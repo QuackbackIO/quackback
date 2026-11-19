@@ -346,6 +346,24 @@ export async function sendVisitorMessage(
       ? callerMetadata
       : null
 
+  // A new thread's fixed spam rules (the burst rule: one sender opening threads
+  // faster than a person types) are decided BEFORE the thread exists, so a
+  // filed thread is filed in its insert and raises nothing, like cold email a
+  // fixed rule files: no team email or bell, no created or message event (so
+  // no webhook, workflow or SLA clock), no inbox update and no routing. The
+  // sender is the visitor's own real address, else one they gave before the
+  // chat. Only the AI classifier runs after the create.
+  const spamSenderEmail = input.conversationId
+    ? null
+    : (normalizeEmail(realEmail(author.email) ?? undefined) ??
+      normalizeEmail(input.visitorEmail) ??
+      null)
+  const fixedSpamSignal = input.conversationId
+    ? null
+    : await import('./conversation.spam-filter').then((m) =>
+        m.fixedSpamSignalFor({ senderEmail: spamSenderEmail }, author.principalId)
+      )
+
   let created = false
   // The conversation's status BEFORE this message, so the assistant trigger can
   // tell a genuinely reopened thread from one a human deliberately closed.
@@ -386,9 +404,19 @@ export async function sendVisitorMessage(
         .values({
           visitorPrincipalId: author.principalId,
           channel: 'messenger',
-          status: 'open',
+          status: fixedSpamSignal ? 'closed' : 'open',
           subject: preview(content || fallbackLabel, attachments),
           ...(testOwner ? { assignedAgentPrincipalId: testOwner } : {}),
+          // The Spam-view shape autoFileConversationAsSpam writes, in the
+          // insert so the thread is never open.
+          ...(fixedSpamSignal
+            ? {
+                resolvedAt: new Date(),
+                endReason: 'spam' as const,
+                endNote: `Auto-filed by the spam filter (${CONVERSATION_SPAM_FILED_BY_LABELS[fixedSpamSignal]})`,
+                spamReason: fixedSpamSignal,
+              }
+            : {}),
         })
         .returning()
       conversation = createdConv
@@ -420,13 +448,17 @@ export async function sendVisitorMessage(
     // a block posted on an already-closed conversation is the intended
     // post-close CSAT/button flow, not the customer reopening the thread —
     // see applyVisitorReopenStatus's doc.
-    const visitorNextStatus = heldInSpam
-      ? 'closed'
-      : applyVisitorReopenStatus(
-          conversation.status,
-          !!resolvedBlockReply,
-          getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
-        )
+    // A thread a fixed spam rule filed in its insert stays closed (resolvedAt
+    // then keeps the filing time, below), and nobody is waiting on a reply.
+    const filedInInsert = created && fixedSpamSignal !== null
+    const visitorNextStatus =
+      heldInSpam || filedInInsert
+        ? 'closed'
+        : applyVisitorReopenStatus(
+            conversation.status,
+            !!resolvedBlockReply,
+            getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
+          )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -439,10 +471,13 @@ export async function sendVisitorMessage(
         snoozedUntil: null,
         // The customer is now waiting on a reply: start the clock if it isn't
         // already running (the oldest unanswered message wins). Nobody owes
-        // spam a reply, so a message held in Spam starts no clock.
-        waitingSince: heldInSpam
-          ? conversation.waitingSince
-          : (conversation.waitingSince ?? message.createdAt),
+        // spam a reply, so a message held in Spam or a thread filed in its
+        // insert starts no clock.
+        waitingSince: filedInInsert
+          ? null
+          : heldInSpam
+            ? conversation.waitingSince
+            : (conversation.waitingSince ?? message.createdAt),
         // Keep resolvedAt consistent with the new status — a reply that reopens
         // a closed thread must clear the stale resolution timestamp. The one
         // case that stays 'closed' (the post-close matched-blockReply carve-out
@@ -485,6 +520,17 @@ export async function sendVisitorMessage(
   const authored = await resolveAuthorAudiences(author)
   const visitorMessage = toMessageDTO(txResult.message, authored.publicAuthor)
   const agentMessage = toMessageDTO(txResult.message, authored.supportAuthor)
+
+  // Filed to Spam by a fixed rule in the insert: the thread is kept and
+  // reviewable in the Spam view, and nothing else happens (see above).
+  if (created && fixedSpamSignal) {
+    log.info(
+      { conversation_id: txResult.conversation.id, signal: fixedSpamSignal },
+      'spam signal matched; messenger thread filed'
+    )
+    const filedDTO = await conversationToDTO(txResult.conversation, 'visitor')
+    return { conversation: filedDTO, message: visitorMessage, created }
+  }
 
   // A new conversation appears in the agent inbox; publish the agent-side DTO
   // there (publishConversationUpdate strips agent-only fields for the visitor).
@@ -573,22 +619,17 @@ export async function sendVisitorMessage(
   // A brand-new conversation is a spam-classification candidate: the filter
   // files only obvious spam (workspace-trusted senders bypass it), and every
   // failure leaves the thread in triage. Fire-and-forget so a slow provider
-  // never delays the visitor's send.
+  // never delays the visitor's send. The fixed rules already ran before the
+  // insert; only the AI classifier is left.
   if (created) {
     void import('./conversation.spam-filter')
       .then((m) =>
         m.maybeAutoFileSpam(txResult.conversation.id, {
-          // The visitor's own address when they have a real one (an
-          // anonymous visitor's is a synthetic placeholder), else one they
-          // gave before the chat. With neither, the burst rule counts on the
-          // visitor themselves.
-          senderEmail:
-            normalizeEmail(realEmail(author.email) ?? undefined) ??
-            txResult.conversation.visitorEmail ??
-            null,
+          senderEmail: spamSenderEmail,
           senderPrincipalId: author.principalId,
           subject: null,
           content: content || fallbackLabel,
+          signalsChecked: true,
         })
       )
       .catch((err) => log.warn({ err }, 'spam classification failed'))

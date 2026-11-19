@@ -619,6 +619,30 @@ describe('new-message bell and email', () => {
     )
   })
 
+  it('bell: a conversation filed as spam by the time the bell resolves reaches no one', async () => {
+    const w = await seedWorld()
+    const to = { assignee: null, team: null }
+    const { conversation } = await seedConversation(to)
+    // The event predates the filing (the AI classifier files after the create).
+    await testDb
+      .update(conversations)
+      .set({ status: 'closed', endReason: 'spam', spamReason: 'ai_classifier' })
+      .where(eq(conversations.id, conversation.id))
+    const target = await getMessageCreatedTargets(
+      messageCreated(conversation.id as ConversationId, to, true)
+    )
+    expect(target).toBeNull()
+    // Restored, it bells again.
+    await testDb
+      .update(conversations)
+      .set({ status: 'open', endReason: null, spamReason: null })
+      .where(eq(conversations.id, conversation.id))
+    const restored = await getMessageCreatedTargets(
+      messageCreated(conversation.id as ConversationId, to, true)
+    )
+    expect(within(w, recipientsOf(restored)).length).toBeGreaterThan(0)
+  })
+
   it('bell: a conversation assigned to someone else with no team skips the other scoped teammates', async () => {
     const w = await seedWorld()
     const to = { assignee: w.solo.id, team: null }
