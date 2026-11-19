@@ -369,6 +369,18 @@ describe('classifyConversationAttributes: happy path', () => {
     expect(mockPublishAgentConversationEvent).toHaveBeenCalledTimes(1)
   })
 
+  it('opens the classification note with its header line (INB-67)', async () => {
+    mockChat.mockResolvedValue({
+      results: [{ key: 'issue_type', optionId: 'opt_billing', reasoning: 'Charged twice.' }],
+    })
+    await classifyConversationAttributes(conversationId, { trigger: 'handoff' })
+
+    const content = String(mockInsertValues.mock.calls[0][0].content)
+    const [header, ...rest] = content.split('\n')
+    expect(header).toBe('Quackback AI classified this conversation:')
+    expect(rest.join('\n')).toContain('Issue type')
+  })
+
   it('drops a result whose optionId is not one of the definition options', async () => {
     mockChat.mockResolvedValue({
       results: [{ key: 'issue_type', optionId: 'opt_not_real', reasoning: 'x' }],
