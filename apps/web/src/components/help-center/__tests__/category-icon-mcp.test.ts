@@ -32,8 +32,11 @@ interface RegisteredTool {
 function manageCategoryTool(): RegisteredTool {
   const tools = new Map<string, RegisteredTool>()
   const fakeServer = {
-    tool: (name: string, description: string, schema: Record<string, z.ZodType>) => {
-      tools.set(name, { description, schema })
+    registerTool: (
+      name: string,
+      config: { description: string; inputSchema: z.ZodObject<Record<string, z.ZodType>> }
+    ) => {
+      tools.set(name, { description: config.description, schema: config.inputSchema.shape })
     },
   }
   registerHelpCenterTools(fakeServer as never, {} as McpAuthContext)
