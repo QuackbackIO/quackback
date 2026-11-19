@@ -7,7 +7,7 @@
  */
 import { test, expect } from '../../support/fixtures'
 import { ticketReplyAddress, sendInboundEmail } from '../../support/inbound-email'
-import { waitForMail } from '../../support/mailpit'
+import { emailLogFor, waitForMail } from '../../support/mailpit'
 import { supportDb } from '../../support/db'
 import {
   addWatcherRow,
@@ -55,6 +55,7 @@ import {
 } from '../../support/tickets-more'
 import { fromUuid } from '@quackback/ids'
 import { readFileSync } from 'node:fs'
+import { apiFor, createKey, mcpCall } from '../../support/api-client'
 import { statusId } from '../../support/tickets'
 
 test.describe('tickets: replies and first response', () => {
@@ -1507,6 +1508,73 @@ test.describe('tickets: notes and export', () => {
         expect(content).toContain(text)
       }
       await api.dispose()
+    }
+  )
+})
+
+test.describe('tickets: MCP writes', () => {
+  test(
+    'TKT-76 MCP create, reply and note have the same requester side effects as the team UI',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, browser, people, marker, customerEmail }) => {
+      test.setTimeout(90_000)
+      const rest = await ticketApi(playwright, baseURL)
+      const customer = await createCustomer(rest, customerEmail)
+      const mcp = await apiFor(
+        playwright,
+        baseURL,
+        createKey({ creatorEmail: people.people.admin.email }).key
+      )
+      const title = `MCP filed ${marker}`
+      const created = await mcpCall(mcp, 'create_ticket', {
+        type: 'customer',
+        title,
+        description: `Opening by MCP ${marker}`,
+        requesterPrincipalId: customer.principalId,
+      })
+      expect(created.isError, created.text).toBe(false)
+      const ticketId = created.json.id as string
+      const reference = created.json.reference as string
+      // As TKT-03: a received email and the requester watching.
+      await waitForMail({
+        to: customerEmail,
+        subject: `We received your ticket ${reference}: ${title}`,
+      })
+      await expect
+        .poll(() => ticketWatchers(ticketId))
+        .toContainEqual(
+          expect.objectContaining({
+            principal_id: principalUuid(customer.principalId),
+            reason: 'requester',
+          })
+        )
+
+      // As TKT-39: the reply reaches the requester by email and in their thread.
+      const answer = `MCP answer ${marker}`
+      const reply = await mcpCall(mcp, 'reply_to_ticket', { ticketId, content: answer })
+      expect(reply.isError, reply.text).toBe(false)
+      const mail = await waitForMail({
+        to: customerEmail,
+        subject: `New reply on ${reference}: ${title}`,
+      })
+      expect(mail.Text).toContain(answer)
+
+      // As TKT-43: a note stays with the team.
+      const secret = `MCP note ${marker}`
+      const note = await mcpCall(mcp, 'add_ticket_note', { ticketId, content: secret })
+      expect(note.isError, note.text).toBe(false)
+      const conversationId = (await pairedConversationId(ticketId))!
+      const page = await signedInAs(browser, customer.userId)
+      await openRequesterThread(page, conversationId)
+      await expect(page.getByText(answer)).toBeVisible()
+      await expect(page.getByText(secret)).toHaveCount(0)
+      expect(
+        (await emailLogFor(customerEmail)).filter((r) =>
+          (r.subject ?? '').startsWith('New reply on')
+        )
+      ).toHaveLength(1)
+      await mcp.dispose()
+      await rest.dispose()
     }
   )
 })
