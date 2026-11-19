@@ -48,6 +48,7 @@ import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { resolveTicketTypeForCreate } from './ticket-type.service'
 import { resolveStage } from './ticket.lifecycle'
 import type { CreateTicketInput, TicketDTO } from './ticket.types'
+import type { PrincipalId } from '@quackback/ids'
 
 const log = logger.child({ component: 'tickets' })
 
@@ -75,6 +76,15 @@ export async function publishTicketUpdated(row: Ticket, prev?: ScopedRow): Promi
   return dto
 }
 
+/** How createTicketCore treats the actor beyond what the input says. */
+export interface CreateTicketCoreOptions {
+  /**
+   * Who watches the ticket as its creator. Absent: the acting principal. The
+   * agent create path names the person behind the actor instead (a personal
+   * API key's teammate) or nobody (a workspace key).
+   */
+  creatorWatcher?: PrincipalId | null
+}
 /**
  * Open a ticket WITHOUT a permission check — the caller authorizes (agent
  * TICKET_CREATE via createTicket, or requester self-creation via createMyTicket).
@@ -137,7 +147,11 @@ export async function publishTicketUpdated(row: Ticket, prev?: ScopedRow): Promi
  * creates (no flag) are byte-identical to before — standalone, no backing
  * conversation.
  */
-export async function createTicketCore(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
+export async function createTicketCore(
+  input: CreateTicketInput,
+  actor: Actor,
+  options: CreateTicketCoreOptions = {}
+): Promise<TicketDTO> {
   const title = input.title?.trim()
   if (!title) throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   if (title.length > MAX_TITLE_LENGTH) {
@@ -297,28 +311,31 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     // The watcher set from birth, in the same transaction so the first fan-out
     // can never race past the subscription rows. The requester watches their
     // own ticket (reason 'requester'); a distinct assignee watches as
-    // 'assignee'; the creating principal watches as 'manual' when they are
-    // neither — skipped when their id resolves to no real principal row (the
-    // subscription FKs principal, so a bare/synthetic actor id could never be
-    // written). First-reason-wins ordering: requester, then assignee, then
-    // creator, with onConflictDoNothing collapsing any overlap.
+    // 'assignee'; the creator (the acting principal, unless the caller says
+    // otherwise: see CreateTicketCoreOptions) watches as 'manual' when they
+    // are neither — skipped when their id resolves to no real principal row
+    // (the subscription FKs principal, so a bare/synthetic actor id could
+    // never be written). First-reason-wins ordering: requester, then
+    // assignee, then creator, with onConflictDoNothing collapsing any overlap.
     if (input.requesterPrincipalId) {
       await subscribeToTicket(input.requesterPrincipalId, ticket.id, 'requester', { tx })
     }
     if (input.assigneePrincipalId && input.assigneePrincipalId !== input.requesterPrincipalId) {
       await subscribeToTicket(input.assigneePrincipalId, ticket.id, 'assignee', { tx })
     }
+    const creatorWatcher =
+      options.creatorWatcher === undefined ? actor.principalId : options.creatorWatcher
     if (
-      actor.principalId &&
-      actor.principalId !== input.requesterPrincipalId &&
-      actor.principalId !== input.assigneePrincipalId
+      creatorWatcher &&
+      creatorWatcher !== input.requesterPrincipalId &&
+      creatorWatcher !== input.assigneePrincipalId
     ) {
       const [creator] = await tx
         .select({ id: principal.id })
         .from(principal)
-        .where(eq(principal.id, actor.principalId))
+        .where(eq(principal.id, creatorWatcher))
         .limit(1)
-      if (creator) await subscribeToTicket(actor.principalId, ticket.id, 'manual', { tx })
+      if (creator) await subscribeToTicket(creatorWatcher, ticket.id, 'manual', { tx })
     }
     return { ticket, backingConversation }
   })
