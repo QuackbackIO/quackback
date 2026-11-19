@@ -1578,15 +1578,18 @@ test.describe('tickets: MCP writes', () => {
           })
         )
 
-      // As TKT-39: the reply reaches the requester by email and in their thread.
+      // As TKT-39: the reply reaches the requester by email (one email, the
+      // conversation's) and in their thread.
       const answer = `MCP answer ${marker}`
       const reply = await mcpCall(mcp, 'reply_to_ticket', { ticketId, content: answer })
       expect(reply.isError, reply.text).toBe(false)
-      const mail = await waitForMail({
-        to: customerEmail,
-        subject: `New reply on ${reference}: ${title}`,
+      const carrying = async (text: string) =>
+        (await Promise.all((await mailTo(customerEmail)).map((m) => getMail(m.ID)))).filter(
+          (m) => m.Text.includes(text) || m.HTML.includes(text)
+        )
+      await pollFor('the reply email', async () => (await carrying(answer))[0], {
+        timeoutMs: 20_000,
       })
-      expect(mail.Text).toContain(answer)
 
       // As TKT-43: a note stays with the team.
       const secret = `MCP note ${marker}`
@@ -1597,11 +1600,13 @@ test.describe('tickets: MCP writes', () => {
       await openRequesterThread(page, conversationId)
       await expect(page.getByText(answer)).toBeVisible()
       await expect(page.getByText(secret)).toHaveCount(0)
+      expect(await carrying(answer)).toHaveLength(1)
       expect(
         (await emailLogFor(customerEmail)).filter((r) =>
           (r.subject ?? '').startsWith('New reply on')
         )
-      ).toHaveLength(1)
+      ).toEqual([])
+      expect(await carrying(secret)).toEqual([])
       await mcp.dispose()
       await rest.dispose()
     }
