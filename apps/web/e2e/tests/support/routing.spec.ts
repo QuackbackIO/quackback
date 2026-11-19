@@ -64,12 +64,12 @@ test.describe('the routing switch', () => {
     { tag: '@core' },
     async ({ asPerson, playwright }) => {
       const admin = await asPerson('admin')
-      await admin.goto('/admin/settings/channels')
-      await expect(admin.getByRole('heading', { name: 'Conversation routing' })).toBeVisible({
-        timeout: 20_000,
-      })
-      await expect(admin.getByText('Applies to new conversations on every channel.')).toBeVisible()
-      await expect(admin.getByText('Assign to an agent who is online.')).toBeVisible()
+      // The switch lives on the Workflows page, beside the routing rules.
+      await admin.goto('/admin/settings/workflows')
+      await expect(admin.getByText('Conversation routing')).toBeVisible({ timeout: 20_000 })
+      await expect(
+        admin.getByText('Assign to an agent who is online, on every channel')
+      ).toBeVisible()
       const toggle = admin.getByRole('switch', { name: 'Auto-assign new conversations' })
       await expect(toggle).not.toBeChecked()
 
@@ -94,7 +94,7 @@ test.describe('the routing switch', () => {
         ).data
 
       const admin = await asPerson('admin')
-      await admin.goto('/admin/settings/channels')
+      await admin.goto('/admin/settings/workflows')
       const toggle = admin.getByRole('switch', { name: 'Auto-assign new conversations' })
       await expect(toggle).toBeEnabled({ timeout: 20_000 })
       await expect(toggle).not.toBeChecked()
