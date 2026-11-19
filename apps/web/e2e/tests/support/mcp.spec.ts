@@ -542,7 +542,7 @@ test.describe('MCP conversations', () => {
   )
 
   test(
-    'API-65 upload_file returns a fileId usable in a reply; over 5 MB is refused; needs write:chat',
+    'API-65 upload_file returns a fileId usable in a reply; over 3 MB is refused clearly; needs write:chat',
     { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       test.setTimeout(90_000)
@@ -566,9 +566,18 @@ test.describe('MCP conversations', () => {
         await sql`SELECT attachments FROM conversation_messages WHERE id = ${uuidOf(reply.json.id)}`
       expect((row.attachments as Array<{ name: string }>)[0].name).toBe(`${marker}.txt`)
 
-      // Over 5 MB decoded is refused. Its base64 body is over the transport's
-      // 4 MiB request cap, so that cap answers first (413), before the tool's
-      // own "File is too large" check can run.
+      // Just over the 3 MB limit still fits the endpoint's request cap, so the
+      // tool itself refuses it and names the limit.
+      const over = await mcpCall(api, 'upload_file', {
+        name: 'over.bin',
+        contentBase64: Buffer.alloc(3 * 1024 * 1024 + 1).toString('base64'),
+      })
+      expect(over.isError).toBe(true)
+      expect(over.text).toContain('File is too large')
+      expect(over.text).toContain('max 3 MB')
+
+      // A request over the endpoint's cap is refused before any tool runs, with
+      // a 413 that names the upload limit and the REST route for bigger files.
       const big = await mcpRpc(api, 'tools/call', {
         name: 'upload_file',
         arguments: {
@@ -577,7 +586,9 @@ test.describe('MCP conversations', () => {
         },
       })
       expect(big.status()).toBe(413)
-      expect(await big.text()).toContain('Payload Too Large')
+      const bigText = await big.text()
+      expect(bigText).toContain('upload_file accepts files up to 3 MB')
+      expect(bigText).toContain('/api/v1/files')
 
       const ro = await keyApi(playwright, baseURL, {
         creatorEmail: people.people.admin.email,
