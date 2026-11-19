@@ -863,3 +863,402 @@ test.describe('realtime: teammates and customers', () => {
     }
   )
 })
+
+test.describe('realtime: nightly', () => {
+  test.beforeAll(() => setFeatureFlag('supportTickets', true))
+
+  test(
+    'RT-06 visitor typing shows in the open thread, clears on their message, and never echoes back',
+    { tag: '@nightly' },
+    async ({ playwright, browser, marker, newTeammate }) => {
+      test.setTimeout(60_000)
+      const agent = await newTeammate({ roleKey: 'admin' })
+      const api = await agent.api(playwright)
+      const visitor = await createVisitor(playwright)
+      const { conversationId } = await visitor.send(`typing ${marker}`)
+      const own = await visitor.openStream(conversationId)
+      await warmUpStream(own, conversationId, { api, fn: 'sendConversationTypingFn' })
+      const page = await agent.newPage(browser)
+      await page.goto(`/admin/inbox?i=${conversationId}`)
+      // The warm-up itself is the journey: the visitor types, the thread shows it.
+      await warmUpAgentThread(page, visitor, conversationId)
+      const indicator = page.getByText(`${visitor.name} is typing…`)
+      await expect(indicator).toBeVisible()
+      // Their next message clears it at once (well inside the 4 s window).
+      await visitor.send(`typed ${marker}`, conversationId)
+      await expect(indicator).toHaveCount(0, { timeout: 2_500 })
+      // And left alone it clears by itself after about 4 s.
+      await callServerFn(visitor.api, 'widgetSendConversationTypingFn', { conversationId })
+      await expect(indicator).toBeVisible({ timeout: 5_000 })
+      await expect(indicator).toHaveCount(0, { timeout: 8_000 })
+      // The visitor's own stream never got a visitor-side typing frame.
+      await own.waitFor(isMessage(`typed ${marker}`))
+      expect(own.matching((e) => e.event === 'typing' && e.data.side === 'visitor')).toEqual([])
+      own.close()
+    }
+  )
+
+  test(
+    "RT-07 agent typing reaches the visitor without the agent's identity",
+    { tag: '@nightly' },
+    async ({ playwright, marker, newTeammate }) => {
+      const agent = await newTeammate({ roleKey: 'admin' })
+      const watcher = await newTeammate({ roleKey: 'support_lead' })
+      const api = await agent.api(playwright)
+      const visitor = await createVisitor(playwright)
+      const { conversationId } = await visitor.send(`who types ${marker}`)
+      const visitorStream = await visitor.openStream(conversationId)
+      const inbox = await openStream({ cookie: watcher.cookie, query: { scope: 'inbox' } })
+      await warmUpStream(inbox, conversationId, {
+        api: visitor.api,
+        fn: 'widgetSendConversationTypingFn',
+      })
+      await warmUpStream(visitorStream, conversationId, { api, fn: 'sendConversationTypingFn' })
+      const visitorFrame = visitorStream.matching((e) => e.event === 'typing').at(-1)!
+      expect(visitorFrame.data.side).toBe('agent')
+      expect(visitorFrame.data.typistPrincipalId).toBeUndefined()
+      expect(visitorFrame.raw).not.toContain(agent.principalId)
+      const agentFrame = await inbox.waitFor(
+        (e) =>
+          e.event === 'typing' &&
+          e.data.side === 'agent' &&
+          e.data.conversationId === conversationId
+      )
+      expect(agentFrame.data.typistPrincipalId).toBe(agent.principalId)
+      visitorStream.close()
+      inbox.close()
+    }
+  )
+
+  test(
+    'RT-08 another agent typing shows a collision notice, with no echo to the typist',
+    { tag: '@nightly' },
+    async ({ playwright, browser, marker, newTeammate }) => {
+      test.setTimeout(60_000)
+      const a = await newTeammate({ roleKey: 'admin' })
+      const b = await newTeammate({ roleKey: 'admin' })
+      const bApi = await b.api(playwright)
+      const visitor = await createVisitor(playwright)
+      const { conversationId } = await visitor.send(`collide ${marker}`)
+      const page = await a.newPage(browser)
+      await page.goto(`/admin/inbox?i=${conversationId}`)
+      await warmUpAgentThread(page, visitor, conversationId)
+      const bStream = await openStream({ cookie: b.cookie, query: { scope: 'inbox' } })
+      await warmUpStream(bStream, conversationId, {
+        api: visitor.api,
+        fn: 'widgetSendConversationTypingFn',
+      })
+
+      const notice = page.getByText('Another agent is replying…')
+      await expect(async () => {
+        await callServerFn(bApi, 'sendConversationTypingFn', { conversationId })
+        await expect(notice).toBeVisible({ timeout: 1_000 })
+      }).toPass({ timeout: 15_000 })
+      // B's own inbox stream never carries B's typing.
+      expect(
+        bStream.matching((e) => e.event === 'typing' && e.data.typistPrincipalId === b.principalId)
+      ).toEqual([])
+      // Any agent message clears it.
+      expect(
+        (
+          await callServerFn(bApi, 'sendAgentMessageFn', {
+            conversationId,
+            content: `took it ${marker}`,
+          })
+        ).ok
+      ).toBe(true)
+      await expect(notice).toHaveCount(0, { timeout: 3_000 })
+      bStream.close()
+    }
+  )
+
+  test(
+    "RT-10 mark unread from here stays on the teammates' side",
+    { tag: '@nightly' },
+    async ({ playwright, marker, newTeammate }) => {
+      const agent = await newTeammate({ roleKey: 'admin' })
+      const watcher = await newTeammate({ roleKey: 'support_lead' })
+      const api = await agent.api(playwright)
+      const visitor = await createVisitor(playwright)
+      const first = await visitor.send(`one ${marker}`)
+      const { conversationId } = first
+      await visitor.send(`two ${marker}`, conversationId)
+      expect((await callServerFn(api, 'markConversationReadFn', { conversationId })).ok).toBe(true)
+      const visitorStream = await visitor.openStream(conversationId)
+      const inbox = await openStream({ cookie: watcher.cookie, query: { scope: 'inbox' } })
+      await warmUpStream(visitorStream, conversationId, { api, fn: 'sendConversationTypingFn' })
+      await warmUpStream(inbox, conversationId, {
+        api: visitor.api,
+        fn: 'widgetSendConversationTypingFn',
+      })
+
+      const r = await callServerFn(api, 'markConversationUnreadFromMessageFn', {
+        conversationId,
+        messageId: first.messageId,
+      })
+      expect(r.ok, r.error).toBe(true)
+      const rewound = await inbox.waitFor(
+        (e) => e.event === 'read' && forConversation(conversationId)(e)
+      )
+      expect(rewound.data.side).toBe('agent')
+      const [row] = await supportDb()`SELECT created_at FROM conversation_messages
+      WHERE id = ${toUuid(first.messageId as `conversation_msg_${string}`)}`
+      expect(new Date(String(rewound.data.at)).getTime()).toBeLessThan(
+        (row.created_at as Date).getTime()
+      )
+
+      const publicMarker = `marker ${marker}`
+      expect(
+        (await callServerFn(api, 'sendAgentMessageFn', { conversationId, content: publicMarker }))
+          .ok
+      ).toBe(true)
+      await visitorStream.waitFor(isMessage(publicMarker))
+      expect(
+        visitorStream.matching(
+          (e) => e.event === 'read' && e.data.side === 'agent' && e.data.at === rewound.data.at
+        )
+      ).toEqual([])
+
+      // A deleted anchor is not found.
+      const doomed = await callServerFn<{ message: { id: string } }>(api, 'sendAgentMessageFn', {
+        conversationId,
+        content: `doomed ${marker}`,
+      })
+      expect(
+        (
+          await callServerFn(api, 'deleteConversationMessageFn', {
+            messageId: doomed.data.message.id,
+          })
+        ).ok
+      ).toBe(true)
+      const gone = await callServerFn(api, 'markConversationUnreadFromMessageFn', {
+        conversationId,
+        messageId: doomed.data.message.id,
+      })
+      expect(gone.ok).toBe(false)
+      expect(gone.code).toBe('MESSAGE_NOT_FOUND')
+      visitorStream.close()
+      inbox.close()
+    }
+  )
+
+  test(
+    'RT-11 reactions and flags reach teammates only; system and hidden messages refuse',
+    { tag: '@nightly' },
+    async ({ playwright, people, marker, newTeammate }) => {
+      const agent = await newTeammate({ roleKey: 'admin' })
+      const watcher = await newTeammate({ roleKey: 'support_lead' })
+      const api = await agent.api(playwright)
+      const visitor = await createVisitor(playwright)
+      const { conversationId, messageId } = await visitor.send(`react ${marker}`)
+      const visitorStream = await visitor.openStream(conversationId)
+      const inbox = await openStream({ cookie: watcher.cookie, query: { scope: 'inbox' } })
+      await warmUpStream(visitorStream, conversationId, { api, fn: 'sendConversationTypingFn' })
+      await warmUpStream(inbox, conversationId, {
+        api: visitor.api,
+        fn: 'widgetSendConversationTypingFn',
+      })
+
+      expect((await callServerFn(api, 'addMessageReactionFn', { messageId, emoji: '👍' })).ok).toBe(
+        true
+      )
+      const reacted = await inbox.waitFor(
+        (e) => e.event === 'message_updated' && e.data.message?.id === messageId
+      )
+      expect(JSON.stringify(reacted.data.message?.reactions)).toContain('👍')
+      // A flag is the flagging teammate's own (no broadcast): it is stored.
+      const flag = await callServerFn<{ flaggedAt: string | null }>(api, 'setMessageFlagFn', {
+        messageId,
+        flagged: true,
+      })
+      expect(flag.ok, flag.error).toBe(true)
+      expect(flag.data.flaggedAt).not.toBeNull()
+
+      const publicMarker = `marker ${marker}`
+      expect(
+        (await callServerFn(api, 'sendAgentMessageFn', { conversationId, content: publicMarker }))
+          .ok
+      ).toBe(true)
+      await visitorStream.waitFor(isMessage(publicMarker))
+      expect(visitorStream.matching((e) => e.event === 'message_updated')).toEqual([])
+
+      // A system notice cannot be reacted to.
+      expect(
+        (
+          await callServerFn(api, 'assignConversationTeamFn', {
+            conversationId,
+            teamId: people.teams.support,
+          })
+        ).ok
+      ).toBe(true)
+      const notice = await inbox.waitFor(
+        (e) =>
+          e.event === 'message' &&
+          forConversation(conversationId)(e) &&
+          Boolean(e.data.message?.systemEvent)
+      )
+      const sys = await callServerFn(api, 'addMessageReactionFn', {
+        messageId: notice.data.message!.id,
+        emoji: '👍',
+      })
+      expect(sys.ok).toBe(false)
+      expect(sys.code).toBe('FORBIDDEN')
+      expect(sys.error).toContain('System messages cannot be reacted to or flagged')
+
+      // On the Support team now: hidden from a Billing-only teammate.
+      const scoped = await newTeammate({
+        roleKey: 'e2e_scoped_agent',
+        teams: [people.teams.billing],
+      })
+      const hidden = await callServerFn(await scoped.api(playwright), 'addMessageReactionFn', {
+        messageId,
+        emoji: '🎉',
+      })
+      expect(hidden.ok).toBe(false)
+      expect(hidden.code).toBe('MESSAGE_NOT_FOUND')
+      visitorStream.close()
+      inbox.close()
+    }
+  )
+
+  test(
+    'RT-26 a raw ticket stream carries ticket updates, messages and reads; others are refused',
+    { tag: '@nightly' },
+    async ({ playwright, people, marker, newTeammate }) => {
+      const agent = await newTeammate({ roleKey: 'admin' })
+      const api = await agent.api(playwright)
+      const visitor = await createVisitor(playwright)
+      await visitor.send(`requester ${marker}`)
+      // A back-office ticket keeps its own thread (a customer ticket's reads
+      // go to its paired conversation instead).
+      const created = await callServerFn<{ id: string }>(api, 'createTicketFn', {
+        type: 'back_office',
+        title: `Stream ${marker}`,
+      })
+      expect(created.ok, created.error).toBe(true)
+      const ticketId = created.data.id
+      const stream = await openStream({ cookie: agent.cookie, query: { ticketId } })
+      expect(stream.status).toBe(200)
+      // Warm up: a status change until its frame arrives.
+      await expect(async () => {
+        await callServerFn(api, 'setTicketStatusFn', {
+          ticketId,
+          statusId: await ticketStatusId('investigating'),
+        })
+        await stream.waitFor((e) => e.event === 'ticket_updated', 1_000)
+      }).toPass({ timeout: 15_000 })
+      expect(
+        (
+          await callServerFn(api, 'sendTicketMessageFn', {
+            ticketId,
+            content: `ticket reply ${marker}`,
+          })
+        ).ok
+      ).toBe(true)
+      await stream.waitFor(
+        (e) => e.event === 'ticket_message' && e.raw.includes(`ticket reply ${marker}`)
+      )
+      expect((await callServerFn(api, 'markTicketReadFn', { ticketId })).ok).toBe(true)
+      await stream.waitFor((e) => e.event === 'ticket_read')
+      stream.close()
+
+      const customer = await openStream({ person: 'customer', query: { ticketId } })
+      expect(customer.status).toBe(403)
+      const missing = await openStream({
+        cookie: agent.cookie,
+        query: { ticketId: `ticket_${'0'.repeat(26)}` },
+      })
+      expect(missing.status).toBe(404)
+      // Assigned to the Support team: hidden from a Billing-only teammate.
+      expect(
+        (
+          await callServerFn(api, 'assignTicketFn', {
+            ticketId,
+            assigneeTeamId: people.teams.support,
+          })
+        ).ok
+      ).toBe(true)
+      const scoped = await newTeammate({
+        roleKey: 'e2e_scoped_agent',
+        teams: [people.teams.billing],
+      })
+      const hidden = await openStream({ cookie: scoped.cookie, query: { ticketId } })
+      expect(hidden.status).toBe(404)
+    }
+  )
+
+  test(
+    'RT-30 an oversized reply spills to the overflow table and still arrives whole',
+    { tag: '@nightly' },
+    async ({ playwright, marker, newTeammate }) => {
+      const agent = await newTeammate({ roleKey: 'admin' })
+      const api = await agent.api(playwright)
+      const visitor = await createVisitor(playwright)
+      const { conversationId } = await visitor.send(`big ${marker}`)
+      const visitorStream = await visitor.openStream(conversationId)
+      await warmUpStream(visitorStream, conversationId, { api, fn: 'sendConversationTypingFn' })
+      // About 12 KB: 3-byte characters, under the 4,000-character limit.
+      const big = `${marker} ${'語'.repeat(3_900)}`
+      const sentAt = new Date(Date.now() - 1000)
+      expect(
+        (await callServerFn(api, 'sendAgentMessageFn', { conversationId, content: big })).ok
+      ).toBe(true)
+      const frame = await visitorStream.waitFor(isMessage(marker))
+      expect(frame.data.message?.content).toBe(big)
+      const [spill] = await supportDb()`SELECT expires_at FROM realtime_overflow
+      WHERE payload::text LIKE ${`%${marker}%`} ORDER BY id DESC LIMIT 1`
+      expect(spill).toBeTruthy()
+      const expires = (spill.expires_at as Date).getTime()
+      expect(expires).toBeGreaterThan(sentAt.getTime() + 55_000)
+      expect(expires).toBeLessThanOrEqual(Date.now() + 61_000)
+      visitorStream.close()
+    }
+  )
+
+  test(
+    'RT-34 filing as spam and restoring reach both sides, and the visitor never sees why',
+    { tag: '@nightly' },
+    async ({ playwright, marker, newTeammate }) => {
+      const agent = await newTeammate({ roleKey: 'admin' })
+      const api = await agent.api(playwright)
+      const visitor = await createVisitor(playwright)
+      const { conversationId } = await visitor.send(`buy now ${marker}`)
+      const visitorStream = await visitor.openStream(conversationId)
+      const inbox = await openStream({ cookie: agent.cookie, query: { scope: 'inbox' } })
+      await warmUpStream(visitorStream, conversationId, { api, fn: 'sendConversationTypingFn' })
+      await warmUpStream(inbox, conversationId, {
+        api: visitor.api,
+        fn: 'widgetSendConversationTypingFn',
+      })
+
+      const filed = await callServerFn(api, 'endConversationFn', { conversationId, reason: 'spam' })
+      expect(filed.ok, filed.error).toBe(true)
+      const conv = (e: StreamEvent) =>
+        e.data.conversation as { id?: string; endReason?: string | null; spamReason?: unknown }
+      const isFiled = (e: StreamEvent) =>
+        e.event === 'conversation' && conv(e)?.id === conversationId && conv(e).endReason === 'spam'
+      const agentCopy = await inbox.waitFor(isFiled)
+      const visitorCopy = await visitorStream.waitFor(
+        (e) => e.event === 'conversation' && conv(e)?.id === conversationId
+      )
+      expect(conv(visitorCopy).spamReason).toBeNull()
+      expect(agentCopy).toBeTruthy()
+
+      const restored = await callServerFn(api, 'restoreConversationFromSpamFn', { conversationId })
+      expect(restored.ok, restored.error).toBe(true)
+      await inbox.waitFor(
+        (e) =>
+          e.event === 'conversation' &&
+          conv(e)?.id === conversationId &&
+          conv(e).endReason !== 'spam'
+      )
+      await visitorStream.waitFor(
+        (e) => e.event === 'conversation' && conv(e)?.id === conversationId
+      )
+      for (const e of visitorStream.matching((x) => x.event === 'conversation'))
+        expect(conv(e).spamReason).toBeNull()
+      visitorStream.close()
+      inbox.close()
+    }
+  )
+})
