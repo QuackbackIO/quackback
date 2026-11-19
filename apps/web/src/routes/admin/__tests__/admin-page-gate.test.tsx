@@ -19,6 +19,10 @@ vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
 vi.mock('@/components/admin/feedback/inbox-container', () => ({
   InboxContainer: () => <div>feedback page</div>,
 }))
+vi.mock('@/components/admin/roadmap-admin', () => ({
+  RoadmapAdmin: () => <div>roadmap page</div>,
+}))
+vi.mock('@/components/admin/roadmap-modal', () => ({ RoadmapModal: () => null }))
 vi.mock('@/components/admin/users/users-container', () => ({
   UsersContainer: () => <div>users page</div>,
 }))
@@ -47,6 +51,8 @@ afterEach(() => {
 
 const PAGES: Array<[string, string, PermissionKey]> = [
   ['@/routes/admin/feedback.index', 'feedback page', PERMISSIONS.POST_VIEW_PRIVATE],
+  // The roadmap board opens on the roadmap list, read under roadmap.manage.
+  ['@/routes/admin/roadmap', 'roadmap page', PERMISSIONS.ROADMAP_MANAGE],
   ['@/routes/admin/users', 'users page', PERMISSIONS.PEOPLE_VIEW],
   ['@/routes/admin/help-center', 'help center page', PERMISSIONS.HELP_CENTER_MANAGE],
   ['@/routes/admin/changelog', 'changelog page', PERMISSIONS.CHANGELOG_VIEW_DRAFT],
@@ -66,9 +72,9 @@ describe('an admin page for a teammate without its permission', () => {
     expect(screen.getByRole('link', { name: 'Back to Home' }).getAttribute('href')).toBe('/admin')
   })
 
-  // Feedback and Users read their loader data, so they are covered through
-  // the gate below and the loader tests instead.
-  it.each(PAGES.slice(2))('%s shows the page with its permission', async (path, page, key) => {
+  // Feedback, Roadmap and Users read their loader data, so they are covered
+  // through the gate below and the loader tests instead.
+  it.each(PAGES.slice(3))('%s shows the page with its permission', async (path, page, key) => {
     viewer.permissions = new Set([key])
     const Page = await pageOf(path)
     render(<Page />)

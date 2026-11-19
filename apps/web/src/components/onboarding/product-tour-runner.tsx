@@ -145,7 +145,8 @@ export function ProductTourRunner({
           changelog:
             isProductEnabled(flags, 'changelog') &&
             canOpenAdminPage(permissions, '/admin/changelog'),
-          support: isProductEnabled(flags, 'support'),
+          support:
+            isProductEnabled(flags, 'support') && canOpenAdminPage(permissions, '/admin/inbox'),
           helpCenter:
             isProductEnabled(flags, 'helpCenter') &&
             canOpenAdminPage(permissions, '/admin/help-center'),

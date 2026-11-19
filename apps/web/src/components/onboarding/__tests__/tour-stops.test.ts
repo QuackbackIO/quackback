@@ -13,7 +13,11 @@ function context(overrides: Partial<TourContext> = {}): TourContext {
     goals: ['product_feedback'],
     feedbackPrivate: false,
     modules: { feedback: true, changelog: false, support: false, helpCenter: false, status: false },
-    permissions: new Set([PERMISSIONS.HELP_CENTER_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE]),
+    permissions: new Set([
+      PERMISSIONS.HELP_CENTER_MANAGE,
+      PERMISSIONS.STATUS_PAGE_MANAGE,
+      PERMISSIONS.ROADMAP_MANAGE,
+    ]),
     narrow: false,
     empty: { feedback: true, support: true, helpCenter: true, status: true },
     ...overrides,
@@ -27,6 +31,14 @@ const brief = (stops: TourStop[]) =>
   stops.map((stop) => `${stop.id}:${stop.target}${stop.route ? `@${stop.route}` : ''}`)
 
 describe('resolveTourStops', () => {
+  it('stops at Roadmap only for a viewer who can list roadmaps', () => {
+    expect(ids(resolveTourStops(context()))).toContain('roadmap')
+    const noRoadmap = context({
+      permissions: new Set([PERMISSIONS.HELP_CENTER_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE]),
+    })
+    expect(ids(resolveTourStops(noRoadmap))).not.toContain('roadmap')
+  })
+
   it('gives each enabled module its own sidebar stop, goal modules first, then portal and search', () => {
     expect(
       brief(

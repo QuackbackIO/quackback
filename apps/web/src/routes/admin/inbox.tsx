@@ -1,4 +1,6 @@
 import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -238,6 +240,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // still reaches this route (§2.3 decision log): the shell renders with
     // conversation affordances hidden.
     if (!flags?.supportInbox && !flags?.supportTickets) return {}
+    if (!canOpenAdminPage(context.permissions ?? [], '/admin/inbox')) return {}
     const { queryClient } = context
     // No loaderDeps (so filter/selection changes do not remount the outlet),
     // which also means the loader is not given the validateSearch result.
@@ -354,7 +357,12 @@ function InboxRoute() {
   if (!flags?.supportInbox && !flags?.supportTickets) {
     return <Navigate to={getFirstEnabledAdminProductPath(flags)} />
   }
-  return <InboxPage />
+  // A viewer who can list neither conversations nor tickets gets the no-access state.
+  return (
+    <AdminPageGate page="/admin/inbox">
+      <InboxPage />
+    </AdminPageGate>
+  )
 }
 
 /** Split a mixed selection (conversation + ticket TypeIDs) into per-kind id

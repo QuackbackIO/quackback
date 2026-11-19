@@ -39,7 +39,7 @@ const PRODUCTS: ProductDestination[] = [
     href: '/admin/roadmap',
     label: 'Roadmap',
     product: 'feedback',
-    permissions: [PERMISSIONS.POST_VIEW_PRIVATE],
+    permissions: [PERMISSIONS.ROADMAP_MANAGE],
   },
   {
     href: '/admin/changelog',

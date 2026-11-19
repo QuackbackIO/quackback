@@ -239,16 +239,25 @@ describe('buildRailItems', () => {
       PERMISSIONS.CONVERSATION_NOTE,
       PERMISSIONS.CONVERSATION_SET_STATUS,
     ]
-    expect(buildRailItems(ALL_ON, billingAgent).map((i) => i.label)).toEqual([
+    // No roadmap.manage, so no Roadmap: its board opens on the roadmap list.
+    expect(buildRailItems(ALL_ON, billingAgent).map((i) => i.label)).toEqual(['Home', 'Support'])
+  })
+
+  it('leaves out Roadmap for a role that cannot list roadmaps, and Support for one that cannot list conversations or tickets', () => {
+    const triager = [PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.POST_SET_STATUS]
+    expect(buildRailItems(ALL_ON, triager).map((i) => i.label)).toEqual(['Home', 'Feedback'])
+    expect(
+      buildRailItems(ALL_ON, [...triager, PERMISSIONS.ROADMAP_MANAGE]).map((i) => i.label)
+    ).toEqual(['Home', 'Feedback', 'Roadmap'])
+    expect(buildRailItems(ALL_ON, [PERMISSIONS.TICKET_VIEW]).map((i) => i.label)).toEqual([
       'Home',
-      'Roadmap',
       'Support',
     ])
   })
 
-  it('leaves out Help center for the built-in Contributor, which cannot manage it', () => {
+  it('leaves out Help center and Roadmap for the built-in Contributor, which cannot manage them', () => {
     expect(buildRailItems(ALL_ON, SYSTEM_ROLE_PERMISSIONS.contributor).map((i) => i.label)).toEqual(
-      ['Home', 'Feedback', 'Roadmap', 'Changelog', 'Support', 'Status', 'Analytics', 'Users']
+      ['Home', 'Feedback', 'Changelog', 'Support', 'Status', 'Analytics', 'Users']
     )
   })
 
@@ -423,6 +432,7 @@ describe('AdminSidebar rail', () => {
     })
     for (const closed of [
       '/admin/feedback',
+      '/admin/roadmap',
       '/admin/changelog',
       '/admin/help-center',
       '/admin/status',
@@ -437,7 +447,12 @@ describe('AdminSidebar rail', () => {
     const menu = [...dialog.querySelectorAll('nav a')].map((a) => a.getAttribute('href'))
     expect(menu).toContain('/admin/inbox')
     expect(menu).toEqual(
-      expect.not.arrayContaining(['/admin/feedback', '/admin/users', '/admin/help-center'])
+      expect.not.arrayContaining([
+        '/admin/feedback',
+        '/admin/roadmap',
+        '/admin/users',
+        '/admin/help-center',
+      ])
     )
   })
 

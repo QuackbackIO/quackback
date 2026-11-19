@@ -133,6 +133,7 @@ beforeEach(() => {
     PERMISSIONS.MEMBER_VIEW,
     PERMISSIONS.CONVERSATION_VIEW,
     PERMISSIONS.POST_VIEW_PRIVATE,
+    PERMISSIONS.ROADMAP_MANAGE,
     PERMISSIONS.CHANGELOG_VIEW_DRAFT,
     PERMISSIONS.HELP_CENTER_MANAGE,
     PERMISSIONS.STATUS_PAGE_PUBLISH,
@@ -267,7 +268,8 @@ describe('guided tour', () => {
   it("runs a stop's Try it: the tour closes and the page that does it opens", async () => {
     hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
     hoisted.flags = { ...hoisted.flags, supportInbox: true }
-    hoisted.permissions = new Set([PERMISSIONS.SETTINGS_MANAGE])
+    // The Support stop is for someone who can open the inbox.
+    hoisted.permissions = new Set([PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CONVERSATION_VIEW])
     mount()
     await startTour()
     await act(async () => {
