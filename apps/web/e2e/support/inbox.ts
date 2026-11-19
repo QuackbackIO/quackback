@@ -313,6 +313,23 @@ export async function tagConversation(conversationUuid: string, tagUuid: string)
                     VALUES (${conversationUuid}, ${tagUuid})`
 }
 
+/** A shared saved view filtering on one tag (TypeID). */
+export async function seedTagView(
+  name: string,
+  tagId: string
+): Promise<{ id: string; uuid: string }> {
+  const id = generateId('conversation_view')
+  await supportDb()`INSERT INTO conversation_views (id, name, filters, is_shared)
+    VALUES (${toUuid(id)}, ${name}, ${supportDb().json({ rules: [{ field: 'tag', value: tagId }] })}, true)`
+  return { id, uuid: toUuid(id) }
+}
+
+/** An AI agent involvement on a conversation, in one lifecycle status. */
+export async function seedInvolvement(conversationUuid: string, status: string): Promise<void> {
+  await supportDb()`INSERT INTO assistant_involvements (id, conversation_id, triggered_by, status)
+    VALUES (${randomUUID()}, ${conversationUuid}, 'first_touch', ${status})`
+}
+
 /** An internal note by `author` (principal TypeID) that mentions `mentioned`. */
 export async function seedMentionNote(
   conversationUuid: string,

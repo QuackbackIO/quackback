@@ -119,3 +119,14 @@ here or the assertions are stale; not traced. The paperclip label
   composer shows no Image option for the signed-in teammate. The comment
   editor turns images on and the post page passes an upload handler, so the
   cause is somewhere between them. owner: unassigned, review by: 2026-12-02.
+
+### Support suite: inbox
+
+- `support/inbox.spec.ts` › inbox views › INB-20 editing a view refilters it
+  and deleting it removes it and falls back to the default view. After Edit
+  view › Save changes the open custom view keeps listing the old rule's rows
+  until a reload (the saved filters are right: a reload shows the new rows).
+  The conversation list query key leaves out the view's rule set
+  (`conversationList` in `src/lib/client/queries/conversation-inbox.ts`), so
+  the list never refetches for the new rules. owner: unassigned, review by:
+  2026-12-03.
