@@ -1607,14 +1607,36 @@ export async function getTicketRepliedEmailTargets(
       : null
 
   const ticketId = ticket.id as TicketId
+  const requester = emailableRequester as PrincipalId | null
   const { getTicketNotifiableWatchers } =
     await import('@/lib/server/domains/tickets/ticket-subscription.service')
-  const watchers = (
-    await getTicketNotifiableWatchers(ticketId, emailableRequester as PrincipalId | null)
-  ).filter((id) => id !== event.actor.principalId)
+  const watchers = (await getTicketNotifiableWatchers(ticketId, requester)).filter(
+    (id) => id !== event.actor.principalId
+  )
   if (watchers.length === 0) return []
 
-  const { recipients, emailMap } = await resolveEligibleRecipients(watchers, 'ticket_replied')
+  // Teammates who watch: their own email settings, "Pause all email" included.
+  const team = await resolveEligibleRecipients(
+    watchers.filter((id) => id !== requester),
+    'ticket_replied'
+  )
+  const recipients = [...team.recipients]
+  const emailMap = team.emailMap
+  // The requester gets this email only when no conversation of theirs carries
+  // the reply: on a ticket's conversation the conversation email is their one
+  // copy (see domains/tickets/ticket-reply-email.ts). A reply is not a
+  // notification, so "Pause all email" does not stop it here either.
+  if (requester && watchers.includes(requester)) {
+    const ticketEmail = await import('@/lib/server/domains/tickets/ticket-reply-email')
+    const sendsHere =
+      !(await ticketEmail.conversationEmailCarriesReplies(ticketId, requester)) &&
+      (await ticketEmail.requesterWantsReplyEmail(ticketId, requester))
+    const address = sendsHere ? (await resolveContactRecipients([requester])).get(requester) : null
+    if (address) {
+      recipients.push(requester)
+      emailMap.set(requester, address)
+    }
+  }
   if (recipients.length === 0) return []
 
   const assignedTeamId = ((ticket.assignedTeamId as string | null | undefined) ??

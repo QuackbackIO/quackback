@@ -65,7 +65,9 @@ export async function sharePost(
     ctx.agent,
     ctx.agentActor,
     undefined,
-    postEmbedDoc(input.postId)
+    postEmbedDoc(input.postId),
+    undefined,
+    { card: true }
   )
 }
 
@@ -87,7 +89,9 @@ export async function shareTicket(
     ctx.agent,
     ctx.agentActor,
     undefined,
-    ticketEmbedDoc(input.ticketId)
+    ticketEmbedDoc(input.ticketId),
+    undefined,
+    { card: true }
   )
 }
 

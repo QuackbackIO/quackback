@@ -196,6 +196,15 @@ import {
 import { generateContentHTML } from '@/lib/shared/content-html'
 
 const conversationId = 'conversation_1' as ConversationId
+// Conversations here carry no customer ticket. The ticket gate on the reply
+// email runs over real rows in
+// domains/tickets/__tests__/ticket-reply-one-email.db.test.ts.
+vi.mock('@/lib/server/domains/tickets/ticket-reply-email', () => ({
+  requesterTicketForConversation: async () => null,
+  requesterWantsReplyEmail: async () => {
+    throw new Error('no ticket here, so no ticket settings to read')
+  },
+}))
 vi.mock('../conversation.test-delivery', () => ({
   conversationTestDelivery: async (id: ConversationId) => {
     const ordinaryThreads = new Map([[conversationId, { test: false as const }]])

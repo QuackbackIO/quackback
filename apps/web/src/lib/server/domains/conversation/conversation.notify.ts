@@ -623,7 +623,30 @@ export async function notifyAgentReply(opts: {
       ? delivery.recipient
       : resolveReplyRecipient(visitor, visitor?.contactEmail, opts.capturedEmail)
     if (delivery.test && !recipient) return
-    if (!recipient) {
+    // On a customer ticket's conversation this email is the customer's only
+    // copy of the reply (the ticket reply email leaves them out), so it keeps
+    // the ticket's email settings: "Ticket replies" off or "Stop watching"
+    // means no email. A thread-addressed channel still posts: that is the
+    // thread itself, not an email about it.
+    const ticketEmail = delivery.test
+      ? null
+      : await import('@/lib/server/domains/tickets/ticket-reply-email')
+    const ticketId = ticketEmail
+      ? await ticketEmail.requesterTicketForConversation(
+          opts.conversationId,
+          opts.visitorPrincipalId
+        )
+      : null
+    const wanted =
+      !ticketEmail ||
+      !ticketId ||
+      (await ticketEmail.requesterWantsReplyEmail(ticketId, opts.visitorPrincipalId))
+    if (!wanted) {
+      log.debug(
+        { conversation_id: opts.conversationId, ticket_id: ticketId },
+        'agent reply email off by the ticket settings'
+      )
+    } else if (!recipient) {
       // The visitor is unreachable — surface it instead of dropping silently
       // (the inbox can flag conversations with no reply-to address). `channel`
       // discriminates the two severities: on messenger the widget's unread
@@ -645,7 +668,7 @@ export async function notifyAgentReply(opts: {
     const ctaUrl = await resolveVisitorConversationLink(ctx, opts.conversationId)
     const adapter = requireChannelAdapter(opts.channel)
     const threadAddressed = getChannelDescriptor(opts.channel)?.addressing === 'thread'
-    if (recipient || threadAddressed) {
+    if ((recipient && wanted) || threadAddressed) {
       await adapter.deliverAgentMessage({
         conversationId: opts.conversationId,
         messageId: opts.messageId,
