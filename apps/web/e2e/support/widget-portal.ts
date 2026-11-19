@@ -435,6 +435,50 @@ export async function conversationWithMessage(text: string): Promise<Conversatio
   })
 }
 
+/** Call one of the widget's conversation server functions. */
+export function widgetFn<T = unknown>(
+  request: APIRequestContext,
+  name: string,
+  call: ServerFnCall = {}
+): Promise<ServerFnResult<T>> {
+  const method = call.method ?? (/^widget(Get|List|Mint)/.test(name) ? 'GET' : 'POST')
+  return callServerFn<T>(request, FN_FILES.widgetConversation, name, { ...call, method })
+}
+
+/** Messages (any kind) in a conversation. */
+export async function messageCount(conversationTypeId: string): Promise<number> {
+  const [row] = await supportDb()`SELECT count(*)::int AS n FROM conversation_messages
+    WHERE conversation_id = ${toUuid(conversationTypeId as `conversation_${string}`)}`
+  return row.n as number
+}
+
+/** Conversations a principal (uuid) owns as the visitor. */
+export async function conversationCount(principalUuid: string): Promise<number> {
+  const [row] = await supportDb()`SELECT count(*)::int AS n FROM conversations
+    WHERE visitor_principal_id = ${principalUuid}`
+  return row.n as number
+}
+
+/**
+ * Open the live stream and report its status and content type, then hang up.
+ * (An accepted stream never ends on its own, so it cannot go through
+ * Playwright's request context.)
+ */
+export async function streamStatus(
+  query: string,
+  headers: Record<string, string> = {}
+): Promise<{ status: number; contentType: string | null; body: string }> {
+  const controller = new AbortController()
+  const res = await fetch(`${supportEnv().baseUrl}/api/chat/stream?${query}`, {
+    headers,
+    signal: controller.signal,
+  })
+  const contentType = res.headers.get('content-type')
+  const body = res.ok ? '' : await res.text()
+  controller.abort()
+  return { status: res.status, contentType, body }
+}
+
 /** A conversation row by TypeID. */
 export async function conversationRow(typeId: string): Promise<ConversationRow> {
   const rows =
@@ -485,10 +529,12 @@ export function widgetTab(widget: Frame, label: 'Messages' | 'Tickets' | 'Home' 
 }
 
 /** Open the visitor's thread whose list row shows `preview`. */
-export async function openWidgetThread(widget: Frame, preview: string) {
+export async function openWidgetThread(widget: Frame, preview: string | RegExp) {
   await widgetTab(widget, 'Messages').click()
   await widget
-    .getByRole('button', { name: new RegExp(escapeRegExp(preview)) })
+    .getByRole('button', {
+      name: typeof preview === 'string' ? new RegExp(escapeRegExp(preview)) : preview,
+    })
     .first()
     .click()
 }
