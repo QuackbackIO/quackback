@@ -17,8 +17,17 @@ test.describe('Portal Notifications (unauthenticated)', () => {
     expect(url.pathname).toBe('/')
     expect(url.searchParams.get('auth')).toBe('signin')
     expect(url.searchParams.get('callbackUrl')).toBe('/notifications')
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 })
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 10000 })
     await expect(page.getByRole('heading', { name: /^notifications/i })).toHaveCount(0)
+
+    // Signing in from that dialog lands back on the page (the seeded demo user).
+    await dialog.getByLabel('Email').fill('demo@example.com')
+    await dialog.getByRole('button', { name: /continue/i }).click()
+    await dialog.getByLabel(/^password$/i).fill('password')
+    await dialog.getByRole('button', { name: /^sign in$/i }).click()
+    await expect(page).toHaveURL(/\/notifications$/, { timeout: 15000 })
+    await expect(page.getByRole('heading', { name: /^notifications/i })).toBeVisible()
   })
 
   test('shows Log in and Sign up buttons on the portal header when unauthenticated', async ({
