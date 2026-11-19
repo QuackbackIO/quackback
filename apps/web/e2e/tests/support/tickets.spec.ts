@@ -7,8 +7,8 @@
  */
 import { test, expect } from '../../support/fixtures'
 import { ticketReplyAddress, sendInboundEmail } from '../../support/inbound-email'
-import { emailLogFor, waitForMail } from '../../support/mailpit'
-import { supportDb } from '../../support/db'
+import { emailLogFor, getMail, mailTo, waitForMail } from '../../support/mailpit'
+import { pollFor, supportDb } from '../../support/db'
 import {
   addWatcherRow,
   clickUntilVisible,
@@ -61,10 +61,10 @@ import { statusId } from '../../support/tickets'
 
 test.describe('tickets: replies and first response', () => {
   test(
-    'TKT-39 an agent reply on a paired customer ticket reaches the requester live and by email',
+    'TKT-39 an agent reply on a paired customer ticket reaches the requester live, and by one email once they leave',
     { tag: '@smoke' },
     async ({ playwright, baseURL, browser, asPerson, people, marker, customerEmail }) => {
-      test.setTimeout(60_000)
+      test.setTimeout(120_000)
       const api = await ticketApi(playwright, baseURL)
       const customer = await createCustomer(api, customerEmail)
       const ticket = await createTicket(api, {
@@ -98,12 +98,38 @@ test.describe('tickets: replies and first response', () => {
       // Live in the requester's open thread, no reload.
       await expect(requester.getByText(answer)).toBeVisible({ timeout: 15_000 })
 
-      // By email, as the ticket's reply notice.
-      const mail = await waitForMail({
-        to: customerEmail,
-        subject: `New reply on ${ticket.reference}: ${ticket.title}`,
+      // Once they leave, the next reply reaches them by email: one email, the
+      // conversation's, never the ticket's own reply notice.
+      await requester.context().close()
+      await pollFor(
+        'the requester offline',
+        async () => {
+          const [presence] = await supportDb()<{ n: number }[]>`
+            SELECT count(*)::int AS n FROM presence_stream
+            WHERE principal_id = ${principalUuid(customer.principalId)}`
+          return presence.n === 0 ? true : null
+        },
+        { timeoutMs: 60_000, intervalMs: 500 }
+      )
+      const later = `Agent follow-up ${marker}`
+      await sendFromComposer(admin, later)
+      await expect(admin.getByText(later).first()).toBeVisible({ timeout: 10_000 })
+      const carrying = async (text: string) =>
+        (await Promise.all((await mailTo(customerEmail)).map((m) => getMail(m.ID)))).filter(
+          (m) => m.Text.includes(text) || m.HTML.includes(text)
+        )
+      const mail = await pollFor('the follow-up email', async () => (await carrying(later))[0], {
+        timeoutMs: 20_000,
       })
-      expect(mail.Text).toContain(answer)
+      expect(mail.From.Name).toBe('Ada Admin from Acme Corp')
+      expect(mail.Text).toContain('Ada Admin replied to your conversation with Acme Corp.')
+      expect(mail.Text).toContain(`/support/${conversationId}`)
+      // The answer they saw live was never emailed, and no ticket reply notice came.
+      expect(await carrying(answer)).toEqual([])
+      expect(
+        (await mailTo(customerEmail)).filter((m) => m.Subject.startsWith('New reply on'))
+      ).toEqual([])
+      expect(await carrying(later)).toHaveLength(1)
 
       // The reply is the ticket's first response; the replier now watches it.
       const row = await waitForTicket(ticket.id, 'first response', (r) => !!r.first_response_at)

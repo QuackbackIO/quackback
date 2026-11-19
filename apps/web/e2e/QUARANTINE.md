@@ -107,10 +107,6 @@ by a separate test that is not quarantined.
   (`conversation.service.ts`), so the requester also gets "<agent> replied to
   your conversation" with the description. Same family as CUS-O-17. owner:
   unassigned, review by: 2026-12-03.
-- `support/email-outbound.spec.ts` › CUS-O-17 one agent reply on a ticket
-  sends the requester exactly one email. Known bug: a reply on a ticket with
-  a linked conversation sends both the ticket reply email and a conversation
-  reply email. owner: unassigned, review by: 2026-12-03.
 - `support/email-outbound-csat.spec.ts` › CUS-O-23 an emailed face link opens
   with its face preselected and records nothing; › CUS-O-27 an out-of-range
   numeric rating still opens the page with nothing preselected. Found here:

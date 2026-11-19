@@ -16,6 +16,8 @@ import {
   ticketReplyAddress,
 } from '../../support/inbound-email'
 import { getMailHeaders, linksIn } from '../../support/mailpit'
+import { INBOX_PERMISSIONS, newTeammate } from '../../support/api-client'
+import { addWatcherRow } from '../../support/tickets'
 import { runSweep } from '../../support/sweeps'
 import { clearSigninRateLimit, enableMagicLinkMethod } from '../../utils/db-helpers'
 import {
@@ -775,10 +777,10 @@ test.describe('ticket emails to the requester', () => {
       expect(header(headers, 'Message-ID')).toMatch(/^<ticket-[a-z0-9]+@acme\.test>$/)
       expect(header(headers, 'In-Reply-To')).toBeUndefined()
 
-      // A later ticket mail arrives; still one confirmation and no conversation-started mail.
+      // A later mail (the reply) arrives; still one confirmation and no conversation-started mail.
       await ticketReply(api, ticket.id, `We are on it ${marker}`)
       await api.dispose()
-      await waitForMailMatching({ to: customerEmail, subject: `New reply on ${label}` })
+      await waitForMailMatching({ to: customerEmail, body: `We are on it ${marker}` })
       expect(
         await mailsMatching({ to: customerEmail, subject: 'We received your ticket' })
       ).toHaveLength(1)
@@ -819,7 +821,7 @@ test.describe('ticket emails to the requester', () => {
   )
 
   test(
-    'CUS-O-17 an agent reply on a ticket emails the requester; a note sends nothing',
+    'CUS-O-17 an agent reply on a ticket emails the requester once, as the conversation email; watchers get the ticket email; a note sends nothing',
     { tag: '@core' },
     async ({ playwright, baseURL, people, customerEmail, marker }) => {
       const customer = await seedCustomer(customerEmail)
@@ -827,25 +829,50 @@ test.describe('ticket emails to the requester', () => {
       const title = `Login fails ${marker}`
       const ticket = await createCustomerTicket(api, customer.principalId, title)
       const label = `#${ticket.number}`
+      const [pair] = await supportDb()<{ conversation_id: string }[]>`
+        SELECT conversation_id FROM ticket_conversations WHERE ticket_id = ${uuidOf(ticket.id)}`
+      const conversationId = conversationTypeId(pair.conversation_id)
+      const watcher = newTeammate(`Watcher ${marker}`, [...INBOX_PERMISSIONS, 'ticket.view_all'])
+      await addWatcherRow(ticket.id, watcher.principalId)
       await ticketNote(api, ticket.id, `Team-only note ${marker}`)
       const reply = `Please clear your cookies ${marker}`
       await ticketReply(api, ticket.id, reply)
-      await api.dispose()
 
-      const mail = await waitForMailMatching({
-        to: customerEmail,
+      // The requester's one copy is the conversation email, signed by the replier.
+      const mail = await waitForMailMatching({ to: customerEmail, body: reply })
+      expect(mail.From.Name).toBe(`${ADMIN_NAME} from ${WORKSPACE}`)
+      const text = mailText(mail)
+      expect(text).toContain(`${ADMIN_NAME} replied to your conversation with ${WORKSPACE}.`)
+      expect(text).toContain('View conversation')
+      expect(linksIn(mail)).toContain(`${supportEnv().baseUrl}/support/${conversationId}`)
+      const headers = await getMailHeaders(mail.ID)
+      expect(header(headers, 'Reply-To')).toBe(conversationReplyAddress(conversationId))
+
+      // A watching teammate still gets the ticket reply email, threaded on the ticket.
+      const watcherMail = await waitForMailMatching({
+        to: watcher.email,
         subject: `New reply on ${label}: ${title}`,
       })
-      const text = mailText(mail)
-      expect(text).toContain(`${ADMIN_NAME} replied to ${label} "${title}":`)
-      expect(text).toContain(reply)
-      expect(text).toContain('View your ticket')
-      const headers = await getMailHeaders(mail.ID)
+      const watcherText = mailText(watcherMail)
+      expect(watcherText).toContain(`${ADMIN_NAME} replied to ${label} "${title}":`)
+      expect(watcherText).toContain(reply)
+      const watcherHeaders = await getMailHeaders(watcherMail.ID)
       const root = `<ticket-${ticket.id.replace(/^ticket_/, '')}@acme.test>`
-      expect(header(headers, 'In-Reply-To')).toBe(root)
-      expect(header(headers, 'Message-ID')).toMatch(
+      expect(header(watcherHeaders, 'In-Reply-To')).toBe(root)
+      expect(header(watcherHeaders, 'Message-ID')).toMatch(
         /^<ticket-[a-z0-9]+\.[A-Za-z0-9_-]+@acme\.test>$/
       )
+
+      // A later reply's email reaches the requester: by then each reply has
+      // sent them exactly one email, and the ticket reply email none.
+      const later = `Did that help? ${marker}`
+      await ticketReply(api, ticket.id, later)
+      await api.dispose()
+      await waitForMailMatching({ to: customerEmail, body: later })
+      await waitForMailMatching({ to: watcher.email, body: later })
+      expect(await mailsMatching({ to: customerEmail, body: reply })).toHaveLength(1)
+      expect(await mailsMatching({ to: customerEmail, body: later })).toHaveLength(1)
+      expect(await mailsMatching({ to: customerEmail, subject: 'New reply on' })).toEqual([])
       for (const m of await mailsMatching({ to: customerEmail })) {
         expect(m.HTML).not.toContain(`Team-only note ${marker}`)
       }
@@ -854,16 +881,8 @@ test.describe('ticket emails to the requester', () => {
 
   test(
     'CUS-O-17 one agent reply on a ticket sends the requester exactly one email',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description: 'Known bug: a ticket reply may also send a conversation reply email',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, baseURL, people, customerEmail, marker }) => {
-      // Known bug: a reply on a ticket with a linked conversation may send both
-      // a ticket reply email and a conversation reply email (QUARANTINE.md).
       const customer = await seedCustomer(customerEmail)
       const api = await adminApi(playwright, baseURL!, people)
       const ticket = await createCustomerTicket(api, customer.principalId, `Double ${marker}`)
@@ -1164,7 +1183,7 @@ test.describe('who the email speaks as', () => {
   test.beforeEach(() => enableSupportTickets())
 
   test(
-    'CUS-O-30 a personal API key reply is signed by its creator, in the email and the ticket mail',
+    'CUS-O-30 a personal API key reply is signed by its creator, on a conversation and on a ticket',
     { tag: '@core' },
     async ({ request, playwright, baseURL, people, customerEmail, marker }) => {
       const thread = await coldThread(request, customerEmail, marker)
@@ -1174,7 +1193,7 @@ test.describe('who the email speaks as', () => {
       expect(mail.From.Name).toBe(`${ADMIN_NAME} from ${WORKSPACE}`)
       expect(mailText(mail)).toContain(ADMIN_NAME)
 
-      // The ticket reply intro names the creator too.
+      // A reply on a ticket reaches its requester signed by the creator too.
       const customer = await seedCustomer(`t-${customerEmail}`)
       const ticket = await createCustomerTicket(
         personal,
@@ -1185,9 +1204,10 @@ test.describe('who the email speaks as', () => {
       await personal.dispose()
       const ticketMail = await waitForMailMatching({
         to: customer.email,
-        subject: `New reply on #${ticket.number}`,
+        body: `Ticket answer ${marker}`,
       })
-      expect(mailText(ticketMail)).toContain(`${ADMIN_NAME} replied to #${ticket.number}`)
+      expect(ticketMail.From.Name).toBe(`${ADMIN_NAME} from ${WORKSPACE}`)
+      expect(mailText(ticketMail)).toContain(`${ADMIN_NAME} replied to your conversation`)
     }
   )
 

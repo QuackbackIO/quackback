@@ -182,9 +182,11 @@ test.describe('requester replies', () => {
       await new Promise((r) => setTimeout(r, 2_000))
       expect(await replies()).toHaveLength(1)
 
-      // The requester gets no reply email for their own message.
+      // The requester gets no reply email for their own message: nothing
+      // beyond the ticket's "We received your ticket" confirmation.
       const sentAfter = (await emailLogFor(customerEmail)).filter(
-        (r) => r.direction === 'outbound' && (r.subject ?? '').startsWith('New reply on')
+        (r) =>
+          r.direction === 'outbound' && !(r.subject ?? '').startsWith('We received your ticket')
       )
       expect(sentAfter).toEqual([])
     }
