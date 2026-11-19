@@ -68,7 +68,7 @@ test.describe('trackers', () => {
       await openInInbox(admin, trackerId, title)
       const panel = detailPanel(admin)
       await expect(panel.getByText('No linked tickets')).toBeVisible()
-      await expect(panel.getByRole('button', { name: 'Attach' })).toBeVisible()
+      await expect(panel.getByRole('button', { name: 'Attach', exact: true })).toBeVisible()
     }
   )
 
@@ -85,9 +85,14 @@ test.describe('trackers', () => {
       await openInInbox(admin, ticket.id, ticket.title)
       const panel = detailPanel(admin)
       const option = admin.getByRole('menuitem').filter({ hasText: tracker.title })
-      await clickUntilVisible(panel.getByRole('button', { name: 'Link to tracker' }), option)
+      await clickUntilVisible(
+        panel.getByRole('button', { name: 'Link to tracker', exact: true }),
+        option
+      )
       await option.click()
-      await expect(panel.getByRole('button', { name: 'Unlink from tracker' })).toBeVisible()
+      await expect(
+        panel.getByRole('button', { name: 'Unlink from tracker', exact: true })
+      ).toBeVisible()
       await expect.poll(() => trackedBy(ticket.id)).toBe(tracker.id)
       await expect
         .poll(async () =>

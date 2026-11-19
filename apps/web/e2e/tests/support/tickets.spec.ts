@@ -675,7 +675,7 @@ test.describe('tickets: more status, assignment and priority', () => {
       const admin = await asPerson('admin')
       await openInInbox(admin, ticket.id, ticket.title)
       const panel = detailPanel(admin)
-      await panel.getByRole('button', { name: 'Priority' }).click()
+      await panel.getByRole('button', { name: 'Priority', exact: true }).click()
       await admin.getByRole('menuitem', { name: /High/ }).click()
       await expect(panel.getByRole('button', { name: 'High' })).toBeVisible()
       await waitForTicket(ticket.id, 'priority', (r) => r.priority === 'high')
@@ -704,7 +704,7 @@ test.describe('tickets: more status, assignment and priority', () => {
       const admin = await asPerson('admin')
       await openInInbox(admin, ticket.id, ticket.title)
       const panel = detailPanel(admin)
-      await panel.getByRole('button', { name: 'Activity' }).click()
+      await panel.getByRole('button', { name: 'Activity', exact: true }).click()
       const timeline = admin.getByText(/created this ticket|changed status|assigned Ben Agent/)
       await expect(timeline).toHaveCount(3)
       await expect(timeline.nth(0)).toContainText('assigned Ben Agent')
@@ -785,12 +785,12 @@ test.describe('tickets: replies, refusals and watchers', () => {
         page.getByRole('menuitem', { name: 'Watch' })
       )
       await page.getByRole('menuitem', { name: 'Watch' }).click()
-      await expect(panel.getByRole('button', { name: 'Watching' })).toBeVisible()
+      await expect(panel.getByRole('button', { name: 'Watching', exact: true })).toBeVisible()
       await expect.poll(mine).toMatchObject({ reason: 'manual', muted_until: null })
 
-      await panel.getByRole('button', { name: 'Watching' }).click()
+      await panel.getByRole('button', { name: 'Watching', exact: true }).click()
       await page.getByRole('menuitem', { name: 'Mute for a week' }).click()
-      await expect(panel.getByRole('button', { name: 'Muted' })).toBeVisible()
+      await expect(panel.getByRole('button', { name: 'Muted', exact: true })).toBeVisible()
       await expect.poll(async () => (await mine())?.muted_until ?? null).not.toBeNull()
 
       // Muted: a status change sends no bell.
@@ -800,7 +800,7 @@ test.describe('tickets: replies, refusals and watchers', () => {
         (await ticketBells(people.people.agentB.principalId, ticket.id)).map((b) => b.type)
       ).not.toContain('ticket_status_changed')
 
-      await panel.getByRole('button', { name: 'Muted' }).click()
+      await panel.getByRole('button', { name: 'Muted', exact: true }).click()
       await page.getByRole('menuitem', { name: 'Unwatch' }).click()
       await expect(panel.getByRole('button', { name: 'Watch', exact: true })).toBeVisible()
       await expect.poll(mine).toBeNull()
@@ -819,7 +819,10 @@ test.describe('tickets: replies, refusals and watchers', () => {
       const panel = detailPanel(admin)
       const popover = admin.getByRole('dialog')
       // The ticket already has watchers (its assignee), so the trigger is the avatar row.
-      await clickUntilVisible(panel.getByRole('button', { name: 'Manage watchers' }), popover)
+      await clickUntilVisible(
+        panel.getByRole('button', { name: 'Manage watchers', exact: true }),
+        popover
+      )
       await popover.getByRole('combobox').click()
       await admin.getByRole('option', { name: /Ben Agent/ }).click()
       await expect
