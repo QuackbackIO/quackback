@@ -6,55 +6,27 @@ test.describe('Portal Notifications (unauthenticated)', () => {
     await page.waitForLoadState('networkidle')
   })
 
-  test(
-    'redirects away from /notifications when not logged in',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Signed-out visitors see the Notifications heading: /notifications has no auth guard; intended behaviour (redirect or sign-in gate) needs a product decision',
-      },
-    },
-    async ({ page, baseURL }) => {
-      // The portal layout should bounce unauthenticated users away from /notifications
-      // or render the page but gate the content behind an auth prompt.
-      // Either way the current URL must not remain /notifications, OR a login trigger
-      // is visible on the page.
-      const url = page.url()
-      const isOnNotifications = url.includes('/notifications')
-
-      if (!isOnNotifications) {
-        // Hard redirect path: just verify we landed somewhere sensible (home or root)
-        expect(new URL(url).origin).toBe(new URL(baseURL!).origin)
-      } else {
-        // Soft-gate path: page renders but only shows a login prompt, not notification
-        // content. Check that neither the notifications heading nor any notification
-        // rows are visible without first logging in.
-        const heading = page.getByRole('heading', { name: /notifications/i })
-        const loginTrigger = page.getByRole('button', { name: /log in|sign in|sign up/i })
-        const isHeadingVisible = (await heading.count()) > 0 && (await heading.isVisible())
-
-        // Unauthenticated users must NOT see the notifications content heading
-        expect(isHeadingVisible).toBe(false)
-
-        // No heading rendered — auth gate in place
-        await expect(loginTrigger.first()).toBeVisible({ timeout: 10000 })
-      }
-    }
-  )
+  test('sends a signed-out visitor to sign in, and back to /notifications after', async ({
+    page,
+    baseURL,
+  }) => {
+    // Like the other signed-in-only portal pages, the page itself never shows:
+    // the visitor lands on the portal home with the sign-in dialog open.
+    const url = new URL(page.url())
+    expect(url.origin).toBe(new URL(baseURL!).origin)
+    expect(url.pathname).toBe('/')
+    expect(url.searchParams.get('auth')).toBe('signin')
+    expect(url.searchParams.get('callbackUrl')).toBe('/notifications')
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: /^notifications/i })).toHaveCount(0)
+  })
 
   test('shows Log in and Sign up buttons on the portal header when unauthenticated', async ({
     page,
   }) => {
-    // Even if we were redirected, navigate home so the header is definitely visible
-    const url = page.url()
-    if (!url.includes('/notifications')) {
-      // Already redirected — check header on current page
-    } else {
-      await page.goto('/')
-      await page.waitForLoadState('networkidle')
-    }
+    // The redirect opens the sign-in dialog; check the header on a plain home page.
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const logInButton = page.getByRole('button', { name: /log in/i })
     const signUpButton = page.getByRole('button', { name: /sign up/i })
