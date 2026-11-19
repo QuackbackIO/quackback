@@ -84,7 +84,9 @@ export async function openWidgetAs(
 }
 
 export async function createVisitor(
-  playwright: PlaywrightWorkerArgs['playwright']
+  playwright: PlaywrightWorkerArgs['playwright'],
+  /** With an email: an identified customer (a real address the app may mail). */
+  opts: { email?: string } = {}
 ): Promise<TestVisitor> {
   const baseURL = supportEnv().baseUrl
   // What the anonymous sign-in writes (an anonymous user, its principal and a
@@ -95,11 +97,13 @@ export async function createVisitor(
   const principalUuid = toUuid(generateId('principal'))
   const token = randomBytes(24).toString('base64url')
   const name = `Visitor ${suffix.slice(0, 6)}`
+  const email = opts.email ?? `temp-${suffix}@anon.quackback.io`
+  const anonymous = !opts.email
   await sql.begin(async (tx) => {
     await tx`INSERT INTO "user" (id, name, email, email_verified, is_anonymous, created_at, updated_at)
-             VALUES (${userUuid}, ${name}, ${`temp-${suffix}@anon.quackback.io`}, false, true, NOW(), NOW())`
+             VALUES (${userUuid}, ${name}, ${email}, ${!anonymous}, ${anonymous}, NOW(), NOW())`
     await tx`INSERT INTO principal (id, user_id, role, type, display_name, created_at)
-             VALUES (${principalUuid}, ${userUuid}, 'user', 'anonymous', ${name}, NOW())`
+             VALUES (${principalUuid}, ${userUuid}, 'user', ${anonymous ? 'anonymous' : 'user'}, ${name}, NOW())`
     await tx`INSERT INTO session (id, expires_at, token, created_at, updated_at, user_agent, scope, user_id)
              VALUES (${randomUUID()}, ${new Date(Date.now() + 24 * 60 * 60 * 1000)}, ${token}, NOW(), NOW(),
                      'support-e2e', 'widget', ${userUuid})`
