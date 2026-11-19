@@ -37,7 +37,12 @@ function workspace({
 }: {
   sectionDomains?: Record<
     string,
-    { hostname: string; verifiedAt: string | null; unconfirmedSince?: string }
+    {
+      hostname: string
+      verifiedAt: string | null
+      unconfirmedSince?: string
+      reachWarning?: { reason: 'unreachable' | 'dns'; since: string }
+    }
   >
   legacyHelpDomain?: { domain: string | null; verifiedAt: string | null }
   helpCenter?: boolean
@@ -85,7 +90,7 @@ describe('authTrustedOrigins on a single-workspace install', () => {
     expect(await authTrustedOrigins()).not.toContain('https://help.acme.com')
   })
 
-  it('does not trust a host whose verification is only kept because its lookups go unanswered', async () => {
+  it('does not trust a host whose verification is only kept after re-checks found it may not be ours', async () => {
     // A lapsed or dangling domain may belong to someone else now.
     state.settings = workspace({
       sectionDomains: {
@@ -97,6 +102,23 @@ describe('authTrustedOrigins on a single-workspace install', () => {
       },
     })
     expect(await authTrustedOrigins()).not.toContain('https://help.acme.com')
+  })
+
+  it('still trusts a verified host this server only could not reach or look up', async () => {
+    // Behind NAT without hairpin routing, or with split DNS, the daily check
+    // may never reach the hostname; sign-in there must keep working.
+    for (const reason of ['unreachable', 'dns'] as const) {
+      state.settings = workspace({
+        sectionDomains: {
+          help: {
+            hostname: 'help.acme.com',
+            verifiedAt: VERIFIED,
+            reachWarning: { reason, since: VERIFIED },
+          },
+        },
+      })
+      expect(await authTrustedOrigins()).toContain('https://help.acme.com')
+    }
   })
 
   it('does not trust the host of a section that is off', async () => {

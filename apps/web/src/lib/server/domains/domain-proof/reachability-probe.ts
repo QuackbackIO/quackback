@@ -109,10 +109,26 @@ async function instanceAnswersOn(domain: string): Promise<'ok' | 'unreachable' |
  * a section domain needs. Only when nothing answered at all: a server that
  * answered with something else is not this one.
  */
+export interface CustomDomainProbe {
+  status: HelpCenterDomainStatus
+  /** Whether DNS gave an answer at all; false when the lookups went unanswered. */
+  dnsAnswered: boolean
+  /**
+   * What DNS said: addresses (`resolved`), the zone's word that there are none
+   * (`absent`), or no answer (`unknown`: timeout, server failure).
+   */
+  dns: 'resolved' | 'absent' | 'unknown'
+  /**
+   * What answered on the hostname: this server (`ok`), nothing (`unreachable`),
+   * or something else (`other`).
+   */
+  instance: 'ok' | 'unreachable' | 'other'
+}
+
 export async function probeCustomDomain(
   domain: string,
   { primaryOrigin }: { primaryOrigin?: string | null } = {}
-): Promise<{ status: HelpCenterDomainStatus; dnsAnswered: boolean }> {
+): Promise<CustomDomainProbe> {
   // Never on a pooled process (Cloud's fleet): there another workspace's
   // hostname answers this request, and the control plane decides readiness.
   // Section domains never call this on Cloud; this holds if one ever does.
@@ -121,6 +137,8 @@ export async function probeCustomDomain(
     return {
       status: { dnsResolved: false, instanceReachable: false, verified: false },
       dnsAnswered: false,
+      dns: 'unknown',
+      instance: 'unreachable',
     }
   }
   const [dns, instance] = await Promise.all([lookUp(domain), instanceAnswersOn(domain)])
@@ -133,12 +151,16 @@ export async function probeCustomDomain(
       return {
         status: { dnsResolved, instanceReachable, verified: true, sharesPrimaryAddress: true },
         dnsAnswered,
+        dns: dns.outcome,
+        instance,
       }
     }
   }
   return {
     status: { dnsResolved, instanceReachable, verified: dnsResolved && instanceReachable },
     dnsAnswered,
+    dns: dns.outcome,
+    instance,
   }
 }
 

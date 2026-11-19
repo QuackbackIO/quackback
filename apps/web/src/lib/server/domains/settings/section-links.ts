@@ -71,7 +71,8 @@ export async function getServedSectionOrigins(): Promise<SectionOrigins> {
  * The origins sign-in may use: trusted origins, the hosts a session is
  * carried to, and the host a sign-in link or provider sign-in comes back to.
  * As `getSectionOrigins`, less any hostname whose verification is only kept
- * because its lookups go unanswered (`confirmedSectionDomains`).
+ * after re-checks found it may no longer be ours (`confirmedSectionDomains`).
+ * A hostname with only a reach warning (`reachWarning`) stays.
  */
 export async function getSignInSectionOrigins(): Promise<SectionOrigins> {
   return sectionOriginsOf(await getWorkspaceSettings(), getBaseUrl(), { forSignIn: true })

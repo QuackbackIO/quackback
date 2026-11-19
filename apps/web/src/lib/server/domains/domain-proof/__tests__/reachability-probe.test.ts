@@ -114,6 +114,23 @@ describe('probeCustomDomain', () => {
     expect(status).toEqual({ dnsResolved: true, instanceReachable: false, verified: false })
   })
 
+  it('says what DNS said and what answered, so a miss can be told apart', async () => {
+    set('A', 'help.acme.com', ['203.0.113.7'])
+    reply = 'unreachable'
+    expect(await probeCustomDomain('help.acme.com')).toMatchObject({
+      dns: 'resolved',
+      instance: 'unreachable',
+    })
+    reply = 'error-page'
+    expect(await probeCustomDomain('help.acme.com')).toMatchObject({
+      dns: 'resolved',
+      instance: 'other',
+    })
+    expect(await probeCustomDomain('gone.acme.com')).toMatchObject({ dns: 'absent' })
+    set('A', 'slow.acme.com', 'timeout')
+    expect(await probeCustomDomain('slow.acme.com')).toMatchObject({ dns: 'unknown' })
+  })
+
   it('reads DNS through the resolver that tries twice', async () => {
     set('AAAA', 'help.acme.com', ['2001:db8::7'])
     expect((await probeCustomDomain('help.acme.com')).status.dnsResolved).toBe(true)

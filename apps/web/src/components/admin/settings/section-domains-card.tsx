@@ -30,6 +30,7 @@ import {
 import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
 import {
   notAnsweringNote,
+  reachWarningNote,
   sectionDomainState,
   type SectionDomainState,
 } from '@/lib/shared/section-domains'
@@ -214,14 +215,18 @@ export function SectionDomainsCard({
           const needsVerify = state === 'pending' || state === 'not-answering'
           // The second line: only a state that needs action speaks, and it says the next step.
           // Modules are turned on in Settings > General; named, not linked, as the page's JS budget is tight.
+          // A verified domain this server could not check speaks too, with no badge: nothing is off.
+          const warning = reachWarningNote(entry)
           const note =
             state === 'not-answering'
               ? notAnsweringNote(entry)
-              : state === 'pending' && checks[section]?.verified === false
-                ? 'Not verified yet. DNS changes can take a while to show.'
-                : off
-                  ? `Turn ${label} on in Settings > General to use this domain.`
-                  : undefined
+              : warning
+                ? warning
+                : state === 'pending' && checks[section]?.verified === false
+                  ? 'Not verified yet. DNS changes can take a while to show.'
+                  : off
+                    ? `Turn ${label} on in Settings > General to use this domain.`
+                    : undefined
           return (
             <Fragment key={section}>
               <SettingsListRow

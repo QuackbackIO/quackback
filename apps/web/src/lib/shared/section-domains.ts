@@ -21,9 +21,10 @@ export interface SectionDomain {
   hostname: string
   verifiedAt: string | null
   /**
-   * Self-hosted only: since when the verification has been kept without an
-   * answer (a Verify whose DNS lookup went unanswered, or a daily re-check
-   * that found the hostname not reaching this server, `section-domains-watch`).
+   * Self-hosted only: since when the verification has been kept after daily
+   * re-checks found the hostname may no longer be this workspace's (no
+   * address, something else answering, or its verification record gone,
+   * `section-domains-watch`).
    * Absent while the hostname is confirmed. Routing keeps a bounded grace;
    * sign-in is never carried there.
    */
@@ -35,6 +36,22 @@ export interface SectionDomain {
    * sign-in reads it.
    */
   missedAt?: string | null
+  /**
+   * Self-hosted only: a check that failed without saying the hostname is no
+   * longer this workspace's. `unreachable`: DNS still points it somewhere and
+   * the workspace's verification record still covers it, but this server
+   * could not reach itself through it (no hairpin routing, split DNS, egress
+   * rules). `dns`: the lookups went unanswered. A warning only: routing and
+   * sign-in keep the hostname and no grace starts. Cleared by a check that
+   * reaches it.
+   */
+  reachWarning?: SectionDomainReachWarning | null
+}
+
+export interface SectionDomainReachWarning {
+  reason: 'unreachable' | 'dns'
+  /** When this run of warnings began. */
+  since: string
 }
 
 /**
@@ -75,8 +92,24 @@ export function notAnsweringNote(entry: SectionDomain): string | null {
 }
 
 /**
+ * What the admin pages say about a verified hostname whose last check could
+ * not reach it while nothing said it is no longer ours. Null otherwise.
+ */
+export function reachWarningNote(entry: SectionDomain): string | null {
+  if (entry.unconfirmedSince || !entry.verifiedAt) return null
+  switch (entry.reachWarning?.reason) {
+    case 'unreachable':
+      return "This server can't reach itself through this domain. If visitors can open it, no action is needed."
+    case 'dns':
+      return 'DNS lookups for this domain failed on the last check. It will be checked again.'
+    default:
+      return null
+  }
+}
+
+/**
  * The map as sign-in may use it: a hostname whose verification is only kept
- * (its lookups go unanswered) counts as unverified. A lapsed or dangling
+ * (`unconfirmedSince`) counts as unverified. A lapsed or dangling
  * domain may be someone else's now, and a session must never be carried to
  * it, nor a sign-in posted from it trusted.
  */
