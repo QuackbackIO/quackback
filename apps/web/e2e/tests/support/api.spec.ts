@@ -720,7 +720,7 @@ test.describe('REST conversations: writes', () => {
   )
 
   test(
-    'API-19 a close with a personal key starts workflows like the app; a workspace or pre-cutoff key starts none',
+    'API-93 a close with a personal key starts workflows like the app; a workspace or pre-cutoff key starts none',
     { tag: '@core' },
     async ({ request, playwright, baseURL, people, customerEmail, marker }) => {
       test.setTimeout(120_000)
