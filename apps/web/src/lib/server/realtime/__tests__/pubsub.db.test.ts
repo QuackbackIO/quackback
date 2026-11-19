@@ -134,6 +134,24 @@ describe('connection lifecycle', () => {
     expect(openListenerCount()).toBe(0)
   })
 
+  it('closeSubscriber (graceful shutdown) closes every LISTEN connection, and nothing is delivered after', async () => {
+    await closeSubscriber()
+    const got: string[] = []
+    await withRealWorkspace(T, () => subscribe(['shutdown'], (_c, m) => void got.push(m)))
+    await withRealWorkspace(OTHER, () => subscribe(['shutdown'], (_c, m) => void got.push(m)))
+    expect(openListenerCount()).toBe(2)
+    // Live before the shutdown.
+    await withRealWorkspace(T, () => publishAsync('shutdown', { n: 'before' }))
+    await until(() => got.length === 1)
+
+    await closeSubscriber()
+    expect(openListenerCount()).toBe(0)
+    await withRealWorkspace(T, () => publishAsync('shutdown', { n: 'after' }))
+    await withRealWorkspace(OTHER, () => publishAsync('shutdown', { n: 'after' }))
+    await new Promise((r) => setTimeout(r, 300))
+    expect(got.map((m) => JSON.parse(m).n)).toEqual(['before'])
+  })
+
   it('two workspaces get two connections, not one shared bus', async () => {
     await closeSubscriber()
     const off1 = await withRealWorkspace(T, () => subscribe(['x'], () => {}))
