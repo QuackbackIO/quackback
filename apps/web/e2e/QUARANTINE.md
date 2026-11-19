@@ -202,3 +202,15 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   visitor email is not suppressed for the intake. Same family as the possible
   double email on ticket replies (CUS-O-17). owner: unassigned, review by:
   2026-12-03.
+
+### Support suite: widget and portal (CUS-W, CUS-P)
+
+- `support/widget-chat.spec.ts` › CUS-W-19 the rate-limit refusal carries
+  RATE_LIMITED and retryAfter to the client. The 21st send in the window is
+  refused, but `ConversationRateLimitError`
+  (`src/lib/server/domains/conversation/conversation.ratelimit.ts:9`) extends
+  plain `Error`, not `DomainException`, so the typed-error adapter
+  (`src/lib/shared/typed-error-serialization.ts`) drops its `code` and
+  `retryAfter`: the widget and portal get only the message and cannot tell a
+  throttle from any other failure or say when to retry. owner: unassigned,
+  review by: 2026-12-03.
