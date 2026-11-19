@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render as baseRender, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createAutosaveMutationCache } from '@/lib/client/autosave'
@@ -108,6 +109,27 @@ describe('NotificationMatrixForm', () => {
       ).toBe('false')
     )
     expect(screen.queryByText('boom')).toBeNull()
+  })
+
+  it('offers no in-app switch for notifications that only ever arrive by email', async () => {
+    render(<NotificationMatrixForm surface="admin" initialPreferences={preferences} />)
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Support' }))
+
+    for (const label of ['SLA breach warning', 'SLA breached']) {
+      expect(await screen.findByLabelText(`${label} - Email`)).toBeTruthy()
+      expect(screen.queryByLabelText(`${label} - In-app`)).toBeNull()
+    }
+    // A notification that does ring the bell keeps both switches.
+    expect(screen.getByLabelText('Ticket assigned - In-app')).toBeTruthy()
+    expect(screen.getByLabelText('Ticket assigned - Email')).toBeTruthy()
+  })
+
+  it('offers a customer no in-app switch for the ticket receipt, which is email only', async () => {
+    render(<NotificationMatrixForm surface="portal" initialPreferences={preferences} />)
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Support' }))
+
+    expect(await screen.findByLabelText('Ticket received - Email')).toBeTruthy()
+    expect(screen.queryByLabelText('Ticket received - In-app')).toBeNull()
   })
 
   it('saves a toggled cell with the full matrix', async () => {
