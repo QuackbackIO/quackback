@@ -688,7 +688,14 @@ export const runListConversationMessages = createServerOnlyFn(
     const actor = await policyActorFromAuth(ctx)
     const { listMessages, enrichMessagesForAgent } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    await assertConversationVisible(data.conversationId as ConversationId, actor)
+    const conversation = await assertConversationVisible(
+      data.conversationId as ConversationId,
+      actor
+    )
+    // The thread's current status and rating ride along, so a surface that
+    // refetches to catch up (a stream that just opened, or a poll) also
+    // learns of a close or reopen it had no event for.
+    const state = { status: conversation.status, csatRating: conversation.csatRating }
     const isTeam = isTeamMember(ctx.principal.role)
     // Agents keep seeing internal notes when paging older messages; visitors never do.
     // CONVERGENCE PHASE 0: the team branch also folds the linked customer
@@ -710,6 +717,7 @@ export const runListConversationMessages = createServerOnlyFn(
     if (isTeam) {
       return {
         ...page,
+        ...state,
         messages: await enrichMessagesForAgent(
           page.messages,
           ctx.principal.id,
@@ -719,7 +727,7 @@ export const runListConversationMessages = createServerOnlyFn(
         ),
       }
     }
-    return page
+    return { ...page, ...state }
   }
 )
 

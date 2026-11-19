@@ -516,30 +516,42 @@ export function VisitorConversationThread({
     // getAuthHeaders is identity-stable per surface; sessionVersion is the reload key.
   }, [sessionVersion, conversationTarget])
 
-  // Refetch the authoritative thread after a reconnect to catch anything missed.
+  // Counts live stream events, so a refetch can tell whether one landed while
+  // it was in flight (its snapshot may then predate that event).
+  const streamEventCountRef = useRef(0)
+
+  // Refetch the authoritative thread (messages, status and rating) to catch up
+  // on anything the stream did not deliver: when it opens or reopens, on a
+  // poll, or when a hidden message is shown again. A refetch that a stream
+  // event overtook is thrown away and read again, so it never undoes that
+  // event (bounded, so a busy thread still settles on the stream).
   const refreshMessages = useCallback(async () => {
     if (!conversationId) return
-    try {
-      const page = await rpc.listConversationMessages({
-        data: { conversationId },
-        headers: getAuthHeaders(),
-      })
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const eventsBefore = streamEventCountRef.current
+      let page: Awaited<ReturnType<typeof rpc.listConversationMessages>>
+      try {
+        page = await rpc.listConversationMessages({
+          data: { conversationId },
+          headers: getAuthHeaders(),
+        })
+      } catch {
+        return /* keep the current thread */
+      }
+      if (streamEventCountRef.current !== eventsBefore) continue
       queryClient.setQueryData(
         conversationKeys.visitorThread(conversationId),
-        (prev: VisitorThreadCache | undefined) =>
-          prev
-            ? { ...prev, messages: page.messages, hasMore: page.hasMore }
-            : {
-                messages: page.messages,
-                hasMore: page.hasMore,
-                agentLastReadAt: null,
-                visitorLastReadAt: null,
-                status: null,
-                csatRating: null,
-              }
+        (prev: VisitorThreadCache | undefined) => ({
+          agentLastReadAt: null,
+          visitorLastReadAt: null,
+          ...prev,
+          messages: page.messages,
+          hasMore: page.hasMore,
+          status: page.status ?? prev?.status ?? null,
+          csatRating: page.status ? (page.csatRating ?? null) : (prev?.csatRating ?? null),
+        })
       )
-    } catch {
-      /* keep current messages */
+      return
     }
   }, [conversationId, getAuthHeaders, queryClient])
 
@@ -592,6 +604,7 @@ export function VisitorConversationThread({
       }
     },
     onEvent: (evt) => {
+      streamEventCountRef.current++
       // Cache-shaped updates (message/read/deleted/conversation) route through
       // the pure reducer; typing + presence side effects stay here.
       if (conversationId) {
@@ -622,7 +635,7 @@ export function VisitorConversationThread({
         onAssistantDelta(evt.text)
       }
     },
-    onReconnect: () => void refreshMessages(),
+    onCatchUp: () => void refreshMessages(),
   })
 
   // Ephemeral turn state is component-local (not keyed by resetKey); drop it when

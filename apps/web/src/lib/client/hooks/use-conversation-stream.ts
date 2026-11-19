@@ -11,13 +11,14 @@ interface UseConversationStreamOptions {
   enabled: boolean
   onEvent: (event: ConversationStreamEvent) => void
   /**
-   * Called after the stream becomes live following a gap: a reconnect, or the
-   * first successful open after one or more failed attempts. Not called on a
-   * clean first connect. Use it to refetch state so events missed while
-   * disconnected are caught up — we recreate the EventSource on error (to
-   * re-mint the token), which forgoes the built-in Last-Event-ID replay.
+   * Called each time the stream becomes live: the first open as well as every
+   * reconnect. Use it to refetch state so changes made before the stream was
+   * listening are caught up: on the first open, whatever happened between the
+   * caller's own load and the subscription; on a reconnect, whatever happened
+   * while disconnected (we recreate the EventSource on error to re-mint the
+   * token, which forgoes the built-in Last-Event-ID replay).
    */
-  onReconnect?: () => void
+  onCatchUp?: () => void
   /** Key that, when changed, tears down and rebuilds the connection. */
   resetKey?: string | number
   /**
@@ -93,7 +94,7 @@ export function useConversationStream({
   buildUrl,
   enabled,
   onEvent,
-  onReconnect,
+  onCatchUp,
   resetKey,
   mode = 'live',
   poll,
@@ -102,8 +103,8 @@ export function useConversationStream({
   const [connected, setConnected] = useState(false)
   const onEventRef = useRef(onEvent)
   onEventRef.current = onEvent
-  const onReconnectRef = useRef(onReconnect)
-  onReconnectRef.current = onReconnect
+  const onCatchUpRef = useRef(onCatchUp)
+  onCatchUpRef.current = onCatchUp
   const buildUrlRef = useRef(buildUrl)
   buildUrlRef.current = buildUrl
   const pollRef = useRef(poll)
@@ -118,11 +119,6 @@ export function useConversationStream({
     let es: EventSource | null = null
     let stopped = false
     let retry = 0
-    let openedOnce = false
-    // True once a connect attempt has failed (error or mint miss) before the
-    // next successful open. The first clean open must not refetch; an open
-    // that follows a failed attempt is a gap the same way a reconnect is.
-    let missedWhileDisconnected = false
     let sseFailures = 0
     let polling = false
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -172,7 +168,6 @@ export function useConversationStream({
       }
       if (stopped) return
       if (!url) {
-        missedWhileDisconnected = true
         scheduleReconnect()
         return
       }
@@ -185,16 +180,15 @@ export function useConversationStream({
         retry = 0
         sseFailures = 0
         setConnected(true)
-        if (openedOnce || missedWhileDisconnected) onReconnectRef.current?.()
-        openedOnce = true
-        missedWhileDisconnected = false
+        // Every open catches up, the first included: anything that changed
+        // before this subscription was listening has no event to deliver.
+        onCatchUpRef.current?.()
       }
       es.onerror = () => {
         // The token may have expired; recreate with a fresh one + backoff.
         es?.close()
         es = null
         sseFailures++
-        missedWhileDisconnected = true
         setConnected(false)
         // Once reconnecting is clearly futile and a poll fallback exists, stop
         // hammering SSE and switch to polling for the rest of this connection.
@@ -224,7 +218,7 @@ export function useConversationStream({
       es = null
       setConnected(false)
     }
-    // buildUrl/onEvent/onReconnect/poll are captured via refs above, so the
+    // buildUrl/onEvent/onCatchUp/poll are captured via refs above, so the
     // connection only rebuilds on enabled/resetKey/mode/interval changes.
   }, [enabled, resetKey, mode, pollIntervalMs])
 
