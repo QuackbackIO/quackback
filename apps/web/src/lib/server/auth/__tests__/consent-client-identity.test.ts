@@ -13,7 +13,11 @@ describe('consentClientIdentity', () => {
         clientDiscoveryId: 'cimd',
         redirectUris: ['https://chatgpt.com/cb'],
       })
-    ).toEqual({ verified: true, host: 'chatgpt.com' })
+    ).toEqual({
+      verified: true,
+      host: 'chatgpt.com',
+      redirect: { kind: 'web', host: 'chatgpt.com' },
+    })
   })
 
   it('never trusts an https-shaped client_id on a row it does not own', () => {
@@ -33,7 +37,7 @@ describe('consentClientIdentity', () => {
         clientDiscoveryId: 'cimd',
         redirectUris: [],
       })
-    ).toEqual({ verified: true, host: 'xn--chtgpt-4nf.com' })
+    ).toEqual({ verified: true, host: 'xn--chtgpt-4nf.com', redirect: null })
   })
 
   it('uses the requested redirect only when the client registered it', () => {

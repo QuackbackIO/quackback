@@ -9,9 +9,14 @@
  * - A CIMD client (`clientDiscoveryId === 'cimd'`) is identified by an HTTPS
  *   URL whose document the server fetched itself. The host of that URL is
  *   verified: only whoever controls it could have served the document.
- * - Any other client registered itself. Nothing about it is verified, but the
- *   redirect URI decides where the authorization code goes, so its host is the
- *   one fact worth showing.
+ * - Any other client registered itself. Nothing about it is verified.
+ *
+ * Either way the redirect URI decides where the authorization code goes, so
+ * its host is always shown (MCP authorization security: the server MUST
+ * clearly display the redirect URI hostname). A verified host does not make a
+ * loopback redirect safe: CIMD cannot stop a local program from claiming a
+ * client whose document lists `localhost` redirects, so the screen warns when
+ * the code goes to this device.
  *
  * Decided from the stored row on the server, never from the shape of the
  * `client_id` the browser holds.
@@ -27,7 +32,8 @@ export type ConsentRedirectTarget =
   | { kind: 'app'; scheme: string }
 
 export type ConsentClientIdentity =
-  { verified: true; host: string } | { verified: false; redirect: ConsentRedirectTarget | null }
+  | { verified: true; host: string; redirect: ConsentRedirectTarget | null }
+  | { verified: false; redirect: ConsentRedirectTarget | null }
 
 export interface ConsentClientRow {
   clientId: string
@@ -69,10 +75,6 @@ export function consentClientIdentity(
   row: ConsentClientRow,
   requestedRedirectUri?: string | null
 ): ConsentClientIdentity {
-  if (row.clientDiscoveryId === CIMD_CLIENT_DISCOVERY_ID) {
-    const host = clientIdMetadataHost(row.clientId)
-    if (host) return { verified: true, host }
-  }
   const registered = row.redirectUris ?? []
   const redirectUri =
     requestedRedirectUri && registered.includes(requestedRedirectUri)
@@ -80,7 +82,12 @@ export function consentClientIdentity(
       : registered.length === 1
         ? registered[0]
         : null
-  return { verified: false, redirect: redirectUri ? describeRedirectUri(redirectUri) : null }
+  const redirect = redirectUri ? describeRedirectUri(redirectUri) : null
+  if (row.clientDiscoveryId === CIMD_CLIENT_DISCOVERY_ID) {
+    const host = clientIdMetadataHost(row.clientId)
+    if (host) return { verified: true, host, redirect }
+  }
+  return { verified: false, redirect }
 }
 
 /**

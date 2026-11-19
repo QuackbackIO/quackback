@@ -60,7 +60,8 @@ type ConsentRedirectTarget =
 
 /** What the server can vouch for about the client (see consent-client-identity.ts). */
 type ClientIdentity =
-  { verified: true; host: string } | { verified: false; redirect: ConsentRedirectTarget | null }
+  | { verified: true; host: string; redirect: ConsentRedirectTarget | null }
+  | { verified: false; redirect: ConsentRedirectTarget | null }
 
 interface OAuthClientInfo {
   client_name?: string
@@ -82,16 +83,6 @@ function isSafeUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
     return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-/** An HTTPS URL on exactly this host. */
-function isOnHost(url: string, host: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' && parsed.hostname === host
   } catch {
     return false
   }
@@ -217,21 +208,20 @@ function ConsentPage() {
   const [error, setError] = useState<string | null>(null)
 
   const clientName = client?.client_name || 'An application'
-  // A self-registered client's link and logo are never shown: it chose them
-  // freely, so they could point at, or look like, anyone.
+  // A self-registered client's link is never shown: it chose it freely, so it
+  // could point at anyone. No client's logo is shown: loading it from the
+  // client's host would tell that host who is consenting and when, and the
+  // draft requires a displayed logo to be prefetched and served from a trusted
+  // host (CIMD §10.9).
   const identity = client?.client_identity
   const verifiedHost = identity?.verified ? identity.host : null
-  const redirectTarget = identity && !identity.verified ? identity.redirect : null
-  // The plugin binds a CIMD client's `client_uri` to its client_id origin, but
-  // not its `logo_uri`, so a logo shows only when it is served from the
-  // verified host too. A document on any host could otherwise pair a familiar
-  // name and logo with the check mark.
+  const redirectTarget = identity?.redirect ?? null
+  // The plugin binds a CIMD client's `client_uri` to its client_id origin.
   const verifiedLink =
     verifiedHost && client?.client_uri && isSafeUrl(client.client_uri) ? client.client_uri : null
-  const verifiedLogo =
-    verifiedHost && client?.logo_uri && isOnHost(client.logo_uri, verifiedHost)
-      ? client.logo_uri
-      : null
+  // CIMD cannot stop a program on this device from claiming a client whose
+  // document lists loopback redirects, so say so plainly.
+  const codeStaysOnDevice = redirectTarget?.kind === 'device' || redirectTarget?.kind === 'app'
 
   const preset = consentPreset(levels)
   const capabilityScopes = scopesFromDomainLevels(levels)
@@ -292,15 +282,7 @@ function ConsentPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center gap-1.5">
           <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-muted/50">
-            {verifiedLogo ? (
-              <img
-                src={verifiedLogo}
-                alt={clientName}
-                className="h-11 w-11 rounded-full object-cover"
-              />
-            ) : (
-              <Globe className="h-5 w-5 text-muted-foreground" />
-            )}
+            <Globe className="h-5 w-5 text-muted-foreground" />
           </div>
 
           <h1 className="text-xl font-semibold">{clientName}</h1>
@@ -333,10 +315,16 @@ function ConsentPage() {
             wants to access {workspaceName ?? 'your account'}
           </p>
 
-          {!verifiedHost && (
+          {(!verifiedHost || redirectTarget) && (
             <p className="text-xs text-muted-foreground/70">
-              This app chose its own name, so it may not be who it says.
-              {redirectTarget && <> {redirectTargetText(redirectTarget)}.</>}
+              {!verifiedHost && <>This app chose its own name, so it may not be who it says. </>}
+              {redirectTarget && <>{redirectTargetText(redirectTarget)}.</>}
+            </p>
+          )}
+
+          {codeStaysOnDevice && (
+            <p className="text-xs text-muted-foreground/70">
+              Only continue if you started this from an app on this device yourself.
             </p>
           )}
         </div>

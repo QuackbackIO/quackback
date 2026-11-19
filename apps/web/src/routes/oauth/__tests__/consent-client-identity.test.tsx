@@ -65,12 +65,16 @@ describe('consent client identity', () => {
     expect(url.searchParams.get('redirect_uri')).toBe('https://chat.example.com/cb')
   })
 
-  it('shows the verified host next to a CIMD client name, with its logo and link', async () => {
+  it('shows the verified host and where the code goes, with its link but never a logo', async () => {
     await renderConsent({
       client_name: 'ChatGPT',
       client_uri: 'https://chatgpt.com',
       logo_uri: 'https://chatgpt.com/logo.png',
-      client_identity: { verified: true, host: 'chatgpt.com' },
+      client_identity: {
+        verified: true,
+        host: 'chatgpt.com',
+        redirect: { kind: 'web', host: 'chatgpt.com' },
+      },
     })
     expect(screen.getByRole('heading', { name: 'ChatGPT' })).toBeInTheDocument()
     expect(screen.getByText(/Verified:/)).toHaveTextContent('Verified: chatgpt.com')
@@ -78,21 +82,24 @@ describe('consent client identity', () => {
       'href',
       'https://chatgpt.com'
     )
-    expect(screen.getByRole('img', { name: 'ChatGPT' })).toHaveAttribute(
-      'src',
-      'https://chatgpt.com/logo.png'
-    )
+    expect(screen.getByText(/Sends you back to chatgpt\.com\./)).toBeInTheDocument()
+    // Loading the logo would tell the client's host who is consenting, and when.
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.queryByText('Unverified app')).not.toBeInTheDocument()
+    expect(screen.queryByText(/may not be who it says/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Only continue if/)).not.toBeInTheDocument()
   })
 
-  it('hides a verified client logo served from another host', async () => {
+  it('warns when a verified client sends the code to an app on this device', async () => {
     await renderConsent({
-      client_name: 'ChatGPT',
-      logo_uri: 'https://chatgpt.com/logo.png',
-      client_identity: { verified: true, host: 'evil.example' },
+      client_name: 'Visual Studio Code',
+      client_identity: { verified: true, host: 'vscode.dev', redirect: { kind: 'device' } },
     })
-    expect(screen.getByText(/Verified:/)).toHaveTextContent('Verified: evil.example')
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByText(/Verified:/)).toHaveTextContent('Verified: vscode.dev')
+    expect(screen.getByText(/Sends you back to an app on this device\./)).toBeInTheDocument()
+    expect(
+      screen.getByText('Only continue if you started this from an app on this device yourself.')
+    ).toBeInTheDocument()
   })
 
   it('marks a self-registered client unverified, and hides the logo and link it chose', async () => {
@@ -118,6 +125,7 @@ describe('consent client identity', () => {
       client_identity: { verified: false, redirect: { kind: 'device' } },
     })
     expect(screen.getByText(/Sends you back to an app on this device\./)).toBeInTheDocument()
+    expect(screen.getByText(/Only continue if you started this/)).toBeInTheDocument()
   })
 
   it('names the app scheme of a private-use redirect', async () => {

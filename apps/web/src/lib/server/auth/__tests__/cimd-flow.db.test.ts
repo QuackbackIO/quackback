@@ -18,6 +18,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   auditLog,
   oauthClient,
+  oauthConsent,
   oauthClientResource,
   oauthResource,
   principal,
@@ -531,11 +532,12 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
   })
 
   // A workspace's auth instance (and so the document cache) is rebuilt after
-  // the pool goes idle. A cold instance refetches the document on first use,
-  // and the plugin fails closed when it cannot: the stored row alone is not
-  // enough. A client whose document host is down cannot authorize, or refresh,
-  // until it is back.
-  it('fails closed when a cold instance cannot refetch the document', async () => {
+  // the pool goes idle, so a cold instance refetches the document on first
+  // use. A transient failure (the stand-in throws, as a network error does)
+  // must not lock out a client people already connected (draft §6.1): the
+  // recently validated stored row keeps working. A terminal failure still
+  // fails closed.
+  it('keeps a stored client working when a cold instance cannot reach its document', async () => {
     serveDocument()
     const person = await signedIn()
     expect((await authorize(person.headers)).status).toBe(302)
@@ -544,13 +546,15 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
     const { resetAuth } = await import('@/lib/server/auth/index')
     resetAuth()
     const res = await authorize(person.headers)
-    expect(`${res.location} ${res.body}`).toMatch(/invalid_client/)
+    expect(res.status, res.body).toBe(302)
+    expect(res.location).toContain('/oauth/consent')
+    expect(res.location).not.toContain('error=')
     expect(docs.fetches).toEqual([CLIENT_ID, CLIENT_ID])
     const rows = await testDb.select().from(oauthClient).where(eq(oauthClient.clientId, CLIENT_ID))
     expect(rows).toHaveLength(1)
   })
 
-  it('refuses a refresh on a cold instance that cannot refetch the document', async () => {
+  it('refreshes a token on a cold instance that cannot reach the document', async () => {
     serveDocument()
     const person = await signedIn()
     const first = await authorize(person.headers)
@@ -571,9 +575,73 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
         }).toString(),
       }),
     })
-    expect(refresh.status).toBeGreaterThanOrEqual(400)
-    expect(await refresh.text()).toMatch(/invalid_client/)
+    const body = await refresh.text()
+    expect(refresh.status, body).toBe(200)
+    expect(JSON.parse(body).access_token).toBeTruthy()
     expect(docs.fetches).toEqual([CLIENT_ID, CLIENT_ID])
+  })
+
+  it('fails closed on a cold instance when the document is gone', async () => {
+    serveDocument()
+    const person = await signedIn()
+    expect((await authorize(person.headers)).status).toBe(302)
+
+    docs.served.set(CLIENT_ID, () => new Response('gone', { status: 404 }))
+    const { resetAuth } = await import('@/lib/server/auth/index')
+    resetAuth()
+    const res = await authorize(person.headers)
+    expect(`${res.location} ${res.body}`).toMatch(/invalid_client/)
+  })
+
+  it('marks the stored client as validated again after each successful refetch', async () => {
+    serveDocument()
+    const person = await signedIn()
+    expect((await authorize(person.headers)).status).toBe(302)
+    const [before] = await testDb
+      .select()
+      .from(oauthClient)
+      .where(eq(oauthClient.clientId, CLIENT_ID))
+
+    await new Promise((resolve) => setTimeout(resolve, 1_100))
+    const { resetAuth } = await import('@/lib/server/auth/index')
+    resetAuth()
+    expect((await authorize(person.headers)).status).toBe(302)
+    const [after] = await testDb
+      .select()
+      .from(oauthClient)
+      .where(eq(oauthClient.clientId, CLIENT_ID))
+    // The stale limit for transient failures counts from this timestamp.
+    expect(after!.updatedAt!.getTime()).toBeGreaterThan(before!.updatedAt!.getTime())
+  })
+
+  it('asks for consent again when a refetched document changes the redirect URIs', async () => {
+    serveDocument()
+    const person = await signedIn()
+    const first = await authorize(person.headers)
+    await consentAndExchange(person.headers, first.location)
+    const stored = await testDb
+      .select()
+      .from(oauthConsent)
+      .where(eq(oauthConsent.clientId, CLIENT_ID))
+    expect(stored.length).toBeGreaterThan(0)
+
+    serveDocument({
+      redirect_uris: [REDIRECT_URI, 'https://chat.example.com/oauth/new-callback'],
+    })
+    const { resetAuth } = await import('@/lib/server/auth/index')
+    resetAuth()
+    expect((await authorize(person.headers)).status).toBe(302)
+
+    const after = await testDb
+      .select()
+      .from(oauthConsent)
+      .where(eq(oauthConsent.clientId, CLIENT_ID))
+    expect(after).toHaveLength(0)
+    const [audit] = await testDb
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.eventType, 'oauth.client.refreshed'))
+    expect(audit?.metadata).toMatchObject({ consentCleared: true })
   })
 
   // Discovery runs before the sign-in check, as client lookup does for DCR
@@ -601,6 +669,8 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
       'https://user:pass@chat.example.com/oauth/client.json',
       'https://127.0.0.1/oauth/client.json',
       'https://chat.example.com/a/../client.json',
+      // This server's own host: a JSON file it serves must not pass as a client.
+      'https://localhost/oauth/client.json',
     ]) {
       const res = await authorize(person.headers, { client_id: clientId })
       expect(res.status, clientId).toBeGreaterThanOrEqual(300)
