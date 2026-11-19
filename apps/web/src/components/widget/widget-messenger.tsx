@@ -21,6 +21,8 @@ interface WidgetMessengerProps {
   autofocusComposer?: boolean
   /** Text the composer starts with (a host's `open({ view: 'chat', body })`). */
   initialDraft?: string
+  /** Whether a reply can reach this visitor by email (see the thread's prop). */
+  onReplyByEmailChange?: (canReplyByEmail: boolean) => void
 }
 
 /**
@@ -35,6 +37,7 @@ export function WidgetMessenger({
   conversationTarget,
   autofocusComposer = false,
   initialDraft,
+  onReplyByEmailChange,
 }: WidgetMessengerProps = {}) {
   const queryClient = useQueryClient()
   const { user, ensureSession, sessionVersion } = useWidgetAuth()
@@ -82,6 +85,7 @@ export function WidgetMessenger({
         showHeader={false}
         autofocusComposer={autofocusComposer}
         initialDraft={initialDraft}
+        onReplyByEmailChange={onReplyByEmailChange}
         compact
       />
     </VisitorSurfaceRpcProvider>

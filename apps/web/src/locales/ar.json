@@ -617,6 +617,7 @@
   "widget.messenger.edited": "(معدّلة)",
   "widget.loading": "جارٍ التحميل…",
   "widget.messenger.offline": "سنرد عبر البريد الإلكتروني",
+  "widget.messenger.offline.replyHere": "سنرد عليك هنا",
   "widget.messenger.assistant.teamAlso": "يمكن للفريق المساعدة أيضًا",
   "widget.messenger.offline.backAt": "سنعود {when}",
   "widget.messenger.offline.noEmail": "نحن غير متواجدين حاليًا. اترك رسالة وسنرد عليك هنا عند عودتنا.",

@@ -617,6 +617,7 @@
   "widget.messenger.edited": "（已编辑）",
   "widget.loading": "加载中…",
   "widget.messenger.offline": "我们会通过邮件回复",
+  "widget.messenger.offline.replyHere": "我们会在这里回复",
   "widget.messenger.assistant.teamAlso": "团队也可以提供帮助",
   "widget.messenger.offline.backAt": "我们将于 {when} 回来",
   "widget.messenger.offline.noEmail": "我们暂时不在。请留言，我们回来后会在这里回复你。",

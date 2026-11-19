@@ -175,6 +175,11 @@ export interface VisitorConversationThreadProps {
   showHeader?: boolean
   /** Notified when the first send creates the conversation. */
   onConversationStarted?: (id: ConversationId) => void
+  /** Notified with whether a reply can reach this visitor by email: false
+   *  until the thread loads, then the server's verdict. A surface that draws
+   *  its own presence badge (the widget's header, with `showHeader` false)
+   *  words its away copy from it. */
+  onReplyByEmailChange?: (canReplyByEmail: boolean) => void
   /**
    * Focus the composer as soon as it mounts. The surface decides: a "new
    * conversation" landing on a desktop host wants the cursor in the box; a
@@ -265,6 +270,7 @@ export function VisitorConversationThread({
   embedOpenMode = 'newTab',
   showHeader = true,
   onConversationStarted,
+  onReplyByEmailChange,
   autofocusComposer = false,
   compact = false,
   initialDraft,
@@ -300,6 +306,9 @@ export function VisitorConversationThread({
   // Whether an offline reply could actually reach this visitor by email — drives
   // the offline copy so the surface never promises email it can't send.
   const [canEmailReply, setCanEmailReply] = useState(false)
+  useEffect(() => {
+    onReplyByEmailChange?.(canEmailReply)
+  }, [canEmailReply, onReplyByEmailChange])
   // Whether the visitor rated in THIS session — enables the optional comment
   // follow-up. A returning, already-rated visitor goes straight to "thanks".
   const [csatJustRated, setCsatJustRated] = useState(false)
@@ -1270,7 +1279,7 @@ export function VisitorConversationThread({
         </div>
       ) : showHeader ? (
         <div className="flex items-center px-4 py-2 border-b border-border/40 shrink-0">
-          <ConversationPresenceBadge available={available} />
+          <ConversationPresenceBadge available={available} canReplyByEmail={canEmailReply} />
         </div>
       ) : null}
 
