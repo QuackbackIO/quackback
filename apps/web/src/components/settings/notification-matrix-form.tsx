@@ -292,11 +292,19 @@ export function NotificationMatrixForm({
             id: 'portal.settings.notifications.pauseAll.label',
             defaultMessage: 'Pause all email',
           })}
-          description={intl.formatMessage({
-            id: 'portal.settings.notifications.pauseAll.description',
-            defaultMessage:
-              'Turn off email delivery for every notification type below. In-app notifications keep working.',
-          })}
+          description={
+            surface === 'portal'
+              ? intl.formatMessage({
+                  id: 'portal.settings.notifications.pauseAll.customerDescription',
+                  defaultMessage:
+                    'Turn off email delivery for every notification type below. In-app notifications keep working. Replies from our team still reach you.',
+                })
+              : intl.formatMessage({
+                  id: 'portal.settings.notifications.pauseAll.description',
+                  defaultMessage:
+                    'Turn off email delivery for every notification type below. In-app notifications keep working.',
+                })
+          }
           control={
             <>
               {surface === 'portal' && savingEmailMuted && (

@@ -800,6 +800,7 @@ async function ingestColdInbound(
           parsed,
           conversationId,
           conversationSubject: parsed.subject,
+          senderPrincipalId: resolution.principalId,
         })
       )
       .catch((err) => log.error({ err, conversationId }, 'cold-inbound auto-ack failed'))

@@ -851,6 +851,13 @@ export async function notifyCsatRequestEmail(
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, null)
     const threadAddressed = getChannelDescriptor(conv.channel)?.addressing === 'thread'
     if (!recipient && !threadAddressed) return
+    // An automated request, so "Pause all email" holds the email back. A
+    // thread-addressed channel posts in the thread itself, which is not email.
+    if (!threadAddressed) {
+      const { hasPausedAllEmail } =
+        await import('@/lib/server/domains/subscriptions/subscription.service')
+      if (await hasPausedAllEmail(visitorPrincipalId)) return
+    }
 
     const ctx = await buildHookContext()
     if (!ctx) return

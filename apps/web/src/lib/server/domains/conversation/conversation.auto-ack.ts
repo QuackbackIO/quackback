@@ -4,7 +4,7 @@
  */
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 import { logger } from '@/lib/server/logger'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { ParsedInboundEmail } from './conversation.email-inbound'
 import { ownEmailDomains } from './conversation.email-channel'
 import { normalizeSenderAddress } from './conversation.email-inbound'
@@ -15,7 +15,14 @@ const ACK_WINDOW_SECONDS = 3600
 const ACK_MAX = 2
 
 export type AutoAckRefusal =
-  'disabled' | 'auto_submitted' | 'precedence' | 'list' | 'own_domain' | 'no_sender' | 'rate_capped'
+  | 'disabled'
+  | 'auto_submitted'
+  | 'precedence'
+  | 'list'
+  | 'own_domain'
+  | 'no_sender'
+  | 'rate_capped'
+  | 'email_paused'
 
 export function evaluateAutoAckGuards(
   parsed: ParsedInboundEmail,
@@ -50,6 +57,9 @@ export async function maybeSendColdInboundAck(opts: {
   parsed: ParsedInboundEmail
   conversationId: ConversationId
   conversationSubject: string | null
+  /** The person the sender's address resolved to, whose "Pause all email"
+   *  holds the acknowledgement back. */
+  senderPrincipalId?: PrincipalId
 }): Promise<AutoAckRefusal | 'sent' | 'skipped'> {
   const { getEmailAutoAck } = await import('@/lib/server/domains/settings/settings.email-auto-ack')
   const setting = await getEmailAutoAck()
@@ -66,6 +76,14 @@ export async function maybeSendColdInboundAck(opts: {
   if (!(await assertAutoAckRate(sender))) {
     log.info({ reason: 'rate_capped' }, 'auto-ack suppressed')
     return 'rate_capped'
+  }
+  // An automated acknowledgement, so the sender's "Pause all email" holds it
+  // back when they are someone we already know.
+  const { hasPausedAllEmail } =
+    await import('@/lib/server/domains/subscriptions/subscription.service')
+  if (opts.senderPrincipalId && (await hasPausedAllEmail(opts.senderPrincipalId))) {
+    log.info({ reason: 'email_paused' }, 'auto-ack suppressed')
+    return 'email_paused'
   }
 
   try {

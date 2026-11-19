@@ -72,6 +72,16 @@ describe('NotificationMatrixForm', () => {
     expect(getNotificationPreferencesFn).toHaveBeenCalledTimes(1)
   })
 
+  it('tells a customer that replies from the team still reach them when email is paused', () => {
+    render(<NotificationMatrixForm surface="portal" initialPreferences={preferences} />)
+    expect(screen.getByText(/Replies from our team still reach you\./)).toBeTruthy()
+  })
+
+  it('keeps that sentence off the team settings, where it does not apply', () => {
+    render(<NotificationMatrixForm surface="admin" initialPreferences={preferences} />)
+    expect(screen.queryByText(/Replies from our team still reach you/)).toBeNull()
+  })
+
   it('offers in-app and email only, with line tabs', () => {
     render(<NotificationMatrixForm surface="admin" initialPreferences={preferences} />)
 

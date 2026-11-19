@@ -48,6 +48,10 @@ export async function notifyConversationClosed(opts: {
       .limit(1)
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, conv.visitorEmail)
     if (!recipient) return
+    // An automated notice, so "Pause all email" holds it back.
+    const { hasPausedAllEmail } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    if (await hasPausedAllEmail(conv.visitorPrincipalId)) return
 
     const ctx = await buildHookContext()
     if (!ctx) return
