@@ -1,5 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getStatusComponentHandler, patchStatusComponentHandler } from '../-service-handlers'
+import {
+  deleteStatusComponentHandler,
+  getStatusComponentHandler,
+  patchStatusComponentHandler,
+} from '../-service-handlers'
 
 // Current public path (see STATUS-ADMIN-REDESIGN-SPEC.md §4 Phase 6): the
 // workspace's public wording is "service", aliasing the legacy
@@ -20,6 +24,12 @@ export const Route = createFileRoute('/api/v1/status/services/$serviceId')({
        */
       PATCH: async ({ request, params }) =>
         patchStatusComponentHandler({ request, id: params.serviceId }),
+
+      /**
+       * DELETE /api/v1/status/services/:serviceId
+       */
+      DELETE: async ({ request, params }) =>
+        deleteStatusComponentHandler({ request, id: params.serviceId }),
     },
   },
 })

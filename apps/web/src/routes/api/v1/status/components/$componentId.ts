@@ -1,5 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getStatusComponentHandler, patchStatusComponentHandler } from '../-service-handlers'
+import {
+  deleteStatusComponentHandler,
+  getStatusComponentHandler,
+  patchStatusComponentHandler,
+} from '../-service-handlers'
 
 // Legacy path — kept byte-identical for existing consumers. The current
 // public name is "service"; see `../services/$serviceId.ts` and OpenAPI's
@@ -18,6 +22,12 @@ export const Route = createFileRoute('/api/v1/status/components/$componentId')({
        */
       PATCH: async ({ request, params }) =>
         patchStatusComponentHandler({ request, id: params.componentId }),
+
+      /**
+       * DELETE /api/v1/status/components/:componentId
+       */
+      DELETE: async ({ request, params }) =>
+        deleteStatusComponentHandler({ request, id: params.componentId }),
     },
   },
 })

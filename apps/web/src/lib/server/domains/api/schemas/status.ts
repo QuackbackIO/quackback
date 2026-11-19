@@ -349,6 +349,18 @@ function componentDetailPath(label: string, paramName: string, deprecatedNote?: 
         404: componentNotFoundResponse(label),
       },
     },
+    delete: {
+      tags: ['Status'],
+      summary: `Delete a status ${label}`,
+      description: `Soft-deletes the ${label}. Past incidents that used it keep their history.${deprecatedNote ?? ''}`,
+      ...deprecated,
+      parameters: componentIdParam(paramName, label),
+      responses: {
+        204: { description: `Status ${label} deleted` },
+        401: componentUnauthorizedResponse,
+        404: componentNotFoundResponse(label),
+      },
+    },
   }
 }
 
@@ -361,7 +373,7 @@ registerPath(
   )
 )
 
-// Register GET+PATCH /status/components/{componentId} (deprecated — see /status/services/{serviceId})
+// Register GET+PATCH+DELETE /status/components/{componentId} (deprecated — see /status/services/{serviceId})
 registerPath(
   '/status/components/{componentId}',
   componentDetailPath(
@@ -374,7 +386,7 @@ registerPath(
 // Register GET+POST /status/services
 registerPath('/status/services', componentCollectionPath('service'))
 
-// Register GET+PATCH /status/services/{serviceId}
+// Register GET+PATCH+DELETE /status/services/{serviceId}
 registerPath('/status/services/{serviceId}', componentDetailPath('service', 'serviceId'))
 
 // Register GET /status/incidents
@@ -441,7 +453,7 @@ registerPath('/status/incidents', {
   },
 })
 
-// Register GET /status/incidents/{incidentId}
+// Register GET+DELETE /status/incidents/{incidentId}
 registerPath('/status/incidents/{incidentId}', {
   get: {
     tags: ['Status'],
@@ -464,6 +476,32 @@ registerPath('/status/incidents/{incidentId}', {
           },
         },
       },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      404: {
+        description: 'Status incident not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+  delete: {
+    tags: ['Status'],
+    summary: 'Delete a status incident',
+    description:
+      'Soft-deletes an incident or maintenance window. Pending maintenance jobs are cancelled and the services it was holding are recomputed from whatever is still open.',
+    parameters: [
+      {
+        name: 'incidentId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' },
+        description: 'Status incident ID',
+      },
+    ],
+    responses: {
+      204: { description: 'Status incident deleted' },
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },

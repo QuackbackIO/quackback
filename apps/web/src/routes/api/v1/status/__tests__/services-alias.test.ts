@@ -50,7 +50,11 @@ describe('status components/services alias', () => {
     const componentsHandlers = importedHandlerNames(componentsIdSource)
     const servicesHandlers = importedHandlerNames(servicesIdSource)
 
-    expect(componentsHandlers).toEqual(['getStatusComponentHandler', 'patchStatusComponentHandler'])
+    expect(componentsHandlers).toEqual([
+      'deleteStatusComponentHandler',
+      'getStatusComponentHandler',
+      'patchStatusComponentHandler',
+    ])
     expect(servicesHandlers).toEqual(componentsHandlers)
   })
 
