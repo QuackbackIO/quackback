@@ -18,6 +18,7 @@ import type {
 } from '@/lib/server/db'
 import type { TicketSort } from '@/lib/server/domains/tickets/ticket.types'
 import type { McpAuthContext } from '../types'
+import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
 import { getBaseUrl } from '@/lib/server/config'
 import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -260,7 +261,7 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
       title: z.string().min(1).max(300).describe('Short summary'),
       description: z
         .string()
-        .max(10000)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
         .optional()
         .describe(`Opening message body (optional). ${TICKET_MARKDOWN_DESCRIBE}`),
       priority: z.enum(TICKET_PRIORITIES).optional().describe('Triage priority (default none)'),
@@ -325,7 +326,7 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
       content: z
         .string()
         .min(1)
-        .max(10000)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
         .describe(`Reply text, visible to the requester. ${TICKET_MARKDOWN_DESCRIBE}`),
       fileIds: z
         .array(z.string())
@@ -368,7 +369,7 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
       content: z
         .string()
         .min(1)
-        .max(10000)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
         .describe(`Internal note text (team-only). ${TICKET_MARKDOWN_DESCRIBE}`),
       fileIds: z
         .array(z.string())

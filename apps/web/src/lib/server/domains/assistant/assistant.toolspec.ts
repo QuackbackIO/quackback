@@ -60,6 +60,7 @@ import { SKILL_LOADS_PER_TURN } from '@/lib/shared/assistant/skills'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
+import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
 import { setConversationStatus } from '@/lib/server/domains/conversation/conversation.service'
 import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { linkTicketToConversation } from '@/lib/server/domains/tickets/ticket-conversation-link.service'
@@ -894,7 +895,7 @@ export const createTicketTool = toolDefinition({
     title: z.string().min(1).max(300).describe('A short, specific summary of the issue.'),
     description: z
       .string()
-      .max(10000)
+      .max(MAX_CONVERSATION_MESSAGE_LENGTH)
       .optional()
       .describe('Additional detail from the conversation to seed the ticket.'),
     priority: z.enum(CONVERSATION_PRIORITIES).optional().describe('How urgent the ticket is.'),

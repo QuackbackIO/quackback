@@ -10,6 +10,7 @@ import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { PostId, BoardId, ConversationId, PrincipalId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
+import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
 import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import {
   registerTool,
@@ -170,7 +171,11 @@ Attach files already uploaded with upload_file by passing their ids in fileIds (
 Example: reply_to_conversation({ conversationId: "conversation_01abc...", content: "Thanks for reaching out — we're on it." })`,
     schema: {
       conversationId: z.string().describe('Conversation TypeID'),
-      content: z.string().min(1).max(4000).describe('Reply text sent to the visitor'),
+      content: z
+        .string()
+        .min(1)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
+        .describe('Reply text sent to the visitor'),
       fileIds: z
         .array(z.string())
         .max(10)
