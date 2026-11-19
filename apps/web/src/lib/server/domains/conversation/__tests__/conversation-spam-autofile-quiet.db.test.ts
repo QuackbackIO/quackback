@@ -204,7 +204,7 @@ describe.skipIf(!fixture.available)('spam auto-filing stays quiet (real DB, roll
     expect(bell.recipients).toContain(admin)
   })
 
-  it('a deterministic rule files the cold email into Spam with a team-only notice', async () => {
+  it('a deterministic rule files the cold email into Spam as it arrives, with its reason', async () => {
     const { conversationId } = await ingestFiled()
     const stored = await testDb.query.conversations.findFirst({
       where: eq(conversations.id, conversationId),
@@ -212,28 +212,15 @@ describe.skipIf(!fixture.available)('spam auto-filing stays quiet (real DB, roll
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
     expect(stored?.spamReason).toBe('auto_responder')
+    expect(stored?.endNote).toContain('Auto-filed by the spam filter')
     expect(mockChat).not.toHaveBeenCalled()
-    const notices = await testDb.query.conversationMessages.findMany({
-      where: (m, { eq: eq_ }) => eq_(m.conversationId, conversationId),
-    })
-    const system = notices.filter((m) => m.senderType === 'system')
-    expect(system.map((m) => [m.content, m.isInternal])).toEqual([
-      ['Conversation auto-filed as spam', true],
-    ])
-    // The bell below is resolved from a real outbox event, not a missing one.
-    expect((await bellRecipients(conversationId)).eventFound).toBe(true)
+    // Filed in its insert, like quarantined mail: no message event is written,
+    // so nothing downstream (bells, workflows, webhooks) can react to it.
+    expect((await bellRecipients(conversationId)).eventFound).toBe(false)
   })
 
-  // Product bug (e2e/QUARANTINE.md, "Support suite: inbox remainder"): the
-  // thread is created open and its message.created event is written before
-  // maybeAutoFileSpam files it (conversation.email-cold-inbound.ts, the emits
-  // after the insert; conversation.email-inbound.service.ts, the filing after
-  // createEmailConversation), and getMessageCreatedTargets (events/targets.ts)
-  // never looks at the filing, so the worker bells the team for spam. `fails`
-  // keeps the suite green until the fix lands; then this turns red and the
-  // marker comes off. Setup is proven by the test above, so the only thing
-  // that can fail here is the assertion.
-  it.fails('a spam-filed cold email rings no team bell', async () => {
+  // INB-62: a cold email a fixed rule files as spam rings no one.
+  it('a spam-filed cold email rings no team bell', async () => {
     const { conversationId } = await ingestFiled()
     expect((await bellRecipients(conversationId)).recipients).toEqual([])
   })

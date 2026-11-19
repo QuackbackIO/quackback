@@ -978,21 +978,13 @@ test.describe('spam, loops and floods', () => {
         spam_reason: 'auto_responder',
         end_note: 'Auto-filed by the spam filter (Auto-responder)',
       })
-      const system = (await messagesIn(auto.row.id)).filter((m) => m.sender_type === 'system')
-      expect(system.map((m) => [m.content, m.is_internal])).toContainEqual([
-        'Conversation auto-filed as spam',
-        true,
-      ])
-      // It had already been created and announced before filing.
-      await expect
-        .poll(() => eventTypesFor(auto.id))
-        .toEqual(
-          expect.arrayContaining([
-            'conversation.created',
-            'message.created',
-            'conversation.status_changed',
-          ])
-        )
+      // Filed as it arrived, like quarantined mail: nothing was announced, so
+      // no bell, workflow or webhook reacts to it. (Settle briefly first: an
+      // event would be written in the same request.)
+      await new Promise((resolve) => setTimeout(resolve, 1_000))
+      const types = await eventTypesFor(auto.id)
+      expect(types).not.toContain('conversation.created')
+      expect(types).not.toContain('message.created')
 
       // Sender-auth failure short of a reject.
       const weak = await coldConversation(request, `weak-${customerEmail}`, `${marker}-weak`, {

@@ -39,6 +39,10 @@ vi.mock('../conversation.webhooks', async (orig) => ({
   emitMessageCreated: vi.fn().mockResolvedValue(undefined),
   emitConversationStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))
+const mockSendAck = vi.fn().mockResolvedValue('sent')
+vi.mock('../conversation.auto-ack', () => ({
+  maybeSendColdInboundAck: (...args: unknown[]) => mockSendAck(...args),
+}))
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: vi.fn(),
   publishConversationMessage: vi.fn(),
@@ -92,6 +96,16 @@ import { ingestParsedEmail } from '../conversation.email-inbound.service'
 import { listConversationsForAgent } from '../conversation.query'
 import { maybeAutoFileSpam } from '../conversation.spam-filter'
 import { sendVisitorMessage } from '../conversation.service'
+import { emitConversationCreated, emitMessageCreated } from '../conversation.webhooks'
+
+/** Mail filed by a fixed rule raises nothing a customer or the team sees. */
+async function expectNoSignals(): Promise<void> {
+  // The acknowledgement is sent out of band; let it start if it is going to.
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(emitConversationCreated).not.toHaveBeenCalled()
+  expect(emitMessageCreated).not.toHaveBeenCalled()
+  expect(mockSendAck).not.toHaveBeenCalled()
+}
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -252,6 +266,10 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     expect(stored?.status).toBe('open')
     expect(stored?.endReason).toBeNull()
     await expect(spamViewIds()).resolves.not.toContain(res.conversationId)
+    // Accepted mail raises its signals and is acknowledged.
+    expect(emitConversationCreated).toHaveBeenCalledTimes(1)
+    expect(emitMessageCreated).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(mockSendAck).toHaveBeenCalledTimes(1))
   })
 
   it('bypasses classification for a workspace-trusted sender', async () => {
@@ -292,6 +310,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
     expect(stored?.spamReason).toBe('auto_responder')
+    await expectNoSignals()
     await expect(spamViewIds()).resolves.toContain(res.conversationId)
     await expect(spamViewReason(res.conversationId)).resolves.toBe('auto_responder')
     // The deterministic signal filed it; the AI path never ran.
@@ -331,6 +350,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
     expect(stored?.spamReason).toBe('sender_auth_failure')
+    await expectNoSignals()
     expect(mockChat).not.toHaveBeenCalled()
   })
 
@@ -352,6 +372,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
     expect(stored?.spamReason).toBe('burst_rate')
+    await expectNoSignals()
     expect(mockChat).not.toHaveBeenCalled()
   })
 
@@ -458,6 +479,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('open')
     expect(stored?.endReason).toBeNull()
+    expect(emitConversationCreated).toHaveBeenCalledTimes(1)
     expect(mockChat).not.toHaveBeenCalled()
   })
 
