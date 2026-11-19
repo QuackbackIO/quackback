@@ -13,8 +13,6 @@ import {
   eq,
   and,
   isNull,
-  desc,
-  ne,
   notInArray,
   conversations,
   conversationMessages,
@@ -42,6 +40,7 @@ import {
   toMessageDTO,
 } from '@/lib/server/messages/message-core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { newestCustomerVisibleMessage } from './conversation.preview'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { assertMessageParentVisible, permissionParentOf } from './message-parent'
@@ -244,19 +243,7 @@ async function applyEdit(
     if (!row.isInternal && row.conversationId) {
       // The preview tracks the newest customer-visible message. System lines
       // never write it, so they must not stop an edit from refreshing it.
-      const [latest] = await tx
-        .select({ id: conversationMessages.id })
-        .from(conversationMessages)
-        .where(
-          and(
-            eq(conversationMessages.conversationId, row.conversationId),
-            isNull(conversationMessages.deletedAt),
-            eq(conversationMessages.isInternal, false),
-            ne(conversationMessages.senderType, 'system')
-          )
-        )
-        .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
-        .limit(1)
+      const latest = await newestCustomerVisibleMessage(tx, row.conversationId)
       if (latest?.id === row.id) {
         await tx
           .update(conversations)

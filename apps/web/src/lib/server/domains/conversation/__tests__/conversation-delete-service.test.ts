@@ -71,11 +71,13 @@ vi.mock('@/lib/server/db', () => {
     return c
   }
 
+  const db: Record<string, unknown> = {
+    select: () => chain('select'),
+    update: (t: { __name?: string }) => chain(t?.__name ?? 'unknown'),
+  }
+  db.transaction = async (fn: (tx: unknown) => unknown) => fn(db)
   return {
-    db: {
-      select: () => chain('select'),
-      update: (t: { __name?: string }) => chain(t?.__name ?? 'unknown'),
-    },
+    db,
     eq: vi.fn(),
     or: vi.fn(),
     sql: vi.fn(),
@@ -100,6 +102,13 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
 const mockSyncTicketFirstResponse = vi.fn()
 vi.mock('@/lib/server/domains/tickets/ticket-first-response', () => ({
   syncTicketFirstResponseAfterRemoval: (...args: unknown[]) => mockSyncTicketFirstResponse(...args),
+}))
+
+// The preview recompute after a delete has its own real-DB coverage
+// (conversation-delete-preview.db.test.ts).
+vi.mock('../conversation.preview', () => ({
+  newestCustomerVisibleMessage: vi.fn(async () => undefined),
+  previewOfStoredMessage: vi.fn(() => ''),
 }))
 
 import { deleteConversationMessage } from '../conversation.service'
