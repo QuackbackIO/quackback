@@ -576,8 +576,8 @@ test.describe('conversation events', () => {
       const hook = await subscribe(api, marker, ['sla.approaching_breach', 'sla.breached'])
       const flows: Array<{ id: string; cleanup: () => void }> = []
       try {
-        // Known gap (SLA-23): the SLA timer events only fire while a live
-        // workflow has the trigger. Never-matching graphs keep runs out.
+        // Live workflows on both triggers: the events still reach the sink
+        // once each. Never-matching graphs keep runs out.
         for (const triggerType of ['sla.approaching_breach', 'sla.breached']) {
           flows.push(
             await createWorkflow({
@@ -645,14 +645,7 @@ test.describe('conversation events', () => {
   )
   test(
     'API-92 sla.breached is delivered with no live SLA workflow',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Known bug SLA-23: SLA timer events fire only while a live workflow has the trigger (workflow-sweep.ts sweepSlaTimerTriggers). Also passes by accident when another test has a live SLA workflow at the time.',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, baseURL, people, marker, customerEmail, request }) => {
       const api = await hooksApi(playwright, baseURL, people, marker)
       const hook = await subscribe(api, marker, ['sla.breached'])

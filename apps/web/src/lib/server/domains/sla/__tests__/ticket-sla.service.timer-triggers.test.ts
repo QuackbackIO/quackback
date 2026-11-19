@@ -365,6 +365,19 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
       ])
     })
 
+    it('looks back one day: a clock that breached longer ago is left alone', async () => {
+      const { ticketId } = await seedTicket({ linked: true })
+      const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
+      await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+      // Due 11:00 on the 5th: still inside the lookback at 10:59 the next day,
+      // outside it a minute after 11:00.
+      expect(await sweepTicketSlaBreachTriggers(new Date('2026-01-06T10:59:00Z'))).toEqual([
+        expect.objectContaining({ ticketId }),
+      ])
+      expect(await sweepTicketSlaBreachTriggers(new Date('2026-01-06T11:01:00Z'))).toEqual([])
+    })
+
     it('a settle landing between scan and claim suppresses the claim (A2)', async () => {
       const { ticketId } = await seedTicket({ linked: true })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })

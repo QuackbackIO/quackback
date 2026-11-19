@@ -128,6 +128,7 @@ import {
   sweepSlaTimerTriggers,
   sweepWorkflowRuns,
 } from '../workflow-sweep'
+import { DEFAULT_BREACH_LEAD_MINUTES } from '../workflow.schemas'
 import { workflowWaitJobId } from '../workflow-wait-queue'
 
 const fixture = await createDbTestFixture({
@@ -1150,14 +1151,18 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
   })
 
   describe('sweepSlaTimerTriggers', () => {
-    it('does nothing when no live workflow subscribes to either SLA trigger', async () => {
-      const fired = await sweepSlaTimerTriggers(new Date())
-      expect(fired).toBe(0)
-      expect(sweepApproachingSlaBreaches).not.toHaveBeenCalled()
-      expect(sweepSlaBreachTriggers).not.toHaveBeenCalled()
-      // The ticket-axis scans share the same live-workflow pre-check.
-      expect(sweepApproachingTicketSlaBreaches).not.toHaveBeenCalled()
-      expect(sweepTicketSlaBreachTriggers).not.toHaveBeenCalled()
+    it('scans every SLA axis at the default lead when no live workflow subscribes', async () => {
+      const now = new Date('2026-01-05T10:50:00Z')
+      await sweepSlaTimerTriggers(now)
+      // The events also drive the SLA emails and webhooks, so no workflow is
+      // needed for the scans to run.
+      expect(sweepApproachingSlaBreaches).toHaveBeenCalledWith(DEFAULT_BREACH_LEAD_MINUTES, now)
+      expect(sweepSlaBreachTriggers).toHaveBeenCalledWith(now)
+      expect(sweepApproachingTicketSlaBreaches).toHaveBeenCalledWith(
+        DEFAULT_BREACH_LEAD_MINUTES,
+        now
+      )
+      expect(sweepTicketSlaBreachTriggers).toHaveBeenCalledWith(now)
     })
 
     it('resolves the widest breachLeadMinutes across live approaching_breach workflows and dispatches each scanned candidate, claiming the marker after the enqueue', async () => {
@@ -1192,7 +1197,7 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(claimSlaTimerTriggerMarker).toHaveBeenCalledWith(candidate, 'warning', now)
     })
 
-    it('dispatches sla.breached for each scanned candidate only when a live workflow subscribes', async () => {
+    it('dispatches sla.breached for each scanned candidate', async () => {
       await seedLiveTimerWorkflow('sla.breached', {})
       const conversationId = await seedConversation()
       const candidate = {
