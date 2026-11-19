@@ -316,7 +316,18 @@ export async function notifyVisitorMessage(opts: {
         teammates.map((t) => ({ id: t.principalId, type: t.type, role: t.role }))
       )
     )
-    const team = teammates.filter((t) => inScope.has(t.principalId))
+    // Each teammate's own email settings: "Pause all email" and the New
+    // message email switch (the same matrix key the bell for this message
+    // rides). No stored preferences means the defaults, which allow it.
+    const { batchGetNotificationPreferences } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    const { shouldNotify } = await import('@/lib/server/domains/subscriptions/notification-matrix')
+    const visible = teammates.filter((t) => inScope.has(t.principalId))
+    const prefs = await batchGetNotificationPreferences(visible.map((t) => t.principalId))
+    const team = visible.filter((t) => {
+      const own = prefs.get(t.principalId)
+      return own ? shouldNotify(own, 'chat_message', 'email') : true
+    })
 
     if (team.length === 0) return
 
