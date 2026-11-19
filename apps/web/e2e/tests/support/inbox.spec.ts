@@ -19,8 +19,11 @@ import {
   inboxUrl,
   listRows,
   openConversation,
+  messagesOf,
   seedMentionNote,
+  seedTag,
   sendFromComposer,
+  tagConversation,
   waitForConversation,
   widgetStartConversation,
 } from '../../support/inbox'
@@ -500,6 +503,287 @@ test.describe('inbox views', () => {
       // B's open list drops the closed row without a reload; the bystander stays.
       await expect(listRows(b, c.visitorName)).toHaveCount(0, { timeout: 15_000 })
       await expect(listRows(b, other.visitorName)).toHaveCount(1)
+    }
+  )
+
+  test(
+    "INB-17 a shared saved view shows in another teammate's nav with the same filter",
+    {
+      tag: '@core',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const { page: other } = await teammate({ role: 'support_lead' })
+      const tag = await seedTag(`View label ${marker}`)
+      const tagged = await seed({ visitorName: `Tagged ${marker}` })
+      const plain = await seed({ visitorName: `Plain ${marker}` })
+      await tagConversation(tagged.uuid, tag.uuid)
+      const viewName = `View ${marker}`
+
+      await page.goto(inboxUrl({ q: marker }))
+      await expectListed(page, marker, [tagged, plain])
+      await expect(async () => {
+        await page.getByRole('button', { name: 'New view' }).click()
+        await expect(page.getByRole('dialog', { name: 'New view' })).toBeVisible({ timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
+      const dialog = page.getByRole('dialog', { name: 'New view' })
+      await dialog.getByLabel('Name').fill(viewName)
+      // The first rule starts as "Status is open": make it "Tag is <label>".
+      await dialog.getByRole('combobox').first().click()
+      await page.getByRole('option', { name: 'Tag', exact: true }).click()
+      await dialog.getByRole('combobox').nth(1).click()
+      await page.getByRole('option', { name: tag.name }).click()
+      const shared = dialog.getByRole('switch', { name: 'Shared with the team' })
+      if ((await shared.getAttribute('aria-checked')) !== 'true') await shared.click()
+      await expect(shared).toHaveAttribute('aria-checked', 'true')
+      await dialog.getByRole('button', { name: 'Create view' }).click()
+
+      await expect(page).toHaveURL(/viewId=conversation_view_/, { timeout: 15_000 })
+      await expectListed(page, marker, [tagged])
+
+      // The other teammate sees the shared view and the same rows through it.
+      await other.goto(inboxUrl({ q: marker }))
+      const viewRow = other.getByRole('button', { name: viewName, exact: true })
+      await expect(viewRow).toBeVisible({ timeout: 15_000 })
+      await expectListed(other, marker, [tagged, plain])
+      await expect(async () => {
+        await viewRow.click()
+        await expect(other).toHaveURL(/viewId=/, { timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
+      await expectListed(other, marker, [tagged])
+    }
+  )
+
+  test(
+    'INB-06 junk URL params fall back to the defaults instead of an error',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const c = await seed({ visitorName: `Junk ${marker}` })
+      const snoozed = await seed({
+        status: 'snoozed',
+        snoozedUntil: new Date(Date.now() + 3_600_000),
+        visitorName: `Waiting ${marker}`,
+      })
+
+      const junk =
+        'view=nope&tag=x&segment=x&team=x&viewId=x&company=x&ttype=x&sort=bogus&status=bogus' +
+        `&priority=bogus&m=x&i=x&post=x&q=${marker}`
+      const res = await page.goto(`/admin/inbox?${junk}`)
+      expect(res?.status()).toBe(200)
+      await expect(navRow(page, 'All conversations')).toHaveAttribute('data-active', 'true')
+      await expect(page.getByRole('button', { name: 'open', exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Sort: Best match' })).toBeVisible()
+      await expectListed(page, marker, [c])
+
+      // The legacy `status=snoozed` is the Waiting facet; `c=` opens like `i=`.
+      await page.goto(`/admin/inbox?status=snoozed&q=${marker}`)
+      await expect(page.getByRole('button', { name: 'waiting', exact: true })).toBeVisible()
+      await expectListed(page, marker, [snoozed])
+      await page.goto(`/admin/inbox?c=${c.id}`)
+      await expect(page.getByText(c.messages[0]).first()).toBeVisible({ timeout: 15_000 })
+      await expect(page).toHaveURL(new RegExp(`i=${c.id}`))
+    }
+  )
+
+  test(
+    'INB-10 Created by me lists only the conversations the teammate started',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page, mate } = await teammate()
+      const { mate: other } = await teammate()
+      const sql = supportDb()
+      const { generateId, toUuid } = await import('@quackback/ids')
+      // Outbound threads open with the teammate's own message.
+      const startedBy = async (who: string, name: string) => {
+        const c = await seed({ visitorName: name, ageMinutes: 0 })
+        await sql`INSERT INTO conversation_messages
+                  (id, conversation_id, principal_id, sender_type, content, is_internal, created_at)
+                VALUES (${toUuid(generateId('conversation_msg'))}, ${c.uuid},
+                        ${toUuid(who as `principal_${string}`)}, 'agent', ${`Outbound ${marker}`}, false,
+                        NOW() - interval '1 hour')`
+        return c
+      }
+      const mine = await startedBy(mate.principalId, `Mine ${marker}`)
+      const theirs = await startedBy(other.principalId, `Theirs ${marker}`)
+      const inbound = await seed({ visitorName: `Inbound ${marker}` })
+
+      await page.goto(inboxUrl({ q: marker }))
+      await expectListed(page, marker, [mine, theirs, inbound])
+      await selectNav(page, 'Created by me', /view=created_by_me/)
+      await expectListed(page, marker, [mine])
+    }
+  )
+
+  test(
+    "INB-11 a saved message shows in its teammate's Saved list only",
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const { page: other } = await teammate()
+      const c = await seed({ messages: [`first ${marker}`, `keep this ${marker}`] })
+      await openConversation(page, c.id, c.messages[0])
+      const save = page.getByRole('button', { name: 'Save for later' })
+      await save.click()
+      await expect(save).toHaveAttribute('aria-pressed', 'true')
+
+      await page.goto(inboxUrl({ view: 'saved' }))
+      await expect(page.getByText(`keep this ${marker}`)).toBeVisible({ timeout: 15_000 })
+      await other.goto(inboxUrl({ view: 'saved' }))
+      await expect(
+        other.getByText('Nothing saved yet. Flag a message to find it here.')
+      ).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(other.getByText(`keep this ${marker}`)).toHaveCount(0)
+    }
+  )
+
+  test(
+    "INB-14 the Test view lists the teammate's test threads, marked Test",
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page, mate } = await teammate()
+      const testThread = await seed({
+        testOwner: mate.principalId,
+        visitorName: `Tester ${marker}`,
+      })
+      const real = await seed({ visitorName: `Real ${marker}` })
+
+      await page.goto(inboxUrl({ q: marker }))
+      await expect(navRow(page, 'Test conversations')).toBeVisible({ timeout: 15_000 })
+      await expectListed(page, marker, [testThread, real])
+      await selectNav(page, 'Test conversations', /view=test/)
+      await expectListed(page, marker, [testThread])
+      await expect(listRows(page, testThread.visitorName)).toContainText('Test')
+    }
+  )
+
+  test(
+    'INB-16 a label scope lists only its rows and its badge counts them',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const tag = await seedTag(`Scope label ${marker}`)
+      const one = await seed({ visitorName: `One ${marker}` })
+      const two = await seed({ visitorName: `Two ${marker}` })
+      const plain = await seed({ visitorName: `Plain ${marker}` })
+      await tagConversation(one.uuid, tag.uuid)
+      await tagConversation(two.uuid, tag.uuid)
+
+      await page.goto(inboxUrl({ q: marker }))
+      await expectListed(page, marker, [one, two, plain])
+      const labelRow = nav(page).getByRole('button', { name: new RegExp(`^${tag.name}`) })
+      await expect(labelRow).toHaveText(new RegExp(`${tag.name}\\s*2$`))
+      await expect(async () => {
+        await labelRow.click()
+        await expect(page).toHaveURL(new RegExp(`tag=${tag.id}`), { timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
+      await expectListed(page, marker, [one, two])
+    }
+  )
+
+  test(
+    'INB-22 priority and channel refinements narrow the list',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const urgent = await seed({ priority: 'urgent', visitorName: `Urgent ${marker}` })
+      const email = await seed({ channel: 'email', visitorName: `Email ${marker}` })
+      const plain = await seed({ visitorName: `Plain ${marker}` })
+
+      await page.goto(inboxUrl({ q: marker }))
+      await expectListed(page, marker, [urgent, email, plain])
+      await page.goto(inboxUrl({ q: marker, priority: 'urgent' }))
+      await expectListed(page, marker, [urgent])
+      await page.goto(inboxUrl({ q: marker, channel: 'email' }))
+      await expectListed(page, marker, [email])
+      // An unknown channel is dropped.
+      await page.goto(inboxUrl({ q: marker, channel: 'carrier-pigeon' }))
+      await expectListed(page, marker, [urgent, email, plain])
+    }
+  )
+
+  test(
+    'INB-29 a deep link to a message scrolls to it and flashes it',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const messages = Array.from({ length: 80 }, (_, i) => `line ${i} ${marker}`)
+      const c = await seed({ messages })
+      const target = c.messageIds[2]
+      await page.goto(inboxUrl({ i: c.id, m: target }))
+      const row = page.locator(`[data-message-id="${target}"]`)
+      await expect(row).toBeInViewport({ timeout: 15_000 })
+      // The thread opened on the target, not at the newest message.
+      await expect(page.locator(`[data-message-id="${c.messageIds[79]}"]`)).not.toBeInViewport()
+      // A malformed `m` is dropped.
+      await page.goto(`/admin/inbox?i=${c.id}&m=nope`)
+      await expect(page).not.toHaveURL(/m=/)
+      await expect(page.getByText(messages[79]).first()).toBeVisible({ timeout: 15_000 })
+    }
+  )
+
+  test(
+    'INB-31 mark unread from a message restores the unread badge',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const c = await seed({ messages: [`one ${marker}`, `two ${marker}`] })
+      await openConversation(page, c.id, c.messages[0], { q: marker })
+      await waitForConversation(c.uuid, 'the read', (r) => r.agent_last_read_at !== null)
+      const row = listRows(page, c.visitorName)
+      const badge = row.locator('span.rounded-full.bg-primary')
+      await expect(badge).toHaveCount(0)
+
+      const message = page.locator(`[data-message-id="${c.messageIds[0]}"]`)
+      await message.hover()
+      await message.getByRole('button', { name: 'More actions' }).click()
+      await page.getByRole('menuitem', { name: /Mark unread/ }).click()
+      await expect(badge).toHaveText('2', { timeout: 15_000 })
+    }
+  )
+
+  test(
+    'INB-96 j and k move between rows and the command bar runs a command',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const older = await seed({ visitorName: `Older ${marker}`, ageMinutes: 5 })
+      const newer = await seed({ visitorName: `Newer ${marker}` })
+      await openConversation(page, newer.id, newer.messages[0], { q: marker, sort: 'recent' })
+      await page.getByRole('heading', { level: 2 }).first().click()
+
+      await page.keyboard.press('j')
+      await expect(page).toHaveURL(new RegExp(`i=${older.id}`))
+      await page.keyboard.press('k')
+      await expect(page).toHaveURL(new RegExp(`i=${newer.id}`))
+
+      await page.keyboard.press('ControlOrMeta+k')
+      const bar = page.getByPlaceholder('Type a command…')
+      await expect(bar).toBeVisible()
+      await bar.fill('Close conversation')
+      await page.keyboard.press('Enter')
+      await waitForConversation(newer.uuid, 'the close', (r) => r.status === 'closed')
+      expect((await messagesOf(older.uuid)).length).toBe(1)
     }
   )
 })
