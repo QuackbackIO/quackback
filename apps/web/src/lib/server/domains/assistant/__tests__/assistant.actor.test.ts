@@ -24,7 +24,7 @@ describe('assistant.actor', () => {
     expect(actor.permissions).toEqual(new Set(ASSISTANT_PERMISSIONS))
   })
 
-  it('quinnActor can view, reply to and close conversations, publish team-only action notices, and record attributes', () => {
+  it('quinnActor can view, reply to and close conversations, publish team-only action notices, record attributes and capture feedback', () => {
     const principalId = 'principal_xyz123' as PrincipalId
     const actor = quinnActor(principalId)
 
@@ -42,6 +42,10 @@ describe('assistant.actor', () => {
     // end_conversation closes a conversation the customer has said is done;
     // it is the only assistant tool that needs this permission.
     expect(can(actor, PERMISSIONS.CONVERSATION_SET_STATUS)).toBe(true)
+    // capture_feedback posts a customer's feature request on their behalf;
+    // it is the only assistant tool that needs these two permissions.
+    expect(can(actor, PERMISSIONS.POST_CREATE)).toBe(true)
+    expect(can(actor, PERMISSIONS.POST_VOTE_ON_BEHALF)).toBe(true)
     expect(actor.permissions).toEqual(
       new Set([
         PERMISSIONS.CONVERSATION_VIEW,
@@ -51,6 +55,8 @@ describe('assistant.actor', () => {
         PERMISSIONS.CONVERSATION_SET_ATTRIBUTES,
         PERMISSIONS.TICKET_CREATE,
         PERMISSIONS.CONVERSATION_SET_STATUS,
+        PERMISSIONS.POST_CREATE,
+        PERMISSIONS.POST_VOTE_ON_BEHALF,
       ])
     )
   })
@@ -60,14 +66,14 @@ describe('assistant.actor', () => {
     const actor = quinnActor(principalId)
 
     // Permissions outside the assistant boundary: assignment, workflows and
-    // customer-visible publishing stay teammate-approved.
+    // moderating feedback stay teammate-approved.
     expect(can(actor, PERMISSIONS.MEMBER_MANAGE)).toBe(false)
     expect(can(actor, PERMISSIONS.SETTINGS_MANAGE)).toBe(false)
     expect(can(actor, PERMISSIONS.WORKFLOW_MANAGE)).toBe(false)
     expect(can(actor, PERMISSIONS.CONVERSATION_ASSIGN)).toBe(false)
     expect(can(actor, PERMISSIONS.TICKET_SET_STATUS)).toBe(false)
-    expect(can(actor, PERMISSIONS.POST_CREATE)).toBe(false)
-    expect(can(actor, PERMISSIONS.POST_VOTE_ON_BEHALF)).toBe(false)
+    expect(can(actor, PERMISSIONS.POST_MERGE)).toBe(false)
+    expect(can(actor, PERMISSIONS.POST_DELETE)).toBe(false)
   })
 
   it('ASSISTANT_PERMISSIONS is a non-empty set', () => {
