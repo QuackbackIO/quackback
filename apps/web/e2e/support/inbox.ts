@@ -389,7 +389,7 @@ export function inboxUrl(params: Record<string, string | undefined> = {}): strin
 
 /** Every list row (conversation or ticket) whose text contains `text`. */
 export function listRows(page: Page, text: string): Locator {
-  return page.locator('div.group').filter({ hasText: text })
+  return page.locator('div.group:not(nav div.group)').filter({ hasText: text })
 }
 
 /** The details panel (shown at 1680px and up). */
