@@ -147,9 +147,14 @@ test.describe('agent replies by email', () => {
       const headers = await getMailHeaders(mail.ID)
       expect(header(headers, 'Reply-To')).toBe(conversationReplyAddress(conversationTypeId(row.id)))
 
+      // The customer's row: a teammate alert on the same thread shares the type.
       const log = await pollFor('the email_log row', async () => {
         const rows = await emailLogForConversation(row.id)
-        return rows.find((r) => r.email_type === 'ConversationMessageEmail') ?? null
+        return (
+          rows.find(
+            (r) => r.email_type === 'ConversationMessageEmail' && r.address === customerEmail
+          ) ?? null
+        )
       })
       expect(log).toMatchObject({ direction: 'outbound', status: 'sent', address: customerEmail })
     }
