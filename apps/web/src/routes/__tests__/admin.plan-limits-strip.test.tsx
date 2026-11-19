@@ -67,14 +67,20 @@ vi.mock('@/lib/server/functions/plan-limits', () => ({
 const { Route: AdminRouteImport } = await import('../admin')
 const { expireRouteContext } = await import('@/lib/client/route-context-memo')
 
-const ENDED_TRIAL = {
-  label: 'Your Pro trial has ended',
-  message: 'Choose a plan to continue.',
-  expiresAt: '2026-11-10T00:00:00.000Z',
-  actionUrl: '/admin/settings/billing',
-  actionLabel: 'See plans',
-  ended: true,
-}
+const { trialEndedNotice } = await import('@/lib/server/domains/settings/cloud/commercial-notice')
+
+/** The ended-trial strip as the plan notice builds it for a billing manager. */
+const ENDED_TRIAL = trialEndedNotice(
+  {
+    enabled: true,
+    plan: 'free',
+    trialActive: false,
+    trialExpiresAt: '2026-11-10T00:00:00.000Z',
+    subscriptionStatus: null,
+    canUpgrade: true,
+  } as never,
+  { trialPlanName: 'Pro', canManageBilling: true, now: new Date('2026-11-18T12:00:00.000Z') }
+)
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -137,7 +143,7 @@ describe('the plan limits strip in the admin layout', () => {
     const { router } = await mount()
     await waitFor(() => expect(banner()).toHaveAttribute('data-plan-limits-banner', 'grace'))
     expect(banner()).toHaveTextContent('Ask someone who manages billing to upgrade.')
-    expect(screen.queryByText('Your Pro trial has ended')).toBeNull()
+    expect(screen.queryByText('Pro trial ended')).toBeNull()
     expect(shell.sidebarLimits).toMatchObject({ phase: 'grace' })
 
     await act(() => router.navigate({ to: '/admin/roadmap' } as never))
@@ -148,24 +154,35 @@ describe('the plan limits strip in the admin layout', () => {
   it('keeps the ended trial strip when the workspace fits its plan', async () => {
     shell.summary.mockResolvedValue(overLimits({ phase: 'ok', issues: [] }))
     await mount()
-    expect(await screen.findByText('Your Pro trial has ended')).toBeInTheDocument()
+    expect(await screen.findByText('Pro trial ended')).toBeInTheDocument()
     expect(banner()).toBeNull()
   })
 
-  it('shows neither strip once only paused features remain after the date', async () => {
-    // Spec 5.1: once no cap is over, the global banner goes and each settings
-    // page carries its own line, so the ended trial strip stays hidden too.
-    shell.summary.mockResolvedValue(overLimits({ phase: 'enforced', issues: [] }))
+  it('keeps the ended trial strip once only paused features remain after the date', async () => {
+    // No cap is over, so the plan limits banner has nothing to say; the ended
+    // trial strip says why those features stopped and how to compare plans.
+    const limits = overLimits({ phase: 'enforced', issues: [] })
+    expect(limits.featureIssues.length).toBeGreaterThan(0)
+    shell.summary.mockResolvedValue(limits)
     await mount()
-    await waitFor(() => expect(shell.summary).toHaveBeenCalled())
-    await act(async () => {})
+    expect(await screen.findByText('Pro trial ended')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Compare plans' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
     expect(banner()).toBeNull()
-    expect(screen.queryByText('Your Pro trial has ended')).toBeNull()
+  })
+
+  it('stands in for the ended trial strip while caps are over after the date', async () => {
+    shell.summary.mockResolvedValue(overLimits({ phase: 'enforced' }))
+    await mount()
+    await waitFor(() => expect(banner()).toHaveAttribute('data-plan-limits-banner', 'enforced'))
+    expect(screen.queryByText('Pro trial ended')).toBeNull()
   })
 
   it('shows nothing and asks nothing without plan billing', async () => {
     await mount({ billing: false, planLimits: true })
-    expect(await screen.findByText('Your Pro trial has ended')).toBeInTheDocument()
+    expect(await screen.findByText('Pro trial ended')).toBeInTheDocument()
     expect(shell.summary).not.toHaveBeenCalled()
     expect(banner()).toBeNull()
     expect(shell.sidebarLimits).toBeNull()

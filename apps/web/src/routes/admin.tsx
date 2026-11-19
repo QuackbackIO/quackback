@@ -18,6 +18,7 @@ import { UpdateBanner } from '@/components/admin/update-banner'
 import { GithubStarPromptGate } from '@/components/admin/github-star-prompt-gate'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { presentPlanNotice } from '@/lib/shared/plan-notice'
+import { planLimitsBannerShows } from '@/lib/shared/billing/plan-limits-shown'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
@@ -321,16 +322,17 @@ const PlanLimitsStrip = lazy(() => import('@/components/admin/plan-limits/plan-l
 
 /**
  * The plan strip: the plan limits banner while the workspace is over its
- * plan, which stands in for the ended-trial strip, or the plan notice.
+ * plan, which stands in for the ended-trial strip when it shows, and the
+ * plan notice.
  */
 function PlanStrip({
   planNotice,
   planLimits,
 }: Pick<ReturnType<typeof Route.useLoaderData>, 'planNotice' | 'planLimits'>) {
-  const over =
-    planLimits?.enabled === true &&
-    (planLimits.phase === 'grace' || planLimits.phase === 'enforced')
-  const hideNotice = over && presentPlanNotice(planNotice)?.ended === true
+  // Only a banner that shows stands in: with paused features alone, the
+  // ended-trial strip stays to say why they stopped.
+  const hideNotice =
+    planLimitsBannerShows(planLimits) && presentPlanNotice(planNotice)?.ended === true
   return (
     <>
       {planLimits ? (

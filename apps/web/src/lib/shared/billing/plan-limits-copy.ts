@@ -13,6 +13,7 @@ import {
 import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { PLAN_ONLY_FEATURES } from '@/lib/server/domains/settings/plan-only-features'
 import { PLAN_NUMERIC_CAPS, type PlanCapKey } from './plan-downgrade'
+import { planLimitsBannerShows } from './plan-limits-shown'
 
 /**
  * A plan limits calendar day (YYYY-MM-DD) as an instant to format with
@@ -232,7 +233,7 @@ export interface PlanLimitsBannerCopy {
 /**
  * The admin banner's words, or null when it shows nothing: the flag is off,
  * nothing is over, or only paused features remain once enforced (each of
- * those pages carries its own line instead).
+ * those pages carries its own line, and an ended trial keeps its strip).
  */
 export function planLimitsBannerCopy(
   limits: Pick<
@@ -252,8 +253,8 @@ export function planLimitsBannerCopy(
     ? `Your workspace is over the ${limits.planName} plan's limits.`
     : "Your workspace is over its plan's limits."
   const ask = 'Ask someone who manages billing to upgrade.'
+  if (!planLimitsBannerShows(limits)) return null
   if (limits.phase === 'enforced') {
-    if (limits.issues.length === 0) return null
     return {
       tone: 'enforced',
       title,
