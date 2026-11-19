@@ -25,6 +25,7 @@
  * edit.
  */
 import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
+import { assertCustomRoleEditable } from './role.plan-lock'
 import {
   db,
   roles,
@@ -311,6 +312,7 @@ export async function updateRole(
   if (role.isSystem) {
     throw new ForbiddenError('SYSTEM_ROLE', 'System roles are read-only; duplicate one instead')
   }
+  await assertCustomRoleEditable(role)
   await assertNotHeldByEditor(roleId, editor, 'edit')
 
   let nextKeys: Set<PermissionKey> | null = null

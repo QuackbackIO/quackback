@@ -56,9 +56,9 @@ const ROLES = {
   ],
 }
 
-function renderTab() {
+function renderTab(data: object = ROLES) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData(['settings', 'roles'], ROLES)
+  client.setQueryData(['settings', 'roles'], data)
   return render(
     <QueryClientProvider client={client}>
       <RolesTab />
@@ -68,6 +68,21 @@ function renderTab() {
 
 describe('RolesTab', () => {
   afterEach(cleanup)
+
+  it('says once, quietly, when the plan holds custom roles', () => {
+    renderTab({ ...ROLES, maxCustomRoles: 0, customRolesLocked: true, planName: 'Free' })
+    expect(
+      screen.getAllByText(
+        /Custom roles are locked on the Free plan\. People on them keep their access\./
+      )
+    ).toHaveLength(1)
+    expect(screen.queryByText(/at its custom-role limit/i)).toBeNull()
+  })
+
+  it('says nothing of a hold while custom roles are not held', () => {
+    renderTab({ ...ROLES, maxCustomRoles: 0, customRolesLocked: false, planName: null })
+    expect(screen.queryByText(/are locked/i)).toBeNull()
+  })
 
   it('offers exactly one New role action, with a plus icon', () => {
     renderTab()

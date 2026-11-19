@@ -896,6 +896,10 @@ export async function updateHelpCenterLocaleChrome(input: {
   if (!current.locales.additional.includes(input.locale)) {
     throw new NotFoundError('HC_LOCALE_NOT_ENABLED', 'That locale is not enabled')
   }
+  // A language held back by the plan keeps its published words, unedited.
+  const { assertHelpCenterLocaleEditable } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.locales')
+  await assertHelpCenterLocaleEditable(input.locale)
   const existingChrome = current.locales.chrome[input.locale] ?? {
     homepageTitle: '',
     homepageDescription: '',

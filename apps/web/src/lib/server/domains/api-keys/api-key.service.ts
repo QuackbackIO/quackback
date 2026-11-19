@@ -179,7 +179,7 @@ export async function createApiKey(
     if (!granter) {
       throw new ForbiddenError('GRANT_CEILING', 'Creator permission set is required')
     }
-    workspaceRole = await resolveGrantableKeyRole(input.roleId, granter)
+    workspaceRole = await resolveGrantableKeyRole(input.roleId, granter, { newGrant: true })
   }
 
   // Generate the key
@@ -491,7 +491,7 @@ export async function setWorkspaceKeyRole(
   granter: ApiKeyGranter,
   grantedBy: PrincipalId
 ): Promise<ApiKey> {
-  const role = await resolveGrantableKeyRole(roleId, granter)
+  const role = await resolveGrantableKeyRole(roleId, granter, { newGrant: true })
   // Lock the key row for the whole change. Revoking updates that row, so a
   // revoke either waits and then demotes the key's principal last, or commits
   // first and this finds no live key. A revoked key is never re-promoted.

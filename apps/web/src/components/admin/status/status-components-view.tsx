@@ -107,6 +107,14 @@ const EMPTY_FORM: ComponentFormValues = {
   segmentIds: [],
 }
 
+/** The one quiet line over the list when the plan hides some services. */
+export function hiddenLine(count: number, planName: string | null): string {
+  const onPlan = planName ? ` on the ${planName} plan` : ''
+  return count === 1
+    ? `1 service is hidden from your status page${onPlan}. It comes back when you upgrade.`
+    : `${count} services are hidden from your status page${onPlan}. They come back when you upgrade.`
+}
+
 export function StatusComponentsView() {
   const intl = useIntl()
   const { data, isLoading } = useQuery(statusComponentQueries.list())
@@ -121,6 +129,14 @@ export function StatusComponentsView() {
     .map((c) => c.id)
   const uptimeQuery = useQuery(statusComponentQueries.uptimeAdmin(uptimeIds))
   const uptimeById = new Map((uptimeQuery.data ?? []).map((s) => [s.componentId, s.days]))
+  // Past the plan's service cap after the grace, these stay here but are
+  // hidden from the public page.
+  const planHidden = data?.planHidden ?? null
+  const hiddenLabel = planHidden?.planName
+    ? `Hidden on ${planHidden.planName}`
+    : 'Hidden from your status page'
+  const hiddenOf = (c: StatusComponentAdmin) =>
+    planHidden?.ids.includes(c.id) ? hiddenLabel : undefined
 
   const term = search.trim().toLowerCase()
   const matches = (c: StatusComponentAdmin) =>
@@ -427,6 +443,11 @@ export function StatusComponentsView() {
         </div>
       ) : (
         <div className="p-3 space-y-4">
+          {planHidden && (
+            <p className="px-3 text-xs text-muted-foreground">
+              {hiddenLine(planHidden.ids.length, planHidden.planName)}
+            </p>
+          )}
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
@@ -452,6 +473,7 @@ export function StatusComponentsView() {
                     key={component.id}
                     component={component}
                     uptimeDays={uptimeById.get(component.id)}
+                    hiddenLabel={hiddenOf(component)}
                     dragDisabled={dragDisabled}
                     onStatusChange={handleStatusChange}
                     onUptimeToggle={handleUptimeToggle}
@@ -482,6 +504,7 @@ export function StatusComponentsView() {
                           component={component}
                           indent
                           uptimeDays={uptimeById.get(component.id)}
+                          hiddenLabel={hiddenOf(component)}
                           dragDisabled={dragDisabled}
                           onStatusChange={handleStatusChange}
                           onUptimeToggle={handleUptimeToggle}
@@ -674,6 +697,7 @@ function SortableComponentRow({
   component,
   indent,
   uptimeDays,
+  hiddenLabel,
   dragDisabled,
   onStatusChange,
   onUptimeToggle,
@@ -683,6 +707,8 @@ function SortableComponentRow({
   component: StatusComponentAdmin
   indent?: boolean
   uptimeDays?: StatusUptimeDay[]
+  /** Set when the plan hides this service from the public page. */
+  hiddenLabel?: string
   dragDisabled?: boolean
   onStatusChange: (id: string, status: StatusComponentStatus) => void
   onUptimeToggle: (component: StatusComponentAdmin, checked: boolean) => void
@@ -720,6 +746,11 @@ function SortableComponentRow({
             <span className="inline-flex items-center gap-1 rounded-full bg-muted text-foreground px-2 py-0.5 text-[11px] font-medium">
               <UsersIcon className="h-2.5 w-2.5" />
               {component.segmentIds.length} segment{component.segmentIds.length === 1 ? '' : 's'}
+            </span>
+          )}
+          {hiddenLabel && (
+            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {hiddenLabel}
             </span>
           )}
         </div>

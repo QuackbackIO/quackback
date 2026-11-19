@@ -78,6 +78,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { activeSendingDomainIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 const log = logger.child({
   component: 'outbound-identity',
@@ -175,6 +176,12 @@ export interface SendingIdentityContext {
   mailSlug: string | null
   /** Whether this process serves more than one workspace. */
   pooled: boolean
+  /**
+   * Verified domains held back by the plan: past its sending-domain cap after
+   * the plan limits grace, mail from them goes from the default sender
+   * instead. Their records and proofs stay. Absent means none.
+   */
+  pausedDomains?: Iterable<string>
 }
 
 /**
@@ -188,15 +195,23 @@ export function isSendingIdentityPermitted(from: string, ctx: SendingIdentityCon
   const rawDomain = addressDomain(from)
   if (!rawDomain) return false
   const domain = toAsciiDomain(rawDomain)
+  const paused = new Set([...(ctx.pausedDomains ?? [])].map(toAsciiDomain))
 
   // A verified domain covers its subdomains, matching what the provider itself
   // does with a verified parent domain. Both sides of that are this workspace's
   // own zone, proved by a token published inside it.
   for (const verified of ctx.verifiedDomains) {
-    if (isAtOrUnder(domain, toAsciiDomain(verified))) return true
+    const zone = toAsciiDomain(verified)
+    if (!paused.has(zone) && isAtOrUnder(domain, zone)) return true
   }
 
   if (ctx.platformFrom && address === comparedAddress(ctx.platformFrom)) return true
+
+  // A domain the plan holds back sends from the default sender instead, on a
+  // single-workspace install too.
+  for (const zone of paused) {
+    if (isAtOrUnder(domain, zone)) return false
+  }
 
   // The slug is the whole of what separates two workspaces on the shared
   // minting domain. Only that domain: widening this to every domain the fleet
@@ -221,7 +236,7 @@ export async function sendingIdentityContext(
   // over as stored: the rule normalises every domain it compares, so doing it
   // here too would be a second spelling authority that could disagree with it.
   const verified = await db
-    .select({ domain: emailSendingDomains.domain })
+    .select({ id: emailSendingDomains.id, domain: emailSendingDomains.domain })
     .from(emailSendingDomains)
     .where(eq(emailSendingDomains.status, 'verified'))
   return {
@@ -230,6 +245,23 @@ export async function sendingIdentityContext(
     inboundDomain: inboundMintDomain(env),
     mailSlug: currentMailSlug(),
     pooled: isPooledTenancy(env),
+    pausedDomains: await pausedSendingDomains(verified),
+  }
+}
+
+/**
+ * The verified domains the plan holds back now. Never throws: a failed read
+ * holds nothing back, so a send is never lost to it.
+ */
+async function pausedSendingDomains(verified: { id: string; domain: string }[]): Promise<string[]> {
+  if (verified.length === 0) return []
+  try {
+    const active = await activeSendingDomainIds()
+    if (active === null) return []
+    return verified.filter((row) => !active.includes(row.id)).map((row) => row.domain)
+  } catch (err) {
+    log.warn({ err }, 'sending domain plan check failed; holding nothing back')
+    return []
   }
 }
 
@@ -297,7 +329,9 @@ export class SendingIdentityRefusedError extends Error {
 
 /** The create-path counterpart: refuse out loud, where someone is reading. */
 export async function assertSendingIdentityPermitted(from: string): Promise<SendingIdentity> {
-  const ctx = await sendingIdentityContext()
+  // Choosing an address on a domain the plan holds back is allowed: the send
+  // path falls back for as long as it is held, and the address is ready after.
+  const ctx = { ...(await sendingIdentityContext()), pausedDomains: [] }
   if (!isSendingIdentityPermitted(from, ctx)) throw new SendingIdentityRefusedError(from)
   return from as SendingIdentity
 }

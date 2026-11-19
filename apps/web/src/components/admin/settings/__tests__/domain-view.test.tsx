@@ -149,6 +149,7 @@ function rowWith({
             autoCheckUntil: '2026-11-05T00:00:00.000Z',
             localParts: ['help@'],
             ownershipProven: false,
+            paused: false,
           },
         ]
       : [],

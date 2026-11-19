@@ -4,6 +4,7 @@ import { DocumentLocaleContext } from '@/components/shared/document-locale-conte
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
+import { isSeatPausedError } from '@/lib/shared/billing/seat-paused'
 import { errorReferenceOf } from '@/lib/shared/error-reference'
 import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
 import { cn } from '@/lib/shared/utils'
@@ -158,6 +159,8 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
   )
 }
 
+const SeatPausedPage = lazy(() => import('./seat-paused-page'))
+
 export function EntitlementRequiredPage({
   error,
   fullPage = true,
@@ -197,6 +200,13 @@ export function EntitlementRequiredPage({
 }
 
 export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
+  if (isSeatPausedError(error)) {
+    return (
+      <Suspense fallback={null}>
+        <SeatPausedPage fullPage={fullPage} />
+      </Suspense>
+    )
+  }
   if (isAuthorizationError(error)) {
     return <PermissionDeniedPage fullPage={fullPage} />
   }

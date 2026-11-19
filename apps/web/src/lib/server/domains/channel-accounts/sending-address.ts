@@ -138,8 +138,11 @@ export async function addSendingAddress(input: {
   const domains = await listSendingDomains(input.owningTeamId)
 
   // Asked as if the server were shared, so "may send" means a real reason to,
-  // not the single-workspace allowance that permits everything.
-  if (isSendingIdentityPermitted(address, { ...ctx, pooled: true })) {
+  // not the single-workspace allowance that permits everything. A domain the
+  // plan holds back still counts as this workspace's own here, as on every
+  // create path: the address is added on it, and mail from it goes from the
+  // default sender until the plan allows it again.
+  if (isSendingIdentityPermitted(address, { ...ctx, pooled: true, pausedDomains: [] })) {
     const covering = domain ? verifiedCovering(domains, domain) : undefined
     if (covering) await ensureDomain(covering.domain)
     return added(createSendingAddress({ ...input, address, sendingDomainId: covering?.id }))
@@ -302,10 +305,19 @@ export async function sendTestEmail(input: {
   }
   const address = account.address
 
-  const permitted = await permittedSendingIdentity(address)
+  const ctx = await sendingIdentityContext()
+  const permitted = await permittedSendingIdentity(address, ctx)
   if (!permitted) {
+    const domain = domainOfAddress(address) ?? address
+    if (isSendingIdentityPermitted(address, { ...ctx, pausedDomains: [] })) {
+      const { currentPlanName, onThePlan } =
+        await import('@/lib/server/domains/plan-limits/plan-limits.copy')
+      throw new SendingDomainRefusedError(
+        `${domain} is paused${onThePlan(await currentPlanName())}. Email goes from your default address.`
+      )
+    }
     throw new SendingDomainRefusedError(
-      `${domainOfAddress(address) ?? address} isn't verified yet. You can send a test once it is.`
+      `${domain} isn't verified yet. You can send a test once it is.`
     )
   }
 

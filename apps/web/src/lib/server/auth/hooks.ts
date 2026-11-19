@@ -765,7 +765,8 @@ export async function handleAutoProvisionAfter(
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
   const { DEFAULT_PROVISION_ROLE } = await import('@/lib/shared/sso-mapping-preview')
-  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
+  const defaultRole: Role = provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
+  let targetRole: Role = claimRole ?? defaultRole
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
@@ -792,7 +793,7 @@ export async function handleAutoProvisionAfter(
   // A rule may grant a workspace role on top of the member tier, through the
   // same assignment path custom-role invites and role changes use. Looked up
   // only once this sign-in may change the role.
-  const targetCustom = claimMatch?.roleId
+  let targetCustom = claimMatch?.roleId
     ? await grantableRuleRole(claimMatch.roleId, claimMatch.ruleIndex, provider.id)
     : null
   // A matched rule whose role cannot be granted grants nothing. First match
@@ -800,6 +801,31 @@ export async function handleAutoProvisionAfter(
   // person keeps whatever role they hold. Granting the bare tier instead would
   // hand out the member preset, which can exceed the role the admin chose.
   if (claimMatch?.roleId && !targetCustom) return
+
+  // Past the plan's custom-role cap (after the plan limits grace) a custom role
+  // goes to nobody new. Whoever already holds it keeps it. A teammate is left
+  // as they are; someone joining gets the default role instead.
+  if (targetCustom && !targetCustom.isSystem) {
+    const holds = p
+      ? (await workspaceAssignmentOf(p.id as PrincipalId))?.id === targetCustom.id
+      : false
+    const { customRolesLocked } = await import('@/lib/server/domains/roles/role.plan-lock')
+    if (!holds && (await customRolesLocked())) {
+      log.warn(
+        {
+          code: 'sso_role_rule_role_held',
+          provider_id: provider.id,
+          rule_index: claimMatch?.ruleIndex,
+          role_id: targetCustom.id,
+        },
+        'sso role rule names a custom role the plan holds; granting the default role instead'
+      )
+      if (currentRole !== 'user') return
+      targetCustom = null
+      targetRole = defaultRole
+      if (targetRole === 'user') return
+    }
+  }
 
   // Under sync the provider owns roles: a plain-member outcome (a rule with no
   // workspace role, or the default) moves a member holding another workspace
@@ -880,14 +906,15 @@ async function grantableRuleRole(
   roleId: string,
   ruleIndex: number,
   providerId: string
-): Promise<{ id: RoleId; name: string } | null> {
+): Promise<{ id: RoleId; name: string; isSystem: boolean } | null> {
   const { db, roles, eq } = await import('@/lib/server/db')
   const [row] = await db
-    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .select({ id: roles.id, key: roles.key, name: roles.name, isSystem: roles.isSystem })
     .from(roles)
     .where(eq(roles.id, roleId as RoleId))
     .limit(1)
-  if (row && row.key !== SYSTEM_ROLES.OWNER) return { id: row.id, name: row.name }
+  if (row && row.key !== SYSTEM_ROLES.OWNER)
+    return { id: row.id, name: row.name, isSystem: row.isSystem }
   log.warn(
     {
       code: 'sso_role_rule_role_missing',

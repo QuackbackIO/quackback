@@ -16,6 +16,7 @@ const hoisted = vi.hoisted(() => ({
   host: 'feedback.acme.com',
   cookie: 'better-auth.session_token=tok' as string | null,
   helpDomainConfig: null as { domain: string | null; verifiedAt: string | null } | null,
+  paused: new Set<string>(),
 }))
 
 vi.mock('@tanstack/react-start', () => ({
@@ -38,6 +39,7 @@ vi.mock('@tanstack/react-start/server', () => {
   }
 })
 vi.mock('@/lib/server/auth/request-session', () => ({
+  IDENTITY_MEMO_PREFIX: 'identity:',
   getRequestSession: hoisted.getRequestSession,
   getRequestPrincipal: hoisted.getRequestPrincipal,
 }))
@@ -61,6 +63,10 @@ vi.mock('@/lib/server/domains/help-center/help-center-domain.service', () => ({
   },
 }))
 vi.mock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
+// Keyed on the principal, as the real `isSeatPaused` (proved in plan-limits.team.db).
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  isSeatPaused: async (id: string) => hoisted.paused.has(id),
+}))
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }) },
 }))
@@ -117,6 +123,7 @@ beforeEach(() => {
   hoisted.getRequestPrincipal.mockReset().mockResolvedValue(principal())
   hoisted.host = 'feedback.acme.com'
   hoisted.cookie = 'better-auth.session_token=tok'
+  hoisted.paused.clear()
 })
 
 describe('the admin link for a teammate on a section host', () => {
@@ -163,6 +170,13 @@ describe('the admin link for a teammate on a section host', () => {
 
   it('sends nothing to a widget session', async () => {
     hoisted.getRequestSession.mockResolvedValue(signedIn('widget'))
+    expect('primaryAdminUrl' in (await getBootstrapData())).toBe(false)
+  })
+
+  // On the primary domain a paused seat reads as a portal user and gets no
+  // Admin link; a section host says the same.
+  it('sends nothing to a teammate whose seat the plan has paused', async () => {
+    hoisted.paused.add('principal_1')
     expect('primaryAdminUrl' in (await getBootstrapData())).toBe(false)
   })
 

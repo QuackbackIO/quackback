@@ -35,6 +35,7 @@ import {
 } from '@/lib/server/domains/notifications/recipient-scope'
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { roleUnlessPaused } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 
 const MENTION_ELIGIBLE_ROLES = ['admin', 'member', 'user'] as const
 // `?scope=team` narrows to teammates only (no visitors), for contexts where a
@@ -146,8 +147,17 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
   if (item) {
     const callerId = principalRecord.id as PrincipalId
     const { visible, hidden } = await teammateView(item, [
-      { id: callerId, type: principalRecord.type, role: principalRecord.role },
-      ...result.map((r) => ({ id: r.principalId as PrincipalId, type: 'user', role: r.role })),
+      {
+        id: callerId,
+        type: principalRecord.type,
+        // A paused seat (the plan has fewer team seats than members) is judged as a portal user.
+        role: await roleUnlessPaused(principalRecord, principalRecord.role),
+      },
+      // The caller is judged once, as above: listed again with their row's role,
+      // a paused seat would count as a teammate after all.
+      ...result
+        .filter((r) => r.principalId !== callerId)
+        .map((r) => ({ id: r.principalId as PrincipalId, type: 'user', role: r.role })),
     ])
     if (visible.has(callerId)) {
       for (const row of result) if (hidden.has(row.principalId as PrincipalId)) row.noAccess = true

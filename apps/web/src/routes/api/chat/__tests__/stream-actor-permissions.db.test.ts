@@ -84,6 +84,17 @@ vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
   readActivitySnapshot: vi.fn(async () => null),
 }))
 
+// Whose seats the plan pauses (fewer team seats than members, after the
+// grace), as the real `isSeatPaused` answers per principal. The real answer is
+// proved against a database in plan-limits.team.db.test.ts.
+const pausedSeats = vi.hoisted(() => ({ ids: new Set<string>() }))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/plan-limits/plan-limits.service')
+  >()),
+  isSeatPaused: async (principalId: string) => pausedSeats.ids.has(principalId),
+}))
+
 import { Route } from '../stream'
 
 type RouteOpts = { server: { handlers: { GET: (a: { request: Request }) => Promise<Response> } } }
@@ -184,6 +195,48 @@ async function openStream(principalId: PrincipalId, scope: string, query: string
   await res.body?.cancel()
   return res.status
 }
+
+describe.skipIf(!fixture.available)('/api/chat/stream and a paused seat (real Postgres)', () => {
+  afterEach(() => pausedSeats.ids.clear())
+
+  it('gives a paused teammate no inbox, presence or ticket stream; a seat holder keeps them', async () => {
+    const { viewAll, ids } = await seedTickets()
+    expect(await openStream(viewAll, 'dashboard', 'scope=inbox')).toBe(200)
+    expect(await openStream(viewAll, 'dashboard', 'scope=presence')).toBe(200)
+    expect(await openStream(viewAll, 'dashboard', `ticketId=${ids.others}`)).toBe(200)
+
+    pausedSeats.ids.add(viewAll)
+    expect(await openStream(viewAll, 'dashboard', 'scope=inbox')).toBe(403)
+    expect(await openStream(viewAll, 'dashboard', 'scope=presence')).toBe(403)
+    expect(await openStream(viewAll, 'dashboard', `ticketId=${ids.others}`)).toBe(403)
+  })
+
+  it('refuses a paused teammate on a dashboard session cookie too, not only on a stream token', async () => {
+    const { viewAll } = await seedTickets()
+    const [row] = await testDb
+      .select({ userId: principal.userId })
+      .from(principal)
+      .where(eq(principal.id, viewAll))
+    const { auth } = await import('@/lib/server/auth')
+    const getSession = vi.mocked(auth.api.getSession)
+    getSession.mockImplementation((async () => ({
+      user: { id: row!.userId },
+      session: { scope: 'dashboard' },
+    })) as never)
+    const viaSession = async () => {
+      const res = await GET({ request: new Request('http://test/api/chat/stream?scope=inbox') })
+      await res.body?.cancel()
+      return res.status
+    }
+    try {
+      expect(await viaSession()).toBe(200)
+      pausedSeats.ids.add(viewAll)
+      expect(await viaSession()).toBe(403)
+    } finally {
+      getSession.mockImplementation((async () => null) as never)
+    }
+  })
+})
 
 describe.skipIf(!fixture.available)('/api/chat/stream actor permissions (real Postgres)', () => {
   describe('ticket streams follow the assigned role', () => {
