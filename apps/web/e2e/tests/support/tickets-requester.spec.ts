@@ -438,7 +438,7 @@ test.describe('the ticket embed card', () => {
       annotation: {
         type: 'quarantine',
         description:
-          'Product bug: generateContentHTML emits a quackbackEmbed placeholder only for post and changelog (lib/shared/content-html.ts:222), so a ticket card (shareTicket) renders nothing in a thread. See QUARANTINE.md.',
+          'Product bug: generateContentHTML emits a quackbackEmbed placeholder only for post and changelog (lib/shared/content-html.ts:223), so a ticket card (shareTicket) renders nothing in a thread. See QUARANTINE.md.',
       },
     },
     async ({ playwright, baseURL, browser, people, marker, customerEmail }) => {

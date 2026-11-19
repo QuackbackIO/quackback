@@ -227,8 +227,8 @@ test(
       {
         fn: 'fetchConversationRoutingFn',
         method: 'GET',
-        permission: 'settings.manage',
-        allowed: admin,
+        permission: 'routing.manage',
+        allowed: lead,
       },
       { fn: 'fetchOfficeHoursFn', method: 'GET', permission: 'office_hours.manage', allowed: lead },
       {

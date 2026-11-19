@@ -190,14 +190,7 @@ test.describe('opening by id', () => {
 
   test(
     'ACC-05 a teammate without conversation.view opening an Unassigned conversation by URL is refused, not shown an empty thread',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Known bug: a role without conversation.view still gets the thread pane (empty, with a reply box) for an Unassigned conversation by URL. See e2e/QUARANTINE.md.',
-      },
-    },
+    { tag: '@core' },
     async ({ asPerson, playwright, marker }) => {
       const queue = await seedConv({ marker, label: 'unassigned' })
       const noAccess = await asPerson('noAccess')

@@ -507,7 +507,7 @@ export async function seedConversation(opts: {
   return { uuid, id: conversationTypeId(uuid) }
 }
 
-interface CachedSettings {
+export interface CachedSettings {
   featureFlags?: Record<string, unknown>
   settings?: { metadata?: string | null }
 }
@@ -520,7 +520,9 @@ interface CachedSettings {
  * cached copy that fails `fresh` until none is left (a miss is fine: the next
  * read is current), looking twice a beat apart for a writer still in flight.
  */
-async function settleSettingsCache(fresh: (cached: CachedSettings) => boolean): Promise<void> {
+export async function settleSettingsCache(
+  fresh: (cached: CachedSettings) => boolean
+): Promise<void> {
   const read = async () => {
     const [row] = await supportDb()<{ value: CachedSettings }[]>`
       SELECT value FROM kv_store WHERE key = 'settings:workspace'`

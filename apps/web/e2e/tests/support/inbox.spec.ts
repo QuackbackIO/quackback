@@ -876,14 +876,7 @@ test.describe('inbox views', () => {
 
   test(
     'INB-20 editing a view refilters it and deleting it removes it and falls back to the default view',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The open custom view keeps listing the old rules after Save changes until a reload: the conversation list query key leaves out the view rules (lib/client/queries/conversation-inbox.ts conversationList)',
-      },
-    },
+    { tag: '@nightly' },
     async ({ teammate, seed, marker }) => {
       const { page } = await teammate()
       const first = await seedTag(`First label ${marker}`)

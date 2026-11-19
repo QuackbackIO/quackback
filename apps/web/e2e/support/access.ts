@@ -18,6 +18,7 @@ import { randomBytes } from 'node:crypto'
 import { expect, type Locator, type Page } from '@playwright/test'
 import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { supportDb } from './db'
+import { settleSettingsCache } from './email-journeys'
 
 const uuidOf = (typeId: string) => toUuid(typeId as `conversation_${string}`)
 
@@ -91,7 +92,10 @@ export async function seedConv(opts: SeedConvOptions): Promise<SeededConv> {
 /**
  * Turn a workspace feature flag on in one statement. The shared
  * set-feature-flag script reads, edits and writes the whole flags object, so
- * two workers turning on different flags at once can lose one.
+ * two workers turning on different flags at once can lose one. Then settle
+ * the app's cached settings: a request that read the row just before the
+ * write can cache the old flags just after it, for an hour (the ACC-18 flake,
+ * where Help center stayed off for the admin).
  */
 export async function turnOnFlag(flag: string): Promise<void> {
   const sql = supportDb()
@@ -99,6 +103,7 @@ export async function turnOnFlag(flag: string): Promise<void> {
             SET feature_flags = (COALESCE(NULLIF(feature_flags, ''), '{}')::jsonb
                                  || jsonb_build_object(${flag}::text, true))::text`
   await sql`DELETE FROM kv_store WHERE key = 'settings:workspace'`
+  await settleSettingsCache((cached) => cached.featureFlags?.[flag] === true)
 }
 
 /** The conversation row as the app stores it (for "row unchanged" checks). */

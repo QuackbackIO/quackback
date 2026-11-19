@@ -697,14 +697,7 @@ test.describe('ratings by email', () => {
 
   test(
     'CSAT-13 an emailed rating link (with its rating) opens the page with that face preselected',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Every emailed link carries &rating=N, which the router parses as a number; csat.tsx validates it as a string, so the page answers 500 "Something went wrong". See QUARANTINE.md.',
-      },
-    },
+    { tag: '@core' },
     async ({ page, playwright, marker }) => {
       const { customer, customerApi, conversation, admin } = await answeredPortalConversation(
         playwright,

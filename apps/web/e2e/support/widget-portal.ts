@@ -62,11 +62,18 @@ function loadSeroval(): Seroval {
     key: 'quackback-typed-error',
     test: () => false,
     toSerializable: (v: unknown) => v,
-    fromSerializable: (wire: { name: string; code: string; statusCode: number; message: string }) =>
+    fromSerializable: (wire: {
+      name: string
+      code: string
+      statusCode: number
+      message: string
+      retryAfter?: number
+    }) =>
       Object.assign(new Error(wire.message), {
         name: wire.name,
         code: wire.code,
         statusCode: wire.statusCode,
+        ...(wire.retryAfter !== undefined ? { retryAfter: wire.retryAfter } : {}),
       }),
   })
   seroval = { ...lib, plugins: [typedError, ...ssr.createDefaultSerovalPlugins()] }

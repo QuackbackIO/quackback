@@ -915,14 +915,7 @@ test.describe('SLA emails', () => {
 
   test(
     'SLA-23 the warning email is sent without any workflow listening',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Known bug: SLA warning/breach events (and their emails) only fire while a live workflow uses that trigger (workflow-sweep.ts). See QUARANTINE.md.',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, request, marker }) => {
       test.setTimeout(120_000)
       const admin = await apiAs(playwright, 'admin')

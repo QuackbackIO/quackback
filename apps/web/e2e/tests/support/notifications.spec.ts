@@ -642,14 +642,7 @@ test.describe('notifications', () => {
 
   test(
     'TKT-57 a visitor message on a paired conversation sends ticket.replied to the ticket watchers',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Known bug: the conversation send path emits no ticket.replied for a paired conversation (ticket-message.service.ts:438, requester.service.ts:376), so watchers get no ticket_replied bell. See e2e/QUARANTINE.md.',
-      },
-    },
+    { tag: '@nightly' },
     async ({ playwright, marker, newTeammate }) => {
       const watcher = await newTeammate({ roleKey: 'support_lead' })
       const admin = await personApi(playwright, 'admin')

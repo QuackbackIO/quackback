@@ -399,16 +399,8 @@ test.describe('cold mail opens a conversation', () => {
 
   test(
     'CUS-E-07 a new cold email conversation appears live in an open inbox',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description: 'Known bug: an unrouted new email conversation publishes no realtime frame',
-      },
-    },
+    { tag: '@core' },
     async ({ request, asPerson, customerEmail, marker }) => {
-      // Known bug: an unrouted new email conversation publishes no realtime
-      // frame, so an open inbox does not show it until a refetch (QUARANTINE.md).
       const admin = await asPerson('admin')
       await admin.goto('/admin/inbox')
       await expect(admin.getByRole('heading').first()).toBeVisible({ timeout: 15_000 })
@@ -795,6 +787,14 @@ test.describe('replies to an existing conversation', () => {
       const mail = await waitForMailMatching({ to: customerEmail, body: replyText })
       const ourId = header(await getMailHeaders(mail.ID), 'Message-ID')!
       expect(ourId).toBeTruthy()
+      // The id is recorded just after the send returns, so the mail can reach
+      // Mailpit first. A real reply never comes back that fast.
+      await pollFor('our Message-ID to be recorded', async () => {
+        const [row] = await supportDb()<{ conversation_id: string }[]>`
+          SELECT conversation_id FROM conversation_outbound_emails
+          WHERE message_id = ${bareMessageId(ourId).toLowerCase()}`
+        return row ?? null
+      })
 
       const byInReplyTo = await deliver(request, {
         from: customerEmail,
@@ -856,13 +856,7 @@ test.describe('replies to an existing conversation', () => {
 
   test(
     'CUS-E-15 a reply to a spam-filed thread is kept but stays closed in Spam',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description: 'Waits for #1084 (a customer message on a spam conversation stays in Spam)',
-      },
-    },
+    { tag: '@core' },
     async ({ request, customerEmail, marker }) => {
       const cold = await coldConversation(request, customerEmail, marker, {
         headers: { 'authentication-results': DMARC_QUARANTINE },
@@ -876,7 +870,14 @@ test.describe('replies to an existing conversation', () => {
       })
       expect(reply.status).toBe('ingested')
       // The message is stored, but the conversation stays closed and in Spam.
-      expect(await messagesIn(cold.row.id)).toHaveLength(2)
+      // (The filing also left a team-only notice, which is not counted.)
+      const customerMessages = (await messagesIn(cold.row.id)).filter(
+        (m) => m.sender_type === 'visitor'
+      )
+      expect(customerMessages.map((m) => m.content)).toEqual([
+        expect.stringContaining(marker),
+        `I am real ${marker}`,
+      ])
       const row = await conversation(cold.row.id)
       expect(row.status).toBe('closed')
       expect(row.end_reason).toBe('spam')

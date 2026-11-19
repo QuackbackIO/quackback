@@ -7,12 +7,11 @@
  *
  * The identify limit is per address only, so it runs in the shared shards.
  * The feedback search and legacy image upload limits also count every request
- * in a workspace-wide bucket and in one bucket shared by every signed-out
- * caller, each with the same limit as the per-address one
- * (`enforceWidgetQuota`, lib/server/widget/public-endpoint.ts). Tripping them
- * would refuse other tests' searches and uploads for the rest of the minute,
- * so those tests are `@isolated`: they run in the support-isolated job on a
- * database of their own and clear the buckets they filled.
+ * in a workspace-wide bucket (`enforceWidgetQuota`,
+ * lib/server/widget/public-endpoint.ts), which sits well above one visitor's
+ * limit but is shared with every other test. So those tests are `@isolated`:
+ * they run only with E2E_SUPPORT_ISOLATED=1, on a database of their own, and
+ * clear the buckets they filled. No CI job sets it today.
  */
 import { randomInt } from 'node:crypto'
 import type { APIRequestContext, APIResponse } from '@playwright/test'
@@ -133,10 +132,10 @@ test.describe('workspace-wide widget limits', { tag: '@isolated' }, () => {
   )
   test(
     'CUS-W-53 one visitor reaching the search limit leaves other visitors searching',
-    // The per-address limit is shared: a workspace bucket and one bucket for
-    // every signed-out caller both stop at the same 60, so one visitor's
-    // burst refuses everyone. See QUARANTINE.md.
-    { tag: ['@nightly', '@quarantine'] },
+    // Each signed-out caller is counted by its own address, and the workspace
+    // count sits well above one visitor's 60, so one burst refuses only that
+    // visitor.
+    { tag: '@nightly' },
     async ({ request }) => {
       const noisy = clientIp()
       try {

@@ -32,11 +32,7 @@ const logFd = openSync(logPath, 'a')
 process.stdout.write(`support app: ${env.baseUrl}, log ${logPath}\n`)
 
 // Suite baseline: support tickets on from boot, as a workspace that uses the
-// support module would run. It also has to be on BEFORE the app starts: the
-// background job worker keeps the workspace settings it first read for as
-// long as the app runs (its loop shares one request memo; a known product bug,
-// see QUARANTINE.md), and ticket emails are built in jobs that skip the send
-// while the flag reads off.
+// support module would run, so no test depends on another to switch it on.
 const db = postgres(env.app.DATABASE_URL, { max: 1, onnotice: () => {} })
 try {
   await db`
