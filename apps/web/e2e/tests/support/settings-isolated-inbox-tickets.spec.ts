@@ -382,13 +382,19 @@ test.describe('ticket settings', { tag: '@isolated' }, () => {
         const input = admin.getByLabel('A teammate is working on it')
         await expect(input).toBeVisible({ timeout: 20_000 })
         await expect(input).toHaveValue('In progress')
-        await input.fill(label)
-        await input.blur()
-        await pollFor('the saved label', async () => {
+        const savedLabel = async () => {
           const [row] = await supportDb()`SELECT metadata FROM settings LIMIT 1`
           const meta = JSON.parse((row.metadata as string | null) ?? '{}')
-          return meta.ticketStageLabels?.in_progress === label ? meta : null
-        })
+          return (meta.ticketStageLabels?.in_progress ?? null) as string | null
+        }
+        // Retried: typing before hydration lands on inert server-rendered HTML,
+        // so the blur saves nothing. Cleared first so a retry is a real change.
+        await expect(async () => {
+          await input.fill('')
+          await input.fill(label)
+          await input.blur()
+          await expect.poll(savedLabel, { timeout: 3_000 }).toBe(label)
+        }).toPass({ timeout: 20_000 })
 
         const api = await ticketApi(playwright, baseURL)
         const { customer, ticket, conversationId } = await pairedCustomerTicket(

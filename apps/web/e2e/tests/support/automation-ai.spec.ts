@@ -10,7 +10,7 @@
  * own (E2E_SUPPORT_ISOLATED=1).
  */
 import { test, expect } from '../../support/fixtures'
-import { supportDb } from '../../support/db'
+import { pollFor, supportDb } from '../../support/db'
 import { fakeAi, FAKE_AI_FAIL } from '../../support/fake-ai-client'
 import {
   ISOLATED,
@@ -72,9 +72,13 @@ test.describe('AI agent in the widget', { tag: '@isolated' }, () => {
       const [author] =
         await supportDb()`SELECT type FROM principal WHERE id = ${answer!.principal_id}`
       expect(author.type).toBe('service')
-      const [involvement] = await involvementsOf(conversationId)
+      // The answer is stamped once the turn finishes, after the message is
+      // stored and shown.
+      const involvement = await pollFor('the answered involvement', async () => {
+        const [row] = await involvementsOf(conversationId)
+        return row?.last_assistant_answer_at ? row : null
+      })
       expect(involvement).toMatchObject({ status: 'active', triggered_by: 'first_touch' })
-      expect(involvement.last_assistant_answer_at).not.toBeNull()
     }
   )
 
