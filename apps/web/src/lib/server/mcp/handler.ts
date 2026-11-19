@@ -346,6 +346,13 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   // are refused before any of that runs. Streamable HTTP allows exactly this.
   if (request.method !== 'POST') return methodNotAllowed()
 
+  // Refused before anything reads the body (the request log, the JSON-RPC
+  // parse, auth): an unauthenticated caller must not make the server buffer
+  // an arbitrarily large body. Both protocol legs also cap what they read, but
+  // answer with a bare byte count; most oversized requests are file uploads,
+  // so say what the limit is for.
+  if (contentLengthExceeds(request, MCP_MAX_REQUEST_BYTES)) return requestTooLarge()
+
   const startedAt = Date.now()
   const summary = await summarizeMcpRequest(request)
   const response = await runWithAuditAttribution(MCP_ATTRIBUTION, () =>
@@ -353,6 +360,14 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   )
   await logMcpRequest(summary, response, startedAt)
   return response
+}
+
+/** 413 that names upload_file's limit and the REST alternative. */
+function requestTooLarge(): Response {
+  return jsonRpcError(
+    413,
+    `Request is too large (max ${formatBytes(MCP_MAX_REQUEST_BYTES)}). upload_file accepts files up to ${formatBytes(MCP_UPLOAD_MAX_BYTES)}; upload larger files with the REST API (POST /api/v1/files).`
+  )
 }
 
 /** 405 for every method but POST, as Streamable HTTP allows. */
@@ -425,16 +440,6 @@ async function handleMcpRequestInBoundary(
     if (!devConfig.mcpPortalAccessEnabled) {
       return jsonRpcError(403, 'Portal user MCP access is disabled by the administrator.', id)
     }
-  }
-
-  // Both legs refuse an oversized body too, but with a bare byte count; most
-  // oversized requests are file uploads, so say what the limit is for.
-  if (contentLengthExceeds(request, MCP_MAX_REQUEST_BYTES)) {
-    return jsonRpcError(
-      413,
-      `Request is too large (max ${formatBytes(MCP_MAX_REQUEST_BYTES)}). upload_file accepts files up to ${formatBytes(MCP_UPLOAD_MAX_BYTES)}; upload larger files with the REST API (POST /api/v1/files).`,
-      id
-    )
   }
 
   return legacy ? serveLegacyRequest(request, auth) : serveModernRequest(request, auth)

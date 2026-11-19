@@ -52,6 +52,7 @@ vi.mock('@/lib/server/audit/log', () => ({ recordAuditEvent: hoisted.recordAudit
 
 import { handleMcpRequest } from '../handler'
 import { mcpServerVersion } from '../server'
+import { MCP_MAX_REQUEST_BYTES, MCP_UPLOAD_MAX_BYTES } from '../tools/files'
 
 const MODERN = '2026-07-28'
 const LEGACY = '2025-11-25'
@@ -346,11 +347,25 @@ describe('MCP 2025-11-25 (initialize, then stateless JSON)', () => {
     expect((await json(response)).result?.protocolVersion).toBe(LEGACY)
   })
 
-  it('accepts a body above the SDK default of 4 MiB, so upload_file can carry its full 5 MB', async () => {
-    const response = await handleMcpRequest(
-      legacy('tools/list', { _meta: { pad: 'x'.repeat(5 * 1024 * 1024) } })
-    )
-    expect(response.status).toBe(200)
+  it('takes a body up to the request cap upload_file needs, on either era', async () => {
+    // The cap fits upload_file's full limit as base64 (upload-size.test.ts).
+    const pad = 'x'.repeat(MCP_UPLOAD_MAX_BYTES + 1024)
+    expect((await handleMcpRequest(legacy('tools/list', { _meta: { pad } }))).status).toBe(200)
+  })
+
+  it('refuses a body over the cap with a 413 that says what the limit is for', async () => {
+    const pad = 'x'.repeat(MCP_MAX_REQUEST_BYTES + 1)
+    const request = legacy('tools/list', { _meta: { pad } })
+    // As a real HTTP client sends it; the cap is checked before the body is read.
+    const sized = new Request(request, {
+      headers: {
+        ...Object.fromEntries(request.headers),
+        'content-length': String(pad.length + 200),
+      },
+    })
+    const response = await handleMcpRequest(sized)
+    expect(response.status).toBe(413)
+    expect(JSON.stringify(await response.json())).toContain('upload_file accepts files up to')
   })
 
   it('records the caller’s address and user agent on an audited tool call', async () => {
