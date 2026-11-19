@@ -16,8 +16,28 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import { IdentityProvidersSection } from '../provider-list'
 
-const { upsertSpy } = vi.hoisted(() => ({
+const { upsertSpy, access } = vi.hoisted(() => ({
   upsertSpy: vi.fn(async (_args: { data: { id: string; enabled: boolean } }) => undefined),
+  access: { billingEnabled: true, permissions: new Set<string>(['billing.manage']) },
+}))
+
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useBillingEnabled: () => access.billingEnabled,
+}))
+
+// The settings layout loader seeds the upgrade context; tests seed the same key.
+vi.mock('@/lib/client/queries/billing', () => ({
+  billingQueries: {
+    upgradeContext: () => ({
+      queryKey: ['billing', 'upgrade-context'],
+      queryFn: async () => null,
+      staleTime: Infinity,
+    }),
+  },
+}))
+
+vi.mock('@/lib/client/hooks/use-permission', () => ({
+  usePermission: (key: string) => access.permissions.has(key),
 }))
 
 vi.mock('@/components/admin/upgrade', () => ({
@@ -65,6 +85,8 @@ vi.mock('@/lib/server/functions/sso', () => ({
 
 beforeEach(() => {
   upsertSpy.mockClear()
+  access.billingEnabled = true
+  access.permissions = new Set(['billing.manage'])
 })
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -159,12 +181,21 @@ vi.mock('@/lib/client/queries/settings', () => ({
   },
 }))
 
-function renderSection(enabledMethodCount = 5) {
+/** Password still on: no provider is the last way in. */
+const withPassword = { oauthState: { password: true }, emailConfigured: true, credentialStatus: {} }
+/** Password and email links off: the providers are the only way in. */
+const ssoOnly = {
+  oauthState: { password: false, magicLink: false },
+  emailConfigured: true,
+  credentialStatus: {},
+}
+
+function renderSection(methods = withPassword) {
   const qc = new QueryClient()
   qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
   return render(
     <QueryClientProvider client={qc}>
-      <IdentityProvidersSection tierEnabled enabledMethodCount={enabledMethodCount} />
+      <IdentityProvidersSection tierEnabled methods={methods} />
     </QueryClientProvider>
   )
 }
@@ -202,10 +233,11 @@ describe('<IdentityProvidersSection>', () => {
 describe('plan gate', () => {
   it('hides New provider and names Enterprise when SSO is not entitled', () => {
     const qc = new QueryClient()
-    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    // No provider set up yet (the only one is switched off): the plain offer.
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider])
     render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
+        <IdentityProvidersSection tierEnabled={false} methods={withPassword} />
       </QueryClientProvider>
     )
     expect(screen.queryByRole('link', { name: /new provider/i })).toBeNull()
@@ -217,7 +249,7 @@ describe('plan gate', () => {
     qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
     return render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
+        <IdentityProvidersSection tierEnabled={false} methods={withPassword} />
       </QueryClientProvider>
     )
   }
@@ -291,12 +323,12 @@ describe('enable toggle on the list row', () => {
   it('blocks disabling a provider that is the only working method', () => {
     // Acme SSO is enabled + configured; with a total of 1 method it is the
     // last thing standing, so its toggle is locked.
-    renderSection(1)
+    renderSection(ssoOnly)
     expect(screen.getByRole('switch', { name: /enable acme sso/i })).toBeDisabled()
   })
 
   it('allows disabling a provider when other methods remain', () => {
-    renderSection(3)
+    renderSection(withPassword)
     expect(screen.getByRole('switch', { name: /enable acme sso/i })).not.toBeDisabled()
   })
 })
@@ -305,7 +337,7 @@ describe('last-method guard depends on the SSO tier', () => {
   // Without the tier the method count leaves identity providers out, so a
   // count of 1 is the built-in or social method, not the SSO provider.
   it('locks the last working method while the tier is on', () => {
-    renderSection(1)
+    renderSection(ssoOnly)
     const toggle = screen.getByRole('switch', { name: /enable acme sso/i })
     expect(toggle).toBeDisabled()
     expect(toggle.parentElement).toHaveAttribute(
@@ -314,12 +346,12 @@ describe('last-method guard depends on the SSO tier', () => {
     )
   })
 
-  it('lets a stale provider be switched off while the tier is off', async () => {
+  it('lets a provider be switched off while the tier is off and another way in remains', async () => {
     const qc = new QueryClient()
     qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
     render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={1} />
+        <IdentityProvidersSection tierEnabled={false} methods={withPassword} />
       </QueryClientProvider>
     )
     const toggle = screen.getByRole('switch', { name: /enable acme sso/i })
@@ -331,6 +363,26 @@ describe('last-method guard depends on the SSO tier', () => {
       enabled: false,
     })
   })
+
+  it('locks the provider that keeps the stand-in email links on while the tier is off', () => {
+    // Password and email links are off; the set-up provider is why email links
+    // are offered at all, so switching it off would leave no way in.
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={false} methods={ssoOnly} />
+      </QueryClientProvider>
+    )
+    const toggle = screen.getByRole('switch', { name: /enable acme sso/i })
+    expect(toggle).toBeDisabled()
+    expect(toggle.parentElement).toHaveAttribute(
+      'title',
+      'At least one sign-in method must stay enabled.'
+    )
+    fireEvent.click(toggle)
+    expect(upsertSpy).not.toHaveBeenCalled()
+  })
 })
 
 describe('empty list', () => {
@@ -339,10 +391,90 @@ describe('empty list', () => {
     qc.setQueryData(['settings', 'identityProviders'], [])
     render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled enabledMethodCount={5} />
+        <IdentityProvidersSection tierEnabled methods={withPassword} />
       </QueryClientProvider>
     )
     expect(screen.getByText('No providers yet')).toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /new provider/i }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('set up but paused on the plan', () => {
+  const PAUSED_COPY =
+    'Single sign-on is paused on the Pro plan. Your team signs in with email links. It comes back when you upgrade.'
+
+  function renderSetUp(
+    tierEnabled: boolean,
+    providers = [buttonProvider, routedProvider],
+    upgradeContext: { currentPlanName: string } | null = { currentPlanName: 'Pro' }
+  ) {
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], providers)
+    qc.setQueryData(['billing', 'upgrade-context'], upgradeContext)
+    return render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={tierEnabled} methods={withPassword} />
+      </QueryClientProvider>
+    )
+  }
+
+  it('names the plan and says email links stand in when an enabled provider is set up', () => {
+    renderSetUp(false)
+    expect(screen.getByText(PAUSED_COPY)).toBeInTheDocument()
+    // One notice, not the plain upgrade offer as well.
+    expect(screen.queryByText(/Single sign-on is an Enterprise feature/)).toBeNull()
+  })
+
+  it('offers Upgrade, linking to Plan & billing, to someone who can manage billing', () => {
+    renderSetUp(false)
+    expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
+    expect(screen.queryByText('Ask someone who manages billing to upgrade.')).toBeNull()
+  })
+
+  it('asks someone without billing rights to find a billing manager', () => {
+    access.permissions = new Set()
+    renderSetUp(false)
+    expect(screen.getByText(PAUSED_COPY)).toBeInTheDocument()
+    expect(screen.getByText('Ask someone who manages billing to upgrade.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Upgrade' })).toBeNull()
+  })
+
+  it('leaves the plan unnamed when the plan is not known', () => {
+    renderSetUp(false, undefined, null)
+    expect(
+      screen.getByText(
+        'Single sign-on is paused. Your team signs in with email links. It comes back when you upgrade.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Pro plan/)).toBeNull()
+  })
+
+  it('offers no upgrade where billing is not managed in the app', () => {
+    access.billingEnabled = false
+    renderSetUp(false)
+    expect(
+      screen.getByText('Single sign-on is paused. Your team signs in with email links.')
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Upgrade' })).toBeNull()
+    expect(screen.queryByText(/upgrade/i)).toBeNull()
+  })
+
+  it('keeps the providers listed', () => {
+    renderSetUp(false)
+    expect(screen.getByText('Acme SSO')).toBeInTheDocument()
+  })
+
+  it('is absent while the plan includes SSO', () => {
+    renderSetUp(true)
+    expect(screen.queryByText(/Single sign-on is paused/)).toBeNull()
+  })
+
+  it('is absent when no enabled provider has its secret saved', () => {
+    renderSetUp(false, [buttonProvider, { ...routedProvider, configured: false }])
+    expect(screen.queryByText(/Single sign-on is paused/)).toBeNull()
+    expect(screen.getByText(/Single sign-on is an Enterprise feature/)).toBeInTheDocument()
   })
 })

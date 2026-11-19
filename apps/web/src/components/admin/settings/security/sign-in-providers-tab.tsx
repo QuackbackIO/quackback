@@ -76,8 +76,10 @@ export function SignInProvidersTab({
     oauthState,
     emailConfigured,
     credentialStatus,
-    // IdPs only register (and so only count as a method) when the tier is on.
-    identityProviders: customOidcProviderTier ? identityProviders : [],
+    identityProviders,
+    // IdPs only register (and so only count as a method) when the tier is on;
+    // without it the email links that stand in for them count instead.
+    ssoLive: customOidcProviderTier,
   })
   const isLastMethod = (id: string) => {
     if (!isSignInMethodEnabled(oauthState, id)) return false
@@ -274,7 +276,7 @@ export function SignInProvidersTab({
           nested inside this card. */}
       <IdentityProvidersSection
         tierEnabled={customOidcProviderTier}
-        enabledMethodCount={enabledMethodCount}
+        methods={{ oauthState, emailConfigured, credentialStatus }}
       />
 
       {configDialog && (

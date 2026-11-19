@@ -21,6 +21,7 @@
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { NotFoundError } from '@/lib/shared/errors'
+import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { invalidateSettingsCache } from './settings.helpers'
 import { invalidateTierLimitsCache } from './tier-limits.service'
 import type { TierLimits } from './tier-limits.types'
@@ -68,6 +69,9 @@ export async function writeTierLimits(
     }
 
     await tx.update(settings).set({ tierLimits: serialized }).where(eq(settings.id, row.id))
+    // Tier limits decide whether identity providers register; the auth
+    // instance is rebuilt only when this version moves.
+    await bumpAuthConfigVersionInTx(tx)
     return { changed: true, managedByConfigFile: false }
   })
 

@@ -3,6 +3,7 @@ import type { StoredCloudConfig } from '@/lib/shared/db-types'
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { invalidateSettingsCache } from '../settings.helpers'
 import { invalidateTierLimitsCache } from '../tier-limits.service'
 import { parseBillingProjection, type BillingProjection } from './billing-projection'
@@ -32,6 +33,20 @@ export function decideBillingProjectionWrite(
   if (incoming.version > current.version) return 'apply'
   if (isDeepStrictEqual(incoming, current)) return 'idempotent'
   throw new BillingProjectionWriteError('version_conflict')
+}
+
+/**
+ * Whether `incoming` can change which features the plan includes: the plan,
+ * its expiry (when it falls back to Free) or the single sign-on entitlement.
+ * Seats and allowances cannot.
+ */
+function changesPlan(current: BillingProjection | null, incoming: BillingProjection): boolean {
+  if (!current) return true
+  return (
+    current.effectivePlan !== incoming.effectivePlan ||
+    current.planLimitsExpireAt !== incoming.planLimitsExpireAt ||
+    (current.entitlements.sso === true) !== (incoming.entitlements.sso === true)
+  )
 }
 
 function expectedWorkspaceKey(): string | null {
@@ -66,6 +81,11 @@ export async function writeBillingProjection(
       .update(settings)
       .set({ cloud, cloudRevision: row.cloudRevision + 1 })
       .where(eq(settings.id, row.id))
+    // The plan decides whether identity providers register, and the auth
+    // instance is rebuilt only when this version moves, so a plan that gains
+    // single sign-on back serves its providers at once, with no setup. Only
+    // when the plan changes: a rebuild refetches every provider's discovery.
+    if (changesPlan(current, projection)) await bumpAuthConfigVersionInTx(tx)
     return true
   })
 
