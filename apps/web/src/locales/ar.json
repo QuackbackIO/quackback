@@ -603,6 +603,7 @@
   "widget.messenger.block.collect.submit": "إرسال",
   "widget.messenger.block.writeOnceExplainer": "لا يمكن لأحد سوى فريقنا تغيير هذا الآن.",
   "widget.messenger.closedReopen": "تم إغلاق هذه المحادثة. رُدّ لإعادة فتحها.",
+  "widget.messenger.sendTooFast": "أنت ترسل الرسائل بسرعة كبيرة. انتظر قليلًا ثم حاول مرة أخرى.",
   "widget.messenger.composer.lockedButtons": "اختر أحد الخيارات أعلاه",
   "widget.messenger.composer.lockedCsat": "قيّم محادثتك أعلاه",
   "widget.messenger.csat.commentPlaceholder": "أضف تعليقًا (اختياري)",

@@ -603,6 +603,7 @@
   "widget.messenger.block.collect.submit": "Wyślij",
   "widget.messenger.block.writeOnceExplainer": "Teraz może to zmienić tylko nasz zespół.",
   "widget.messenger.closedReopen": "Ta rozmowa została zamknięta. Odpowiedz, aby ją wznowić.",
+  "widget.messenger.sendTooFast": "Wysyłasz wiadomości zbyt szybko. Poczekaj chwilę i spróbuj ponownie.",
   "widget.messenger.composer.lockedButtons": "Wybierz jedną z opcji powyżej",
   "widget.messenger.composer.lockedCsat": "Oceń rozmowę powyżej",
   "widget.messenger.csat.commentPlaceholder": "Dodaj komentarz (opcjonalnie)",

@@ -603,6 +603,7 @@
   "widget.messenger.block.collect.submit": "Versturen",
   "widget.messenger.block.writeOnceExplainer": "Alleen ons team kan dit nu nog wijzigen.",
   "widget.messenger.closedReopen": "Dit gesprek is gesloten. Antwoord om het te heropenen.",
+  "widget.messenger.sendTooFast": "Je verstuurt berichten te snel. Wacht even en probeer het dan opnieuw.",
   "widget.messenger.composer.lockedButtons": "Kies een optie hierboven",
   "widget.messenger.composer.lockedCsat": "Beoordeel je gesprek hierboven",
   "widget.messenger.csat.commentPlaceholder": "Voeg een opmerking toe (optioneel)",

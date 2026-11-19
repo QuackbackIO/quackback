@@ -190,6 +190,56 @@ export interface VisitorConversationThreadProps {
   initialDraft?: string
 }
 
+/** How long the "sending too quickly" notice stays when the refusal names no wait. */
+const DEFAULT_SEND_WAIT_SECONDS = 30
+const MAX_SEND_WAIT_SECONDS = 300
+
+/**
+ * The seconds to wait when a send was refused for going too fast, or null for
+ * any other failure. Reads the refusal's code: in the browser a typed server
+ * error is a plain Error carrying `code` and `retryAfter`
+ * (typed-error-serialization.ts).
+ */
+function sendWaitSeconds(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null
+  const { code, retryAfter } = error as { code?: unknown; retryAfter?: unknown }
+  if (code !== 'RATE_LIMITED') return null
+  const seconds =
+    typeof retryAfter === 'number' && retryAfter > 0 ? retryAfter : DEFAULT_SEND_WAIT_SECONDS
+  return Math.min(Math.ceil(seconds), MAX_SEND_WAIT_SECONDS)
+}
+
+/**
+ * The notice a visitor sees after sending too fast. It shows for the wait the
+ * server named, and a send that goes through clears it early.
+ */
+function useSendThrottleNotice() {
+  const [active, setActive] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
+  const clear = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setActive(false)
+  }, [])
+  const noteFailure = useCallback((error: unknown) => {
+    const seconds = sendWaitSeconds(error)
+    if (seconds === null) return
+    if (timer.current) clearTimeout(timer.current)
+    setActive(true)
+    timer.current = setTimeout(() => {
+      timer.current = null
+      setActive(false)
+    }, seconds * 1000)
+  }, [])
+  return useMemo(() => ({ active, clear, noteFailure }), [active, clear, noteFailure])
+}
+
 /**
  * The visitor side of a conversation: virtualized thread, live SSE updates,
  * composer (rich text + file attachments + emoji), pre-chat email capture,
@@ -271,6 +321,7 @@ export function VisitorConversationThread({
     return doc
   })
   const [sending, setSending] = useState(false)
+  const sendThrottle = useSendThrottleNotice()
   // Phase C conversational block layer: the block message currently awaiting
   // its structured-send response — the optimistic tap-disable (contract
   // idempotency: a losing double-tap must never fire a second send). Cleared
@@ -607,13 +658,15 @@ export function VisitorConversationThread({
           conversationKeys.visitorThread(conversationId),
           (prev: VisitorThreadCache | undefined) => appendSentVisitorMessage(prev, res)
         )
-      } catch {
+        sendThrottle.clear()
+      } catch (error) {
         // Leave it tappable again for a retry.
+        sendThrottle.noteFailure(error)
       } finally {
         setSubmittingBlockId(null)
       }
     },
-    [conversationId, submittingBlockId, getAuthHeaders, queryClient]
+    [conversationId, submittingBlockId, getAuthHeaders, queryClient, sendThrottle]
   )
 
   const handleButtonTap = useCallback(
@@ -917,8 +970,10 @@ export function VisitorConversationThread({
       // Clear the composer only on success — the resetSignal bump empties the editor.
       clearComposer()
       clearAttachments()
-    } catch {
+      sendThrottle.clear()
+    } catch (error) {
       // Leave the composer content intact for a retry.
+      sendThrottle.noteFailure(error)
     } finally {
       setSending(false)
     }
@@ -938,6 +993,7 @@ export function VisitorConversationThread({
     conversationStatus,
     blockStates,
     composerLock.disabled,
+    sendThrottle,
   ])
 
   // Enter-to-send routes through the editor's keymap, whose closure is baked in
@@ -1336,6 +1392,14 @@ export function VisitorConversationThread({
           </span>
           <span className="h-px flex-1 bg-border/50" />
         </div>
+      )}
+      {sendThrottle.active && (
+        <p className="px-4 pt-2 text-center text-[11px] text-muted-foreground" role="status">
+          <FormattedMessage
+            id="widget.messenger.sendTooFast"
+            defaultMessage="You're sending messages too quickly. Wait a moment, then try again."
+          />
+        </p>
       )}
       <div className="border-t border-border/40 p-2 shrink-0">
         {/* Composer: a rich editor on top (the / menu inserts code blocks etc.,
