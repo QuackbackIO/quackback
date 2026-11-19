@@ -70,7 +70,10 @@ import { refreshVisitorUnreadCounts } from '@/lib/client/conversation/visitor-re
 import { conversationKeys } from '@/components/conversation/query-keys'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
-import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type {
+  ConversationMessageDTO,
+  ConversationStreamEvent,
+} from '@/lib/shared/conversation/types'
 import { CSAT_FACES } from '@/lib/shared/db-types'
 import type { BlockReplyMetadata } from '@/lib/shared/db-types'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
@@ -260,6 +263,14 @@ function useSendThrottleNotice() {
   }, [])
   return useMemo(() => ({ active, clear, noteFailure }), [active, clear, noteFailure])
 }
+
+/** Stream events whose effect a thread refetch's snapshot could undo. */
+const SNAPSHOT_EVENT_KINDS: ReadonlySet<ConversationStreamEvent['kind']> = new Set([
+  'message',
+  'message_edited',
+  'message_deleted',
+  'conversation',
+])
 
 /**
  * The visitor side of a conversation: virtualized thread, live SSE updates,
@@ -516,8 +527,11 @@ export function VisitorConversationThread({
     // getAuthHeaders is identity-stable per surface; sessionVersion is the reload key.
   }, [sessionVersion, conversationTarget])
 
-  // Counts live stream events, so a refetch can tell whether one landed while
-  // it was in flight (its snapshot may then predate that event).
+  // Counts the live stream events a refetch's snapshot could undo (messages
+  // and the conversation's status), so a refetch can tell whether one landed
+  // while it was in flight. Typing and assistant-progress frames don't count:
+  // they arrive constantly while the assistant writes, and the snapshot
+  // carries nothing of theirs.
   const streamEventCountRef = useRef(0)
 
   // Refetch the authoritative thread (messages, status and rating) to catch up
@@ -604,7 +618,7 @@ export function VisitorConversationThread({
       }
     },
     onEvent: (evt) => {
-      streamEventCountRef.current++
+      if (SNAPSHOT_EVENT_KINDS.has(evt.kind)) streamEventCountRef.current++
       // Cache-shaped updates (message/read/deleted/conversation) route through
       // the pure reducer; typing + presence side effects stay here.
       if (conversationId) {

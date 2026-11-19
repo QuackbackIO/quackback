@@ -148,6 +148,32 @@ describe('VisitorConversationThread catches up when the stream first opens', () 
     expect(await screen.findByText(CLOSED_HINT)).toBeInTheDocument()
   })
 
+  it('still catches up while the assistant streams (typing and progress frames undo nothing)', async () => {
+    let answer: (page: Page) => void = () => {}
+    const rpc = makeRpc(() => new Promise<Page>((resolve) => (answer = resolve)))
+    const stream = await renderThread(rpc)
+    act(() => stream.onopen?.())
+    await waitFor(() => expect(rpc.listConversationMessages).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      stream.emit('typing', { kind: 'typing', conversationId: CONVERSATION_ID, side: 'agent' })
+      stream.emit('assistant_activity', {
+        kind: 'assistant_activity',
+        conversationId: CONVERSATION_ID,
+        status: 'thinking',
+      })
+      stream.emit('assistant_delta', {
+        kind: 'assistant_delta',
+        conversationId: CONVERSATION_ID,
+        text: 'Let me check',
+      })
+    })
+    await act(async () => answer({ messages: [message], hasMore: false, status: 'closed' }))
+
+    expect(await screen.findByText(CLOSED_HINT)).toBeInTheDocument()
+    expect(rpc.listConversationMessages).toHaveBeenCalledTimes(1)
+  })
+
   it('does not let an older refetch undo a stream event that landed while it was in flight', async () => {
     let answer: (page: Page) => void = () => {}
     const pages: Page[] = []
