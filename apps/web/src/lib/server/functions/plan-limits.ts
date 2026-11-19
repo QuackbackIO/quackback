@@ -17,7 +17,7 @@ import { assertAnyPermission, assertDashboardScope, requireAuth } from './auth-h
 
 export type PlanLimitsChoiceRefusal = {
   ok: false
-  reason: 'not_over' | 'unknown' | 'too_many'
+  reason: 'not_over' | 'unknown' | 'too_many' | 'read_only'
 }
 export type PlanLimitsChoiceResponse = { ok: true } | PlanLimitsChoiceRefusal
 

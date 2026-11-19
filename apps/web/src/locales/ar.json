@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "تعذّر التحقق من تسجيل دخولك. سجّل الدخول مرة أخرى، ثم اربط.",
   "admin.integrations.oauthError.credentials": "أضف بيانات اعتماد تطبيق {name} قبل الاتصال.",
   "admin.integrations.oauthError.elsewhere": "حساب {name} هذا متصل بالفعل بمساحة عمل Quackback أخرى.",
-  "admin.integrations.oauthError.failed": "لم يكتمل الاتصال بـ {name}. حاول الربط مرة أخرى."
+  "admin.integrations.oauthError.failed": "لم يكتمل الاتصال بـ {name}. حاول الربط مرة أخرى.",
+  "portal.feedback.readOnly": "هذه الفئة لا تستقبل ملاحظات جديدة حاليًا.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}}, التصويت مغلق",
+  "widget.voteButton.ariaClosed": "{count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}}, التصويت مغلق",
+  "widget.readOnly": "هذه الفئة لا تستقبل ملاحظات جديدة حاليًا."
 }

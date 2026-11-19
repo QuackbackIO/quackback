@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "No pudimos confirmar tu inicio de sesión. Vuelve a iniciar sesión y conecta.",
   "admin.integrations.oauthError.credentials": "Añade las credenciales de la app de {name} antes de conectar.",
   "admin.integrations.oauthError.elsewhere": "Esta cuenta de {name} ya está conectada a otro espacio de trabajo de Quackback.",
-  "admin.integrations.oauthError.failed": "La conexión con {name} no se completó. Vuelve a intentar conectar."
+  "admin.integrations.oauthError.failed": "La conexión con {name} no se completó. Vuelve a intentar conectar.",
+  "portal.feedback.readOnly": "Esta categoría no admite comentarios nuevos por ahora.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votación cerrada",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votación cerrada",
+  "widget.readOnly": "Esta categoría no admite comentarios nuevos por ahora."
 }

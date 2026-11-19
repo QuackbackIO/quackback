@@ -2066,6 +2066,13 @@
       "when": 1791002200000,
       "tag": "0317_plan_limits_state",
       "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "7",
+      "when": 1791002300000,
+      "tag": "0318_board_read_only",
+      "breakpoints": true
     }
   ]
 }

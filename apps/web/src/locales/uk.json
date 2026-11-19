@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "Не вдалося підтвердити ваш вхід. Увійдіть знову, а потім підключіть.",
   "admin.integrations.oauthError.credentials": "Додайте облікові дані застосунку {name} перед підключенням.",
   "admin.integrations.oauthError.elsewhere": "Цей обліковий запис {name} уже підключено до іншого робочого простору Quackback.",
-  "admin.integrations.oauthError.failed": "Підключення до {name} не завершилося. Спробуйте підключити ще раз."
+  "admin.integrations.oauthError.failed": "Підключення до {name} не завершилося. Спробуйте підключити ще раз.",
+  "portal.feedback.readOnly": "Ця дошка зараз не приймає новий відгук.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# голос} few {# голоси} many {# голосів} other {# голоса}}, голосування закрито",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# голос} few {# голоси} many {# голосів} other {# голоса}}, голосування закрито",
+  "widget.readOnly": "Ця дошка зараз не приймає новий відгук."
 }

@@ -70,6 +70,7 @@ import { sharePost, shareTicket } from '@/lib/server/domains/conversation/conver
 import { quinnActor } from './assistant.actor'
 import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
 import { logger } from '@/lib/server/logger'
+import { BoardReadOnlyError } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
 const log = logger.child({ component: 'assistant-toolspec' })
 
@@ -1169,6 +1170,20 @@ type CaptureFeedbackArgs = InferToolInput<typeof captureFeedbackTool>
 type CaptureFeedbackOutput = z.infer<typeof captureFeedbackOutputSchema>
 
 async function executeCaptureFeedback(
+  args: CaptureFeedbackArgs,
+  ctx: AssistantToolContext
+): Promise<CaptureFeedbackOutput> {
+  try {
+    return await captureFeedback(args, ctx)
+  } catch (error) {
+    // A read-only board is a refusal the model can act on (pick another
+    // board), not a failure of the tool.
+    if (error instanceof BoardReadOnlyError) return { created: false, note: error.message }
+    throw error
+  }
+}
+
+async function captureFeedback(
   args: CaptureFeedbackArgs,
   ctx: AssistantToolContext
 ): Promise<CaptureFeedbackOutput> {

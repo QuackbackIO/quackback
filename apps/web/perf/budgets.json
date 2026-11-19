@@ -457,7 +457,7 @@
     },
     "sweep:doc:admin:/admin/settings/boards": {
       "dbQueries": 9,
-      "htmlKB": 74.5
+      "htmlKB": 75.5
     },
     "sweep:ui:admin:/admin/settings/boards": {
       "dbQueries": 9,

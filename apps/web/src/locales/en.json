@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "We couldn't confirm your sign-in. Sign in again, then connect.",
   "admin.integrations.oauthError.credentials": "Add the {name} app credentials before connecting.",
   "admin.integrations.oauthError.elsewhere": "This {name} account is already connected to another Quackback workspace.",
-  "admin.integrations.oauthError.failed": "The connection to {name} didn't finish. Try connecting again."
+  "admin.integrations.oauthError.failed": "The connection to {name} didn't finish. Try connecting again.",
+  "portal.feedback.readOnly": "This board isn't taking new feedback right now.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# vote} other {# votes}}, voting closed",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# vote} other {# votes}}, voting closed",
+  "widget.readOnly": "This board isn't taking new feedback right now."
 }

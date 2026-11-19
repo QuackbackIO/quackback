@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "Nous n'avons pas pu confirmer votre connexion. Reconnectez-vous, puis connectez l'intégration.",
   "admin.integrations.oauthError.credentials": "Ajoutez les identifiants de l'application {name} avant de vous connecter.",
   "admin.integrations.oauthError.elsewhere": "Ce compte {name} est déjà connecté à un autre espace de travail Quackback.",
-  "admin.integrations.oauthError.failed": "La connexion à {name} n'a pas abouti. Réessayez de vous connecter."
+  "admin.integrations.oauthError.failed": "La connexion à {name} n'a pas abouti. Réessayez de vous connecter.",
+  "portal.feedback.readOnly": "Cette catégorie n'accepte pas de nouveaux retours pour le moment.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# vote} other {# votes}}, vote fermé",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# vote} other {# votes}}, vote fermé",
+  "widget.readOnly": "Cette catégorie n'accepte pas de nouveaux retours pour le moment."
 }

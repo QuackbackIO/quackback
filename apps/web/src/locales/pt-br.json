@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "Não conseguimos confirmar seu login. Entre novamente e depois conecte.",
   "admin.integrations.oauthError.credentials": "Adicione as credenciais do app {name} antes de conectar.",
   "admin.integrations.oauthError.elsewhere": "Esta conta do {name} já está conectada a outro espaço de trabalho do Quackback.",
-  "admin.integrations.oauthError.failed": "A conexão com {name} não foi concluída. Tente conectar novamente."
+  "admin.integrations.oauthError.failed": "A conexão com {name} não foi concluída. Tente conectar novamente.",
+  "portal.feedback.readOnly": "Este quadro não está recebendo novo feedback no momento.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votação encerrada",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votação encerrada",
+  "widget.readOnly": "Este quadro não está recebendo novo feedback no momento."
 }

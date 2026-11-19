@@ -1,4 +1,5 @@
 import type { BoardId } from '@quackback/ids'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -52,7 +53,7 @@ export interface FeedbackHeaderProps {
    * workspace anonymous switch). The submit CTA follows the selected board's
    * `canSubmit` instead of the workspace-wide flag.
    */
-  boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
+  boardPermissions?: Record<string, BoardPermission>
   onPostCreated?: (postId: string, boardSlug: string) => void
   /**
    * When true, posts go to this page's board and the form does not offer a
@@ -67,6 +68,11 @@ export interface FeedbackHeaderProps {
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
+// The server's refusal for a read-only board, matched by its message. Kept
+// local so this file shares no module with the lazy chunks.
+const isReadOnlyRefusal = (err: unknown): boolean =>
+  err instanceof Error && err.message === "This board isn't taking new feedback right now."
+
 const DETAILS_MAX_LENGTH = 10_000
 
 export function FeedbackHeaderAnimated({
@@ -287,14 +293,19 @@ export function FeedbackHeaderAnimated({
           },
         }
       )
-    } catch {
+    } catch (err) {
       // The server logs why it refused the post; its message is not written
-      // for the visitor.
+      // for the visitor, except the neutral line for a board that takes none.
       setError(
-        intl.formatMessage({
-          id: 'portal.feedback.header.errorSubmit',
-          defaultMessage: 'Could not submit your feedback. Please try again.',
-        })
+        isReadOnlyRefusal(err)
+          ? intl.formatMessage({
+              id: 'portal.feedback.readOnly',
+              defaultMessage: "This board isn't taking new feedback right now.",
+            })
+          : intl.formatMessage({
+              id: 'portal.feedback.header.errorSubmit',
+              defaultMessage: 'Could not submit your feedback. Please try again.',
+            })
       )
     }
   }

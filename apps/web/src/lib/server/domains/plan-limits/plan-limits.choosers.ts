@@ -18,7 +18,7 @@ import { evaluate, type PlanLimitsSnapshot } from './plan-limits.service'
 type SnapshotPart = keyof PlanLimitsSnapshot
 
 export type PlanLimitsChoiceResult =
-  { ok: true } | { ok: false; reason: 'not_over' | 'unknown' | 'too_many' }
+  { ok: true } | { ok: false; reason: 'not_over' | 'unknown' | 'too_many' | 'read_only' }
 
 type ChoiceField =
   'keptBoardId' | 'seatHolderIds' | 'visibleStatusComponentIds' | 'sendingDomainIds'
@@ -35,6 +35,10 @@ async function choose(
   if (!view.enabled || !issue) return { ok: false, reason: 'not_over' }
   const known = new Set((snapshot[part] as { id: string }[] | undefined)?.map((c) => c.id) ?? [])
   if (ids.some((id) => !known.has(id))) return { ok: false, reason: 'unknown' }
+  // A board an admin set read-only takes no feedback whichever board is kept.
+  if (part === 'boards' && snapshot.boards?.some((b) => ids.includes(b.id) && b.readOnly)) {
+    return { ok: false, reason: 'read_only' }
+  }
   // The owner and a billing manager always hold a seat and count toward it.
   const always = part === 'members' ? guaranteedSeatHolders(snapshot.members ?? []) : []
   if (new Set([...always, ...ids]).size > Math.max(issue.cap, always.length)) {

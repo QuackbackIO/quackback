@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "Nie udało się potwierdzić logowania. Zaloguj się ponownie, a następnie połącz.",
   "admin.integrations.oauthError.credentials": "Dodaj dane uwierzytelniające aplikacji {name} przed połączeniem.",
   "admin.integrations.oauthError.elsewhere": "To konto {name} jest już połączone z innym obszarem roboczym Quackback.",
-  "admin.integrations.oauthError.failed": "Połączenie z {name} nie zostało ukończone. Spróbuj połączyć ponownie."
+  "admin.integrations.oauthError.failed": "Połączenie z {name} nie zostało ukończone. Spróbuj połączyć ponownie.",
+  "portal.feedback.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# głos} few {# głosy} many {# głosów} other {# głosu}}, głosowanie zamknięte",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# głos} few {# głosy} many {# głosów} other {# głosu}}, głosowanie zamknięte",
+  "widget.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii."
 }

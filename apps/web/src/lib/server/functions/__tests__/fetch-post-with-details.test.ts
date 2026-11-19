@@ -52,6 +52,9 @@ function held<T>(name: string, value: T) {
   }
 }
 const post = { canonicalPostId: null as PostId | null }
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.board-guard', () => ({
+  isBoardOpenFor: vi.fn(async () => true),
+}))
 vi.mock('@/lib/server/domains/posts/post.query', () => ({
   getPostWithDetails: () =>
     held('post', {
@@ -63,6 +66,7 @@ vi.mock('@/lib/server/domains/posts/post.query', () => ({
       summaryUpdatedAt: null,
       pinnedComment: null,
       mergedAt: null,
+      board: { id: 'board_1', name: 'Ideas', slug: 'ideas' },
       ...post,
     })(),
   getPaginatedCommentsWithReplies: held('comments', {

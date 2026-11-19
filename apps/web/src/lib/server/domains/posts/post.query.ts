@@ -160,6 +160,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       id: board.id,
       name: board.name,
       slug: board.slug,
+      readOnly: board.readOnly,
     },
     tags: postTagsResult.map((t) => ({
       id: t.id,

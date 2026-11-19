@@ -151,6 +151,7 @@ export async function getPublicPostDetail(
         boardName: boards.name,
         boardSlug: boards.slug,
         boardAccess: boards.access,
+        boardManualReadOnly: boards.readOnly,
         postModerationState: posts.moderationState,
         postPrincipalId: posts.principalId,
         tagsJson: sql<string>`COALESCE(
@@ -532,6 +533,7 @@ export async function getPublicPostDetail(
     // Server-only: fetchPublicPostDetail derives canVote/canComment from this
     // and strips it before the response reaches the client.
     boardAccess: postResult.boardAccess,
+    boardManualReadOnly: postResult.boardManualReadOnly,
     tags: tagsResult,
     comments: hydratedRootComments,
     commentsHasMore,

@@ -2274,5 +2274,9 @@
   "admin.integrations.oauthError.session": "我們無法確認你的登入狀態。請重新登入，然後再連接。",
   "admin.integrations.oauthError.credentials": "請先新增 {name} 應用程式憑證再連線。",
   "admin.integrations.oauthError.elsewhere": "此 {name} 帳戶已連線到另一個 Quackback 工作區。",
-  "admin.integrations.oauthError.failed": "與 {name} 的連線未完成。請重新嘗試連線。"
+  "admin.integrations.oauthError.failed": "與 {name} 的連線未完成。請重新嘗試連線。",
+  "portal.feedback.readOnly": "這個看板目前不接受新的意見回饋。",
+  "portal.postCard.vote.ariaClosed": "{count, plural, other {# 票}}, 投票已關閉",
+  "widget.voteButton.ariaClosed": "{count, plural, other {# 票}}, 投票已關閉",
+  "widget.readOnly": "這個看板目前不接受新的意見回饋。"
 }
