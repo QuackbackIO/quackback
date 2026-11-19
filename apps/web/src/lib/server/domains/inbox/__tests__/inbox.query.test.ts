@@ -432,6 +432,103 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
       expect(page2.items.map(idOf)).toEqual([ticketDue40.id, conversationNoSla, ticketSettled.id])
       expect(page2.cursor).toBeNull()
     })
+
+    /** Walk every page with the real cursor; the ids in emitted order. */
+    async function walkAllPages(limit: number): Promise<string[]> {
+      const seen: string[] = []
+      let cursor: string | undefined
+      for (let pages = 0; pages < 20; pages++) {
+        const page = await listInboxItems(serviceActor(), {
+          facet: 'all',
+          kinds: ['conversation', 'ticket'],
+          sort: 'sla',
+          limit,
+          cursor,
+        })
+        seen.push(...page.items.map(idOf))
+        if (!page.cursor) return seen
+        cursor = page.cursor
+      }
+      throw new Error('paging never ended')
+    }
+
+    it('pages a long no-deadline tail of both kinds exactly once each', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+
+      // Each row is newer in activity than the one created after it, so the
+      // activity order runs opposite to the id order the null tail pages by.
+      const conversationIds: string[] = []
+      for (let i = 0; i < 5; i++) {
+        conversationIds.push(
+          await seedConversation(visitor, { lastMessageAt: new Date(at(50 - i)) })
+        )
+      }
+      const ticketIds: string[] = []
+      for (let i = 0; i < 5; i++) {
+        const ticket = await createTicket(
+          { type: 'back_office', title: `No deadline ${i}` },
+          writeActor()
+        )
+        await testDb
+          .update(tickets)
+          .set({ updatedAt: new Date(at(40 - i)) })
+          .where(eq(tickets.id, ticket.id))
+        ticketIds.push(ticket.id)
+      }
+
+      const seen = await walkAllPages(3)
+      expect(seen).toHaveLength(10)
+      expect(new Set(seen).size).toBe(10)
+      expect([...seen].sort()).toEqual([...conversationIds, ...ticketIds].sort())
+      // The tail runs conversations then tickets, each kind in id order.
+      expect(seen).toEqual([...[...conversationIds].sort(), ...[...ticketIds].sort()])
+    })
+
+    it('pages rows that share a deadline across a page boundary exactly once each', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+
+      const conversationEarly = await seedConversation(visitor, { lastMessageAt: new Date(at(1)) })
+      const conversationTiedA = await seedConversation(visitor, { lastMessageAt: new Date(at(9)) })
+      const conversationTiedB = await seedConversation(visitor, { lastMessageAt: new Date(at(8)) })
+      await testDb
+        .update(conversations)
+        .set({ slaApplied: conversationStamp(at(5)) as never })
+        .where(eq(conversations.id, conversationEarly))
+      for (const id of [conversationTiedA, conversationTiedB]) {
+        await testDb
+          .update(conversations)
+          .set({ slaApplied: conversationStamp(at(20)) as never })
+          .where(eq(conversations.id, id))
+      }
+      const ticketTied = await createTicket({ type: 'back_office', title: 'Tied' }, writeActor())
+      const ticketLater = await createTicket({ type: 'back_office', title: 'Later' }, writeActor())
+      await testDb
+        .update(tickets)
+        .set({ slaApplied: ticketStamp(at(20)), updatedAt: new Date(at(30)) })
+        .where(eq(tickets.id, ticketTied.id))
+      await testDb
+        .update(tickets)
+        .set({ slaApplied: ticketStamp(at(25)), updatedAt: new Date(at(31)) })
+        .where(eq(tickets.id, ticketLater.id))
+
+      // Pages of 2 split the three rows due at :20 across a boundary.
+      const seen = await walkAllPages(2)
+      const tiedConversations = [conversationTiedA, conversationTiedB].sort()
+      expect(seen).toEqual([
+        conversationEarly,
+        tiedConversations[0],
+        tiedConversations[1],
+        ticketTied.id,
+        ticketLater.id,
+      ])
+      expect(new Set(seen).size).toBe(seen.length)
+    })
   })
 
   describe('countInboxScopes', () => {
