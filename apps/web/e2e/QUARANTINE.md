@@ -71,9 +71,7 @@ by a separate test that is not quarantined.
   there, the requester's thread then failed with "Something went wrong", so
   the fix likely needs more than that line. owner: unassigned, review by:
   2026-12-03.
-
 ### Support suite: workflows and the AI agent
-
 - `support/automation-ai.spec.ts` › AI agent in the widget › WFL-76 the model
   closes the conversation. The `end_conversation` tool needs
   `conversation.set_status` (its spec in `assistant.toolspec.ts`), but the AI
