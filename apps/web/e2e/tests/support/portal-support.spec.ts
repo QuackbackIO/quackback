@@ -799,9 +799,15 @@ test.describe('portal support: what the customer receives and is refused', () =>
       expect((await bells())[0].title).toBe(`${ticket.title} is now In progress`)
 
       await moveTicket(admin, ticket.id, 'Resolved')
-      const mail = await waitForMail({ to: customerEmail, timeoutMs: 20_000 })
-      expect(mail.Subject).toBeTruthy()
+      const mail = await waitForMail({
+        to: customerEmail,
+        subject: 'was resolved',
+        timeoutMs: 20_000,
+      })
+      expect(mail.Subject).toBe(`Your ticket ${ticket.reference} was resolved`)
       await waitForEmailLog(customerEmail, { email_type: 'TicketEventEmail' })
+      // The resolve rings the bell too; let it land before counting.
+      await pollFor('the resolved bell', async () => ((await bells()).length >= 2 ? true : null))
 
       // Unwatched: the next moves reach neither the bell nor the inbox.
       const off = await portalFn(context.request, 'unwatchMyTicketFn', { ticketId: ticket.id })
