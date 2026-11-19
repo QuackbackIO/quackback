@@ -646,8 +646,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::regenerateWidgetSecretFn | settings.manage |
 | `lib/server/functions/settings.ts`::mintWidgetInstallCodeFn | settings.manage |
 | `lib/server/functions/settings.ts`::fetchOfficeHoursFn | office_hours.manage |
-| `lib/server/functions/settings.ts`::fetchConversationRoutingFn | settings.manage |
-| `lib/server/functions/settings.ts`::updateConversationRoutingFn | settings.manage |
+| `lib/server/functions/settings.ts`::fetchConversationRoutingFn | routing.manage |
+| `lib/server/functions/settings.ts`::updateConversationRoutingFn | routing.manage |
 | `lib/server/functions/settings.ts`::fetchEmailAutoAckFn | channel_account.manage |
 | `lib/server/functions/settings.ts`::updateEmailAutoAckFn | channel_account.manage |
 | `lib/server/functions/settings.ts`::updateOfficeHoursFn | office_hours.manage |

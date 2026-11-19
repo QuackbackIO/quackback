@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
 const updateRouting = vi.fn()
+/** The viewer's permissions; every one by default. */
+const held = { permissions: null as string[] | null }
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -39,7 +41,8 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
     },
   }),
   useBaseUrl: () => 'https://acme.com',
-  useHasPermission: () => true,
+  useHasPermission: (permission: string) =>
+    held.permissions === null || held.permissions.includes(permission),
 }))
 vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
@@ -84,6 +87,7 @@ function renderPage() {
 
 beforeEach(() => {
   updateRouting.mockReset()
+  held.permissions = null
   updateRouting.mockResolvedValue({})
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 })
@@ -153,5 +157,13 @@ describe('ChannelsHubPage', () => {
     )
     const mutation = client.getMutationCache().getAll()[0]
     expect(mutation.meta).toEqual({ autosave: true })
+  })
+
+  it('leaves the routing switch out for a viewer without routing.manage', () => {
+    held.permissions = ['settings.manage']
+    seed(WORKING_GITHUB)
+    renderPage()
+    expect(screen.queryByRole('switch', { name: 'Auto-assign new conversations' })).toBeNull()
+    expect(screen.queryByText('Conversation routing')).toBeNull()
   })
 })

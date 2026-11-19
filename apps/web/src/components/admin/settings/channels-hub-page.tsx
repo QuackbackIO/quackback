@@ -17,7 +17,8 @@ import {
   isPortalSupportSurfaceEnabled,
   isWidgetMessengerEnabled,
 } from '@/lib/shared/support-surfaces'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useHasPermission, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
 
 // The hub's GitHub row may be up to a minute old, like its email row.
@@ -33,7 +34,9 @@ export function ChannelsHubPage() {
     ...githubChannelStatusQuery(),
     staleTime: HUB_STATUS_STALE_MS,
   })
-  const routingQuery = useQuery(channelSettingsQueries.routing())
+  // The routing switch follows routing.manage; without it the card is left out.
+  const canManageRouting = useHasPermission(PERMISSIONS.ROUTING_MANAGE)
+  const routingQuery = useQuery({ ...channelSettingsQueries.routing(), enabled: canManageRouting })
   const updateRouting = useUpdateConversationRouting()
 
   const enabled = updateRouting.isPending
@@ -85,26 +88,28 @@ export function ChannelsHubPage() {
 
       {portalSupportOn && <SectionDomainSettingsCard section="support" />}
 
-      <SettingsCard
-        title="Conversation routing"
-        description="Applies to new conversations on every channel."
-      >
-        <SettingRows>
-          <SettingRow
-            label="Auto-assign new conversations"
-            description="Assign to an agent who is online."
-            htmlFor="routing-auto-assign"
-            control={
-              <Switch
-                id="routing-auto-assign"
-                checked={enabled}
-                disabled={routingQuery.isLoading}
-                onCheckedChange={(checked) => updateRouting.mutate(checked)}
-              />
-            }
-          />
-        </SettingRows>
-      </SettingsCard>
+      {canManageRouting && (
+        <SettingsCard
+          title="Conversation routing"
+          description="Applies to new conversations on every channel."
+        >
+          <SettingRows>
+            <SettingRow
+              label="Auto-assign new conversations"
+              description="Assign to an agent who is online."
+              htmlFor="routing-auto-assign"
+              control={
+                <Switch
+                  id="routing-auto-assign"
+                  checked={enabled}
+                  disabled={routingQuery.isLoading}
+                  onCheckedChange={(checked) => updateRouting.mutate(checked)}
+                />
+              }
+            />
+          </SettingRows>
+        </SettingsCard>
+      )}
     </SettingsPage>
   )
 }

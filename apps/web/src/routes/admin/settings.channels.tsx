@@ -31,7 +31,10 @@ export const Route = createFileRoute('/admin/settings/channels')({
       ensure(settingsQueries.portalConfig()),
       warmQuery(ensure, channels.emailStatus()),
       warmQuery(ensure, githubStatus()),
-      warmQuery(ensure, channels.routing()),
+      // The routing switch shows only to routing.manage holders.
+      context.permissions?.includes(PERMISSIONS.ROUTING_MANAGE)
+        ? warmQuery(ensure, channels.routing())
+        : undefined,
     ])
     return {}
   },
