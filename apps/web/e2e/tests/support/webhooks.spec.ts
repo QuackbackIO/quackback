@@ -18,7 +18,6 @@ import {
   expectSigned,
   hookOp,
   hooksApi,
-  purgeDeletedSinkWebhooks,
   subscribe,
   unsubscribe,
   type Hook,
@@ -50,7 +49,6 @@ test.describe('webhook subscriptions', () => {
     { tag: '@core' },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await hooksApi(playwright, baseURL, people, marker)
-      await purgeDeletedSinkWebhooks()
       const created = await api.post('/api/v1/webhooks', {
         data: { url: sink.url(marker), events: ['message.created', 'ticket.created'] },
       })
@@ -154,14 +152,7 @@ test.describe('webhook subscriptions', () => {
   )
   test(
     'API-69 a deleted webhook frees its place under the 25-webhook cap',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: createWebhook counts soft-deleted rows toward MAX_WEBHOOKS (webhook.service.ts:69), so 25 create/delete cycles block every new webhook.',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await hooksApi(playwright, baseURL, people, marker)
       const sql = supportDb()

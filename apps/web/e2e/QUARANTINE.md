@@ -78,15 +78,6 @@ These assert the right behaviour and fail until the fix lands. Review by
 
 ### Support suite: webhooks (PR 5c)
 
-- `support/webhooks.spec.ts` › webhook subscriptions › API-69 a deleted
-  webhook frees its place under the 25-webhook cap. Product bug:
-  `createWebhook` counts every row, soft-deleted ones included, toward
-  `MAX_WEBHOOKS` (`apps/web/src/lib/server/domains/webhooks/webhook.service.ts:69`),
-  so after 25 create/delete cycles a workspace can never create another
-  webhook. The suite works around it by removing soft-deleted sink webhooks
-  before each subscription (`e2e/support/webhooks.ts`
-  `purgeDeletedSinkWebhooks`). owner: unassigned, review by: 2026-12-03.
-
 ### Support suite: routing switch permission (known bug)
 
 - `support/routing.spec.ts` › the routing switch › RTE-03 a Support lead

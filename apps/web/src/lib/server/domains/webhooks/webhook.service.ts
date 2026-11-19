@@ -66,8 +66,12 @@ export async function createWebhook(
     throw new ValidationError('VALIDATION_ERROR', 'At least one event is required')
   }
 
-  // Check webhook limit
-  const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(webhooks)
+  // Check webhook limit. Deleting a webhook is a soft delete, so only live
+  // webhooks count; otherwise deleted ones would use up the limit for good.
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(webhooks)
+    .where(isNull(webhooks.deletedAt))
   if (count >= MAX_WEBHOOKS) {
     throw new ValidationError(
       'WEBHOOK_LIMIT_REACHED',
