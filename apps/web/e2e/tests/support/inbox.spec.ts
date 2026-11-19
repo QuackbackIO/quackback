@@ -21,7 +21,9 @@ import {
   openConversation,
   messagesOf,
   seedMentionNote,
+  seedInvolvement,
   seedTag,
+  seedTagView,
   sendFromComposer,
   tagConversation,
   waitForConversation,
@@ -784,6 +786,132 @@ test.describe('inbox views', () => {
       await page.keyboard.press('Enter')
       await waitForConversation(newer.uuid, 'the close', (r) => r.status === 'closed')
       expect((await messagesOf(older.uuid)).length).toBe(1)
+    }
+  )
+
+  test(
+    'INB-13 AI agent activity lists involved threads and each bucket narrows to its status',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const resolved = await seed({ visitorName: `Resolved ${marker}` })
+      const handedOff = await seed({ visitorName: `Handed off ${marker}` })
+      const active = await seed({ visitorName: `In progress ${marker}` })
+      const human = await seed({ visitorName: `Human only ${marker}` })
+      await seedInvolvement(resolved.uuid, 'resolved_assumed')
+      await seedInvolvement(handedOff.uuid, 'handed_off')
+      await seedInvolvement(active.uuid, 'active')
+
+      await page.goto(inboxUrl({ q: marker, status: 'all' }))
+      await expectListed(page, marker, [resolved, handedOff, active, human])
+      await selectNav(page, 'AI agent activity', /view=quinn/)
+      await expectListed(page, marker, [resolved, handedOff, active])
+      for (const [label, row] of [
+        ['Pending', active],
+        ['Escalated', handedOff],
+        ['Resolved', resolved],
+      ] as const) {
+        await page.getByRole('button', { name: new RegExp(`^${label}`) }).click()
+        await expectListed(page, marker, [row])
+      }
+    }
+  )
+
+  test(
+    'INB-19 pinning a view is per teammate and unpinning puts it back',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, marker }) => {
+      const { page: a } = await teammate()
+      const { page: b } = await teammate()
+      const tag = await seedTag(`Pin label ${marker}`)
+      const name = `Pinned ${marker}`
+      const view = await seedTagView(name, tag.id)
+      const manage = (page: Page) => page.getByRole('button', { name: `Manage view ${name}` })
+      const sql = supportDb()
+      const pins = async () =>
+        (
+          await sql`SELECT count(*)::int AS n FROM conversation_view_pins
+                 WHERE view_id = ${view.uuid}`
+        )[0].n
+
+      await a.goto('/admin/inbox')
+      await expect(async () => {
+        await manage(a).click()
+        await a.getByRole('menuitem', { name: 'Pin', exact: true }).click({ timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
+      await expect.poll(pins).toBe(1)
+      // Pinned views lead the list for A.
+      const firstView = a.getByRole('button', { name: /^Manage view / }).first()
+      await expect(firstView).toHaveAccessibleName(`Manage view ${name}`)
+      await a.reload()
+      await expect(async () => {
+        await manage(a).click()
+        await expect(a.getByRole('menuitem', { name: 'Unpin', exact: true })).toBeVisible({
+          timeout: 2_000,
+        })
+      }).toPass({ timeout: 15_000 })
+      await a.keyboard.press('Escape')
+
+      // B never pinned it.
+      await b.goto('/admin/inbox')
+      await expect(async () => {
+        await manage(b).click()
+        await expect(b.getByRole('menuitem', { name: 'Pin', exact: true })).toBeVisible({
+          timeout: 2_000,
+        })
+      }).toPass({ timeout: 15_000 })
+      await b.keyboard.press('Escape')
+
+      await manage(a).click()
+      await a.getByRole('menuitem', { name: 'Unpin', exact: true }).click()
+      await expect.poll(pins).toBe(0)
+    }
+  )
+
+  test(
+    'INB-20 editing a view refilters it and deleting it removes it and falls back to the default view',
+    {
+      tag: ['@nightly', '@quarantine'],
+      annotation: {
+        type: 'quarantine',
+        description:
+          'The open custom view keeps listing the old rules after Save changes until a reload: the conversation list query key leaves out the view rules (lib/client/queries/conversation-inbox.ts conversationList)',
+      },
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const first = await seedTag(`First label ${marker}`)
+      const second = await seedTag(`Second label ${marker}`)
+      const a = await seed({ visitorName: `Alpha ${marker}` })
+      const b = await seed({ visitorName: `Beta ${marker}` })
+      await tagConversation(a.uuid, first.uuid)
+      await tagConversation(b.uuid, second.uuid)
+      const name = `Editable ${marker}`
+      const view = await seedTagView(name, first.id)
+
+      await page.goto(inboxUrl({ viewId: view.id, q: marker }))
+      await expectListed(page, marker, [a])
+      await expect(async () => {
+        await page.getByRole('button', { name: `Manage view ${name}` }).click()
+        await page.getByRole('menuitem', { name: 'Edit', exact: true }).click({ timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
+      const dialog = page.getByRole('dialog', { name: 'Edit view' })
+      await dialog.getByRole('combobox').nth(1).click()
+      await page.getByRole('option', { name: second.name }).click()
+      await dialog.getByRole('button', { name: 'Save changes' }).click()
+      await expectListed(page, marker, [b])
+
+      await page.getByRole('button', { name: `Manage view ${name}` }).click()
+      await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
+      await expect(page.getByRole('button', { name: `Manage view ${name}` })).toHaveCount(0, {
+        timeout: 15_000,
+      })
+      await expect(page).not.toHaveURL(/viewId=/)
+      await expectListed(page, marker, [a, b])
     }
   )
 })
