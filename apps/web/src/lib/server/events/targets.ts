@@ -1237,6 +1237,16 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
   )
   if (pairTicketId) return null
 
+  // A conversation in Spam bells no one: read by id, not from the payload, so
+  // a thread filed after the event was raised (the AI classifier files after
+  // the create) is caught too.
+  const [current] = await db
+    .select({ status: conversations.status, endReason: conversations.endReason })
+    .from(conversations)
+    .where(eq(conversations.id, event.data.message.conversationId as ConversationId))
+    .limit(1)
+  if (current?.status === 'closed' && current.endReason === 'spam') return null
+
   const team = await db
     .select({ id: principal.id, type: principal.type, role: principal.role })
     .from(principal)
