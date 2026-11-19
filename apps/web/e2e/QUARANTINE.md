@@ -52,17 +52,6 @@ job leaves it out, so it cannot hide new failures.
 
 Every entry has owner: unassigned and review by: 2026-12-02.
 
-### Needs a reachable OIDC discovery document (environment, and a suspected product bug)
-
-- `auth/unified-login.spec.ts` › (4) /?auth=signin shows the dialog with OIDC
-  button and recovery-code link. The seeded provider's discovery URL cannot be
-  reached, so the provider is skipped. With password and magic link turned off,
-  `GET /` then fails with "Provider not found" and shows the error page. The
-  page should fall back instead of failing. This failed every time locally,
-  also with the file run alone, but passed on its own in the first CI
-  quarantine run, so the cause is not confirmed. owner: unassigned, review by:
-  2026-12-02.
-
 ### Suspected product bugs
 
 - `admin/settings-team.spec.ts` › add people dialog cancel closes the dialog.
