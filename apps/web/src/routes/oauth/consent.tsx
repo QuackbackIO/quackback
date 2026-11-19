@@ -87,6 +87,16 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
+/** An HTTPS URL on exactly this host. */
+function isOnHost(url: string, host: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' && parsed.hostname === host
+  } catch {
+    return false
+  }
+}
+
 function useClientInfo(clientId: string, redirectUri: string | undefined) {
   const [client, setClient] = useState<OAuthClientInfo | null>(null)
 
@@ -207,14 +217,21 @@ function ConsentPage() {
   const [error, setError] = useState<string | null>(null)
 
   const clientName = client?.client_name || 'An application'
-  // Only a verified client's own links and logo are shown. A self-registered
-  // client chose them freely, so they could point at, or look like, anyone.
+  // A self-registered client's link and logo are never shown: it chose them
+  // freely, so they could point at, or look like, anyone.
   const identity = client?.client_identity
   const verifiedHost = identity?.verified ? identity.host : null
   const redirectTarget = identity && !identity.verified ? identity.redirect : null
-  // The plugin binds a CIMD client's `client_uri` to its client_id origin.
+  // The plugin binds a CIMD client's `client_uri` to its client_id origin, but
+  // not its `logo_uri`, so a logo shows only when it is served from the
+  // verified host too. A document on any host could otherwise pair a familiar
+  // name and logo with the check mark.
   const verifiedLink =
     verifiedHost && client?.client_uri && isSafeUrl(client.client_uri) ? client.client_uri : null
+  const verifiedLogo =
+    verifiedHost && client?.logo_uri && isOnHost(client.logo_uri, verifiedHost)
+      ? client.logo_uri
+      : null
 
   const preset = consentPreset(levels)
   const capabilityScopes = scopesFromDomainLevels(levels)
@@ -275,9 +292,9 @@ function ConsentPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center gap-1.5">
           <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-muted/50">
-            {verifiedHost && client.logo_uri && isSafeUrl(client.logo_uri) ? (
+            {verifiedLogo ? (
               <img
-                src={client.logo_uri}
+                src={verifiedLogo}
                 alt={clientName}
                 className="h-11 w-11 rounded-full object-cover"
               />

@@ -85,6 +85,16 @@ describe('consent client identity', () => {
     expect(screen.queryByText('Unverified app')).not.toBeInTheDocument()
   })
 
+  it('hides a verified client logo served from another host', async () => {
+    await renderConsent({
+      client_name: 'ChatGPT',
+      logo_uri: 'https://chatgpt.com/logo.png',
+      client_identity: { verified: true, host: 'evil.example' },
+    })
+    expect(screen.getByText(/Verified:/)).toHaveTextContent('Verified: evil.example')
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
   it('marks a self-registered client unverified, and hides the logo and link it chose', async () => {
     await renderConsent({
       client_name: 'ChatGPT',
