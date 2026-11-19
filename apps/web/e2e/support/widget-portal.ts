@@ -307,8 +307,8 @@ export function signSsoToken(
  * Turn the customer ticket surfaces on (only ever on): the supportTickets
  * flag (requester ticket functions, the ticket form) and the widget Tickets
  * tab, which still shows only to a visitor who has a ticket. Idempotent, one
- * statement, so parallel workers never lose each other's write. The suite runs
- * with QUACKBACK_SETTINGS_CACHE_MS=0, so the app sees it at once.
+ * statement, so parallel workers never lose each other's write; then busts the
+ * shared settings cache row so the app sees it at once.
  */
 export async function enableTicketSurfaces(): Promise<void> {
   await supportDb()`UPDATE settings SET
@@ -316,6 +316,8 @@ export async function enableTicketSurfaces(): Promise<void> {
                      || '{"supportTickets": true}'::jsonb)::text,
     widget_config = jsonb_set(coalesce(nullif(widget_config, '')::jsonb, '{}'::jsonb),
                               '{tabs,tickets}', 'true'::jsonb, true)::text`
+  // The shared settings cache row (the scripts' bustWorkspaceSettings does the same).
+  await supportDb()`DELETE FROM kv_store WHERE key = 'settings:workspace'`
 }
 
 /** Clear the per-IP identify budget (every test client shares 127.0.0.1). */

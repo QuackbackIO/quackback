@@ -596,15 +596,11 @@ test.describe('widget chat: the live thread', () => {
       await expect(widget.getByText('Status updated to In progress')).toBeVisible({
         timeout: 15_000,
       })
-      // The header card shows the ticket and its stage (asserted after reopening
-      // the thread: in CI the in-place refresh was not seen within the wait).
-      await page.reload()
-      const again = page.frameLocator('iframe.quackback-widget-iframe')
-      await openWidgetThread(again, new RegExp(`${marker}|Status updated|Ticket #`))
-      await expect(again.getByText(`${marker} export ticket`).first()).toBeVisible({
+      // The header card appears and follows the stage, in place.
+      await expect(widget.getByText(`${marker} export ticket`).first()).toBeVisible({
         timeout: 15_000,
       })
-      await expect(again.getByText('In progress').first()).toBeVisible()
+      await expect(widget.getByText('In progress').first()).toBeVisible()
       await admin.dispose()
     }
   )
