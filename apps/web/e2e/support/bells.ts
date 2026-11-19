@@ -4,10 +4,11 @@
  * ticket. Bells are written by the queued event job, so poll for arrival and
  * prove an absence against a later bell the same person must get.
  */
-import { toUuid } from '@quackback/ids'
+import { fromUuid, toUuid } from '@quackback/ids'
 import { pollFor, supportDb } from './db'
 
 export interface BellRow {
+  /** TypeID (notification_...), what the notification server functions take. */
   id: string
   type: string
   title: string
@@ -21,13 +22,14 @@ export interface BellRow {
 export async function bellsFor(principalId: string, aboutId?: string): Promise<BellRow[]> {
   const sql = supportDb()
   const pid = toUuid(principalId as `principal_${string}`)
-  return aboutId
+  const rows = await (aboutId
     ? sql<BellRow[]>`SELECT id, type, title, body, metadata, read_at, archived_at
         FROM in_app_notifications
         WHERE principal_id = ${pid} AND metadata::text LIKE ${`%${aboutId}%`}
         ORDER BY created_at`
     : sql<BellRow[]>`SELECT id, type, title, body, metadata, read_at, archived_at
-        FROM in_app_notifications WHERE principal_id = ${pid} ORDER BY created_at`
+        FROM in_app_notifications WHERE principal_id = ${pid} ORDER BY created_at`)
+  return rows.map((r) => ({ ...r, id: fromUuid('notification', r.id) }))
 }
 
 /**

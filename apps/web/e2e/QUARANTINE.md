@@ -193,3 +193,13 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   (`conversationList` in `src/lib/client/queries/conversation-inbox.ts`), so
   the list never refetches for the new rules. owner: unassigned, review by:
   2026-12-03.
+
+### Support suite: known product bugs (support realtime and notifications)
+
+- `support/notifications.spec.ts` › TKT-57 a visitor message on a paired
+  conversation sends ticket.replied to the ticket watchers. Known bug: the
+  conversation send path emits no `ticket.replied` for a ticket-paired
+  conversation (it is emitted only from `ticket-message.service.ts:438` and
+  `requester.service.ts:376`), so agent watchers get no `ticket_replied` bell
+  for a requester's widget or portal message. The no-team-wide-bell half of
+  the same journey runs normally. owner: unassigned, review by: 2026-12-03.
