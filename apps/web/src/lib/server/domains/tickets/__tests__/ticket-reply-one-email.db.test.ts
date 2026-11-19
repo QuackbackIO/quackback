@@ -66,6 +66,34 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isSupportTicketsEnabled: async () => true,
 }))
 
+// Filing a ticket through intake publishes and emits; none of that is under
+// test here, only the rows it leaves behind.
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishTicketEvent: vi.fn(),
+  publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
+  publishAgentConversationEvent: vi.fn(),
+  publishConversationUpdate: vi.fn(),
+  publishTyping: vi.fn(),
+}))
+vi.mock('../ticket.webhooks', () => ({
+  emitTicketCreated: vi.fn().mockResolvedValue(undefined),
+  emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
+  emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketReplied: vi.fn().mockResolvedValue(undefined),
+  emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
+  emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/lib/server/domains/conversation/conversation.webhooks', () => ({
+  emitConversationCreated: vi.fn().mockResolvedValue(undefined),
+  emitMessageCreated: vi.fn().mockResolvedValue(undefined),
+  emitConversationStatusChanged: vi.fn().mockResolvedValue(undefined),
+  emitConversationAssigned: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
+  runAssistantTurnForConversation: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   conversations,
@@ -80,6 +108,7 @@ import {
   eq,
 } from '@/lib/server/db'
 import type { EventData } from '@/lib/server/events/types'
+import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import type { HookContext } from '@/lib/server/events/hook-context'
 import { notifyAgentReply } from '@/lib/server/domains/conversation/conversation.notify'
 import { getTicketRepliedEmailTargets } from '@/lib/server/events/targets'
@@ -305,6 +334,35 @@ describe.skipIf(!fixture.available)('one email per teammate reply on a customer 
       const scene = await seedScene()
       await pauseAllEmail(scene.customer.id)
       expect(await conversationEmailsFor(scene)).toEqual([scene.customer.email])
+    })
+
+    it('sends one email on a ticket filed through intake, which makes the customer a watcher', async () => {
+      await seedStatus()
+      const customer = await seedPerson('user', `customer-${suffix()}@example.com`)
+      const { createTicketCore } = await import('../ticket.service')
+      const ticket = await createTicketCore(
+        {
+          type: 'customer',
+          title: 'Cannot export',
+          requesterPrincipalId: customer.id,
+          withBackingConversation: true,
+        },
+        { ...ANONYMOUS_ACTOR, principalId: customer.id, principalType: 'user' }
+      )
+      const [link] = await testDb
+        .select({ conversationId: ticketConversations.conversationId })
+        .from(ticketConversations)
+        .where(eq(ticketConversations.ticketId, ticket.id as TicketId))
+      expect(link).toBeTruthy()
+
+      await notifyAgentReply({
+        conversationId: link!.conversationId as ConversationId,
+        visitorPrincipalId: customer.id,
+        content: 'Here is the fix.',
+        agentName: 'Sam',
+        channel: 'messenger',
+      })
+      expect(deliveries.map((d) => d.recipient)).toEqual([customer.email])
     })
 
     it('ignores the ticket settings on a conversation with no ticket', async () => {
