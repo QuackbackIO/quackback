@@ -507,8 +507,64 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(message.senderType).toBe('visitor')
       expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
       // The ticket side of the matrix still fires: ticket.replied alongside
-      // message.created (watcher fan-out preserved).
+      // message.created (watcher fan-out preserved), and only once: the
+      // conversation send it rides does not signal it a second time.
+      await flushAssistantChain()
       expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+    })
+
+    it('a requester message written on the pair conversation (widget, portal) signals ticket.replied once', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const dto = await intakeCreate(requesterP, { title: 'intake pair', description: 'opening' })
+      const link = await readPairLink(dto.id as TicketId)
+      ticketEmit.emitTicketReplied.mockClear()
+
+      const { message } = await sendVisitorMessage(
+        { conversationId: link!.conversationId as ConversationId, content: 'any news?' },
+        { principalId: requesterP, displayName: 'R' },
+        requesterActor(requesterP)
+      )
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await flushAssistantChain()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      const [actor, ticket, sent] = ticketEmit.emitTicketReplied.mock.calls[0]!
+      expect(actor).toMatchObject({ principalId: requesterP })
+      expect(ticket).toMatchObject({ id: dto.id })
+      expect(sent).toMatchObject({ id: message.id, senderType: 'visitor' })
+    })
+
+    it('the intake opening message does not signal ticket.replied (ticket.created covers it)', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+
+      await intakeCreate(requesterP, { title: 'intake pair', description: 'opening' })
+      await flushAssistantChain()
+
+      expect(convEmit.emitMessageCreated).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied).not.toHaveBeenCalled()
+    })
+
+    it('a message on a conversation with no ticket signals no ticket.replied', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const conversationId = createId('conversation') as ConversationId
+      await testDb.insert(conversations).values({
+        id: conversationId,
+        visitorPrincipalId: requesterP,
+        channel: 'messenger',
+      })
+
+      await sendVisitorMessage(
+        { conversationId, content: 'hello' },
+        { principalId: requesterP, displayName: 'R' },
+        requesterActor(requesterP)
+      )
+      await flushAssistantChain()
+
+      expect(convEmit.emitMessageCreated).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied).not.toHaveBeenCalled()
     })
   })
 
