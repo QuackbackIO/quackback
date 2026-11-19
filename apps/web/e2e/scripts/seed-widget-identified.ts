@@ -94,10 +94,10 @@ try {
     await sql`
       INSERT INTO conversations
         (id, visitor_principal_id, status, channel, priority, subject,
-         last_message_preview, last_message_at, created_at)
+         last_message_preview, last_message_at, resolved_at, created_at)
       VALUES
-        (${csatConversationId}, ${customerPrincipalId}, 'open', 'messenger', 'none', ${CSAT_SUBJECT},
-         ${'How did we do?'}, NOW(), NOW())`
+        (${csatConversationId}, ${customerPrincipalId}, 'closed', 'messenger', 'none', ${CSAT_SUBJECT},
+         ${'How did we do?'}, NOW(), NOW(), NOW())`
     const visitorMsg = toUuid(generateId('conversation_msg'))
     await sql`
       INSERT INTO conversation_messages

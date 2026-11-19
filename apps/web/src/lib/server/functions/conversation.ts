@@ -806,16 +806,32 @@ export const sendConversationTypingFn = createServerFn({ method: 'POST' })
     return runSendConversationTyping(await requireAuth(), data)
   })
 
-/** Submit a CSAT rating for a conversation (visitor only). */
+/** What a CSAT submit answers: recorded, or refused because the conversation is open again. */
+export type SubmitCsatResult = { ok: true } | { ok: false; code: 'CSAT_CONVERSATION_OPEN' }
+
+/**
+ * Submit a CSAT rating for a conversation (visitor only). A rating is accepted
+ * only once the conversation is closed; the refusal for an open one is
+ * returned as a value (a thrown typed error reaches the client without its
+ * code), so the surface can quietly put its rating prompt away.
+ */
 export const runSubmitCsat = createServerOnlyFn(async function runSubmitCsat(
   ctx: AuthContext,
   data: CsatInput
-) {
+): Promise<SubmitCsatResult> {
   await assertVisitorConversationAccess(ctx)
   const actor = await policyActorFromAuth(ctx)
-  const { recordCsat } = await import('@/lib/server/domains/conversation/conversation.service')
-  await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
-  return { ok: true as const }
+  const { recordCsat, CSAT_CONVERSATION_OPEN } =
+    await import('@/lib/server/domains/conversation/conversation.service')
+  try {
+    await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
+  } catch (err) {
+    if (err instanceof ConflictError && err.code === CSAT_CONVERSATION_OPEN) {
+      return { ok: false, code: CSAT_CONVERSATION_OPEN }
+    }
+    throw err
+  }
+  return { ok: true }
 })
 
 export const submitCsatFn = createServerFn({ method: 'POST' })

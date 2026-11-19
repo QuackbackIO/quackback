@@ -46,7 +46,7 @@ import type {
   SegmentId,
   TeamId,
 } from '@quackback/ids'
-import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '@/lib/shared/errors'
 import {
   channelFromVisitorTransport,
   channelCloseSystemCopy,
@@ -2101,7 +2101,16 @@ export async function deleteConversationMessage(
   }
 }
 
-/** Record a visitor CSAT rating (1-5) on their conversation. */
+/** The code recordCsat refuses a rating with while the conversation is open. */
+export const CSAT_CONVERSATION_OPEN = 'CSAT_CONVERSATION_OPEN'
+
+/**
+ * Record a visitor CSAT rating (1-5) on their conversation. A rating rates a
+ * finished conversation, so it is accepted only once the conversation is
+ * closed: while it is open (or snoozed) the call refuses with a ConflictError
+ * coded CSAT_CONVERSATION_OPEN and writes nothing. The status is read under
+ * the same row lock as the rating, so a reopen that lands first wins.
+ */
 export async function recordCsat(
   conversationId: ConversationId,
   rating: number,
@@ -2130,6 +2139,7 @@ export async function recordCsat(
   const { updated, isFirstSubmission, commentJustAdded } = await db.transaction(async (tx) => {
     const [prev] = await tx
       .select({
+        status: conversations.status,
         csatRating: conversations.csatRating,
         csatComment: conversations.csatComment,
         csatSubmittedAt: conversations.csatSubmittedAt,
@@ -2137,6 +2147,12 @@ export async function recordCsat(
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .for('update')
+    if (prev && prev.status !== 'closed') {
+      throw new ConflictError(
+        CSAT_CONVERSATION_OPEN,
+        'This conversation is still open. It can be rated once it is resolved.'
+      )
+    }
     const [row] = await tx
       .update(conversations)
       .set({

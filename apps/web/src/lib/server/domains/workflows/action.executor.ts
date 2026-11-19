@@ -120,7 +120,7 @@ import { logRunEvent } from './workflow-run-events'
 import { interpolateTiptapContent } from '@/lib/shared/workflows/interpolate'
 import { tiptapJsonToText } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import * as ticketService from '@/lib/server/domains/tickets/ticket.service'
 import {
   resolveTicketTypeForCreate,
@@ -618,9 +618,9 @@ export async function applyAction(
         action.block,
         ctx.resolvedBlockDeps
       )
-      // A csat ask on a conversation already asked or rated posts nothing:
-      // skip (don't park).
-      if (!messageId) return label('csat skipped — already asked on this thread')
+      // A csat ask on a conversation already asked or rated, or still open,
+      // posts nothing: skip (don't park).
+      if (!messageId) return label('csat skipped — already asked, or the conversation is open')
       // Funnel: one `block_sent` event per successful post — never suffixed
       // with the block kind (keeps cardinality low; the funnel counts
       // distinct runs, not kinds). Macros never reach this branch (ctx.runId
@@ -665,7 +665,19 @@ export async function applyAction(
       // recordCsat requires the caller to BE the visitor (amendment 1); the
       // engine passes a visitor-scoped actor for this action specifically,
       // never its own service actor.
-      await conversationService.recordCsat(conversationId, action.rating, action.comment, actor)
+      try {
+        await conversationService.recordCsat(conversationId, action.rating, action.comment, actor)
+      } catch (err) {
+        // A rating is only taken once the conversation is closed; a run that
+        // reaches this step on an open one moves on without it.
+        if (
+          err instanceof ConflictError &&
+          err.code === conversationService.CSAT_CONVERSATION_OPEN
+        ) {
+          return label('csat not recorded — conversation is open')
+        }
+        throw err
+      }
       return label('csat recorded')
     case 'add_note': {
       // Authored by the assistant's service principal (see the module doc) —

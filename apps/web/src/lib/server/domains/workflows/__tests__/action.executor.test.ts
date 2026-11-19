@@ -72,6 +72,7 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   appendAssistantReply,
   recordCsat,
   addAgentNote,
+  CSAT_CONVERSATION_OPEN: 'CSAT_CONVERSATION_OPEN',
 }))
 vi.mock('@/lib/server/domains/conversation/conversation-tag.service', () => ({
   attachTag,
@@ -941,6 +942,26 @@ describe('applyAction', () => {
       )
       expect(res.label).toBe('csat already recorded')
       expect(recordCsat).not.toHaveBeenCalled()
+    })
+
+    it('moves on without a rating when the conversation is open', async () => {
+      const { ConflictError } = await import('@/lib/shared/errors')
+      recordCsat.mockRejectedValueOnce(
+        new ConflictError('CSAT_CONVERSATION_OPEN', 'This conversation is still open.')
+      )
+      const res = await applyAction(
+        { type: 'record_csat', rating: 5, comment: 'Great!' },
+        { conversationId, actor }
+      )
+      expect(res.label).toBe('csat not recorded — conversation is open')
+    })
+
+    it('still fails the step on any other refusal', async () => {
+      const { ForbiddenError } = await import('@/lib/shared/errors')
+      recordCsat.mockRejectedValueOnce(new ForbiddenError('FORBIDDEN', 'Only the visitor'))
+      await expect(
+        applyAction({ type: 'record_csat', rating: 5 }, { conversationId, actor })
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
   })
 

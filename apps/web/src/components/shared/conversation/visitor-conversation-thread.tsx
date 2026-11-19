@@ -628,6 +628,17 @@ export function VisitorConversationThread({
   // switching threads so it can't bleed across conversations.
   useEffect(() => clearAssistantTurn, [conversationId, clearAssistantTurn])
 
+  // A rating is only taken on a closed conversation. When the server refuses
+  // one because the thread was reopened before the live update arrived, show
+  // it as open so the rating prompt goes away instead of erroring.
+  const markReopened = useCallback(() => {
+    if (!conversationId) return
+    queryClient.setQueryData(
+      conversationKeys.visitorThread(conversationId),
+      (prev: VisitorThreadCache | undefined) => (prev ? { ...prev, status: 'open' } : prev)
+    )
+  }, [conversationId, queryClient])
+
   // A star click records the rating immediately (so it's never lost), then the
   // surface offers an optional comment as a follow-up.
   const submitRating = useCallback(
@@ -639,6 +650,14 @@ export function VisitorConversationThread({
           conversationKeys.visitorThread(conversationId),
           (prev: VisitorThreadCache | undefined) => (prev ? { ...prev, csatRating: value } : prev)
         )
+      const rollBack = () => {
+        // Roll back so the stars reappear for a retry — unless a later CSAT
+        // submit (e.g. the comment) already superseded this request.
+        if (csatSubmitGenRef.current === gen) {
+          setRating(null)
+          setCsatJustRated(false)
+        }
+      }
       setRating(rating)
       setCsatJustRated(true)
       void rpc
@@ -646,16 +665,16 @@ export function VisitorConversationThread({
           data: { conversationId, rating },
           headers: getAuthHeaders(),
         })
-        .catch(() => {
-          // Roll back so the stars reappear for a retry — unless a later CSAT
-          // submit (e.g. the comment) already superseded this request.
-          if (csatSubmitGenRef.current === gen) {
-            setRating(null)
-            setCsatJustRated(false)
-          }
+        .then((result) => {
+          if (result.ok) return
+          // Refused: the conversation is open again (a reopen raced the
+          // click). Drop the optimistic rating and put the prompt away.
+          rollBack()
+          markReopened()
         })
+        .catch(rollBack)
     },
-    [conversationId, getAuthHeaders, queryClient]
+    [conversationId, getAuthHeaders, queryClient, markReopened]
   )
 
   // Optional follow-up: attach a comment to the rating already on file.
@@ -669,8 +688,12 @@ export function VisitorConversationThread({
         data: { conversationId, rating: csatRating, comment: trimmed || undefined },
         headers: getAuthHeaders(),
       })
+      .then((result) => {
+        // Refused because the conversation is open again: nothing to retry.
+        if (!result.ok) markReopened()
+      })
       .catch(() => setCsatCommentDone(false)) // reopen the box for a retry on failure
-  }, [conversationId, csatRating, csatComment, getAuthHeaders])
+  }, [conversationId, csatRating, csatComment, getAuthHeaders, markReopened])
 
   // Phase C conversational block layer: a structured reply (button tap /
   // collect submit / CSAT rating) rides the SAME send path as an ordinary
