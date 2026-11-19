@@ -9,6 +9,7 @@ import {
 import type { ConversationId, PostId, TicketId } from '@quackback/ids'
 import { db, emailLog } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { bareMessageId } from './email-log.query'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 
@@ -22,8 +23,8 @@ async function writeOutbound(entry: EmailLogSinkEntry): Promise<void> {
       direction: entry.direction,
       emailType: entry.emailType,
       provider: entry.provider,
-      messageId: entry.messageId ?? null,
-      providerMessageId: entry.providerMessageId ?? null,
+      messageId: entry.messageId ? bareMessageId(entry.messageId) : null,
+      providerMessageId: entry.providerMessageId ? bareMessageId(entry.providerMessageId) : null,
       address: entry.to,
       subject: entry.subject.slice(0, SUBJECT_MAX),
       status: entry.status,
