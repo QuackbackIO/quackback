@@ -112,14 +112,6 @@ here or the assertions are stale; not traced. The paperclip label
   so decide whether it should redirect, show a sign-in gate, or stay as it is.
   owner: unassigned, review by: 2026-12-02.
 
-### Not traced
-
-- `public/comments.spec.ts` › Markdown comment rendering › uploading an image
-  into a comment renders it in the thread. Typing `/image` in the comment
-  composer shows no Image option for the signed-in teammate. The comment
-  editor turns images on and the post page passes an upload handler, so the
-  cause is somewhere between them. owner: unassigned, review by: 2026-12-02.
-
 ### Support API and MCP (support suite)
 
 - `support/mcp.spec.ts` › MCP tickets › API-63 reply_to_ticket and

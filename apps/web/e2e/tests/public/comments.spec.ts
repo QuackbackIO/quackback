@@ -982,59 +982,45 @@ test.describe('Markdown comment rendering', () => {
     }
   })
 
-  test(
-    'uploading an image into a comment renders it in the thread',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Typing /image in the team comment composer shows no Image option; cause not traced (slash menu or upload wiring)',
-      },
-    },
-    async () => {
-      const page = await sharedContext.newPage()
-      try {
-        await goToFirstPost(page)
-        await page.route('**/api/portal/upload', async (route) => {
-          await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-              publicUrl: 'https://cdn.example.com/portal-images/e2e-comment.png',
-            }),
-          })
+  test('uploading an image into a comment renders it in the thread', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      await goToFirstPost(page)
+      await page.route('**/api/portal/upload', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            publicUrl: 'https://cdn.example.com/portal-images/e2e-comment.png',
+          }),
         })
+      })
 
-        const editor = commentEditor(page)
-        await editor.click()
-        await clearEditor(editor)
-        await editor.pressSequentially('/image')
-        const imageItem = page
-          .getByRole('option', { name: /^image$/i })
-          .or(page.getByText('Upload an image', { exact: false }))
-        await expect(imageItem.first()).toBeVisible({ timeout: 5000 })
-        const [fileChooser] = await Promise.all([
-          page.waitForEvent('filechooser'),
-          imageItem.first().click(),
-        ])
-        await fileChooser.setFiles({
-          name: 'shot.png',
-          mimeType: 'image/png',
-          buffer: Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-            'base64'
-          ),
-        })
+      const editor = commentEditor(page)
+      await editor.click()
+      await clearEditor(editor)
+      await editor.pressSequentially('/image')
+      // The slash menu lists each command as a button named by its title
+      // (the toolbar's own button is "Insert Image").
+      const imageItem = page.getByRole('button', { name: 'Image', exact: true })
+      await expect(imageItem).toBeVisible({ timeout: 5000 })
+      const [fileChooser] = await Promise.all([page.waitForEvent('filechooser'), imageItem.click()])
+      await fileChooser.setFiles({
+        name: 'shot.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          'base64'
+        ),
+      })
 
-        const submitBtn = page.getByRole('button', { name: /^comment$/i }).first()
-        await submitBtn.click()
-        await expect(page.locator('img[src*="e2e-comment.png"]').first()).toBeVisible({
-          timeout: 15000,
-        })
-      } finally {
-        await page.close()
-      }
+      const submitBtn = page.getByRole('button', { name: /^comment$/i }).first()
+      await submitBtn.click()
+      await expect(page.locator('img[src*="e2e-comment.png"]').first()).toBeVisible({
+        timeout: 15000,
+      })
+    } finally {
+      await page.close()
     }
-  )
+  })
 })
