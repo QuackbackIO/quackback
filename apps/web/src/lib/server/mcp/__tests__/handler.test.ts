@@ -3074,7 +3074,8 @@ describe('MCP plan gate and the plan limits pause', () => {
           expect(await response.json()).toEqual({
             jsonrpc: '2.0',
             error: { code: -32001, message: refusal.message, data: refusal.toResponseBody() },
-            id: null,
+            // The refusal answers the request it refuses (JSON-RPC 2.0 §5).
+            id: 1,
           })
         }
       } finally {

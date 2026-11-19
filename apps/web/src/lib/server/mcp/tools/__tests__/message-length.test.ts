@@ -20,8 +20,8 @@ type Shape = Record<string, z.ZodType>
 function schemas(register: (server: never, auth: McpAuthContext) => void): Map<string, Shape> {
   const out = new Map<string, Shape>()
   const fakeServer = {
-    tool: (name: string, _d: string, schema: Shape) => {
-      out.set(name, schema)
+    registerTool: (name: string, config: { inputSchema: z.ZodObject<Shape> }) => {
+      out.set(name, config.inputSchema.shape)
     },
   }
   register(fakeServer as never, { role: 'admin', scopes: [] } as unknown as McpAuthContext)
