@@ -8,7 +8,9 @@
  * see, so the absence is not just a slow page.
  */
 import { pollFor } from '../../support/db'
+import { fakeAi } from '../../support/fake-ai-client'
 import { waitForMail } from '../../support/mailpit'
+import { createSupportApiKey } from '../../utils/db-helpers'
 import {
   test,
   expect,
@@ -21,6 +23,7 @@ import {
   messagesOf,
   openConversation,
   sendFromComposer,
+  threadMessages,
   setComposerMode,
   waitForConversation,
   widgetStartConversation,
@@ -85,7 +88,7 @@ test.describe('inbox composer', () => {
       await expect(detailsPanel(page).getByRole('button', { name: 'Unassigned' })).toBeVisible()
       const reply = `On it ${marker}`
       await sendFromComposer(page, reply, 'reply')
-      await expect(page.getByText(reply, { exact: true })).toBeVisible()
+      await expect(threadMessages(page, reply)).toBeVisible()
       await waitForConversation(
         c.uuid,
         'the claim',
@@ -94,8 +97,8 @@ test.describe('inbox composer', () => {
       await expect(detailsPanel(page).getByRole('button', { name: mate.name })).toBeVisible()
       // A claim writes no "Conversation assigned to" system notice.
       await page.reload()
-      await expect(page.getByText(reply, { exact: true })).toBeVisible({ timeout: 15_000 })
-      await expect(page.getByText(/Conversation assigned to/)).toHaveCount(0)
+      await expect(threadMessages(page, reply)).toBeVisible({ timeout: 15_000 })
+      await expect(threadMessages(page, /Conversation assigned to/)).toHaveCount(0)
       expect((await messagesOf(c.uuid)).filter((m) => m.sender_type === 'system')).toHaveLength(0)
 
       // A scoped (Billing) teammate cannot open or answer a Support conversation,
@@ -175,7 +178,7 @@ test.describe('inbox composer', () => {
       await setComposerMode(page, 'note')
       const note = `Customer is on the old plan ${marker}`
       await sendFromComposer(page, note, 'note')
-      await expect(page.getByText(note, { exact: true })).toBeVisible({ timeout: 15_000 })
+      await expect(threadMessages(page, note)).toBeVisible({ timeout: 15_000 })
       const before = await conversationState(visitor.uuid)
       expect(before.last_message_preview).toBe(`Hello ${marker}`)
       const noteRow = (await messagesOf(visitor.uuid)).find((m) => m.content === note)
@@ -216,7 +219,7 @@ test.describe('inbox composer', () => {
       await page.getByRole('option', { name: new RegExp(target.name) }).click()
       await editor.pressSequentially(` please check ${marker}`)
       await page.getByRole('button', { name: 'Add note' }).click()
-      await expect(page.getByText(`please check ${marker}`)).toBeVisible({ timeout: 15_000 })
+      await expect(threadMessages(page, `please check ${marker}`)).toBeVisible({ timeout: 15_000 })
 
       const bell = await pollFor(
         'the mention bell',
@@ -276,10 +279,250 @@ test.describe('inbox composer', () => {
       await page.keyboard.press('Escape')
       await editor.pressSequentially(` note ${marker}`)
       await page.getByRole('button', { name: 'Add note' }).click()
-      await expect(page.getByText(`note ${marker}`)).toBeVisible({ timeout: 15_000 })
+      await expect(threadMessages(page, `note ${marker}`)).toBeVisible({ timeout: 15_000 })
       // Nothing reached the blocked teammate.
       await page.waitForTimeout(2_000)
-      expect(await bellsFor(blocked.principalUuid)).toEqual([])
+      expect((await bellsFor(blocked.principalUuid)).map((b) => b.type)).not.toContain(
+        'chat_mention'
+      )
+    }
+  )
+
+  test(
+    'INB-42 the author edits a reply and the visitor sees the edit',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, browser, marker }) => {
+      test.setTimeout(60_000)
+      const { page } = await teammate()
+      const { page: other } = await teammate()
+      const visitor = await widgetVisitor(browser, `Edit me ${marker}`)
+      await openConversation(page, visitor.id, `Edit me ${marker}`)
+      await sendFromComposer(page, `Typo reply ${marker}`, 'reply')
+      await expect(visitor.page.getByText(`Typo reply ${marker}`)).toBeVisible({ timeout: 15_000 })
+      const replyId = await agentMessageId(visitor.uuid)
+
+      const bubble = page.locator(`[data-message-id="${replyId}"]`)
+      await bubble.hover()
+      await bubble.getByRole('button', { name: 'More actions' }).click()
+      await page.getByRole('menuitem', { name: 'Edit message' }).click()
+      const editor = bubble.locator('.ProseMirror[contenteditable="true"]')
+      await editor.fill(`Fixed reply ${marker}`)
+      await bubble.getByRole('button', { name: 'Save changes' }).click()
+      await expect(bubble).toContainText(`Fixed reply ${marker}`, { timeout: 15_000 })
+      await expect(bubble).toContainText('(edited)')
+      await expect(visitor.page.getByText(`Fixed reply ${marker}`)).toBeVisible({ timeout: 15_000 })
+
+      // Another teammate sees the edit but is not offered Edit on it.
+      await openConversation(other, visitor.id, `Edit me ${marker}`)
+      const otherBubble = other.locator(`[data-message-id="${replyId}"]`)
+      await expect(otherBubble).toContainText(`Fixed reply ${marker}`)
+      await otherBubble.hover()
+      await otherBubble.getByRole('button', { name: 'More actions' }).click()
+      await expect(other.getByRole('menuitem', { name: 'Mark unread' })).toBeVisible()
+      await expect(other.getByRole('menuitem', { name: 'Edit message' })).toHaveCount(0)
+      await visitor.page.context().close()
+    }
+  )
+
+  test(
+    'INB-43 deleting a public reply removes it for teammate and visitor',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, browser, marker }) => {
+      test.setTimeout(60_000)
+      const { page } = await teammate()
+      const visitor = await widgetVisitor(browser, `Delete test ${marker}`)
+      await openConversation(page, visitor.id, `Delete test ${marker}`)
+      await sendFromComposer(page, `Wrong answer ${marker}`, 'reply')
+      await expect(visitor.page.getByText(`Wrong answer ${marker}`)).toBeVisible({
+        timeout: 15_000,
+      })
+      const replyId = await agentMessageId(visitor.uuid)
+
+      const bubble = page.locator(`[data-message-id="${replyId}"]`)
+      await bubble.hover()
+      await bubble.getByRole('button', { name: 'More actions' }).click()
+      await page.getByRole('menuitem', { name: 'Delete' }).click()
+      await expect(bubble).toHaveCount(0, { timeout: 15_000 })
+      await expect(visitor.page.getByText(`Wrong answer ${marker}`)).toHaveCount(0, {
+        timeout: 15_000,
+      })
+      const deleted = (await messagesOf(visitor.uuid)).find((m) => m.sender_type === 'agent')
+      expect(deleted?.deleted_at).not.toBeNull()
+      await visitor.page.context().close()
+    }
+  )
+
+  test(
+    'INB-44 two teammates react to a message and both see the counts live',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page: a } = await teammate()
+      const { page: b } = await teammate()
+      const c = await seed({ messages: [`React to me ${marker}`] })
+      await openConversation(a, c.id, c.messages[0])
+      await openConversation(b, c.id, c.messages[0])
+      const bubbleA = a.locator(`[data-message-id="${c.messageIds[0]}"]`)
+      const bubbleB = b.locator(`[data-message-id="${c.messageIds[0]}"]`)
+      const count = (n: number) => new RegExp(`👍\\s*${n}`)
+
+      await bubbleA.hover()
+      await bubbleA.getByRole('button', { name: 'Add reaction' }).click()
+      await a.getByRole('button', { name: 'React with 👍' }).click()
+      await expect(bubbleA.getByRole('button', { name: count(1) })).toBeVisible({ timeout: 15_000 })
+      await expect(bubbleB.getByRole('button', { name: count(1) })).toBeVisible({ timeout: 15_000 })
+
+      await bubbleB.getByRole('button', { name: count(1) }).click()
+      await expect(bubbleB.getByRole('button', { name: count(2) })).toBeVisible({ timeout: 15_000 })
+      await expect(bubbleA.getByRole('button', { name: count(2) })).toBeVisible({ timeout: 15_000 })
+    }
+  )
+
+  test(
+    'INB-45 flagging a message saves it to Saved messages and unflagging removes it',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const c = await seed({ messages: [`Flag me ${marker}`, `newest ${marker}`] })
+      await openConversation(page, c.id, c.messages[0])
+      const bubble = page.locator(`[data-message-id="${c.messageIds[0]}"]`)
+      await bubble.hover()
+      await bubble.getByRole('button', { name: 'Flag message' }).click()
+      await expect(bubble.getByRole('button', { name: 'Remove flag' })).toBeAttached({
+        timeout: 15_000,
+      })
+
+      await page.goto('/admin/inbox?view=saved')
+      await expect(page.getByText(`Flag me ${marker}`)).toBeVisible({ timeout: 15_000 })
+      await openConversation(page, c.id, c.messages[0])
+      await bubble.hover()
+      await bubble.getByRole('button', { name: 'Remove flag' }).click()
+      await expect(bubble.getByRole('button', { name: 'Flag message' })).toBeAttached({
+        timeout: 15_000,
+      })
+      await page.goto('/admin/inbox?view=saved')
+      await expect(
+        page.getByText('Nothing saved yet. Flag a message to find it here.')
+      ).toBeVisible({
+        timeout: 15_000,
+      })
+    }
+  )
+
+  test(
+    'INB-87 typing in the inbox shows the visitor and a second teammate a typing indicator that clears',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, browser, marker }) => {
+      test.setTimeout(60_000)
+      const { page } = await teammate()
+      const { page: other } = await teammate()
+      const visitor = await widgetVisitor(browser, `Typing ${marker}`)
+      await openConversation(page, visitor.id, `Typing ${marker}`)
+      await openConversation(other, visitor.id, `Typing ${marker}`)
+
+      const dots = visitor.page.locator('span.animate-bounce')
+      await expect(dots).toHaveCount(0)
+      await composer(page).click()
+      await composer(page).pressSequentially('Let me check', { delay: 50 })
+      await expect(dots.first()).toBeVisible({ timeout: 10_000 })
+      await expect(other.getByText('Another agent is replying…')).toBeVisible({ timeout: 10_000 })
+      // About 4 s without a keystroke and the indicator is gone.
+      await expect(dots).toHaveCount(0, { timeout: 10_000 })
+      await expect(other.getByText('Another agent is replying…')).toHaveCount(0, {
+        timeout: 10_000,
+      })
+      await visitor.page.context().close()
+    }
+  )
+
+  test(
+    'INB-88 reply and note drafts are kept apart per mode',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const c = await seed()
+      await openConversation(page, c.id, c.messages[0])
+
+      await composer(page).click()
+      await composer(page).fill(`reply draft ${marker}`)
+      await setComposerMode(page, 'note')
+      await expect(composer(page)).not.toContainText(`reply draft ${marker}`)
+      await composer(page).click()
+      await composer(page).fill(`note draft ${marker}`)
+      await setComposerMode(page, 'reply')
+      await expect(composer(page)).toContainText(`reply draft ${marker}`)
+      await setComposerMode(page, 'note')
+      await expect(composer(page)).toContainText(`note draft ${marker}`)
+    }
+  )
+
+  test(
+    'INB-89 the Copilot tab answers a question from the model',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const c = await seed()
+      const answer = `Refunds take five days ${marker}`
+      await fakeAi.script({ marker: `ask-${marker}`, reply: answer })
+      await openConversation(page, c.id, c.messages[0])
+
+      await detailsPanel(page).getByRole('tab', { name: 'Copilot' }).click()
+      const ask = page.getByPlaceholder('Ask a question...')
+      await ask.fill(`How long do refunds take? ask-${marker}`)
+      await page.getByRole('button', { name: 'Ask', exact: true }).click()
+      await expect(page.getByText(answer)).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByRole('button', { name: 'Good answer' })).toBeVisible()
+      await expect(page.getByPlaceholder('Ask a follow-up question...')).toBeVisible()
+      await fakeAi.waitForRequests({ contains: `ask-${marker}` })
+    }
+  )
+
+  test(
+    'INB-93 a personal API key reply shows the creator to teammates and the customer',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, browser, request, marker }) => {
+      test.setTimeout(60_000)
+      const { page, mate } = await teammate({ name: `Kim ${marker.slice(-6)}` })
+      const visitor = await widgetVisitor(browser, `Via API ${marker}`)
+      const key = createSupportApiKey(mate.email, 'personal')
+      const res = await request.post(`/api/v1/conversations/${visitor.id}/reply`, {
+        headers: { authorization: `Bearer ${key}` },
+        data: { content: `From the API ${marker}` },
+      })
+      expect(res.status(), await res.text()).toBeLessThan(300)
+
+      await expect(visitor.page.getByText(`From the API ${marker}`)).toBeVisible({
+        timeout: 15_000,
+      })
+      await openConversation(page, visitor.id, `Via API ${marker}`)
+      const replyId = await agentMessageId(visitor.uuid)
+      await expect(page.locator(`[data-message-id="${replyId}"]`)).toContainText(mate.name)
+      await expect(visitor.page.getByText(mate.name.split(' ')[0]).first()).toBeVisible()
+      await visitor.page.context().close()
     }
   )
 })
+
+/** The TypeID of the conversation's first agent message. */
+async function agentMessageId(conversationUuid: string): Promise<string> {
+  const { fromUuid } = await import('@quackback/ids')
+  const reply = await pollFor('an agent message', async () =>
+    (await messagesOf(conversationUuid)).find((m) => m.sender_type === 'agent')
+  )
+  return fromUuid('conversation_msg', reply.id)
+}

@@ -23,6 +23,7 @@ import {
   seedMacro,
   seedTag,
   sendFromComposer,
+  threadMessages,
   systemNotices,
   waitForBell,
   waitForConversation,
@@ -68,7 +69,7 @@ test.describe('inbox thread actions', () => {
 
       await pick(page, assigneeButton(page, 'Unassigned'), b.name)
       const notice = `Conversation assigned to ${b.name}`
-      await expect(page.getByText(notice)).toBeVisible({ timeout: 15_000 })
+      await expect(threadMessages(page, notice)).toBeVisible({ timeout: 15_000 })
       await expect(assigneeButton(page, b.name)).toBeVisible()
       await waitForConversation(
         visitor.uuid,
@@ -104,7 +105,7 @@ test.describe('inbox thread actions', () => {
         'the self-assignment',
         (r) => r.assigned_agent_principal_id === mate.principalUuid
       )
-      await expect(page.getByText(`Conversation assigned to ${mate.name}`)).toBeVisible({
+      await expect(threadMessages(page, `Conversation assigned to ${mate.name}`)).toBeVisible({
         timeout: 15_000,
       })
       const afterFirst = (await systemNotices(c.uuid)).length
@@ -112,7 +113,7 @@ test.describe('inbox thread actions', () => {
       await pick(page, assigneeButton(page, mate.name), 'Assign to me')
       await page.waitForTimeout(1_000)
       expect((await systemNotices(c.uuid)).length).toBe(afterFirst)
-      await expect(page.getByText(`Conversation assigned to ${mate.name}`)).toHaveCount(1)
+      await expect(threadMessages(page, `Conversation assigned to ${mate.name}`)).toHaveCount(1)
 
       await pick(page, assigneeButton(page, mate.name), 'Unassign')
       await expect(assigneeButton(page, 'Unassigned')).toBeVisible({ timeout: 15_000 })
@@ -149,7 +150,9 @@ test.describe('inbox thread actions', () => {
         await expect(bar).toBeVisible({ timeout: 2_000 })
       }).toPass({ timeout: 15_000 })
       await page.getByRole('menuitem', { name: teamName }).click()
-      await expect(page.getByText(`Conversation assigned to the ${teamName} team`)).toBeVisible({
+      await expect(
+        threadMessages(page, `Conversation assigned to the ${teamName} team`)
+      ).toBeVisible({
         timeout: 15_000,
       })
       await waitForConversation(c.uuid, 'the team', (r) => r.assigned_team_id === toUuid(teamId))
@@ -179,7 +182,8 @@ test.describe('inbox thread actions', () => {
       )
       const row = await waitForConversation(c.uuid, 'the snooze', (r) => r.status === 'snoozed')
       expect(row.snoozed_until).not.toBeNull()
-      const notice = page.getByText(
+      const notice = threadMessages(
+        page,
         new RegExp(`${mate.name} snoozed the conversation until \\w{3} \\d+`)
       )
       await expect(notice).toBeVisible({ timeout: 15_000 })
@@ -213,7 +217,7 @@ test.describe('inbox thread actions', () => {
       )
       await waitForConversation(visitor.uuid, 'the snooze', (r) => r.status === 'snoozed')
       await expect(
-        page.getByText(`${mate.name} snoozed the conversation until the customer replies`)
+        threadMessages(page, `${mate.name} snoozed the conversation until the customer replies`)
       ).toBeVisible({ timeout: 15_000 })
 
       await sendFromComposer(page, `Checking ${marker}`, 'reply')

@@ -25,6 +25,7 @@ import {
   seedTag,
   seedTagView,
   sendFromComposer,
+  threadMessages,
   tagConversation,
   waitForConversation,
   widgetStartConversation,
@@ -492,7 +493,7 @@ test.describe('inbox views', () => {
 
       const reply = `answer ${marker}`
       await sendFromComposer(a, reply, 'reply')
-      await expect(b.getByText(reply, { exact: true })).toBeVisible({ timeout: 15_000 })
+      await expect(threadMessages(b, reply)).toBeVisible({ timeout: 15_000 })
 
       await detailsPanel(a).getByRole('button', { name: aMate.name }).click()
       await a.getByRole('menuitem', { name: bMate.name }).click()

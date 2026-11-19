@@ -409,6 +409,14 @@ export function listRows(page: Page, text: string): Locator {
   return page.locator('div.group:not(nav div.group)').filter({ hasText: text })
 }
 
+/**
+ * Messages in the open thread whose text contains `text` (never the list row,
+ * whose preview shows the newest message too).
+ */
+export function threadMessages(page: Page, text: string | RegExp): Locator {
+  return page.locator('[data-message-id], div[role="status"]').filter({ hasText: text })
+}
+
 /** The details panel (shown at 1680px and up). */
 export function detailsPanel(page: Page): Locator {
   return page.getByRole('complementary', { name: 'Item details' })
