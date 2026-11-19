@@ -13,7 +13,10 @@ async function bustSettings(): Promise<void> {
  * Turn the widget assistant on or off. With it off the widget's thread header
  * shows the live presence badge ("We're online" / "We'll reply by email").
  */
-export async function setWidgetAssistant(enabled: boolean): Promise<() => Promise<void>> {
+export async function setWidgetAssistant(
+  enabled: boolean,
+  respond?: boolean
+): Promise<() => Promise<void>> {
   const sql = supportDb()
   const [row] = await sql<
     { widget_config: string | null }[]
@@ -24,7 +27,11 @@ export async function setWidgetAssistant(enabled: boolean): Promise<() => Promis
   }
   config.messenger = {
     ...config.messenger,
-    assistant: { ...config.messenger?.assistant, enabled },
+    assistant: {
+      ...config.messenger?.assistant,
+      enabled,
+      ...(respond === undefined ? {} : { respond }),
+    },
   }
   await sql`UPDATE settings SET widget_config = ${JSON.stringify(config)}`
   await bustSettings()

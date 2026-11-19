@@ -10,7 +10,14 @@ import { pollFor, supportDb } from '../../support/db'
 import { presenceRows, waitForPresence } from '../../support/presence'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { openStream, type StreamEvent } from '../../support/streams'
-import { createVisitor, openWidgetAs, warmUpStream, type TestVisitor } from '../../support/visitors'
+import { fakeAi } from '../../support/fake-ai-client'
+import {
+  createVisitor,
+  openWidgetAs,
+  warmUpStream,
+  warmUpWidgetThread,
+  type TestVisitor,
+} from '../../support/visitors'
 import { clearPresence, setWidgetAssistant } from '../../support/workspace-settings'
 
 async function agentsOnline(visitor: TestVisitor): Promise<boolean> {
@@ -107,6 +114,108 @@ test.describe('realtime and presence', () => {
         await expect(widget.getByText("We'll reply by email")).toBeVisible({ timeout: 40_000 })
         tab.close()
       } finally {
+        await restore()
+      }
+    }
+  )
+
+  test(
+    'RT-14 the assistant trace and streamed answer reach the widget in order',
+    { tag: '@core' },
+    async ({ playwright, browser, marker, newTeammate }) => {
+      test.setTimeout(90_000)
+      // The assistant answers customers (a workspace setting; serial project, put back after).
+      const restore = await setWidgetAssistant(true, true)
+      try {
+        const answer = `Here is the streamed answer for ${marker}, in several words so it arrives in pieces.`
+        // The assistant answers in its structured shape: { text, citations }.
+        await fakeAi.script({ marker, json: { text: answer, citations: [] } })
+        const visitor = await createVisitor(playwright)
+        const first = await visitor.send(`hello there ${marker}`)
+        const { conversationId } = first
+        // The first message gets its own answer; wait for it to land.
+        await pollFor(
+          'the first answer',
+          async () => {
+            const rows = await supportDb()`SELECT 1 FROM conversation_messages
+            WHERE conversation_id = ${toUuid(conversationId as `conversation_${string}`)}
+              AND content = ${answer}`
+            return rows.length > 0 ? true : null
+          },
+          { timeoutMs: 30_000 }
+        )
+        const widget = await openWidgetAs(browser, visitor, answer)
+        const teammate = await newTeammate({ roleKey: 'support_lead' })
+        await warmUpWidgetThread(widget, await teammate.api(playwright), conversationId)
+        const stream = await visitor.openStream(conversationId)
+        await warmUpStream(stream, conversationId, {
+          api: await teammate.api(playwright),
+          fn: 'sendConversationTypingFn',
+        })
+        stream.mark()
+
+        await visitor.send(`question ${marker}`, conversationId)
+        const finalMessage = await stream.waitFor(
+          (e) => e.event === 'message' && e.data.message?.content === answer,
+          45_000
+        )
+        const at = (e: StreamEvent) => stream.events.indexOf(e)
+        const activity = stream.matching((e) => e.event === 'assistant_activity')
+        const deltas = stream.matching((e) => e.event === 'assistant_delta' && Boolean(e.data.text))
+        expect(activity.length).toBeGreaterThan(0)
+        expect(deltas.length).toBeGreaterThan(0)
+        expect(activity.some((e) => at(e) < at(deltas[0]))).toBe(true)
+        expect(at(deltas.at(-1)!)).toBeLessThan(at(finalMessage))
+        // Each delta carries the whole text so far.
+        const texts = deltas.map((e) => String(e.data.text))
+        for (let i = 1; i < texts.length; i++) expect(texts[i].startsWith(texts[i - 1])).toBe(true)
+        expect(answer.startsWith(texts.at(-1)!)).toBe(true)
+        expect(finalMessage.data.message).toMatchObject({ isAssistant: true })
+        await expect(widget.getByText(answer)).toHaveCount(2, { timeout: 15_000 })
+        stream.close()
+      } finally {
+        await fakeAi.clear(marker)
+        await restore()
+      }
+    }
+  )
+
+  test(
+    'RT-15 a stream opened mid-turn replays the latest assistant activity, and none after',
+    { tag: '@nightly' },
+    async ({ playwright, marker, newTeammate }) => {
+      test.setTimeout(90_000)
+      const restore = await setWidgetAssistant(true, true)
+      try {
+        const answer = `Slow answer for ${marker}.`
+        // Slowed by a rule for this test's marker only, not shard-wide.
+        await fakeAi.script({ marker, json: { text: answer, citations: [] }, delayMs: 6_000 })
+        const visitor = await createVisitor(playwright)
+        const { conversationId } = await visitor.send(`slow ${marker}`)
+        await fakeAi.waitForRequests({ contains: marker })
+        // The turn is running: a new subscriber gets the snapshot after connecting.
+        const late = await visitor.openStream(conversationId)
+        const snapshot = await late.waitFor((e) => e.event === 'assistant_activity', 5_000)
+        expect(snapshot.data.conversationId).toBe(conversationId)
+        await late.waitFor(
+          (e) => e.event === 'message' && e.data.message?.content === answer,
+          30_000
+        )
+        late.close()
+
+        // Turn over: a fresh stream replays nothing.
+        // (The snapshot comes before any live frame, so a typing frame after it
+        // proves the replay step is over.)
+        const after = await visitor.openStream(conversationId)
+        const teammate = await newTeammate({ roleKey: 'support_lead' })
+        await warmUpStream(after, conversationId, {
+          api: await teammate.api(playwright),
+          fn: 'sendConversationTypingFn',
+        })
+        expect(after.matching((e) => e.event === 'assistant_activity')).toEqual([])
+        after.close()
+      } finally {
+        await fakeAi.clear(marker)
         await restore()
       }
     }
