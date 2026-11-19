@@ -192,6 +192,8 @@ function inboxListParamsKey(params: InboxListParams): string {
     (params.kinds ?? []).join(','),
     params.ticketType ?? '',
     params.ticketTypeId ?? '',
+    // A saved view's stage rule: editing it must refetch the list.
+    params.ticketStage ?? '',
     params.priority ?? '',
     params.search ?? '',
     params.assignee ?? '',
