@@ -25,7 +25,7 @@ import {
   type TicketStatusId,
 } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
-import type { PermissionKey } from '@/lib/shared/permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 const session = vi.hoisted(() => ({ actor: null as unknown as Actor }))
 const translation = vi.hoisted(() => ({ calls: 0 }))
@@ -36,9 +36,9 @@ vi.mock('@tanstack/react-start', async (importOriginal) => {
 })
 
 /** The session stand-in: the caller is `session.actor`, and a permission gate
- *  refuses exactly as the real one does when the actor lacks the key. */
+ *  refuses exactly as the real one does when the actor lacks the key: a plain
+ *  Error in requireAuth's own wording, which callers may map. */
 vi.mock('@/lib/server/functions/auth-helpers', async () => {
-  const { ForbiddenError } = await import('@/lib/shared/errors')
   const ctxFor = (actor: Actor) => ({
     principal: { id: actor.principalId, role: actor.role, type: 'user' },
     user: { id: 'user_stub', name: 'Ana', image: null },
@@ -46,7 +46,7 @@ vi.mock('@/lib/server/functions/auth-helpers', async () => {
   })
   const check = (permission?: PermissionKey) => {
     if (permission && !session.actor.permissions?.has(permission)) {
-      throw new ForbiddenError('FORBIDDEN', 'You do not have permission')
+      throw new Error(`Access denied: Requires permission '${permission}', role member lacks it`)
     }
   }
   return {
@@ -773,5 +773,50 @@ describe('conversation server functions check visibility (real DB, rolled back)'
       ).rejects.toMatchObject(NOT_FOUND)
       expect(await testDb.select().from(tickets)).toHaveLength(before.length)
     })
+  })
+
+  /**
+   * A teammate whose role holds every conversation key except
+   * `conversation.view` sees no conversation at all, the Unassigned queue
+   * included. Opening one answers NotFound, as for any conversation they
+   * cannot see, and no other call acts on it.
+   */
+  describe('a teammate without conversation.view', () => {
+    async function seedNoViewWorld() {
+      const w = await seedWorld()
+      const permissions = new Set(w.actor.permissions)
+      permissions.delete(PERMISSIONS.CONVERSATION_VIEW)
+      session.actor = { ...w.actor, permissions }
+      return w
+    }
+
+    it('opening an Unassigned-queue conversation is NotFound', async () => {
+      const w = await seedNoViewWorld()
+      const unassigned = await w.conversation(null)
+      await expect(
+        getConversationFn({ data: { conversationId: unassigned.id } })
+      ).rejects.toMatchObject(NOT_FOUND)
+    })
+
+    it.each(calls)(
+      '%s: refused on an Unassigned-queue conversation, which stays as it was',
+      async (_, call) => {
+        const w = await seedNoViewWorld()
+        const unassigned = await w.conversation(null, { channel: 'github' })
+        const before = await row(unassigned.id)
+        const thread = await messagesOn(unassigned.id)
+        const outcome = await call(w, unassigned).then(
+          () => null,
+          (err: unknown) => err
+        )
+        // Refused: Not found, or the permission gate's own refusal.
+        expect(
+          (outcome as { statusCode?: number } | null)?.statusCode === 404 ||
+            (outcome instanceof Error && outcome.message.startsWith('Access denied'))
+        ).toBe(true)
+        expect(await row(unassigned.id)).toEqual(before)
+        expect(await messagesOn(unassigned.id)).toEqual(thread)
+      }
+    )
   })
 })

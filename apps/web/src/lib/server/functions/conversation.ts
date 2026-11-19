@@ -63,6 +63,7 @@ import {
   hasAuthCredentials,
   type AuthContext,
 } from './auth-helpers'
+import { isAccessDeniedError } from './auth-errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { RequesterTicketDTO, ConversationTicketSummary } from '@/lib/server/domains/tickets'
@@ -1021,7 +1022,18 @@ const agentConversationSchema = listMessagesSchema.extend({
 export const getConversationFn = createServerFn({ method: 'GET' })
   .validator(agentConversationSchema)
   .handler(async ({ data }) => {
-    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    // A teammate refused here (no conversation.view) sees no conversation, so
+    // opening one answers NotFound like any other conversation they cannot
+    // see: the inbox shows its not-found state for exactly that answer, and
+    // for any other failure keeps the thread pane, Close and reply box open.
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW }).catch(
+      (err: unknown) => {
+        if (isAccessDeniedError(err)) {
+          throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+        }
+        throw err
+      }
+    )
     const actor = await policyActorFromAuth(ctx)
     const { conversationToDTO, listMessages, enrichMessagesForAgent } =
       await import('@/lib/server/domains/conversation/conversation.query')

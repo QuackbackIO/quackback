@@ -22,3 +22,13 @@ export function isAuthDenialError(err: unknown): boolean {
     (err.message.startsWith('Authentication required') || err.message.startsWith('Access denied'))
   )
 }
+
+/**
+ * Whether an error is `requireAuth`'s refusal of a signed-in caller ('Access
+ * denied: …': a missing permission, a non-team principal, a widget or portal
+ * session). Unlike `isAuthDenialError` it leaves out 'Authentication
+ * required', so a signed-out caller still reads as signed out.
+ */
+export function isAccessDeniedError(err: unknown): boolean {
+  return err instanceof Error && err.message.startsWith('Access denied')
+}
