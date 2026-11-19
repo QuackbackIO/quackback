@@ -71,7 +71,9 @@ export function isPlausibleContactEmail(raw: string | undefined | null): boolean
  * principal string (auth-helpers warns that collapsing anonymous is a security
  * bug). `service` principals never reach these requester paths.
  */
-export async function requesterHasContactChannel(actor: Actor): Promise<boolean> {
+export async function requesterHasContactChannel(
+  actor: Pick<Actor, 'principalId' | 'principalType'>
+): Promise<boolean> {
   if (actor.principalType !== 'anonymous') return true
   if (!actor.principalId) return false
   const [row] = await db

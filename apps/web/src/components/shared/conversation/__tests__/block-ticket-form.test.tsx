@@ -84,12 +84,15 @@ function inputUnder(label: string): HTMLInputElement {
   return node
 }
 
-function renderCard(headers: Record<string, string> = { 'x-widget-session': 'sess_1' }) {
+function renderCard(
+  headers: Record<string, string> = { 'x-widget-session': 'sess_1' },
+  askEmail?: boolean
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en-US" messages={{}}>
-        <BlockTicketForm getAuthHeaders={() => headers} />
+        <BlockTicketForm getAuthHeaders={() => headers} askEmail={askEmail} />
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -147,6 +150,24 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
         description: 'SSO loop after password reset',
         email: 'sam@example.com',
       },
+      headers: { 'x-widget-session': 'sess_1' },
+    })
+  })
+
+  it('does not ask an identified visitor for an email, and sends none', async () => {
+    renderCard(undefined, false)
+    expect(screen.queryByLabelText(/email/i)).toBeNull()
+    expect(screen.queryByPlaceholderText(/you@example\.com/i)).toBeNull()
+    fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
+      target: { value: 'Cannot sign in' },
+    })
+    const submit = screen.getByRole('button', { name: /create ticket/i })
+    await waitFor(() => expect(submit).toBeEnabled())
+    fireEvent.click(submit)
+
+    await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
+    expect(createMyTicketFn).toHaveBeenCalledWith({
+      data: { title: 'Cannot sign in' },
       headers: { 'x-widget-session': 'sess_1' },
     })
   })

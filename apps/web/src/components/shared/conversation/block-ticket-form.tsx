@@ -5,8 +5,9 @@
  * both authenticate through the thread's getAuthHeaders prop, so this card
  * never reaches for a surface-specific auth context).
  *
- * Compact by design: Subject (required), Details, an Email field, and the
- * customer-visible fields of the intake default type, with no type picker.
+ * Compact by design: Subject (required), Details, the customer-visible
+ * fields of the intake default type (no type picker) and, only for an
+ * anonymous visitor with no email on file, an Email field.
  * The type is the one the server files under when none is named (the intake
  * default, else the first intake type), and the form sends its id with the
  * answers, so a required field is filled here and passes the server's check.
@@ -14,9 +15,9 @@
  * the type list loads, the fields area shows a spinner; if the read still
  * fails after its retries, the fields area shows the error and a Try again
  * button, and the form cannot be sent, since the server would refuse a
- * submit that skips a required field. The email is optional here: an identified visitor's
- * ticket links to their session principal, and an anonymous one can leave it
- * blank.
+ * submit that skips a required field. An identified visitor, or an anonymous
+ * one whose email is already on file, is never asked for it: the ticket links
+ * to their session principal (`askEmail` false, from the thread load).
  *
  * Filed state is local to the mounted card: a successful submit collapses
  * the form to a confirmation line, and the conversation's own
@@ -48,8 +49,11 @@ function intakeDefaultType(types: TicketIntakeType[]): TicketIntakeType | null {
 
 export function BlockTicketForm({
   getAuthHeaders,
+  askEmail = true,
 }: {
   getAuthHeaders: () => Record<string, string>
+  /** Show the Email field: only an anonymous visitor with no email on file. */
+  askEmail?: boolean
 }) {
   const intl = useIntl()
   const rpc = useVisitorSurfaceRpc()
@@ -102,7 +106,7 @@ export function BlockTicketForm({
     create.mutate({
       title: title.trim(),
       description: details.trim() || undefined,
-      email: email.trim() || undefined,
+      email: (askEmail && email.trim()) || undefined,
       ...(type ? { ticketTypeId: type.id, fieldValues } : {}),
     })
   }
@@ -175,21 +179,23 @@ export function BlockTicketForm({
         onChange={intake.setFieldValue}
         errors={intake.fieldErrors}
       />
-      <div className="space-y-1">
-        <label htmlFor={`${id}-email`} className="text-xs font-medium text-muted-foreground">
-          <FormattedMessage id="widget.tickets.new.email" defaultMessage="Email" />
-        </label>
-        <Input
-          id={`${id}-email`}
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={intl.formatMessage({
-            id: 'widget.tickets.new.emailPlaceholder',
-            defaultMessage: 'you@example.com',
-          })}
-        />
-      </div>
+      {askEmail && (
+        <div className="space-y-1">
+          <label htmlFor={`${id}-email`} className="text-xs font-medium text-muted-foreground">
+            <FormattedMessage id="widget.tickets.new.email" defaultMessage="Email" />
+          </label>
+          <Input
+            id={`${id}-email`}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={intl.formatMessage({
+              id: 'widget.tickets.new.emailPlaceholder',
+              defaultMessage: 'you@example.com',
+            })}
+          />
+        </div>
+      )}
       <Button className="w-full" size="sm" onClick={submit} disabled={!canSubmit}>
         {create.isPending ? (
           <Spinner />

@@ -262,7 +262,7 @@ test.describe('what the requester sees', () => {
 
 test.describe('requester intake rules', () => {
   test(
-    'TKT-18 an anonymous widget visitor must give an email; the first one is kept',
+    'TKT-18 an anonymous widget visitor must give an email once; the first one is kept',
     { tag: '@core' },
     async ({ page, people, marker }) => {
       test.setTimeout(120_000)
@@ -299,10 +299,12 @@ test.describe('requester intake rules', () => {
       await expect.poll(contactEmail).toBe(first.toLowerCase())
       expect(await ticketsFiled()).toEqual([`With email ${marker}`])
 
-      // c) A different email on a later ticket never replaces it.
+      // c) With an email on file, a later form no longer asks for one, and the
+      // ticket files against the email already kept.
       await postTicketFormBlock(conversationId, people.people.admin.principalId)
       await reopenWidgetConversation(page, text)
-      await widget.getByLabel('Email').last().fill(`other.${marker}@customers.example`)
+      await expect(widget.getByLabel('Subject').last()).toBeVisible()
+      await expect(widget.getByLabel('Email')).toHaveCount(0)
       await widget.getByLabel('Subject').last().fill(`Second ${marker}`)
       await widget.getByRole('button', { name: 'Create ticket' }).last().click()
       await expect(widget.getByText("Ticket filed. We'll track it from here.")).toBeVisible()
@@ -494,7 +496,8 @@ test.describe('ticket forms are accessible', () => {
       await expect(subject).toHaveAttribute('aria-required', 'true')
       await expect(page.getByRole('textbox', { name: 'Subject' })).toBeVisible()
       await expect(page.getByRole('textbox', { name: 'Details' })).toBeVisible()
-      await expect(page.getByRole('textbox', { name: 'Email' })).toBeVisible()
+      // A signed-in customer is never asked for an email.
+      await expect(page.getByRole('textbox', { name: 'Email' })).toHaveCount(0)
       await page.locator('label', { hasText: 'Details' }).click()
       await expect(page.getByLabel('Details')).toBeFocused()
       await page.locator('label', { hasText: 'Subject' }).click()
