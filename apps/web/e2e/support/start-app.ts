@@ -8,6 +8,7 @@
  */
 import { closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { resolve } from 'node:path'
+import postgres from 'postgres'
 import { SUPPORT_RUN_DIR, supportEnv } from './env'
 import { ensureSinkCertificate } from './stand-ins/tls'
 
@@ -29,6 +30,25 @@ mkdirSync(SUPPORT_RUN_DIR, { recursive: true })
 const logPath = resolve(SUPPORT_RUN_DIR, 'app.log')
 const logFd = openSync(logPath, 'a')
 process.stdout.write(`support app: ${env.baseUrl}, log ${logPath}\n`)
+
+// Suite baseline: support tickets on from boot, as a workspace that uses the
+// support module would run. It also has to be on BEFORE the app starts: the
+// background job worker keeps the workspace settings it first read for as
+// long as the app runs (its loop shares one request memo; a known product bug,
+// see QUARANTINE.md), and ticket emails are built in jobs that skip the send
+// while the flag reads off.
+const db = postgres(env.app.DATABASE_URL, { max: 1, onnotice: () => {} })
+try {
+  await db`
+    UPDATE settings
+    SET feature_flags = jsonb_set(coalesce(nullif(feature_flags, '')::jsonb, '{}'::jsonb),
+                                  '{supportTickets}', 'true'::jsonb)::text`
+  await db`DELETE FROM kv_store WHERE key = 'settings:workspace'`
+} catch (err) {
+  process.stderr.write(`could not pre-set support tickets: ${String(err)}\n`)
+} finally {
+  await db.end({ timeout: 5 })
+}
 
 const server = Bun.spawn(['bun', entry], {
   cwd: appDir,

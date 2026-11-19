@@ -102,3 +102,62 @@ These assert the right behaviour and fail until the fix lands. Review by
   (`functions/settings.ts:930`, `:940`), so the Support lead role, whose
   description lists routing and which holds `routing.manage`, is refused. The
   test asserts the intended rule. owner: unassigned, review by: 2026-12-03.
+
+### Support email journeys (`tests/support/email-*.spec.ts`)
+
+Known bugs (fixes in flight) and bugs found while writing these journeys. Each
+test asserts the right behaviour; the working part of each journey is proved
+by a separate test that is not quarantined.
+
+- `support/email-inbound.spec.ts` › CUS-E-07 a new cold email conversation
+  appears live in an open inbox. Known bug: an unrouted new email
+  conversation publishes no realtime frame, so an open inbox shows it only
+  after a refetch. owner: unassigned, review by: 2026-12-03.
+- `support/email-inbound.spec.ts` › CUS-E-15 a reply to a spam-filed thread
+  is kept but stays closed in Spam. Waits for #1084, which keeps a customer
+  message on a spam conversation in Spam (owner decision 2026-11-19); today the
+  reply reopens the thread and keeps the spam marker, so it shows in neither
+  triage nor Spam. Lift when #1084 lands. owner: unassigned, review by:
+  2026-12-03.
+- `support/email-outbound.spec.ts` › CUS-O-08 References repeats our earlier
+  Message-IDs exactly as they were sent. Found here: outbound ids are stored
+  lower-cased (`conversation.email-store.ts` `normalizeMessageId`, used by
+  `recordOutboundEmail`) and the References chain is rebuilt from that store,
+  so it carries a spelling we never sent; a client that matches ids exactly
+  can lose the thread. owner: unassigned, review by: 2026-12-03.
+- `support/email-outbound.spec.ts` › CUS-O-16 a teammate-filed ticket sends
+  the requester the confirmation and no conversation email. Found here: a
+  customer ticket filed by a teammate (API key) writes its opening message
+  into the backing conversation as a teammate message after commit
+  (`ticket-intake.service.ts`), which runs `notifyAgentReply`
+  (`conversation.service.ts`), so the requester also gets "<agent> replied to
+  your conversation" with the description. Same family as CUS-O-17. owner:
+  unassigned, review by: 2026-12-03.
+- `support/email-outbound.spec.ts` › CUS-O-17 one agent reply on a ticket
+  sends the requester exactly one email. Known bug: a reply on a ticket with
+  a linked conversation sends both the ticket reply email and a conversation
+  reply email. owner: unassigned, review by: 2026-12-03.
+- `support/email-outbound-csat.spec.ts` › CUS-O-23 an emailed face link opens
+  with its face preselected and records nothing; › CUS-O-27 an out-of-range
+  numeric rating still opens the page with nothing preselected. Found here:
+  every face link in the close and rating-request emails
+  (`/csat?token=…&rating=4`) renders the error page. The router parses
+  `rating=4` into the number 4 and the route's search schema
+  (`routes/csat.tsx` `searchSchema`, `rating: z.string().optional()`)
+  refuses it; `rating=abc` and a link with no rating work. The other CSAT
+  journeys open the page with the token alone. owner: unassigned, review by:
+  2026-12-03.
+
+Found here, with no quarantined test: the background job worker keeps the
+workspace settings it first read for as long as the app runs. The job loop
+runs inside one log context (`jobs/worker.ts` `runWithLogContext`), and
+`memoizePerRequest` (`request-memo.ts`) keys on that context, so
+`getWorkspaceSettings` (`settings.service.ts`) never re-reads in the worker.
+A setting switched on after boot (Support tickets) reaches a job only when that
+job happens to run inline in the request; picked up by the worker, the job
+still sees the boot value and, for ticket mail, sends nothing. The support
+suite turns Support tickets on before the app starts (`support/start-app.ts`).
+No deterministic test: whether an event job runs inline or in the worker is
+not under the suite's control, and the one job-read setting the suite could
+switch on after boot is part of its baseline. owner: unassigned, review by:
+2026-12-03.

@@ -930,6 +930,24 @@ describe('extractReplyText', () => {
   it('still returns empty for a reply that is entirely quoted history', () => {
     expect(extractReplyText('On Mon wrote:\n> only quoted text\n> more quoted')).toBe('')
   })
+
+  // CUS-E-24: the other separators an email client writes above the quote.
+  it('cuts at an Outlook "-----Original Message-----" separator', () => {
+    const raw = [
+      'Fixed on my side, thanks.',
+      '',
+      '-----Original Message-----',
+      'From: Support <reply+x@d>',
+      'Sent: Monday',
+      'previous agent message',
+    ].join('\n')
+    expect(extractReplyText(raw)).toBe('Fixed on my side, thanks.')
+  })
+
+  it('cuts at a run of five or more underscores', () => {
+    const raw = ['Yes, that works.', '________________________________', 'From: Support'].join('\n')
+    expect(extractReplyText(raw)).toBe('Yes, that works.')
+  })
 })
 
 describe('extractEmailAddress', () => {

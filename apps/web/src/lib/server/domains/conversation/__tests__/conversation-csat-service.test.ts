@@ -152,4 +152,21 @@ describe('recordCsat webhook emission', () => {
     expect(emit.emitConversationCsatSubmitted).not.toHaveBeenCalled()
     expect(emit.emitConversationCsatCommentAdded).toHaveBeenCalledTimes(1)
   })
+
+  // CUS-O-28: a rating token is bound to the visitor. One minted for any other
+  // principal (the thread moved to another visitor, or a forged id) is refused
+  // and records nothing.
+  it('refuses a rating from anyone but the conversation visitor and records nothing', async () => {
+    const stranger: Actor = { ...visitorActor, principalId: 'principal_other' as PrincipalId }
+
+    await expect(recordCsat(convId, 5, 'not mine', stranger)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Only the visitor can rate this conversation',
+    })
+
+    expect(lastUpdate).toEqual({})
+    expect(emit.emitConversationCsatSubmitted).not.toHaveBeenCalled()
+    expect(emit.emitConversationCsatCommentAdded).not.toHaveBeenCalled()
+    expect(publishConversationUpdate).not.toHaveBeenCalled()
+  })
 })
