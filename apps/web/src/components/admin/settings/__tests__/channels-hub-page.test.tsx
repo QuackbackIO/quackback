@@ -1,12 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
-
-const updateRouting = vi.fn()
-/** The viewer's permissions; every one by default. */
-const held = { permissions: null as string[] | null }
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -41,12 +37,8 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
     },
   }),
   useBaseUrl: () => 'https://acme.com',
-  useHasPermission: (permission: string) =>
-    held.permissions === null || held.permissions.includes(permission),
-}))
-vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
-  updateConversationRoutingFn: (...args: unknown[]) => updateRouting(...args),
+  // A viewer holding every permission, routing.manage included.
+  useHasPermission: () => true,
 }))
 vi.mock('@/lib/server/functions/channel-accounts', () => ({ listRecentEmailLogFn: vi.fn() }))
 vi.mock('@/integrations/github/server/functions', () => ({ getGitHubChannelStatusFn: vi.fn() }))
@@ -72,7 +64,6 @@ function seed(github: Record<string, unknown>) {
     fromAddress: 'a@b.c',
   } as never)
   client.setQueryData(githubChannelStatusQuery().queryKey, github as never)
-  client.setQueryData(channelSettingsQueries.routing().queryKey, { enabled: false } as never)
 }
 
 function renderPage() {
@@ -86,9 +77,6 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  updateRouting.mockReset()
-  held.permissions = null
-  updateRouting.mockResolvedValue({})
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 })
 afterEach(cleanup)
@@ -144,23 +132,7 @@ describe('ChannelsHubPage', () => {
     expect(screen.getByText('Needs attention')).toBeTruthy()
   })
 
-  it('saves the routing switch as an autosave mutation', async () => {
-    seed(WORKING_GITHUB)
-    renderPage()
-    const toggle = screen.getByRole('switch', { name: 'Auto-assign new conversations' })
-    expect(toggle.getAttribute('aria-checked')).toBe('false')
-    fireEvent.click(toggle)
-    await waitFor(() =>
-      expect(updateRouting).toHaveBeenCalledWith({
-        data: { enabled: true, strategy: 'auto_assign_active' },
-      })
-    )
-    const mutation = client.getMutationCache().getAll()[0]
-    expect(mutation.meta).toEqual({ autosave: true })
-  })
-
-  it('leaves the routing switch out for a viewer without routing.manage', () => {
-    held.permissions = ['settings.manage']
+  it('has no routing switch: it lives on the Workflows page', () => {
     seed(WORKING_GITHUB)
     renderPage()
     expect(screen.queryByRole('switch', { name: 'Auto-assign new conversations' })).toBeNull()

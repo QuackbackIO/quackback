@@ -27,6 +27,7 @@ import {
   updateCustomCssFn,
   updateWorkflowAbandonedAutoCloseFn,
   updateWorkflowCloseSpamFn,
+  updateConversationRoutingFn,
   updateDefaultSlaPolicyFn,
   updateSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
@@ -474,6 +475,19 @@ export function useUpdateWorkflowCloseSpam() {
       updateWorkflowCloseSpamFn({ data }),
     onSuccess: (saved) =>
       queryClient.setQueryData(settingsQueries.workflowCloseSpam().queryKey, saved),
+  })
+}
+
+/** Autosave for the auto-assign switch on the Workflows page. */
+export function useUpdateConversationRouting() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (enabled: boolean) =>
+      updateConversationRoutingFn({ data: { enabled, strategy: 'auto_assign_active' } }),
+    onSuccess: (saved) =>
+      queryClient.setQueryData(settingsQueries.conversationRouting().queryKey, saved),
   })
 }
 
