@@ -491,19 +491,31 @@ describe('buildInboxListParams', () => {
     ).toMatchObject({ kinds: ['ticket'], ticketType: 'tracker' })
   })
 
-  it('carries a supported sort but clamps an unsupported (conversation-only) sort to undefined', () => {
+  it('carries a supported sort, SLA included, but clamps the conversation-only waiting sort', () => {
     expect(
       buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '', undefined, 'priority')
         .sort
     ).toBe('priority')
-    // 'waiting'/'sla' have no ticket-row equivalent and the endpoint's schema
-    // rejects them — the client clamps rather than forwarding and 400ing.
+    // 'sla' ranks both kinds by their nearest unmet deadline, so it reaches
+    // the endpoint rather than silently listing by most recent activity.
+    expect(
+      buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '', undefined, 'sla').sort
+    ).toBe('sla')
+    expect(
+      buildInboxListParams(
+        { kind: 'view', view: 'tickets_all' },
+        'open',
+        'all',
+        '',
+        undefined,
+        'sla'
+      ).sort
+    ).toBe('sla')
+    // 'waiting' has no ticket-row equivalent and the endpoint's schema
+    // rejects it — the client clamps rather than forwarding and 400ing.
     expect(
       buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '', undefined, 'waiting')
         .sort
-    ).toBeUndefined()
-    expect(
-      buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '', undefined, 'sla').sort
     ).toBeUndefined()
     // The default 'recent' is omitted just like the legacy buildListParams.
     expect(

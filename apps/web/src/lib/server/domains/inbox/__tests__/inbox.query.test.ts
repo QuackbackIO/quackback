@@ -346,6 +346,94 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
     })
   })
 
+  describe('the SLA breach soonest sort', () => {
+    const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 12, minutes)).toISOString()
+    const conversationStamp = (firstResponseDueAt: string) => ({
+      policyId: 'sla_policy_test',
+      policyName: 'Standard',
+      appliedAt: at(0),
+      firstResponseDueAt,
+      nextResponseTargetSecs: null,
+      timeToCloseDueAt: null,
+    })
+    const ticketStamp = (timeToResolveDueAt: string, resolvedAt: string | null = null) => ({
+      policyId: 'sla_policy_test',
+      policyName: 'Standard',
+      appliedAt: at(0),
+      timeToResolveDueAt,
+      resolvedAt,
+    })
+    const idOf = (item: Awaited<ReturnType<typeof listInboxItems>>['items'][number]) =>
+      item.kind === 'conversation' ? item.conversation.id : item.ticket.id
+
+    it('ranks conversations and tickets by their nearest unmet deadline, unmet clocks last, across pages', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+
+      // Activity order is the reverse of deadline order, so a list that
+      // silently fell back to "most recent" would fail every assertion.
+      const conversationDue10 = await seedConversation(visitor, { lastMessageAt: new Date(at(50)) })
+      const conversationDue30 = await seedConversation(visitor, { lastMessageAt: new Date(at(49)) })
+      const conversationNoSla = await seedConversation(visitor, { lastMessageAt: new Date(at(59)) })
+      await testDb
+        .update(conversations)
+        .set({ slaApplied: conversationStamp(at(10)) as never })
+        .where(eq(conversations.id, conversationDue10))
+      await testDb
+        .update(conversations)
+        .set({ slaApplied: conversationStamp(at(30)) as never })
+        .where(eq(conversations.id, conversationDue30))
+
+      const ticketDue20 = await createTicket(
+        { type: 'back_office', title: 'Due at 20' },
+        writeActor()
+      )
+      const ticketDue40 = await createTicket(
+        { type: 'back_office', title: 'Due at 40' },
+        writeActor()
+      )
+      const ticketSettled = await createTicket(
+        { type: 'back_office', title: 'Resolved within its SLA' },
+        writeActor()
+      )
+      await testDb
+        .update(tickets)
+        .set({ slaApplied: ticketStamp(at(20)), updatedAt: new Date(at(1)) })
+        .where(eq(tickets.id, ticketDue20.id))
+      await testDb
+        .update(tickets)
+        .set({ slaApplied: ticketStamp(at(40)), updatedAt: new Date(at(2)) })
+        .where(eq(tickets.id, ticketDue40.id))
+      // A settled clock has nothing left to breach: it sorts with the rows
+      // that carry no SLA at all, however early its old deadline was.
+      await testDb
+        .update(tickets)
+        .set({ slaApplied: ticketStamp(at(5), at(4)), updatedAt: new Date(at(3)) })
+        .where(eq(tickets.id, ticketSettled.id))
+
+      const filter = {
+        facet: 'all' as const,
+        kinds: ['conversation', 'ticket'] as Array<'conversation' | 'ticket'>,
+        sort: 'sla' as const,
+        limit: 3,
+      }
+      const page1 = await listInboxItems(serviceActor(), filter)
+      expect(page1.items.map(idOf)).toEqual([conversationDue10, ticketDue20.id, conversationDue30])
+      expect(page1.cursor).not.toBeNull()
+
+      const page2 = await listInboxItems(serviceActor(), {
+        ...filter,
+        cursor: page1.cursor ?? undefined,
+      })
+      // The deadline-less rows follow every live deadline, conversation
+      // before ticket, without a duplicate or a skip at the page boundary.
+      expect(page2.items.map(idOf)).toEqual([ticketDue40.id, conversationNoSla, ticketSettled.id])
+      expect(page2.cursor).toBeNull()
+    })
+  })
+
   describe('countInboxScopes', () => {
     it('counts open mine/unassigned conversations and open tickets by type, RBAC-bounded', async () => {
       await seedSettings()

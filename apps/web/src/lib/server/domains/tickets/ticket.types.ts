@@ -81,8 +81,9 @@ export interface AssignTicketInput {
   assigneeTeamId?: TeamId | null
 }
 
-/** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt). */
-export type TicketSort = 'recent' | 'oldest' | 'created' | 'priority'
+/** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt);
+ *  `sla` by the open time-to-resolve deadline, soonest first, none last. */
+export type TicketSort = 'recent' | 'oldest' | 'created' | 'priority' | 'sla'
 
 /** Who a list is scoped to by assignee: the caller, nobody, or a specific teammate. */
 export type TicketAssigneeFilter = 'me' | 'unassigned' | PrincipalId

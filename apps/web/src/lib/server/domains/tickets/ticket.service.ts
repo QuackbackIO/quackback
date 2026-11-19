@@ -58,6 +58,7 @@ import {
   type KeysetColumn,
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
+import { ticketSlaDueAt } from '@/lib/shared/inbox/items'
 import { getStageLabels } from '../settings/settings.tickets'
 import { emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
@@ -164,7 +165,7 @@ const priorityRankExpr = priorityRankSql(tickets.priority)
  * conversation sort, so the keyset cursor only ever needs two columns.
  */
 export interface TicketSortDescriptor {
-  primary: 'updatedAt' | 'createdAt' | 'priorityRank'
+  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'slaDueAt'
   direction: 'asc' | 'desc'
 }
 
@@ -176,11 +177,21 @@ export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSort
       return { primary: 'createdAt', direction: 'desc' }
     case 'priority':
       return { primary: 'priorityRank', direction: 'desc' }
+    case 'sla':
+      return { primary: 'slaDueAt', direction: 'asc' }
     case 'recent':
     default:
       return { primary: 'updatedAt', direction: 'desc' }
   }
 }
+
+/**
+ * The open time-to-resolve deadline for the 'sla' sort — the SQL twin of
+ * `ticketSlaDueAt` (keep them in lockstep). A ticket with no SLA, or one that
+ * already resolved (the clock settles for good), yields NULL and sorts last.
+ */
+const ticketSlaDueExpr = sql`CASE WHEN ${tickets.slaApplied} ->> 'resolvedAt' IS NULL
+  THEN (${tickets.slaApplied} ->> 'timeToResolveDueAt')::timestamptz END`
 
 /** ORDER BY clause list for a sort. `id` breaks ties so keyset never dupes/skips. */
 function orderByForTicketSort(sort: TicketSort): SQL[] {
@@ -189,6 +200,9 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
   switch (d.primary) {
     case 'priorityRank':
       return [desc(priorityRankExpr), idTie]
+    case 'slaDueAt':
+      // Soonest breach first; rows with no open SLA clock sit at the end.
+      return [sql`${ticketSlaDueExpr} ASC NULLS LAST`, idTie]
     case 'createdAt':
       return [d.direction === 'asc' ? asc(tickets.createdAt) : desc(tickets.createdAt), idTie]
     case 'updatedAt':
@@ -218,6 +232,22 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
         strict: lt(priorityRankExpr, rank),
       }
       return buildKeysetCondition([rankCol, idTie])
+    }
+    case 'slaDueAt': {
+      // ticketSlaDueExpr ASC NULLS LAST, id ASC. A cursor in the NULL tail is
+      // followed only by later NULL rows (by id); otherwise later deadlines and
+      // the whole NULL tail. The due is bound as an ISO string and cast.
+      const due = ticketSlaDueAt(t.slaApplied as Parameters<typeof ticketSlaDueAt>[0])
+      const slaCol: KeysetColumn = due
+        ? {
+            equal: sql`${ticketSlaDueExpr} = ${due.toISOString()}::timestamptz`,
+            strict: or(
+              sql`${ticketSlaDueExpr} > ${due.toISOString()}::timestamptz`,
+              sql`${ticketSlaDueExpr} IS NULL`
+            )!,
+          }
+        : { equal: sql`${ticketSlaDueExpr} IS NULL`, strict: undefined }
+      return buildKeysetCondition([slaCol, idTie])
     }
     case 'createdAt': {
       const col =
