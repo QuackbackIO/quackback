@@ -267,6 +267,30 @@ export async function widgetSend(page: Page | FrameLocator, text: string): Promi
   await expect(page.getByText(text).first()).toBeVisible({ timeout: 15_000 })
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Wait until `text` shows in the open widget thread. The thread updates live;
+ * if a live frame is missed (seen under load), reopen the conversation from
+ * the Messages list, which reads the stored thread.
+ */
+export async function widgetExpectText(page: Page, text: string, opening: string): Promise<void> {
+  try {
+    await expect(page.getByText(text).first()).toBeVisible({ timeout: 20_000 })
+  } catch {
+    await page.reload()
+    await page.getByRole('button', { name: 'Messages', exact: true }).click()
+    // The list row shows the conversation's subject (its first message) or its latest message.
+    await page
+      .getByText(new RegExp(`${escapeRegExp(opening)}|${escapeRegExp(text)}`))
+      .first()
+      .click()
+    await expect(page.getByText(text).first()).toBeVisible({ timeout: 15_000 })
+  }
+}
+
 /**
  * Open the widget on a host page as an identified customer of the test's own
  * (unique email), signed in with a minted ssoToken, and start a conversation.

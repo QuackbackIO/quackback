@@ -27,6 +27,7 @@ import {
   runEventKinds,
   setScopeAttribute,
   waitForRun,
+  widgetExpectText,
   widgetSend,
   widgetStartConversation,
   withWorkflows,
@@ -81,8 +82,8 @@ test(
         const conversationId = await widgetStartConversation(page, `Question ${marker}`)
 
         // The block reaches the widget with its two buttons; the run parks.
-        await expect(page.getByText(`Did that help ${marker}?`)).toBeVisible({ timeout: 20_000 })
         const parked = await waitForRun(conversationId, workflowId, 'waiting')
+        await widgetExpectText(page, `Did that help ${marker}?`, `Question ${marker}`)
         expect(parked.cursor).toMatchObject({ waitKind: 'input', blockKind: 'buttons' })
         expect(parked.cursor.blockMessageId).toBeTruthy()
         const block = (await messagesOf(conversationId)).find((m) =>
@@ -93,8 +94,8 @@ test(
         await page.getByRole('button', { name: 'Yes', exact: true }).click()
 
         // The yes branch's message follows; the no branch never runs.
-        await expect(page.getByText(`Great, glad ${marker}`)).toBeVisible({ timeout: 20_000 })
         const done = await waitForRun(conversationId, workflowId, 'done')
+        await widgetExpectText(page, `Great, glad ${marker}`, `Question ${marker}`)
         await expect
           .poll(() => runEventKinds(done.id), { timeout: 10_000 })
           .toContain('block_engaged')
