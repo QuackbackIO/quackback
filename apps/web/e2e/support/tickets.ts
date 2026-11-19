@@ -68,7 +68,12 @@ export async function ticketApi(
   }
   return playwright.request.newContext({
     baseURL,
-    extraHTTPHeaders: { authorization: `Bearer ${key}` },
+    extraHTTPHeaders: {
+      authorization: `Bearer ${key}`,
+      // Its own REST rate-limit bucket (TRUSTED_CLIENT_IP_HEADER in
+      // support.env), so parallel tests never share loopback's 100 a minute.
+      'x-e2e-client-ip': `10.${randomBytes(3).join('.')}`,
+    },
   })
 }
 
