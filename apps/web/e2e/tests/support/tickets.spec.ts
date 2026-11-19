@@ -327,9 +327,10 @@ test.describe('tickets: assignment, notes and the linked ticket', () => {
 
       const agentB = principalUuid(people.people.agentB.principalId)
       await waitForTicket(ticket.id, 'assignee', (r) => r.assignee_principal_id === agentB)
-      expect(await ticketWatchers(ticket.id)).toContainEqual(
-        expect.objectContaining({ principal_id: agentB, reason: 'assignee' })
-      )
+      // The watcher row is written just after the assignment itself.
+      await expect
+        .poll(() => ticketWatchers(ticket.id))
+        .toContainEqual(expect.objectContaining({ principal_id: agentB, reason: 'assignee' }))
       await expect
         .poll(async () => (await ticketActivity(ticket.id)).map((a) => a.type))
         .toContain('ticket.assigned')
