@@ -12,6 +12,8 @@ import {
   conversationState,
   inboxUrl,
   listRows,
+  messagesOf,
+  seedMacro,
   seedTag,
   type SeededConversation,
 } from '../../support/inbox'
@@ -117,6 +119,60 @@ test.describe('inbox bulk actions', () => {
       expect(other.assigned_agent_principal_id).toBeNull()
       await expect(listRows(page, marker)).toHaveCount(1)
       await expect(listRows(page, untouched.visitorName)).toHaveCount(1)
+    }
+  )
+
+  test(
+    'INB-73 a bulk action where a row fails reports the partial success',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const rows = [
+        await seed({ visitorName: `Bulk one ${marker}` }),
+        await seed({ visitorName: `Bulk two ${marker}` }),
+      ]
+      await page.goto(inboxUrl({ q: marker }))
+      await expect(listRows(page, marker)).toHaveCount(2, { timeout: 15_000 })
+      await selectRows(page, rows)
+      // One selected conversation disappears before the action runs.
+      await supportDb()`DELETE FROM conversations WHERE id = ${rows[1].uuid}`
+      await bulkBar(page).getByRole('button', { name: 'Close', exact: true }).click()
+      await expect(page.getByText('1 updated, 1 failed')).toBeVisible({ timeout: 15_000 })
+      expect((await conversationState(rows[0].uuid)).status).toBe('closed')
+    }
+  )
+
+  test(
+    'INB-76 a bulk macro reply sends the macro text to each selected conversation',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const macro = await seedMacro(`Bulk macro ${marker}`, `Thanks for writing in ${marker}`)
+      const rows = [
+        await seed({ visitorName: `Macro one ${marker}` }),
+        await seed({ visitorName: `Macro two ${marker}` }),
+      ]
+      const untouched = await seed({ visitorName: `Macro none ${marker}` })
+      await page.goto(inboxUrl({ q: marker }))
+      await expect(listRows(page, marker)).toHaveCount(3, { timeout: 15_000 })
+      await selectRows(page, rows)
+      await bulkBar(page).getByRole('button', { name: 'Macro' }).click()
+      await page.getByRole('menuitem', { name: macro.name }).click()
+      for (const c of rows) {
+        await expect
+          .poll(async () =>
+            (await messagesOf(c.uuid)).some(
+              (m) =>
+                m.sender_type === 'agent' && m.content.includes(`Thanks for writing in ${marker}`)
+            )
+          )
+          .toBe(true)
+      }
+      expect((await messagesOf(untouched.uuid)).some((m) => m.sender_type === 'agent')).toBe(false)
     }
   )
 })
