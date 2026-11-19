@@ -617,6 +617,7 @@
   "widget.messenger.edited": "(editado)",
   "widget.loading": "Cargando…",
   "widget.messenger.offline": "Te responderemos por correo",
+  "widget.messenger.offline.replyHere": "Te responderemos aquí",
   "widget.messenger.assistant.teamAlso": "El equipo también puede ayudar",
   "widget.messenger.offline.backAt": "Volvemos {when}",
   "widget.messenger.offline.noEmail": "Ahora mismo no estamos. Deja un mensaje y te responderemos aquí cuando volvamos.",

@@ -617,6 +617,7 @@
   "widget.messenger.edited": "(bewerkt)",
   "widget.loading": "Laden…",
   "widget.messenger.offline": "We antwoorden via e-mail",
+  "widget.messenger.offline.replyHere": "We antwoorden hier",
   "widget.messenger.assistant.teamAlso": "Het team kan ook helpen",
   "widget.messenger.offline.backAt": "Terug op {when}",
   "widget.messenger.offline.noEmail": "We zijn nu afwezig. Laat een bericht achter, dan antwoorden we hier zodra we terug zijn.",

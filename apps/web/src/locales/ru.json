@@ -617,6 +617,7 @@
   "widget.messenger.edited": "(изменено)",
   "widget.loading": "Загрузка…",
   "widget.messenger.offline": "Мы ответим по email",
+  "widget.messenger.offline.replyHere": "Мы ответим здесь",
   "widget.messenger.assistant.teamAlso": "Команда тоже может помочь",
   "widget.messenger.offline.backAt": "Вернёмся {when}",
   "widget.messenger.offline.noEmail": "Нас сейчас нет на месте. Оставьте сообщение, и мы ответим здесь, когда вернёмся.",

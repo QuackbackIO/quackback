@@ -871,6 +871,7 @@
   "widget.messenger.edited": "(แก้ไขแล้ว)",
   "widget.loading": "กำลังโหลด…",
   "widget.messenger.offline": "เราจะตอบกลับทางอีเมล",
+  "widget.messenger.offline.replyHere": "เราจะตอบกลับที่นี่",
   "widget.messenger.assistant.teamAlso": "ทีมงานก็ช่วยคุณได้เช่นกัน",
   "widget.messenger.assistant.citationUpdated": "อัปเดต {time}",
   "widget.messenger.assistant.thinking": "กำลังคิด…",
