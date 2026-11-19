@@ -286,3 +286,53 @@ export async function switchComposerToNote(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Reply', exact: true }).click()
   await page.getByRole('menuitemradio', { name: 'Note' }).click()
 }
+
+/**
+ * A customer ticket for a fresh customer, paired with its backing
+ * conversation (REST create with a requester).
+ */
+export async function pairedCustomerTicket(
+  api: APIRequestContext,
+  customerEmail: string,
+  title: string,
+  description = `Opening note for ${title}`
+) {
+  const customer = await createCustomer(api, customerEmail)
+  const ticket = await createTicket(api, {
+    title,
+    type: 'customer',
+    requesterPrincipalId: customer.principalId,
+    description,
+  })
+  const conversationId = await pairedConversationId(ticket.id)
+  if (!conversationId) throw new Error(`ticket ${ticket.id} has no paired conversation`)
+  return { customer, ticket, conversationId }
+}
+
+/**
+ * Make a teammate watch a ticket. A precondition only: the product's own
+ * watch paths (TKT-53, TKT-54) are tested through the UI.
+ */
+export async function addWatcherRow(ticketId: string, principalId: string, reason = 'manual') {
+  await supportDb()`
+    INSERT INTO ticket_subscriptions (id, ticket_id, principal_id, reason)
+    VALUES (${randomUUID()}, ${toUuid(ticketId as `ticket_${string}`)},
+            ${toUuid(principalId as `principal_${string}`)}, ${reason})
+    ON CONFLICT (ticket_id, principal_id) DO NOTHING`
+}
+
+/** The requester's portal view of a paired conversation. */
+export async function openRequesterThread(page: Page, conversationId: string): Promise<void> {
+  await page.goto(`/support/${conversationId}`)
+  await expect(page.locator('[contenteditable="true"]').last()).toBeVisible({ timeout: 15_000 })
+}
+
+/** The inbox's right-hand detail panel (shown at the 1920px viewport). */
+export function detailPanel(page: Page) {
+  return page.getByRole('complementary', { name: 'Item details' })
+}
+
+/** A principal TypeID as the uuid stored in the database. */
+export function principalUuid(principalId: string): string {
+  return toUuid(principalId as `principal_${string}`)
+}

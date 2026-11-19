@@ -10,7 +10,16 @@ import { ticketReplyAddress, sendInboundEmail } from '../../support/inbound-emai
 import { waitForMail } from '../../support/mailpit'
 import { supportDb } from '../../support/db'
 import {
+  addWatcherRow,
   conversationMessages,
+  detailPanel,
+  openRequesterThread,
+  pairedCustomerTicket,
+  principalUuid,
+  ticketActivity,
+  ticketBells,
+  ticketOwnMessages,
+  switchComposerToNote,
   createCustomer,
   createTicket,
   getTicket,
@@ -143,6 +152,266 @@ test.describe('tickets: replies and first response', () => {
       expect(stamped.getTime()).toBe(human.created_at.getTime())
       await personal.dispose()
       await workspace.dispose()
+    }
+  )
+})
+
+test.describe('tickets: status', () => {
+  // The ticket view with its detail panel inline (the panel is xl-only).
+  test.use({ viewport: { width: 1920, height: 1080 } })
+
+  test(
+    'TKT-23 a stage crossing posts the notice to the requester, logs activity and bells watchers but not the actor',
+    { tag: '@core' },
+    async ({ playwright, baseURL, browser, asPerson, people, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { customer, ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Stage cross ${marker}`
+      )
+      await addWatcherRow(ticket.id, people.people.agentB.principalId)
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await admin.getByRole('button', { name: 'New', exact: true }).first().click()
+      await admin.getByRole('menuitem', { name: 'Investigating In progress' }).click()
+      await expect(
+        admin.getByRole('button', { name: 'Investigating', exact: true }).first()
+      ).toBeVisible()
+
+      const requester = await signedInAs(browser, customer.userId)
+      await openRequesterThread(requester, conversationId)
+      await expect(requester.getByText('Status updated to In progress')).toBeVisible()
+
+      await expect
+        .poll(async () => (await ticketActivity(ticket.id)).map((a) => a.type))
+        .toContain('status.changed')
+      const change = (await ticketActivity(ticket.id)).find((a) => a.type === 'status.changed')!
+      expect(change.metadata).toMatchObject({ fromName: 'New', toName: 'Investigating' })
+      expect(change.actor).toBe(principalUuid(people.people.admin.principalId))
+
+      await expect
+        .poll(async () =>
+          (await ticketBells(people.people.agentB.principalId, ticket.id)).map((b) => b.type)
+        )
+        .toContain('ticket_status_changed')
+      await expect
+        .poll(async () => (await ticketBells(customer.principalId, ticket.id)).map((b) => b.type))
+        .toContain('ticket_status_changed')
+      expect(
+        (await ticketBells(people.people.admin.principalId, ticket.id)).map((b) => b.type)
+      ).not.toContain('ticket_status_changed')
+    }
+  )
+
+  test(
+    'TKT-25 Resolve closes a customer ticket and emails the requester and watching teammates',
+    { tag: '@core' },
+    async ({ playwright, baseURL, browser, asPerson, people, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { customer, ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Resolve me ${marker}`
+      )
+      await addWatcherRow(ticket.id, people.people.agentB.principalId)
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await admin.getByRole('button', { name: 'Resolve', exact: true }).click()
+      await expect(admin.getByText('Ticket resolved')).toBeVisible()
+
+      const row = await waitForTicket(ticket.id, 'resolved', (r) => !!r.resolved_at)
+      expect(row.status_name).toBe('Resolved')
+      expect(row.status_category).toBe('closed')
+
+      const subject = `Your ticket ${ticket.reference} was resolved`
+      await waitForMail({ to: customerEmail, subject })
+      await waitForMail({ to: people.people.agentB.email, subject })
+
+      const requester = await signedInAs(browser, customer.userId)
+      await openRequesterThread(requester, conversationId)
+      await expect(requester.getByText('Status updated to Resolved')).toBeVisible()
+    }
+  )
+
+  test(
+    'TKT-27 a teammate reopens a closed ticket',
+    { tag: '@core' },
+    async ({ playwright, baseURL, asPerson, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(api, customerEmail, `Reopen ${marker}`)
+      await setStatus(api, ticket.id, 'Resolved')
+      expect((await ticketRow(ticket.id))!.resolved_at).not.toBeNull()
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await admin.getByRole('button', { name: 'Resolved', exact: true }).first().click()
+      await admin.getByRole('menuitem', { name: 'New Received' }).click()
+
+      const row = await waitForTicket(ticket.id, 'reopened', (r) => r.status_name === 'New')
+      expect(row.status_category).toBe('open')
+      expect(row.resolved_at).toBeNull()
+      expect(row.reopened_count).toBe(1)
+      const moves = (await ticketActivity(ticket.id)).filter((a) => a.type === 'status.changed')
+      expect(moves.at(-1)?.metadata).toMatchObject({ fromName: 'Resolved', toName: 'New' })
+    }
+  )
+
+  test(
+    'TKT-30 an agent message on the paired conversation does not reopen; the requester reply does',
+    { tag: '@core' },
+    async ({ playwright, baseURL, request, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Awaiting ${marker}`
+      )
+      await setStatus(api, ticket.id, 'Waiting on customer')
+
+      const reply = await api.post(`/api/v1/conversations/${conversationId}/reply`, {
+        data: { content: `Agent nudge ${marker}` },
+      })
+      expect(reply.ok(), await reply.text()).toBe(true)
+      await expect
+        .poll(async () =>
+          (await conversationMessages(conversationId)).some((m) =>
+            m.content.includes(`Agent nudge ${marker}`)
+          )
+        )
+        .toBe(true)
+      // The reopen reaction is queued: give it time, then check nothing moved.
+      await new Promise((r) => setTimeout(r, 3_000))
+      expect((await ticketRow(ticket.id))!.status_name).toBe('Waiting on customer')
+
+      // Control: the requester's own reply does reopen it.
+      const inbound = await sendInboundEmail(request, {
+        from: customerEmail,
+        to: ticketReplyAddress(ticket.id),
+        subject: `Re: ${ticket.title}`,
+        text: `Here is the info ${marker}`,
+      })
+      expect(inbound.status(), await inbound.text()).toBe(200)
+      const row = await waitForTicket(ticket.id, 'reopen', (r) => r.status_category === 'open')
+      expect(row.status_name).toBe('New')
+    }
+  )
+})
+
+test.describe('tickets: assignment, notes and the linked ticket', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } })
+
+  test(
+    'TKT-33 assigning a teammate makes them a watcher and sends them a bell and an email',
+    { tag: '@core' },
+    async ({ playwright, baseURL, asPerson, people, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(api, customerEmail, `Assign ${marker}`)
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      const panel = detailPanel(admin)
+      await panel.getByRole('button', { name: /Ada Admin/ }).click()
+      await admin.getByRole('menuitem', { name: /Ben Agent/ }).click()
+      await expect(panel.getByRole('button', { name: /Ben Agent/ })).toBeVisible()
+
+      const agentB = principalUuid(people.people.agentB.principalId)
+      await waitForTicket(ticket.id, 'assignee', (r) => r.assignee_principal_id === agentB)
+      expect(await ticketWatchers(ticket.id)).toContainEqual(
+        expect.objectContaining({ principal_id: agentB, reason: 'assignee' })
+      )
+      await expect
+        .poll(async () => (await ticketActivity(ticket.id)).map((a) => a.type))
+        .toContain('ticket.assigned')
+      await expect
+        .poll(async () =>
+          (await ticketBells(people.people.agentB.principalId, ticket.id)).map((b) => b.type)
+        )
+        .toContain('ticket_assigned')
+      await waitForMail({
+        to: people.people.agentB.email,
+        subject: `Ticket ${ticket.reference} assigned to you`,
+      })
+    }
+  )
+
+  test(
+    'TKT-43 an internal note shows to teammates and never to the requester',
+    { tag: '@core' },
+    async ({ playwright, baseURL, browser, asPerson, people, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const opening = `Visible opening ${marker}`
+      const { customer, ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Note ${marker}`,
+        opening
+      )
+      await addWatcherRow(ticket.id, people.people.agentB.principalId)
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      const note = `Team only ${marker}`
+      await switchComposerToNote(admin)
+      await sendFromComposer(admin, note, 'Add note')
+      await expect(admin.getByText(note).first()).toBeVisible()
+
+      await expect
+        .poll(async () =>
+          (await ticketOwnMessages(ticket.id)).find((m) => m.content.includes(note))
+        )
+        .toMatchObject({ is_internal: true, sender_type: 'agent' })
+      await expect
+        .poll(async () =>
+          (await ticketBells(people.people.agentB.principalId, ticket.id)).map((b) => b.type)
+        )
+        .toContain('ticket_note_added')
+      expect((await ticketBells(customer.principalId, ticket.id)).map((b) => b.type)).not.toContain(
+        'ticket_note_added'
+      )
+
+      const requester = await signedInAs(browser, customer.userId)
+      await openRequesterThread(requester, conversationId)
+      await expect(requester.getByText(opening)).toBeVisible()
+      await expect(requester.getByText(note)).toHaveCount(0)
+    }
+  )
+
+  test(
+    'TKT-64 the conversation panel shows the linked ticket, or says it cannot be opened',
+    { tag: '@core' },
+    async ({ playwright, baseURL, asPerson, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Pill ${marker}`
+      )
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, conversationId, `Opening note for ${ticket.title}`)
+      const panel = detailPanel(admin)
+      await expect(panel.getByText('Linked ticket', { exact: true })).toBeVisible()
+      // A first click can land before the panel hydrates: retry until it opens.
+      await expect(async () => {
+        await panel.getByRole('button', { name: ticket.reference, exact: true }).click()
+        await expect(admin).toHaveURL(new RegExp(`i=${ticket.id}`), { timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
+
+      // The scoped teammate can open the unassigned conversation but not the
+      // ticket, which is assigned to the admin and to no Billing team.
+      const scoped = await asPerson('scoped')
+      await openInInbox(scoped, conversationId, `Opening note for ${ticket.title}`)
+      const scopedPanel = detailPanel(scoped)
+      await expect(scopedPanel.getByText("Linked ticket you can't open")).toBeVisible()
+      await expect(scopedPanel.getByRole('button', { name: ticket.reference })).toHaveCount(0)
     }
   )
 })
