@@ -64,6 +64,17 @@ Every entry has owner: unassigned and review by: 2026-12-02.
   9000-character reply or note fails with "Message must be 4,000 characters
   or less". Either the schemas or the limit is wrong. owner: unassigned,
   review by: 2026-12-03.
+### Support suite: known product bugs (fixes in flight)
+
+These assert the right behaviour and fail until the fix lands. Review by
+2026-12-03.
+
+- `support/access.spec.ts` › opening by id › ACC-05 a teammate without
+  conversation.view opening an Unassigned conversation by URL is refused, not
+  shown an empty thread. Known bug: `getConversationFn` refuses the call, but
+  the inbox still renders the thread pane for the URL (empty, "No messages
+  yet", with a reply box) instead of a not-found or no-access state. owner:
+  unassigned, review by: 2026-12-03.
 
 ### Support suite: webhooks (PR 5c)
 
