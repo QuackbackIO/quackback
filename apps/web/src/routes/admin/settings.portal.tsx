@@ -83,6 +83,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import {
   useBaseUrl,
+  useCloudEnabled,
   useSectionDomainsCloud,
   useSessionContext,
   useWorkspaceSettings,
@@ -775,16 +776,15 @@ function FontSelectGroup({ category }: { category: FontCategory }) {
 }
 
 /**
- * The paused notice. The flag check lives in this route rather than a shared
- * module, so with the plan limits flag off the page loads no extra chunk.
+ * The paused notice. The plan billing check lives in this route rather than a
+ * shared module, so without plan billing the page loads no extra chunk.
  */
 const PlanFeatureNoticeBody = lazy(
   () => import('@/components/admin/settings/plan-feature-notice-body')
 )
 
 function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
-  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
-  if (!enabled) return null
+  if (!useCloudEnabled()) return null
   return (
     <Suspense fallback={null}>
       <PlanFeatureNoticeBody feature={feature} />

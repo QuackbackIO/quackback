@@ -17,7 +17,7 @@ import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-se
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
-import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useBaseUrl, useCloudEnabled } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
 
 // The two guides are long and sit on the Webhooks and MCP tabs, so they load
@@ -168,16 +168,15 @@ function ApiPage() {
 }
 
 /**
- * The paused notice. The flag check lives in this route rather than a shared
- * module, so with the plan limits flag off the page loads no extra chunk.
+ * The paused notice. The plan billing check lives in this route rather than a
+ * shared module, so without plan billing the page loads no extra chunk.
  */
 const PlanFeatureNoticeBody = lazy(
   () => import('@/components/admin/settings/plan-feature-notice-body')
 )
 
 function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
-  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
-  if (!enabled) return null
+  if (!useCloudEnabled()) return null
   return (
     <Suspense fallback={null}>
       <PlanFeatureNoticeBody feature={feature} />

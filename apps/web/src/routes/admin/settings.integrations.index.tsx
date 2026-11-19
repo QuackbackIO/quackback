@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useCloudEnabled } from '@/lib/client/hooks/use-root-context'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -54,16 +54,15 @@ function IntegrationsPage() {
 }
 
 /**
- * The paused notice. The flag check lives in this route rather than a shared
- * module, so with the plan limits flag off the page loads no extra chunk.
+ * The paused notice. The plan billing check lives in this route rather than a
+ * shared module, so without plan billing the page loads no extra chunk.
  */
 const PlanFeatureNoticeBody = lazy(
   () => import('@/components/admin/settings/plan-feature-notice-body')
 )
 
 function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
-  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
-  if (!enabled) return null
+  if (!useCloudEnabled()) return null
   return (
     <Suspense fallback={null}>
       <PlanFeatureNoticeBody feature={feature} />
