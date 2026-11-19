@@ -58,16 +58,3 @@ Known bugs (fixes in flight) and bugs found while writing these journeys. Each
 test asserts the right behaviour; the working part of each journey is proved
 by a separate test that is not quarantined.
 
-### Support suite: tickets remainder
-
-- `support/tickets-requester.spec.ts` › the ticket embed card › TKT-65 a
-  ticket card shows its stage to the requester and is unavailable to another
-  visitor. Product bug: a ticket embed (the embed-only message `shareTicket`
-  sends, `conversation.cards.ts`) renders nothing in a thread, so the owner
-  never sees the card and nobody else sees "This ticket is unavailable".
-  `generateContentHTML` emits the embed placeholder only for `post` and
-  `changelog` (`apps/web/src/lib/shared/content-html.ts:223`); a post embed
-  stored the same way renders. In a local build patched to allow `ticket`
-  there, the requester's thread then failed with "Something went wrong", so
-  the fix likely needs more than that line. owner: unassigned, review by:
-  2026-12-03.
