@@ -41,7 +41,7 @@ import {
 } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
+import { isFeatureLive } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { getLiveWorkflowReferencedAttributeKeys } from '@/lib/server/domains/workflows/workflow.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import {
@@ -138,13 +138,7 @@ export async function previewAssistantTurnForConversation(
   opts?: { surface?: 'widget' | 'workflow_step' }
 ): Promise<AssistantTurnEligibility> {
   if (!isAssistantConfigured()) return 'declined'
-  try {
-    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
-    await requireEntitlement('aiAssistant')
-  } catch (err) {
-    if (err instanceof EntitlementRequiredError) return 'declined'
-    throw err
-  }
+  if (!(await isFeatureLive('aiAssistant'))) return 'declined'
   try {
     await enforceAiTokenBudget()
   } catch (err) {
@@ -179,15 +173,11 @@ export async function runAssistantTurnForConversation(
 ): Promise<void> {
   if (!isAssistantConfigured()) return
 
-  try {
-    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
-    await requireEntitlement('aiAssistant')
-  } catch (err) {
-    if (err instanceof EntitlementRequiredError) {
-      log.info({ conversationId }, 'assistant turn skipped: ai assistant not entitled')
-      return
-    }
-    throw err
+  // The plan gate, kept live through the plan limits grace. Without it the
+  // conversation stays with the team.
+  if (!(await isFeatureLive('aiAssistant'))) {
+    log.info({ conversationId }, 'assistant turn skipped: ai assistant not on this plan')
+    return
   }
 
   try {

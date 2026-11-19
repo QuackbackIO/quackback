@@ -6,6 +6,7 @@
  */
 import { parseIdentityProjection, type IdentityProjection } from './cloud/identity-projection'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
+import { pausedHostnames } from '@/lib/server/base-url-override'
 import {
   PORTAL_SECTIONS,
   UNCONFIRMED_GRACE_MS,
@@ -90,4 +91,31 @@ export function routableSectionDomains(
       : { ...entry, verifiedAt: null }
   }
   return routable
+}
+
+/**
+ * The map as links and routing use it while the custom domain is paused after
+ * the plan limits grace: a paused hostname reads as not verified, so no link
+ * names it and the primary domain sends no one there. Its entry stays, so the
+ * host keeps serving its own section in place (a visitor there may hold a
+ * cached move from the primary domain, and sending them back would loop) and
+ * still sends the team's pages to the primary domain.
+ *
+ * Not for sign-in, trusted origins or session scope: a paused host still
+ * serves, so a visitor there must still be able to sign in and out.
+ */
+export function withoutPausedHosts(
+  map: SectionDomainMap,
+  paused: ReadonlySet<string> = pausedHostnames()
+): SectionDomainMap {
+  if (paused.size === 0) return map
+  let result: SectionDomainMap | null = null
+  for (const section of PORTAL_SECTIONS) {
+    const entry = map[section]
+    const host = normalizeHost(entry?.hostname)
+    if (!entry?.verifiedAt || !host || !paused.has(host)) continue
+    result ??= { ...map }
+    result[section] = { ...entry, verifiedAt: null }
+  }
+  return result ?? map
 }

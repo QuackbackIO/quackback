@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const widget = vi.hoisted(() => ({
   enabled: true,
   stored: {} as Record<string, unknown>,
+  customCss: null as string | null,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
@@ -13,8 +14,14 @@ vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
 
 vi.mock('@/lib/server/domains/settings/settings.media', () => ({
   getBrandingConfig: async () => ({}),
-  getCustomCss: async () => null,
+  getCustomCss: async () => widget.customCss,
 }))
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
 
 const mockGetTierLimits = vi.fn()
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
@@ -22,6 +29,8 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
 }))
 
 const { getPublicServerConfig } = await import('../public-config')
+const { FEATURE_STATES, runsWithoutPlanGate, setFeatureState } =
+  await import('@/lib/server/domains/plan-limits/__tests__/feature-states')
 
 function setEntitled(entitled: boolean) {
   mockGetTierLimits.mockResolvedValue({ features: { visitorAnalytics: entitled } })
@@ -38,7 +47,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   widget.enabled = true
   widget.stored = {}
+  widget.customCss = null
   setEntitled(true)
+  setFeatureState('flagOff')
 })
 
 describe('getPublicServerConfig visitor tracking', () => {
@@ -78,4 +89,21 @@ describe('getPublicServerConfig visitor tracking', () => {
     expect(enabled).toBe(false)
     expect(config).toEqual({})
   })
+})
+
+// Custom CSS paused after the plan limits grace no longer themes the embed.
+describe('getPublicServerConfig custom CSS and the plan limits pause', () => {
+  it.each(FEATURE_STATES)(
+    'reads theme values from custom CSS only while not paused (%s)',
+    async (state) => {
+      widget.customCss = ':root { --primary: #ff0000; --radius: 4px; }'
+      setFeatureState(state, 'customCss')
+      const { config } = await getPublicServerConfig()
+      expect(config.theme).toEqual(
+        runsWithoutPlanGate(state)
+          ? { themeMode: 'user', lightPrimary: '#ff0000', radius: '4px' }
+          : { themeMode: 'user' }
+      )
+    }
+  )
 })

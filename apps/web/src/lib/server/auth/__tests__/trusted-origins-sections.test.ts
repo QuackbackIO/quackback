@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://acme.com' },
+  configuredBaseUrl: () => 'https://acme.com',
   getBaseUrl: () => 'https://acme.com',
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({

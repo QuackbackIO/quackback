@@ -31,12 +31,15 @@ const mockFindFirst = vi.fn()
 // The plan gate runs after auth and before any tool, so it sees what anything
 // recorded in that window would be attributed to.
 const entitlementGate = vi.hoisted(() => ({ seen: [] as unknown[] }))
-vi.mock('@/lib/server/domains/settings/cloud/entitlements', async (importOriginal) => {
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', async () => {
   const { getAuditAttribution } = await import('@/lib/server/audit/attribution')
+  const { planLimitsServiceDouble } =
+    await import('@/lib/server/domains/plan-limits/__tests__/feature-states')
   return {
-    ...(await importOriginal<typeof import('@/lib/server/domains/settings/cloud/entitlements')>()),
-    requireEntitlement: async () => {
+    ...planLimitsServiceDouble,
+    isFeatureLive: async (key: Parameters<typeof planLimitsServiceDouble.isFeatureLive>[0]) => {
       entitlementGate.seen.push(getAuditAttribution())
+      return planLimitsServiceDouble.isFeatureLive(key)
     },
   }
 })
@@ -2982,4 +2985,46 @@ describe('MCP HTTP Handler', () => {
       ])
     })
   })
+})
+
+// The plan gate reads isFeatureLive('mcpServer'). MCP is not a grace feature,
+// so it stops at once on a drop, and the refusal is the same 402 body as the
+// entitlement gate it replaced.
+describe('MCP plan gate and the plan limits pause', () => {
+  it.each(['flagOff', 'grace', 'enforced', 'included'] as const)(
+    'in the %s state',
+    async (state) => {
+      const { setFeatureState } =
+        await import('@/lib/server/domains/plan-limits/__tests__/feature-states')
+      const { storedCloud } =
+        await import('@/lib/server/domains/settings/cloud/__tests__/cloud-fixture')
+      const { resolveCloudConfig } =
+        await import('@/lib/server/domains/settings/cloud/cloud.service')
+      const { buildRefusal } = await import('@/lib/server/domains/settings/cloud/entitlements')
+      const { getWorkspaceSettings } =
+        await import('@/lib/server/domains/settings/settings.service')
+      await setupValidAuth()
+      const cloud = storedCloud('free')
+      vi.mocked(getWorkspaceSettings).mockResolvedValue({ settings: { cloud } } as never)
+      setFeatureState(state, 'mcpServer')
+      try {
+        const { handleMcpRequest } = await import('../handler')
+        const response = await handleMcpRequest(mcpRequest(jsonRpcRequest('tools/list')))
+        if (state === 'included') {
+          expect(response.status).toBe(200)
+        } else {
+          const refusal = buildRefusal(resolveCloudConfig(cloud), 'mcpServer')
+          expect(response.status).toBe(402)
+          expect(await response.json()).toEqual({
+            jsonrpc: '2.0',
+            error: { code: -32001, message: refusal.message, data: refusal.toResponseBody() },
+            id: null,
+          })
+        }
+      } finally {
+        setFeatureState('flagOff')
+        vi.mocked(getWorkspaceSettings).mockResolvedValue(null)
+      }
+    }
+  )
 })

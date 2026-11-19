@@ -47,11 +47,12 @@ const budget = vi.hoisted(() => ({
   exhausted: false,
   windowEnd: new Date('2026-12-01T00:00:00.000Z'),
 }))
-const translateEntitlement = vi.hoisted(() => ({ granted: true }))
-vi.mock('@/lib/server/domains/settings/cloud/entitlements', () => ({
-  hasEntitlement: async (key: string) =>
-    key === 'aiArticleTranslation' ? translateEntitlement.granted : true,
-}))
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
 vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
   getAiBudgetStatus: async () => ({
     cap: 1000,
@@ -74,6 +75,8 @@ vi.mock('@/lib/server/domains/plan-limits/plan-limits.locales', () => ({
 
 const { buildTranslationPrompt, translateArticleForLocale, queueAutoTranslateOnPublish } =
   await import('../help-center-auto-translate.service')
+const { FEATURE_STATES, runsWithPlanGate, setFeatureState } =
+  await import('@/lib/server/domains/plan-limits/__tests__/feature-states')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -300,13 +303,13 @@ describe('queueAutoTranslateOnPublish', () => {
   })
 })
 
-describe('AI article translation entitlement', () => {
-  beforeEach(() => {
-    translateEntitlement.granted = true
-  })
+// The plan gate reads isFeatureLive: today's answer with the flag off, kept
+// live through the plan limits grace, off after it.
+describe('AI article translation and the plan limits pause', () => {
+  beforeEach(() => setFeatureState('flagOff'))
 
-  it('makes no AI call on a plan without AI article translation', async () => {
-    translateEntitlement.granted = false
+  it.each(FEATURE_STATES)('translates in the %s state only while live', async (state) => {
+    setFeatureState(state, 'aiArticleTranslation')
     mockGetHelpCenterConfig.mockResolvedValue({ autoTranslate: { protectedTerms: [] } })
     mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
     mockChat.mockResolvedValue({ title: 'T', content: 'C' })
@@ -314,12 +317,16 @@ describe('AI article translation entitlement', () => {
     const result = await translateArticleForLocale('article_1' as KbArticleId, 'de')
 
     expect(result).toBeUndefined()
-    expect(mockChat).not.toHaveBeenCalled()
-    expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+    if (runsWithPlanGate(state)) {
+      expect(mockChat).toHaveBeenCalled()
+    } else {
+      expect(mockChat).not.toHaveBeenCalled()
+      expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+    }
   })
 
-  it('queues no translation jobs on a plan without AI article translation', async () => {
-    translateEntitlement.granted = false
+  it.each(FEATURE_STATES)('queues on publish in the %s state only while live', async (state) => {
+    setFeatureState(state, 'aiArticleTranslation')
     mockGetHelpCenterConfig.mockResolvedValue({
       autoTranslate: { enabled: true },
       locales: { additional: ['de', 'fr'] },
@@ -327,6 +334,6 @@ describe('AI article translation entitlement', () => {
 
     await queueAutoTranslateOnPublish({ id: 'article_1' } as never)
 
-    expect(mockEnqueueHelpCenterTranslateJob).not.toHaveBeenCalled()
+    expect(mockEnqueueHelpCenterTranslateJob).toHaveBeenCalledTimes(runsWithPlanGate(state) ? 2 : 0)
   })
 })

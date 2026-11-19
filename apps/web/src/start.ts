@@ -16,6 +16,7 @@ import { requestContextMiddleware } from '@/lib/server/middleware/request-contex
 import { userContentHostMiddleware } from '@/lib/server/middleware/user-content-host'
 import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
+import { pausedCustomDomainMiddleware } from '@/lib/server/middleware/paused-custom-domain'
 import { sectionHostMiddleware } from '@/lib/server/middleware/section-host'
 import { auditAttributionMiddleware } from '@/lib/server/middleware/audit-attribution'
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
@@ -42,13 +43,15 @@ export const startInstance = createStart(() => {
     // request_id and an access log. Workspace resolution second — before CSRF and
     // before auth, because auth is full of `db` queries and cannot run until the
     // database has been chosen (SAAS-HOSTING-STACK.md §6). Under
-    // QUACKBACK_TENANCY=single it is a pass-through.
+    // QUACKBACK_TENANCY=single it is a pass-through. A custom domain paused
+    // after the plan limits grace is redirected right after, inside the scope.
     // OAuth/MCP CORS answers preflights before workspace resolution: a
     // preflight carries no credentials and needs no database.
     // The user-content host (USER_CONTENT_URL) is narrowed to stored-file
     // reads before anything else looks at the request.
     // Section hosts (help.acme.com for the help center) are routed once the
-    // workspace, and so its settings, is known.
+    // workspace, and so its settings, is known, and after the paused custom
+    // domain, whose decision (the default origin, the paused hosts) they read.
     // Audit attribution last: it opens the request's attribution boundary, and
     // anything it records must land in the workspace resolved above.
     requestMiddleware: [
@@ -56,6 +59,7 @@ export const startInstance = createStart(() => {
       userContentHostMiddleware,
       oauthCorsMiddleware,
       workspaceContextMiddleware,
+      pausedCustomDomainMiddleware,
       sectionHostMiddleware,
       csrfMiddleware,
       auditAttributionMiddleware,

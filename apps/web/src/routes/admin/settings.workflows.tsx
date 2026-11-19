@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { createFileRoute, Navigate } from '@tanstack/react-router'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -10,6 +11,7 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { adminPageHead } from '@/lib/client/admin-head'
+import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 
 export const Route = createFileRoute('/admin/settings/workflows')({
   head: adminPageHead('Workflows settings'),
@@ -58,7 +60,26 @@ function WorkflowsPage() {
   const { workflowsEntitled } = Route.useLoaderData()
   return (
     <WorkflowsManager entitled={workflowsEntitled} after={<AbandonedJourneyAutoCloseCard />}>
+      <PlanFeatureNotice feature="workflows" />
       <WhoRepliesFirstCard />
     </WorkflowsManager>
+  )
+}
+
+/**
+ * The paused notice. The flag check lives in this route rather than a shared
+ * module, so with the plan limits flag off the page loads no extra chunk.
+ */
+const PlanFeatureNoticeBody = lazy(
+  () => import('@/components/admin/settings/plan-feature-notice-body')
+)
+
+function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
+  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
+  if (!enabled) return null
+  return (
+    <Suspense fallback={null}>
+      <PlanFeatureNoticeBody feature={feature} />
+    </Suspense>
   )
 }

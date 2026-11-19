@@ -20,6 +20,8 @@ const calls = vi.hoisted(() => ({
   usedBySection: undefined as ((hostname: string) => boolean) | undefined,
   domainsFail: false,
   domainsUnavailable: undefined as boolean | undefined,
+  noticeShown: false,
+  pausedNoticeShown: undefined as boolean | undefined,
   card: {} as {
     cloudHostnames?: readonly string[]
     cloudDomainsUnavailable?: boolean
@@ -69,6 +71,10 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
+vi.mock('@/components/admin/settings/plan-feature-notice', () => ({
+  usePlanFeatureNoticeShown: (feature: string) => feature === 'customDomain' && calls.noticeShown,
+}))
+
 vi.mock('@/components/admin/settings/section-domains-card', () => ({
   listedSections: () => [],
   SectionDomainsCard: ({
@@ -98,13 +104,16 @@ vi.mock('@/components/admin/settings/domains-cards', () => ({
     onRefresh,
     usedBySection,
     domainsUnavailable,
+    pausedNoticeShown,
   }: {
     onRefresh: (hostname: string) => void
     usedBySection?: (hostname: string) => boolean
     domainsUnavailable?: boolean
+    pausedNoticeShown?: boolean
   }) => {
     calls.usedBySection = usedBySection
     calls.domainsUnavailable = domainsUnavailable
+    calls.pausedNoticeShown = pausedNoticeShown
     return (
       <button type="button" onClick={() => onRefresh('help.acme.com')}>
         Verify domain
@@ -147,6 +156,8 @@ beforeEach(() => {
   calls.usedBySection = undefined
   calls.domainsFail = false
   calls.domainsUnavailable = undefined
+  calls.noticeShown = false
+  calls.pausedNoticeShown = undefined
 })
 
 afterEach(() => {
@@ -224,6 +235,17 @@ describe('the Custom domains tab on Cloud', () => {
     await screen.findByText('Verify domain')
     expect(calls.usedBySection?.('help.acme.com')).toBe(true)
     expect(calls.usedBySection?.('feedback.acme.com')).toBe(false)
+  })
+
+  it('tells the Domain verification card when the plan limits notice offers the upgrade', async () => {
+    renderTab()
+    await screen.findByText('Verify domain')
+    expect(calls.pausedNoticeShown).toBe(false)
+    cleanup()
+    calls.noticeShown = true
+    renderTab()
+    await screen.findByText('Verify domain')
+    expect(calls.pausedNoticeShown).toBe(true)
   })
 
   it('says why Make primary was refused, and leaves the page where it is', async () => {

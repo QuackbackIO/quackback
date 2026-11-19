@@ -21,6 +21,26 @@ const PENDING: CustomDomainInstruction = {
 }
 
 describe('domains card', () => {
+  it('leaves the upgrade to the plan limits notice when the page shows it', () => {
+    render(
+      <DomainsCard
+        entitled={false}
+        pausedNoticeShown
+        domains={[]}
+        hostname=""
+        pending={false}
+        error={null}
+        onHostnameChange={vi.fn()}
+        onAdd={vi.fn()}
+        onRefresh={vi.fn()}
+        onMakePrimary={vi.fn()}
+        onRemove={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/Custom domains are a Pro feature/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Hostname')).not.toBeInTheDocument()
+  })
+
   it('locks add on a plan without the entitlement', () => {
     render(
       <DomainsCard

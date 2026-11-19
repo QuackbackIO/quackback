@@ -35,6 +35,7 @@ import {
 import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { DraftBar } from '@/components/admin/settings/draft-bar'
 import { ThemeModeTiles } from '@/components/admin/settings/branding/theme-mode-tiles'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -177,6 +178,7 @@ function PortalSettingsRoute() {
   return (
     <SettingsPage page="/admin/settings/portal">
       <PortalTabBar tab={tab} tabs={tabs} />
+      <PlanFeatureNotice feature="customDomain" />
       <CustomDomainsPanel />
     </SettingsPage>
   )
@@ -513,6 +515,7 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
   return (
     <SettingsPage page="/admin/settings/portal" width={tab === 'design' ? 'wide' : 'form'}>
       <PortalTabBar tab={tab} tabs={tabs} />
+      <PlanFeatureNotice feature={tab === 'design' ? 'customCss' : 'customDomain'} />
       {tab === 'design' ? navigation : <CustomDomainsPanel onLeave={markLeaving} />}
       {/* Custom domains save from their own dialog; the drafts wait on the Design tab. */}
       {tab === 'design' && (
@@ -768,5 +771,23 @@ function FontSelectGroup({ category }: { category: FontCategory }) {
         </SelectItem>
       ))}
     </SelectGroup>
+  )
+}
+
+/**
+ * The paused notice. The flag check lives in this route rather than a shared
+ * module, so with the plan limits flag off the page loads no extra chunk.
+ */
+const PlanFeatureNoticeBody = lazy(
+  () => import('@/components/admin/settings/plan-feature-notice-body')
+)
+
+function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
+  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
+  if (!enabled) return null
+  return (
+    <Suspense fallback={null}>
+      <PlanFeatureNoticeBody feature={feature} />
+    </Suspense>
   )
 }

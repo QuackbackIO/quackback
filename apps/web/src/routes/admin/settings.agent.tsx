@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useBlocker } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
@@ -19,6 +19,7 @@ import { AgentKnowledgeCard } from '@/components/admin/automation/assistant-know
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
 
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { Button } from '@/components/ui/button'
@@ -121,6 +122,7 @@ function AssistantAgentSettings() {
           />
         }
       >
+        <PlanFeatureNotice feature="aiAssistant" />
         {settingsQuery.isPending ? (
           <div className="rounded-xl border bg-card p-6" role="status">
             <p className="text-sm text-muted-foreground">
@@ -222,5 +224,23 @@ function AssistantAgentSettings() {
         }}
       />
     </>
+  )
+}
+
+/**
+ * The paused notice. The flag check lives in this route rather than a shared
+ * module, so with the plan limits flag off the page loads no extra chunk.
+ */
+const PlanFeatureNoticeBody = lazy(
+  () => import('@/components/admin/settings/plan-feature-notice-body')
+)
+
+function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
+  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
+  if (!enabled) return null
+  return (
+    <Suspense fallback={null}>
+      <PlanFeatureNoticeBody feature={feature} />
+    </Suspense>
   )
 }

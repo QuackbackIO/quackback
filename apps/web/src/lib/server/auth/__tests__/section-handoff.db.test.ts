@@ -81,6 +81,7 @@ vi.mock('@/lib/server/logger', () => ({ logger: hoisted.log }))
 vi.mock('@/lib/server/domains/settings/section-links', () => ({
   getSignInSectionOrigins: async () => hoisted.signInOrigins ?? hoisted.origins,
   getSectionOrigins: async () => hoisted.origins,
+  getServedSectionOrigins: async () => hoisted.origins,
 }))
 // The real auth instance, with one fault switch on its session lookup.
 vi.mock('@/lib/server/auth', async (importOriginal) => {

@@ -74,7 +74,19 @@ vi.mock('@/lib/server/domains/workflows/dispatcher.guards', () => ({
   hasActiveCustomerFacingRun: hoisted.hasActiveCustomerFacingRun,
 }))
 
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
+
 import { listRunnableWorkflowsFn, runWorkflowManuallyFn } from '../workflows'
+import {
+  FEATURE_STATES,
+  runsWithoutPlanGate,
+  setFeatureState,
+} from '@/lib/server/domains/plan-limits/__tests__/feature-states'
 
 function makeWorkflow(extra: Partial<Workflow> = {}): Workflow {
   return {
@@ -125,6 +137,27 @@ describe('listRunnableWorkflowsFn', () => {
         triggerType: 'conversation.created',
       },
     ])
+  })
+})
+
+describe('runWorkflowManuallyFn and the plan limits pause', () => {
+  it.each(FEATURE_STATES)('in the %s state', async (state) => {
+    setFeatureState(state, 'workflows')
+    hoisted.getWorkflow.mockResolvedValue(makeWorkflow())
+    hoisted.resolveConditionContext.mockResolvedValue(ctx)
+    hoisted.runWorkflow.mockResolvedValue({ id: 'workflow_run_1', state: 'done' })
+
+    const result = await runWorkflowManuallyFn({
+      data: { workflowId: 'workflow_1', conversationId: 'conversation_1' },
+    })
+
+    if (runsWithoutPlanGate(state)) {
+      expect(result).toEqual({ ok: true, runId: 'workflow_run_1', state: 'done' })
+    } else {
+      expect(result).toEqual({ ok: false, reason: 'not_live' })
+      expect(hoisted.runWorkflow).not.toHaveBeenCalled()
+    }
+    setFeatureState('flagOff')
   })
 })
 

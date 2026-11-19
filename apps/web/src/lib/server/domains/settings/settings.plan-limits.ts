@@ -11,7 +11,7 @@ import type {
   StoredCloudIdentityProjection,
   StoredPlanLimitsState,
 } from '@/lib/shared/db-types'
-import { getBaseUrl } from '@/lib/server/config'
+import { configuredBaseUrl } from '@/lib/server/config'
 import {
   effectiveSectionDomains,
   hostOfOrigin,
@@ -21,15 +21,20 @@ import {
   routableSectionHost,
   type SectionDomainMap,
 } from '@/lib/shared/section-domains'
+import { CACHE_KEYS } from '@/lib/server/cache'
+import { derivedMemoKey, memoizePerRequest } from '@/lib/server/request-memo'
 import { isPortalChatStartEnabled, isWidgetMessengerEnabled } from '@/lib/shared/support-surfaces'
 import { parseIdentityProjection } from './cloud/identity-projection'
 import { hostingOf, routableSectionDomains } from './section-domains.hosting'
+import { customHostnamesOf } from './settings.custom-hostnames'
 import {
+  deriveFromSettingsCached,
   findSettingsCached,
   invalidateSettingsCache,
   parseJsonConfig,
   parsePortalConfig,
   parseWidgetConfig,
+  type SettingsRecord,
 } from './settings.helpers'
 import { resolveStatusSettings } from './settings.status'
 import {
@@ -70,7 +75,46 @@ export interface PlanLimitsSources {
   visitorChatLive: boolean
 }
 
-export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null> {
+/** The configured origin, never a paused custom domain's override; '' when there is none. */
+function configuredOrigin(): string {
+  try {
+    return configuredBaseUrl()
+  } catch {
+    return ''
+  }
+}
+
+/** The section map every reader uses, from the help center and portal configs. */
+function sectionDomainsOf(
+  row: Pick<SettingsRecord, 'helpCenterConfig' | 'portalConfig'>,
+  primaryHost: string | null
+): SectionDomainMap {
+  const helpCenter = parseJsonConfig(row.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+  const portal = parsePortalConfig(row.portalConfig)
+  return effectiveSectionDomains({
+    sectionDomains: portal.sectionDomains,
+    legacyHelpDomain: helpCenter.domain,
+    primaryHost,
+  })
+}
+
+/** Every hostname a portal section names, lower-case: never the primary domain. */
+function sectionHostnamesIn(sectionDomains: SectionDomainMap): string[] {
+  return PORTAL_SECTIONS.flatMap((section) => {
+    const hostname = sectionDomains[section]?.hostname
+    return hostname ? [hostname.toLowerCase()] : []
+  })
+}
+
+/** Read once per request; a settings write forgets it with the settings row. */
+const SOURCES_MEMO_KEY = derivedMemoKey(CACHE_KEYS.WORKSPACE_SETTINGS, 'plan-limits-sources')
+
+/** The sources off the cached settings row, read once per request. Callers must not change them. */
+export function readPlanLimitsSources(): Promise<PlanLimitsSources | null> {
+  return memoizePerRequest(SOURCES_MEMO_KEY, loadPlanLimitsSources)
+}
+
+async function loadPlanLimitsSources(): Promise<PlanLimitsSources | null> {
   const row = await findSettingsCached()
   if (!row) return null
   const helpCenter = parseJsonConfig(row.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
@@ -78,11 +122,7 @@ export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null>
   const widget = parseWidgetConfig(row.widgetConfig)
   const flags = resolveFeatureFlags(row.featureFlags)
   const messenger = { ...DEFAULT_MESSENGER_CONFIG, ...(widget.messenger ?? {}) }
-  const sectionDomains = effectiveSectionDomains({
-    sectionDomains: portal.sectionDomains,
-    legacyHelpDomain: helpCenter.domain,
-    primaryHost: hostOfOrigin(getBaseUrl()),
-  })
+  const sectionDomains = sectionDomainsOf(row, hostOfOrigin(configuredOrigin()))
   const sectionOn = portalSectionsEnabled({
     featureFlags: flags,
     statusConfig: resolveStatusSettings(row.metadata),
@@ -96,10 +136,7 @@ export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null>
     authConfigVersion: row.authConfigVersion ?? 0,
     cloudIdentity: row.cloudIdentity ?? null,
     customCss: row.customCss ?? null,
-    sectionHostnames: PORTAL_SECTIONS.flatMap((section) => {
-      const hostname = sectionDomains[section]?.hostname
-      return hostname ? [hostname.toLowerCase()] : []
-    }),
+    sectionHostnames: sectionHostnamesIn(sectionDomains),
     liveCustomDomains: liveCustomDomains(
       row.cloudIdentity,
       routableSectionDomains(sectionDomains, hostingOf(row)),
@@ -135,6 +172,24 @@ function liveCustomDomains(
     if (domain.isPrimary || !parked.has(host)) live.add(host)
   }
   return [...live]
+}
+
+const NO_HOSTNAMES: ReadonlySet<string> = new Set()
+
+/**
+ * Every custom hostname set up (`customHostnamesOf`), derived once per cached
+ * copy of the settings: the cheap check every request makes before anything
+ * reads the plan state. Empty before the workspace has a settings row.
+ */
+export async function readCustomHostnames(): Promise<ReadonlySet<string>> {
+  const primaryHost = hostOfOrigin(configuredOrigin())
+  const hostnames = await deriveFromSettingsCached(`custom-hostnames:${primaryHost ?? ''}`, (row) =>
+    customHostnamesOf(
+      row.cloudIdentity ?? null,
+      sectionHostnamesIn(sectionDomainsOf(row, primaryHost))
+    )
+  )
+  return hostnames ?? NO_HOSTNAMES
 }
 
 /** The stored state straight from the database, for a caller that lost a race. */

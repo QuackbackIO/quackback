@@ -265,6 +265,20 @@ function clientSafeSettings(
   }
 }
 
+/**
+ * Custom CSS paused after the plan limits grace is not rendered (portal, help
+ * center, widget, auth pages). Returns a copy; the stored settings and the
+ * cached object are unchanged. A custom domain paused with it is read through
+ * the section map (`withoutPausedHosts`).
+ */
+async function withPausedPresentationHidden(
+  settings: WorkspaceSettings
+): Promise<WorkspaceSettings> {
+  if (!settings.customCss) return settings
+  const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  return (await isFeaturePaused('customCss')) ? { ...settings, customCss: '' } : settings
+}
+
 let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
@@ -286,7 +300,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { requestWorkspaceHost },
     { sectionOriginsOf },
     { compactSectionLinks },
-    { hostingOf, routableSectionDomains },
+    { hostingOf, routableSectionDomains, withoutPausedHosts },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/auth/registered-providers'),
@@ -302,8 +316,9 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   // Single principal read returns both session.principalType + userRole;
   // run in parallel with the settings fetch.
-  const [{ session, role: userRole, teammate }, settings, registeredAuthProviders] =
+  const [{ session, role: userRole, teammate }, storedSettings, registeredAuthProviders] =
     await Promise.all([getSessionAndRole(), getWorkspaceSettings(), getRegisteredAuthProviders()])
+  const settings = storedSettings ? await withPausedPresentationHidden(storedSettings) : null
 
   // One-time initialization on first request.
   //
@@ -390,7 +405,8 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const hosting = hostingOf(
     (settings?.settings as { cloud?: unknown; cloudIdentity?: unknown }) ?? null
   )
-  const routableDomains = routableSectionDomains(sectionDomains, hosting)
+  // A host paused with the custom domain is not linked or moved to (withoutPausedHosts).
+  const routableDomains = withoutPausedHosts(routableSectionDomains(sectionDomains, hosting))
   const baseUrl = resolveHelpCenterBaseUrl({
     domainConfig: helpDomainConfig(routableDomains),
     currentHost: requestHost,

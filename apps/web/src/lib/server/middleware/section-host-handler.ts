@@ -26,6 +26,7 @@ import { getWorkspaceSettings } from '@/lib/server/domains/settings/settings.ser
 import {
   hostingOf,
   routableSectionDomains,
+  withoutPausedHosts,
 } from '@/lib/server/domains/settings/section-domains.hosting'
 import { config } from '@/lib/server/config'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
@@ -72,13 +73,17 @@ export async function handleSectionHost<T extends NextResult>({
   const settings = await getWorkspaceSettings()
   if (!settings) return next()
 
-  const map = routableSectionDomains(
-    effectiveSectionDomains({
-      sectionDomains: settings.portalConfig?.sectionDomains,
-      legacyHelpDomain: settings.helpCenterConfig?.domain,
-      primaryHost: hostOfOrigin(config.baseUrl),
-    }),
-    hostingOf(settings.settings as { cloud?: unknown; cloudIdentity?: unknown })
+  // A host paused with the custom domain keeps its entry: it serves its own
+  // section in place, and nothing moves a visitor there (`withoutPausedHosts`).
+  const map = withoutPausedHosts(
+    routableSectionDomains(
+      effectiveSectionDomains({
+        sectionDomains: settings.portalConfig?.sectionDomains,
+        legacyHelpDomain: settings.helpCenterConfig?.domain,
+        primaryHost: hostOfOrigin(config.baseUrl),
+      }),
+      hostingOf(settings.settings as { cloud?: unknown; cloudIdentity?: unknown })
+    )
   )
   if (Object.keys(map).length === 0) return next()
 

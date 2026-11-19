@@ -371,6 +371,17 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'for up to the copy lifetime.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/settings/settings.service.ts',
+    name: 'derivedFromSettings',
+    category: 'workspace-scoped-key',
+    keyedBy: 'WorkspaceSettings',
+    reason:
+      "Keyed by one workspace's cached settings copy, which the workspace-keyed settings cache and " +
+      'the request memo hand out only to that workspace, so a lookup can only find values derived ' +
+      "from its own row. Shared, one workspace would read another's custom hostnames. It is a " +
+      'WeakMap, so an entry goes when its copy does.',
+  },
+  {
     file: 'apps/web/src/lib/server/mcp/untrusted.ts',
     name: 'itemFacts',
     category: 'workspace-scoped-key',

@@ -18,15 +18,19 @@ vi.mock('@/lib/server/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/cache')>()),
   cacheGet: async () => null,
   cacheSet: async () => {},
-  cacheDel: async () => {},
+  // The shared tier is off; this process's copies are still forgotten.
+  cacheDel: async (...keys: string[]) =>
+    (await import('@/lib/server/local-cache')).forgetCachedKeys(...keys),
 }))
 vi.mock('@/lib/server/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/config')>()),
+  configuredBaseUrl: () => 'https://feedback.acme.com',
   getBaseUrl: () => 'https://feedback.acme.com',
 }))
 
-const { readPlanLimitsSources } = await import('../settings.plan-limits')
-const { invalidateSettingsCache } = await import('../settings.helpers')
+const { readCustomHostnames, readPlanLimitsSources } = await import('../settings.plan-limits')
+const { deriveFromSettingsCached, invalidateSettingsCache } = await import('../settings.helpers')
+const { runWithLogContext } = await import('@/lib/server/log-context')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -121,5 +125,50 @@ describe.skipIf(!fixture.available)('plan limits section hostnames (real DB)', (
       'ideas.acme.com',
       'roadmap.acme.com',
     ])
+  })
+
+  it('reads every custom hostname, from the identity projection and the section map', async () => {
+    await seed({
+      cloudIdentity: {
+        version: 1,
+        displayName: 'Acme',
+        canonicalOrigin: 'https://feedback.acme.com',
+        platformHostname: 'acme.example.com',
+        customDomains: [
+          { hostname: 'feedback.acme.com', readiness: 'ready', isPrimary: true, updatedAt: NOW },
+        ],
+        updatedAt: NOW,
+      },
+      portalConfig: portal({ status: { hostname: 'status.acme.com', verifiedAt: null } }),
+    })
+    expect([...(await readCustomHostnames())]).toEqual(['feedback.acme.com', 'status.acme.com'])
+  })
+
+  it('reads no custom hostname when none is set up', async () => {
+    await seed({})
+    expect((await readCustomHostnames()).size).toBe(0)
+  })
+
+  it('derives once per copy of the settings, and again after a write', async () => {
+    await seed({ portalConfig: portal({ help: { hostname: 'help.acme.com', verifiedAt: NOW } }) })
+    const derive = vi.fn((row: { name: string }) => row.name)
+    await runWithLogContext({} as never, async () => {
+      expect(await deriveFromSettingsCached('name', derive)).toBe('Acme')
+      expect(await deriveFromSettingsCached('name', derive)).toBe('Acme')
+      expect(derive).toHaveBeenCalledTimes(1)
+      // A settings write drops the request's copy.
+      await testDb.update(settings).set({ name: 'Acme Two' })
+      await invalidateSettingsCache()
+      expect(await deriveFromSettingsCached('name', derive)).toBe('Acme Two')
+      expect(derive).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('reads the sources once per request', async () => {
+    await seed({ helpCenterConfig: legacyHelp('help.acme.com') })
+    await runWithLogContext({} as never, async () => {
+      const first = await readPlanLimitsSources()
+      expect(await readPlanLimitsSources()).toBe(first)
+    })
   })
 })

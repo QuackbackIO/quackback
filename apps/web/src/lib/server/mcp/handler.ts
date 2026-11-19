@@ -339,14 +339,16 @@ async function handleMcpRequestInBoundary(request: Request): Promise<Response> {
 
   // Plan gate, deliberately after auth: a 402 names the workspace's plan, which
   // is an answer only a caller who has already identified itself should get.
-  // No-op on any install without a plan, which is every self-hosted one — see
-  // domains/settings/cloud/entitlements.ts.
-  const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
-  try {
-    await requireEntitlement('mcpServer')
-  } catch (err) {
-    if (!(err instanceof EntitlementRequiredError)) throw err
-    return jsonRpcEntitlementError(err)
+  // Open on any install without a plan, which is every self-hosted one — see
+  // domains/settings/cloud/entitlements.ts. MCP is not a plan limits grace
+  // feature, so this is the plan's own grant, as before.
+  const { isFeatureLive } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  if (!(await isFeatureLive('mcpServer'))) {
+    const [{ buildRefusal }, { getCloudConfig }] = await Promise.all([
+      import('@/lib/server/domains/settings/cloud/entitlements'),
+      import('@/lib/server/domains/settings/cloud/cloud.service'),
+    ])
+    return jsonRpcEntitlementError(buildRefusal(await getCloudConfig(), 'mcpServer'))
   }
 
   // Portal user access check
