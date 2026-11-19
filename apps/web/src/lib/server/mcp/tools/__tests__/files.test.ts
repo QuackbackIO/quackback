@@ -9,7 +9,7 @@ vi.mock('@/lib/server/domains/files/files.service', () => ({
   toUploadedFile: (...a: unknown[]) => mockToUploadedFile(...a),
 }))
 
-import { registerFileTools } from '../files'
+import { registerFileTools, MCP_UPLOAD_MAX_BYTES } from '../files'
 import type { McpAuthContext } from '../../types'
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
@@ -89,8 +89,8 @@ describe('file MCP tools', () => {
     expect(description).not.toContain('—')
   })
 
-  it('rejects more than 5 MB decoded, with a clear message, before calling storeFile', async () => {
-    const big = new Uint8Array(5 * 1024 * 1024 + 1)
+  it('rejects more than the upload limit decoded, with a clear message, before calling storeFile', async () => {
+    const big = new Uint8Array(MCP_UPLOAD_MAX_BYTES + 1)
     const out = await collect(teamAuth).get('upload_file')!({
       name: 'big.bin',
       contentBase64: Buffer.from(big).toString('base64'),
@@ -101,5 +101,6 @@ describe('file MCP tools', () => {
     const text = (out.content[0] as { text: string }).text.toLowerCase()
     expect(text).toContain('too large')
     expect(text).toContain('mb')
+    expect(text).toContain('/api/v1/files')
   })
 })

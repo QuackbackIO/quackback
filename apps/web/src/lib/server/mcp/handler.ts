@@ -10,7 +10,6 @@
  * the MCP SDK's OAuth discovery flow.
  */
 
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import type { Role } from '@/lib/shared/roles'
 import { requestToResourceInput, verifyAccessTokenRequest } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
@@ -39,6 +38,10 @@ import {
   setAuditAttribution,
 } from '@/lib/server/audit/attribution'
 import { createMcpServer } from './server'
+import { createMcpTransport } from './transport'
+import { MCP_MAX_REQUEST_BYTES, MCP_UPLOAD_MAX_BYTES } from './tools/files'
+import { contentLengthExceeds } from '@/lib/server/utils/read-body'
+import { formatBytes } from '@/lib/shared/files/file-types'
 import { readOAuthPrincipal } from './oauth-principal'
 import type { PrincipalId } from '@quackback/ids'
 import type { McpAuthContext, McpScope } from './types'
@@ -362,10 +365,15 @@ async function handleMcpRequestInBoundary(request: Request): Promise<Response> {
 }
 
 async function serveMcpRequest(request: Request, auth: McpAuthContext): Promise<Response> {
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  })
+  // The transport refuses an oversized body too, but with a bare byte count;
+  // most oversized requests are file uploads, so say what the limit is for.
+  if (contentLengthExceeds(request, MCP_MAX_REQUEST_BYTES)) {
+    return jsonRpcError(
+      413,
+      `Request is too large (max ${formatBytes(MCP_MAX_REQUEST_BYTES)}). upload_file accepts files up to ${formatBytes(MCP_UPLOAD_MAX_BYTES)}; upload larger files with the REST API (POST /api/v1/files).`
+    )
+  }
+  const transport = createMcpTransport()
 
   const server = createMcpServer(auth)
   await server.connect(transport)
