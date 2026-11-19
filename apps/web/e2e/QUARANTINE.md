@@ -119,3 +119,14 @@ here or the assertions are stale; not traced. The paperclip label
   composer shows no Image option for the signed-in teammate. The comment
   editor turns images on and the post page passes an upload handler, so the
   cause is somewhere between them. owner: unassigned, review by: 2026-12-02.
+
+### Support API and MCP (support suite)
+
+- `support/mcp.spec.ts` › MCP tickets › API-63 reply_to_ticket and
+  add_ticket_note take up to 10000 characters as advertised. The tools'
+  schemas accept content up to 10000 characters (`mcp/tools/tickets.ts:328`,
+  `:371`), but the shared message write refuses anything over 4000
+  (`messages/message-core.ts:93`, `MAX_CONVERSATION_MESSAGE_LENGTH`), so a
+  9000-character reply or note fails with "Message must be 4,000 characters
+  or less". Either the schemas or the limit is wrong. owner: unassigned,
+  review by: 2026-12-03.
