@@ -121,6 +121,24 @@ describe('POST /api/v1/tickets (create)', () => {
     expect(actor.principalType).toBe('service')
   })
 
+  it('never passes a due date through: dueAt is the SLA target, not a user field (TKT-78)', async () => {
+    mockCreateTicket.mockResolvedValue(ticketDTO)
+    const res = await post(ListRoute)({
+      request: jsonReq('https://x.test/api/v1/tickets', {
+        type: 'customer',
+        title: 'Due tomorrow',
+        dueAt: '2030-01-01T00:00:00.000Z',
+        due_at: '2030-01-01T00:00:00.000Z',
+      }),
+      params: {},
+    })
+    expect(res.status).toBe(201)
+    const [input] = mockCreateTicket.mock.calls[0]
+    expect(input).toMatchObject({ title: 'Due tomorrow' })
+    expect(input).not.toHaveProperty('dueAt')
+    expect(input).not.toHaveProperty('due_at')
+  })
+
   it('omits descriptionJson when no description is given', async () => {
     mockCreateTicket.mockResolvedValue(ticketDTO)
     await post(ListRoute)({
