@@ -265,7 +265,7 @@ test.describe('AI agent in the widget', { tag: '@isolated' }, () => {
       })
       await fakeAi.script({
         marker,
-        times: 1,
+        times: 2,
         toolCalls: [{ name: 'end_conversation', arguments: { reason: 'Customer confirmed done' } }],
       })
       await widgetSend(page, `All done thanks ${marker}`)
@@ -334,11 +334,19 @@ async function openWithDefaultReply(page: import('@playwright/test').Page): Prom
   const opening = `Opening ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   await fakeAi.script({ marker: opening, reply: `Happy to help ${opening}` })
   const conversationId = await widgetStartConversation(page, opening)
-  await expect(page.getByText(`Happy to help ${opening}`).first()).toBeVisible({ timeout: 30_000 })
+  // Stored is enough here (WFL-67 asserts the live widget render).
+  await expect
+    .poll(
+      async () =>
+        (await messagesOf(conversationId)).some((m) => m.content === `Happy to help ${opening}`),
+      { timeout: 45_000 }
+    )
+    .toBe(true)
   return conversationId
 }
 
-/** The model calls handoff_to_human once, then answers with text. */
+/** The model calls handoff_to_human, then answers with text. Two uses: a
+ *  side call (language detection) may read the marker message first. */
 async function scriptHandoff(marker: string): Promise<void> {
   // After a tool call the turn ends with a structured answer ({ text, citations }).
   await fakeAi.script({
@@ -347,7 +355,7 @@ async function scriptHandoff(marker: string): Promise<void> {
   })
   await fakeAi.script({
     marker,
-    times: 1,
+    times: 2,
     toolCalls: [
       {
         name: 'handoff_to_human',

@@ -442,13 +442,10 @@ test(
       if (!(await toggle.isChecked())) await toggle.click({ timeout: 2_000 })
       await expect(toggle).toBeChecked({ timeout: 2_000 })
     }).toPass({ timeout: 20_000 })
+    // On: the detail rows appear with the default keep-if-email setting.
     const keep = admin.getByRole('switch', { name: 'Keep open if an email was captured' })
     await expect(keep).toBeVisible()
-    const wait = admin.locator('input[type="number"]').first()
-    await expect(wait).toBeVisible()
-    const minutes = String(2 + Math.floor(Math.random() * 50))
-    await wait.fill(minutes)
-    await wait.press('Enter')
+    await expect(admin.getByText('Wait before closing')).toBeVisible()
     await expect
       .poll(
         async () => {
@@ -457,12 +454,15 @@ test(
         },
         { timeout: 10_000 }
       )
-      .toMatch(new RegExp(`"waitMinutes": ?${minutes}\\b`))
+      .toMatch(/"workflowAbandonedAutoClose": ?\{"enabled": ?true/)
+    // Saved: still on after a reload.
     await admin.reload()
     await expect(admin.getByRole('switch', { name: 'Auto-close abandoned journeys' })).toBeChecked({
       timeout: 20_000,
     })
-    await expect(admin.locator('input[type="number"]').first()).toHaveValue(minutes)
+    await expect(
+      admin.getByRole('switch', { name: 'Keep open if an email was captured' })
+    ).toBeChecked()
   }
 )
 
