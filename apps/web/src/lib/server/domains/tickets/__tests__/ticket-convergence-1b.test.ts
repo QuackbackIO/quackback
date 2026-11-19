@@ -123,7 +123,7 @@ import {
   eq,
 } from '@/lib/server/db'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
-import { appendInboundTicketReply } from '../requester.service'
+import { appendInboundTicketReply, createMyTicket } from '../requester.service'
 import { createTicket, createTicketCore } from '../ticket.service'
 import { sendVisitorMessage } from '../../conversation/conversation.service'
 
@@ -574,6 +574,47 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
         .from(conversationMessages)
         .where(eq(conversationMessages.conversationId, pairConversationId))
       expect(messages).toHaveLength(1)
+    })
+  })
+
+  describe('a blocked requester', () => {
+    async function blockedRequester(): Promise<PrincipalId> {
+      const requesterP = await seedPrincipal({})
+      await testDb
+        .update(principal)
+        .set({ blockedAt: new Date() })
+        .where(eq(principal.id, requesterP))
+      return requesterP
+    }
+
+    it('cannot file a title-only ticket, and nothing is created', async () => {
+      await seedDefaultStatus()
+      const requesterP = await blockedRequester()
+
+      await expect(
+        createMyTicket(requesterActor(requesterP), { title: 'let me in' })
+      ).rejects.toMatchObject({ code: 'BLOCKED' })
+
+      expect(await testDb.select().from(tickets)).toHaveLength(0)
+      expect(await testDb.select().from(conversations)).toHaveLength(0)
+      expect(ticketEmit.emitTicketCreated).not.toHaveBeenCalled()
+      expect(convEmit.emitConversationCreated).not.toHaveBeenCalled()
+    })
+
+    it('cannot file a ticket with a description, and leaves no half-made pair behind', async () => {
+      await seedDefaultStatus()
+      const requesterP = await blockedRequester()
+
+      await expect(
+        createMyTicket(requesterActor(requesterP), {
+          title: 'let me in',
+          description: 'please',
+        })
+      ).rejects.toMatchObject({ code: 'BLOCKED' })
+
+      expect(await testDb.select().from(tickets)).toHaveLength(0)
+      expect(await testDb.select().from(conversations)).toHaveLength(0)
+      expect(await testDb.select().from(conversationMessages)).toHaveLength(0)
     })
   })
 
