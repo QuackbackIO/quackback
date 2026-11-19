@@ -777,8 +777,11 @@ test.describe('inbox thread actions', () => {
     }
   )
 
+  // Routing is off in this project (the serial routing specs cover the
+  // requeue with routing on, RTE-41 and RTE-44): nothing would hand the work
+  // on, so going offline takes nothing away.
   test(
-    'INB-91 when a teammate goes offline their unanswered threads go back to the queue',
+    'INB-91 with routing off, a teammate who goes offline keeps their unanswered threads',
     {
       tag: '@nightly',
     },
@@ -795,25 +798,20 @@ test.describe('inbox thread actions', () => {
         snoozedUntil: new Date(Date.now() + 86_400_000),
         visitorName: `Snoozed ${marker}`,
       })
+      const presence = async () =>
+        (await supportDb()`SELECT 1 FROM presence_stream WHERE principal_id = ${mate.principalId}`)
+          .length
       const held = await holdPresenceFor(mate.cookie)
-      await expect
-        .poll(
-          async () =>
-            (
-              await supportDb()`SELECT 1 FROM presence_stream WHERE principal_id = ${mate.principalId}`
-            ).length
-        )
-        .toBeGreaterThan(0)
+      await expect.poll(presence).toBeGreaterThan(0)
       held.release()
-      await waitForConversation(
-        unanswered.uuid,
-        'the requeue',
-        (r) => r.assigned_agent_principal_id === null,
-        75_000
-      )
-      expect((await conversationState(snoozed.uuid)).assigned_agent_principal_id).toBe(
-        mate.principalUuid
-      )
+      // The stream's teardown clears presence, then decides on the requeue.
+      await expect.poll(presence, { timeout: 75_000 }).toBe(0)
+      await new Promise((r) => setTimeout(r, 1_500))
+      for (const conversation of [unanswered, snoozed]) {
+        expect((await conversationState(conversation.uuid)).assigned_agent_principal_id).toBe(
+          mate.principalUuid
+        )
+      }
     }
   )
 })

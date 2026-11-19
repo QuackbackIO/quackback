@@ -53,6 +53,11 @@ vi.mock('../routing', () => ({
   routeConversation: (...a: unknown[]) => routeConversation(...a),
 }))
 
+// The offline requeue runs only with routing on.
+vi.mock('@/lib/server/domains/settings/settings.conversation-routing', () => ({
+  getConversationRouting: async () => ({ enabled: true, strategy: 'auto_assign_active' }),
+}))
+
 vi.mock('@/lib/server/test-data', () => ({
   activeTestOwnerOf: vi.fn(async () => null),
   testOwnerOf: vi.fn(async () => null),

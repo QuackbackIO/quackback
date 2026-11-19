@@ -1919,15 +1919,21 @@ export async function assignTeam(
 
 /**
  * Free an offline agent's unanswered conversations (see shouldRequeueOnAgentOffline
- * for the rule) and re-route each to another active agent when routing is on;
- * any that can't be routed stay in the unassigned queue. Called when an agent's
- * last live stream closes. Best-effort + system-driven (no actor): a failure
- * must not break stream teardown, and the work is idempotent.
+ * for the rule) and re-route each to another active agent; any that can't be
+ * routed stay in the unassigned queue. Called when an agent's last live stream
+ * closes. Only while conversation routing is on: with it off nothing would
+ * hand the work on, so the agent keeps what they hold (an unreadable setting
+ * counts as off). Best-effort + system-driven (no actor): a failure must not
+ * break stream teardown, and the work is idempotent.
  */
 export async function requeueUnansweredOnAgentOffline(
   agentPrincipalId: PrincipalId
 ): Promise<void> {
   try {
+    const { getConversationRouting } =
+      await import('@/lib/server/domains/settings/settings.conversation-routing')
+    if (!(await getConversationRouting()).enabled) return
+
     // A test thread stays with the teammate who owns it, online or not.
     const assigned = await db
       .select({ id: conversations.id, status: conversations.status })
@@ -1979,7 +1985,7 @@ export async function requeueUnansweredOnAgentOffline(
       .returning()
 
     // Re-route each freed conversation to another active agent (routing fires
-    // only when enabled + someone is active); any that can't be routed stay in
+    // only when someone is active); any that can't be routed stay in
     // the unassigned queue, and we just broadcast that state. One at a time (not
     // in parallel) so the load-aware strategy sees each prior assignment and
     // spreads the batch across the online team instead of piling it onto one.

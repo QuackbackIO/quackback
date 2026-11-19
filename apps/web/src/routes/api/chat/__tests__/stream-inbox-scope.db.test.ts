@@ -295,6 +295,13 @@ const SCOPED_KEYS = [
   PERMISSIONS.TICKET_ASSIGN,
 ] as PermissionKey[]
 
+/** Turn conversation routing on or off through the real settings writer. */
+async function setRouting(enabled: boolean): Promise<void> {
+  const { updateConversationRouting } =
+    await import('@/lib/server/domains/settings/settings.conversation-routing')
+  await updateConversationRouting({ enabled, strategy: 'auto_assign_active' })
+}
+
 /**
  * A scoped teammate on team X, a workspace-wide viewer, an admin who does the
  * writes, and a conversation and a ticket on each of teams X and Y.
@@ -551,11 +558,13 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     await settle()
     expect(scoped.frames().filter((f) => f.event === 'inbox_item_removed')).toHaveLength(1)
 
-    // The offline requeue: the agent loses an unanswered conversation.
+    // The offline requeue, with routing on: the agent loses an unanswered
+    // conversation.
     await testDb
       .update(conversations)
       .set({ assignedAgentPrincipalId: w.scoped, status: 'open' })
       .where(eq(conversations.id, w.conv.y))
+    await setRouting(true)
     await requeueUnansweredOnAgentOffline(w.scoped)
     await settle()
     // Nobody took it, so it waits in the Unassigned queue, which the teammate
@@ -582,6 +591,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
       .where(eq(conversations.id, w.conv.y))
     const scoped = await openInbox(w.scoped)
     const viewAll = await openInbox(w.viewAll)
+    await setRouting(true)
     routing.to = w.other
     await requeueUnansweredOnAgentOffline(w.scoped)
     await settle()
@@ -599,6 +609,29 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
             ?.principalId
       )
     ).toContain(w.other)
+  })
+
+  // With routing off nothing hands the work on, so going offline takes
+  // nothing away: the conversation stays with the agent who holds it.
+  it('leaves an offline agent their unanswered conversation while routing is off', async () => {
+    const w = await seedWorld()
+    await testDb
+      .update(conversations)
+      .set({ assignedAgentPrincipalId: w.scoped, assignedTeamId: null, status: 'open' })
+      .where(eq(conversations.id, w.conv.y))
+    const scoped = await openInbox(w.scoped)
+    await setRouting(false)
+    // Routing would place it elsewhere if it ran at all.
+    routing.to = w.other
+    await requeueUnansweredOnAgentOffline(w.scoped)
+    await settle()
+
+    const [after] = await testDb
+      .select({ assignee: conversations.assignedAgentPrincipalId })
+      .from(conversations)
+      .where(eq(conversations.id, w.conv.y))
+    expect(after.assignee).toBe(w.scoped)
+    expect(scoped.frames().filter((f) => f.event === 'inbox_item_removed')).toEqual([])
   })
 
   describe('the Unassigned queue: no assignee and no team', () => {

@@ -1,8 +1,8 @@
 /**
  * Raw inbox streams for the team-access specs. Streams are always opened for
  * a test's own teammates (newTeammate), never for the shared people: an
- * inbox stream marks its owner online, and closing their last one frees
- * their unanswered conversations.
+ * inbox stream marks its owner online, and closing their last one while
+ * routing is on frees their unanswered conversations.
  */
 import type { APIRequestContext } from '@playwright/test'
 import { expect } from '@playwright/test'

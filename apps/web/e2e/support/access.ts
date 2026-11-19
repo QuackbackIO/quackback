@@ -8,10 +8,11 @@
  * team B" in one statement. Anything a journey observes happening (a reply,
  * an assignment, a live frame) goes through the app instead.
  *
- * Assignees: when a teammate's last live stream closes, the app frees their
- * open conversations that have no public agent reply (stream.ts, offline
- * requeue). A conversation seeded onto a shared person (admin, scoped, ...)
- * therefore gets `agentReply: true`, or is assigned to a test's own teammate.
+ * Assignees: when a teammate's last live stream closes while conversation
+ * routing is on, the app frees their open conversations that have no public
+ * agent reply (stream.ts, offline requeue). Only the serial routing specs turn
+ * routing on, but a conversation seeded onto a shared person (admin, scoped,
+ * ...) still gets `agentReply: true`, or is assigned to a test's own teammate.
  */
 import { randomBytes } from 'node:crypto'
 import { expect, type Locator, type Page } from '@playwright/test'
