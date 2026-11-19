@@ -32,6 +32,7 @@ import { resolveBlockReply, type BlockReplyInput, type ResolvedBlockReply } from
 import { isTeamMember } from '@/lib/shared/roles'
 import type {
   ConversationAttachment,
+  ConversationMessage,
   ConversationMessageCitation,
   Team,
   Transaction,
@@ -1564,6 +1565,32 @@ async function emitSnoozeSystemMessage(
  * null when routing declines (disabled / nobody active) or the row was claimed
  * concurrently — the caller then leaves it in the unassigned queue.
  */
+/**
+ * Put a conversation opened outside the visitor-message path (a cold inbound
+ * email) in the team inbox live: the agent-side conversation, then its first
+ * message, as the widget start publishes them. Routing may then assign it and
+ * publish its own update; without this, a conversation routing leaves in the
+ * Unassigned queue would appear only on a refresh.
+ */
+export async function publishConversationStarted(
+  conversation: Conversation,
+  message: ConversationMessage,
+  author: ConversationAuthorInput
+): Promise<void> {
+  const authored = await resolveAuthorAudiences(author)
+  const agentDTO = await conversationToDTO(conversation, 'agent')
+  await publishConversationUpdate(agentDTO.id, agentDTO)
+  publishConversationMessage(
+    conversation.id,
+    {
+      visitor: toMessageDTO(message, authored.publicAuthor),
+      agent: toMessageDTO(message, authored.supportAuthor),
+    },
+    { conversationUpdated: true },
+    conversationScopeOf(conversation)
+  )
+}
+
 /** Best-effort auto-assign for any channel's new-conversation path. */
 export async function routeUnassignedConversation(
   conversation: Conversation
