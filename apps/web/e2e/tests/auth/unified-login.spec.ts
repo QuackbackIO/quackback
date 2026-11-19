@@ -218,62 +218,53 @@ test('(3) private portal gate: sign-in in the gate lands on /admin', async ({ pa
 // /?auth=signin escape hatch: the dialog opens with the seeded OIDC button and
 // the break-glass recovery-code link (callbackUrl=/admin satisfies isTeamCallback).
 //
-// DEFERRED — anonymous `/` → IdP redirect: requires a live OIDC discovery
-// document. The instant-SSO resolver calls auth.api.signInSocial which
-// fetches the provider's discovery URL; with a synthetic URL this returns null
-// and no redirect fires. Tracking: run this sub-case against the CI environment
-// where a mock-OIDC container is available.
+// The seeded provider's discovery URL is unreachable, so the auth runtime skips
+// it. It is still the sole sign-in method, so the instant-SSO shortcut tries
+// it; that attempt fails and the page falls back to the dialog, which is what
+// this journey checks. The redirect itself (anonymous `/` → IdP) needs a live
+// discovery document and stays untested here.
 
-test(
-  '(4) /?auth=signin shows the dialog with OIDC button and recovery-code link',
-  {
-    tag: '@quarantine',
-    annotation: {
-      type: 'quarantine',
-      description:
-        'Needs a reachable OIDC discovery document. With it unreachable the provider is skipped, and with password and magic link off GET / fails with "Provider not found" and shows the error page (suspected product bug: it should fall back, not fail).',
-    },
-  },
-  async ({ page }) => {
-    seedIdentityProvider({
-      registrationId: BTN_RID,
-      label: BTN_LABEL,
-      clientId: 'e2e-unified-btn-client',
-      discoveryUrl: DISCOVERY_URL,
-      enabled: true,
-      showButton: true,
+test('(4) /?auth=signin shows the dialog with OIDC button and recovery-code link', async ({
+  page,
+}) => {
+  seedIdentityProvider({
+    registrationId: BTN_RID,
+    label: BTN_LABEL,
+    clientId: 'e2e-unified-btn-client',
+    discoveryUrl: DISCOVERY_URL,
+    enabled: true,
+    showButton: true,
+  })
+  // Disable password + magic-link so Stage 1 is SSO-only: the recovery link
+  // renders only in the SSO views, not in the generic email-entry Stage 1.
+  setPortalAuthMethods('disable')
+  try {
+    // ?auth=signin opens the dialog; ?callbackUrl=/admin makes isTeamCallback true
+    // so the recovery-code link renders inside the SSO-only Stage 1.
+    await page.goto('/?auth=signin&callbackUrl=%2Fadmin')
+    await page.waitForLoadState('networkidle')
+
+    // Dialog must open (?auth=signin triggers useAutoOpenAuthDialog).
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 })
+
+    // The seeded button-only provider's "Sign in with …" button appears.
+    await expect(
+      page.getByRole('button', { name: new RegExp(`Sign in with ${BTN_LABEL}`, 'i') })
+    ).toBeVisible({ timeout: 10000 })
+
+    // Break-glass recovery-code link is visible (SSO-only Stage 1 + callbackUrl=/admin → isTeamCallback).
+    await expect(page.getByRole('link', { name: /use a recovery code/i })).toBeVisible({
+      timeout: 10000,
     })
-    // Disable password + magic-link so Stage 1 is SSO-only: the recovery link
-    // renders only in the SSO views, not in the generic email-entry Stage 1.
-    setPortalAuthMethods('disable')
-    try {
-      // ?auth=signin opens the dialog; ?callbackUrl=/admin makes isTeamCallback true
-      // so the recovery-code link renders inside the SSO-only Stage 1.
-      await page.goto('/?auth=signin&callbackUrl=%2Fadmin')
-      await page.waitForLoadState('networkidle')
-
-      // Dialog must open (?auth=signin triggers useAutoOpenAuthDialog).
-      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 })
-
-      // The seeded button-only provider's "Sign in with …" button appears.
-      await expect(
-        page.getByRole('button', { name: new RegExp(`Sign in with ${BTN_LABEL}`, 'i') })
-      ).toBeVisible({ timeout: 10000 })
-
-      // Break-glass recovery-code link is visible (SSO-only Stage 1 + callbackUrl=/admin → isTeamCallback).
-      await expect(page.getByRole('link', { name: /use a recovery code/i })).toBeVisible({
-        timeout: 10000,
-      })
-      await expect(page.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
-        'href',
-        /\/auth\/recovery/
-      )
-    } finally {
-      removeIdentityProvider(BTN_RID)
-      setPortalAuthMethods('restore')
-    }
+    await expect(page.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
+      'href',
+      /\/auth\/recovery/
+    )
+  } finally {
+    removeIdentityProvider(BTN_RID)
+    setPortalAuthMethods('restore')
   }
-)
+})
 
 // ── Journey 5 ────────────────────────────────────────────────────────────────
 // Recovery break-glass: /auth/recovery renders the standalone form directly,
