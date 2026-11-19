@@ -252,7 +252,7 @@ test.describe('presence', () => {
         expect(await presenceRows(t.principalId)).not.toEqual([])
         await widget.reload()
         await widget.getByText(first).first().click()
-        await expect(widget.getByText("We'll reply by email")).toBeVisible({ timeout: 15_000 })
+        await expect(widget.getByText("We'll reply here")).toBeVisible({ timeout: 15_000 })
         await expect(widget.getByText("We're online")).toHaveCount(0)
         s.close()
       }
@@ -269,7 +269,7 @@ test.describe('presence', () => {
         const first = `offline at first ${marker}`
         const { conversationId } = await visitor.send(first)
         const widget = await openWidgetAs(browser, visitor, first)
-        await expect(widget.getByText("We'll reply by email")).toBeVisible({ timeout: 15_000 })
+        await expect(widget.getByText("We'll reply here")).toBeVisible({ timeout: 15_000 })
         // Nobody online: the teammate's typing (activity on this thread) is the
         // only sign someone is there, and the badge flips at once, well before
         // the 30 s poll (which would still say nobody is online).
@@ -479,7 +479,7 @@ test.describe('presence', () => {
           expect(new Date(q.nextOpenAt!).getUTCHours()).toBe(10)
           await widget.reload()
           await widget.getByText(first).first().click()
-          await expect(widget.getByText("We'll reply by email")).toBeVisible({ timeout: 15_000 })
+          await expect(widget.getByText("We'll reply here")).toBeVisible({ timeout: 15_000 })
           await expect(widget.getByText(/Back /)).toBeVisible()
           await admin.dispose()
         } finally {

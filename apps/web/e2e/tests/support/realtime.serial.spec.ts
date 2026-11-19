@@ -111,7 +111,7 @@ test.describe('realtime and presence', () => {
         // Still connected, no longer available: the widget's next read says offline.
         expect(await presenceRows(t.principalId)).not.toEqual([])
         await expect.poll(() => agentsOnline(visitor), { timeout: 10_000 }).toBe(false)
-        await expect(widget.getByText("We'll reply by email")).toBeVisible({ timeout: 40_000 })
+        await expect(widget.getByText("We'll reply here")).toBeVisible({ timeout: 40_000 })
         tab.close()
       } finally {
         await restore()
