@@ -456,13 +456,16 @@ async function sendViaPairConversation(
 }
 
 /**
- * Signal `ticket.replied` for a message written straight on a pair's
- * conversation: a customer message (the widget, the portal Messages thread, an
+ * A message written straight on a pair's conversation is a reply on its
+ * ticket: a customer message (the widget, the portal Messages thread, an
  * email reply to the conversation's address) or a teammate's reply typed in
- * the conversation view. Called by the conversation send after its own
- * `message.created`; a conversation with no customer ticket signals nothing.
- * Messages the ticket side writes onto the pair never come through here:
- * their callers signal for themselves.
+ * the conversation view. Does what a reply from the ticket view does: bumps
+ * `tickets.updatedAt` (listMyTickets orders by it), makes a teammate who
+ * replied a watcher (reason 'replier'; never a service principal such as an
+ * API key), then signals `ticket.replied`. Called by the conversation send
+ * after its own `message.created`; a conversation with no customer ticket
+ * does nothing. Messages the ticket side writes onto the pair never come
+ * through here: their callers do all of this for themselves.
  */
 export async function emitPairTicketReplied(
   conversationId: ConversationId,
@@ -471,7 +474,12 @@ export async function emitPairTicketReplied(
 ): Promise<void> {
   const ticketId = await resolvePairTicketIdForConversation(conversationId)
   if (!ticketId) return
-  const ticket = await loadTicketOr404(ticketId)
+  const updatedAt = new Date(message.createdAt)
+  await db.update(tickets).set({ updatedAt }).where(eq(tickets.id, ticketId))
+  const ticket = { ...(await loadTicketOr404(ticketId)), updatedAt }
+  if (message.senderType === 'agent' && actor.principalType === 'user' && actor.principalId) {
+    await safeSubscribeToTicket(actor.principalId, ticketId, 'replier')
+  }
   await emitTicketReplied(actor, ticket, message)
 }
 
