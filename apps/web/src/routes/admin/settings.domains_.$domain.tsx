@@ -1,7 +1,7 @@
 import { createFileRoute, Navigate, useNavigate, useRouter } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
+import { domainUseLinks } from '@/lib/shared/domains-permissions'
 import { visibleDomainUses } from '@/lib/shared/domain-uses'
 import { portalSectionsEnabled } from '@/lib/shared/section-domains'
 import { adminPageHead } from '@/lib/client/admin-head'
@@ -15,7 +15,7 @@ import { listedSections } from '@/components/admin/settings/section-domains-card
 export const Route = createFileRoute('/admin/settings/domains_/$domain')({
   head: adminPageHead('Domain settings'),
   loader: async ({ context, params }) => {
-    assertRouteAnyPermission(context.permissions, DOMAINS_PAGE_PERMISSIONS)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/domains/$domain')
     const { loadDomainPage } = await import('@/lib/client/domain-page-loader')
     return loadDomainPage(context, params.domain)
   },

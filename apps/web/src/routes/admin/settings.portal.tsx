@@ -10,7 +10,7 @@ import {
   useTransition,
 } from 'react'
 import { z } from 'zod'
-import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { ClientOnly, createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -91,7 +91,6 @@ import {
 import { adminPageHead } from '@/lib/client/admin-head'
 import { SETTINGS_PAGES } from '@/lib/shared/settings-pages'
 import {
-  PORTAL_PAGE_PERMISSIONS,
   PORTAL_SETTINGS_PATH,
   PORTAL_TAB_LABELS,
   PORTAL_TABS,
@@ -144,7 +143,7 @@ export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context, location }) => {
     // Each tab opens to its own permission, which non-admin team roles lack.
     // Gate the page instead of letting managers land on a shell full of 403s.
-    assertRouteAnyPermission(context.permissions, PORTAL_PAGE_PERMISSIONS)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/portal')
     const tabs = portalTabsFor(context.permissions)
     const tab = resolvePortalTab((location.search as { tab?: PortalTab }).tab, tabs)
 

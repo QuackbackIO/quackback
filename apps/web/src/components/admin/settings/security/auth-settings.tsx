@@ -6,6 +6,7 @@ import { SignInProvidersTab } from './sign-in-providers-tab'
 import { AuditLogPage } from './audit-log-page'
 import { UpgradeScreen } from '@/components/admin/upgrade'
 import type { AuthConfig, PortalConfig } from '@/lib/shared/types/settings'
+import { AUTH_TABS, type AuthTab } from '@/lib/shared/authentication-tabs'
 
 /**
  * The Access & Security page tabs split by concern, not by surface:
@@ -15,16 +16,18 @@ import type { AuthConfig, PortalConfig } from '@/lib/shared/types/settings'
  *                       with per-surface toggles inline.
  *  - `audit-log`     — what admins changed (compliance review + CSV export).
  */
-export type AuthTab = 'portal-access' | 'sign-in' | 'audit-log'
+export type { AuthTab }
 
 interface AuthSettingsProps {
   /** Current selected tab. URL-driven via `?tab=` so the choice is
    *  bookmarkable and the back button switches back. */
   tab: AuthTab
+  /** The tabs this viewer has (authTabsFor); a tab they lack is not shown. */
+  tabs?: readonly AuthTab[]
   /** Team-side auth config from settings.authConfig. */
   teamAuthConfig: AuthConfig
-  /** Full portal config — needed for the visibility card inside PortalAuthTab. */
-  portalConfig: PortalConfig
+  /** Full portal config, for the visibility card inside PortalAuthTab; read only with that tab. */
+  portalConfig?: PortalConfig
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
   /** Tier flag for portal custom OIDC — passed through to <SignInProvidersTab>. */
   customOidcProviderTier: boolean
@@ -44,6 +47,7 @@ interface AuthSettingsProps {
  */
 export function AuthSettings({
   tab,
+  tabs = AUTH_TABS,
   teamAuthConfig,
   portalConfig,
   credentialStatus,
@@ -76,14 +80,18 @@ export function AuthSettings({
       className="space-y-6"
     >
       <TabsList className={FORM_WIDTH_CLASS}>
-        <TabsTrigger value="portal-access">Portal access</TabsTrigger>
+        {tabs.includes('portal-access') && (
+          <TabsTrigger value="portal-access">Portal access</TabsTrigger>
+        )}
         <TabsTrigger value="sign-in">Sign-in</TabsTrigger>
-        <TabsTrigger value="audit-log">Audit log</TabsTrigger>
+        {tabs.includes('audit-log') && <TabsTrigger value="audit-log">Audit log</TabsTrigger>}
       </TabsList>
 
-      <TabsContent value="portal-access">
-        <PortalAuthTab portalConfig={portalConfig} teamOpenSignup={teamAuthConfig.openSignup} />
-      </TabsContent>
+      {tabs.includes('portal-access') && portalConfig && (
+        <TabsContent value="portal-access">
+          <PortalAuthTab portalConfig={portalConfig} teamOpenSignup={teamAuthConfig.openSignup} />
+        </TabsContent>
+      )}
 
       <TabsContent value="sign-in">
         <SignInProvidersTab
@@ -94,9 +102,11 @@ export function AuthSettings({
         />
       </TabsContent>
 
-      <TabsContent value="audit-log">
-        {auditEntitled ? <AuditLogPage /> : <UpgradeScreen entitlement="auditLog" />}
-      </TabsContent>
+      {tabs.includes('audit-log') && (
+        <TabsContent value="audit-log">
+          {auditEntitled ? <AuditLogPage /> : <UpgradeScreen entitlement="auditLog" />}
+        </TabsContent>
+      )}
     </Tabs>
   )
 }

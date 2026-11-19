@@ -2,8 +2,7 @@ import { lazy, Suspense } from 'react'
 import { useCloudEnabled } from '@/lib/client/hooks/use-root-context'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -14,7 +13,7 @@ import { adminPageHead } from '@/lib/client/admin-head'
 export const Route = createFileRoute('/admin/settings/integrations/')({
   head: adminPageHead('Integrations settings'),
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.INTEGRATION_VIEW)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/integrations')
     const { queryClient } = context
     const { hasTierFeatureFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')

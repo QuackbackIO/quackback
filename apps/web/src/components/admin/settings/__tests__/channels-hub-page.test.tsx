@@ -40,6 +40,11 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
   // A viewer holding every permission, routing.manage included.
   useHasPermission: () => true,
 }))
+const canOpen = vi.hoisted(() => ({ github: true }))
+vi.mock('@/lib/client/hooks/use-permission', () => ({
+  useCanOpenSettingsPage: (path: string) =>
+    path === '/admin/settings/channels/github' ? canOpen.github : true,
+}))
 vi.mock('@/lib/server/functions/channel-accounts', () => ({ listRecentEmailLogFn: vi.fn() }))
 vi.mock('@/integrations/github/server/functions', () => ({ getGitHubChannelStatusFn: vi.fn() }))
 
@@ -79,7 +84,10 @@ function renderPage() {
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  canOpen.github = true
+})
 
 const WORKING_GITHUB = {
   connected: true,
@@ -124,6 +132,15 @@ describe('ChannelsHubPage', () => {
     expect(screen.queryByText('Receiving')).toBeNull()
     expect(screen.getByText('mail.example.app')).toBeTruthy()
     expect(screen.getByText('acme/inbox')).toBeTruthy()
+  })
+
+  it('leaves out a channel row whose page the viewer cannot open', () => {
+    // The GitHub page needs settings.manage and channel_account.manage.
+    canOpen.github = false
+    seed(WORKING_GITHUB)
+    renderPage()
+    expect(screen.getByText('Email').closest('a')).toBeTruthy()
+    expect(screen.queryByText('GitHub')).toBeNull()
   })
 
   it('badges a channel only when it needs attention', () => {

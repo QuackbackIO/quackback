@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { useState } from 'react'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -17,7 +16,7 @@ export const Route = createFileRoute('/admin/settings/macros')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.CONVERSATION_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/macros')
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const [macrosEntitled] = await Promise.all([

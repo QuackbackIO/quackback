@@ -26,8 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { warmQuery } from '@/lib/client/queries/warm-query'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import type { FeatureFlags } from '@/lib/shared/types'
 import { useCloudEnabled, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
@@ -46,7 +45,7 @@ export const Route = createFileRoute('/admin/settings/agent')({
     if (search.tab === 'actions') {
       throw redirect({ to: '/admin/settings/connectors' })
     }
-    assertRoutePermission(context.permissions, PERMISSIONS.AI_CUSTOMER_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/agent')
   },
   // The page reads its settings, and the always-mounted Guidance tab reads the
   // rules and their stats. Warming them means the page finds all three loaded;

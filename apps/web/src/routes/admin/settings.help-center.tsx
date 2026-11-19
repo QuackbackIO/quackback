@@ -1,7 +1,6 @@
 import { useState, useTransition, lazy, Suspense } from 'react'
 import { useCloudEnabled } from '@/lib/client/hooks/use-root-context'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, useRouter, useNavigate, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -38,7 +37,7 @@ export const Route = createFileRoute('/admin/settings/help-center')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.HELP_CENTER_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/help-center')
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.helpCenterConfig())

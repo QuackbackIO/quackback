@@ -2,8 +2,8 @@
  * Settings > Portal is one settings row with two tabs: Design (the
  * portal's look, tabs and welcome message, saved from the page's save bar) and
  * Custom domains (where each section's domain is set, saved from its own
- * dialog). Each tab opens to the permission that owns it, so the page opens to
- * a holder of either. Pure and client-safe: the route, the nav, the links to
+ * dialog). Each tab opens to the permissions it needs, so the page opens to a
+ * viewer who has either tab. Pure and client-safe: the route, the nav, the links to
  * the tab and the old Domains anchor read it.
  */
 import { PERMISSIONS, type PermissionKey } from './permissions'
@@ -19,21 +19,31 @@ export const PORTAL_TAB_LABELS: Record<PortalTab, string> = {
   'custom-domains': 'Custom domains',
 }
 
-/** The permission each tab's reads and writes are gated on. */
-const TAB_PERMISSION: Record<PortalTab, PermissionKey> = {
-  design: PERMISSIONS.SETTINGS_BRANDING,
-  'custom-domains': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+/**
+ * What each tab needs. Design reads and saves the portal config (its tabs and
+ * welcome message, under settings.manage) as well as the theme
+ * (settings.branding); Custom domains needs settings.custom_domain alone.
+ */
+const TAB_PERMISSIONS: Record<PortalTab, readonly PermissionKey[]> = {
+  design: [PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.SETTINGS_MANAGE],
+  'custom-domains': [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
 }
 
-/** Who can open Settings > Portal: a holder of either tab's permission. */
-export const PORTAL_PAGE_PERMISSIONS = [
-  TAB_PERMISSION.design,
-  TAB_PERMISSION['custom-domains'],
-] as const satisfies readonly PermissionKey[]
+/** Who can open Settings > Portal: a viewer who has either tab. */
+export const PORTAL_PAGE_GATE: readonly (readonly PermissionKey[])[] = PORTAL_TABS.map(
+  (tab) => TAB_PERMISSIONS[tab]
+)
+
+/** The permissions a viewer needs, all of them, to have `tab`. */
+export function portalTabPermissions(tab: PortalTab): readonly PermissionKey[] {
+  return TAB_PERMISSIONS[tab]
+}
 
 /** The tabs this viewer has, in order. */
 export function portalTabsFor(permissions: readonly string[] | undefined): PortalTab[] {
-  return PORTAL_TABS.filter((tab) => permissions?.includes(TAB_PERMISSION[tab]) ?? false)
+  return PORTAL_TABS.filter((tab) =>
+    TAB_PERMISSIONS[tab].every((permission) => permissions?.includes(permission) ?? false)
+  )
 }
 
 /** The tab asked for when the viewer has it; otherwise their first. */

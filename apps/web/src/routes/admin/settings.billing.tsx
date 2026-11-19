@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { XMarkIcon } from '@heroicons/react/24/solid'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BillingSettings } from '@/components/admin/settings/billing/billing-settings'
@@ -47,7 +46,7 @@ export const Route = createFileRoute('/admin/settings/billing')({
   }),
   loaderDeps: ({ search }) => ({ checkout: search.checkout }),
   loader: async ({ context, deps }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.BILLING_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/billing')
     if (deps.checkout === 'success') {
       await context.queryClient.invalidateQueries({ queryKey: billingQueries.all })
     }

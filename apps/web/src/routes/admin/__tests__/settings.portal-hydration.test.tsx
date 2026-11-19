@@ -24,7 +24,7 @@ const { cardRenders, previewRenders, rootContext, router, customDomainReads } = 
   rootContext: {
     settings: { name: 'Acme', featureFlags: { feedback: true, changelog: true } },
     session: null,
-    permissions: ['settings.branding'] as string[],
+    permissions: ['settings.branding', 'settings.manage'] as string[],
     cloudEnabled: false,
     sectionDomainsCloud: false,
   },
@@ -163,7 +163,7 @@ afterEach(() => {
   cardRenders.clear()
   previewRenders.count = 0
   document.body.innerHTML = ''
-  rootContext.permissions = ['settings.branding']
+  rootContext.permissions = ['settings.branding', 'settings.manage']
   router.search = {}
 })
 
@@ -226,7 +226,7 @@ describe('portal settings page hydration', () => {
   })
 
   it('shows Design and Custom domains tabs to a viewer with settings.custom_domain', async () => {
-    rootContext.permissions = ['settings.branding', 'settings.custom_domain']
+    rootContext.permissions = ['settings.branding', 'settings.manage', 'settings.custom_domain']
     const container = await hydratePage()
     const bar = container.querySelector('nav[aria-label="Portal"]')
     expect(bar?.textContent).toBe('DesignCustom domains')
@@ -235,7 +235,7 @@ describe('portal settings page hydration', () => {
   })
 
   it('reads the Custom domains tab ahead when the pointer or focus reaches its tab', async () => {
-    rootContext.permissions = ['settings.branding', 'settings.custom_domain']
+    rootContext.permissions = ['settings.branding', 'settings.manage', 'settings.custom_domain']
     customDomainReads.count = 0
     render(
       <IntlProvider locale="en" defaultLocale="en">
@@ -258,7 +258,7 @@ describe('portal settings page hydration', () => {
   })
 
   it('drops the unsaved-changes guard when the Custom domains tab leaves for another domain', async () => {
-    rootContext.permissions = ['settings.branding', 'settings.custom_domain']
+    rootContext.permissions = ['settings.branding', 'settings.manage', 'settings.custom_domain']
     const queryClient = seededClient()
     const page = () => (
       <IntlProvider locale="en" defaultLocale="en">
@@ -305,7 +305,7 @@ describe('portal settings page hydration', () => {
   it('sets up section domains the Cloud way on a pooled workspace whose projection has not landed', async () => {
     // Billing is not on yet (cloudEnabled false), but the workspace is on
     // Cloud's fleet: the tab must never offer the self-hosted record and check.
-    rootContext.permissions = ['settings.branding', 'settings.custom_domain']
+    rootContext.permissions = ['settings.branding', 'settings.manage', 'settings.custom_domain']
     rootContext.cloudEnabled = false
     rootContext.sectionDomainsCloud = true
     customDomainReads.cloud = []

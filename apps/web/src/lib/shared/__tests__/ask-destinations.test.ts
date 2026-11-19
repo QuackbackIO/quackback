@@ -73,7 +73,7 @@ describe('Ask destinations', () => {
     // Only a holder of settings.custom_domain is offered it.
     const branding = buildAskDestinations({
       ...options,
-      permissions: new Set([PERMISSIONS.SETTINGS_BRANDING]),
+      permissions: new Set([PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.SETTINGS_MANAGE]),
     }).map((item) => item.href)
     expect(branding).toContain('/admin/settings/portal')
     expect(branding).not.toContain('/admin/settings/portal?tab=custom-domains')

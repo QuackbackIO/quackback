@@ -40,6 +40,11 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 
+const canOpen = vi.hoisted(() => ({ moderation: true }))
+vi.mock('@/lib/client/hooks/use-permission', () => ({
+  useCanOpenSettingsPage: () => canOpen.moderation,
+}))
+
 const mutate = vi.fn()
 vi.mock('@/lib/client/mutations', () => ({
   useUpdateBoardAccess: () => ({
@@ -124,6 +129,7 @@ function renderForm(access: BoardAccess = DEFAULT_BOARD_ACCESS) {
 
 beforeEach(() => {
   mutate.mockReset()
+  canOpen.moderation = true
   setWsFlags({ requireApproval: 'none' })
 })
 
@@ -132,6 +138,18 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('<BoardModerationForm> rendering', () => {
+  it('links to workspace moderation only for a viewer who can open it', () => {
+    renderForm(PUBLIC_ACCESS)
+    expect(screen.getByRole('link', { name: /Workspace moderation/ })).toBeInTheDocument()
+  })
+
+  it('leaves the workspace moderation link out for a viewer who cannot open it', () => {
+    // Board managers without settings.manage and settings.moderation.
+    canOpen.moderation = false
+    renderForm(PUBLIC_ACCESS)
+    expect(screen.queryByRole('link', { name: /Workspace moderation/ })).toBeNull()
+  })
+
   it('renders the three rule rows', () => {
     renderForm(PUBLIC_ACCESS)
     expect(screen.getByText(MOD_RULE_LABELS.anonPosts)).toBeInTheDocument()
