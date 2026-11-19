@@ -244,12 +244,13 @@ test.describe('rating request emails', () => {
             await pollFor('the note written just before the rating step', async () =>
               (await messagesIn(thread.row.id)).find((m) => m.content === reached)
             )
-            // The run went past the ask (it waits on it) and asked nobody.
+            // The run reached the ask, asked nobody, and ended there rather
+            // than waiting on an answer that cannot come.
             await expect
               .poll(async () => (await workflowRuns(workflow.id)).map((r) => r.state), {
                 timeout: 20_000,
               })
-              .toEqual(['waiting'])
+              .toEqual(['done'])
             await new Promise((r) => setTimeout(r, 2_000))
             expect((await conversation(thread.row.id)).status).toBe('open')
             expect(await csatBlocks(thread.row.id)).toEqual([])

@@ -597,10 +597,10 @@ test.describe('the rating block', () => {
             conversationId: rated.conversation.id,
             rating: 4,
           })
-          // The run reaches its ask (it parks there) but posts no block.
+          // The run reaches its ask, posts no block and ends there.
           await expect
             .poll(async () => (await workflowRuns(workflow.id))[0]?.state, { timeout: 15_000 })
-            .toBe('waiting')
+            .toBe('done')
           await new Promise((r) => setTimeout(r, 1500))
           expect(await csatBlocks(rated.conversation.uuid)).toHaveLength(0)
         }
