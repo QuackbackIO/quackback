@@ -185,7 +185,7 @@ test.describe('default SLA at intake', () => {
         expect(await slaEventsFor({ conversationUuid }, 'applied')).toHaveLength(1)
       }
 
-      // The internal ticket view carries the SLA; the requester's own view does not.
+      // The internal ticket view carries the SLA.
       const internal = await fnOk<{ sla?: unknown }>(
         admin,
         'getTicketFn',
@@ -196,7 +196,13 @@ test.describe('default SLA at intake', () => {
       const restBody = (await (await rest.get(`/api/v1/tickets/${restTicketId}`)).json()) as {
         data: Record<string, unknown>
       }
-      expect(JSON.stringify(restBody.data)).not.toContain('timeToResolveDueAt')
+      // The REST ticket carries the SLA too.
+      expect(restBody.data.sla).toMatchObject({
+        policyName: expect.any(String),
+        timeToResolveDueAt: expect.any(String),
+        resolvedAt: null,
+        paused: false,
+      })
 
       await rest.dispose()
       await customerApi.dispose()
@@ -205,17 +211,10 @@ test.describe('default SLA at intake', () => {
   )
 })
 
-test.describe('default SLA at intake: known gaps', () => {
+test.describe('default SLA at intake: webhook', () => {
   test(
     'SLA-07 the ticket.created webhook carries the ticket SLA',
-    {
-      tag: ['@smoke', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'ticket.created payload is built by ticketData() with no SLA field (ticket.webhooks.ts:46-72). See QUARANTINE.md.',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, marker }) => {
       const admin = await apiAs(playwright, 'admin')
       await ensureDefaultSla(admin)
@@ -238,7 +237,8 @@ test.describe('default SLA at intake: known gaps', () => {
         const [delivery] = await sink.waitForDeliveries(marker, {
           where: (d) => d.body.includes(marker),
         })
-        expect(delivery.body).toMatch(/timeToResolveDueAt|"sla"/)
+        expect(delivery.body).toContain('"sla"')
+        expect(delivery.body).toContain('timeToResolveDueAt')
       } finally {
         await rest.delete(`/api/v1/webhooks/${webhook.id}`)
         await rest.dispose()
