@@ -13,6 +13,7 @@ import {
 import { mcp } from '@better-auth/mcp'
 import { oauthDeviceAuthorization } from '@better-auth/oauth-provider'
 import { betterAuthMcpResource } from './mcp-plugin-resource'
+import { mcpCimdPlugin } from './cimd'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
@@ -748,14 +749,14 @@ async function createAuth() {
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
         scopes: [...MCP_AS_SCOPES],
-        // Fallback when DCR omits `scope`. The register interceptor still
-        // persists the full AS allow-list on the client row so step-up works.
-        clientRegistrationDefaultScopes: [
-          'openid',
-          'profile',
-          'email',
-          ...API_KEY_SCOPES.filter((s) => s.startsWith('read:')),
-        ],
+        // Baseline capability set stored on every dynamically registered (DCR)
+        // and discovered (CIMD) client: Better Auth persists the union of this
+        // and `clientRegistrationAllowedScopes`. The full catalogue, so a later
+        // step-up authorize can ask for writes. What a token may do stays
+        // bounded by the person's consent. CIMD clients never reach the
+        // register interceptor in `routes/api/auth/$.ts`, so this is what
+        // sets theirs.
+        clientRegistrationDefaultScopes: [...MCP_AS_SCOPES],
         clientRegistrationAllowedScopes: [...MCP_AS_SCOPES],
         resources: [
           {
@@ -781,6 +782,13 @@ async function createAuth() {
           }
         },
       }),
+
+      // Client ID Metadata Documents: an MCP client may use an HTTPS URL as
+      // its client_id instead of registering. Advertises
+      // `client_id_metadata_document_supported`. Must follow `mcp()`. DCR
+      // above stays for clients without CIMD; its workspace toggle does not
+      // affect this. See ./cimd.ts for the fetch transport and policy.
+      mcpCimdPlugin(),
 
       // RFC 8628 device authorization grant on the same OAuth server: a
       // headless client asks `/device/code`, the person approves the code at

@@ -97,6 +97,14 @@ jobs:
         if: matrix.shard == 1
         run: bun run db:check-drift
       - run: bun run test --run --shard=${{ matrix.shard }}/4 --reporter=dot --reporter=github-actions
+      # The suite runs under Node. Production runs Bun, and the CIMD fetch
+      # transport's SSRF pin depends on Bun's node:https honouring a custom
+      # lookup, so that one file runs again under Bun.
+      - name: CIMD fetch transport under Bun
+        if: matrix.shard == 1
+        env:
+          CIMD_TRANSPORT_EXPECT_BUN: '1'
+        run: bun --bun node_modules/vitest/vitest.mjs run apps/web/src/lib/server/auth/__tests__/cimd-transport.test.ts
 
   # Single check name so existing "test" required-status wiring still matches.
   test:
