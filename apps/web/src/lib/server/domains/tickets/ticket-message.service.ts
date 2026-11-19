@@ -99,7 +99,11 @@ import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/
 // re-querying those tables here. Safe to import statically: conversation.query.ts
 // has no import edge back into this domain (verified — no cycle).
 import { enrichMessagesForAgent } from '../conversation/conversation.query'
-import { listPairThreadMessages, resolvePairConversationId } from './pair-thread.service'
+import {
+  listPairThreadMessages,
+  resolvePairConversationId,
+  resolvePairTicketIdForConversation,
+} from './pair-thread.service'
 import { crossPostTicketNote } from './ticket-conversation-link.service'
 import {
   messageCanMoveFirstResponse,
@@ -398,7 +402,9 @@ async function sendViaPairConversation(
             },
             publicAuthor,
             opts.actor,
-            prepared.contentJson
+            prepared.contentJson,
+            // This module's caller owns the ticket.replied signal for it.
+            { fromTicketThread: true }
           )
         ).message
       : (
@@ -442,6 +448,25 @@ async function sendViaPairConversation(
   const updated: Ticket = { ...ticket, updatedAt, firstResponseAt }
   if (firstResponseAt !== ticket.firstResponseAt) publishFirstResponseChange(updated)
   return { message, ticket: updated }
+}
+
+/**
+ * Signal `ticket.replied` for a customer message written straight on a pair's
+ * conversation (the widget, the portal Messages thread, an email reply to the
+ * conversation's address). Called by the conversation send after its own
+ * `message.created`; a conversation with no customer ticket signals nothing.
+ * Messages the ticket side writes onto the pair never come through here:
+ * their callers signal for themselves.
+ */
+export async function emitPairTicketReplied(
+  conversationId: ConversationId,
+  actor: Actor,
+  message: ConversationMessageDTO
+): Promise<void> {
+  const ticketId = await resolvePairTicketIdForConversation(conversationId)
+  if (!ticketId) return
+  const ticket = await loadTicketOr404(ticketId)
+  await emitTicketReplied(actor, ticket, message)
 }
 
 /** Agent reply on a customer ticket thread (customer-visible). A ticket the

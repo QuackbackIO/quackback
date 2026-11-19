@@ -276,7 +276,11 @@ export async function sendVisitorMessage(
   input: SendVisitorMessageInput,
   author: ConversationAuthorInput,
   actor: Actor,
-  contentJson?: TiptapContent | null
+  contentJson?: TiptapContent | null,
+  /** `fromTicketThread`: the ticket side wrote this message onto its pair
+   *  (ticket-message.service's redirect), and that caller decides whether it
+   *  is a ticket reply, so this send does not signal one itself. */
+  opts: { fromTicketThread?: boolean } = {}
 ): Promise<SendVisitorMessageResult> {
   // Defense in depth: every visitor-ingress channel funnels through here, so a
   // blocked visitor is refused at the shared seam even if a future channel
@@ -518,6 +522,24 @@ export async function sendVisitorMessage(
   // the team bell's anti-spam gate (WO-3 slice 5) now reads it off this
   // event instead of a direct call.
   void emitMessageCreated(actor, author, txResult.message, txResult.conversation, created)
+
+  // A customer message on a conversation paired with a customer ticket is a
+  // reply on that ticket: signal ticket.replied, so the ticket's watchers get
+  // their bell and integrations their webhook (the team-wide message bell is
+  // held back on a pair for exactly this fan-out). Skipped when the ticket
+  // side wrote the message (it signals for itself), on a brand-new
+  // conversation (it cannot be paired yet), and for a rating, which answers a
+  // close rather than replying.
+  if (!created && !opts.fromTicketThread && matchedReply?.kind !== 'csat') {
+    void import('@/lib/server/domains/tickets/ticket-message.service')
+      .then((m) => m.emitPairTicketReplied(txResult.conversation.id, actor, agentMessage))
+      .catch((err) =>
+        log.warn(
+          { err, conversationId: txResult.conversation.id },
+          'pair ticket reply signal failed'
+        )
+      )
+  }
 
   // A brand-new conversation is a spam-classification candidate: the filter
   // files only obvious spam (workspace-trusted senders bypass it), and every

@@ -339,9 +339,8 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       // Phase 1a redirect lands it on the conversation with the full write
       // pipeline (last-message denorm, wait clock, read stamps,
       // message.created, realtime). Failure-isolated: the pair already
-      // committed, so a redirect failure (e.g. the requester is
-      // messenger-blocked — a gate createMyTicket never checked pre-1b)
-      // degrades to the legacy ticket-parented opening row rather than 500ing
+      // committed, so a redirect failure (e.g. the requester was blocked
+      // after createMyTicket's own block check) degrades to the legacy ticket-parented opening row rather than 500ing
       // an intake that succeeded; the union loader reads both shapes.
       try {
         const { insertTicketMessage } = await import('./ticket-message.service')
