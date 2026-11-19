@@ -857,8 +857,10 @@ jobs:
   # change every other test's behaviour (the AI agent answering every widget
   # message, the cold-mail auto-acknowledgement, abandoned-journey auto-close),
   # so the shared shards skip them and they run here on a database of their
-  # own (E2E_SUPPORT_ISOLATED=1). Gated like support-core; PRs and main run
-  # @smoke and @core, nightly and manual runs run all but @quarantine.
+  # own (E2E_SUPPORT_ISOLATED=1). One worker: the isolated tests share that
+  # database and flip workspace settings, so two at once would see each
+  # other's flips. Gated like support-core; PRs and main run @smoke and @core,
+  # nightly and manual runs run all but @quarantine.
   support-isolated:
     needs: support-changes
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.support-changes.outputs.support == 'true') }}
@@ -930,7 +932,7 @@ jobs:
           tier=(--grep '@isolated.*@(smoke|core)|@(smoke|core).*@isolated')
           if [ "$FULL_RUN" = 'true' ]; then tier=(--grep @isolated); fi
           ./node_modules/.bin/playwright test -c playwright.support.config.ts \
-            "${tier[@]}" --grep-invert @quarantine --pass-with-no-tests --global-timeout=1200000
+            "${tier[@]}" --grep-invert @quarantine --workers=1 --pass-with-no-tests --global-timeout=1200000
       - name: Server log
         if: failure()
         run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
