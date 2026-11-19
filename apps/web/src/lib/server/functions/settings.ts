@@ -920,6 +920,8 @@ export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(asyn
   return await getOfficeHoursSchedule()
 })
 
+// The routing switch is the routing rule, so it follows routing.manage (the
+// Support lead preset holds it), not settings.manage.
 const conversationRoutingSchema = z.object({
   enabled: z.boolean(),
   strategy: z.literal('auto_assign_active'),
@@ -927,7 +929,7 @@ const conversationRoutingSchema = z.object({
 
 export const fetchConversationRoutingFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch conversation routing')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
   const { getConversationRouting } =
     await import('@/lib/server/domains/settings/settings.conversation-routing')
   return await getConversationRouting()
@@ -937,7 +939,7 @@ export const updateConversationRoutingFn = createServerFn({ method: 'POST' })
   .validator(conversationRoutingSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled }, 'update conversation routing')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
     const { updateConversationRouting } =
       await import('@/lib/server/domains/settings/settings.conversation-routing')
     return await updateConversationRouting(data)
