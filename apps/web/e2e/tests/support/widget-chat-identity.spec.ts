@@ -27,6 +27,13 @@ import {
   widgetTab,
 } from '../../support/widget-portal'
 
+interface IdentifyJson {
+  sessionToken?: string
+  user?: { id: string; email: string; name: string }
+  canPortalHandoff?: boolean
+  error?: { code: string; message: string }
+}
+
 async function identify(
   request: APIRequestContext,
   body: Record<string, unknown>,
@@ -37,7 +44,7 @@ async function identify(
     data: body,
     headers: bearer ? { authorization: `Bearer ${bearer}` } : {},
   })
-  return { res, json: (await res.json().catch(() => null)) as Record<string, any> | null }
+  return { res, json: (await res.json().catch(() => null)) as IdentifyJson | null }
 }
 
 test.describe('widget identity: config, SDK and sessions', () => {
