@@ -54,7 +54,11 @@ test('a teammate answers', { tag: '@core' }, async ({ asPerson, marker }) => {
 
 - **Tags.** `@smoke` runs on every PR (keep it small and fast), `@core` on PRs
   that touch support code, on main and nightly, `@nightly` only nightly.
-  `@quarantine` follows `e2e/QUARANTINE.md`.
+  `@quarantine` follows `e2e/QUARANTINE.md`. `@isolated` marks a test that
+  turns on a workspace-wide switch other tests would notice (the AI agent
+  answering every widget message, for example): it skips itself unless
+  `E2E_SUPPORT_ISOLATED=1`, and the `support-isolated` CI job runs it on a
+  database of its own (`--grep @isolated`).
 - **Unique data.** Every stand-in is shared by all workers. Use the `marker`
   fixture in subjects, sender addresses, AI rules and sink channels, and find
   your rows by it. Never clear Mailpit and never count all messages.

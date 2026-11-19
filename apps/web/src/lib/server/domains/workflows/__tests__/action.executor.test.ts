@@ -257,6 +257,9 @@ describe('applyAction', () => {
 
     expect(safeFetch).toHaveBeenCalledOnce()
     const [, options] = safeFetch.mock.calls[0]
+    // Same e2e sink allowance as outgoing webhooks; safeFetch ignores it unless
+    // the harness gate is open (ssrf-guard-e2e-sink.test.ts).
+    expect(options.allowE2eWebhookSink).toBe(true)
     expect(options.headers).toMatchObject({
       'X-Quackback-Delivery-Id': 'workflow:workflow_run_1:action_webhook',
       'Idempotency-Key': 'workflow:workflow_run_1:action_webhook',

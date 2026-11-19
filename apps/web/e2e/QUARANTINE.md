@@ -119,3 +119,14 @@ here or the assertions are stale; not traced. The paperclip label
   composer shows no Image option for the signed-in teammate. The comment
   editor turns images on and the post page passes an upload handler, so the
   cause is somewhere between them. owner: unassigned, review by: 2026-12-02.
+
+### Support suite: workflows and the AI agent
+
+- `support/automation-ai.spec.ts` › AI agent in the widget › WFL-76 the model
+  closes the conversation. The `end_conversation` tool needs
+  `conversation.set_status` (its spec in `assistant.toolspec.ts`), but the AI
+  agent's permission ceiling (`ASSISTANT_PERMISSIONS`,
+  `domains/assistant/assistant.actor.ts`) does not hold it, so the permission
+  check in `assistant.tools.ts` denies every call ("This action is not
+  permitted for the assistant.") and the conversation stays open. Runs in the
+  support-isolated job. owner: unassigned, review by: 2026-12-03.

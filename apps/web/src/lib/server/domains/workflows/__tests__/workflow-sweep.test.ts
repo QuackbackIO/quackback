@@ -15,6 +15,7 @@ import {
   conversations,
   conversationMessages,
   workflowRuns,
+  workflows,
   workflowRunEvents,
   user,
   principal,
@@ -59,6 +60,13 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
 }))
 vi.mock('@/lib/server/domains/settings/settings.workflows', () => ({
   getWorkflowAbandonedAutoCloseSettings,
+}))
+
+// A resumed run (the assistant-wait expiry pass) resolves its condition
+// context, which reads the workspace office-hours schedule; the test database
+// has no settings row, so serve a disabled schedule (24/7 open) here.
+vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
+  getOfficeHoursSchedule: async () => ({ enabled: false, timezone: 'UTC', intervals: [] }),
 }))
 
 // The two timer-driven unresponsive triggers dispatch through
@@ -124,6 +132,7 @@ import {
   sweepStaleRunningRuns,
   sweepOrphanedWaitingRuns,
   sweepExpiredInputWaits,
+  sweepExpiredAssistantWaits,
   sweepUnresponsiveConversations,
   sweepSlaTimerTriggers,
   sweepWorkflowRuns,
@@ -972,6 +981,78 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       // The loser's guarded update affected zero rows, so it never reached
       // the close decision at all — exactly one close, not two.
       expect(setConversationStatus).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('sweepExpiredAssistantWaits (let-the-AI-answer expiry)', () => {
+    /** A live workflow whose pinned graph parks at a let_assistant_answer
+     *  step; the escalated path has no next step, so a resume settles done. */
+    async function seedAssistantWait(expiresAt: Date) {
+      const conversationId = await seedConversation()
+      const graph: WorkflowGraph = {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          { id: 'la', type: 'let_assistant_answer' },
+        ],
+        edges: [{ from: 't', to: 'la' }],
+      } as unknown as WorkflowGraph
+      const wf = await createWorkflow({
+        name: `assistant wait ${suffix()}`,
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph,
+      })
+      await testDb.update(workflows).set({ status: 'live' }).where(eq(workflows.id, wf.id))
+      const [run] = await testDb
+        .insert(workflowRuns)
+        .values({
+          workflowId: wf.id,
+          conversationId,
+          state: 'waiting',
+          customerFacing: true,
+          graph: graph as unknown as Record<string, unknown>,
+          cursor: {
+            waitKind: 'assistant',
+            resumeNodeId: 'la',
+            waitSeconds: 0,
+            waitSeq: 1,
+            waitStartedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+            expiresAt: expiresAt.toISOString(),
+          },
+        })
+        .returning()
+      return run
+    }
+
+    it('resumes an expired assistant wait down the escalated path and logs swept_assistant_expired', async () => {
+      const expired = await seedAssistantWait(new Date(Date.now() - 60 * 1000))
+      const notYet = await seedAssistantWait(new Date(Date.now() + 10 * 60 * 1000))
+
+      const count = await sweepExpiredAssistantWaits(new Date())
+      expect(count).toBeGreaterThanOrEqual(1)
+
+      const [after] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, expired.id))
+      expect(after.state).toBe('done')
+      const events = await testDb
+        .select()
+        .from(workflowRunEvents)
+        .where(eq(workflowRunEvents.runId, expired.id))
+      expect(events.map((e) => e.kind)).toContain('swept_assistant_expired')
+
+      // A wait that has not expired yet is left parked.
+      const [untouched] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, notYet.id))
+      expect(untouched.state).toBe('waiting')
+      const none = await testDb
+        .select()
+        .from(workflowRunEvents)
+        .where(eq(workflowRunEvents.runId, notYet.id))
+      expect(none).toHaveLength(0)
     })
   })
 

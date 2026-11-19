@@ -824,3 +824,93 @@ jobs:
           name: support-core-report
           path: apps/web/playwright-report
           retention-days: 14
+
+  # Support tests tagged @isolated turn on a workspace-wide switch that would
+  # change every other test's behaviour (the AI agent answering every widget
+  # message, the cold-mail auto-acknowledgement, abandoned-journey auto-close),
+  # so the shared shards skip them and they run here on a database of their
+  # own (E2E_SUPPORT_ISOLATED=1). Gated like support-core; PRs and main run
+  # @smoke and @core, nightly and manual runs run all but @quarantine.
+  support-isolated:
+    needs: support-changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.support-changes.outputs.support == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mailpit:
+        image: axllent/mailpit:v1.29.5
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: Map test hostnames to loopback
+        run: echo "127.0.0.1 acme.localhost webhook-sink.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun run --filter @quackback/widget build
+      - run: bun run build
+        env:
+          SKIP_ENV_VALIDATION: true
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      - name: Run support @isolated
+        working-directory: apps/web
+        env:
+          E2E_SUPPORT_ISOLATED: '1'
+          FULL_RUN: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          tier=(--grep '@isolated.*@(smoke|core)|@(smoke|core).*@isolated')
+          if [ "$FULL_RUN" = 'true' ]; then tier=(--grep @isolated); fi
+          ./node_modules/.bin/playwright test -c playwright.support.config.ts \
+            "${tier[@]}" --grep-invert @quarantine --pass-with-no-tests --global-timeout=1200000
+      - name: Server log
+        if: failure()
+        run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: support-isolated-report
+          path: |
+            apps/web/blob-report
+            apps/web/e2e/.auth/support/app.log
+          retention-days: 7
