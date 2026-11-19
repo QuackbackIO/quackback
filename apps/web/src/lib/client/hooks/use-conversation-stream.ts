@@ -17,8 +17,12 @@ interface UseConversationStreamOptions {
    * caller's own load and the subscription; on a reconnect, whatever happened
    * while disconnected (we recreate the EventSource on error to re-mint the
    * token, which forgoes the built-in Last-Event-ID replay).
+   *
+   * `reason` is 'first-open' for a clean first open and 'reconnect' for any
+   * open after a failed attempt, so a caller whose refetch is expensive can
+   * catch up only after a real gap.
    */
-  onCatchUp?: () => void
+  onCatchUp?: (reason: 'first-open' | 'reconnect') => void
   /** Key that, when changed, tears down and rebuilds the connection. */
   resetKey?: string | number
   /**
@@ -120,6 +124,9 @@ export function useConversationStream({
     let stopped = false
     let retry = 0
     let sseFailures = 0
+    // True once any attempt has failed (an error or a mint miss): every later
+    // open follows a gap.
+    let hadGap = false
     let polling = false
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -168,6 +175,7 @@ export function useConversationStream({
       }
       if (stopped) return
       if (!url) {
+        hadGap = true
         scheduleReconnect()
         return
       }
@@ -182,13 +190,14 @@ export function useConversationStream({
         setConnected(true)
         // Every open catches up, the first included: anything that changed
         // before this subscription was listening has no event to deliver.
-        onCatchUpRef.current?.()
+        onCatchUpRef.current?.(hadGap ? 'reconnect' : 'first-open')
       }
       es.onerror = () => {
         // The token may have expired; recreate with a fresh one + backoff.
         es?.close()
         es = null
         sseFailures++
+        hadGap = true
         setConnected(false)
         // Once reconnecting is clearly futile and a poll fallback exists, stop
         // hammering SSE and switch to polling for the rest of this connection.

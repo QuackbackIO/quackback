@@ -145,6 +145,7 @@ describe('useConversationStream', () => {
     const first = MockEventSource.instances[0]
     act(() => first.onopen?.())
     expect(onCatchUp).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenLastCalledWith('first-open')
 
     act(() => first.onerror?.())
     await advance(2000)
@@ -153,6 +154,7 @@ describe('useConversationStream', () => {
 
     act(() => MockEventSource.instances[1].onopen?.())
     expect(onCatchUp).toHaveBeenCalledTimes(2)
+    expect(onCatchUp).toHaveBeenLastCalledWith('reconnect')
 
     // A successful open resets the backoff: the next error retries at 2s again.
     act(() => MockEventSource.instances[1].onerror?.())
@@ -179,6 +181,7 @@ describe('useConversationStream', () => {
 
     act(() => MockEventSource.instances[1].onopen?.())
     expect(onCatchUp).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenCalledWith('reconnect')
   })
 
   it('fires onCatchUp once on the first open after a failed token mint', async () => {
@@ -199,6 +202,7 @@ describe('useConversationStream', () => {
     expect(MockEventSource.instances).toHaveLength(1)
     act(() => MockEventSource.instances[0].onopen?.())
     expect(onCatchUp).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenCalledWith('reconnect')
   })
 
   it('schedules a retry when buildUrl resolves null (token mint failed)', async () => {
