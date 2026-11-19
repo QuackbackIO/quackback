@@ -97,12 +97,6 @@ here or the assertions are stale; not traced. The paperclip label
   failed in its file locally but passed on its own in the first CI quarantine
   run, so the cause is not confirmed. owner: unassigned, review by:
   2026-12-02.
-- `public/post-submission.spec.ts` › Board Selector › board selector defaults to
-  filtered board when filter is active. On a direct load of `/?board=features`
-  the composer does not open on the first attempt, even after 15 seconds of
-  clicks; the retry passes. Not traced; possibly a hydration race in the
-  composer. It passed on its own in the first CI quarantine run. owner:
-  unassigned, review by: 2026-12-02.
 
 ### Needs a product decision
 

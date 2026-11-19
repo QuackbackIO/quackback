@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { renderToString } from 'react-dom/server'
 
 type Doc = { json(): unknown; html(): string; markdown(): string }
 
@@ -371,5 +372,31 @@ describe('feedback header post composer', () => {
       await screen.findByText('Could not submit your feedback. Please try again.')
     ).toBeTruthy()
     expect(screen.queryByText(/invalid_type|expected object/)).toBeNull()
+  })
+})
+
+describe('opening the composer', () => {
+  it('opens when the title field was focused before hydration', async () => {
+    const tree = (
+      <QueryClientProvider client={new QueryClient()}>
+        <IntlProvider locale="en" messages={{}} onError={() => {}}>
+          <FeedbackHeaderAnimated
+            workspaceName="Acme"
+            boards={[BOARD]}
+            defaultBoardId={BOARD.id}
+            boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
+          />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    const container = document.createElement('div')
+    container.innerHTML = renderToString(tree)
+    document.body.appendChild(container)
+    // A visitor's click on the server-rendered field, before React runs.
+    container.querySelector<HTMLInputElement>('input[aria-label="Feedback title"]')!.focus()
+
+    render(tree, { container, hydrate: true })
+
+    expect(await screen.findByTestId('editor')).toBeTruthy()
   })
 })

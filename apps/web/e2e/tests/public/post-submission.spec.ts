@@ -398,38 +398,24 @@ test.describe('Board Selector', () => {
     }
   })
 
-  test(
-    'board selector defaults to filtered board when filter is active',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'On a direct load of /?board=features the composer does not open on the first attempt, even after 15 s of clicks; the retry passes. Not traced; possibly a hydration race in the composer.',
-      },
-    },
-    async () => {
-      // Navigate with a board filter (using 'features' board which exists in database)
-      await globalPage.goto('/?board=features')
+  test('board selector defaults to filtered board when filter is active', async () => {
+    // Navigate with a board filter (using 'features' board which exists in database)
+    await globalPage.goto('/?board=features')
 
-      // Wait for posts to load first (indicates page is ready)
-      const postCards = globalPage.locator('h3 a[href*="/posts/"]')
-      await expect(postCards.first()).toBeVisible({ timeout: 15000 })
+    // Wait for posts to load first (indicates page is ready)
+    const postCards = globalPage.locator('h3 a[href*="/posts/"]')
+    await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
-      // Open the form. A click before hydration focuses the input but does not
-      // open the composer, so click again until the editor shows.
-      const editor = globalPage.locator('.tiptap')
-      await expect(async () => {
-        await globalPage.getByPlaceholder("What's on your mind?").click()
-        await expect(editor).toBeVisible({ timeout: 2000 })
-      }).toPass({ timeout: 15000 })
+    // One click opens the form, even one that lands before hydration (the
+    // composer opens once React finds the title field already focused).
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.locator('.tiptap')).toBeVisible({ timeout: 15000 })
 
-      // Viewing a board locks posting to that board — no switcher.
-      const postingTo = globalPage.getByLabel(/Posting to Feature Requests/i)
-      await expect(postingTo).toBeVisible({ timeout: 10000 })
-      await expect(postingTo.getByRole('combobox')).toHaveCount(0)
-    }
-  )
+    // Viewing a board locks posting to that board — no switcher.
+    const postingTo = globalPage.getByLabel(/Posting to Feature Requests/i)
+    await expect(postingTo).toBeVisible({ timeout: 10000 })
+    await expect(postingTo.getByRole('combobox')).toHaveCount(0)
+  })
 
   test('can submit post to a different board than default', async () => {
     // Sort by new to see fresh posts

@@ -151,6 +151,16 @@ export function FeedbackHeaderAnimated({
     titleInputRef.current?.focus({ preventScroll: true })
   }, [draft, title])
 
+  // A click that lands before hydration focuses the title field but runs no
+  // handler, and a later click on an already focused field fires no focus
+  // event. Open the composer once React takes over if the field already has
+  // focus, so that early click is not lost.
+  useEffect(() => {
+    if (titleInputRef.current && document.activeElement === titleInputRef.current) {
+      setExpanded(true)
+    }
+  }, [])
+
   // Focus title input when form expands
   useEffect(() => {
     if (expanded && titleInputRef.current) {
