@@ -110,7 +110,7 @@ function everyLine(): string[] {
   for (const target of Object.keys(PLAN_CATALOGUE) as PlanId[]) {
     lines.push(...keepEverythingLines(page({}), target))
     for (const from of Object.keys(PLAN_CATALOGUE) as PlanId[]) {
-      lines.push(...featuresDisabledOnDowngrade(from, target, { planLimits: true }))
+      lines.push(...featuresDisabledOnDowngrade(from, target))
     }
   }
   return lines
