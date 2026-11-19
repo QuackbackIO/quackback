@@ -3,12 +3,14 @@ import { logger } from '@/lib/server/logger'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
 import {
+  entitlementsAt,
   parseBillingProjection,
   projectedLimitsAt,
+  projectionAccessEnded,
   type BillingProjection,
   type ProjectedLimits,
 } from './cloud/billing-projection'
-import { canonicalPlanId, isPlanId, type PlanId } from './cloud/cloud.types'
+import { canonicalPlanId, isPlanId, type EntitlementKey, type PlanId } from './cloud/cloud.types'
 
 const log = logger.child({ component: 'tier-limits-service' })
 
@@ -141,21 +143,28 @@ export function cloudProjectionFloor(limits: ProjectedLimits): TierLimits {
   }
 }
 
+/** The tier features a projection's entitlement switches on. */
+export const ENTITLEMENT_TIER_FEATURES = {
+  customDomain: 'customDomain',
+  sso: 'customOidcProvider',
+  webhooks: 'webhooks',
+  mcpServer: 'mcpServer',
+} as const satisfies Partial<Record<EntitlementKey, keyof TierLimits['features']>>
+
 function featuresFromProjection(projection: BillingProjection, now: Date): TierLimits['features'] {
-  const expired =
-    projection.planLimitsExpireAt !== null &&
-    now.getTime() >= Date.parse(projection.planLimitsExpireAt)
-  const entitlements = expired ? {} : projection.entitlements
-  const resolved = expired ? 'free' : canonicalPlanId(projection.effectivePlan)
+  const entitlements = entitlementsAt(projection, now)
+  const resolved = projectionAccessEnded(projection, now)
+    ? 'free'
+    : canonicalPlanId(projection.effectivePlan)
   const planId: PlanId = isPlanId(resolved) ? resolved : 'free'
-  return {
+  const features: TierLimits['features'] = {
     ...CLOSED_CLOUD_FEATURES,
     ...PLAN_ONLY_FEATURES[planId],
-    customDomain: entitlements.customDomain === true,
-    customOidcProvider: entitlements.sso === true,
-    webhooks: entitlements.webhooks === true,
-    mcpServer: entitlements.mcpServer === true,
   }
+  for (const [entitlement, feature] of Object.entries(ENTITLEMENT_TIER_FEATURES)) {
+    features[feature] = entitlements[entitlement as EntitlementKey] === true
+  }
+  return features
 }
 
 /**
