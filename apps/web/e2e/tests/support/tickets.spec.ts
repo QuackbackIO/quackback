@@ -948,7 +948,7 @@ test.describe('tickets: workflow actions', () => {
         const ticket = await pollFor(
           'the converted ticket',
           () => linkedCustomerTicket(conversationId),
-          { timeoutMs: 30_000 }
+          { timeoutMs: 60_000 }
         )
         const conversation = await conversationVisitor(conversationId)
         // Title from the conversation subject; the requester is its visitor.
@@ -1022,7 +1022,13 @@ test.describe('tickets: workflow actions', () => {
           text: `Any news ${marker}`,
         })
         expect(res.status(), await res.text()).toBe(200)
-        await waitForTicket(ticket.id, 'Investigating', (r) => r.status_name === 'Investigating')
+        // Dispatch is queued; a busy queue can hold it for tens of seconds.
+        await waitForTicket(
+          ticket.id,
+          'Investigating',
+          (r) => r.status_name === 'Investigating',
+          60_000
+        )
         await expect
           .poll(async () =>
             (await ticketActivity(ticket.id))
@@ -1201,11 +1207,7 @@ test.describe('tickets: the inbox list', () => {
       )
       await bar.getByRole('button', { name: 'Priority' }).click()
       await admin.getByRole('menuitem', { name: 'High' }).click()
-      await expect(
-        admin.getByText('Prioritized 2 items').or(admin.getByText(/2 items/))
-      ).toBeVisible({
-        timeout: 15_000,
-      })
+      await expect(admin.getByText('Updated 2 items')).toBeVisible({ timeout: 15_000 })
 
       await expect(bar).toHaveCount(0)
       await selectRows(

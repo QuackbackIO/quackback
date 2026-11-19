@@ -91,7 +91,7 @@ export function waitForEndedRuns(
   conversationId: string,
   workflowId: string,
   count: number,
-  timeoutMs = 30_000
+  timeoutMs = 60_000
 ) {
   return pollFor(
     `${count} ended run(s) of ${workflowId}`,

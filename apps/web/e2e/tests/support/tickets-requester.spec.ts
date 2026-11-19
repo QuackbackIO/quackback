@@ -323,12 +323,19 @@ test.describe('requester intake rules', () => {
         name: `Desk ${marker.slice(-12)}`,
         category: 'back_office',
       })
-      const hidden = await createTicketTypeRow({ name: `Hidden ${marker.slice(-12)}` })
-      await supportDb()`UPDATE ticket_types SET intake_visible = false
-                        WHERE id = ${toUuid(hidden as `ticket_type_${string}`)}`
-      const archived = await createTicketTypeRow({ name: `Gone ${marker.slice(-12)}` })
-      await supportDb()`UPDATE ticket_types SET intake_visible = false, deleted_at = NOW()
-                        WHERE id = ${toUuid(archived as `ticket_type_${string}`)}`
+      // Inserted already off the intake form, so no other test's form ever
+      // offers them.
+      const offIntakeType = async (name: string, archived: boolean) => {
+        const id = randomUUID()
+        await supportDb()`
+          INSERT INTO ticket_types (id, name, slug, category, fields, is_default, position,
+                                    intake_visible, deleted_at)
+          VALUES (${id}, ${name}, ${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}, 'customer',
+                  '[]'::jsonb, false, 100, false, ${archived ? new Date() : null})`
+        return fromUuid('ticket_type', id)
+      }
+      const hidden = await offIntakeType(`Hidden ${marker.slice(-12)}`, false)
+      const archived = await offIntakeType(`Gone ${marker.slice(-12)}`, true)
       const [offered] = await supportDb()<{ id: string }[]>`
         SELECT id FROM ticket_types WHERE category = 'customer' AND is_default AND deleted_at IS NULL`
       const offeredId = fromUuid('ticket_type', offered.id)
@@ -429,7 +436,7 @@ test.describe('the ticket embed card', () => {
       annotation: {
         type: 'quarantine',
         description:
-          'Product bug: generateContentHTML renders a quackbackEmbed placeholder only for post and changelog (lib/shared/content-html.ts:222), so a ticket card (shareTicket) renders nothing in any thread.',
+          'Product bug: generateContentHTML emits a quackbackEmbed placeholder only for post and changelog (lib/shared/content-html.ts:222), so a ticket card (shareTicket) renders nothing in a thread. See QUARANTINE.md.',
       },
     },
     async ({ playwright, baseURL, browser, people, marker, customerEmail }) => {
