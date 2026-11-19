@@ -40,6 +40,8 @@ import {
 } from '@/lib/server/audit/attribution'
 import { createMcpServer } from './server'
 import { readOAuthPrincipal } from './oauth-principal'
+import { logMcpRequest, summarizeMcpRequest, type McpRequestSummary } from './request-log'
+import { logger } from '@/lib/server/logger'
 import type { PrincipalId } from '@quackback/ids'
 import type { McpAuthContext, McpScope } from './types'
 
@@ -300,11 +302,38 @@ async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise
  * before any auth runs: key auth fills this boundary with the key and keeps
  * the label, so nothing in an MCP request reads as the REST API.
  */
-export function handleMcpRequest(request: Request): Promise<Response> {
-  return runWithAuditAttribution(MCP_ATTRIBUTION, () => handleMcpRequestInBoundary(request))
+export async function handleMcpRequest(request: Request): Promise<Response> {
+  // Stateless serving has no standalone server-to-client stream and no session
+  // to delete. Answering GET with an event stream that ends at once made
+  // clients reconnect in a loop, each time paying for auth, so GET and DELETE
+  // are refused before any of that runs. Streamable HTTP allows exactly this.
+  if (request.method !== 'POST') return methodNotAllowed()
+
+  const startedAt = Date.now()
+  const summary = await summarizeMcpRequest(request)
+  const response = await runWithAuditAttribution(MCP_ATTRIBUTION, () =>
+    handleMcpRequestInBoundary(request, summary)
+  )
+  await logMcpRequest(summary, response, startedAt)
+  return response
 }
 
-async function handleMcpRequestInBoundary(request: Request): Promise<Response> {
+/** 405 for every method but POST, as Streamable HTTP allows. */
+export function methodNotAllowed(): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: { code: -32000, message: 'Method not allowed. Send MCP requests with POST.' },
+      id: null,
+    }),
+    { status: 405, headers: { 'Content-Type': 'application/json', Allow: 'POST' } }
+  )
+}
+
+async function handleMcpRequestInBoundary(
+  request: Request,
+  summary: McpRequestSummary
+): Promise<Response> {
   const devConfig = await getDeveloperConfig()
   if (!devConfig.mcpEnabled) {
     return jsonRpcError(
@@ -318,6 +347,8 @@ async function handleMcpRequestInBoundary(request: Request): Promise<Response> {
   // API key auth paths, and the API key path converts failures to Response
   // objects internally rather than throwing.
   if (auth instanceof Response) return auth
+  summary.authMethod = auth.authMethod
+  if (auth.credentialId) summary.credentialId = auth.credentialId
 
   // From here on, everything in this request runs as the credential that
   // made it.
@@ -355,6 +386,12 @@ async function serveMcpRequest(request: Request, auth: McpAuthContext): Promise<
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   })
+
+  // The transport names the reason for a refusal it answers itself (an
+  // unsupported protocol version, a malformed body); without this it is lost.
+  transport.onerror = (error) => {
+    logger.warn({ err: error }, 'mcp transport error')
+  }
 
   const server = createMcpServer(auth)
   await server.connect(transport)

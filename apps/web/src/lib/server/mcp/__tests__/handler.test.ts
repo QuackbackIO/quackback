@@ -467,6 +467,29 @@ describe('MCP HTTP Handler', () => {
   // Auth Flow
   // ===========================================================================
 
+  describe('HTTP methods', () => {
+    it.each(['GET', 'DELETE'])(
+      'answers %s with 405 and Allow: POST before any auth runs',
+      async (method) => {
+        const { verifyAccessTokenRequest } = await import('better-auth/oauth2')
+        const { handleMcpRequest } = await import('../handler')
+        const response = await handleMcpRequest(
+          new Request('https://example.com/api/mcp', {
+            method,
+            headers: { authorization: 'Bearer some.jwt.token', accept: 'text/event-stream' },
+          })
+        )
+
+        expect(response.status).toBe(405)
+        expect(response.headers.get('allow')).toBe('POST')
+        // No event stream for a client to reconnect to, and no auth paid for.
+        expect(response.headers.get('content-type')).toBe('application/json')
+        expect(verifyAccessTokenRequest).not.toHaveBeenCalled()
+        expect(mockFindFirst).not.toHaveBeenCalled()
+      }
+    )
+  })
+
   describe('Authentication', () => {
     it('should return 401 with WWW-Authenticate when no Authorization header is provided', async () => {
       const { handleMcpRequest } = await import('../handler')
