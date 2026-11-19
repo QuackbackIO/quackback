@@ -18,7 +18,6 @@ import { UpdateBanner } from '@/components/admin/update-banner'
 import { GithubStarPromptGate } from '@/components/admin/github-star-prompt-gate'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { presentPlanNotice } from '@/lib/shared/plan-notice'
-import { planLimitsBannerShows } from '@/lib/shared/billing/plan-limits-shown'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-limits.notice'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
@@ -334,9 +333,16 @@ function PlanStrip({
   planLimits,
 }: Pick<ReturnType<typeof Route.useLoaderData>, 'planNotice' | 'planLimits'>) {
   // Only a banner that shows stands in: with paused features alone, the
-  // ended-trial strip stays to say why they stopped.
-  const hideNotice =
-    planLimitsBannerShows(planLimits) && presentPlanNotice(planNotice)?.ended === true
+  // ended-trial strip stays to say why they stopped. The same rule as
+  // `planLimitsBannerShows`, inline so every admin page loads no extra chunk.
+  const bannerShows =
+    planLimits?.enabled === true &&
+    (planLimits.phase === 'grace' ||
+      (planLimits.phase === 'enforced' &&
+        planLimits.issues.length +
+          ('withheldIssues' in planLimits ? planLimits.withheldIssues.length : 0) >
+          0))
+  const hideNotice = bannerShows && presentPlanNotice(planNotice)?.ended === true
   return (
     <>
       {planLimits ? (

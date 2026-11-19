@@ -30,8 +30,7 @@ export function planLimitsIssueCount(
  * Whether the plan limits banner has something to say: the workspace is over
  * its plan and, after the date, some cap is still over. Paused features alone
  * leave each settings page its own line and the ended-trial strip in place.
- * No runtime imports beyond a path, so the admin layout can ask without
- * loading the banner.
+ * The admin layout inlines the same rule, so its pages load no extra chunk.
  */
 export function planLimitsBannerShows(
   limits:
