@@ -169,6 +169,52 @@ async function authorize(headers: Headers, overrides: Record<string, string> = {
   return { status: res.status, location: res.headers.get('location') ?? '', body: await res.text() }
 }
 
+/** Accept on the consent screen, then exchange the code through the route. */
+async function consentAndExchange(headers: Headers, consentLocation: string) {
+  // Consent, as the consent page posts it.
+  const consentQuery = new URL(consentLocation, ORIGIN).search.replace(/^\?/, '')
+  const auth = await getAuth()
+  const consent = await auth.handler(
+    new Request(`${ORIGIN}/api/auth/oauth2/consent`, {
+      method: 'POST',
+      headers: { ...Object.fromEntries(headers), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        accept: true,
+        scope: 'openid offline_access read:feedback',
+        oauth_query: consentQuery,
+      }),
+    })
+  )
+  const consentBody = (await consent.json()) as { url?: string; redirect?: boolean }
+  expect(consent.status, JSON.stringify(consentBody)).toBe(200)
+  const callback = new URL(consentBody.url!)
+  expect(`${callback.origin}${callback.pathname}`).toBe(REDIRECT_URI)
+  const code = callback.searchParams.get('code')
+  expect(code).toBeTruthy()
+
+  // Through the route, which adds the MCP `resource` the client left out.
+  const tokenRes = await routePost(authCatchAllRoute)({
+    request: new Request(`${ORIGIN}/api/auth/oauth2/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: ORIGIN },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code!,
+        redirect_uri: REDIRECT_URI,
+        client_id: CLIENT_ID,
+        code_verifier: VERIFIER,
+      }).toString(),
+    }),
+  })
+  const tokens = (await tokenRes.json()) as {
+    access_token?: string
+    refresh_token?: string
+    scope?: string
+  }
+  expect(tokenRes.status, JSON.stringify(tokens)).toBe(200)
+  return tokens
+}
+
 describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, rolled back)', () => {
   beforeEach(async () => {
     await fixture.begin()
@@ -271,42 +317,7 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
       client_identity: { verified: true, host: 'chat.example.com' },
     })
 
-    // Consent, as the consent page posts it.
-    const consentQuery = new URL(first.location, ORIGIN).search.replace(/^\?/, '')
-    const consent = await auth.handler(
-      new Request(`${ORIGIN}/api/auth/oauth2/consent`, {
-        method: 'POST',
-        headers: { ...Object.fromEntries(person.headers), 'content-type': 'application/json' },
-        body: JSON.stringify({
-          accept: true,
-          scope: 'openid offline_access read:feedback',
-          oauth_query: consentQuery,
-        }),
-      })
-    )
-    const consentBody = (await consent.json()) as { url?: string; redirect?: boolean }
-    expect(consent.status, JSON.stringify(consentBody)).toBe(200)
-    const callback = new URL(consentBody.url!)
-    expect(`${callback.origin}${callback.pathname}`).toBe(REDIRECT_URI)
-    const code = callback.searchParams.get('code')
-    expect(code).toBeTruthy()
-
-    // Through the route, which adds the MCP `resource` the client left out.
-    const tokenRes = await routePost(authCatchAllRoute)({
-      request: new Request(`${ORIGIN}/api/auth/oauth2/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded', origin: ORIGIN },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code: code!,
-          redirect_uri: REDIRECT_URI,
-          client_id: CLIENT_ID,
-          code_verifier: VERIFIER,
-        }).toString(),
-      }),
-    })
-    const tokens = (await tokenRes.json()) as { access_token?: string; scope?: string }
-    expect(tokenRes.status, JSON.stringify(tokens)).toBe(200)
+    const tokens = await consentAndExchange(person.headers, first.location)
     const payload = JSON.parse(
       Buffer.from(tokens.access_token!.split('.')[1]!, 'base64url').toString()
     ) as { aud: string | string[]; azp?: string; scope?: string }
@@ -537,6 +548,32 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
     expect(docs.fetches).toEqual([CLIENT_ID, CLIENT_ID])
     const rows = await testDb.select().from(oauthClient).where(eq(oauthClient.clientId, CLIENT_ID))
     expect(rows).toHaveLength(1)
+  })
+
+  it('refuses a refresh on a cold instance that cannot refetch the document', async () => {
+    serveDocument()
+    const person = await signedIn()
+    const first = await authorize(person.headers)
+    const tokens = await consentAndExchange(person.headers, first.location)
+    expect(tokens.refresh_token).toBeTruthy()
+
+    docs.served.clear()
+    const { resetAuth } = await import('@/lib/server/auth/index')
+    resetAuth()
+    const refresh = await routePost(authCatchAllRoute)({
+      request: new Request(`${ORIGIN}/api/auth/oauth2/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', origin: ORIGIN },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: tokens.refresh_token!,
+          client_id: CLIENT_ID,
+        }).toString(),
+      }),
+    })
+    expect(refresh.status).toBeGreaterThanOrEqual(400)
+    expect(await refresh.text()).toMatch(/invalid_client/)
+    expect(docs.fetches).toEqual([CLIENT_ID, CLIENT_ID])
   })
 
   // Discovery runs before the sign-in check, as client lookup does for DCR
