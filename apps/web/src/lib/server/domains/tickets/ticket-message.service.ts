@@ -231,6 +231,10 @@ interface InsertTicketMessageOpts {
   /** The ticket row, when the caller already loaded it (the visibility check),
    *  so the write does not read it a second time. */
   ticket?: Ticket
+  /** False for an agent-written opening message: the requester learns of the
+   *  ticket from its confirmation email, so the pair's conversation does not
+   *  also email them "replied to your conversation". */
+  notifyCustomer?: boolean
 }
 
 /**
@@ -418,7 +422,7 @@ async function sendViaPairConversation(
             input.metadata as ConversationMessageMetadata | undefined,
             // The agent caller checked the ticket, and a tracker reply-all is
             // a system effect, so the pair's conversation is not checked again.
-            { systemCascade: true }
+            { systemCascade: true, notifyCustomer: opts.notifyCustomer }
           )
         ).message
   const message = { ...sent, author: supportAuthor }

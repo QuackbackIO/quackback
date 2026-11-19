@@ -744,6 +744,14 @@ export async function startAgentConversation(
   return { conversation: agentDTO, message: messageDTO, created: true }
 }
 
+export interface SendAgentMessageOptions extends SystemCascadeOptions {
+  /** Tell the customer about this message (email, or the conversation's own
+   *  channel). Off only for a message the customer was told about another way:
+   *  the opening message of a ticket a teammate filed for them, which the
+   *  ticket's own confirmation email announces. */
+  notifyCustomer?: boolean
+}
+
 /**
  * Agent reply. A person replying claims an unowned conversation; a service
  * principal (the assistant's cards, an API key) never does, so the
@@ -761,7 +769,7 @@ export async function sendAgentMessage(
   // it passes the teammate's pre-translation original here so it lands on
   // the new message's own metadata (agent-only, never sent to the visitor).
   extraMetadata?: ConversationMessageMetadata,
-  opts?: SystemCascadeOptions
+  opts?: SendAgentMessageOptions
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -908,18 +916,19 @@ export async function sendAgentMessage(
     })
   }
 
-  void notifyAgentReply({
-    conversationId: txResult.conversation.id,
-    visitorPrincipalId: txResult.conversation.visitorPrincipalId,
-    // Full text, not the truncated preview — notify derives its own excerpt.
-    content: content || preview(fallbackLabel, attachments),
-    contentJson: safeContentJson,
-    agentName: authored.publicAuthor.displayName ?? 'Support',
-    capturedEmail: txResult.conversation.visitorEmail,
-    channel: txResult.conversation.channel,
-    messageId: txResult.message.id,
-    attachments,
-  })
+  if (opts?.notifyCustomer !== false)
+    void notifyAgentReply({
+      conversationId: txResult.conversation.id,
+      visitorPrincipalId: txResult.conversation.visitorPrincipalId,
+      // Full text, not the truncated preview — notify derives its own excerpt.
+      content: content || preview(fallbackLabel, attachments),
+      contentJson: safeContentJson,
+      agentName: authored.publicAuthor.displayName ?? 'Support',
+      capturedEmail: txResult.conversation.visitorEmail,
+      channel: txResult.conversation.channel,
+      messageId: txResult.message.id,
+      attachments,
+    })
 
   // isFirstMessage only matters for a VISITOR message — this is an agent
   // reply, so false. The event carries the name the customer saw.
