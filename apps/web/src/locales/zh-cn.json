@@ -202,6 +202,7 @@
   "admin.auditLog.via.workflow": "通过工作流",
   "admin.auditLog.via.system": "通过系统",
   "admin.auditLog.via.onBehalfOf": "代表 {name}",
+  "admin.inbox.message.viaApi": "通过 API",
   "portal.header.nav.feedback": "反馈",
   "portal.header.nav.roadmap": "路线图",
   "portal.header.nav.changelog": "更新日志",

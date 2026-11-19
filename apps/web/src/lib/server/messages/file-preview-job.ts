@@ -22,17 +22,21 @@ import {
 } from '@/lib/server/realtime/conversation-channels'
 import { broadcastInboxMessageUpdated } from '@/lib/server/domains/conversation/message.actions'
 import {
-  loadAuthors,
+  loadAuthorAudiences,
   fallbackAuthor,
   toMessageDTO,
 } from '@/lib/server/domains/conversation/conversation.query'
 import { resolvePairTicketIdForConversation } from '@/lib/server/domains/tickets/pair-thread.service'
 
 async function publishAttachmentPreview(message: ConversationMessage): Promise<void> {
-  const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
-    : null
+  // The conversation channel reaches the customer and takes the public name.
+  // The ticket channel is team-only and takes the author as the team sees it.
+  const views = message.principalId
+    ? (await loadAuthorAudiences([message.principalId])).get(message.principalId)
+    : undefined
+  const fallback = message.principalId ? fallbackAuthor(message.principalId) : null
+  const author = views?.publicAuthor ?? fallback
+  const teamAuthor = views?.supportAuthor ?? fallback
   let ticketId = message.ticketId
   if (message.conversationId) {
     await broadcastInboxMessageUpdated(message)
@@ -49,7 +53,7 @@ async function publishAttachmentPreview(message: ConversationMessage): Promise<v
     publishTicketEvent(ticketId, {
       kind: 'ticket_message_updated',
       ticketId,
-      message: toMessageDTO(message, author),
+      message: toMessageDTO(message, teamAuthor),
     })
   }
 }

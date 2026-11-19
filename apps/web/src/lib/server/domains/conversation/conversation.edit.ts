@@ -57,9 +57,11 @@ async function toAgentDto(
   message: ConversationMessage,
   viewerPrincipalId: PrincipalId
 ): Promise<AgentConversationMessageDTO> {
+  // Team-only, so the account name and the "via API" mark, as the thread shows.
   const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
+    ? ((await loadAuthors([message.principalId], { preferAccountName: true })).get(
+        message.principalId
+      ) ?? fallbackAuthor(message.principalId))
     : null
   const suggestions = new Map()
   if (message.metadata?.postSuggestion) {
@@ -120,9 +122,11 @@ async function publishTicketThreadEdit(message: ConversationMessage): Promise<vo
     ticketId = await resolvePairTicketIdForConversation(message.conversationId)
   }
   if (!ticketId) return
+  // The ticket channel is team-only: the author as the ticket thread shows it.
   const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
+    ? ((await loadAuthors([message.principalId], { preferAccountName: true })).get(
+        message.principalId
+      ) ?? fallbackAuthor(message.principalId))
     : null
   publishTicketEvent(ticketId, {
     kind: 'ticket_message_updated',

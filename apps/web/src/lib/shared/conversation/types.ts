@@ -89,6 +89,10 @@ export interface ConversationAuthorDTO {
   principalId: PrincipalId
   displayName: string | null
   avatarUrl: string | null
+  /** Agent views only: true when the author shows as an API key (a workspace
+   *  key, or a personal key that keeps its own name), so the inbox can mark
+   *  its messages "via API". Absent otherwise, and never on a customer view. */
+  viaApi?: boolean
 }
 
 /** A conversation label ("tag") as surfaced to the inbox. Agent-only. */

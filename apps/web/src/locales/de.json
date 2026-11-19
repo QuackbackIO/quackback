@@ -202,6 +202,7 @@
   "admin.auditLog.via.workflow": "über einen Workflow",
   "admin.auditLog.via.system": "über das System",
   "admin.auditLog.via.onBehalfOf": "für {name}",
+  "admin.inbox.message.viaApi": "über die API",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Neuigkeiten",

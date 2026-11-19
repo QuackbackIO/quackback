@@ -326,12 +326,15 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     expect(portal.author?.principalId).toBe(apiKey.principalId)
     expect(portal.author?.displayName).toBe(PUBLIC_NAME)
     expect(portal.author?.avatarUrl).toBe(CREATOR_IMAGE)
+    expect(portal.author?.viaApi).toBeUndefined()
 
-    // The team's view (the inbox reads the account name).
+    // The team's view (the inbox reads the account name). It shows the
+    // teammate, so it carries no "via API" mark.
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.principalId).toBe(apiKey.principalId)
     expect(inbox.author?.displayName).toBe(ACCOUNT_NAME)
     expect(inbox.author?.avatarUrl).toBe(CREATOR_IMAGE)
+    expect(inbox.author?.viaApi).toBeUndefined()
   })
 
   it('webhooks for a reply and a note through a personal key made after the cutoff name its creator', async () => {
@@ -358,6 +361,7 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     const reply = await sendTicketMessage(actor, { ticketId, content: 'A reply via the key' })
     // The returned copy is the team's (the ticket channel is team-only).
     expect(reply.message.author?.displayName).toBe(ACCOUNT_NAME)
+    expect(reply.message.author?.viaApi).toBeUndefined()
     const note = await addTicketNote(actor, { ticketId, content: 'A note via the key' })
     expect(note.message.author?.displayName).toBe(ACCOUNT_NAME)
 
@@ -389,14 +393,28 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     const portal = openingMessage((await listTicketMessages(ticketId)).messages)
     expect(portal.author?.principalId).toBe(apiKey.principalId)
     expect(portal.author?.displayName).toBe('ops-bot')
+    // The "via API" mark is for the team only; the customer's view never has it.
+    expect(portal.author?.viaApi).toBeUndefined()
 
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.displayName).toBe('ops-bot')
     expect(inbox.author?.avatarUrl).toBeNull()
+    expect(inbox.author?.viaApi).toBe(true)
 
     const events = await replyAndNoteThroughRoutes(plainTextKey, ticketId)
     expect(events.reply).toEqual({ actorName: 'ops-bot', authorName: 'ops-bot' })
     expect(events.note).toEqual({ actorName: 'ops-bot', authorName: 'ops-bot' })
+
+    // A reply sent with the key, as sent and on reload.
+    const actor = await keyActor(plainTextKey)
+    const reply = await sendTicketMessage(actor, { ticketId, content: 'A reply via ops-bot' })
+    expect(reply.message.author?.viaApi).toBe(true)
+    const reloaded = (await listTicketMessagesForAgent(ticketId, creator)).messages
+    expect(reloaded.find((m) => m.content === 'A reply via ops-bot')?.author?.viaApi).toBe(true)
+    const customerView = (await listTicketMessages(ticketId)).messages
+    expect(
+      customerView.find((m) => m.content === 'A reply via ops-bot')?.author?.viaApi
+    ).toBeUndefined()
   })
 
   it('a personal key made before the cutoff keeps its own name', async () => {
@@ -409,8 +427,11 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     const portal = openingMessage((await listTicketMessages(ticketId)).messages)
     expect(portal.author?.principalId).toBe(apiKey.principalId)
     expect(portal.author?.displayName).toBe(KEY_NAME)
+    expect(portal.author?.viaApi).toBeUndefined()
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.displayName).toBe(KEY_NAME)
+    // It shows as the key, so the team sees the "via API" mark.
+    expect(inbox.author?.viaApi).toBe(true)
   })
 
   it('with no cutoff recorded, a personal key keeps its own name', async () => {
@@ -424,6 +445,7 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     expect(portal.author?.displayName).toBe(KEY_NAME)
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.displayName).toBe(KEY_NAME)
+    expect(inbox.author?.viaApi).toBe(true)
   })
 
   it("a pinned comment from a personal key made after the cutoff shows its creator's name and avatar together", async () => {
@@ -463,5 +485,13 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
 
     const authors = await loadAuthors([apiKey.principalId], { preferAccountName: true })
     expect(authors.get(apiKey.principalId)?.displayName).toBe(KEY_NAME)
+    expect(authors.get(apiKey.principalId)?.viaApi).toBe(true)
+  })
+
+  it('a teammate carries no "via API" mark', async () => {
+    const teammate = await seedCreator()
+    const authors = await loadAuthors([teammate], { preferAccountName: true })
+    expect(authors.get(teammate)?.displayName).toBe(ACCOUNT_NAME)
+    expect(authors.get(teammate)?.viaApi).toBeUndefined()
   })
 })

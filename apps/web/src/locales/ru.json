@@ -202,6 +202,7 @@
   "admin.auditLog.via.workflow": "через рабочий процесс",
   "admin.auditLog.via.system": "через систему",
   "admin.auditLog.via.onBehalfOf": "от имени: {name}",
+  "admin.inbox.message.viaApi": "через API",
   "portal.header.nav.feedback": "Обратная связь",
   "portal.header.nav.roadmap": "Дорожная карта",
   "portal.header.nav.changelog": "Журнал изменений",

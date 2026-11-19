@@ -36,6 +36,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { AttachmentList } from '@/components/shared/files/attachment-list'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { NoteContent } from '@/components/admin/conversation/note-content'
+import { ViaApiBadge } from '@/components/admin/conversation/via-api-badge'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
 import { RichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
@@ -882,6 +883,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             {message.isAssistant && <SparklesIcon className="h-3 w-3 shrink-0" aria-hidden />}
             <span className="truncate">{authorName}</span>
           </span>
+          <ViaApiBadge author={message.author} />
           {isNote && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
               <PencilSquareIcon className="h-3 w-3" /> Internal note

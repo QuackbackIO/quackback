@@ -59,6 +59,8 @@ type AuthorRow = {
   userImage: string | null
   userImageKey: string | null
   serviceMetadata: ServiceMetadata | null
+  /** Set by showPersonalKeysAsCreator when the row now shows the key's creator. */
+  shownAsCreator?: boolean
 }
 
 /** The AI agent's service principal; the discriminator is set in assistant.principal.ts. */
@@ -66,13 +68,26 @@ function isAssistantPrincipal(metadata: ServiceMetadata | null): boolean {
   return metadata?.kind === 'integration' && metadata.integrationType === 'assistant'
 }
 
-/** Public label, or the account name agents should see. */
+/**
+ * Whether the author shows as an API key rather than a person: a workspace
+ * key, or a personal key that keeps its own name (made before the cutoff, or
+ * with its creator gone). A personal key that shows its creator does not.
+ */
+function showsAsApiKey(row: AuthorRow): boolean {
+  return row.serviceMetadata?.kind === 'api_key' && !row.shownAsCreator
+}
+
+/**
+ * Public label, or the account name agents should see. The agent view also
+ * marks an author that shows as an API key, so the team can tell its messages
+ * from a teammate's. The public view never carries the mark.
+ */
 function authorFromRow(row: AuthorRow, preferAccountName: boolean): ConversationAuthorDTO {
   const publicName =
     isAssistantPrincipal(row.serviceMetadata) && row.displayName
       ? displayAssistantName(row.displayName)
       : (row.displayName ?? null)
-  return {
+  const author: ConversationAuthorDTO = {
     principalId: row.id,
     displayName: preferAccountName
       ? supportContactName({
@@ -88,6 +103,8 @@ function authorFromRow(row: AuthorRow, preferAccountName: boolean): Conversation
       principalAvatarKey: row.avatarKey,
     }),
   }
+  if (preferAccountName && showsAsApiKey(row)) author.viaApi = true
+  return author
 }
 
 async function selectAuthorRows(
@@ -177,7 +194,7 @@ async function showPersonalKeysAsCreator<T extends AuthorRow>(rows: T[]): Promis
   const byKey = new Map(creators.map(({ keyPrincipalId, ...display }) => [keyPrincipalId, display]))
   return rows.map((row) => {
     const creator = byKey.get(row.id)
-    return creator ? { ...row, ...creator } : row
+    return creator ? { ...row, ...creator, shownAsCreator: true } : row
   })
 }
 
