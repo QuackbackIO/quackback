@@ -117,6 +117,7 @@ import {
   tickets,
   ticketStatuses,
   ticketSubscriptions,
+  ticketTypes,
   user,
   and,
   eq,
@@ -689,6 +690,60 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       const link = await readPairLink(dto.id as TicketId)
       expect(link).not.toBeNull()
       expect(convEmit.emitConversationCreated).toHaveBeenCalledTimes(1)
+    })
+
+    it('a customer REGISTRY type with no bare category also pairs (the admin New ticket dialog shape)', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const agentP = await seedPrincipal({ role: 'member' })
+      const [customerType] = await testDb
+        .insert(ticketTypes)
+        .values({
+          name: `Question-${suffix()}`,
+          slug: `question_${suffix()}`,
+          category: 'customer',
+        })
+        .returning()
+
+      // The dialog sends the chosen registry type and leaves the category to
+      // the server (`type: undefined`), exactly like create-ticket-dialog.tsx.
+      const dto = await createTicket(
+        {
+          type: undefined,
+          ticketTypeId: customerType.id,
+          title: 'dialog create, on behalf',
+          description: 'x',
+          requesterPrincipalId: requesterP,
+        },
+        serviceActor(agentP)
+      )
+
+      expect(dto.type).toBe('customer')
+      expect(await readPairLink(dto.id as TicketId)).not.toBeNull()
+      expect(convEmit.emitConversationCreated).toHaveBeenCalledTimes(1)
+    })
+
+    it('a back-office REGISTRY type with a requester stays standalone', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const agentP = await seedPrincipal({ role: 'member' })
+      const [backOfficeType] = await testDb
+        .insert(ticketTypes)
+        .values({ name: `Task-${suffix()}`, slug: `task_${suffix()}`, category: 'back_office' })
+        .returning()
+
+      const dto = await createTicket(
+        {
+          ticketTypeId: backOfficeType.id,
+          title: 'internal work',
+          requesterPrincipalId: requesterP,
+        },
+        serviceActor(agentP)
+      )
+
+      expect(dto.type).toBe('back_office')
+      expect(await readPairLink(dto.id as TicketId)).toBeNull()
+      expect(convEmit.emitConversationCreated).not.toHaveBeenCalled()
     })
 
     it('customer + requester + a SOURCE conversation stays standalone (convert flow links its source right after)', async () => {

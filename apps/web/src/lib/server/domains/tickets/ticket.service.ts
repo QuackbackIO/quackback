@@ -67,6 +67,7 @@ import { ticketFtsMatch } from './ticket-search.service'
 import { statusTransition, resolveStage } from './ticket.lifecycle'
 import { resolvePairConversationId } from './pair-thread.service'
 import { createTicketCore, publishTicketUpdated } from './ticket-intake.service'
+import { resolveTicketTypeForCreate } from './ticket-type.service'
 import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import { publishInboxRemoval } from '@/lib/server/realtime/inbox-publish'
 import type {
@@ -420,18 +421,31 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
     companyId = requester?.companyId ?? null
   }
 
+  // The create-from-a-conversation flow stays standalone here — it links its
+  // SOURCE conversation right after this call, and the pair unique would
+  // reject that second link if a backing conversation were minted first. An
+  // explicit withBackingConversation (API v1 / MCP) always wins. The category
+  // is the RESOLVED one: a caller that picks a registry type sends no bare
+  // category (the admin New ticket dialog), and the type's category decides.
+  let withBackingConversation = input.withBackingConversation
+  if (withBackingConversation === undefined) {
+    withBackingConversation =
+      !!input.requesterPrincipalId &&
+      !input.sourceConversationId &&
+      (
+        await resolveTicketTypeForCreate({
+          ticketTypeId: input.ticketTypeId,
+          category: input.type,
+        })
+      ).category === 'customer'
+  }
+
   return createTicketCore(
     {
       ...input,
       assigneePrincipalId,
       companyId,
-      // The create-from-a-conversation flow stays standalone here — it links
-      // its SOURCE conversation right after this call, and the pair unique
-      // would reject that second link if a backing conversation were minted
-      // first. An explicit withBackingConversation (API v1 / MCP) always wins.
-      withBackingConversation:
-        input.withBackingConversation ??
-        (input.type === 'customer' && !!input.requesterPrincipalId && !input.sourceConversationId),
+      withBackingConversation,
     },
     actor
   )
