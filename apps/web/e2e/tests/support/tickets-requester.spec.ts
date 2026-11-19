@@ -205,7 +205,7 @@ test.describe('what the requester sees', () => {
   )
 
   test(
-    "TKT-79 the requester's thread never shows internal notes or team-only notices",
+    "TKT-79 the requester's thread never shows internal notes from the ticket or its conversation",
     { tag: '@core' },
     async ({ playwright, baseURL, browser, asPerson, marker, customerEmail }) => {
       test.setTimeout(60_000)
