@@ -105,7 +105,7 @@ export function WidgetMessages({
                           {name}
                         </span>
                         <TimeAgo
-                          date={c.lastMessageAt}
+                          date={c.activityAt}
                           className="shrink-0 text-[11px] text-muted-foreground/60"
                         />
                       </span>

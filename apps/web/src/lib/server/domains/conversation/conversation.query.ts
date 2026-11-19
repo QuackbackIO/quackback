@@ -32,6 +32,7 @@ import {
   segments,
   assistantInvolvements,
   ticketConversations,
+  tickets,
   type Conversation,
   type ConversationMessage,
   type PostSuggestion,
@@ -803,24 +804,78 @@ export async function getConversationForVisitor(
   return resolveVisitorConversation(row ?? null, visitorPrincipalId)
 }
 
+/** A row of the customer's own Messages list: the conversation plus the time
+ *  the list sorts on and shows (see `listConversationsForVisitor`). */
+export type VisitorConversationListItem = ConversationDTO & { activityAt: string }
+
 /**
  * All of a visitor's conversations, newest-first. `side` controls the DTO
  * audience: 'agent' for the admin user profile (default), 'visitor' for the
  * visitor browsing their own history in the widget (drops agent-only fields).
+ *
+ * Each row carries `activityAt`, the time the list sorts on and the row shows.
+ * It is `lastMessageAt`, except with `ticketActivity` on: a conversation paired
+ * with one of the visitor's own customer tickets uses the LATER of
+ * `lastMessageAt` and that ticket's requester-visible update time
+ * (`requesterUpdatedAtSql`, the key the Tickets tab sorts on), so a ticket that
+ * was just resolved, or was just opened on an old conversation, sits where the
+ * Tickets tab puts it. The pair is matched exactly as the row's ticket chip is
+ * (`getRequesterTicketSummaries`: customer pair, requester = this visitor, not
+ * deleted), so the time never comes from a ticket the row does not show. Read
+ * only: `conversations.last_message_at` itself is unchanged.
+ *
+ * Not paged (one `limit`), so no cursor has to follow the key; the id breaks
+ * ties so equal times keep a stable order.
  */
 export async function listConversationsForVisitor(
   visitorPrincipalId: PrincipalId,
   limit = 50,
-  side: MessageSenderType = 'agent'
-): Promise<ConversationDTO[]> {
+  side: MessageSenderType = 'agent',
+  options: { ticketActivity?: boolean } = {}
+): Promise<VisitorConversationListItem[]> {
+  let activityAt: SQL<Date> = sql<Date>`${conversations.lastMessageAt}`.mapWith(
+    conversations.lastMessageAt
+  )
+  if (options.ticketActivity) {
+    const { loadCustomerVisibleStatusIds, requesterUpdatedAtSql } =
+      await import('@/lib/server/domains/tickets/requester-ticket.dto')
+    const ticketUpdatedAt = requesterUpdatedAtSql(await loadCustomerVisibleStatusIds())
+    // GREATEST skips nulls: an unpaired row (no joined ticket) keeps its
+    // lastMessageAt.
+    activityAt = sql<Date>`GREATEST(${conversations.lastMessageAt}, ${ticketUpdatedAt})`.mapWith(
+      conversations.lastMessageAt
+    )
+  }
   const rows = await db
-    .select()
+    .select({ conversation: conversations, activityAt })
     .from(conversations)
+    .leftJoin(
+      ticketConversations,
+      and(
+        eq(ticketConversations.conversationId, conversations.id),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    // Unaliased `tickets`: requesterUpdatedAtSql reads the outer row by that
+    // name. The unique customer pair per conversation keeps this one row each.
+    .leftJoin(
+      tickets,
+      and(
+        eq(tickets.id, ticketConversations.ticketId),
+        eq(tickets.requesterPrincipalId, visitorPrincipalId),
+        isNull(tickets.deletedAt)
+      )
+    )
     .where(eq(conversations.visitorPrincipalId, visitorPrincipalId))
-    .orderBy(desc(conversations.lastMessageAt))
+    .orderBy(desc(activityAt), desc(conversations.id))
     .limit(limit)
   // Small N per user, so per-row DTO building is fine.
-  return Promise.all(rows.map((c) => conversationToDTO(c, side)))
+  return Promise.all(
+    rows.map(async (r) => ({
+      ...(await conversationToDTO(r.conversation, side)),
+      activityAt: r.activityAt.toISOString(),
+    }))
+  )
 }
 
 /**
