@@ -513,11 +513,16 @@ test.describe('assigning by hand', () => {
       await expect(admin.getByRole('button', { name: 'Unassigned', exact: true })).toBeVisible()
       await waitForAssignee(conversationId, null)
       expect(await assignmentNotices(conversationId)).toHaveLength(1)
-      const events = await conversationEvents(conversationId, 'conversation.assigned')
-      expect(events.at(-1)?.payload).toMatchObject({
-        assignedAgentPrincipalId: null,
-        previousAgentPrincipalId: b.principalId,
-      })
+      // The event row is written after the update returns: wait for it.
+      await expect
+        .poll(async () =>
+          (await conversationEvents(conversationId, 'conversation.assigned')).some(
+            (e) =>
+              e.payload.assignedAgentPrincipalId === null &&
+              e.payload.previousAgentPrincipalId === b.principalId
+          )
+        )
+        .toBe(true)
     }
   )
 
@@ -728,13 +733,17 @@ test.describe('claiming by reply', () => {
         conversationId,
         assignTo: holder.principalId,
       })
+      const assignedEvents = async () =>
+        (await conversationEvents(conversationId, 'conversation.assigned')).length
+      await expect.poll(assignedEvents).toBe(1)
       const sent = await callServerFn(await helper.api(playwright), 'sendAgentMessageFn', {
         conversationId,
         content: `helping ${marker}`,
       })
       expect(sent.ok, sent.error.slice(0, 200)).toBe(true)
       expect((await conversationState(conversationId)).assignedAgent).toBe(holder.principalId)
-      expect(await conversationEvents(conversationId, 'conversation.assigned')).toHaveLength(1)
+      await settle()
+      expect(await assignedEvents()).toBe(1)
     }
   )
 
