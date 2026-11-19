@@ -449,6 +449,10 @@ test.describe('tickets: settings', () => {
       const editor = admin.getByRole('dialog')
       await clickUntilVisible(admin.getByRole('button', { name: 'New type' }), editor)
       await editor.getByLabel('Name').fill(name)
+      // Back office, so a second customer type never reaches the requester
+      // intake form other tests use.
+      await editor.getByRole('combobox').first().click()
+      await admin.getByRole('option', { name: 'Back office' }).click()
       await editor.getByRole('button', { name: 'Create type' }).click()
       await expect(admin.getByText(`Created "${name}"`)).toBeVisible()
 
@@ -814,7 +818,8 @@ test.describe('tickets: replies, refusals and watchers', () => {
       await openInInbox(admin, ticket.id, ticket.title)
       const panel = detailPanel(admin)
       const popover = admin.getByRole('dialog')
-      await clickUntilVisible(panel.getByRole('button', { name: 'Add watcher' }), popover)
+      // The ticket already has watchers (its assignee), so the trigger is the avatar row.
+      await clickUntilVisible(panel.getByRole('button', { name: 'Manage watchers' }), popover)
       await popover.getByRole('combobox').click()
       await admin.getByRole('option', { name: /Ben Agent/ }).click()
       await expect
