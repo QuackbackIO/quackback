@@ -378,8 +378,7 @@ test.describe('agent replies by email', () => {
       expect(id2).not.toBe(id1)
       expect(header(h1, 'In-Reply-To')).toBe(thread.messageId)
       expect(header(h2, 'In-Reply-To')).toBe(thread.messageId)
-      // Compared without case: the stored chain is normalised (see the
-      // quarantined case-preservation test below).
+      // Compared without case here; CUS-O-08 below checks the exact spelling.
       const refs2 = header(h2, 'References')!.toLowerCase().split(/\s+/)
       expect(refs2[0]).toBe(thread.messageId.toLowerCase())
       expect(refs2).toContain(id1.toLowerCase())
@@ -407,17 +406,8 @@ test.describe('agent replies by email', () => {
 
   test(
     'CUS-O-08 References repeats our earlier Message-IDs exactly as they were sent',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description: 'Suspected bug: outbound Message-IDs are stored and replayed lower-cased',
-      },
-    },
+    { tag: '@core' },
     async ({ request, playwright, baseURL, people, customerEmail, marker }) => {
-      // Found while writing CUS-O-08: outbound ids are stored lower-cased
-      // (conversation.email-store.ts normalizeMessageId) and replayed from
-      // there, so References carries a spelling we never sent (QUARANTINE.md).
       const thread = await coldThread(request, customerEmail, marker)
       const api = await adminApi(playwright, baseURL!, people)
       await agentReply(api, thread.id, `One ${marker}`)
@@ -795,14 +785,7 @@ test.describe('ticket emails to the requester', () => {
 
   test(
     'CUS-O-16 a teammate-filed ticket sends the requester the confirmation and no conversation email',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Suspected bug: the opening message of a teammate-filed ticket is also emailed as a conversation reply',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, baseURL, people, customerEmail, marker }) => {
       await enableSupportTickets()
       const customer = await seedCustomer(customerEmail)

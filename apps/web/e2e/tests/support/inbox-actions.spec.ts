@@ -399,7 +399,7 @@ test.describe('inbox thread actions', () => {
       })
       await openConversation(page, c.id, c.messages[0])
 
-      await page.getByRole('button', { name: 'Macros' }).click()
+      await page.getByRole('button', { name: 'Macros', exact: true }).click()
       await page.getByPlaceholder('Search macros…').fill(macro.name)
       await page.getByRole('option', { name: new RegExp(macro.name) }).click()
       await expect(page.getByText(/^Applied: /)).toBeVisible({ timeout: 15_000 })

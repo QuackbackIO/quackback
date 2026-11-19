@@ -157,14 +157,7 @@ test.describe('the routing switch', () => {
 
   test(
     'RTE-03 a Support lead (routing.manage) may read and change the routing switch',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Known bug: the routing switch is gated on settings.manage, not routing.manage (functions/settings.ts:930, :940)',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, newTeammate }) => {
       const lead = await newTeammate({ roleKey: 'support_lead' })
       const api = await lead.api(playwright)

@@ -378,14 +378,7 @@ test.describe('SLA in the inbox', () => {
 
   test(
     'SLA-26 picking "SLA breach soonest" in All conversations orders the list by due time',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The sort menu offers the sla sort on the unified list scopes, which clamp it to most recent (inbox-scope.ts INBOX_UNIFIED_SORTS). See QUARANTINE.md.',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, request, asPerson, marker }) => {
       test.setTimeout(90_000)
       const admin = await apiAs(playwright, 'admin')

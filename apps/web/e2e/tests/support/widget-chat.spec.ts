@@ -713,10 +713,8 @@ test.describe('widget chat: limits and history', () => {
 
   test(
     'CUS-W-19 the rate-limit refusal carries RATE_LIMITED and retryAfter to the client',
-    { tag: ['@nightly', '@quarantine'] },
+    { tag: '@nightly' },
     async ({ request, marker }) => {
-      // Quarantined: ConversationRateLimitError is a plain Error, not a typed
-      // DomainException, so only its message crosses the wire (see QUARANTINE.md).
       const visitor = await mintVisitor()
       const { conversation } = await visitorSend(request, visitor.token, `${marker} 1`)
       for (let i = 2; i <= 20; i++) {

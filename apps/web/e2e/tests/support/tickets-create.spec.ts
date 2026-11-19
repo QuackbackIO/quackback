@@ -263,18 +263,8 @@ test.describe('create a ticket through the API', () => {
 
   test(
     'TKT-03 the requester gets one email on create, not also a reply email echoing the opening note',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The opening note also goes out as a conversation reply email (ticket-intake.service.ts:347)',
-      },
-    },
+    { tag: '@nightly' },
     async ({ playwright, baseURL, marker, customerEmail }) => {
-      // Quarantined: the opening message runs the full conversation write
-      // pipeline (ticket-intake.service.ts:347), so the requester also gets a
-      // ConversationMessageEmail "Re: <opening note>" (see QUARANTINE.md).
       const api = await ticketApi(playwright, baseURL)
       const customer = await createCustomer(api, customerEmail)
       const opening = `One email ${marker}`

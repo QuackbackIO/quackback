@@ -73,10 +73,8 @@ async function closeAndGetRatingLinks(
 }
 
 /**
- * The page an emailed face link opens, without its `rating` parameter. A link
- * WITH it currently fails to render (QUARANTINE.md: the /csat route's search
- * schema refuses the number the router parses `rating=4` into), so the tests
- * of what happens after the page opens use the token alone.
+ * The page an emailed face link opens, without its `rating` parameter, for the
+ * tests of what happens after the page opens. CUS-O-23 opens a link with it.
  */
 function tokenOnly(link: string) {
   return csatPath(new URL(link).searchParams.get('token')!)
@@ -255,14 +253,7 @@ test.describe('the /csat landing page', () => {
 
   test(
     'CUS-O-23 an emailed face link opens with its face preselected and records nothing',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: /csat?token=…&rating=4 (every emailed face link) renders the error page',
-      },
-    },
+    { tag: '@core' },
     async ({ request, playwright, baseURL, people, page, customerEmail, marker }) => {
       const thread = await coldThread(request, customerEmail, marker)
       const links = await closeAndGetRatingLinks(
@@ -449,13 +440,7 @@ test.describe('the /csat landing page', () => {
 
   test(
     'CUS-O-27 an out-of-range numeric rating still opens the page with nothing preselected',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description: 'Product bug: a numeric rating parameter makes /csat render the error page',
-      },
-    },
+    { tag: '@core' },
     async ({ request, page, customerEmail, marker }) => {
       const thread = await coldThread(request, customerEmail, marker)
       const valid = mintCsatToken(thread.id, principalTypeId(thread.row.visitor_principal_id))

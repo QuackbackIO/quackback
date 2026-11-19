@@ -8,7 +8,7 @@
  *
  * Usage: bun set-feature-flag.ts <flag> <on|off>
  */
-import { bustWorkspaceSettings, openDb, parseJson } from './_lib'
+import { bustWorkspaceSettings, openDb } from './_lib'
 
 const [flag, mode] = process.argv.slice(2)
 if (!flag || (mode !== 'on' && mode !== 'off')) {
@@ -19,13 +19,18 @@ if (!flag || (mode !== 'on' && mode !== 'off')) {
 const sql = openDb()
 
 try {
-  const rows = await sql`SELECT id, feature_flags FROM settings ORDER BY created_at ASC LIMIT 1`
+  // One statement, so a flag another worker sets at the same moment is kept:
+  // reading the flags here and writing them back would drop it.
+  const on = mode === 'on'
+  const rows = await sql`
+    UPDATE settings
+    SET feature_flags = (coalesce(nullif(feature_flags, '')::jsonb, '{}'::jsonb)
+                         || jsonb_build_object(${flag}::text, ${on}::boolean))::text
+    WHERE id = (SELECT id FROM settings ORDER BY created_at ASC LIMIT 1)
+    RETURNING id`
   if (rows.length === 0) throw new Error('No settings row found (run the seed first)')
-  const flags = parseJson(rows[0].feature_flags)
-  flags[flag] = mode === 'on'
-  await sql`UPDATE settings SET feature_flags = ${JSON.stringify(flags)} WHERE id = ${rows[0].id}`
   await bustWorkspaceSettings(sql)
-  console.log(JSON.stringify({ [flag]: flags[flag] }))
+  console.log(JSON.stringify({ [flag]: on }))
   await sql.end()
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err))

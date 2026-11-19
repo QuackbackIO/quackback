@@ -922,11 +922,13 @@ test.describe('portal support: what the customer receives and is refused', () =>
         conversationId: id,
         content: `${marker} 21`,
       })
-      // The RATE_LIMITED code and retryAfter do not cross the wire (see the
-      // quarantined CUS-W-19 twin); the refusal and its message do.
-      expect(over.error?.message).toBe(
-        'You are sending messages too quickly. Please wait a moment.'
-      )
+      // The typed refusal crosses the wire with its code and wait, as in the
+      // widget (CUS-W-19), so the portal can tell the customer to wait.
+      expect(over.error).toMatchObject({
+        code: 'RATE_LIMITED',
+        message: 'You are sending messages too quickly. Please wait a moment.',
+      })
+      expect(Number(over.error?.retryAfter)).toBeGreaterThan(0)
       expect(await messageCount(id)).toBe(20)
       await context.close()
     }
