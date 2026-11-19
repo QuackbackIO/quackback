@@ -404,6 +404,14 @@ export function agentApi(request: APIRequestContext) {
     return res.json() as Promise<{ data: Record<string, unknown> }>
   }
   return {
+    /** The thread as the team reads it. */
+    messages: async (conversationId: string) => {
+      const res = await request.get(`/api/v1/conversations/${conversationId}/messages`, {
+        headers: headers(),
+      })
+      if (!res.ok()) throw new Error(`GET messages answered ${res.status()}`)
+      return res.json() as Promise<unknown>
+    },
     reply: (conversationId: string, content: string) =>
       post(`/conversations/${conversationId}/reply`, { content }),
     note: (conversationId: string, content: string) =>
@@ -458,6 +466,39 @@ export function widgetFn<T = unknown>(
 ): Promise<ServerFnResult<T>> {
   const method = call.method ?? (/^widget(Get|List|Mint)/.test(name) ? 'GET' : 'POST')
   return callServerFn<T>(request, FN_FILES.widgetConversation, name, { ...call, method })
+}
+
+const PORTAL_GET_FNS = new Set([
+  'getConversationPresenceFn',
+  'getMyConversationFn',
+  'getMyConversationsFn',
+  'getMessengerUnreadFn',
+  'listConversationMessagesFn',
+  'mintConversationStreamTokenFn',
+  'getConversationLinkedTicketFn',
+  'getMyTicketsFn',
+  'getMyTicketWatchStatusFn',
+  'getMyTicketFormFn',
+  'getMyTicketStageLabelsFn',
+  'getTicketFn',
+  'listTicketMessagesFn',
+])
+
+/**
+ * Call a cookie-authed server function the portal (or the admin) uses, with
+ * the cookies of `request` (a signed-in context's request). Ticket functions
+ * live in tickets.ts, the rest in conversation.ts.
+ */
+export function portalFn<T = unknown>(
+  request: APIRequestContext,
+  name: string,
+  data?: unknown
+): Promise<ServerFnResult<T>> {
+  const file = /Ticket/.test(name) ? FN_FILES.tickets : FN_FILES.conversation
+  return callServerFn<T>(request, file, name, {
+    method: PORTAL_GET_FNS.has(name) ? 'GET' : 'POST',
+    data,
+  })
 }
 
 /** Messages (any kind) in a conversation. */
@@ -582,6 +623,15 @@ export async function adminWrite(
   return message
 }
 
+/** Any cookie-authed server function as the admin; throws on a refusal. */
+export function adminFn<T = unknown>(
+  admin: APIRequestContext,
+  name: string,
+  data?: unknown
+): Promise<T> {
+  return must(portalFn<T>(admin, name, data), name)
+}
+
 /** Teammate edits or deletes a conversation message. */
 export async function editMessage(admin: APIRequestContext, messageId: string, content: string) {
   return must(
@@ -598,6 +648,36 @@ export async function deleteMessage(admin: APIRequestContext, messageId: string)
     }),
     'delete message'
   )
+}
+
+/**
+ * Seed a workflow block message into a conversation, shaped as a workflow's
+ * send_block node writes it (an agent message carrying `metadata.block`), so
+ * the customer's interaction with the block can be tested without a
+ * workspace-wide workflow. Returns the message uuid.
+ */
+export async function seedBlockMessage(
+  conversationTypeId: string,
+  content: string,
+  block: Record<string, unknown> & { kind: string },
+  authorPrincipalId?: string
+): Promise<string> {
+  const id = toUuid(generateId('conversation_msg'))
+  const metadata = {
+    block: {
+      v: 1,
+      runId: `wfrun_e2e_${randomBytes(4).toString('hex')}`,
+      nodeId: 'e2e-node',
+      waiting: !['message', 'ticketForm', 'replyTime'].includes(block.kind),
+      ...block,
+    },
+  }
+  await supportDb()`
+    INSERT INTO conversation_messages (id, conversation_id, principal_id, sender_type, content, is_internal, metadata, created_at)
+    VALUES (${id}, ${toUuid(conversationTypeId as `conversation_${string}`)},
+            ${authorPrincipalId ? toUuid(authorPrincipalId as `principal_${string}`) : null},
+            'agent', ${content}, false, ${supportDb().json(metadata)}, NOW())`
+  return id
 }
 
 /** A conversation row by TypeID. */
