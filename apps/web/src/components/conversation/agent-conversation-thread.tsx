@@ -1928,9 +1928,12 @@ export function AgentConversationThread({
       case 'empty':
         return (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {isTicket
-              ? 'No replies yet. Send the first message to the requester.'
-              : 'No messages yet'}
+            {!isTicket
+              ? 'No messages yet'
+              : capabilities.reply && !isTracker
+                ? 'No replies yet. Send the first message to the requester.'
+                : // A back-office or tracker ticket has no requester to write to.
+                  'No notes yet'}
           </p>
         )
       case 'seen':

@@ -651,6 +651,33 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     expect(share).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('an empty back-office ticket says there are no notes, not to message a requester', async () => {
+    mockTicketVariants['ticket_bo_empty'] = { type: 'back_office' }
+    mockProvenanceCount.value = 0
+    const saved = mockTicketThread.messages
+    mockTicketThread.messages = []
+    try {
+      renderThread({ kind: 'ticket', id: 'ticket_bo_empty' })
+      expect(await screen.findByText('No notes yet')).toBeInTheDocument()
+      expect(screen.queryByText(/requester/i)).toBeNull()
+    } finally {
+      mockTicketThread.messages = saved
+    }
+  })
+
+  it('an empty customer ticket still invites the first message to the requester', async () => {
+    const saved = mockTicketThread.messages
+    mockTicketThread.messages = []
+    try {
+      renderThread({ kind: 'ticket', id: 'ticket_1' })
+      expect(
+        await screen.findByText('No replies yet. Send the first message to the requester.')
+      ).toBeInTheDocument()
+    } finally {
+      mockTicketThread.messages = saved
+    }
+  })
+
   it('renders the ticket header controls + type badge', async () => {
     renderThread({ kind: 'ticket', id: 'ticket_1' })
     expect(await screen.findByTestId('ticket-type-badge')).toHaveTextContent('customer')
