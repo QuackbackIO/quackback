@@ -6,6 +6,11 @@ import { MCP_AS_SCOPES } from '@/lib/shared/api-key-scopes'
  * `application_type`, so DCR defaults to `web` and fails earlier with
  * "web clients require https redirect URIs on non-loopback hosts".
  *
+ * Re-checked on 1.7.26: a client that sends `application_type: native` may now
+ * register `cursor://…` as is, but an omitted type still defaults to `web` and
+ * is refused, so the coercion below is still needed (cimd-flow.db.test.ts pins
+ * both). The placeholder swap could go once nothing relies on it.
+ *
  * Upstream: better-auth#10946 / unmerged PR #10956. We do not rewrite the
  * client's authorize `redirect_uri` — it must exact-match the stored row.
  * Authorize itself only checks `findRegisteredRedirectUri`, so restoring the
