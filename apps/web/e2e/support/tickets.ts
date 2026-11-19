@@ -354,6 +354,36 @@ export async function clickUntilVisible(
   }).toPass({ timeout: timeoutMs })
 }
 
+export interface TicketFieldDef {
+  key: string
+  label: string
+  type: 'text' | 'long_text' | 'number' | 'select' | 'date' | 'checkbox'
+  required: boolean
+  visibleToCustomer: boolean
+  options?: string[]
+}
+
+/**
+ * A ticket type of the test's own (never a seeded default), as a
+ * precondition. The settings UI path for types is TKT-20.
+ */
+export async function createTicketTypeRow(opts: {
+  name: string
+  category?: 'customer' | 'back_office' | 'tracker'
+  fields?: TicketFieldDef[]
+}): Promise<string> {
+  const id = randomUUID()
+  const slug = opts.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  await supportDb()`
+    INSERT INTO ticket_types (id, name, slug, category, fields, is_default, position)
+    VALUES (${id}, ${opts.name}, ${slug}, ${opts.category ?? 'customer'},
+            ${supportDb().json((opts.fields ?? []) as never)}, false, 100)`
+  return fromUuid('ticket_type', id)
+}
+
 /** A principal TypeID as the uuid stored in the database. */
 export function principalUuid(principalId: string): string {
   return toUuid(principalId as `principal_${string}`)

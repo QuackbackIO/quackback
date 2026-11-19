@@ -189,3 +189,16 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   and so their emails, are only produced while a live workflow uses that
   trigger (`workflow-sweep.ts`). Known bug. owner: unassigned, review by:
   2026-12-03.
+
+### Support suite: tickets
+
+- `support/tickets-create.spec.ts` › TKT-03 the requester gets one email on
+  create, not also a reply email echoing the opening note. A customer ticket
+  created for a requester (REST, MCP, or the dialog's typeless path) sends the
+  "We received your ticket" email and also a conversation reply email
+  ("Re: <opening note>"): the opening message is written through the full
+  conversation pipeline (`ticket-intake.service.ts:347`,
+  `insertTicketMessage` redirected onto the backing conversation), whose
+  visitor email is not suppressed for the intake. Same family as the possible
+  double email on ticket replies (CUS-O-17). owner: unassigned, review by:
+  2026-12-03.
