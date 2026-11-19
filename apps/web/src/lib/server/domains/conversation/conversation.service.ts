@@ -103,6 +103,7 @@ import {
   richMessageFallbackLabel,
   resolveMessageContent,
 } from '@/lib/server/messages/message-core'
+import { newestCustomerVisibleMessage, previewOfStoredMessage } from './conversation.preview'
 import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
 import {
   notifyVisitorMessage,
@@ -1991,10 +1992,35 @@ export async function deleteConversationMessage(
     await deleteGitHubIssueComment(conversationId, message.metadata.githubCommentId)
   }
 
-  await db
-    .update(conversationMessages)
-    .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId, updatedAt: new Date() })
-    .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
+  // The delete and the preview it may move land together. Only a
+  // customer-visible message can be the one the preview shows (notes and
+  // system lines never write it), so only its delete recomputes it.
+  const movedPreview = await db.transaction(async (tx) => {
+    const deleted = await tx
+      .update(conversationMessages)
+      .set({
+        deletedAt: new Date(),
+        deletedByPrincipalId: actor.principalId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
+      .returning({ id: conversationMessages.id })
+    if (deleted.length === 0 || message.isInternal || message.senderType === 'system') return null
+    const latest = await newestCustomerVisibleMessage(tx, conversationId)
+    const nextPreview = latest ? previewOfStoredMessage(latest) : null
+    if (nextPreview === conversation.lastMessagePreview) return null
+    const [updated] = await tx
+      .update(conversations)
+      .set({ lastMessagePreview: nextPreview, updatedAt: new Date() })
+      .where(eq(conversations.id, conversationId))
+      .returning()
+    return updated ?? null
+  })
+  // Open inboxes get the new preview before the deletion event that makes
+  // them refetch their lists.
+  if (movedPreview) {
+    await publishConversationUpdate(conversationId, await conversationToDTO(movedPreview, 'agent'))
+  }
 
   const deletedEvent = {
     kind: 'message_deleted' as const,
