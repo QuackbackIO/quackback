@@ -240,6 +240,17 @@ export async function kvSetMemberClaimCounted(
   })
 }
 
+/** SCARD: how many live members the set has. */
+export async function kvSetCount(setKey: string): Promise<number> {
+  const result = await db.execute(sql`
+    SELECT count(*)::int AS n FROM kv_set_member
+    WHERE workspace_key = ${currentWorkspaceNamespace()}
+      AND set_key = ${setKey}
+      AND expires_at > now()
+  `)
+  return Number(getExecuteRows<{ n: unknown }>(result)[0]?.n ?? 0)
+}
+
 /** SADD + EXPIRE NX, as one statement. True iff the member was not already live. */
 export async function kvSetMemberClaim(
   setKey: string,

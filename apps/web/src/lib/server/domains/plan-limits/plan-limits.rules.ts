@@ -23,6 +23,7 @@ import {
   type PlanCapKey,
   type PlanDowngradeIssue,
 } from '@/lib/shared/billing/plan-downgrade'
+import { parseEmailState, type PlanLimitsEmailState } from './plan-limits.email-state'
 import type { TierLimits } from '@/lib/server/domains/settings/tier-limits.types'
 import { isPlanId, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import {
@@ -132,7 +133,7 @@ export interface PlanFeatureIssue {
 export type ConfiguredFeatures = Partial<Record<PlanFeatureKey, number>>
 
 /** The stored state. Absent (null) means the workspace has never been over these limits. */
-export interface PlanLimitsState {
+export interface PlanLimitsState extends PlanLimitsEmailState {
   /** First time seen over these limits, ISO. */
   since: string
   /** `since` + 7 days, ISO. */
@@ -552,5 +553,6 @@ export function parsePlanLimitsState(value: unknown): PlanLimitsState | null {
   if (components) state.visibleStatusComponentIds = components
   const domains = stringList(raw.sendingDomainIds)
   if (domains) state.sendingDomainIds = domains
+  Object.assign(state, parseEmailState(raw))
   return state
 }

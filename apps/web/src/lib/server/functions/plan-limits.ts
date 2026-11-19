@@ -31,7 +31,12 @@ export const getPlanLimitsFn = createServerFn({ method: 'GET' }).handler(async (
     await import('@/lib/server/domains/plan-limits/plan-limits.service')
   const { planLimitsPage } = await import('@/lib/server/domains/plan-limits/plan-limits.page')
   const { limits, candidates } = await getPlanLimitsWithCandidates()
-  return planLimitsPage(limits, candidates, permissions)
+  const { skippedBroadcastCount } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.broadcasts')
+  const skipped = limits.infoRows.some((row) => row.key === 'emailsPerMonth')
+    ? await skippedBroadcastCount()
+    : 0
+  return planLimitsPage(limits, candidates, permissions, skipped)
 })
 
 export const setKeptBoardFn = createServerFn({ method: 'POST' })

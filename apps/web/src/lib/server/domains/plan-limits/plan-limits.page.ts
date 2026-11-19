@@ -76,10 +76,16 @@ const CANDIDATE_FOR: Record<PlanLimitsChooser, keyof PlanLimitsPageCandidates> =
   sendingDomains: 'sendingDomains',
 }
 
+/** The line added to the used-up email row once broadcasts were held back. */
+export function skippedBroadcastsNote(count: number): string {
+  return count === 1 ? '1 update was not sent' : `${count} updates were not sent`
+}
+
 export function planLimitsPage(
   view: PlanLimitsView,
   candidates: PlanLimitsPageCandidates,
-  permissions: readonly PermissionKey[]
+  permissions: readonly PermissionKey[],
+  skippedBroadcasts = 0
 ): PlanLimitsPage {
   const over = new Set(view.issues.map((issue) => issue.key))
   const choosers = {} as Record<PlanLimitsChooser, boolean>
@@ -100,7 +106,11 @@ export function planLimitsPage(
     fromPlan: view.fromPlan,
     issues: view.issues,
     fixedIssues: view.fixedIssues ?? [],
-    infoRows: view.infoRows,
+    infoRows: view.infoRows.map((row) =>
+      row.key === 'emailsPerMonth' && skippedBroadcasts > 0
+        ? { ...row, message: `${row.message}. ${skippedBroadcastsNote(skippedBroadcasts)}` }
+        : row
+    ),
     openBoardIds: view.openBoardIds,
     keptBoardId: view.keptBoardId,
     seatHolderIds: view.seatHolderIds,

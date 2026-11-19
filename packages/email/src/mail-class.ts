@@ -39,6 +39,7 @@ export const EMAIL_BILLABLE: Record<string, boolean> = {
   NewSignInEmail: false,
   SendingDomainAttentionEmail: false,
   DomainAttentionEmail: false,
+  PlanLimitsEmail: false,
   InvitationEmail: false,
   PortalInviteEmail: false,
   VerifyAddressEmail: false,
@@ -87,6 +88,7 @@ export const EMAIL_TENANTED: Record<string, boolean> = {
   MessengerInstallEmail: true,
   SendingDomainAttentionEmail: true,
   DomainAttentionEmail: true,
+  PlanLimitsEmail: true,
   RawEmail: true,
 
   MagicLinkEmail: false,
@@ -127,6 +129,7 @@ export const EMAIL_VOICE: Record<string, EmailVoice> = {
   OnboardingNudgeEmail: 'product',
   SendingDomainAttentionEmail: 'product',
   DomainAttentionEmail: 'product',
+  PlanLimitsEmail: 'product',
 
   ChangelogPublishedEmail: 'workspace',
   StatusIncidentPublishedEmail: 'workspace',
