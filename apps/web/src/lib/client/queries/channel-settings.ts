@@ -21,7 +21,7 @@ export const channelSettingsQueries = {
       staleTime: 60_000,
     }),
 
-  /** The conversation routing switch on the Channels hub (settings.manage). */
+  /** The conversation routing switch on the Channels hub (routing.manage). */
   routing: () =>
     queryOptions({
       queryKey: ['conversation-routing'],
