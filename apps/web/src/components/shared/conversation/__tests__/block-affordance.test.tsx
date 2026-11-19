@@ -224,6 +224,7 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="pending"
         submitting={false}
+        closed={false}
         onRate={onRate}
         onComment={recorded()}
       />
@@ -240,6 +241,7 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="pending"
         submitting={false}
+        closed={false}
         onRate={recorded()}
         onComment={onComment}
       />
@@ -260,6 +262,7 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="pending"
         submitting={false}
+        closed={false}
         onRate={onRate}
         onComment={recorded()}
       />
@@ -278,12 +281,35 @@ describe('BlockCsatRow', () => {
     expect(onRate).toHaveBeenLastCalledWith(5)
   })
 
+  it('drops the refusal line once the conversation closes', async () => {
+    const onRate = vi.fn().mockResolvedValue('refused')
+    const row = (closed: boolean) => (
+      <IntlProvider locale="en-US" messages={{}}>
+        <BlockCsatRow
+          block={csatBlock}
+          state="pending"
+          submitting={false}
+          closed={closed}
+          onRate={onRate}
+          onComment={recorded()}
+        />
+      </IntlProvider>
+    )
+    const { rerender } = render(row(false))
+    fireEvent.click(screen.getByLabelText('4 of 5'))
+    expect(await screen.findByText(NOT_CLOSED)).toBeInTheDocument()
+    rerender(row(true))
+    expect(screen.queryByText(NOT_CLOSED)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('4 of 5')).toBeEnabled()
+  })
+
   it('a failed rating puts the faces back for a retry, with no thanks', async () => {
     withIntl(
       <BlockCsatRow
         block={csatBlock}
         state="pending"
         submitting={false}
+        closed={false}
         onRate={vi.fn().mockResolvedValue('failed')}
         onComment={recorded()}
       />
@@ -300,6 +326,7 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="pending"
         submitting={false}
+        closed={false}
         onRate={recorded()}
         onComment={vi.fn().mockResolvedValue('refused')}
       />
@@ -318,6 +345,7 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="pending"
         submitting={false}
+        closed={false}
         onRate={onRate}
         onComment={recorded()}
       />
@@ -332,6 +360,7 @@ describe('BlockCsatRow', () => {
           block={csatBlock}
           state="chosen"
           submitting={false}
+          closed={false}
           onRate={onRate}
           onComment={recorded()}
         />
@@ -348,6 +377,7 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="chosen"
         submitting={false}
+        closed={false}
         onRate={recorded()}
         onComment={recorded()}
       />
@@ -361,6 +391,7 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="superseded"
         submitting={false}
+        closed={false}
         onRate={recorded()}
         onComment={recorded()}
       />

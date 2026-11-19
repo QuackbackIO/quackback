@@ -287,12 +287,16 @@ export function BlockCsatRow({
   block,
   state,
   submitting,
+  closed,
   onRate,
   onComment,
 }: {
   block: Extract<WorkflowBlockPayload, { kind: 'csat' }>
   state: BlockState
   submitting: boolean
+  /** Whether the conversation is closed now: a refusal line from while it was
+   *  open goes away once it closes, since a tap then counts. */
+  closed: boolean
   onRate: (rating: number) => Promise<CsatSubmitOutcome>
   /** `rating` is the face the visitor picked earlier THIS session (tracked
    *  locally — `row.message` for a csat block is the prompt itself, never
@@ -304,6 +308,7 @@ export function BlockCsatRow({
   const [pickedRating, setPickedRating] = useState<number | null>(null)
   const [phase, setPhase] = useState<'ask' | 'sending' | 'rated' | 'done'>('ask')
   const [refused, setRefused] = useState(false)
+  const showRefusal = refused && !closed
   const [comment, setComment] = useState('')
 
   if (phase === 'ask' && (state === 'chosen' || state === 'superseded')) {
@@ -378,7 +383,7 @@ export function BlockCsatRow({
                 </button>
               ))}
             </div>
-            {refused && notClosed}
+            {showRefusal && notClosed}
           </>
         ) : phase === 'rated' ? (
           <m.div
@@ -411,7 +416,7 @@ export function BlockCsatRow({
               <FormattedMessage id="widget.messenger.csat.send" defaultMessage="Send feedback" />
             </button>
           </m.div>
-        ) : refused ? (
+        ) : showRefusal ? (
           notClosed
         ) : (
           <p className="text-xs text-muted-foreground">

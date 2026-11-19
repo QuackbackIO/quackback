@@ -1203,6 +1203,7 @@ export function VisitorConversationThread({
                 block={block}
                 state={row.blockState}
                 submitting={submitting}
+                closed={conversationStatus === 'closed'}
                 onRate={(rating) => handleCsatRate(m.id as unknown as string, rating)}
                 onComment={(rating, comment) => handleCsatComment(rating, comment)}
               />
