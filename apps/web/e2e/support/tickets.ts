@@ -39,6 +39,13 @@ export interface ApiTicket {
   firstResponseAt: string | null
   resolvedAt: string | null
   reopenedCount: number
+  /** The time-to-resolve SLA, null when none applies. */
+  sla: {
+    policyName: string
+    timeToResolveDueAt: string
+    resolvedAt: string | null
+    paused: boolean
+  } | null
 }
 
 export interface ApiCustomer {

@@ -118,6 +118,11 @@ const CLOSED_REFUSAL = {
   message: 'This conversation has been closed. Please start a new one.',
 }
 
+/** The closed notice when a reply reopens the conversation (the default). */
+const CLOSED_REOPENS = 'This conversation was closed. Reply to reopen it.'
+/** The closed notice when replies to closed conversations are refused. */
+const CLOSED_STARTS_NEW = 'This conversation is closed. Start a new one to message us.'
+
 // ---------------------------------------------------------------------------
 // Surfaces off, tickets only
 // ---------------------------------------------------------------------------
@@ -385,28 +390,37 @@ test.describe('prevent replies to closed conversations', { tag: '@isolated' }, (
 
   test(
     'CUS-W-21 the widget tells the visitor a closed conversation takes no replies',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'With prevent-replies on the closed hint still says "Reply to reopen it" and a refused send shows nothing (visitor-conversation-thread.tsx)',
-      },
-    },
-    async ({ page, request, marker }) => {
+    { tag: '@core' },
+    async ({ browser, page, request, marker }) => {
+      // A thread loaded before the switch says a reply reopens it; the refused
+      // send then says to start a new one, raised as an alert, and keeps the draft.
+      const opening = `${marker} question`
+      const { conversation, widget } = await openThread(page, request, opening)
+      await agentApi(request).status(conversation.id, 'closed')
+      await expect(widget.getByText(CLOSED_REOPENS)).toBeVisible({ timeout: 15_000 })
       await withSettings(PREVENT, async () => {
-        const opening = `${marker} question`
-        const { conversation, widget } = await openThread(page, request, opening)
-        await agentApi(request).status(conversation.id, 'closed')
-        await expect(widget.getByText('How was your conversation?')).toBeVisible({
+        const draft = `${marker} one more thing`
+        await visitorType(widget, draft)
+        await expect(widget.getByRole('alert').filter({ hasText: CLOSED_STARTS_NEW })).toBeVisible({
           timeout: 15_000,
         })
-        await visitorType(widget, `${marker} one more thing`)
-        await expect(widget.getByText(/This conversation has been closed/)).toBeVisible({
-          timeout: 15_000,
-        })
-        // And no promise that a reply reopens it while replies are refused.
-        await expect(widget.getByText('Reply to reopen it.')).toHaveCount(0)
+        await expect(widget.getByText(CLOSED_REOPENS)).toHaveCount(0)
+        await expect(composer(widget)).toContainText(draft)
+        expect(await visitorMessages(conversation.id)).toEqual([opening])
+        expect((await conversationRow(conversation.id)).status).toBe('closed')
+
+        // A thread loaded with the switch on says so before any send.
+        const context = await browser.newContext()
+        try {
+          const fresh = await openThread(await context.newPage(), request, `${marker} later`)
+          await agentApi(request).status(fresh.conversation.id, 'closed')
+          await expect(
+            fresh.widget.getByRole('status').filter({ hasText: CLOSED_STARTS_NEW })
+          ).toBeVisible({ timeout: 15_000 })
+          await expect(fresh.widget.getByText(CLOSED_REOPENS)).toHaveCount(0)
+        } finally {
+          await context.close()
+        }
       })
     }
   )
@@ -435,7 +449,13 @@ test.describe('prevent replies to closed conversations', { tag: '@isolated' }, (
           const page = await context.newPage()
           await page.goto(`/support/${conversation.id}`)
           await expect(page.getByText(`${marker} closed soon`)).toBeVisible({ timeout: 15_000 })
+          // The portal thread is the widget's: the same notice, before and after a send.
+          await expect(page.getByText(CLOSED_STARTS_NEW)).toBeVisible({ timeout: 15_000 })
+          await expect(page.getByText(CLOSED_REOPENS)).toHaveCount(0)
           await visitorType(page, `${marker} typed reply`)
+          await expect(page.getByRole('alert').filter({ hasText: CLOSED_STARTS_NEW })).toBeVisible({
+            timeout: 15_000,
+          })
           await expect(composer(page)).toContainText(`${marker} typed reply`)
           await new Promise((r) => setTimeout(r, 2_000))
           expect((await conversationRow(conversation.id)).status).toBe('closed')
@@ -603,17 +623,11 @@ test.describe('transport and availability', { tag: '@isolated' }, () => {
 
   test(
     'CUS-W-32 the presence line never promises an anonymous visitor an email reply',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The thread header badge says "We\'ll reply by email" to a visitor with no email (conversation-presence-badge.tsx)',
-      },
-    },
+    { tag: '@core' },
     async ({ page, request, marker }) => {
       await anonymousVisitorOffline(page, request, marker, `${marker} offline`, async (widget) => {
         await expect(widget.getByText(/We're away right now/)).toBeVisible({ timeout: 15_000 })
+        await expect(widget.getByText("We'll reply here").first()).toBeVisible()
         await expect(widget.getByText(/by email/i)).toHaveCount(0)
       })
     }

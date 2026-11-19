@@ -29,14 +29,7 @@ import {
   sendFromComposer,
   threadMessages,
 } from '../../support/inbox'
-import {
-  FN_FILES,
-  adminRequest,
-  callServerFn,
-  mintVisitor,
-  visitorSend,
-  widgetFn,
-} from '../../support/widget-portal'
+import { mintVisitor, visitorSend, widgetFn } from '../../support/widget-portal'
 import {
   createCustomer,
   createTicket,
@@ -118,14 +111,7 @@ test.describe('the support product switched off', { tag: '@isolated' }, () => {
 
   test(
     'INB-02 a tickets-only inbox hides the conversation affordances',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'With supportInbox off and supportTickets on, the inbox still offers "New conversation" and the conversation views (routes/admin/inbox.tsx, inbox-nav-sidebar.tsx)',
-      },
-    },
+    { tag: '@nightly' },
     async ({ asPerson }) => {
       const admin = await asPerson('admin')
       await withSettings(
@@ -450,28 +436,15 @@ test.describe('ticket settings', { tag: '@isolated' }, () => {
             WHERE id = ${toUuid(ticket.id as `ticket_${string}`)}`
           expect(row.sla_applied).toMatchObject({ policyName })
           expect(row.sla_applied.timeToResolveDueAt).toEqual(expect.any(String))
-          await api.dispose()
 
-          // The app's own create answers with the SLA the ticket took.
-          const admin = await adminRequest(playwright)
-          const created = await callServerFn<{ id: string; sla: unknown }>(
-            admin,
-            FN_FILES.tickets,
-            'createTicketFn',
-            {
-              data: {
-                type: 'customer',
-                title: `SLA dialog ticket ${marker}`,
-                requesterPrincipalId: customer.principalId,
-              },
-            }
-          )
-          await admin.dispose()
-          expect(created.error).toBeUndefined()
-          expect(created.value?.sla).toMatchObject({
+          // The REST create answers with the SLA the ticket took.
+          expect(ticket.sla).toMatchObject({
             policyName,
-            timeToResolveDueAt: expect.any(String),
+            timeToResolveDueAt: row.sla_applied.timeToResolveDueAt,
+            resolvedAt: null,
+            paused: false,
           })
+          await api.dispose()
         })
       } finally {
         await supportDb()`UPDATE sla_policies SET deleted_at = NOW() WHERE id = ${policyUuid}`

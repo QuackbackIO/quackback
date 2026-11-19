@@ -71,7 +71,9 @@ by a separate test that is not quarantined.
   there, the requester's thread then failed with "Something went wrong", so
   the fix likely needs more than that line. owner: unassigned, review by:
   2026-12-03.
+
 ### Support suite: workflows and the AI agent
+
 - `support/automation-ai.spec.ts` › AI agent in the widget › WFL-76 the model
   closes the conversation. The `end_conversation` tool needs
   `conversation.set_status` (its spec in `assistant.toolspec.ts`), but the AI
@@ -80,30 +82,3 @@ by a separate test that is not quarantined.
   check in `assistant.tools.ts` denies every call ("This action is not
   permitted for the assistant.") and the conversation stays open. Runs in the
   support-isolated job. owner: unassigned, review by: 2026-12-03.
-### Support suite: workspace-setting journeys (support-isolated job)
-- `support/settings-isolated-widget-portal.spec.ts` › CUS-W-21 the widget
-  tells the visitor a closed conversation takes no replies. With "Prevent
-  replies to closed conversations" on, the server refuses a free-text reply
-  (409 `CONVERSATION_CLOSED`), but the widget still shows "This conversation
-  was closed. Reply to reopen it." (`visitor-conversation-thread.tsx:1333`,
-  shown for every closed thread) and the send's `catch {}`
-  (`visitor-conversation-thread.tsx:920`) swallows the refusal, so the
-  visitor's message just stays in the composer with no explanation. The
-  portal thread is the same component. owner: unassigned, review by:
-- `support/settings-isolated-widget-portal.spec.ts` › CUS-W-32 the presence
-  line never promises an anonymous visitor an email reply. With nobody
-  online, an anonymous visitor (no real email, `canEmailVisitor: false`) gets
-  the neutral "We're away right now ... we'll reply here" hint, but the
-  thread header's badge above it says "We'll reply by email": the badge's
-  offline copy is fixed (`conversation-presence-badge.tsx:55`) and the
-  thread passes it only `available` (`visitor-conversation-thread.tsx:1217`),
-  not whether the visitor can be emailed. owner: unassigned, review by:
-- `support/settings-isolated-inbox-tickets.spec.ts` › INB-02 a tickets-only
-  inbox hides the conversation affordances. With `supportInbox` off and
-  `supportTickets` on, `/admin/inbox` renders the shell as intended
-  (`routes/admin/inbox.tsx:237`), but the "conversation affordances hidden"
-  half of that rule is not built: the list still offers "New conversation"
-  and its dialog (`components/admin/conversation/conversation-list-column.tsx`)
-  and the nav still lists the conversation views ("All conversations",
-  `inbox-nav-sidebar.tsx`); nothing there reads `supportInbox`. owner:
-  unassigned, review by: 2026-12-03.
