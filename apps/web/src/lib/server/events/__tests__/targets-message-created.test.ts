@@ -98,6 +98,7 @@ describe('getMessageCreatedTargets', () => {
         authorName: 'Jane',
         preview: 'hello team, need help',
         isFirstMessage: true,
+        stillClosed: false,
       },
     })
   })

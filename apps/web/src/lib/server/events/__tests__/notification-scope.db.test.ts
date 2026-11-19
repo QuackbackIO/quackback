@@ -1029,4 +1029,61 @@ describe('presence gate on a follow-up visitor message', () => {
 
     expect(await belled(followUp(conversation.id as ConversationId))).toContain(w.onTeam.id)
   })
+
+  // A button tap answering a block on a closed conversation leaves it closed,
+  // so it never shows in an online teammate's open inbox: the bell is the
+  // only alert they get.
+  function closedBlockReply(
+    conversationId: ConversationId,
+    blockReplyKind: 'buttons' | 'csat'
+  ): EventData {
+    const event = followUp(conversationId) as unknown as {
+      data: { message: Record<string, unknown> }
+    }
+    event.data.message.blockReplyKind = blockReplyKind
+    return event as unknown as EventData
+  }
+
+  async function closeConversation(id: ConversationId) {
+    await testDb
+      .update(conversations)
+      .set({ status: 'closed', resolvedAt: new Date(), endReason: 'resolved' })
+      .where(eq(conversations.id, id))
+  }
+
+  it('a button reply on a closed conversation bells the teammates who can see it, even while one is online', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    await closeConversation(conversation.id as ConversationId)
+    await goOnline(w.solo.id)
+
+    const rung = await belled(closedBlockReply(conversation.id as ConversationId, 'buttons'))
+    expect(rung).toContain(w.solo.id)
+    expect(rung).not.toContain(w.elsewhere.id)
+  })
+
+  it('a button reply on a closed conversation still follows the teammate’s own bell setting', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    await closeConversation(conversation.id as ConversationId)
+    await goOnline(w.solo.id)
+    await testDb.insert(notificationPreferences).values({
+      principalId: w.solo.id,
+      matrix: { chat_message: { inApp: false } },
+    })
+
+    const rung = await belled(closedBlockReply(conversation.id as ConversationId, 'buttons'))
+    expect(rung).not.toContain(w.solo.id)
+    // The teammates who keep the bell on still hear it.
+    expect(rung).toContain(w.manager.id)
+  })
+
+  it('a rating on a closed conversation is still held back while a teammate who can see it is online', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    await closeConversation(conversation.id as ConversationId)
+    await goOnline(w.solo.id)
+
+    expect(await belled(closedBlockReply(conversation.id as ConversationId, 'csat'))).toEqual([])
+  })
 })
