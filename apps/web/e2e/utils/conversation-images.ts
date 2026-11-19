@@ -130,6 +130,27 @@ export async function expectLandscapeContainThumb(button: Locator) {
   }
 }
 
+/**
+ * Two or more images on one message sit side by side as square, cropped tiles
+ * (`ImageRow` in attachment-list.tsx); only a lone image is shown whole with
+ * object-contain. The tile must hold a decoded image, not a file card.
+ */
+export async function expectSquareImageTile(button: Locator) {
+  const img = button.locator('img')
+  await expectLoadedImage(img)
+  const className = (await img.getAttribute('class')) ?? ''
+  if (!className.split(/\s+/).includes('object-cover')) {
+    throw new Error(`expected object-cover on a gallery tile, got "${className}"`)
+  }
+  const box = await button.boundingBox()
+  if (!box) throw new Error('tile has no box')
+  if (Math.abs(box.width - box.height) > 2) {
+    throw new Error(
+      `expected a square tile, got ${Math.round(box.width)}×${Math.round(box.height)}`
+    )
+  }
+}
+
 /** The displayed <img> decoded real bytes (not a broken-image / filename chip). */
 export async function expectLoadedImage(img: Locator) {
   await img.waitFor({ state: 'visible' })
