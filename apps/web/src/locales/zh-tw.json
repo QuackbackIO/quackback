@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "這次對話體驗如何？",
   "widget.messenger.csat.send": "送出意見回饋",
   "widget.messenger.csat.thanks": "感謝你的意見回饋！",
+  "widget.messenger.csat.notClosed": "此對話關閉後即可評分。",
   "widget.messenger.jumpToLatest": "跳至最新訊息",
   "widget.messenger.loadOlder": "載入較早的訊息",
   "widget.messenger.loadingOlder": "載入中…",

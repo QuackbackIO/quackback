@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "Hoe was je gesprek?",
   "widget.messenger.csat.send": "Feedback versturen",
   "widget.messenger.csat.thanks": "Bedankt voor je feedback!",
+  "widget.messenger.csat.notClosed": "Je kunt beoordelen zodra dit gesprek is gesloten.",
   "widget.messenger.jumpToLatest": "Naar laatste bericht",
   "widget.messenger.loadOlder": "Eerdere berichten laden",
   "widget.messenger.loadingOlder": "Laden…",

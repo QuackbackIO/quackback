@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "Wie war die Unterhaltung für dich?",
   "widget.messenger.csat.send": "Feedback senden",
   "widget.messenger.csat.thanks": "Danke für dein Feedback!",
+  "widget.messenger.csat.notClosed": "Du kannst bewerten, sobald diese Unterhaltung geschlossen ist.",
   "widget.messenger.jumpToLatest": "Zur neuesten Nachricht",
   "widget.messenger.loadOlder": "Ältere Nachrichten laden",
   "widget.messenger.loadingOlder": "Wird geladen …",

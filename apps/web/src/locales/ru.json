@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "Как прошла переписка?",
   "widget.messenger.csat.send": "Отправить отзыв",
   "widget.messenger.csat.thanks": "Спасибо за отзыв!",
+  "widget.messenger.csat.notClosed": "Оценить можно, когда переписка будет закрыта.",
   "widget.messenger.jumpToLatest": "К последним сообщениям",
   "widget.messenger.loadOlder": "Загрузить предыдущие сообщения",
   "widget.messenger.loadingOlder": "Загрузка…",

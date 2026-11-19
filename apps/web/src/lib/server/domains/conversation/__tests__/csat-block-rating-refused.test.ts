@@ -89,7 +89,15 @@ async function seed() {
   const conversationId = createId('conversation') as ConversationId
   await testDb
     .insert(conversations)
-    .values({ id: conversationId, visitorPrincipalId: visitor, channel: 'messenger' })
+    // Closed: a rating tapped on an open conversation is refused before the
+    // send (csat-block-open-refusal.db.test.ts); this covers a refusal after it.
+    .values({
+      id: conversationId,
+      visitorPrincipalId: visitor,
+      channel: 'messenger',
+      status: 'closed',
+      resolvedAt: new Date(),
+    })
   const [block] = await testDb
     .insert(conversationMessages)
     .values({
