@@ -269,7 +269,10 @@ function uniqueIds<T extends string>(ids: ReadonlyArray<T | null | undefined>): 
  * (slaChipState), so the chip agrees with the status pill it renders next to
  * even in the brief window before the event hook stamps `pausedAt`.
  */
-function ticketSlaRefFor(slaApplied: unknown, category: TicketStatusCategory): TicketSlaRef | null {
+export function ticketSlaRefFor(
+  slaApplied: unknown,
+  category: TicketStatusCategory
+): TicketSlaRef | null {
   if (!slaApplied || typeof slaApplied !== 'object') return null
   const stamp = slaApplied as TicketSlaApplied
   // A live stamp always carries the deadline (applySlaToTicket refuses to

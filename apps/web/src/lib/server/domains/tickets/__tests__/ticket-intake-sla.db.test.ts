@@ -61,18 +61,31 @@ const realtime = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 
-// ticket.created is fired without an await after intake returns; stubbing it
-// keeps that work from touching the database after the rollback, and the spy
-// shows which ticket row the event is built from.
-const ticketEmit = vi.hoisted(() => ({
-  emitTicketCreated: vi.fn().mockResolvedValue(undefined),
-  emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
-  emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
-  emitTicketReplied: vi.fn().mockResolvedValue(undefined),
-  emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
-  emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
+// ticket.created is fired without an await after intake returns. The real
+// ticket bridge (ticket.webhooks.ts) builds the payload; only the ticket
+// dispatchers at the event bus are stubbed, which keeps the dispatch from
+// touching the database after the rollback, and the spy holds the exact
+// payload a webhook subscriber receives. The conversation dispatchers stay
+// real: the default SLA apply rides conversation.created.
+const ticketDispatch = vi.hoisted(() => ({
+  dispatchTicketCreated: vi.fn().mockResolvedValue(undefined),
+  dispatchTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
+  dispatchTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  dispatchTicketReplied: vi.fn().mockResolvedValue(undefined),
+  dispatchTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
+  dispatchTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))
-vi.mock('../ticket.webhooks', () => ticketEmit)
+vi.mock('@/lib/server/events/dispatch', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/events/dispatch')>()),
+  ...ticketDispatch,
+}))
+
+/** The `ticket` object of the one ticket.created payload intake dispatched. */
+function dispatchedCreatedTicket(): Record<string, unknown> {
+  expect(ticketDispatch.dispatchTicketCreated).toHaveBeenCalledTimes(1)
+  const [, ticket] = ticketDispatch.dispatchTicketCreated.mock.calls[0]!
+  return ticket as Record<string, unknown>
+}
 
 vi.mock('../../conversation/conversation.notify', () => ({
   notifyVisitorMessage: vi.fn().mockResolvedValue(undefined),
@@ -228,12 +241,18 @@ async function expectDefaultSlaOnPair(ticketId: TicketId, policyId: SlaPolicyId,
   return pair
 }
 
-/** The ticket.created event and the realtime update are built from the row
+/** The ticket.created payload and the realtime update are built from the row
  *  after the handoff, so both carry the ticket's SLA. */
 function expectCreateSignalsCarrySla(ticketId: TicketId, stamp: TicketSlaApplied) {
-  expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
-  const [, eventRow] = ticketEmit.emitTicketCreated.mock.calls[0]!
-  expect(eventRow).toMatchObject({ id: ticketId, slaApplied: { policyId: stamp.policyId } })
+  expect(dispatchedCreatedTicket()).toMatchObject({
+    id: ticketId,
+    sla: {
+      policyName: stamp.policyName,
+      timeToResolveDueAt: stamp.timeToResolveDueAt,
+      resolvedAt: null,
+      paused: false,
+    },
+  })
   const updates = realtime.publishTicketEvent.mock.calls.filter(
     ([id, event]) => id === ticketId && event.kind === 'ticket_updated'
   )
@@ -404,9 +423,7 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
     expect(pair.ticket.slaApplied).toBeNull()
     expect(await appliedEventCount(pair.conversationId)).toBe(0)
     expect(dto.sla).toBeNull()
-    expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
-    const [, eventRow] = ticketEmit.emitTicketCreated.mock.calls[0]!
-    expect(eventRow).toMatchObject({ id: dto.id, slaApplied: null })
+    expect(dispatchedCreatedTicket()).toMatchObject({ id: dto.id, sla: null })
     // Nothing was handed over, so intake does not read the ticket again.
     expect(intakeReads).toBe(0)
   })
@@ -420,7 +437,7 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
     // its re-read. The requester projection read createMyTicket makes after
     // intake returns is a separate read and is not counted.
     let intakeReads: number | null = null
-    ticketEmit.emitTicketCreated.mockImplementationOnce(async () => {
+    ticketDispatch.dispatchTicketCreated.mockImplementationOnce(async () => {
       intakeReads = reads.count()
     })
 
@@ -452,9 +469,7 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
     // create transaction returned.
     const pair = await readPair(dto.id as TicketId)
     expect(pair.ticket.slaApplied).toMatchObject({ policyId })
-    expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
-    const [, eventRow] = ticketEmit.emitTicketCreated.mock.calls[0]!
-    expect(eventRow).toMatchObject({ id: dto.id })
+    expect(dispatchedCreatedTicket()).toMatchObject({ id: dto.id })
   })
 
   it('a default apply that throws still creates the ticket, with no SLA', async () => {

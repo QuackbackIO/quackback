@@ -38,6 +38,7 @@ const TICKET_KEYS = [
   'reopenedCount',
   'requesterPrincipalId',
   'resolvedAt',
+  'sla',
   'stage',
   'status',
   'ticketType',

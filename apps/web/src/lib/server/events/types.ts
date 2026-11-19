@@ -453,6 +453,21 @@ export interface EventTicketData extends EventTicketRef {
   createdAt: string
   updatedAt: string
   resolvedAt: string | null
+  /** The ticket's SLA (its time-to-resolve clock), or null when none applies.
+   *  Same shape as the ticket's `sla` in the REST API. */
+  sla: EventTicketSla | null
+}
+
+/** A ticket's SLA as events and the REST API carry it (TicketSlaRef). */
+export interface EventTicketSla {
+  /** The policy name when the SLA was applied. */
+  policyName: string
+  /** When the ticket is due to be resolved (ISO), office hours included. */
+  timeToResolveDueAt: string
+  /** When the ticket was first resolved (ISO), or null while the clock runs. */
+  resolvedAt: string | null
+  /** Whether the clock is paused because the ticket is waiting on the customer. */
+  paused: boolean
 }
 
 export interface TicketCreatedPayload {

@@ -35,6 +35,7 @@ import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
 import { makeSafeDispatch } from '@/lib/server/events/safe-dispatch'
 import { loadAuthors } from '../principals/principal-display'
+import { ticketSlaRefFor } from './ticket.dto'
 
 const log = logger.child({ component: 'ticket-webhooks' })
 const safe = makeSafeDispatch(log)
@@ -74,6 +75,7 @@ function ticketData(
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
     resolvedAt: t.resolvedAt ? t.resolvedAt.toISOString() : null,
+    sla: ticketSlaRefFor(t.slaApplied, status.category),
   }
 }
 
