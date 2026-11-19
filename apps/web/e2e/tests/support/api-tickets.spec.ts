@@ -591,11 +591,10 @@ test.describe('REST tickets: writes', () => {
       const url = `/api/v1/tickets/${ticket.id}/assign`
       const agentB = people.people.agentB.principalId
       const team = people.teams.support
-      // A ticket a key opens starts assigned to the key itself; clear it first.
-      let body = await expectJson(await api.post(url, { data: { assigneePrincipalId: null } }), 200)
-      expect(body.data).toMatchObject({ assigneeTeamId: null, assigneePrincipalId: null })
+      // A workspace key belongs to nobody, so the ticket it opens starts unassigned.
+      expect(ticket).toMatchObject({ assigneeTeamId: null, assigneePrincipalId: null })
 
-      body = await expectJson(await api.post(url, { data: { assigneeTeamId: team } }), 200)
+      let body = await expectJson(await api.post(url, { data: { assigneeTeamId: team } }), 200)
       expect(body.data).toMatchObject({ assigneeTeamId: team, assigneePrincipalId: null })
       body = await expectJson(await api.post(url, { data: { assigneePrincipalId: agentB } }), 200)
       expect(body.data).toMatchObject({ assigneeTeamId: team, assigneePrincipalId: agentB })
@@ -606,11 +605,11 @@ test.describe('REST tickets: writes', () => {
 
       const events = await expect
         .poll(async () => (await eventsFor(ticket.id, ['ticket.assigned'])).length)
-        .toBeGreaterThanOrEqual(4)
+        .toBeGreaterThanOrEqual(3)
       void events
       const payloads = (await eventsFor(ticket.id, ['ticket.assigned'])).map((e) => e.payload)
       test.info().annotations.push({ type: 'payloads', description: JSON.stringify(payloads) })
-      expect(payloads[2]).toMatchObject({
+      expect(payloads[1]).toMatchObject({
         assignedPrincipalId: agentB,
         previousPrincipalId: null,
         assignedTeamId: team,
