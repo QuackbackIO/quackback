@@ -218,3 +218,17 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   `session:anonymous` bucket, so one visitor's burst refuses search (or
   upload) for every visitor of the workspace for the rest of the minute.
   Runs in the support-isolated job. owner: unassigned, review by: 2026-12-03.
+
+### Support suite: tickets remainder
+
+- `support/tickets-requester.spec.ts` › the ticket embed card › TKT-65 a
+  ticket card shows its stage to the requester and is unavailable to another
+  visitor. Product bug: a ticket embed (the embed-only message `shareTicket`
+  sends, `conversation.cards.ts`) renders nothing in a thread, so the owner
+  never sees the card and nobody else sees "This ticket is unavailable".
+  `generateContentHTML` emits the embed placeholder only for `post` and
+  `changelog` (`apps/web/src/lib/shared/content-html.ts:222`); a post embed
+  stored the same way renders. In a local build patched to allow `ticket`
+  there, the requester's thread then failed with "Something went wrong", so
+  the fix likely needs more than that line. owner: unassigned, review by:
+  2026-12-03.
