@@ -57,6 +57,12 @@ function fixtureAdapter(): ChannelAdapter {
 let visitorRows: Array<Record<string, unknown>> = []
 let limitQueue: Array<Record<string, unknown>[]> = []
 
+// Nobody here is blocked. Holding mail back from a blocked person runs over
+// real rows in events/__tests__/blocked-person-email.db.test.ts.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  getsAutomatedEmail: async () => true,
+}))
+
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: async () => false,
   isPrincipalOnline: async () => false,

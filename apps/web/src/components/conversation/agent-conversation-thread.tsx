@@ -179,6 +179,7 @@ import { EndConversationDialog } from '@/components/admin/conversation/end-conve
 import { AddParticipantDialog } from '@/components/conversation/add-participant-dialog'
 import { SharePostDialog } from '@/components/admin/conversation/share-post-dialog'
 import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
+import { BLOCK_PERSON_DESCRIPTION } from '@/components/admin/users/block-person-copy'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { RequiredAttributesDialog } from '@/components/admin/conversation/required-attributes-dialog'
 import { downloadTranscriptFile } from '@/components/admin/conversation/export-transcript-button'
@@ -2525,7 +2526,7 @@ export function AgentConversationThread({
             open={blockConfirmOpen}
             onOpenChange={setBlockConfirmOpen}
             title={`Block ${conversation?.visitor.displayName || 'this person'}?`}
-            description="They will not be able to send new messages or sign in again. Their existing activity stays, and you can unblock them at any time."
+            description={BLOCK_PERSON_DESCRIPTION}
             confirmLabel="Block"
             variant="destructive"
             isPending={blockMutation.isPending}

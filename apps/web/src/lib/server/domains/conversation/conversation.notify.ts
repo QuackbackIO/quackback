@@ -839,6 +839,8 @@ export async function notifyCsatRequestEmail(
     )
       return
     const visitorPrincipalId = conv.visitorPrincipalId
+    const { getsAutomatedEmail } = await import('@/lib/server/domains/principals/blocking')
+    if (!(await getsAutomatedEmail(visitorPrincipalId))) return
 
     const [visitor] = await db
       .select({ type: principal.type, email: user.email, contactEmail: principal.contactEmail })

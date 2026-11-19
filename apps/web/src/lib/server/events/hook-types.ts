@@ -8,6 +8,7 @@
 
 import type { EventData } from './types'
 import type { ContactEmail } from '@/lib/server/email/recipient'
+import type { PrincipalId } from '@quackback/ids'
 
 /**
  * Result of running a hook.
@@ -119,6 +120,12 @@ export interface EmailTarget {
   email: ContactEmail
   name?: string
   unsubscribeUrl: string
+  /**
+   * The person the email is for. The delivery handler reads it at send time
+   * to hold back automated email to someone blocked since the event. Absent on
+   * a target queued before it was added.
+   */
+  principalId?: PrincipalId
 }
 
 export interface EmailConfig {

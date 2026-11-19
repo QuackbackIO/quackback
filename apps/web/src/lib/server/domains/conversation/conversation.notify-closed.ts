@@ -8,6 +8,7 @@ import { hookOrigins } from '@/lib/server/events/hook-origins'
 import { logger } from '@/lib/server/logger'
 import { ensureEmailLogSink } from '@/lib/server/email/email-log.sink'
 import { isCsatRatedOrEmailed } from './csat-request.service'
+import { getsAutomatedEmail } from '@/lib/server/domains/principals/blocking'
 
 const log = logger.child({ component: 'conversation-notify-closed' })
 
@@ -37,6 +38,7 @@ export async function notifyConversationClosed(opts: {
     if (!conv?.visitorPrincipalId) return
     if (conv.endReason === 'spam') return
     if (opts.closerPrincipalId && opts.closerPrincipalId === conv.visitorPrincipalId) return
+    if (!(await getsAutomatedEmail(conv.visitorPrincipalId))) return
 
     const [visitor] = await db
       .select({ type: principal.type, email: user.email, contactEmail: principal.contactEmail })

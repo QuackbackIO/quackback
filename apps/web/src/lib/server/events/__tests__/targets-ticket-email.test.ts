@@ -179,7 +179,12 @@ describe('getTicketCreatedEmailTargets', () => {
     const targets = await getTicketCreatedEmailTargets(createdEvent(), context)
     expect(targets).toHaveLength(1)
     expect(targets[0].type).toBe('email')
-    expect(targets[0].target).toEqual({ email: 'req@example.com', unsubscribeUrl: '' })
+    expect(targets[0].target).toEqual({
+      email: 'req@example.com',
+      unsubscribeUrl: '',
+      // Who it is for, so the send can hold it back if they are blocked by then.
+      principalId: 'principal_requester',
+    })
     expect(targets[0].config).toMatchObject({
       kind: 'created',
       ticketLabel: '#1',

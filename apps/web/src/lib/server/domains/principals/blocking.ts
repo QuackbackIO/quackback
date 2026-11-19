@@ -11,6 +11,10 @@
  * principals (integrations / API keys / the AI assistant) — blocking either
  * would be an own-goal, not a moderation action.
  *
+ * A blocked person also gets no automated email: no notices, rating requests
+ * or announcements ({@link getsAutomatedEmail}). A teammate's own reply still
+ * reaches them.
+ *
  * The block travels with the person across an anonymous-to-identified merge via
  * the fill-if-empty steps in principal-repoint.ts, so signing in never sheds it.
  */
@@ -42,6 +46,19 @@ export async function isBlocked(principalId: PrincipalId): Promise<boolean> {
     where: eq(principal.id, principalId),
   })
   return row?.blockedAt != null
+}
+
+/**
+ * Whether automated email may go to this person: ticket notices, post updates,
+ * mentions, changelog and status announcements, rating requests and closing
+ * notices. A blocked person gets none of it. A teammate's own reply is not
+ * automated and does not ask: it is the conversation itself.
+ *
+ * The one check every automated sender shares, asked when the email is sent
+ * so a notice queued before the block is held back too.
+ */
+export async function getsAutomatedEmail(principalId: PrincipalId): Promise<boolean> {
+  return !(await isBlocked(principalId))
 }
 
 /** When (if ever) a principal was blocked — for the People / conversation UI. */

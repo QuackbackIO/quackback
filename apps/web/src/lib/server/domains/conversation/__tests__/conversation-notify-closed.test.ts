@@ -12,6 +12,11 @@ const isCsatAlreadyRequested = vi.fn(async (_id: unknown) => false)
 const isCsatRatedOrEmailed = vi.fn(async (_id: unknown) => false)
 let limitQueue: Array<Array<Record<string, unknown>>> = []
 
+// Nobody here is blocked. Holding mail back from a blocked person runs over
+// real rows in events/__tests__/blocked-person-email.db.test.ts.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  getsAutomatedEmail: async () => true,
+}))
 vi.mock('@quackback/email', () => ({
   sendConversationClosedEmail: (opts: unknown) => sendConversationClosedEmail(opts),
 }))
