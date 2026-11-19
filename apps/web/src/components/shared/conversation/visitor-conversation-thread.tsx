@@ -333,6 +333,9 @@ export function VisitorConversationThread({
   // Whether an offline reply could actually reach this visitor by email — drives
   // the offline copy so the surface never promises email it can't send.
   const [canEmailReply, setCanEmailReply] = useState(false)
+  // Whether the in-thread ticket form asks for an email: only an anonymous
+  // visitor with none on file. Asks until the thread load says otherwise.
+  const [ticketFormAsksEmail, setTicketFormAsksEmail] = useState(true)
   useEffect(() => {
     onReplyByEmailChange?.(canEmailReply)
   }, [canEmailReply, onReplyByEmailChange])
@@ -499,6 +502,7 @@ export function VisitorConversationThread({
         setTeamName(res.teamName)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
+        setTicketFormAsksEmail(res.ticketFormAsksEmail)
         setReopensOnReply(res.reopensOnReply !== false)
         setLinkedTicket(res.linkedTicket ?? null)
         const conv = res.conversation
@@ -1192,7 +1196,10 @@ export function VisitorConversationThread({
             <div className="flex flex-col items-start">
               {bubble}
               <Suspense fallback={<BlockTicketFormLoading />}>
-                <LazyBlockTicketForm getAuthHeaders={getAuthHeaders} />
+                <LazyBlockTicketForm
+                  getAuthHeaders={getAuthHeaders}
+                  askEmail={ticketFormAsksEmail}
+                />
               </Suspense>
             </div>
           )

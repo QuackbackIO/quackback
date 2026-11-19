@@ -61,6 +61,7 @@ import {
   assertPermission,
   policyActorFromAuth,
   hasAuthCredentials,
+  normalizePrincipalType,
   type AuthContext,
 } from './auth-helpers'
 import { isAccessDeniedError } from './auth-errors'
@@ -506,6 +507,10 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     // The pair's ticket (converged Messages surface): the thread header
     // card renders when this is set. Overridden on the loaded-thread path.
     linkedTicket: null as RequesterTicketDTO | null,
+    // Whether the in-thread ticket form asks for an email. Only an anonymous
+    // visitor with no contact email on file must give one to file a ticket
+    // (the same check the create runs); everyone else is never asked.
+    ticketFormAsksEmail: true,
   }
 
   if (!enabled || !ctx?.principal) {
@@ -521,6 +526,13 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
       return { ...base, conversation: null, messages: [], hasMore: false }
     }
   }
+
+  const { requesterHasContactChannel } =
+    await import('@/lib/server/domains/tickets/requester.service')
+  base.ticketFormAsksEmail = !(await requesterHasContactChannel({
+    principalId: ctx.principal.id,
+    principalType: normalizePrincipalType(ctx.principal.type),
+  }))
 
   const target = data?.conversationId
 
