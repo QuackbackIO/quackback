@@ -18,6 +18,8 @@ import {
   type SeededConversation,
 } from '../../support/inbox'
 import { supportDb } from '../../support/db'
+import { createTicket, pairedCustomerTicket, ticketApi, ticketRow } from '../../support/tickets'
+import { toUuid } from '@quackback/ids'
 
 test.use({ viewport: { width: 1920, height: 1080 } })
 
@@ -36,6 +38,21 @@ async function selectRows(page: Page, rows: SeededConversation[]) {
       const row = listRows(page, c.visitorName)
       await row.getByRole('button').first().click()
       await expect(page).toHaveURL(new RegExp(`i=${c.id}`), { timeout: 3_000 })
+      await page.getByRole('heading', { level: 2 }).first().click()
+      await page.keyboard.press('x')
+      await expect(bulkBar(page).getByText(`${i + 1} selected`)).toBeVisible({ timeout: 3_000 })
+    }
+  }).toPass({ timeout: 30_000 })
+}
+
+/** Like selectRows, for any item kind: open it by its row text and press `x`. */
+async function selectItems(page: Page, items: { id: string; text: string }[]) {
+  await expect(async () => {
+    const clear = bulkBar(page).getByRole('button', { name: 'Clear selection' })
+    if (await clear.isVisible()) await clear.click()
+    for (const [i, item] of items.entries()) {
+      await listRows(page, item.text).getByRole('button').first().click()
+      await expect(page).toHaveURL(new RegExp(`i=${item.id}`), { timeout: 3_000 })
       await page.getByRole('heading', { level: 2 }).first().click()
       await page.keyboard.press('x')
       await expect(bulkBar(page).getByText(`${i + 1} selected`)).toBeVisible({ timeout: 3_000 })
@@ -173,6 +190,69 @@ test.describe('inbox bulk actions', () => {
           .toBe(true)
       }
       expect((await messagesOf(untouched.uuid)).some((m) => m.sender_type === 'agent')).toBe(false)
+    }
+  )
+
+  test(
+    'INB-75 a mixed conversation and ticket selection applies assign, priority and close to both kinds',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, playwright, baseURL, customerEmail, marker }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      // A customer-ticket pair lists as its conversation; a back-office ticket
+      // lists as a ticket. All tickets shows both kinds.
+      const pair = await pairedCustomerTicket(api, customerEmail, `Pair ${marker}`)
+      const backOffice = await createTicket(api, {
+        title: `Back office ${marker}`,
+        type: 'back_office',
+      })
+      const untouched = await createTicket(api, {
+        title: `Left alone ${marker}`,
+        type: 'back_office',
+      })
+      await api.dispose()
+      const { page, mate } = await teammate()
+      await page.goto(inboxUrl({ view: 'tickets_all', q: marker }))
+      await expect(listRows(page, marker)).toHaveCount(3, { timeout: 15_000 })
+      const rows = [
+        { id: pair.conversationId, text: `Pair ${marker}` },
+        { id: backOffice.id, text: `Back office ${marker}` },
+      ]
+
+      const bar = bulkBar(page)
+      await selectItems(page, rows)
+      await bar.getByRole('button', { name: 'Assign' }).click()
+      await page.getByRole('menuitem', { name: 'Assign to me' }).click()
+      await expect(page.getByText('Assigned 2 items')).toBeVisible({ timeout: 15_000 })
+
+      await expect(bar).toHaveCount(0)
+      await selectItems(page, rows)
+      await bar.getByRole('button', { name: 'Priority' }).click()
+      await page.getByRole('menuitem', { name: 'High' }).click()
+      await expect(page.getByText('Updated 2 items')).toBeVisible({ timeout: 15_000 })
+
+      await expect(bar).toHaveCount(0)
+      await selectItems(page, rows)
+      await bar.getByRole('button', { name: 'Close', exact: true }).click()
+      await expect(page.getByText('Closed 2 items')).toBeVisible({ timeout: 15_000 })
+
+      const conversation = await conversationState(
+        toUuid(pair.conversationId as `conversation_${string}`)
+      )
+      expect(conversation.assigned_agent_principal_id).toBe(mate.principalUuid)
+      expect(conversation.priority).toBe('high')
+      expect(conversation.status).toBe('closed')
+      const ticket = await ticketRow(backOffice.id)
+      expect(ticket.assignee_principal_id).toBe(mate.principalUuid)
+      expect(ticket.priority).toBe('high')
+      expect(ticket.status_category).toBe('closed')
+      const other = await ticketRow(untouched.id)
+      // (A ticket created through the API starts with its creator assigned.)
+      expect(other.assignee_principal_id).not.toBe(mate.principalUuid)
+      expect(other.priority).not.toBe('high')
+      expect(other.status_category).not.toBe('closed')
     }
   )
 })

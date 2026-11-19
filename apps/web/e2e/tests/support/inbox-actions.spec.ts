@@ -12,6 +12,7 @@ import {
   test,
   expect,
   bellsFor,
+  clickUntil,
   conversationState,
   conversationTypeId,
   conversationWithMessage,
@@ -31,6 +32,17 @@ import {
 } from '../../support/inbox'
 import { supportDb } from '../../support/db'
 import { runSweep } from '../../support/sweeps'
+import { ticketApi } from '../../support/tickets'
+import {
+  archiveAttribute,
+  attributeRow,
+  mailsContaining,
+  seedSelectAttribute,
+  seedSlaOnConversation,
+  slaChip,
+  threadMenu,
+  waitForMailContaining,
+} from '../../support/inbox-more'
 
 test.use({ viewport: { width: 1920, height: 1080 } })
 
@@ -802,6 +814,329 @@ test.describe('inbox thread actions', () => {
       expect((await conversationState(snoozed.uuid)).assigned_agent_principal_id).toBe(
         mate.principalUuid
       )
+    }
+  )
+})
+
+test.describe('inbox thread actions, details and group threads', () => {
+  test(
+    'INB-66 setting a conversation attribute saves it and shows it in the details panel; clearing removes it',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const attr = await seedSelectAttribute(marker)
+      try {
+        const { page } = await teammate()
+        const c = await seed()
+        await openConversation(page, c.id, c.messages[0])
+        const control = attributeRow(page, attr.label).getByRole('combobox')
+        await expect(control).toHaveText('None', { timeout: 15_000 })
+
+        await expect(async () => {
+          await control.click()
+          await page.getByRole('option', { name: attr.options[1].label }).click({ timeout: 2_000 })
+        }).toPass({ timeout: 15_000 })
+        const set = await waitForConversation(c.uuid, 'the attribute', (r) =>
+          Boolean(r.custom_attributes[attr.key])
+        )
+        expect(set.custom_attributes[attr.key]).toMatchObject({ v: 'opt_pro', src: 'teammate' })
+        // The saved value is what the panel shows after a fresh load.
+        await openConversation(page, c.id, c.messages[0])
+        await expect(control).toHaveText(attr.options[1].label, { timeout: 15_000 })
+
+        await control.click()
+        await page.getByRole('option', { name: 'None' }).click()
+        await waitForConversation(
+          c.uuid,
+          'the cleared attribute',
+          (r) => !(attr.key in r.custom_attributes)
+        )
+        await expect(control).toHaveText('None')
+      } finally {
+        await archiveAttribute(attr.id)
+      }
+    }
+  )
+
+  test(
+    'INB-70 a manager creates, edits and deletes a macro; a Contributor cannot reach macro management',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, marker }) => {
+      const { page } = await teammate()
+      const name = `Macro ${marker}`
+      const macroRows = () =>
+        supportDb()<{ body: string }[]>`
+          SELECT body FROM macros WHERE name = ${name} AND deleted_at IS NULL`
+      await page.goto('/admin/settings/macros')
+      await clickUntil(page.getByRole('button', { name: 'New macro' }), () =>
+        expect(page.getByRole('dialog', { name: 'New macro' })).toBeVisible({ timeout: 2_000 })
+      )
+      const create = page.getByRole('dialog', { name: 'New macro' })
+      await create.locator('#macro-name').fill(name)
+      await create.locator('#macro-body').fill(`First body ${marker}`)
+      await create.getByRole('button', { name: 'Create' }).click()
+      await expect(page.getByText('Macro created')).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByText(`First body ${marker}`)).toBeVisible()
+      expect(await macroRows()).toEqual([{ body: `First body ${marker}` }])
+
+      await page.getByRole('button', { name: `Actions for ${name}` }).click()
+      await page.getByRole('menuitem', { name: 'Edit' }).click()
+      const edit = page.getByRole('dialog', { name: 'Edit macro' })
+      await edit.locator('#macro-body').fill(`Second body ${marker}`)
+      await edit.getByRole('button', { name: 'Save' }).click()
+      await expect(page.getByText('Macro updated')).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByText(`Second body ${marker}`)).toBeVisible()
+      expect(await macroRows()).toEqual([{ body: `Second body ${marker}` }])
+
+      await page.getByRole('button', { name: `Actions for ${name}` }).click()
+      await page.getByRole('menuitem', { name: 'Delete' }).click()
+      await page.getByRole('button', { name: 'Delete macro' }).click()
+      await expect(page.getByText('Macro deleted')).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByText(`Second body ${marker}`)).toHaveCount(0)
+      expect(await macroRows()).toEqual([])
+
+      const { page: contributor } = await teammate({ role: 'contributor' })
+      await contributor.goto('/admin/settings/macros')
+      await expect(contributor).toHaveURL(/error=not_team_member/, { timeout: 15_000 })
+      await expect(contributor.getByRole('button', { name: 'New macro' })).toHaveCount(0)
+    }
+  )
+
+  test(
+    'INB-77 adding a customer by email posts a team notice once and mails them the next reply',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, customerEmail, marker }) => {
+      test.setTimeout(60_000)
+      const { page, mate } = await teammate()
+      const c = await seed({ visitorEmail: customerEmail })
+      const added = `${marker}-cc@customers.example`
+      await openConversation(page, c.id, c.messages[0])
+      await threadMenu(page, 'Add customer…')
+      const dialog = page.getByRole('dialog', { name: 'Conversation customers' })
+      const addCustomer = async (email: string) => {
+        await dialog.getByLabel('Customer email').fill(email)
+        await dialog.getByRole('button', { name: 'Add customer' }).click()
+        // A finished add clears the field.
+        await expect(dialog.getByLabel('Customer email')).toHaveValue('', { timeout: 15_000 })
+      }
+      await addCustomer(added)
+      await expect(dialog.getByRole('button', { name: `Remove ${added}` })).toBeVisible({
+        timeout: 15_000,
+      })
+      const notice = `${added} was added to the conversation by ${mate.name} — they will receive future replies by email`
+      await expect(threadMessages(page, notice)).toBeVisible({ timeout: 15_000 })
+
+      // The same address again, and the visitor's own address: no-ops.
+      await addCustomer(added)
+      await addCustomer(customerEmail)
+      await expect(page.getByText('Customer added').first()).toBeVisible()
+      await expect(dialog.getByRole('button', { name: /^Remove / })).toHaveCount(1)
+      const participants = await supportDb()`
+        SELECT 1 FROM conversation_participants WHERE conversation_id = ${c.uuid}`
+      expect(participants).toHaveLength(1)
+      const notices = (await systemNotices(c.uuid)).filter((m) => m.content.includes('was added'))
+      expect(notices.map((m) => [m.content, m.is_internal])).toEqual([[notice, true]])
+      await page.keyboard.press('Escape')
+
+      const reply = `Looping you in ${marker}`
+      await sendFromComposer(page, reply, 'reply')
+      const mail = await waitForMailContaining(added, reply)
+      expect(mail.Text).toContain(reply)
+    }
+  )
+
+  test(
+    'INB-78 removing a customer posts a team notice and later replies are not mailed to them',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, customerEmail, marker }) => {
+      test.setTimeout(60_000)
+      const { page, mate } = await teammate()
+      const c = await seed({ visitorEmail: customerEmail })
+      const added = `${marker}-cc@customers.example`
+      // A second customer who stays: their copy is the signal the fan-out ran.
+      const kept = `${marker}-kept@customers.example`
+      await openConversation(page, c.id, c.messages[0])
+      await threadMenu(page, 'Add customer…')
+      const dialog = page.getByRole('dialog', { name: 'Conversation customers' })
+      for (const email of [added, kept]) {
+        await dialog.getByLabel('Customer email').fill(email)
+        await dialog.getByRole('button', { name: 'Add customer' }).click()
+        await expect(dialog.getByRole('button', { name: `Remove ${email}` })).toBeVisible({
+          timeout: 15_000,
+        })
+      }
+      const remove = dialog.getByRole('button', { name: `Remove ${added}` })
+
+      await remove.click()
+      await expect(page.getByText('Customer removed').first()).toBeVisible({ timeout: 15_000 })
+      await expect(remove).toHaveCount(0)
+      const notice = `${added} was removed from the conversation by ${mate.name} — they no longer receive replies`
+      await expect(threadMessages(page, notice)).toBeVisible({ timeout: 15_000 })
+      expect(
+        await supportDb()`SELECT 1 FROM conversation_participants WHERE conversation_id = ${c.uuid}`
+      ).toHaveLength(1)
+      await page.keyboard.press('Escape')
+
+      // The reply reaches the visitor and the customer who stayed; the removed
+      // customer gets none of it. Participants are mailed one by one in no set
+      // order, so after the kept copy lands give the fan-out a moment to finish.
+      const reply = `Only for you now ${marker}`
+      await sendFromComposer(page, reply, 'reply')
+      await waitForMailContaining(customerEmail, reply)
+      await waitForMailContaining(kept, reply)
+      await new Promise((resolve) => setTimeout(resolve, 3_000))
+      expect(await mailsContaining(added, reply)).toEqual([])
+    }
+  )
+
+  test(
+    'INB-80 sharing an existing post puts a post card in the thread the visitor sees',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, browser, playwright, baseURL, marker }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const boards = (await (await api.get('/api/v1/boards')).json()) as {
+        data: Array<{ id: string }>
+      }
+      const title = `Shared idea ${marker}`
+      const created = await api.post('/api/v1/posts', {
+        data: { boardId: boards.data[0].id, title, content: 'A post to share' },
+      })
+      expect(created.status(), await created.text()).toBe(201)
+      await api.dispose()
+
+      const { page } = await teammate()
+      const text = `Is this planned ${marker}`
+      const visitor = await widgetVisitor(browser, text)
+      await openConversation(page, visitor.id, text)
+      const message = threadMessages(page, text)
+      await expect(async () => {
+        await message.hover()
+        await message.getByRole('button', { name: 'More actions' }).click({ timeout: 2_000 })
+        await page.getByRole('menuitem', { name: 'Share a post…' }).click({ timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
+      const dialog = page.getByRole('dialog', { name: 'Share a post' })
+      await dialog.getByPlaceholder('Search posts by title…').fill(title)
+      const result = dialog.locator('div.flex.items-center').filter({ hasText: title })
+      await result.getByRole('button', { name: 'Share' }).click({ timeout: 15_000 })
+      await expect(page.getByText('Post shared in conversation')).toBeVisible({ timeout: 15_000 })
+
+      await expect(visitor.page.getByText(title)).toBeVisible({ timeout: 15_000 })
+      const shared = (await messagesOf(visitor.uuid)).filter(
+        (m) => m.sender_type === 'agent' && !m.is_internal
+      )
+      expect(shared).toHaveLength(1)
+      await visitor.page.context().close()
+    }
+  )
+
+  test(
+    'INB-83 the conversations export downloads for an admin and is refused for a member',
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed }) => {
+      const c = await seed()
+      const { page: admin } = await teammate()
+      const res = await admin.request.get('/api/export/conversations')
+      expect(res.status()).toBe(200)
+      expect(res.headers()['content-type']).toContain('application/x-ndjson')
+      expect(res.headers()['content-disposition']).toMatch(
+        /^attachment; filename="conversations-export-.+-\d+\.jsonl"$/
+      )
+      const body = await res.text()
+      expect(body).toContain(c.messages[0])
+
+      const { page: member } = await teammate({ role: 'contributor' })
+      const refused = await member.request.get('/api/export/conversations')
+      expect(refused.status()).toBe(403)
+      expect(await refused.json()).toEqual({ error: 'Only admins can export conversations' })
+    }
+  )
+
+  test(
+    "INB-85 a captured email is saved to an anonymous visitor's contact; a malformed one is ignored",
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      test.setTimeout(60_000)
+      const { page } = await teammate()
+      const contactOf = async (visitorUuid: string) =>
+        (
+          await supportDb()<{ contact_email: string | null }[]>`
+            SELECT contact_email FROM principal WHERE id = ${visitorUuid}`
+        )[0].contact_email
+      const track = async (c: { id: string; messages: string[] }, email: string) => {
+        await openConversation(page, c.id, c.messages[0])
+        await detailsPanel(page).getByRole('button', { name: 'Track as feedback' }).click()
+        const dialog = page.getByRole('dialog')
+        await dialog.locator('#convert-contact-email').fill(email)
+        await dialog.getByRole('button', { name: 'Track as feedback' }).click()
+        await expect(page.getByText(/Post created from conversation/).first()).toBeVisible({
+          timeout: 15_000,
+        })
+      }
+
+      const good = await seed({
+        subject: `Export to CSV ${marker}`,
+        messages: [`Please add CSV export ${marker}`],
+      })
+      const email = `${marker}-lead@customers.example`
+      await track(good, email)
+      await expect.poll(() => contactOf(good.visitorUuid)).toBe(email)
+
+      // A malformed address never blocks the track and is never stored.
+      const bad = await seed({
+        subject: `Dark charts ${marker}`,
+        messages: [`Charts in dark mode ${marker}`],
+        visitorName: `Second ${marker}`,
+      })
+      await track(bad, 'not-an-email')
+      await expect
+        .poll(
+          async () =>
+            (await supportDb()`SELECT 1 FROM posts WHERE title = ${`Dark charts ${marker}`}`).length
+        )
+        .toBe(1)
+      expect(await contactOf(bad.visitorUuid)).toBeNull()
+    }
+  )
+
+  test(
+    "INB-86 removing a conversation's SLA clears the chip",
+    {
+      tag: '@nightly',
+    },
+    async ({ teammate, seed, marker }) => {
+      const { page } = await teammate()
+      const c = await seed()
+      const policy = `Gold ${marker}`
+      await seedSlaOnConversation(c.uuid, policy)
+      await openConversation(page, c.id, c.messages[0])
+      await expect(slaChip(page, policy)).toBeVisible({ timeout: 15_000 })
+
+      await threadMenu(page, `Remove SLA (${policy})`)
+      await expect(page.getByText('SLA removed')).toBeVisible({ timeout: 15_000 })
+      await expect(slaChip(page, policy)).toHaveCount(0)
+      const [row] = await supportDb()<{ sla_applied: unknown }[]>`
+        SELECT sla_applied FROM conversations WHERE id = ${c.uuid}`
+      expect(row.sla_applied).toBeNull()
+      const events = await supportDb()<{ kind: string }[]>`
+        SELECT kind FROM sla_events WHERE conversation_id = ${c.uuid}`
+      expect(events.map((e) => e.kind)).toContain('removed')
+      // A fresh load agrees: no chip.
+      await openConversation(page, c.id, c.messages[0])
+      await expect(slaChip(page, policy)).toHaveCount(0)
     }
   )
 })
