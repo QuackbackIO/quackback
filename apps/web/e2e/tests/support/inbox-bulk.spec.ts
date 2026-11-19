@@ -25,16 +25,20 @@ function bulkBar(page: Page) {
 
 /** Open each row and press `x`: the bulk bar counts the selection. */
 async function selectRows(page: Page, rows: SeededConversation[]) {
-  for (const [i, c] of rows.entries()) {
-    const row = listRows(page, c.visitorName)
-    await expect(async () => {
+  // A live list update right after an earlier bulk action can reset the
+  // selection mid-way; start over until the whole set sticks.
+  await expect(async () => {
+    const clear = bulkBar(page).getByRole('button', { name: 'Clear selection' })
+    if (await clear.isVisible()) await clear.click()
+    for (const [i, c] of rows.entries()) {
+      const row = listRows(page, c.visitorName)
       await row.getByRole('button').first().click()
-      await expect(page).toHaveURL(new RegExp(`i=${c.id}`), { timeout: 2_000 })
-    }).toPass({ timeout: 15_000 })
-    await page.getByRole('heading', { level: 2 }).first().click()
-    await page.keyboard.press('x')
-    await expect(bulkBar(page).getByText(`${i + 1} selected`)).toBeVisible()
-  }
+      await expect(page).toHaveURL(new RegExp(`i=${c.id}`), { timeout: 3_000 })
+      await page.getByRole('heading', { level: 2 }).first().click()
+      await page.keyboard.press('x')
+      await expect(bulkBar(page).getByText(`${i + 1} selected`)).toBeVisible({ timeout: 3_000 })
+    }
+  }).toPass({ timeout: 30_000 })
 }
 
 test.describe('inbox bulk actions', () => {
