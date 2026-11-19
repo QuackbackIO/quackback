@@ -161,3 +161,31 @@ No deterministic test: whether an event job runs inline or in the worker is
 not under the suite's control, and the one job-read setting the suite could
 switch on after boot is part of its baseline. owner: unassigned, review by:
 2026-12-03.
+
+### Support suite: SLA, ratings and notification emails
+
+Each entry: owner: unassigned, review by: 2026-12-03.
+
+- `support/sla-clocks.spec.ts` › default SLA at intake: known gaps › SLA-07
+  the ticket.created webhook carries the ticket SLA. The ticket is stamped at
+  intake, but the `ticket.created` payload is built by `ticketData()`
+  (`ticket.webhooks.ts`), which has no SLA field, so subscribers never see the
+  due date. Known bug. owner: unassigned, review by: 2026-12-03.
+- `support/sla.spec.ts` › SLA in the inbox › SLA-26 picking "SLA breach
+  soonest" in All conversations orders the list by due time. The sort menu
+  (`conversation-list-toolbar.tsx`) offers the sla sort on every scope, but
+  the unified list scopes (All, Mine, Unassigned, a team) clamp it to most
+  recent (`inbox-scope.ts`, `INBOX_UNIFIED_SORTS`; `listInboxItemsFn` has no
+  sla sort), so the list silently keeps its recency order. New bug. owner:
+  unassigned, review by: 2026-12-03.
+- `support/csat.spec.ts` › ratings by email › CSAT-13 an emailed rating link
+  (with its rating) opens the page with that face preselected. Every rating
+  link in the close and rating-request emails carries `&rating=N`; the router
+  parses it as a number and `csat.tsx` validates `rating` as a string, so the
+  page answers 500 "Something went wrong" and the customer cannot rate. A link
+  without `rating` works. New bug. owner: unassigned, review by: 2026-12-03.
+- `support/notifications-email.spec.ts` › SLA emails › SLA-23 the warning
+  email is sent without any workflow listening. SLA warning and breach events,
+  and so their emails, are only produced while a live workflow uses that
+  trigger (`workflow-sweep.ts`). Known bug. owner: unassigned, review by:
+  2026-12-03.
