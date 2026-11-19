@@ -2,7 +2,8 @@
  * The answers the runtime pauses read, against a real database, for every
  * paid feature a runtime path pauses or gates: a workspace on the Free plan
  * with each of them set up, in the four states the paths are tested in
- * (feature-states.ts mirrors these).
+ * (feature-states.ts mirrors these). Each drop to Free starts from a plan
+ * that had them all, as a lapse does.
  *
  *  - flag off: nothing pauses; the plan gates answer as they always have.
  *  - grace: the grace features keep running; MCP stops at once.
@@ -14,22 +15,25 @@ import { createId, type PrincipalId, type UserId, type WorkspaceId } from '@quac
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { eq, integrations, principal, settings, user, webhooks, workflows } from '@/lib/server/db'
 import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
-import type { PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { DISABLED_CLOUD_CONFIG, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+import { resetConfig } from '@/lib/server/config'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import {
+  detectPlanLimits,
   getPlanLimits,
   invalidatePlanLimits,
   isFeatureLive,
   isFeaturePaused,
 } from '../plan-limits.service'
-import type { PlanFeatureKey } from '../plan-limits.features'
+import { planFeatureSet, type PlanFeatureKey } from '../plan-limits.features'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -49,11 +53,21 @@ const KEYS: PlanFeatureKey[] = [...GRACE_KEYS, 'mcpServer']
 
 let settingsId: WorkspaceId
 
+/** An AI client and chat model, as on any server that runs the assistant and translation. */
+function useAiModel() {
+  vi.stubEnv('BASE_URL', 'https://feedback.acme.com')
+  vi.stubEnv('SECRET_KEY', 'acme-test-secret-key-0123456789abcdef')
+  vi.stubEnv('OPENAI_API_KEY', 'acme-key')
+  vi.stubEnv('OPENAI_BASE_URL', 'https://ai.example.com/v1')
+  vi.stubEnv('AI_CHAT_MODEL', 'acme-chat')
+  resetConfig()
+}
+
 async function configure(planLimits: boolean, plan: PlanId) {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, planLimits }),
+      featureFlags: JSON.stringify({ feedback: true, supportInbox: true, planLimits }),
       tierLimits: null,
       cloud: storedCloud(plan) as never,
     })
@@ -61,6 +75,17 @@ async function configure(planLimits: boolean, plan: PlanId) {
   invalidateTierLimitsCache()
   await invalidateSettingsCache()
   await invalidatePlanLimits()
+}
+
+/** The drop to Free from a plan that had every paid feature. */
+async function dropToFree() {
+  await configure(true, 'free')
+  await detectPlanLimits({
+    previous: {
+      plan: 'enterprise',
+      features: planFeatureSet(OSS_TIER_LIMITS.features, DISABLED_CLOUD_CONFIG),
+    },
+  })
 }
 
 /** Every grace feature set up and running. */
@@ -88,8 +113,15 @@ async function setUpEverything() {
     .update(settings)
     .set({
       customCss: '.acme { color: red }',
-      widgetConfig: JSON.stringify({ messenger: { assistant: { respond: true } } }),
-      helpCenterConfig: JSON.stringify({ autoTranslate: { enabled: true } }),
+      widgetConfig: JSON.stringify({
+        enabled: true,
+        tabs: { messenger: true },
+        messenger: { assistant: { respond: true } },
+      }),
+      helpCenterConfig: JSON.stringify({
+        autoTranslate: { enabled: true },
+        locales: { additional: ['fr'] },
+      }),
       cloudIdentity: {
         version: 1,
         displayName: 'Acme',
@@ -130,10 +162,13 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
           .returning({ id: settings.id })
       )[0]!.id
     await testDb.update(settings).set({ planLimitsState: null }).where(eq(settings.id, settingsId))
+    useAiModel()
     await setUpEverything()
   })
   afterEach(async () => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
+    resetConfig()
     await invalidatePlanLimits()
     await fixture.rollback()
   })
@@ -144,7 +179,7 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
   })
 
   it('grace: the grace features keep running and MCP stops at once', async () => {
-    await configure(true, 'free')
+    await dropToFree()
     expect((await getPlanLimits()).phase).toBe('grace')
     expect(await answers()).toEqual(
       every(false, true, { mcpServer: { paused: true, live: false } })
@@ -152,7 +187,7 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
   })
 
   it('grace: setting up more is refused on the current plan, while what exists runs', async () => {
-    await configure(true, 'free')
+    await dropToFree()
     expect((await getPlanLimits()).phase).toBe('grace')
     expect(await isFeatureLive('webhooks')).toBe(true)
     expect(await isFeatureLive('workflows')).toBe(true)
@@ -174,16 +209,14 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
   })
 
   it('enforced: every one of them pauses after the grace', async () => {
-    await configure(true, 'free')
-    await getPlanLimits()
+    await dropToFree()
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     expect((await getPlanLimits()).phase).toBe('enforced')
     expect(await answers()).toEqual(every(true, false))
   })
 
   it('included: on a plan with them all, nothing pauses, with no setup again', async () => {
-    await configure(true, 'free')
-    await getPlanLimits()
+    await dropToFree()
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     expect(await isFeaturePaused('webhooks')).toBe(true)
     await configure(true, 'enterprise')
@@ -191,7 +224,7 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
   })
 
   it('pauses at the grace end exactly, not a moment before', async () => {
-    await configure(true, 'free')
+    await dropToFree()
     const { graceEndsAt } = await getPlanLimits()
     const end = Date.parse(graceEndsAt!)
     vi.useFakeTimers({ toFake: ['Date'], now: end - 1 })
@@ -203,8 +236,7 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
   })
 
   it('upgrade during the grace: nothing pauses at the old grace end', async () => {
-    await configure(true, 'free')
-    await getPlanLimits()
+    await dropToFree()
     await configure(true, 'enterprise')
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     expect((await getPlanLimits()).phase).toBe('ok')
