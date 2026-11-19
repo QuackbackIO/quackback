@@ -6,7 +6,6 @@
  * This handler only resets failureCount on success.
  */
 
-import crypto from 'crypto'
 import type { HookHandler, HookResult, HookRunContext } from '../hook-types'
 import type { EventData } from '../types'
 import type { WebhookTarget, WebhookConfig } from '../integrations/webhook/constants'
@@ -21,6 +20,7 @@ import {
 } from '../hook-idempotency'
 import { db, webhooks, eq } from '@/lib/server/db'
 import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
+import { webhookSignatureHeaders } from '@/lib/server/domains/webhooks/signing'
 import { logger } from '@/lib/server/logger'
 import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
@@ -102,16 +102,10 @@ export const webhookHook: HookHandler = {
       data: event.data,
     })
 
-    // Create HMAC signature
-    const timestamp = Math.floor(Date.now() / 1000)
-    const signaturePayload = `${timestamp}.${payload}`
-    const signature = crypto.createHmac('sha256', secret).update(signaturePayload).digest('hex')
-
     const headers = {
       'Content-Type': 'application/json',
       'User-Agent': USER_AGENT,
-      'X-Quackback-Signature': `sha256=${signature}`,
-      'X-Quackback-Timestamp': String(timestamp),
+      ...webhookSignatureHeaders(secret, payload),
       'X-Quackback-Event': event.type,
     }
 

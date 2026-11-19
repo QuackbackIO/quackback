@@ -47,6 +47,8 @@ import {
   type ValidatedWorkflowGraph,
 } from '@/lib/server/domains/workflows/workflow.schemas'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { httpsUrl } from '@/lib/shared/schemas/auth'
+import { workflowWebhookSecret } from '@/lib/server/domains/webhooks/signing'
 
 // createServerFn constrains returns to serializable types, so the jsonb fields
 // are typed as JSON (not Record<string, unknown> — `unknown` isn't provably
@@ -400,6 +402,21 @@ export const listRunnableWorkflowsFn = createServerFn({ method: 'GET' }).handler
     return toRunnableWorkflows(await listWorkflows())
   }
 )
+
+const webhookSecretSchema = z.object({ url: httpsUrl })
+
+/**
+ * The secret a "Send webhook" step signs with for this URL, so whoever builds
+ * the workflow can set up the receiver to verify deliveries. Derived from the
+ * URL (domains/webhooks/signing.ts), so it is the same before and after the
+ * step is saved. POST, so the secret never sits in a URL.
+ */
+export const getWorkflowWebhookSecretFn = createServerFn({ method: 'POST' })
+  .validator(webhookSecretSchema)
+  .handler(async ({ data }): Promise<{ secret: string }> => {
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    return { secret: workflowWebhookSecret(data.url) }
+  })
 
 const runManuallySchema = z.object({ workflowId: z.string(), conversationId: z.string() })
 
