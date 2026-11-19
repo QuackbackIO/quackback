@@ -150,6 +150,28 @@ vi.mock('@/lib/server/domains/principals/principal-display', async (importOrigin
     },
   }
 })
+// Every scope reload a stream's gate starts, until it settles. The gate starts
+// stale, so the first frame each stream hears waits behind a reload of real
+// reads that no publish chain covers; `settle` waits for these too, so a case
+// asserts on what was delivered, never on how fast the database answered.
+const reloads = vi.hoisted(() => new Set<Promise<void>>())
+vi.mock('@/lib/server/realtime/inbox-scope-gate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/realtime/inbox-scope-gate')>()
+  return {
+    ...actual,
+    createInboxScopeGate: (opts: Parameters<typeof actual.createInboxScopeGate>[0]) =>
+      actual.createInboxScopeGate({
+        ...opts,
+        runReload: (body) => {
+          const run = opts.runReload(body)
+          reloads.add(run)
+          const done = () => void reloads.delete(run)
+          run.then(done, done)
+          return run
+        },
+      }),
+  }
+})
 // The scope reload's team read, real unless a case makes it fail.
 const teamRead = vi.hoisted(() => ({ failNext: 0, failed: 0 }))
 vi.mock('@/lib/server/domains/teams', async (importOriginal) => {
@@ -228,8 +250,9 @@ if (fixture.available) {
     await fixture.begin()
   })
   afterEach(async () => {
+    await settle()
     for (const close of openStreams.splice(0)) await close()
-    await inboxPublishesSettled()
+    await settle()
     vi.useRealTimers()
     await fixture.rollback()
   })
@@ -393,10 +416,21 @@ async function until(predicate: () => boolean, ms = 3_000): Promise<void> {
   throw new Error('timed out')
 }
 
-/** Let every chained publish, and the frames it delivers, land. */
+/**
+ * Wait until nothing is in flight: every chained publish, every scope reload a
+ * frame queued behind, and the delivery to each reader. After a reload settles
+ * the gate's delivery and the reader's pump are promise continuations only, so
+ * one macrotask turn drains them; a reload a frame starts in that turn is
+ * caught by the next pass. No fixed sleep: a slow database only makes this
+ * wait longer, never return early.
+ */
 async function settle(): Promise<void> {
-  await inboxPublishesSettled()
-  await new Promise((r) => setTimeout(r, 20))
+  do {
+    await inboxPublishesSettled()
+    // A failed reload is a case's subject, not an error here: the gate handles it.
+    await Promise.allSettled(reloads)
+    await new Promise((r) => setImmediate(r))
+  } while (reloads.size > 0)
 }
 
 /** Publish an agent-side `ticket_read` for a ticket, marked `at`. */
@@ -406,8 +440,8 @@ function publishTicketRead(ticketId: TicketId, at: string): void {
 
 /**
  * Publish a `ticket_read` marked `at`, and say whether this inbox received it.
- * A frame can wait behind a scope reload of real reads, so this waits up to a
- * second for it to arrive; an answer of false has waited the whole second.
+ * The frame may wait behind a scope reload of real reads; `settle` waits that
+ * out, so false means the gate dropped it, not that it was still on its way.
  */
 async function ticketReadReaches(
   inbox: Awaited<ReturnType<typeof openInbox>>,
@@ -416,16 +450,13 @@ async function ticketReadReaches(
 ): Promise<boolean> {
   publishTicketRead(ticketId, at)
   await settle()
-  const arrived = () => inbox.frames().some((f) => f.event === 'ticket_read' && f.data.at === at)
-  return until(arrived, 1_000).then(
-    () => true,
-    () => false
-  )
+  return inbox.frames().some((f) => f.event === 'ticket_read' && f.data.at === at)
 }
 
-/** Wait for the inbox to be told its scope changed (a reload runs first). */
+/** Assert the inbox was told its scope changed (a reload runs first). */
 async function scopeChangeReaches(inbox: Awaited<ReturnType<typeof openInbox>>): Promise<void> {
-  await until(() => inbox.frames().some((f) => f.event === 'inbox_scope_changed'))
+  await settle()
+  expect(inbox.frames().map((f) => f.event)).toContain('inbox_scope_changed')
 }
 
 /** The ids an inbox frame is about, whatever its kind. */
@@ -608,7 +639,6 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
         } as never,
       })
       await settle()
-      await until(() => scoped.frames().filter((f) => f.event !== 'inbox_item_removed').length >= 2)
       expect(scoped.frames().map(itemIdOf)).toEqual([u.conversationId, u.conversationId])
       expect(await ticketReadReaches(scoped, u.ticketId, 'unassigned')).toBe(false)
     })
@@ -836,10 +866,9 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     teamRead.failNext = 1
     publishInboxScopeChanged([w.scoped])
     publishTicketRead(w.ticket.x, 'lost')
-    await settle()
     // Past the failed reload's slow read, however long the machine takes.
-    await until(() => teamRead.failed === 1)
     await settle()
+    expect(teamRead.failed).toBe(1)
     expect(scoped.frames().some((f) => f.data.at === 'lost')).toBe(false)
 
     publishTicketRead(w.ticket.x, 'kept')
