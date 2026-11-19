@@ -54,15 +54,6 @@ Every entry has owner: unassigned and review by: 2026-12-02.
 
 ### Suspected product bugs
 
-- `admin/settings-team.spec.ts` › add people dialog cancel closes the dialog.
-  With the People field focused (it focuses itself when the dialog opens), the
-  first click on Cancel does not close the Add people dialog; a second click
-  does. The dialog code (`add-people-dialog.tsx`) looks right, so the
-  combobox's blur or outside-click handling may take the first click. It
-  failed in its file locally but passed on its own in the first CI quarantine
-  run, so the cause is not confirmed. owner: unassigned, review by:
-  2026-12-02.
-
 ### Support API and MCP (support suite)
 
 - `support/mcp.spec.ts` › MCP tickets › API-63 reply_to_ticket and
