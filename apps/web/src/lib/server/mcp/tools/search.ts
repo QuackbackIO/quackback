@@ -8,8 +8,8 @@
 
 import { z } from 'zod'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { McpServer } from '@modelcontextprotocol/server'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
 import { getMergedPosts } from '@/lib/server/domains/posts/post.merge'

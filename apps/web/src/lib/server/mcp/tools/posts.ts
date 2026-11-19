@@ -6,7 +6,7 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { isTeamMember } from '@/lib/shared/roles'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 import { voteOnPost, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'

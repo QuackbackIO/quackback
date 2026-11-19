@@ -78,7 +78,7 @@ describe('requiredScopeForMcpRpc', () => {
     const names: string[] = []
     registerTools(
       {
-        tool: (name: string) => {
+        registerTool: (name: string) => {
           names.push(name)
         },
       } as never,
@@ -96,8 +96,8 @@ describe('requiredScopeForMcpRpc', () => {
     const annotations = new Map<string, { readOnlyHint?: boolean }>()
     registerTools(
       {
-        tool: (name: string, _d: string, _s: unknown, a: { readOnlyHint?: boolean }) => {
-          annotations.set(name, a)
+        registerTool: (name: string, config: { annotations: { readOnlyHint?: boolean } }) => {
+          annotations.set(name, config.annotations)
         },
       } as never,
       TEST_AUTH
@@ -119,7 +119,7 @@ describe('requiredScopeForMcpRpc', () => {
     const uris: string[] = []
     registerResources(
       {
-        resource: (_name: string, uri: string) => {
+        registerResource: (_name: string, uri: string) => {
           uris.push(uri)
         },
       } as never,

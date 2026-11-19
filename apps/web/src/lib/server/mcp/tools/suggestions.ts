@@ -7,7 +7,7 @@
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import {
   acceptMergeSuggestion,
   dismissMergeSuggestion,
@@ -15,7 +15,7 @@ import {
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
 import { isTypeId } from '@quackback/ids'
 import type { PostMergeSuggestionId } from '@quackback/ids'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import type { McpAuthContext } from '../types'
 import { registerTool, jsonResult, errorResult, WRITE } from './helpers'
 

@@ -43,7 +43,8 @@ vi.mock('../server', () => ({
   },
 }))
 
-vi.mock('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js', () => ({
+vi.mock('@modelcontextprotocol/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@modelcontextprotocol/server')>()),
   WebStandardStreamableHTTPServerTransport: class {
     async handleRequest(request: Request): Promise<Response> {
       hoisted.mockHandleRequest(request)

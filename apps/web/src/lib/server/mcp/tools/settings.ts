@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { McpAuthContext } from '../types'
 import { resolveMcpActor } from '../resolve-actor'
 import { z } from 'zod'

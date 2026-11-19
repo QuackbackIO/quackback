@@ -5,7 +5,7 @@
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { PostId, BoardId, ConversationId, PrincipalId } from '@quackback/ids'

@@ -7,7 +7,7 @@
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { McpAuthContext } from '../types'
 import { formatBytes } from '@/lib/shared/files/file-types'
 import { registerTool, jsonResult, WRITE } from './helpers'
