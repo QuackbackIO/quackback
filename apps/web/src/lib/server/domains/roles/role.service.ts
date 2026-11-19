@@ -252,7 +252,7 @@ export async function createRole(
           .where(eq(roles.isSystem, false))
         return Number(row?.count ?? 0)
       },
-      name: 'custom_roles',
+      name: 'maxCustomRoles',
       friendly: 'custom roles',
     })
     await tx.insert(roles).values({

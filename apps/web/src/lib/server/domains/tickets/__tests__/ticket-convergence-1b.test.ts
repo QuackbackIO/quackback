@@ -117,12 +117,13 @@ import {
   tickets,
   ticketStatuses,
   ticketSubscriptions,
+  ticketTypes,
   user,
   and,
   eq,
 } from '@/lib/server/db'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
-import { appendInboundTicketReply } from '../requester.service'
+import { appendInboundTicketReply, createMyTicket } from '../requester.service'
 import { createTicket, createTicketCore } from '../ticket.service'
 import { sendVisitorMessage } from '../../conversation/conversation.service'
 
@@ -506,8 +507,64 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(message.senderType).toBe('visitor')
       expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
       // The ticket side of the matrix still fires: ticket.replied alongside
-      // message.created (watcher fan-out preserved).
+      // message.created (watcher fan-out preserved), and only once: the
+      // conversation send it rides does not signal it a second time.
+      await flushAssistantChain()
       expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+    })
+
+    it('a requester message written on the pair conversation (widget, portal) signals ticket.replied once', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const dto = await intakeCreate(requesterP, { title: 'intake pair', description: 'opening' })
+      const link = await readPairLink(dto.id as TicketId)
+      ticketEmit.emitTicketReplied.mockClear()
+
+      const { message } = await sendVisitorMessage(
+        { conversationId: link!.conversationId as ConversationId, content: 'any news?' },
+        { principalId: requesterP, displayName: 'R' },
+        requesterActor(requesterP)
+      )
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await flushAssistantChain()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      const [actor, ticket, sent] = ticketEmit.emitTicketReplied.mock.calls[0]!
+      expect(actor).toMatchObject({ principalId: requesterP })
+      expect(ticket).toMatchObject({ id: dto.id })
+      expect(sent).toMatchObject({ id: message.id, senderType: 'visitor' })
+    })
+
+    it('the intake opening message does not signal ticket.replied (ticket.created covers it)', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+
+      await intakeCreate(requesterP, { title: 'intake pair', description: 'opening' })
+      await flushAssistantChain()
+
+      expect(convEmit.emitMessageCreated).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied).not.toHaveBeenCalled()
+    })
+
+    it('a message on a conversation with no ticket signals no ticket.replied', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const conversationId = createId('conversation') as ConversationId
+      await testDb.insert(conversations).values({
+        id: conversationId,
+        visitorPrincipalId: requesterP,
+        channel: 'messenger',
+      })
+
+      await sendVisitorMessage(
+        { conversationId, content: 'hello' },
+        { principalId: requesterP, displayName: 'R' },
+        requesterActor(requesterP)
+      )
+      await flushAssistantChain()
+
+      expect(convEmit.emitMessageCreated).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied).not.toHaveBeenCalled()
     })
   })
 
@@ -573,6 +630,47 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
         .from(conversationMessages)
         .where(eq(conversationMessages.conversationId, pairConversationId))
       expect(messages).toHaveLength(1)
+    })
+  })
+
+  describe('a blocked requester', () => {
+    async function blockedRequester(): Promise<PrincipalId> {
+      const requesterP = await seedPrincipal({})
+      await testDb
+        .update(principal)
+        .set({ blockedAt: new Date() })
+        .where(eq(principal.id, requesterP))
+      return requesterP
+    }
+
+    it('cannot file a title-only ticket, and nothing is created', async () => {
+      await seedDefaultStatus()
+      const requesterP = await blockedRequester()
+
+      await expect(
+        createMyTicket(requesterActor(requesterP), { title: 'let me in' })
+      ).rejects.toMatchObject({ code: 'BLOCKED' })
+
+      expect(await testDb.select().from(tickets)).toHaveLength(0)
+      expect(await testDb.select().from(conversations)).toHaveLength(0)
+      expect(ticketEmit.emitTicketCreated).not.toHaveBeenCalled()
+      expect(convEmit.emitConversationCreated).not.toHaveBeenCalled()
+    })
+
+    it('cannot file a ticket with a description, and leaves no half-made pair behind', async () => {
+      await seedDefaultStatus()
+      const requesterP = await blockedRequester()
+
+      await expect(
+        createMyTicket(requesterActor(requesterP), {
+          title: 'let me in',
+          description: 'please',
+        })
+      ).rejects.toMatchObject({ code: 'BLOCKED' })
+
+      expect(await testDb.select().from(tickets)).toHaveLength(0)
+      expect(await testDb.select().from(conversations)).toHaveLength(0)
+      expect(await testDb.select().from(conversationMessages)).toHaveLength(0)
     })
   })
 
@@ -689,6 +787,60 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       const link = await readPairLink(dto.id as TicketId)
       expect(link).not.toBeNull()
       expect(convEmit.emitConversationCreated).toHaveBeenCalledTimes(1)
+    })
+
+    it('a customer REGISTRY type with no bare category also pairs (the admin New ticket dialog shape)', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const agentP = await seedPrincipal({ role: 'member' })
+      const [customerType] = await testDb
+        .insert(ticketTypes)
+        .values({
+          name: `Question-${suffix()}`,
+          slug: `question_${suffix()}`,
+          category: 'customer',
+        })
+        .returning()
+
+      // The dialog sends the chosen registry type and leaves the category to
+      // the server (`type: undefined`), exactly like create-ticket-dialog.tsx.
+      const dto = await createTicket(
+        {
+          type: undefined,
+          ticketTypeId: customerType.id,
+          title: 'dialog create, on behalf',
+          description: 'x',
+          requesterPrincipalId: requesterP,
+        },
+        serviceActor(agentP)
+      )
+
+      expect(dto.type).toBe('customer')
+      expect(await readPairLink(dto.id as TicketId)).not.toBeNull()
+      expect(convEmit.emitConversationCreated).toHaveBeenCalledTimes(1)
+    })
+
+    it('a back-office REGISTRY type with a requester stays standalone', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const agentP = await seedPrincipal({ role: 'member' })
+      const [backOfficeType] = await testDb
+        .insert(ticketTypes)
+        .values({ name: `Task-${suffix()}`, slug: `task_${suffix()}`, category: 'back_office' })
+        .returning()
+
+      const dto = await createTicket(
+        {
+          ticketTypeId: backOfficeType.id,
+          title: 'internal work',
+          requesterPrincipalId: requesterP,
+        },
+        serviceActor(agentP)
+      )
+
+      expect(dto.type).toBe('back_office')
+      expect(await readPairLink(dto.id as TicketId)).toBeNull()
+      expect(convEmit.emitConversationCreated).not.toHaveBeenCalled()
     })
 
     it('customer + requester + a SOURCE conversation stays standalone (convert flow links its source right after)', async () => {

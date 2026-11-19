@@ -130,3 +130,14 @@ here or the assertions are stale; not traced. The paperclip label
   (`conversationList` in `src/lib/client/queries/conversation-inbox.ts`), so
   the list never refetches for the new rules. owner: unassigned, review by:
   2026-12-03.
+
+### Support API and MCP (support suite)
+
+- `support/mcp.spec.ts` › MCP tickets › API-63 reply_to_ticket and
+  add_ticket_note take up to 10000 characters as advertised. The tools'
+  schemas accept content up to 10000 characters (`mcp/tools/tickets.ts:328`,
+  `:371`), but the shared message write refuses anything over 4000
+  (`messages/message-core.ts:93`, `MAX_CONVERSATION_MESSAGE_LENGTH`), so a
+  9000-character reply or note fails with "Message must be 4,000 characters
+  or less". Either the schemas or the limit is wrong. owner: unassigned,
+  review by: 2026-12-03.
