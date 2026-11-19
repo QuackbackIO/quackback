@@ -10,6 +10,7 @@ import { AUTOSAVE } from '@/lib/client/autosave'
 import {
   catalogByGroup,
   catalogForSurface,
+  deliversOn,
   type NotificationChannel,
   type NotificationGroup,
   type NotificationTypeMeta,
@@ -441,12 +442,14 @@ function MatrixRow({
         {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
       </div>
       <div className="flex justify-center">
-        <Switch
-          aria-label={`${label} - ${intl.formatMessage(CHANNEL_LABELS.inApp)}`}
-          checked={inAppChecked}
-          onCheckedChange={(checked) => onToggle(meta.type, 'inApp', checked)}
-          disabled={busy}
-        />
+        {deliversOn(meta, 'inApp') && (
+          <Switch
+            aria-label={`${label} - ${intl.formatMessage(CHANNEL_LABELS.inApp)}`}
+            checked={inAppChecked}
+            onCheckedChange={(checked) => onToggle(meta.type, 'inApp', checked)}
+            disabled={busy}
+          />
+        )}
       </div>
       <div className="flex justify-center">
         <Switch

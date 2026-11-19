@@ -2206,6 +2206,7 @@ export function AgentConversationThread({
             assignedAgent={conversation.assignedAgent}
             status={conversation.status}
             snoozedUntil={conversation.snoozedUntil}
+            endReason={conversation.endReason}
             onChanged={refreshThread}
           />
         )}
@@ -2889,6 +2890,7 @@ const ConversationTriageFallback = memo(function ConversationTriageFallback({
   assignedAgent,
   status,
   snoozedUntil,
+  endReason,
   onChanged,
 }: {
   conversationId: ConversationId
@@ -2896,6 +2898,7 @@ const ConversationTriageFallback = memo(function ConversationTriageFallback({
   assignedAgent: ConversationDTO['assignedAgent']
   status: ConversationDTO['status']
   snoozedUntil: ConversationDTO['snoozedUntil']
+  endReason: ConversationDTO['endReason']
   onChanged: () => void
 }) {
   return (
@@ -2910,6 +2913,7 @@ const ConversationTriageFallback = memo(function ConversationTriageFallback({
         conversationId={conversationId}
         status={status}
         snoozedUntil={snoozedUntil}
+        endReason={endReason}
         onChanged={onChanged}
       />
     </div>

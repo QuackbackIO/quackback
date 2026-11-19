@@ -63,6 +63,8 @@ const threadProbe = vi.hoisted(() => ({
   overAllowanceNotice: null as string | null,
   panelOnChanged: [] as unknown[],
   remeasure: () => {},
+  /** Fields the mocked thread read lays over the default conversation. */
+  conversation: {} as Partial<ConversationDTO>,
 }))
 
 const routeContextState = {
@@ -162,9 +164,11 @@ vi.mock('@/components/admin/conversation/conversation-tags-editor', () => ({
   },
 }))
 vi.mock('@/components/admin/conversation/status-control', () => ({
-  StatusControl: () => {
+  StatusControl: ({ status, endReason }: { status: string; endReason?: string | null }) => {
     countRender('status')
-    return null
+    return (
+      <span data-testid="status-control" data-status={status} data-end-reason={endReason ?? ''} />
+    )
   },
 }))
 // The detail panel renders whenever the thread does, so it doubles as the
@@ -487,7 +491,10 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
         if (threadProbe.fail) throw threadProbe.fail
         return {
           hasMore: false,
-          conversation: makeConversation({ id: id as ConversationDTO['id'] }),
+          conversation: makeConversation({
+            id: id as ConversationDTO['id'],
+            ...threadProbe.conversation,
+          }),
           messages: [] as AgentConversationMessageDTO[],
         }
       },
@@ -503,6 +510,7 @@ import { sendTicketMessageFn, setTicketStatusFn } from '@/lib/server/functions/t
 afterEach(() => {
   staged.items = []
   threadProbe.fail = null
+  threadProbe.conversation = {}
   mockTrackerLinks.value = { linked: [], hiddenCount: 0 }
   mockTicketLink.value = null
   mockTicketStatuses.value = []
@@ -1476,6 +1484,16 @@ describe('AgentConversationThread: triage controls beside the detail panel', () 
 
     expect(screen.getByTestId('priority-control')).toBeInTheDocument()
     expect(panel).toHaveAttribute('data-visible', 'false')
+  })
+})
+
+describe('AgentConversationThread: a spam-ended thread below the inline panel width', () => {
+  it("hands the header's status control the spam marker, so it offers restore", async () => {
+    threadProbe.conversation = { status: 'closed', endReason: 'spam', spamReason: 'burst_rate' }
+    renderThread({ kind: 'conversation', id: 'conversation_spam' }, { detailPanelShown: false })
+    const control = await screen.findByTestId('status-control')
+    await waitFor(() => expect(control).toHaveAttribute('data-status', 'closed'))
+    expect(control).toHaveAttribute('data-end-reason', 'spam')
   })
 })
 
