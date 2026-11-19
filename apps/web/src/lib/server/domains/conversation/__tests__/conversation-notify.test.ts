@@ -44,6 +44,11 @@ const mintCsatEmailToken =
 vi.mock('@/lib/server/domains/notifications/recipient-scope', async () =>
   (await import('@/lib/server/__tests__/conversation-visibility-mocks')).recipientScopePassThrough()
 )
+// Nobody here is blocked. Holding mail back from a blocked person runs over
+// real rows in events/__tests__/blocked-person-email.db.test.ts.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  getsAutomatedEmail: async () => true,
+}))
 vi.mock('@/lib/server/config', () => ({
   config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
   getBaseUrl: () => 'http://localhost:3000',

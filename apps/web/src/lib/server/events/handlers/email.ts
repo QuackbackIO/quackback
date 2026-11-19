@@ -35,6 +35,7 @@ import type { ConversationId } from '@quackback/ids'
 import { isRetryableError } from '../hook-utils'
 import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
 import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
+import { getsAutomatedEmail } from '@/lib/server/domains/principals/blocking'
 import { logger } from '@/lib/server/logger'
 
 /** The event types whose email is one of the seven ticket-lifecycle kinds. */
@@ -139,6 +140,9 @@ async function checkedSender(cfg: {
   return { from, fromDisplayName: from ? (cfg.fromDisplayName ?? cfg.workspaceName) : undefined }
 }
 
+/** Email that carries a teammate's own reply rather than a notice about something. */
+const TEAMMATE_REPLY_EVENTS = new Set(['ticket.replied'])
+
 const BROADCAST_EMAIL_EVENTS = new Set([
   'changelog.published',
   'status.incident_created',
@@ -166,12 +170,23 @@ async function deliverEmail(
   config: unknown,
   finalAttempt: boolean
 ): Promise<HookResult> {
-  const { email, unsubscribeUrl } = target as EmailTarget
+  const { email, unsubscribeUrl, principalId } = target as EmailTarget
   const cfg = config as EmailConfig
 
   log.debug({ event_type: event.type }, 'sending email notification')
 
   try {
+    // Automated email never goes to a blocked person. A ticket reply carries a
+    // teammate's own words, so it still does.
+    if (
+      principalId &&
+      !TEAMMATE_REPLY_EVENTS.has(event.type) &&
+      !(await getsAutomatedEmail(principalId))
+    ) {
+      log.info({ event_type: event.type }, 'email skipped: the person is blocked')
+      return { success: true }
+    }
+
     if (BROADCAST_EMAIL_EVENTS.has(event.type)) {
       const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
       if (!(await emailBudgetAvailable())) {

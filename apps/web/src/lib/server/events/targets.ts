@@ -357,7 +357,7 @@ async function buildEmailTargets(
     if (!to) return []
     return [
       emailTarget(
-        to,
+        { principalId: subscriber.principalId, email: to },
         `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
         {
           workspaceName: context.workspaceName,
@@ -696,16 +696,20 @@ export async function getMentionTargets(
       ])
       const token = tokenMap.get(row.id as PrincipalId)
       targets.push(
-        emailTarget(mentionTo, token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : '', {
-          postTitle,
-          postUrl,
-          workspaceName: context.workspaceName,
-          logoUrl: context.logoUrl ?? undefined,
-          preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
-          eventType: 'post.mentioned',
-          mentionerName,
-          ...sender,
-        })
+        emailTarget(
+          { principalId: row.id as PrincipalId, email: mentionTo },
+          token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : '',
+          {
+            postTitle,
+            postUrl,
+            workspaceName: context.workspaceName,
+            logoUrl: context.logoUrl ?? undefined,
+            preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+            eventType: 'post.mentioned',
+            mentionerName,
+            ...sender,
+          }
+        )
       )
     }
   }
@@ -996,7 +1000,9 @@ export async function getConversationNoteMentionedEmailTargets(
     preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
   } satisfies NoteMentionEmailConfig
 
-  return recipients.map((id) => emailTarget(emailMap.get(id)!, '', { ...config }))
+  return recipients.map((id) =>
+    emailTarget({ principalId: id, email: emailMap.get(id)! }, '', { ...config })
+  )
 }
 
 /**
@@ -1378,15 +1384,26 @@ async function readTicketFacts(ticketId: TicketId): Promise<{
  * happens.
  */
 export function emailTarget(
-  email: ContactEmail,
+  to: { principalId: PrincipalId; email: ContactEmail },
   unsubscribeUrl: string,
   config: Record<string, unknown>
 ): HookTarget {
-  return { type: 'email', target: { email, unsubscribeUrl } satisfies EmailTarget, config }
+  return {
+    type: 'email',
+    target: {
+      email: to.email,
+      unsubscribeUrl,
+      principalId: to.principalId,
+    } satisfies EmailTarget,
+    config,
+  }
 }
 
-function ticketEmailTarget(email: ContactEmail, config: Record<string, unknown>): HookTarget {
-  return emailTarget(email, '', config)
+function ticketEmailTarget(
+  to: { principalId: PrincipalId; email: ContactEmail },
+  config: Record<string, unknown>
+): HookTarget {
+  return emailTarget(to, '', config)
 }
 
 type TicketEmailKind =
@@ -1523,7 +1540,7 @@ async function buildRequesterOrAgentTargets(params: {
             ctaUrl: inboxUrl(context.portalBaseUrl, params.ticketId),
             context,
           })
-    targets.push(ticketEmailTarget(email, config))
+    targets.push(ticketEmailTarget({ principalId: id, email }, config))
   }
   return targets
 }
@@ -1579,7 +1596,7 @@ export async function getTicketCreatedEmailTargets(
     assignedTeamId: (assignedTeamId as TeamId | null) ?? null,
     context,
   })
-  return [ticketEmailTarget(email, config)]
+  return [ticketEmailTarget({ principalId: requester, email }, config)]
 }
 
 /**
@@ -1773,7 +1790,7 @@ export async function getTicketAssignedEmailTargets(
 
   return recipients.map((id) =>
     ticketEmailTarget(
-      emailMap.get(id)!,
+      { principalId: id, email: emailMap.get(id)! },
       agentFacingConfig({ kind: kindById.get(id)!, ticketId, ticketLabel, title, ctaUrl, context })
     )
   )
@@ -1863,7 +1880,7 @@ export async function getSlaEmailTargets(
 
   return recipients.map((id) =>
     ticketEmailTarget(
-      emailMap.get(id)!,
+      { principalId: id, email: emailMap.get(id)! },
       agentFacingConfig({ kind, ticketLabel: '', title, ctaUrl, context, clockLabel, dueLabel })
     )
   )
@@ -2043,7 +2060,7 @@ export async function getChangelogSubscriberTargets(
       if (!to) continue
       targets.push(
         emailTarget(
-          to,
+          { principalId: subscriber.principalId, email: to },
           `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
           {
             workspaceName: context.workspaceName,
@@ -2310,7 +2327,7 @@ export async function getStatusSubscriberTargets(
         for (const p of emailable) {
           targets.push(
             emailTarget(
-              p.to,
+              { principalId: p.id as PrincipalId, email: p.to },
               `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(p.id as PrincipalId)}`,
               {
                 eventType: event.type,

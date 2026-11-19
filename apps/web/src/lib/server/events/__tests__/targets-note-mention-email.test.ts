@@ -89,7 +89,7 @@ describe('getConversationNoteMentionedEmailTargets', () => {
     expect(targets).toEqual([
       {
         type: 'email',
-        target: { email: 'one@acme.test', unsubscribeUrl: '' },
+        target: { email: 'one@acme.test', unsubscribeUrl: '', principalId: 'principal_one' },
         config: {
           workspaceName: 'Acme Support',
           conversationId: 'conversation_1',
@@ -102,7 +102,7 @@ describe('getConversationNoteMentionedEmailTargets', () => {
       },
       {
         type: 'email',
-        target: { email: 'two@acme.test', unsubscribeUrl: '' },
+        target: { email: 'two@acme.test', unsubscribeUrl: '', principalId: 'principal_two' },
         config: expect.objectContaining({ conversationId: 'conversation_1' }),
       },
     ])
