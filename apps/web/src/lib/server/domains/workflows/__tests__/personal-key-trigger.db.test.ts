@@ -157,6 +157,28 @@ describe.skipIf(!fixture.available)('workflow triggers from API key changes', ()
     expect(await actorTypeDispatchedFor({ type: 'user', principalId: teammate })).toBe('user')
   })
 
+  it('a reply sent with a personal key interrupts waiting runs like a teammate reply', async () => {
+    const replyFrom = async (key: PrincipalId) => {
+      interruptWaitingRuns.mockClear()
+      await dispatchWorkflowsForEvent({
+        id: createId('event'),
+        type: 'message.created',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'service', principalId: key },
+        data: {
+          message: {
+            conversationId: 'conversation_01kpkeytest0000000000000000',
+            senderType: 'agent',
+            content: 'On it',
+          },
+        },
+      } as unknown as EventData)
+      return interruptWaitingRuns.mock.calls.length
+    }
+    expect(await replyFrom(await seedKey('personal'))).toBe(1)
+    expect(await replyFrom(await seedKey('workspace'))).toBe(0)
+  })
+
   it('a personal key close ends a parked assistant wait as resolved, like the app', async () => {
     const { findWaitingCustomerFacingRun } = await import('../dispatcher.guards')
     vi.mocked(findWaitingCustomerFacingRun).mockResolvedValue({
