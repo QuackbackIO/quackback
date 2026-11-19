@@ -324,8 +324,9 @@ export const Route = createFileRoute('/api/chat/stream')({
               const wentOffline = await clearPresence(me.principalId, streamId, isAgentStream)
               // When an inbox agent's last stream closes cluster-wide, return
               // their unanswered conversations to the queue so they aren't
-              // stranded. wentOffline reads the shared presence store, so an
-              // agent still live on another replica is not treated as offline.
+              // stranded, while routing is on (the requeue checks). wentOffline
+              // reads the shared presence store, so an agent still live on
+              // another replica is not treated as offline.
               if (wentOffline && isAgentStream) {
                 const { requeueUnansweredOnAgentOffline } =
                   await import('@/lib/server/domains/conversation/conversation.service')

@@ -927,6 +927,34 @@ test.describe('going offline', () => {
   )
 
   test(
+    'RTE-51 with routing off, going offline frees nothing: unanswered work stays assigned',
+    { tag: '@core' },
+    async ({ playwright, marker, newTeammate }) => {
+      // Routing is off (every test starts that way), yet a colleague is online
+      // who would take the work if anything freed it.
+      const leaving = await newTeammate({ roleKey: 'support_lead' })
+      const staying = await newTeammate({ roleKey: 'support_lead' })
+      const customer = await createCustomer(marker)
+      const { conversationId } = await customerSays(
+        await customer.api(playwright),
+        `unanswered ${marker}`
+      )
+      await callServerFn(await adminApi(playwright), 'assignConversationFn', {
+        conversationId,
+        assignTo: leaving.principalId,
+      })
+      const online = await goOnline(staying)
+      const leavingStream = await goOnline(leaving)
+
+      leavingStream.close()
+      await waitForPresence(leaving.principalId, false, 15_000)
+      await settle()
+      expect((await conversationState(conversationId)).assignedAgent).toBe(leaving.principalId)
+      online.close()
+    }
+  )
+
+  test(
     'RTE-44 freed conversations spread across the online team one at a time',
     { tag: '@nightly' },
     async ({ playwright, marker, newTeammate }) => {
