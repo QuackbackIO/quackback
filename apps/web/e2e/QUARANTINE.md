@@ -119,3 +119,15 @@ here or the assertions are stale; not traced. The paperclip label
   composer shows no Image option for the signed-in teammate. The comment
   editor turns images on and the post page passes an upload handler, so the
   cause is somewhere between them. owner: unassigned, review by: 2026-12-02.
+
+### Support suite: widget and portal (CUS-W, CUS-P)
+
+- `support/widget-chat.spec.ts` › CUS-W-19 the rate-limit refusal carries
+  RATE_LIMITED and retryAfter to the client. The 21st send in the window is
+  refused, but `ConversationRateLimitError`
+  (`src/lib/server/domains/conversation/conversation.ratelimit.ts:9`) extends
+  plain `Error`, not `DomainException`, so the typed-error adapter
+  (`src/lib/shared/typed-error-serialization.ts`) drops its `code` and
+  `retryAfter`: the widget and portal get only the message and cannot tell a
+  throttle from any other failure or say when to retry. owner: unassigned,
+  review by: 2026-12-03.
