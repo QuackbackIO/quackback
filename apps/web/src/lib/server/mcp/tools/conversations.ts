@@ -163,7 +163,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
   registerTool<{ conversationId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'reply_to_conversation',
     permissions: [PERMISSIONS.CONVERSATION_REPLY],
-    description: `Send an agent reply in a conversation (visible to the visitor). Auto-assigns the conversation to the calling agent if unassigned.
+    description: `Send an agent reply in a conversation (visible to the visitor). When you are signed in as a teammate, replying to an unassigned conversation assigns it to you. A reply made with an API key leaves the assignment unchanged.
 
 Attach files already uploaded with upload_file by passing their ids in fileIds (max 10).
 
