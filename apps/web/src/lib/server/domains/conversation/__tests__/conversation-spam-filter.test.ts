@@ -56,6 +56,7 @@ import { classifyInboundAsSpam } from '../conversation.spam-filter'
 
 const input = {
   senderEmail: 'sender@example.com',
+  trustedSenderEmail: 'sender@example.com',
   subject: 'Question about my order',
   content: 'Where is my invoice for last month?',
 }
@@ -90,6 +91,18 @@ describe('classifyInboundAsSpam', () => {
     mockChat.mockResolvedValue({ spam: true })
     await expect(classifyInboundAsSpam(input)).resolves.toBe(false)
     expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  // A widget visitor can type any address before a chat. Only an address the
+  // sender has proven they own may earn the trust list's bypass.
+  it('still classifies a sender whose address on a trusted domain is unverified', async () => {
+    mockGetSpamFilterConfig.mockResolvedValue({
+      trustedSenders: ['example.com'],
+      aiClassifier: true,
+    })
+    mockChat.mockResolvedValue({ spam: true })
+    await expect(classifyInboundAsSpam({ ...input, trustedSenderEmail: null })).resolves.toBe(true)
+    expect(mockChat).toHaveBeenCalledTimes(1)
   })
 
   it('never calls the model while the workspace has the AI classifier off', async () => {

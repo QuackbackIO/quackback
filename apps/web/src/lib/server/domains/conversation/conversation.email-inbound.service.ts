@@ -760,6 +760,9 @@ async function ingestColdInbound(
     : await fixedSpamSignalFor(
         {
           senderEmail,
+          // The From is the only address an email has; the authentication
+          // checks above stand behind it (a hard reject never gets here).
+          trustedSenderEmail: senderEmail,
           signals: { autoResponder: opts.autoResponder === true, senderAuthSignal: authSignal },
         },
         resolution.principalId
@@ -810,6 +813,7 @@ async function ingestColdInbound(
   // The fixed rules already ran above.
   const filedBySpamFilter = await maybeAutoFileSpam(conversationId, {
     senderEmail,
+    trustedSenderEmail: senderEmail,
     subject: parsed.subject,
     content,
     signalsChecked: true,
