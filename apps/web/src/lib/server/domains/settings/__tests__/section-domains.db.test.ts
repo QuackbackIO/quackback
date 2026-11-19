@@ -250,16 +250,41 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       })
     })
 
-    it('takes the verification away when the hostname stops answering', async () => {
+    it('marks, never drops, a verified hostname that stops answering with no record to vouch for it', async () => {
       await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
       side.status = { dnsResolved: true, instanceReachable: false, verified: false }
       await verifySectionDomain('help')
 
+      // Sign-in stops there (marked); routing keeps the grace; the daily run ends it.
       expect((await getSectionDomains()).help).toEqual({
         hostname: 'help.acme.com',
+        verifiedAt: NOW,
+        unconfirmedSince: expect.any(String),
+      })
+    })
+
+    it('keeps the first mark when Verify fails again, so the grace has an end', async () => {
+      const since = '2026-10-30T00:00:00.000Z'
+      await seedSettings({
+        portalConfig: JSON.stringify({
+          sectionDomains: {
+            help: { hostname: 'help.acme.com', verifiedAt: NOW, unconfirmedSince: since },
+          },
+        }),
+      })
+      side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      await verifySectionDomain('help')
+      expect((await getSectionDomains()).help?.unconfirmedSince).toBe(since)
+    })
+
+    it('leaves a hostname never verified unverified when the check fails', async () => {
+      await setSectionDomain('status', 'status.acme.com')
+      side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      await verifySectionDomain('status')
+      expect((await getSectionDomains()).status).toEqual({
+        hostname: 'status.acme.com',
         verifiedAt: null,
       })
-      expect((await stored()).helpDomain).toEqual({ domain: 'help.acme.com', verifiedAt: null })
     })
 
     it('keeps a verification with a warning, and no grace, when the lookup goes unanswered', async () => {
@@ -344,12 +369,13 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
         })
       })
 
-      it('takes the verification away when the record is gone', async () => {
+      it('marks it, starting the grace, when the record is gone', async () => {
         await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
         await verifySectionDomain('help')
         expect((await getSectionDomains()).help).toEqual({
           hostname: 'help.acme.com',
-          verifiedAt: null,
+          verifiedAt: NOW,
+          unconfirmedSince: expect.any(String),
         })
       })
 

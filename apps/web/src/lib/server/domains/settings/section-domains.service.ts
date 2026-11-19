@@ -237,8 +237,10 @@ export async function setSectionDomain(
  * (`section-domain-check.ts`): a lookup that went unanswered, or a server that
  * cannot reach itself through a hostname the workspace's verification record
  * still covers. Either leaves a warning on the Custom domains card, never a
- * grace. Only a check that says the hostname has no address, that something
- * else answers there, or that the record is gone takes the verification away.
+ * grace. A check that says the hostname has no address, that something else
+ * answers there, or that the record is gone marks it (`unconfirmedSince`):
+ * sign-in stops there at once, routing keeps the grace, and the daily run
+ * takes the verification away if it still fails once the grace is over.
  * A hostname never verified is verified only by a check that reaches it.
  */
 export async function verifySectionDomain(
@@ -277,8 +279,16 @@ export async function verifySectionDomain(
     })
     if (judged === 'reaches') {
       checked = { ...rest, verifiedAt: new Date().toISOString() }
-    } else if (!entry.verifiedAt || judged === 'failed') {
+    } else if (!entry.verifiedAt) {
       checked = { ...rest, verifiedAt: null }
+    } else if (judged === 'failed') {
+      // One check never takes a verified hostname down: it is marked, so sign-in
+      // stops there at once (it may be someone else's now) while routing keeps
+      // the grace, and the daily run ends it if it still fails then.
+      checked = {
+        ...rest,
+        unconfirmedSince: entry.unconfirmedSince ?? new Date().toISOString(),
+      }
     } else if (judged === 'unreachable') {
       // The verification record says the hostname is still ours: a mark ends too.
       checked = { ...rest, reachWarning: warning('unreachable') }
