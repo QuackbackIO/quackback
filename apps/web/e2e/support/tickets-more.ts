@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto'
 import { expect, type Locator, type Page } from '@playwright/test'
 import { fromUuid, toUuid } from '@quackback/ids'
 import { pollFor, supportDb } from './db'
+import { createWorkflow } from './webhooks'
 
 export interface WorkflowNode {
   id: string
@@ -204,4 +205,23 @@ export async function postTicketEmbed(
     VALUES (${randomUUID()}, ${toUuid(conversationId as `conversation_${string}`)},
             ${toUuid(authorPrincipalId as `principal_${string}`)}, 'agent', '',
             ${supportDb().json(doc as never)}, false, NOW())`
+}
+
+/**
+ * Create a live workflow and wait until the app's cached "is any workflow
+ * live?" answer (30 s) cannot predate the shared sentinel workflow. Another
+ * worker may have just created the sentinel, in which case `createWorkflow`
+ * reports a warm cache although the app may still hold a stale `false`.
+ */
+export async function createLiveWorkflow(
+  input: Record<string, unknown>
+): Promise<{ id: string; cleanup: () => void }> {
+  const flow = await createWorkflow(input)
+  const [sentinel] = await supportDb()<{ age_ms: number }[]>`
+    SELECT (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000)::int AS age_ms FROM workflows
+    WHERE name = 'E2E sentinel (never matches)' AND deleted_at IS NULL
+    ORDER BY created_at LIMIT 1`
+  const wait = sentinel ? 31_000 - sentinel.age_ms : 0
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+  return flow
 }

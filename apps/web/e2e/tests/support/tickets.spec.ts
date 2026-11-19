@@ -42,10 +42,11 @@ import { seedConversation } from '../../utils/db-helpers'
 import { sink } from '../../support/webhook-sink-client'
 import { pollFor } from '../../support/db'
 import { conversationReplyAddress } from '../../support/inbound-email'
-import { createWorkflow, emailConversation } from '../../support/webhooks'
+import { emailConversation } from '../../support/webhooks'
 import {
   bulkBar,
   conversationVisitor,
+  createLiveWorkflow,
   customerTicketCount,
   linkedCustomerTicket,
   listRows,
@@ -934,7 +935,7 @@ test.describe('tickets: workflow actions', () => {
     { tag: '@nightly' },
     async ({ request, marker, customerEmail }) => {
       test.setTimeout(150_000)
-      const flow = await createWorkflow({
+      const flow = await createLiveWorkflow({
         name: `Convert ${marker}`,
         class: 'background',
         triggerType: 'message.created',
@@ -1001,7 +1002,7 @@ test.describe('tickets: workflow actions', () => {
         `Workflow status ${marker}`
       )
       expect((await ticketRow(ticket.id))!.status_name).toBe('New')
-      const flow = await createWorkflow({
+      const flow = await createLiveWorkflow({
         name: `Set status ${marker}`,
         class: 'background',
         triggerType: 'message.created',
