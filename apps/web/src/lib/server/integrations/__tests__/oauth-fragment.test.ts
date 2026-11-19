@@ -20,6 +20,10 @@ vi.mock('@/lib/server/db', () => ({
   principal: {},
   eq: vi.fn(),
 }))
+vi.mock('@/lib/server/domains/settings/tier-limits.service', async () => ({
+  getTierLimits: async () =>
+    (await import('@/lib/server/domains/settings/tier-limits.types')).OSS_TIER_LIMITS,
+}))
 vi.mock('../save', () => ({ saveIntegration: mocks.save }))
 import { handleOAuthCallback } from '../oauth-handlers'
 

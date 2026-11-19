@@ -103,6 +103,8 @@ const ALLOWLIST: Record<string, string> = {
     'the requester-reply reopen, a system effect of the requester writing',
   'lib/server/domains/tickets/ticket-message.service.ts::insertTicketMessage::loadTicketOr404':
     'shared by the requester reply and intake; agent callers check visibility first',
+  'lib/server/domains/tickets/ticket-message.service.ts::emitPairTicketReplied::loadTicketOr404':
+    'the ticket.replied signal for a customer message already written on its pair conversation',
   'lib/server/domains/tickets/ticket-external-links.service.ts::buildTicketIssueData::loadTicketOr404':
     'the integration sync worker builds the issue body after the write was checked',
   'lib/server/domains/tickets/requester.service.ts::loadOwnedTicketOr404::loadTicketOr404':
