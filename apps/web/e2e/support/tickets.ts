@@ -7,7 +7,13 @@
  * product (UI or API); these helpers only set the stage and read results.
  */
 import { createHmac, randomBytes, randomUUID } from 'node:crypto'
-import type { APIRequestContext, Browser, Page, PlaywrightWorkerArgs } from '@playwright/test'
+import type {
+  APIRequestContext,
+  Browser,
+  Locator,
+  Page,
+  PlaywrightWorkerArgs,
+} from '@playwright/test'
 import { expect } from '@playwright/test'
 import { fromUuid, toUuid } from '@quackback/ids'
 import { createSupportApiKey } from '../utils/db-helpers'
@@ -330,6 +336,22 @@ export async function openRequesterThread(page: Page, conversationId: string): P
 /** The inbox's right-hand detail panel (shown at the 1920px viewport). */
 export function detailPanel(page: Page) {
   return page.getByRole('complementary', { name: 'Item details' })
+}
+
+/**
+ * Click `trigger` until `appears` is visible. Server-rendered pages take
+ * clicks before React hydrates; a first click can land on inert HTML.
+ */
+export async function clickUntilVisible(
+  trigger: Locator,
+  appears: Locator,
+  timeoutMs = 20_000
+): Promise<void> {
+  await expect(async () => {
+    // Never click again once it shows: a second click would toggle it shut.
+    if (!(await appears.isVisible())) await trigger.click()
+    await expect(appears).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: timeoutMs })
 }
 
 /** A principal TypeID as the uuid stored in the database. */
