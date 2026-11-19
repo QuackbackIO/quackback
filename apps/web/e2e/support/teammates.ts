@@ -61,6 +61,8 @@ export interface CreateTeammateOptions {
 }
 
 const contexts = new Set<{ close: () => Promise<void> }>()
+/** Teammates made in this worker since the last retire (principal uuids). */
+const made = new Set<string>()
 
 export async function createTeammate(opts: CreateTeammateOptions): Promise<TestTeammate> {
   const sql = supportDb()
@@ -89,6 +91,7 @@ export async function createTeammate(opts: CreateTeammateOptions): Promise<TestT
     }
   })
 
+  made.add(principalUuid)
   const storageState = await mintSession(fromUuid('user', userUuid))
   const secure = supportEnv().baseUrl.startsWith('https://')
   const cookie = storageState.cookies
@@ -160,4 +163,16 @@ export async function closeTeammateContexts(): Promise<void> {
   const open = [...contexts]
   contexts.clear()
   await Promise.all(open.map((c) => c.close().catch(() => {})))
+}
+
+/**
+ * Turn the teammates this worker made into portal users once their test is
+ * done, so later tests' fan-outs (every teammate who can see an Unassigned
+ * conversation gets its first-message email) do not grow with the run.
+ */
+export async function retireTeammates(): Promise<void> {
+  const ids = [...made]
+  made.clear()
+  if (ids.length === 0) return
+  await supportDb()`UPDATE principal SET role = 'user' WHERE id IN ${supportDb()(ids)}`
 }

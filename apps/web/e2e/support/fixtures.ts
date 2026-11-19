@@ -22,6 +22,7 @@ import { closeSupportDb } from './db'
 import {
   closeTeammateContexts,
   createTeammate,
+  retireTeammates,
   type CreateTeammateOptions,
   type TestTeammate,
 } from './teammates'
@@ -89,6 +90,7 @@ export const test = base.extend<SupportFixtures, SupportWorkerFixtures>({
   newTeammate: async ({ marker }, use) => {
     await use((opts) => createTeammate({ marker, ...opts }))
     await closeTeammateContexts()
+    await retireTeammates()
   },
 })
 
