@@ -4,7 +4,7 @@
  * viewer without the permission never asks the server for it.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { PERMISSIONS, SYSTEM_ROLE_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 vi.mock('@/lib/server/functions/entitlement-status', () => ({
   hasEntitlementFn: vi.fn(async () => true),
@@ -50,6 +50,15 @@ describe('workflows settings loader', () => {
     const keys = await warmedKeys([PERMISSIONS.WORKFLOW_MANAGE, PERMISSIONS.SETTINGS_MANAGE])
     expect(keys).toContain(JSON.stringify(['settings', 'workflowCloseSpam']))
     expect(keys).not.toContain(ROUTING_KEY)
+  })
+
+  it('reads nothing a Support lead is refused, so the page opens for them', async () => {
+    // fetchWidgetConfig requires settings.manage, which the Support lead
+    // preset lacks; a loader that reads it throws Access denied for them.
+    const keys = await warmedKeys(SYSTEM_ROLE_PERMISSIONS.support_lead)
+    expect(SYSTEM_ROLE_PERMISSIONS.support_lead).not.toContain(PERMISSIONS.SETTINGS_MANAGE)
+    expect(keys).not.toContain(JSON.stringify(['settings', 'widgetConfig']))
+    expect(keys).toContain(ROUTING_KEY)
   })
 
   it('leaves the switch out when the support inbox is off', async () => {

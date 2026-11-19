@@ -38,8 +38,9 @@ export const Route = createFileRoute('/admin/settings/workflows')({
         ]
       : []
     const [, workflowsEntitled] = await Promise.all([
+      // Nothing here may need settings.manage: Support leads open this page
+      // without it, and one refused read fails the whole page.
       Promise.all([
-        queryClient.ensureQueryData(settingsQueries.widgetConfig()),
         queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
         ...pageReads,
       ]),
