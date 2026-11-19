@@ -144,6 +144,7 @@ export const workspaceNavigationInputSchema = z
 export function registerNavigationTools(server: McpServer, auth: McpAuthContext) {
   registerTool<{ destination: WorkspaceNavigationDestination }>(server, auth, {
     name: 'navigate_workspace',
+    title: 'Get workspace link',
     permissions: ({ destination }, toolAuth) => [
       navigationPermission(WORKSPACE_NAVIGATION[destination], heldPermissions(toolAuth)),
     ],

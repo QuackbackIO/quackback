@@ -109,6 +109,7 @@ type DeleteChangelogArgs = { changelogId: string }
 export function registerChangelogTools(server: McpServer, auth: McpAuthContext) {
   registerTool<CreateChangelogArgs>(server, auth, {
     name: 'create_changelog',
+    title: 'Create changelog entry',
     permissions: [PERMISSIONS.CHANGELOG_MANAGE],
     description: `Create a changelog entry. Saves as draft by default; set publish: true to publish immediately.
 
@@ -145,6 +146,7 @@ Examples:
 
   registerTool<UpdateChangelogArgs>(server, auth, {
     name: 'update_changelog',
+    title: 'Update changelog entry',
     permissions: [PERMISSIONS.CHANGELOG_MANAGE],
     description: `Update title, content, publish state, and/or linked posts on an existing changelog entry.
 
@@ -191,6 +193,7 @@ Examples:
 
   registerTool<DeleteChangelogArgs>(server, auth, {
     name: 'delete_changelog',
+    title: 'Delete changelog entry',
     permissions: [PERMISSIONS.CHANGELOG_MANAGE],
     description: `Soft-delete a changelog entry. This cannot be undone via the API.
 

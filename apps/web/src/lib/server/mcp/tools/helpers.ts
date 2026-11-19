@@ -205,7 +205,7 @@ export interface ToolDef<TArgs> {
   /** Must be declared in UNTRUSTED_TOOL_FIELDS (../untrusted). */
   name: McpToolName
   /** Human-readable name shown by clients in place of `name`. */
-  title?: string
+  title: string
   description: string
   schema: z.ZodRawShape
   annotations: ToolAnnotations

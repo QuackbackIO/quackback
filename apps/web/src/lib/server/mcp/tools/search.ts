@@ -176,6 +176,7 @@ type GetDetailsArgs = { id: string }
 export function registerSearchTools(server: McpServer, auth: McpAuthContext) {
   registerTool<SearchArgs>(server, auth, {
     name: 'search',
+    title: 'Search workspace',
     // Every branch is team-only; the per-branch scope gates stay in the handler.
     teamOnly: true,
     permissions: (args) => [SEARCH_PERMISSIONS[args.entity ?? 'posts']],
@@ -226,6 +227,7 @@ Examples:
 
   registerTool<GetDetailsArgs>(server, auth, {
     name: 'get_details',
+    title: 'Get details by ID',
     // Every branch is team-only; the per-branch scope gates stay in the handler.
     teamOnly: true,
     permissions: (args) => detailPermissions(args.id),

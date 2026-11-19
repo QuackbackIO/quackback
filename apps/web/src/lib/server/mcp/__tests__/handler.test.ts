@@ -1829,12 +1829,13 @@ describe('MCP HTTP Handler', () => {
       expect(schemes('search')).toEqual([
         { type: 'oauth2', scopes: ['read:feedback', 'read:article'] },
       ])
-      // Every tool declares at least one scope.
+      // Every tool declares at least one scope and has a title.
       for (const tool of body.result.tools as {
         name: string
         title?: string
         _meta?: { securitySchemes?: { scopes: string[] }[] }
       }[]) {
+        expect(tool.title, tool.name).toMatch(/\S/)
         expect(tool._meta?.securitySchemes?.[0]?.scopes.length, tool.name).toBeGreaterThan(0)
       }
     })

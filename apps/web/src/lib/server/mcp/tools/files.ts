@@ -40,6 +40,7 @@ const UPLOAD_LIMIT = formatBytes(MCP_UPLOAD_MAX_BYTES)
 export function registerFileTools(server: McpServer, auth: McpAuthContext) {
   registerTool<{ name: string; contentBase64: string }>(server, auth, {
     name: 'upload_file',
+    title: 'Upload file',
     permissions: [PERMISSIONS.CONVERSATION_REPLY],
     description: `Upload a file (base64-encoded, max ${UPLOAD_LIMIT} decoded) so it can be attached to a conversation reply, ticket reply, or ticket note. Returns a fileId: pass it in fileIds on reply_to_conversation, reply_to_ticket, or add_ticket_note. For a larger file, upload it with the REST API (POST /api/v1/files) and pass its fileId the same way.
 

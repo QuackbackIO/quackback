@@ -9,6 +9,7 @@ import { registerTool, jsonResult, READ_ONLY } from './helpers'
 export function registerWidgetTools(server: McpServer, auth: McpAuthContext) {
   registerTool<Record<string, never>>(server, auth, {
     name: 'widget_install_status',
+    title: 'Check widget install status',
     permissions: 'none',
     description: `Read whether the Quackback widget is connected on the customer site.
 
