@@ -49,6 +49,7 @@ import {
   invalidatePlanLimits,
 } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { fetchBoardsWithCountsFn } from '../boards'
+import { planBillingOn } from '@/lib/server/domains/plan-limits/__tests__/plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -61,9 +62,10 @@ const list = async () =>
 let openBoard: BoardId
 let closedBoard: BoardId
 
-async function configure(planLimits: boolean) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(planBilling: boolean) {
   await testDb.update(settings).set({
-    featureFlags: JSON.stringify({ feedback: true, planLimits }),
+    cloud: (planBilling ? planBillingOn() : null) as never,
     tierLimits: JSON.stringify({ ...OSS_TIER_LIMITS, maxBoards: 1 }),
   })
   invalidateTierLimitsCache()
@@ -119,7 +121,7 @@ describe.skipIf(!fixture.available)('admin boards list and plan limits (real DB)
     expect(rows[0]?.atCap).toMatchObject({ cap: 1 })
   })
 
-  it('labels nothing and reports no cap with the rules off', async () => {
+  it('labels nothing and reports no cap without plan billing', async () => {
     await configure(false)
     const rows = await list()
     expect(rows).toHaveLength(2)

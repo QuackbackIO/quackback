@@ -100,7 +100,7 @@ describe.skipIf(!fixture.available)('plan limits helpers fail open (real DB)', (
   it('answers every runtime helper permissively when the read fails after the deadline', async () => {
     const small = await addBoard('Acme small', 0, new Date('2026-01-01T00:00:00.000Z'), ownerId)
     await addBoard('Acme big', 2, new Date('2026-02-01T00:00:00.000Z'), ownerId)
-    await configure(settingsId, { planLimits: true, tierLimits: FREE_LIKE })
+    await configure(settingsId, { planBilling: true, tierLimits: FREE_LIKE })
     await getPlanLimits()
     vi.setSystemTime(Date.now() + 8 * DAY)
     // Enforced while reads work, so the permissive answers below come from the failure.
@@ -122,7 +122,7 @@ describe.skipIf(!fixture.available)('plan limits helpers fail open (real DB)', (
   it('still answers from what it computed when storing the state fails', async () => {
     await addBoard('Acme one', 0, new Date('2026-01-01T00:00:00.000Z'), ownerId)
     await addBoard('Acme two', 0, new Date('2026-02-01T00:00:00.000Z'), ownerId)
-    await configure(settingsId, { planLimits: true, tierLimits: FREE_LIKE })
+    await configure(settingsId, { planBilling: true, tierLimits: FREE_LIKE })
     spies.writeFails = true
     const limits = await getPlanLimits()
     expect(limits.phase).toBe('grace')

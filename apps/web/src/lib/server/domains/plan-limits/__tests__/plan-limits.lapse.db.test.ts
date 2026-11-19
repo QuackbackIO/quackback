@@ -73,7 +73,7 @@ describe.skipIf(!fixture.available)('plan limits on a lapsing term (real DB)', (
     await addBoard('Acme two', 0, new Date('2026-02-01T00:00:00.000Z'), ownerId)
     // Pro until the expiry, then the Free limits (one board).
     await configure(settingsId, {
-      planLimits: true,
+      planBilling: true,
       tierLimits: null,
       cloud: {
         enabled: true,

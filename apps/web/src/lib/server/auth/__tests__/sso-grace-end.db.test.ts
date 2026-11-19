@@ -6,8 +6,8 @@
  *
  * The workspace signs in only through its identity provider (password and
  * email links stored off), and its plan does not include single sign-on. The
- * provider was set up before the drop, so it keeps signing in through the
- * grace. When the grace ends on the clock nothing is written: the auth
+ * provider was set up before the drop from a plan that had it, so it keeps
+ * signing in through the grace. When the grace ends on the clock nothing is written: the auth
  * instance built during the grace is still the one in use, with the provider
  * registered. The per-request gates must still refuse the provider's sign-in
  * start and let email links in, or the team would be sent to a provider the
@@ -189,6 +189,18 @@ describe.skipIf(!fixture.available)('single sign-on when the grace ends (real DB
     const { invalidateSettingsCache } =
       await import('@/lib/server/domains/settings/settings.helpers')
     await invalidateSettingsCache()
+    // The drop from a plan that had single sign-on starts the grace.
+    const { detectPlanLimits } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    const { planFeatureSet } = await import('@/lib/server/domains/plan-limits/plan-limits.features')
+    const { DISABLED_CLOUD_CONFIG } =
+      await import('@/lib/server/domains/settings/cloud/cloud.types')
+    await detectPlanLimits({
+      previous: {
+        plan: 'pro',
+        features: planFeatureSet(OSS_TIER_LIMITS.features, DISABLED_CLOUD_CONFIG),
+      },
+    })
   })
   afterEach(async () => {
     vi.useRealTimers()

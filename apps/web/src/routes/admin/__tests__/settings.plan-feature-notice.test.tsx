@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
 /**
- * A settings page's paused notice costs nothing with the plan limits flag off:
- * the page renders no notice and never loads its body, so no query runs and
- * no chunk is fetched. With the flag on it loads the body. Integrations
- * stands in for the six pages; each one carries the same flag check.
+ * A settings page's paused notice costs nothing without plan billing: the
+ * page renders no notice and never loads its body, so no query runs and no
+ * chunk is fetched. With plan billing on it loads the body. Integrations
+ * stands in for the six pages; each one carries the same check.
  */
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 const h = vi.hoisted(() => ({
-  flags: {} as Record<string, boolean>,
+  planBilling: false,
   loaded: vi.fn(),
 }))
 
@@ -25,7 +25,7 @@ vi.mock('@tanstack/react-query', () => ({
   queryOptions: (options: unknown) => options,
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
-  useWorkspaceSettings: () => ({ featureFlags: h.flags }),
+  useCloudEnabled: () => h.planBilling,
 }))
 vi.mock('@/components/admin/settings/settings-page', () => ({
   SettingsPage: ({ children }: { children?: ReactNode }) => <main>{children}</main>,
@@ -44,8 +44,8 @@ const Page = (Route as unknown as { options: { component: () => ReactNode } }).o
 afterEach(cleanup)
 
 describe('the paused notice on a settings page', () => {
-  it('renders nothing and loads nothing with the flag off', async () => {
-    h.flags = { planLimits: false }
+  it('renders nothing and loads nothing without plan billing', async () => {
+    h.planBilling = false
     render(<Page />)
     expect(screen.getByText('integrations')).toBeTruthy()
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -53,8 +53,8 @@ describe('the paused notice on a settings page', () => {
     expect(h.loaded).not.toHaveBeenCalled()
   })
 
-  it('loads the notice for its own feature with the flag on', async () => {
-    h.flags = { planLimits: true }
+  it('loads the notice for its own feature with plan billing on', async () => {
+    h.planBilling = true
     render(<Page />)
     expect(await screen.findByText('notice for integrations')).toBeTruthy()
     expect(h.loaded).toHaveBeenCalledOnce()

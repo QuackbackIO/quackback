@@ -182,7 +182,7 @@ describe('the body and the leaf agree', () => {
   it.each<[string, PlanNoticeState | null | undefined]>([
     ['no state', undefined],
     ['null state', null],
-    ['rules off', state({ enabled: false })],
+    ['no plan billing', state({ enabled: false })],
     ['nothing over', state({ phase: 'ok' })],
     ['in the grace', state({ phase: 'grace' })],
     ['paused', state()],

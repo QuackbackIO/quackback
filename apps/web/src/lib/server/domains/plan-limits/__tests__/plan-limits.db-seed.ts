@@ -33,6 +33,7 @@ import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-li
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 import { featureFlagsWrite } from '@/lib/server/domains/settings/settings.service'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
+import { planBillingOn } from './plan-billing'
 
 export const DAY = 24 * 60 * 60 * 1000
 
@@ -53,16 +54,20 @@ export async function ensureSettings(): Promise<WorkspaceId> {
   return created!.id
 }
 
+/**
+ * Store tier limits and plan billing. `planBilling` on with no `cloud` of its
+ * own uses `planBillingOn()`, so the stored tier limits decide the caps;
+ * `planBilling` off is an install without plan billing.
+ */
 export async function configure(
   settingsId: WorkspaceId,
-  options: { planLimits: boolean; tierLimits?: Record<string, unknown> | null; cloud?: unknown }
+  options: { planBilling: boolean; tierLimits?: Record<string, unknown> | null; cloud?: unknown }
 ): Promise<void> {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, planLimits: options.planLimits }),
       tierLimits: options.tierLimits === null ? null : JSON.stringify(options.tierLimits ?? {}),
-      cloud: (options.cloud ?? null) as never,
+      cloud: (options.planBilling ? (options.cloud ?? planBillingOn()) : null) as never,
     })
     .where(eq(settings.id, settingsId))
   invalidateTierLimitsCache()

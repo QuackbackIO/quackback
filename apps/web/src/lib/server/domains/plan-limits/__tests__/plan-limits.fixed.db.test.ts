@@ -53,6 +53,7 @@ import { deleteStatusComponent } from '@/lib/server/domains/status/status.compon
 import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { setKeptBoard } from '../plan-limits.choosers'
 import { planLimitsPage } from '../plan-limits.page'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -125,9 +126,8 @@ describe.skipIf(!fixture.available)('plan limits fixed rows (real DB)', () => {
       .update(settings)
       .set({
         planLimitsState: null,
-        featureFlags: JSON.stringify({ feedback: true, planLimits: true }),
         tierLimits: JSON.stringify({ ...OSS_TIER_LIMITS, maxBoards: 1, maxStatusComponents: 0 }),
-        cloud: null as never,
+        cloud: planBillingOn() as never,
       })
       .where(eq(settings.id, settingsId))
   })

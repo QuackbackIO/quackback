@@ -1,8 +1,8 @@
 /**
  * The admin layout loader reads the plan limits summary for every admin page,
  * so every teammate sees the banner and the sidebar line wherever they are.
- * It reads it only where plan billing is on and the plan limits flag is on:
- * an install without plan billing never asks and never shows anything. A read
+ * It reads it only where plan billing is on: an install without plan billing
+ * never asks and never shows anything. A read
  * that fails or is refused leaves the layout working, with no banner.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -52,8 +52,7 @@ afterEach(() => getPlanLimitsSummaryFn.mockClear())
 
 function loadAdmin(opts: {
   permissions?: PermissionKey[]
-  billingEnabled?: boolean
-  planLimits?: boolean
+  planBilling?: boolean
   pathname?: string
 }) {
   caller.permissions = opts.permissions ?? SYSTEM_ROLE_PERMISSIONS.owner
@@ -64,10 +63,8 @@ function loadAdmin(opts: {
       principal: { id: 'principal_1', chatAvailability: 'online' },
       permissions: caller.permissions,
       acceptLanguageLocale: 'en',
-      billingEnabled: opts.billingEnabled ?? true,
-      settings: {
-        featureFlags: { ...DEFAULT_FEATURE_FLAGS, planLimits: opts.planLimits ?? true },
-      },
+      cloudEnabled: opts.planBilling ?? true,
+      settings: { featureFlags: DEFAULT_FEATURE_FLAGS },
     },
     location: { pathname: opts.pathname ?? '/admin/inbox' },
   })
@@ -85,14 +82,8 @@ describe('admin loader: plan limits', () => {
     }
   )
 
-  it('never asks without plan billing, even with the flag on', async () => {
-    const data = await loadAdmin({ billingEnabled: false })
-    expect(getPlanLimitsSummaryFn).not.toHaveBeenCalled()
-    expect(data.planLimits).toBeNull()
-  })
-
-  it('never asks with the flag off', async () => {
-    const data = await loadAdmin({ planLimits: false })
+  it('never asks without plan billing', async () => {
+    const data = await loadAdmin({ planBilling: false })
     expect(getPlanLimitsSummaryFn).not.toHaveBeenCalled()
     expect(data.planLimits).toBeNull()
   })

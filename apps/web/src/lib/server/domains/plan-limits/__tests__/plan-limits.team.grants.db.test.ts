@@ -2,7 +2,7 @@
  * Giving a custom role past the plan's cap, after the grace, against a real
  * database, on the paths the main team suite does not drive: a team invite
  * and a workspace API key. A new grant is refused once enforced and allowed in
- * the grace and with the flag off; keeping a key on the role it already has
+ * the grace and without plan billing; keeping a key on the role it already has
  * (a rotate or rename) stays open.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -29,6 +29,7 @@ import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-li
 import { assertInviteGrant } from '@/lib/server/domains/principals/team-invitation'
 import { resolveGrantableKeyRole } from '@/lib/server/domains/api-keys/workspace-key-role'
 import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -36,11 +37,11 @@ const DAY = 24 * 60 * 60 * 1000
 
 const GRANTER = { role: 'admin' as const, permissions: ['member.view'] as never }
 
-async function configure(planLimits: boolean) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(planBilling: boolean) {
   await testDb.update(settings).set({
-    featureFlags: JSON.stringify({ feedback: true, planLimits }),
+    cloud: (planBilling ? planBillingOn() : null) as never,
     tierLimits: JSON.stringify({ ...OSS_TIER_LIMITS, maxCustomRoles: 0 }),
-    cloud: null,
   })
   invalidateTierLimitsCache()
   await invalidateSettingsCache()

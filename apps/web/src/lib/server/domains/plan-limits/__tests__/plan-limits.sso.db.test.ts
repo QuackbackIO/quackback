@@ -60,7 +60,9 @@ import { runWithLogContext } from '@/lib/server/log-context'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { resolveCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { planBillingOn } from './plan-billing'
-import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
+import { detectPlanLimits, getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
+import { planFeatureSet } from '../plan-limits.features'
+import { DISABLED_CLOUD_CONFIG } from '@/lib/server/domains/settings/cloud/cloud.types'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -83,6 +85,16 @@ async function configure(options: {
     .where(eq(settings.id, settingsId))
   invalidateTierLimitsCache()
   await invalidateSettingsCache()
+}
+
+/** The drop from a plan that had every paid feature, single sign-on included. */
+async function dropFromPro() {
+  await detectPlanLimits({
+    previous: {
+      plan: 'pro',
+      features: planFeatureSet(OSS_TIER_LIMITS.features, DISABLED_CLOUD_CONFIG),
+    },
+  })
 }
 
 async function ensureSettings(): Promise<WorkspaceId> {
@@ -147,6 +159,7 @@ describe.skipIf(!fixture.available)('single sign-on through the grace (real DB)'
 
   it('keeps a provider set up before the drop signing in until the grace ends', async () => {
     await configure({ planBilling: true, tierLimits: NO_SSO })
+    await dropFromPro()
     const workspace = await settled(getWorkspaceSettings())
     expect(workspace?.ssoProvidersConfigured).toBe(true)
     expect(workspace?.publicPortalConfig.oidcProviders?.map((p) => p.id)).toEqual(['acme-sso'])
@@ -193,7 +206,8 @@ describe.skipIf(!fixture.available)('single sign-on through the grace (real DB)'
 
   it('evaluates plan limits once for two settings reads in one request', async () => {
     await configure({ planBilling: true, tierLimits: NO_SSO })
-    // A first read stores the grace; the request below finds it stored.
+    // The drop stores the grace; the request below finds it stored.
+    await dropFromPro()
     await settled(getWorkspaceSettings())
     spies.sourceReads = 0
     // In a request the settings load is shared, so loading it must not ask

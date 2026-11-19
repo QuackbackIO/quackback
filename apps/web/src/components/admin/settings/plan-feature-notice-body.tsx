@@ -19,7 +19,7 @@ export type { PlanNoticeState }
 // The query key and the rule below match plan-feature-notice-state.ts, a
 // parity test holds them together. They are copied rather than imported: a
 // module shared with the Custom domains tab, which loads that one, would
-// become a chunk of its own and cost that tab a request with the flag off.
+// become a chunk of its own and cost that tab a request without plan billing.
 
 /** The query the notice and the pages that defer to it share. */
 export const PLAN_FEATURE_NOTICE_QUERY_KEY = ['plan-limits', 'feature-notice'] as const

@@ -21,6 +21,7 @@ import { processBatch } from '@/lib/server/domains/import/import-service'
 import { ImportUserResolver } from '@/lib/server/domains/import/user-resolver'
 import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { BOARD_READ_ONLY_MESSAGE } from '../plan-limits.board-guard'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -29,9 +30,10 @@ const DAY = 24 * 60 * 60 * 1000
 let openBoard: BoardId
 let closedBoard: BoardId
 
-async function configure(planLimits: boolean) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(planBilling: boolean) {
   await testDb.update(settings).set({
-    featureFlags: JSON.stringify({ feedback: true, planLimits }),
+    cloud: (planBilling ? planBillingOn() : null) as never,
     tierLimits: JSON.stringify({ ...OSS_TIER_LIMITS, maxBoards: 1 }),
   })
   invalidateTierLimitsCache()
@@ -143,7 +145,7 @@ describe.skipIf(!fixture.available)('import and read-only boards (real DB)', () 
     expect(created).toHaveLength(0)
   })
 
-  it('creates the new board and imports the row with the rules off', async () => {
+  it('creates the new board and imports the row without plan billing', async () => {
     await configure(false)
     const result = await processBatch(
       [{ title: 'Acme new', content: 'x', author_name: 'Acme Fan', board: 'Acme Brand New' }],
