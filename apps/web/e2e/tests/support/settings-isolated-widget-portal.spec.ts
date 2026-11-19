@@ -18,6 +18,7 @@ import { fakeAi } from '../../support/fake-ai-client'
 import {
   SUPPORT_FLAGS_ON,
   WIDGET_BASELINE,
+  isolatedSettingsBaseline,
   withEveryTeammateAway,
   withSettings,
 } from '../../support/isolated-settings'
@@ -42,8 +43,17 @@ import {
   widgetTab,
 } from '../../support/widget-portal'
 
-test.beforeEach(() => {
+const baseline = isolatedSettingsBaseline()
+
+test.beforeEach(async () => {
   test.skip(!ISOLATED, ISOLATED_SKIP)
+  // Generous: a flipped setting must never outlive its test on a timeout.
+  test.setTimeout(120_000)
+  await baseline.apply()
+})
+
+test.afterEach(async () => {
+  await baseline.restore()
 })
 
 /** A fresh anonymous visitor with one conversation, its thread open in the widget. */
@@ -119,10 +129,7 @@ test.describe('support surfaces switched off', { tag: '@isolated' }, () => {
     async ({ request, marker }) => {
       const visitor = await mintVisitor()
       // Before the switch: a thread and a stream token the visitor already holds.
-      const { conversation } = await withSettings(
-        { feature_flags: SUPPORT_FLAGS_ON, widget_config: WIDGET_BASELINE },
-        () => visitorSend(request, visitor.token, `${marker} before`)
-      )
+      const { conversation } = await visitorSend(request, visitor.token, `${marker} before`)
       const minted = await widgetFn<{ token: string }>(
         request,
         'widgetMintConversationStreamTokenFn',
@@ -186,10 +193,7 @@ test.describe('support surfaces switched off', { tag: '@isolated' }, () => {
     async ({ browser, request, customerEmail, marker }) => {
       const customer = await mintCustomer({ email: customerEmail })
       const token = await mintSessionToken(customer.userUuid)
-      const { conversation } = await withSettings(
-        { feature_flags: SUPPORT_FLAGS_ON, widget_config: WIDGET_BASELINE },
-        () => visitorSend(request, token, `${marker} hello`)
-      )
+      const { conversation } = await visitorSend(request, token, `${marker} hello`)
       const context = await portalContext(browser, customer)
       const page = await context.newPage()
       try {
@@ -217,7 +221,7 @@ test.describe('support surfaces switched off', { tag: '@isolated' }, () => {
             }
           )
         }
-        // Back on (the suite's settings restored): the thread opens again.
+        // Back on (the baseline): the thread opens again.
         await page.goto(`/support/${conversation.id}`)
         await expect(page.getByText(`${marker} hello`)).toBeVisible({ timeout: 15_000 })
       } finally {
@@ -232,9 +236,7 @@ test.describe('support surfaces switched off', { tag: '@isolated' }, () => {
     async ({ browser, request, customerEmail, marker }) => {
       const customer = await mintCustomer({ email: customerEmail })
       const token = await mintSessionToken(customer.userUuid)
-      await withSettings({ feature_flags: SUPPORT_FLAGS_ON, widget_config: WIDGET_BASELINE }, () =>
-        visitorSend(request, token, `${marker} hello`)
-      )
+      await visitorSend(request, token, `${marker} hello`)
       const empty = await mintCustomer({ email: `empty-${customerEmail}` })
       const context = await portalContext(browser, customer)
       const emptyContext = await portalContext(browser, empty)
@@ -348,11 +350,11 @@ test.describe('prevent replies to closed conversations', { tag: '@isolated' }, (
       await withSettings(PREVENT, async () => {
         const visitor = await mintVisitor()
         const { conversation } = await visitorSend(request, visitor.token, `${marker} hi`)
+        await agentApi(request).status(conversation.id, 'closed')
         const blockId = await seedBlockMessage(conversation.id, `${marker} How did we do?`, {
           kind: 'csat',
           allowTypingInterrupt: true,
         })
-        await agentApi(request).status(conversation.id, 'closed')
         const send = (blockReply: Record<string, unknown>) =>
           widgetFn(request, 'widgetSendConversationMessageFn', {
             bearer: visitor.token,
@@ -399,12 +401,12 @@ test.describe('prevent replies to closed conversations', { tag: '@isolated' }, (
         await expect(widget.getByText('How was your conversation?')).toBeVisible({
           timeout: 15_000,
         })
-        // No promise that a reply reopens it while replies are refused.
-        await expect(widget.getByText('Reply to reopen it.')).toHaveCount(0)
         await visitorType(widget, `${marker} one more thing`)
         await expect(widget.getByText(/This conversation has been closed/)).toBeVisible({
           timeout: 15_000,
         })
+        // And no promise that a reply reopens it while replies are refused.
+        await expect(widget.getByText('Reply to reopen it.')).toHaveCount(0)
       })
     }
   )
@@ -417,11 +419,11 @@ test.describe('prevent replies to closed conversations', { tag: '@isolated' }, (
         const customer = await mintCustomer({ email: customerEmail })
         const token = await mintSessionToken(customer.userUuid)
         const { conversation } = await visitorSend(request, token, `${marker} closed soon`)
+        await agentApi(request).status(conversation.id, 'closed')
         const blockId = await seedBlockMessage(conversation.id, `${marker} Rate us`, {
           kind: 'csat',
           allowTypingInterrupt: true,
         })
-        await agentApi(request).status(conversation.id, 'closed')
         const context = await portalContext(browser, customer)
         try {
           const refused = await portalFn(context.request, 'sendConversationMessageFn', {

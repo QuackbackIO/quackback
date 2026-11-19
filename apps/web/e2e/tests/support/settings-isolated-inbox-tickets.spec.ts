@@ -12,10 +12,11 @@ import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { test, expect } from '../../support/inbox'
 import { pollFor, supportDb } from '../../support/db'
 import { ISOLATED, ISOLATED_SKIP } from '../../support/automation'
-import { FAKE_AI_FAIL, fakeAi } from '../../support/fake-ai-client'
+import { fakeAi } from '../../support/fake-ai-client'
 import {
   SUPPORT_FLAGS_ON,
   WIDGET_BASELINE,
+  isolatedSettingsBaseline,
   snapshotSettings,
   restoreSettings,
   withSettings,
@@ -49,8 +50,17 @@ import {
 
 test.use({ viewport: { width: 1920, height: 1080 } })
 
-test.beforeEach(() => {
+const baseline = isolatedSettingsBaseline()
+
+test.beforeEach(async () => {
   test.skip(!ISOLATED, ISOLATED_SKIP)
+  // Generous: a flipped setting must never outlive its test on a timeout.
+  test.setTimeout(120_000)
+  await baseline.apply()
+})
+
+test.afterEach(async () => {
+  await baseline.restore()
 })
 
 // ---------------------------------------------------------------------------
@@ -227,11 +237,16 @@ test.describe('inbox translation', { tag: '@isolated' }, () => {
         const admin = await asPerson('admin')
         await openConversation(admin, conversationId, opening)
         // The model fails: the send is blocked and nothing is stored.
-        const reply = `${marker} We will call you tomorrow ${FAKE_AI_FAIL}`
+        const reply = `${marker} We will call you tomorrow`
+        await fakeAi.script({ marker: reply, status: 500, error: 'translation model down' })
         await sendFromComposer(admin, reply, 'reply')
         await expect(admin.getByText('Could not translate your reply.')).toBeVisible({
           timeout: 30_000,
         })
+        // The model was asked (and failed) for this very reply.
+        const asked = await fakeAi.requests({ contains: reply, endpoint: 'chat' })
+        expect(asked.length).toBeGreaterThan(0)
+        expect(asked.every((r) => r.matched === reply && r.status === 500)).toBe(true)
         expect(await agentMessages()).toEqual([])
 
         await admin.getByRole('button', { name: 'Send untranslated' }).click()
@@ -240,9 +255,7 @@ test.describe('inbox translation', { tag: '@isolated' }, () => {
           return rows.length ? rows : null
         })
         expect(sent).toHaveLength(1)
-        // Sent as typed (the composer's markdown escapes the brackets).
-        expect(sent[0].content).toContain(`${marker} We will call you tomorrow`)
-        expect(sent[0].content).toContain('fake-ai:fail')
+        expect(sent[0].content).toBe(reply)
         expect(sent[0].metadata?.translatedFrom ?? null).toBeNull()
         await expect(threadMessages(admin, `${marker} We will call you tomorrow`)).toBeVisible()
       })
