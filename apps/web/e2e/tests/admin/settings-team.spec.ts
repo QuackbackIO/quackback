@@ -79,26 +79,30 @@ test.describe('Admin Team Settings', () => {
     await expect(dialog.getByRole('button', { name: /^add people$/i })).toBeDisabled()
   })
 
-  test(
-    'add people dialog cancel closes the dialog',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: with the People field focused, the first Cancel click does not close the Add people dialog; a second click does',
-      },
-    },
-    async ({ page }) => {
-      await page.getByRole('button', { name: /add people/i }).click()
+  test('add people dialog cancel closes the dialog', async ({ page }) => {
+    await page.getByRole('button', { name: /add people/i }).click()
 
-      const dialog = page.getByRole('dialog')
-      await expect(dialog).toBeVisible({ timeout: 5000 })
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
 
-      await dialog.getByRole('button', { name: /cancel/i }).click()
-      await expect(dialog).toBeHidden({ timeout: 5000 })
-    }
-  )
+    await dialog.getByRole('button', { name: /cancel/i }).click()
+    await expect(dialog).toBeHidden({ timeout: 5000 })
+  })
+
+  test('one Cancel click closes the dialog while the results are open', async ({ page }) => {
+    // The results sit in the dialog above Cancel. The press on Cancel blurs
+    // the field; closing the results right then moved Cancel up before the
+    // press ended, so the first click was lost.
+    await page.getByRole('button', { name: /add people/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+    const address = `e2e-cancel-${Date.now()}@example.com`
+    await dialog.getByRole('combobox', { name: 'People' }).fill(address)
+    await expect(dialog.getByRole('option', { name: `Invite ${address}` })).toBeVisible()
+
+    await dialog.getByRole('button', { name: /cancel/i }).click()
+    await expect(dialog).toBeHidden({ timeout: 5000 })
+  })
 
   test('typing a new full email offers to invite it', async ({ page }) => {
     await page.getByRole('button', { name: /add people/i }).click()
