@@ -67,6 +67,11 @@ vi.mock('../csat-request.service', () => ({
   isCsatRatedOrEmailed: (id: unknown) => isCsatRatedOrEmailed(id),
 }))
 
+// Nobody here paused all email. Holding automated email back for someone who
+// did runs over real rows in conversation/__tests__/paused-email.db.test.ts.
+vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
+  hasPausedAllEmail: async () => false,
+}))
 vi.mock('../csat-email-token', () => ({
   mintCsatEmailToken: () => 'csat-token',
 }))
