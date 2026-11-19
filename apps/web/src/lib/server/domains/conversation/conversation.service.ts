@@ -86,6 +86,8 @@ import {
   resolvedAtForStatus,
   shouldRequeueOnAgentOffline,
   unreadWatermarkFromAnchor,
+  isHeldInSpam,
+  SPAM_MARKER_CLEARED,
 } from './conversation.lifecycle'
 import {
   publishConversationEvent,
@@ -348,6 +350,9 @@ export async function sendVisitorMessage(
   // The conversation's status BEFORE this message, so the assistant trigger can
   // tell a genuinely reopened thread from one a human deliberately closed.
   let priorStatus: ConversationStatus | null = null
+  // A customer message on a conversation in Spam is kept, but the thread stays
+  // closed and in Spam with no alerts — see isHeldInSpam.
+  let heldInSpam = false
   const txResult = await db.transaction(async (tx) => {
     let conversation: Conversation
     if (input.conversationId) {
@@ -369,6 +374,7 @@ export async function sendVisitorMessage(
       }
       conversation = existing
       priorStatus = existing.status
+      heldInSpam = isHeldInSpam(existing)
     } else {
       const start = canStartConversation(actor)
       if (!start.allowed) throw new ForbiddenError('FORBIDDEN', start.reason)
@@ -414,11 +420,13 @@ export async function sendVisitorMessage(
     // a block posted on an already-closed conversation is the intended
     // post-close CSAT/button flow, not the customer reopening the thread —
     // see applyVisitorReopenStatus's doc.
-    const visitorNextStatus = applyVisitorReopenStatus(
-      conversation.status,
-      !!resolvedBlockReply,
-      getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
-    )
+    const visitorNextStatus = heldInSpam
+      ? 'closed'
+      : applyVisitorReopenStatus(
+          conversation.status,
+          !!resolvedBlockReply,
+          getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
+        )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -430,14 +438,19 @@ export async function sendVisitorMessage(
         // A customer message always wakes a snoozed thread — clear the timer.
         snoozedUntil: null,
         // The customer is now waiting on a reply: start the clock if it isn't
-        // already running (the oldest unanswered message wins).
-        waitingSince: conversation.waitingSince ?? message.createdAt,
+        // already running (the oldest unanswered message wins). Nobody owes
+        // spam a reply, so a message held in Spam starts no clock.
+        waitingSince: heldInSpam
+          ? conversation.waitingSince
+          : (conversation.waitingSince ?? message.createdAt),
         // Keep resolvedAt consistent with the new status — a reply that reopens
         // a closed thread must clear the stale resolution timestamp. The one
         // case that stays 'closed' (the post-close matched-blockReply carve-out
         // above) must NOT bump resolvedAt to this message's time either — the
         // conversation's original resolution moment is untouched by a CSAT tap
-        // answering it after the fact.
+        // answering it after the fact. A message held in Spam keeps it too:
+        // resolvedAt is the filing time the spam retention sweep counts from,
+        // so a sender cannot keep filed spam alive by writing again.
         resolvedAt:
           visitorNextStatus === 'closed'
             ? conversation.resolvedAt
@@ -504,6 +517,20 @@ export async function sendVisitorMessage(
   // hiccup can't roll back the visitor's message.
   if (created && txResult.conversation.assignedAgentPrincipalId === null) {
     await routeUnassignedConversation(txResult.conversation)
+  }
+
+  // Held in Spam: the message is stored and shown to anyone viewing the Spam
+  // list (published above), and nothing else happens — no team email or bell,
+  // no message event (workflow triggers, webhooks, the next-response SLA
+  // re-arm), no ticket reply signal. The assistant is already skipped for a
+  // closed thread (shouldConsiderAssistant).
+  if (heldInSpam) {
+    log.info(
+      { conversation_id: txResult.conversation.id },
+      'customer message held on a conversation in spam'
+    )
+    const heldDTO = await conversationToDTO(txResult.conversation, 'visitor')
+    return { conversation: heldDTO, message: visitorMessage, created }
   }
 
   void notifyVisitorMessage({
@@ -861,6 +888,9 @@ export async function sendAgentMessage(
         // Keep resolvedAt consistent with the new status (reopening clears it).
         resolvedAt: resolvedAtForStatus(agentNextStatus, message.createdAt),
         updatedAt: message.createdAt,
+        // A teammate replying to a thread in Spam has judged it real: it
+        // leaves Spam the same way Restore takes it out.
+        ...(existing.endReason === 'spam' ? SPAM_MARKER_CLEARED : {}),
       })
       .where(eq(conversations.id, conversationId))
       .returning()
@@ -1096,6 +1126,9 @@ export async function setConversationStatus(
       snoozedUntil: null,
       resolvedAt: resolvedAtForStatus(status, now),
       updatedAt: now,
+      // Reopening (or snoozing) a thread in Spam takes it out of Spam, the
+      // same way Restore does. Closing it again leaves the marker alone.
+      ...(status !== 'closed' && existing.endReason === 'spam' ? SPAM_MARKER_CLEARED : {}),
     })
     .where(eq(conversations.id, conversationId))
     .returning()
@@ -1320,9 +1353,7 @@ export async function restoreConversationFromSpam(
     .set({
       status: 'open',
       resolvedAt: null,
-      endReason: null,
-      endNote: null,
-      spamReason: null,
+      ...SPAM_MARKER_CLEARED,
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))

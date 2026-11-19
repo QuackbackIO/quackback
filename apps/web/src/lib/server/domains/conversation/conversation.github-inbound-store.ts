@@ -36,7 +36,7 @@ import type { ConversationAuthorInput } from './conversation.types'
 import { githubLoginsMatch } from '@/lib/server/domains/channels/github-thread'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { logger } from '@/lib/server/logger'
-import { applyVisitorReopenStatus } from './conversation.lifecycle'
+import { applyVisitorReopenStatus, isHeldInSpam } from './conversation.lifecycle'
 
 const log = logger.child({ component: 'github-channel-inbound' })
 
@@ -205,13 +205,13 @@ export async function appendGitHubComment(input: {
   }
 
   try {
-    const { conversation, message } = await db.transaction(async (tx) => {
+    const { conversation, message, heldInSpam } = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select()
         .from(conversations)
         .where(eq(conversations.id, input.conversationId))
         .limit(1)
-      if (!existing) return { conversation: undefined, message: undefined }
+      if (!existing) return { conversation: undefined, message: undefined, heldInSpam: false }
       const nextStatus = applyVisitorReopenStatus(existing.status, false, 'never')
       const [inserted] = await tx
         .insert(conversationMessages)
@@ -238,7 +238,7 @@ export async function appendGitHubComment(input: {
         })
         .where(eq(conversations.id, input.conversationId))
         .returning()
-      return { conversation: updated, message: inserted }
+      return { conversation: updated, message: inserted, heldInSpam: isHeldInSpam(existing) }
     })
 
     if (!conversation || !message) return
@@ -252,7 +252,8 @@ export async function appendGitHubComment(input: {
       principalId: sender.principalId,
       displayName: input.commenter.login ?? null,
     }
-    await emitMessageCreated(actor, author, message, conversation, false)
+    // A comment on a thread in Spam is kept but fires nothing (see isHeldInSpam).
+    if (!heldInSpam) await emitMessageCreated(actor, author, message, conversation, false)
     await publishGitHubInboxMessage(message, 'created')
   } catch (err) {
     if (isUniqueViolation(err)) return
