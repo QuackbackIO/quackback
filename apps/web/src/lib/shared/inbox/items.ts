@@ -20,7 +20,8 @@ import type { TermSegment } from '@/lib/shared/utils/keyword-context'
 /** The unified inbox's sorts. All but 'relevance' are a subset of both
  *  `ConversationSort` and `TicketSort`, so they type-check as either branch's
  *  `sort` param directly (see `resolveInboxSort` for 'relevance'). */
-export type InboxSort = 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'relevance'
+export type InboxSort =
+  'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'relevance'
 
 /**
  * A ticket's nearest unmet SLA deadline for the 'sla' sort: its time-to-resolve

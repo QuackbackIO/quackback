@@ -531,6 +531,87 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
     })
   })
 
+  describe('the waiting longest sort', () => {
+    const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 12, minutes))
+    const idOf = (item: Awaited<ReturnType<typeof listInboxItems>>['items'][number]) =>
+      item.kind === 'conversation' ? item.conversation.id : item.ticket.id
+
+    /** Walk every page with the real cursor; the ids in emitted order. */
+    async function walkAllPages(limit: number): Promise<string[]> {
+      const seen: string[] = []
+      let cursor: string | undefined
+      for (let pages = 0; pages < 20; pages++) {
+        const page = await listInboxItems(serviceActor(), {
+          facet: 'all',
+          kinds: ['conversation', 'ticket'],
+          sort: 'waiting',
+          limit,
+          cursor,
+        })
+        seen.push(...page.items.map(idOf))
+        if (!page.cursor) return seen
+        cursor = page.cursor
+      }
+      throw new Error('paging never ended')
+    }
+
+    it('lists waiting conversations longest first, then the rest, then tickets by id, each exactly once', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+
+      // Waiting order (:10, :20, :30) differs from both creation (id) order
+      // and activity order, so a list sorted by either would fail.
+      const waiting: Record<number, ConversationId> = {}
+      for (const [since, activity] of [
+        [30, 59],
+        [10, 41],
+        [20, 50],
+      ] as const) {
+        const id = await seedConversation(visitor, { lastMessageAt: at(activity) })
+        await testDb
+          .update(conversations)
+          .set({ waitingSince: at(since) })
+          .where(eq(conversations.id, id))
+        waiting[since] = id
+      }
+      // Nobody is waiting on these; they are the most recently active rows.
+      const idle = [
+        await seedConversation(visitor, { lastMessageAt: at(58) }),
+        await seedConversation(visitor, { lastMessageAt: at(57) }),
+      ]
+      // Tickets have no waiting clock. Activity runs opposite to id order.
+      const ticketIds: string[] = []
+      for (let i = 0; i < 3; i++) {
+        const ticket = await createTicket(
+          { type: 'back_office', title: `Ticket ${i}` },
+          writeActor()
+        )
+        await testDb
+          .update(tickets)
+          .set({ updatedAt: at(56 - i) })
+          .where(eq(tickets.id, ticket.id))
+        ticketIds.push(ticket.id)
+      }
+
+      const expected = [
+        waiting[10],
+        waiting[20],
+        waiting[30],
+        ...[...idle].sort(),
+        ...[...ticketIds].sort(),
+      ]
+      // Pages of 2 split the waiting/idle boundary and the conversation/ticket
+      // boundary; pages of 3 land a boundary between pages instead.
+      for (const limit of [2, 3]) {
+        const seen = await walkAllPages(limit)
+        expect(seen).toEqual(expected)
+        expect(new Set(seen).size).toBe(seen.length)
+      }
+    })
+  })
+
   describe('countInboxScopes', () => {
     it('counts open mine/unassigned conversations and open tickets by type, RBAC-bounded', async () => {
       await seedSettings()

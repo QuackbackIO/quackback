@@ -275,13 +275,31 @@ export function mergeInboxBranches(input: MergeInboxBranchesInput): MergeInboxBr
   // re-deriving it (a `new Date(...).getTime()` or priority-rank lookup) on
   // every comparator call during the sort. On a searched list the key is the
   // item's position within its own branch instead (see `relevanceOrdered`).
+  //
+  // Waiting longest: a ticket has no waiting clock, so every conversation
+  // comes first, in the branch's own order (longest waiting, then the
+  // nobody-waiting tail by id), and the tickets follow, by id as their branch
+  // lists them. The conversation's waiting time is not on its DTO, so its
+  // position within the branch is its key.
   const keyed: KeyedInboxItem[] = relevanceOrdered
     ? [conversation.items, ticket.items].flatMap((b) => b.map((item, key) => ({ item, key })))
-    : [...conversation.items, ...ticket.items].map((item) => ({ item, key: sortValue(item, sort) }))
-  // Rank fusion ascends (position 0 = best match), as do the oldest and
-  // soonest-deadline sorts.
+    : sort === 'waiting'
+      ? [
+          ...conversation.items.map((item, key) => ({ item, key })),
+          ...ticket.items.map((item) => ({ item, key: Number.POSITIVE_INFINITY })),
+        ]
+      : [...conversation.items, ...ticket.items].map((item) => ({
+          item,
+          key: sortValue(item, sort),
+        }))
+  // Rank fusion ascends (position 0 = best match), as do the oldest,
+  // soonest-deadline and waiting-longest sorts.
   keyed.sort((a, b) =>
-    compareKeyedInboxItems(a, b, relevanceOrdered || sort === 'oldest' || sort === 'sla')
+    compareKeyedInboxItems(
+      a,
+      b,
+      relevanceOrdered || sort === 'oldest' || sort === 'sla' || sort === 'waiting'
+    )
   )
   const combined = keyed.map((k) => k.item)
   const truncated = combined.length > limit ? combined.slice(0, limit) : combined

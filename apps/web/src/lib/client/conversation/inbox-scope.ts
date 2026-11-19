@@ -378,10 +378,17 @@ export function facetToStatusFilter(facet: InboxTriageFacet): StatusFilter {
 
 /** The subset of `ConversationSort` the unified endpoint's `inboxSortSchema`
  *  accepts. 'sla' ranks both kinds by their nearest unmet deadline (a ticket's
- *  time-to-resolve clock). `waiting` is a conversation-only clock with no
- *  ticket-row equivalent — the endpoint's zod schema rejects it, so the client
- *  must clamp rather than forward and 400. */
-const INBOX_UNIFIED_SORTS = new Set(['recent', 'oldest', 'created', 'priority', 'sla', 'relevance'])
+ *  time-to-resolve clock). 'waiting' lists every waiting conversation longest
+ *  first; tickets have no waiting clock, so they follow every conversation. */
+const INBOX_UNIFIED_SORTS = new Set([
+  'recent',
+  'oldest',
+  'created',
+  'priority',
+  'sla',
+  'waiting',
+  'relevance',
+])
 
 export interface InboxListParams {
   facet: InboxTriageFacet
@@ -401,7 +408,7 @@ export interface InboxListParams {
   assignee?: string
   teamId?: string
   companyId?: string
-  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'relevance'
+  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'relevance'
   channel?: Channel
 }
 

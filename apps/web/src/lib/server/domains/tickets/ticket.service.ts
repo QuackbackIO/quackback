@@ -165,7 +165,7 @@ const priorityRankExpr = priorityRankSql(tickets.priority)
  * conversation sort, so the keyset cursor only ever needs two columns.
  */
 export interface TicketSortDescriptor {
-  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'slaDueAt'
+  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'slaDueAt' | 'id'
   direction: 'asc' | 'desc'
 }
 
@@ -179,6 +179,9 @@ export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSort
       return { primary: 'priorityRank', direction: 'desc' }
     case 'sla':
       return { primary: 'slaDueAt', direction: 'asc' }
+    case 'waiting':
+      // No waiting clock on a ticket: id order keeps the cursor stable.
+      return { primary: 'id', direction: 'asc' }
     case 'recent':
     default:
       return { primary: 'updatedAt', direction: 'desc' }
@@ -203,6 +206,8 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
     case 'slaDueAt':
       // Soonest breach first; rows with no open SLA clock sit at the end.
       return [sql`${ticketSlaDueExpr} ASC NULLS LAST`, idTie]
+    case 'id':
+      return [idTie]
     case 'createdAt':
       return [d.direction === 'asc' ? asc(tickets.createdAt) : desc(tickets.createdAt), idTie]
     case 'updatedAt':
@@ -249,6 +254,8 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
         : { equal: sql`${ticketSlaDueExpr} IS NULL`, strict: undefined }
       return buildKeysetCondition([slaCol, idTie])
     }
+    case 'id':
+      return buildKeysetCondition([idTie])
     case 'createdAt': {
       const col =
         d.direction === 'asc'

@@ -117,9 +117,9 @@ describe('listInboxItemsSchema', () => {
     expect(() => listInboxItemsSchema.parse({ facet: 'all', kinds: ['ticket', 'post'] })).toThrow()
   })
 
-  it('accepts the SLA sort but rejects a sort it cannot run', () => {
+  it('accepts the SLA and waiting longest sorts but rejects a sort it cannot run', () => {
     expect(listInboxItemsSchema.parse({ facet: 'all', sort: 'sla' }).sort).toBe('sla')
-    expect(() => listInboxItemsSchema.parse({ facet: 'all', sort: 'waiting' })).toThrow()
+    expect(listInboxItemsSchema.parse({ facet: 'all', sort: 'waiting' }).sort).toBe('waiting')
     expect(() => listInboxItemsSchema.parse({ facet: 'all', sort: 'nonsense' })).toThrow()
   })
 
