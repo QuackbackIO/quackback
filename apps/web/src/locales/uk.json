@@ -602,6 +602,7 @@
   "widget.messenger.block.collect.required": "Це поле обов’язкове.",
   "widget.messenger.block.collect.submit": "Надіслати",
   "widget.messenger.block.writeOnceExplainer": "Тепер це може змінити лише наша команда.",
+  "widget.messenger.closedStartNew": "Цю розмову закрито. Почніть нову, щоб написати нам.",
   "widget.messenger.closedReopen": "Цю розмову закрито. Відповідайте, щоб відкрити її знову.",
   "widget.messenger.sendTooFast": "Ви надсилаєте повідомлення надто швидко. Зачекайте трохи й спробуйте ще раз.",
   "widget.messenger.composer.lockedButtons": "Виберіть варіант вище",

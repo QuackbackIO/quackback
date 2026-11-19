@@ -602,6 +602,7 @@
   "widget.messenger.block.collect.required": "Это поле обязательно для заполнения.",
   "widget.messenger.block.collect.submit": "Отправить",
   "widget.messenger.block.writeOnceExplainer": "Теперь изменить это может только наша команда.",
+  "widget.messenger.closedStartNew": "Переписка закрыта. Начните новую, чтобы написать нам.",
   "widget.messenger.closedReopen": "Переписка была закрыта. Ответьте, чтобы возобновить её.",
   "widget.messenger.sendTooFast": "Вы отправляете сообщения слишком быстро. Подождите немного и попробуйте снова.",
   "widget.messenger.composer.lockedButtons": "Выберите один из вариантов выше",

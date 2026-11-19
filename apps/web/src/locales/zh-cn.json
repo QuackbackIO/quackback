@@ -602,6 +602,7 @@
   "widget.messenger.block.collect.required": "此字段为必填项。",
   "widget.messenger.block.collect.submit": "提交",
   "widget.messenger.block.writeOnceExplainer": "现在只有我们的团队才能更改此项。",
+  "widget.messenger.closedStartNew": "该对话已关闭。请发起新对话联系我们。",
   "widget.messenger.closedReopen": "该对话已关闭。回复即可重新开启。",
   "widget.messenger.sendTooFast": "你发送消息太快了。请稍等片刻再试。",
   "widget.messenger.composer.lockedButtons": "请选择上方的选项",

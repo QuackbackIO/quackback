@@ -602,6 +602,7 @@
   "widget.messenger.block.collect.required": "Dit veld is verplicht.",
   "widget.messenger.block.collect.submit": "Versturen",
   "widget.messenger.block.writeOnceExplainer": "Alleen ons team kan dit nu nog wijzigen.",
+  "widget.messenger.closedStartNew": "Dit gesprek is gesloten. Begin een nieuw gesprek om ons een bericht te sturen.",
   "widget.messenger.closedReopen": "Dit gesprek is gesloten. Antwoord om het te heropenen.",
   "widget.messenger.sendTooFast": "Je verstuurt berichten te snel. Wacht even en probeer het dan opnieuw.",
   "widget.messenger.composer.lockedButtons": "Kies een optie hierboven",
