@@ -58,17 +58,6 @@ Known bugs (fixes in flight) and bugs found while writing these journeys. Each
 test asserts the right behaviour; the working part of each journey is proved
 by a separate test that is not quarantined.
 
-- `support/email-outbound-csat.spec.ts` › CUS-O-21 a workflow rating block on
-  an email conversation sends one rating request email. Waits on an owner
-  decision. The test's workflow runs `request_csat` on `message.created`, so
-  it asks while the conversation is open. Since #1102 a rating is only taken
-  on a closed conversation, and a workflow rating ask on an open one is
-  skipped (`mayAskForCsat`, `csat-request.service.ts`), so no rating email is
-  sent. The question: should a workflow rating request on an open
-  conversation be skipped, or should asking be allowed and only recording
-  wait for close? Skipped: rewrite the test to ask on close. Allowed: change
-  `mayAskForCsat` and lift the tag. owner: unassigned, review by: 2026-12-03.
-
 ### Support suite: tickets remainder
 
 - `support/tickets-requester.spec.ts` › the ticket embed card › TKT-65 a
