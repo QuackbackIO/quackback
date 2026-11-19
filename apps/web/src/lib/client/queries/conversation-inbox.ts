@@ -9,7 +9,7 @@
  * (conversation-inbox.test.ts pins them) so SSE cache writes, invalidations, and the
  * per-scope conversation memory keep matching.
  */
-import { queryOptions } from '@tanstack/react-query'
+import { hashKey, queryOptions } from '@tanstack/react-query'
 import type { ConversationId, CompanyId } from '@quackback/ids'
 import {
   listConversationsFn,
@@ -79,6 +79,10 @@ export const conversationInboxQueries = {
     if (companyId) key.push(companyId)
     if (aiBucket) key.push(`ai:${aiBucket}`)
     if (channel) key.push(`channel:${channel}`)
+    // A custom view's rules are part of what the list shows, so editing the
+    // view must change the key and refetch. hashKey orders object fields, so
+    // the same rules always give the same key.
+    if (customParams) key.push(`rules:${hashKey([customParams])}`)
     return queryOptions({
       queryKey: key,
       queryFn: () =>
