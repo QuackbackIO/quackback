@@ -485,6 +485,57 @@ describe('MCP HTTP Handler', () => {
       expect(body.error.message).toContain('upload_file accepts files up to 3 MB')
       expect(body.error.message).toContain('/api/v1/files')
     })
+
+    it.each([
+      ['an API key', () => setupValidAuth(), 'qb_valid_key'],
+      ['an OAuth token', () => setupValidOAuth(), 'oauth_test_token_abc123'],
+    ])(
+      'stops reading a body with no Content-Length at the cap (%s)',
+      async (_label, setup, token) => {
+        const { handleMcpRequest } = await import('../handler')
+        const { MCP_MAX_REQUEST_BYTES } = await import('../tools/files')
+        await setup()
+
+        // A streamed body declares no length, so the Content-Length pre-check
+        // cannot catch it. It is valid JSON-RPC padded far past the cap, and
+        // counts how much of it the server pulls.
+        const chunk = new TextEncoder().encode(' '.repeat(64 * 1024))
+        const head = new TextEncoder().encode(JSON.stringify(jsonRpcRequest('tools/list')))
+        const total = MCP_MAX_REQUEST_BYTES * 8
+        let pulled = 0
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (pulled === 0) {
+              pulled += head.byteLength
+              controller.enqueue(head)
+            } else if (pulled < total) {
+              pulled += chunk.byteLength
+              controller.enqueue(chunk)
+            } else {
+              controller.close()
+            }
+          },
+        })
+        const request = new Request('https://example.com/api/mcp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+            Authorization: `Bearer ${token}`,
+          },
+          body,
+          duplex: 'half',
+        } as RequestInit)
+
+        const response = await handleMcpRequest(request)
+
+        expect(response.status).toBe(413)
+        const answer = (await response.json()) as { error: { message: string } }
+        expect(answer.error.message).toContain('upload_file accepts files up to 3 MB')
+        // Read up to the cap plus a chunk of stream lookahead, never the rest.
+        expect(pulled).toBeLessThan(MCP_MAX_REQUEST_BYTES + 4 * chunk.byteLength)
+      }
+    )
   })
 
   // ===========================================================================

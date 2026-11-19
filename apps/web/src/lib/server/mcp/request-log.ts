@@ -43,11 +43,12 @@ function str(value: unknown): string | undefined {
 }
 
 /**
- * Read what the request says about itself. Reads a clone, so the body stays
- * available to the transport. A body that is not JSON yields an empty method
- * list rather than an error: the transport reports the parse failure itself.
+ * Read what the request says about itself: its headers and its already-parsed
+ * JSON body (the handler reads the body once, under the size cap). A body that
+ * is not JSON (`undefined`) yields an empty method list rather than an error:
+ * the transport reports the parse failure itself.
  */
-export async function summarizeMcpRequest(request: Request): Promise<McpRequestSummary> {
+export function summarizeMcpRequest(request: Request, body: unknown): McpRequestSummary {
   const summary: McpRequestSummary = {
     methods: [],
     tools: [],
@@ -56,12 +57,7 @@ export async function summarizeMcpRequest(request: Request): Promise<McpRequestS
     userAgent: str(request.headers.get('user-agent')),
   }
 
-  let body: unknown
-  try {
-    body = await request.clone().json()
-  } catch {
-    return summary
-  }
+  if (body === undefined) return summary
 
   for (const call of Array.isArray(body) ? body : [body]) {
     if (!isRecord(call)) continue

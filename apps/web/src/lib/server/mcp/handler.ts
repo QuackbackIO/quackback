@@ -41,7 +41,7 @@ import {
 import { createMcpServer } from './server'
 import { createMcpTransport } from './transport'
 import { MCP_MAX_REQUEST_BYTES, MCP_UPLOAD_MAX_BYTES } from './tools/files'
-import { contentLengthExceeds } from '@/lib/server/utils/read-body'
+import { contentLengthExceeds, readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { formatBytes } from '@/lib/shared/files/file-types'
 import { readOAuthPrincipal } from './oauth-principal'
 import { logMcpRequest, summarizeMcpRequest, type McpRequestSummary } from './request-log'
@@ -277,18 +277,42 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
 
 type RpcId = string | number | null
 
+/** The request body as read once, up front, by handleMcpRequest. */
+interface ReadBody {
+  /** The request to hand on, its body replayed from the bytes already read. */
+  request: Request
+  /** The parsed JSON, whatever the content type; `undefined` when it is not JSON. */
+  json: unknown
+  /** The JSON-RPC payload: `json` for a JSON POST, otherwise `undefined` (the protocol leg answers that itself). */
+  rpc: unknown
+}
+
 /**
- * The request body as JSON, read once from a clone so the protocol leg can
- * still read the request. `undefined` when it is not a JSON POST; the
- * protocol leg answers that itself.
+ * Read the body once, never past MCP_MAX_REQUEST_BYTES: a body with no (or a
+ * false) Content-Length is cut off at the cap instead of buffered whole.
+ * `null` when the body is over the cap. A capped read of a clone cannot stop
+ * early (cancelling one branch of a tee waits on the other), so the original
+ * is read and a copy carrying the same bytes goes on to the transport.
  */
-async function readRpcBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get('content-type') ?? ''
-  if (!contentType.includes('application/json')) return undefined
+async function readBody(request: Request): Promise<ReadBody | null> {
+  const bytes = await readBodyWithLimit(request, MCP_MAX_REQUEST_BYTES)
+  if (bytes === null) return null
+  let json: unknown
   try {
-    return await request.clone().json()
+    json = JSON.parse(new TextDecoder().decode(bytes))
   } catch {
-    return undefined
+    json = undefined
+  }
+  const contentType = request.headers.get('content-type') ?? ''
+  return {
+    request: new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: bytes,
+      signal: request.signal,
+    }),
+    json,
+    rpc: contentType.includes('application/json') ? json : undefined,
   }
 }
 
@@ -352,11 +376,16 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   // answer with a bare byte count; most oversized requests are file uploads,
   // so say what the limit is for.
   if (contentLengthExceeds(request, MCP_MAX_REQUEST_BYTES)) return requestTooLarge()
+  // The header is only a hint: a streamed body declares no length. Every
+  // reader before the transport (the request log, the OAuth scope check)
+  // shares this one capped read.
+  const body = await readBody(request)
+  if (!body) return requestTooLarge()
 
   const startedAt = Date.now()
-  const summary = await summarizeMcpRequest(request)
+  const summary = summarizeMcpRequest(body.request, body.json)
   const response = await runWithAuditAttribution(MCP_ATTRIBUTION, () =>
-    handleMcpRequestInBoundary(request, summary)
+    handleMcpRequestInBoundary(body.request, body.rpc, summary)
   )
   await logMcpRequest(summary, response, startedAt)
   return response
@@ -384,9 +413,9 @@ export function methodNotAllowed(): Response {
 
 async function handleMcpRequestInBoundary(
   request: Request,
+  body: unknown,
   summary: McpRequestSummary
 ): Promise<Response> {
-  const body = await readRpcBody(request)
   const id = rpcIdOf(body)
 
   const devConfig = await getDeveloperConfig()
