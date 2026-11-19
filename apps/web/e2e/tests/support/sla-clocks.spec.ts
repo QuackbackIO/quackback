@@ -650,7 +650,7 @@ test.describe('breaches', () => {
 
 test.describe('SLA timer triggers', () => {
   test(
-    'SLA-21 approaching breach fires once per clock, and only while a workflow listens',
+    'SLA-21 approaching breach fires once per clock to a listening workflow',
     { tag: '@nightly' },
     async ({ playwright, request, marker }) => {
       test.setTimeout(180_000)
@@ -661,15 +661,8 @@ test.describe('SLA timer triggers', () => {
       await waitForStamp(conversation.uuid, 'the default stamp', () => true)
 
       await withSlaTimerLock(admin, async () => {
-        // Due in 5 minutes: inside the 15-minute lead.
-        await setStampFields('conversations', conversation.uuid, {
-          firstResponseDueAt: isoMinutesFromNow(5),
-        })
-        await runSweep(request, 'workflow-sweep')
-        expect(
-          (await slaStampOf(conversation.uuid))!.firstResponseWarningFiredAt ?? null
-        ).toBeNull()
-
+        // The warning fires with or without a workflow (#1090), so the
+        // workflow listens before the clock enters the lead.
         await withLiveWorkflow(
           admin,
           {
@@ -686,6 +679,10 @@ test.describe('SLA timer triggers', () => {
             ],
           },
           async (workflow) => {
+            // Due in 5 minutes: inside the 15-minute lead.
+            await setStampFields('conversations', conversation.uuid, {
+              firstResponseDueAt: isoMinutesFromNow(5),
+            })
             await runSweep(request, 'workflow-sweep')
             await waitForStamp(conversation.uuid, 'warning claimed', (s) =>
               Boolean(s.firstResponseWarningFiredAt)
