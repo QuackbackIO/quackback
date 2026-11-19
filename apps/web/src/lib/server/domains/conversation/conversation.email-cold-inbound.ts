@@ -279,9 +279,14 @@ export async function createEmailConversation(input: {
   // online, so passing false here would leave this defect half-fixed.
   await emitMessageCreated(actor, author, message, conversation, true)
 
-  // Routing is channel-agnostic: a cold-inbound email conversation auto-assigns
-  // the same way a widget conversation does when routing is enabled.
-  const { routeUnassignedConversation } = await import('./conversation.service')
+  // Live in the team inbox before routing runs, so a conversation routing
+  // leaves unassigned shows up without a refresh, and an assignment's own
+  // update lands after it. Routing is channel-agnostic: a cold-inbound email
+  // conversation auto-assigns the same way a widget conversation does when
+  // routing is enabled.
+  const { publishConversationStarted, routeUnassignedConversation } =
+    await import('./conversation.service')
+  await publishConversationStarted(conversation, message, author)
   await routeUnassignedConversation(conversation)
 
   return conversation.id
