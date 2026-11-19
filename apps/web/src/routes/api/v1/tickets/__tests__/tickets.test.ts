@@ -125,6 +125,28 @@ describe('GET /api/v1/tickets/:id', () => {
     expect(body.data).toMatchObject({ id: TICKET_ID, reference: '#42' })
   })
 
+  it("carries the ticket's SLA, or null when none applies", async () => {
+    const sla = {
+      policyName: 'Standard',
+      timeToResolveDueAt: '2026-07-05T00:00:00.000Z',
+      resolvedAt: null,
+      paused: false,
+    }
+    mockGetTicketForActor.mockResolvedValueOnce({ ...ticketDTO, sla })
+    const withSla = await getHandler(DetailRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
+      params: { ticketId: TICKET_ID },
+    })
+    expect((await withSla.json()).data.sla).toEqual(sla)
+
+    mockGetTicketForActor.mockResolvedValueOnce({ ...ticketDTO, sla: null })
+    const withoutSla = await getHandler(DetailRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
+      params: { ticketId: TICKET_ID },
+    })
+    expect((await withoutSla.json()).data).toHaveProperty('sla', null)
+  })
+
   it("checks the ticket against the key's own scope, and 404s one its creator cannot see", async () => {
     mockAuth.mockResolvedValue({
       principalId: 'principal_key',

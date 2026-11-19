@@ -128,6 +128,7 @@ const ticketData = (): EventTicketData => ({
   createdAt: new Date('2026-01-01').toISOString(),
   updatedAt: new Date('2026-01-01').toISOString(),
   resolvedAt: null,
+  sla: null,
 })
 
 const attachments = () => [

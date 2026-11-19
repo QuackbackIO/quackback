@@ -159,11 +159,6 @@ switch on after boot is part of its baseline. owner: unassigned, review by:
 
 Each entry: owner: unassigned, review by: 2026-12-03.
 
-- `support/sla-clocks.spec.ts` › default SLA at intake: known gaps › SLA-07
-  the ticket.created webhook carries the ticket SLA. The ticket is stamped at
-  intake, but the `ticket.created` payload is built by `ticketData()`
-  (`ticket.webhooks.ts`), which has no SLA field, so subscribers never see the
-  due date. Known bug. owner: unassigned, review by: 2026-12-03.
 - `support/sla.spec.ts` › SLA in the inbox › SLA-26 picking "SLA breach
   soonest" in All conversations orders the list by due time. The sort menu
   (`conversation-list-toolbar.tsx`) offers the sla sort on every scope, but

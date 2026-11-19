@@ -909,6 +909,7 @@ test.describe('ticket events', () => {
             'createdAt',
             'requesterPrincipalId',
             'resolvedAt',
+            'sla',
             'stage',
             'status',
             'title',

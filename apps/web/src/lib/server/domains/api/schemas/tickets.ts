@@ -25,6 +25,24 @@ export const TICKET_STAGES = ['received', 'in_progress', 'awaiting_requester', '
 export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
 const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority'] as const
 
+// A ticket's time-to-resolve SLA (TicketSlaRef).
+const TicketSlaSchema = z.object({
+  policyName: z.string().meta({
+    description: 'The SLA policy name when it was applied',
+    example: 'Standard support',
+  }),
+  timeToResolveDueAt: TimestampSchema.meta({
+    description: 'When the ticket is due to be resolved, office hours included',
+  }),
+  resolvedAt: NullableTimestampSchema.meta({
+    description: 'When the ticket was first resolved, null while the clock runs',
+  }),
+  paused: z.boolean().meta({
+    description: 'Whether the clock is paused because the ticket is waiting on the customer',
+    example: false,
+  }),
+})
+
 // Ticket schema (GET /tickets, GET /tickets/:id)
 export const TicketSchema = z.object({
   id: TypeIdSchema.meta({ example: 'ticket_01h455vb4pex5vsknk084sn02q' }),
@@ -81,6 +99,10 @@ export const TicketSchema = z.object({
   dueAt: NullableTimestampSchema.meta({ description: 'SLA due time, null if no policy applies' }),
   resolvedAt: NullableTimestampSchema.meta({
     description: 'When the ticket entered a closed status, null while open',
+  }),
+  sla: TicketSlaSchema.nullable().meta({
+    description:
+      "The ticket's time-to-resolve SLA, null when none applies. The ticket.created webhook carries the same object.",
   }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
