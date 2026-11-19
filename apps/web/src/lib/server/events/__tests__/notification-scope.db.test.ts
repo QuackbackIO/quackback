@@ -23,6 +23,7 @@ import {
   conversationMessageMentions,
   conversationMessages,
   conversations,
+  notificationPreferences,
   principal,
   ticketSubscriptions,
   eq,
@@ -626,6 +627,18 @@ describe('new-message bell and email', () => {
     expect(emailed.filter((e) => mine.some((p) => p.email === e))).toEqual(
       [w.manager.email, w.actor.email, w.onTeam.email].sort()
     )
+  })
+
+  it('email: a teammate who paused all email, or turned off New message email, is not emailed', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    await testDb.insert(notificationPreferences).values([
+      { principalId: w.manager.id, emailMuted: true },
+      { principalId: w.actor.id, matrix: { chat_message: { email: false } } },
+    ])
+    const emailed = await emailedFor(conversation, true)
+    const mine = [w.manager, w.actor, w.onTeam, w.elsewhere, w.solo, w.blind, w.former]
+    expect(emailed.filter((e) => mine.some((p) => p.email === e))).toEqual([w.onTeam.email])
   })
 
   it('first-message email: reads the row routing just wrote, not the snapshot it was handed', async () => {
