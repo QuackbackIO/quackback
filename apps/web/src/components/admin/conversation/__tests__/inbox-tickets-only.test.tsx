@@ -6,7 +6,7 @@
  * All tickets instead.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { ConversationTagId, SegmentId, TeamId } from '@quackback/ids'
@@ -62,11 +62,14 @@ vi.mock('@/lib/client/hooks/use-activation-action', () => ({
 
 const { InboxNavSidebar } = await import('../inbox-nav-sidebar')
 const { ConversationListColumn } = await import('../conversation-list-column')
+const { inboxTeamsQueryOptions } = await import('@/lib/client/queries/inbox-teams')
 
 const TICKETS_ALL: InboxNavItem = { kind: 'view', view: 'tickets_all' }
 
+let client: QueryClient
+
 function withProviders(ui: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <IntlProvider locale="en" onError={() => {}}>
@@ -120,8 +123,13 @@ describe('a tickets-only Support inbox', () => {
     expect(screen.queryByText('All conversations')).not.toBeInTheDocument()
     expect(screen.queryByText('Assigned to me')).not.toBeInTheDocument()
     expect(screen.queryByText('AI agent activity')).not.toBeInTheDocument()
-    // Teams, tags and segments only ever list conversations.
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    // Teams, tags and segments only ever list conversations. Wait until their
+    // rows have loaded, so their absence is the gate and not a pending fetch.
+    await waitFor(() => {
+      expect(client.getQueryData(['admin', 'inbox', 'conversation-tags', 'counts'])).toBeDefined()
+      expect(client.getQueryData(['admin', 'inbox', 'segments', 'counts'])).toBeDefined()
+      expect(client.getQueryData(inboxTeamsQueryOptions().queryKey)).toBeDefined()
+    })
     expect(screen.queryByText('Tier 2')).not.toBeInTheDocument()
     expect(screen.queryByText('Billing')).not.toBeInTheDocument()
     expect(screen.queryByText('Enterprise')).not.toBeInTheDocument()
