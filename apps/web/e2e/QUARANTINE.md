@@ -86,13 +86,6 @@ These assert the right behaviour and fail until the fix lands. Review by
   webhook. The suite works around it by removing soft-deleted sink webhooks
   before each subscription (`e2e/support/webhooks.ts`
   `purgeDeletedSinkWebhooks`). owner: unassigned, review by: 2026-12-03.
-- `support/webhooks.spec.ts` › conversation events › API-92 sla.breached is
-  delivered with no live SLA workflow. Known bug SLA-23: SLA timer events are
-  dispatched only from `sweepSlaTimerTriggers`, which returns early unless a
-  live workflow has that trigger
-  (`apps/web/src/lib/server/domains/workflows/workflow-sweep.ts`). It can pass
-  by accident while another test has a live SLA workflow. owner: unassigned,
-  review by: 2026-12-03.
 
 ### Support suite: routing switch permission (known bug)
 
@@ -213,7 +206,6 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   (`src/lib/shared/typed-error-serialization.ts`) drops its `code` and
   `retryAfter`: the widget and portal get only the message and cannot tell a
   throttle from any other failure or say when to retry. owner: unassigned,
-  review by: 2026-12-03.
 
 ### Support suite: inbox
 
