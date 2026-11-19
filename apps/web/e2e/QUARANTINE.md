@@ -93,6 +93,16 @@ by a separate test that is not quarantined.
   reply reopens the thread and keeps the spam marker, so it shows in neither
   triage nor Spam. Lift when #1084 lands. owner: unassigned, review by:
   2026-12-03.
+- `support/email-outbound-csat.spec.ts` › CUS-O-21 a workflow rating block on
+  an email conversation sends one rating request email. Waits on an owner
+  decision. The test's workflow runs `request_csat` on `message.created`, so
+  it asks while the conversation is open. Since #1102 a rating is only taken
+  on a closed conversation, and a workflow rating ask on an open one is
+  skipped (`mayAskForCsat`, `csat-request.service.ts`), so no rating email is
+  sent. The question: should a workflow rating request on an open
+  conversation be skipped, or should asking be allowed and only recording
+  wait for close? Skipped: rewrite the test to ask on close. Allowed: change
+  `mayAskForCsat` and lift the tag. owner: unassigned, review by: 2026-12-03.
 - `support/email-outbound.spec.ts` › CUS-O-08 References repeats our earlier
   Message-IDs exactly as they were sent. Found here: outbound ids are stored
   lower-cased (`conversation.email-store.ts` `normalizeMessageId`, used by

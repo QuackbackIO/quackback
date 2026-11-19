@@ -7,9 +7,11 @@
  *   - a `CsatRequestEmail` in the email log (the rating email a csat block
  *     sends on channels with no in-thread ask).
  *
- * A workflow's csat block posts only when none is present, checked under the
- * conversation row lock in the same transaction as the post
- * (`mayAskForCsat`), so two workflows asking at once post one block. The
+ * A workflow's csat block posts only on a closed conversation and only when
+ * none is present, checked under the conversation row lock in the same
+ * transaction as the post (`mayAskForCsat`), so two workflows asking at once
+ * post one block, and an open conversation (where a rating is refused) is
+ * never asked. The
  * close email adds rating links unless the conversation is rated or a rating
  * email already went out (`isCsatRatedOrEmailed`); a csat block in the thread
  * does not stop it, since a visitor who left the widget never saw the block.
@@ -27,7 +29,7 @@ import type { ConversationId } from '@quackback/ids'
 
 type Executor = Database | Transaction
 
-type CsatSignals = { rated: boolean; asked: boolean; emailed: boolean }
+type CsatSignals = { closed: boolean; rated: boolean; asked: boolean; emailed: boolean }
 
 async function readCsatSignals(
   conversationId: ConversationId,
@@ -37,6 +39,7 @@ async function readCsatSignals(
   // would drop the table prefix and self-correlate the subqueries.
   const [row] = await executor
     .select({
+      closed: sql<boolean>`${conversations.status} = 'closed'`,
       rated: sql<boolean>`${conversations.csatRating} is not null`,
       asked: sql<boolean>`exists (
         select 1 from conversation_messages m
@@ -96,9 +99,15 @@ export async function isConversationRated(conversationId: ConversationId): Promi
 
 /**
  * The precondition for posting a csat block, run on the posting transaction
- * after it locks the conversation row: true when no earlier signal exists.
+ * after it locks the conversation row: true when the conversation is closed
+ * and no earlier signal exists. A rating is only accepted once the
+ * conversation is closed (recordCsat), so an open one is never asked: the
+ * customer could tap a face that would not count.
  */
 export function mayAskForCsat(conversationId: ConversationId) {
-  return async (tx: Transaction): Promise<boolean> =>
-    !(await isCsatAlreadyRequested(conversationId, tx))
+  return async (tx: Transaction): Promise<boolean> => {
+    const signals = await readCsatSignals(conversationId, tx)
+    if (!signals) return true
+    return signals.closed && !(signals.rated || signals.asked || signals.emailed)
+  }
 }

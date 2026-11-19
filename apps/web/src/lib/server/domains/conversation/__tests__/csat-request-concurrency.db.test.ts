@@ -133,6 +133,8 @@ describe.skipIf(!available)('csat ask concurrency', () => {
       id: conversationId,
       visitorPrincipalId: createId('principal') as PrincipalId,
       channel: 'messenger',
+      // Only a closed conversation is asked for a rating.
+      status: 'closed',
     })
 
     const ask = () =>

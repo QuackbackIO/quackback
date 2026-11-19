@@ -75,6 +75,9 @@ function RateView({ token, linkedRating }: { token: string; linkedRating?: numbe
   const [recorded, setRecorded] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [rateError, setRateError] = useState(false)
+  // The conversation was reopened after the email went out: a rating is only
+  // taken once it is resolved again, so the faces give way to a plain note.
+  const [reopened, setReopened] = useState(false)
   const [comment, setComment] = useState('')
   const [commentSaved, setCommentSaved] = useState(false)
   const [commentError, setCommentError] = useState(false)
@@ -86,6 +89,7 @@ function RateView({ token, linkedRating }: { token: string; linkedRating?: numbe
     try {
       const result = await recordCsatViaTokenFn({ data: { token, rating } })
       if (result.success) setRecorded(rating)
+      else if (result.error === 'open') setReopened(true)
       else setRateError(true)
     } catch {
       setRateError(true)
@@ -103,12 +107,26 @@ function RateView({ token, linkedRating }: { token: string; linkedRating?: numbe
         data: { token, rating: recorded, comment: comment.trim() },
       })
       if (result.success) setCommentSaved(true)
+      else if (result.error === 'open') setReopened(true)
       else setCommentError(true)
     } catch {
       setCommentError(true)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (reopened) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
+        <div className="w-full max-w-md space-y-2 text-center">
+          <h1 className="text-xl font-semibold text-foreground">This conversation is open again</h1>
+          <p className="text-sm text-muted-foreground">
+            You can rate it once it has been resolved.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (

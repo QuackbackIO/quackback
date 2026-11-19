@@ -31,20 +31,32 @@ const PNG_1X1 = Buffer.from(
   'base64'
 )
 
-/** A fresh anonymous visitor with one conversation, and a block seeded into it. */
+/**
+ * A fresh anonymous visitor with one conversation, and a block seeded into it.
+ * `closeFirst` closes the conversation through the app before the block is
+ * seeded, the way a close-time rating ask lands (a rating is only taken once
+ * the conversation is closed).
+ */
 async function visitorWithBlock(
   page: import('@playwright/test').Page,
   request: import('@playwright/test').APIRequestContext,
   opening: string,
   blockText: string,
-  block: Record<string, unknown> & { kind: string }
+  block: Record<string, unknown> & { kind: string },
+  { closeFirst = false }: { closeFirst?: boolean } = {}
 ) {
   const visitor = await mintVisitor()
   const { conversation } = await visitorSend(request, visitor.token, opening)
+  if (closeFirst) await agentApi(request).status(conversation.id, 'closed')
   const blockId = await seedBlockMessage(conversation.id, blockText, block)
   const widget = await openWidget(page, { visitorToken: visitor.token })
   const live = threadStreamOpen(page, conversation.id)
-  await openWidgetThread(widget, opening)
+  // The list row previews the latest message: the opening, or after a close
+  // the block (or the close notice).
+  await openWidgetThread(
+    widget,
+    closeFirst ? new RegExp(`${blockText}|${opening}|Conversation ended`) : opening
+  )
   await expect(widget.getByText(blockText)).toBeVisible({ timeout: 15_000 })
   await live
   return { visitor, conversation, widget, blockId }
@@ -154,16 +166,21 @@ test.describe('widget blocks', () => {
         request,
         `${marker} done`,
         `${marker} How did we do?`,
-        { kind: 'csat', allowTypingInterrupt: true, commentPrompt: 'Anything to add?' }
+        { kind: 'csat', allowTypingInterrupt: true, commentPrompt: 'Anything to add?' },
+        // A rating is only taken once the conversation is closed.
+        { closeFirst: true }
       )
       await widget.getByRole('button', { name: '4 of 5' }).click()
       await widget.getByRole('textbox', { name: 'Add a comment (optional)' }).fill(`${marker} fast`)
       await widget.getByRole('button', { name: 'Send feedback' }).click()
       await expect(widget.getByText('Thanks for your feedback!')).toBeVisible({ timeout: 15_000 })
-      await pollFor('the rating', async () => {
-        const row = await conversationRow(conversation.id)
-        return row.csat_rating === 4 ? row : null
+      const row = await pollFor('the rating and comment', async () => {
+        const r = await conversationRow(conversation.id)
+        return r.csat_rating === 4 && r.csat_comment ? r : null
       })
+      expect(row.csat_comment).toContain(`${marker} fast`)
+      // Rating the block does not reopen the conversation.
+      expect(row.status).toBe('closed')
     }
   )
 

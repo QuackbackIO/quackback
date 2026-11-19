@@ -71,7 +71,7 @@ afterAll(() => fixture.close())
 
 const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
-async function seedConversation(): Promise<{
+async function seedConversation(status: 'open' | 'closed' = 'open'): Promise<{
   conversationId: ConversationId
   visitor: PrincipalId
 }> {
@@ -84,7 +84,7 @@ async function seedConversation(): Promise<{
   const conversationId = createId('conversation') as ConversationId
   await testDb
     .insert(conversations)
-    .values({ id: conversationId, visitorPrincipalId: visitor, channel: 'messenger' })
+    .values({ id: conversationId, visitorPrincipalId: visitor, channel: 'messenger', status })
   return { conversationId, visitor }
 }
 
@@ -243,7 +243,7 @@ describe.skipIf(!fixture.available)('a workflow csat block asks once', () => {
   afterEach(fixture.rollback)
 
   it('posts the first ask and skips the second', async () => {
-    const { conversationId } = await seedConversation()
+    const { conversationId } = await seedConversation('closed')
 
     const first = await askForRating(conversationId)
     expect(first.blockMessageId).toBeDefined()
@@ -257,7 +257,7 @@ describe.skipIf(!fixture.available)('a workflow csat block asks once', () => {
     ['a rating', 'rating'],
     ['a rating email', 'email'],
   ] as const)('skips a conversation that already has %s', async (_label, signal) => {
-    const { conversationId } = await seedConversation()
+    const { conversationId } = await seedConversation('closed')
     if (signal === 'rating') {
       await testDb
         .update(conversations)
@@ -270,6 +270,16 @@ describe.skipIf(!fixture.available)('a workflow csat block asks once', () => {
     const result = await askForRating(conversationId)
 
     expect(result.blockMessageId).toBeUndefined()
+    expect(await csatBlockCount(conversationId)).toBe(0)
+  })
+
+  it('never asks an open conversation, where a rating would be refused', async () => {
+    const { conversationId } = await seedConversation('open')
+
+    const result = await askForRating(conversationId)
+
+    expect(result.blockMessageId).toBeUndefined()
+    expect(result.label).toBe('csat skipped — already asked, or the conversation is open')
     expect(await csatBlockCount(conversationId)).toBe(0)
   })
 })

@@ -101,7 +101,14 @@ async function rateOnPage(page: Page, rating: number) {
 test.describe('rating request emails', () => {
   test(
     'CUS-O-21 a workflow rating block on an email conversation sends one rating request email',
-    { tag: '@core' },
+    {
+      tag: ['@core', '@quarantine'],
+      annotation: {
+        type: 'quarantine',
+        description:
+          'Waits on an owner decision: the workflow asks on an open conversation, which #1102 skips',
+      },
+    },
     async ({ request, playwright, baseURL, people, customerEmail, marker }) => {
       test.setTimeout(90_000)
       await seedCustomer(customerEmail, 'Rhea Rater')
@@ -397,9 +404,14 @@ test.describe('the /csat landing page', () => {
   test(
     'CUS-O-27 missing, tampered, expired and out-of-range links show their states',
     { tag: '@core' },
-    async ({ request, page, customerEmail, marker }) => {
+    async ({ request, page, playwright, baseURL, people, customerEmail, marker }) => {
       const thread = await coldThread(request, customerEmail, marker)
       const visitor = principalTypeId(thread.row.visitor_principal_id)
+      // A rating is only taken once the conversation is closed: close it so
+      // the valid link below records.
+      const api = await apiAs(playwright, baseURL!, personalKeyFor(people.people.admin.email))
+      await setConversationStatus(api, thread.id, 'closed')
+      await api.dispose()
 
       await page.goto('/csat')
       await expect(page.getByText('Missing Link')).toBeVisible()

@@ -407,6 +407,9 @@ test.describe('conversation events', () => {
       ])
       try {
         const id = await emailConversation(request, customerEmail, marker)
+        // A rating is only taken once the conversation is closed.
+        await supportDb()`UPDATE conversations SET status = 'closed', resolved_at = now()
+          WHERE id = ${toUuid(id as `conversation_${string}`)}`
         // The widget posts the rating, then the comment.
         hookOp({ op: 'csat', conversationId: id, rating: 4 })
         hookOp({ op: 'csat', conversationId: id, rating: 4, comment: `Thanks ${marker}` })

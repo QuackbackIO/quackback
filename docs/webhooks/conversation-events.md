@@ -25,7 +25,8 @@ submits a CSAT rating and its optional comment as two separate calls, so they ma
 two events: `conversation.csat_submitted` fires once when the rating is recorded, and
 `conversation.csat_comment_added` fires once if the visitor later leaves a comment
 (both payloads carry the immutable first rating; comment text appears only on the
-comment event).
+comment event). A rating is only accepted once the conversation is closed, so
+neither event fires for an open conversation.
 
 `data.message.blockReplyKind` names the kind of conversation block a visitor message
 answers (`csat`, `buttons`, `collect` or `collectReply`), and is `null` for every

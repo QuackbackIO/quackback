@@ -47,6 +47,7 @@ vi.mock('../conversation.query', () => ({
 const conversationRow: Record<string, unknown> = {
   id: 'conversation_1',
   visitorPrincipalId: 'principal_visitor',
+  status: 'closed',
   csatRating: null,
   csatComment: null,
   csatSubmittedAt: null,
@@ -97,6 +98,7 @@ const visitorActor: Actor = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  conversationRow.status = 'closed'
   conversationRow.csatRating = null
   conversationRow.csatComment = null
   conversationRow.csatSubmittedAt = null
@@ -168,5 +170,33 @@ describe('recordCsat webhook emission', () => {
     expect(emit.emitConversationCsatSubmitted).not.toHaveBeenCalled()
     expect(emit.emitConversationCsatCommentAdded).not.toHaveBeenCalled()
     expect(publishConversationUpdate).not.toHaveBeenCalled()
+  })
+})
+
+describe('recordCsat while the conversation is open', () => {
+  it.each(['open', 'snoozed'])(
+    'refuses a %s conversation with a typed error and writes nothing',
+    async (status) => {
+      conversationRow.status = status
+
+      await expect(recordCsat(convId, 5, 'great', visitorActor)).rejects.toMatchObject({
+        name: 'ConflictError',
+        code: 'CSAT_CONVERSATION_OPEN',
+      })
+
+      expect(lastUpdate).toEqual({})
+      expect(emit.emitConversationCsatSubmitted).not.toHaveBeenCalled()
+      expect(emit.emitConversationCsatCommentAdded).not.toHaveBeenCalled()
+      expect(publishConversationUpdate).not.toHaveBeenCalled()
+    }
+  )
+
+  it('accepts the rating once the conversation is closed', async () => {
+    conversationRow.status = 'closed'
+
+    await recordCsat(convId, 5, undefined, visitorActor)
+
+    expect(lastUpdate.csatRating).toBe(5)
+    expect(emit.emitConversationCsatSubmitted).toHaveBeenCalledTimes(1)
   })
 })
