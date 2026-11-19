@@ -293,6 +293,10 @@ export interface ActionResult {
   /** Set by `let_assistant_answer` when Quinn will not run (greet-only,
    *  unconfigured, token budget, silence). The engine resumes escalated. */
   assistantDeclined?: boolean
+  /** Set by `send_block` when it posted nothing (a csat ask on a conversation
+   *  that is still open, or already asked or rated). There is no answer to
+   *  wait for, so the engine ends the step instead of parking on it. */
+  blockSkipped?: boolean
 }
 
 const label = (label: string | null): ActionResult => ({ label })
@@ -628,8 +632,13 @@ export async function applyAction(
         ctx.resolvedBlockDeps
       )
       // A csat ask on a conversation already asked or rated, or still open,
-      // posts nothing: skip (don't park).
-      if (!messageId) return label('csat skipped — already asked, or the conversation is open')
+      // posts nothing: skip, and tell the engine not to park on it.
+      if (!messageId) {
+        return {
+          label: 'csat skipped — already asked, or the conversation is open',
+          blockSkipped: true,
+        }
+      }
       // Funnel: one `block_sent` event per successful post — never suffixed
       // with the block kind (keeps cardinality low; the funnel counts
       // distinct runs, not kinds). Macros never reach this branch (ctx.runId

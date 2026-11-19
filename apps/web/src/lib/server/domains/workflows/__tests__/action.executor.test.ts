@@ -762,6 +762,7 @@ describe('applyAction', () => {
       it('posts a csat block on the ask condition', async () => {
         const res = await applyAction(csatAction, runCtx)
         expect(res.blockMessageId).toBe('conversation_message_block_1')
+        expect(res.blockSkipped).toBeUndefined()
         expect(appendAssistantReply.mock.calls[0]![3].onlyIf).toBeTypeOf('function')
         expect(notifyCsatRequestEmail).toHaveBeenCalledTimes(1)
       })
@@ -771,6 +772,8 @@ describe('applyAction', () => {
         const res = await applyAction(csatAction, runCtx)
         expect(res.label).toContain('skipped')
         expect(res.blockMessageId).toBeUndefined()
+        // Tells the engine the step is over rather than waiting on an answer.
+        expect(res.blockSkipped).toBe(true)
         expect(notifyCsatRequestEmail).not.toHaveBeenCalled()
         expect(logRunEvent).not.toHaveBeenCalled()
       })
@@ -780,6 +783,7 @@ describe('applyAction', () => {
         const res = await applyAction(csatAction, runCtx)
         expect(res.label).toContain('skipped')
         expect(res.blockMessageId).toBeUndefined()
+        expect(res.blockSkipped).toBe(true)
         expect(isCsatAlreadyRequested).toHaveBeenCalledWith(conversationId)
         expect(ensureAssistantPrincipal).not.toHaveBeenCalled()
         expect(appendAssistantReply).not.toHaveBeenCalled()

@@ -268,6 +268,9 @@ async function runPlanAndSettle(
   // InputWaitCursor below as the correlation key a customer's reply matches.
   let blockMessageId: string | null = null
   let assistantDeclined = false
+  // The interactive block the plan would park on posted nothing (a declined
+  // csat ask): nothing will ever answer it.
+  let parkedBlockSkipped = false
   // Once a non-idempotent action starts, a later failure must interrupt the
   // run instead of reverting to its old cursor and replaying customer-visible
   // work. Set before execution because an action may commit and then throw.
@@ -329,6 +332,11 @@ async function runPlanAndSettle(
           resolvedBlockDeps,
         })
         if (result.blockMessageId) blockMessageId = result.blockMessageId
+        // Only the block the plan parks on (an input wait resumes at itself).
+        const parksHere = plan.waitKind === 'input' && plan.resumeNodeId
+        if (result.blockSkipped && 'nodeId' in action && action.nodeId === parksHere) {
+          parkedBlockSkipped = true
+        }
         if (result.assistantDeclined) assistantDeclined = true
       } catch (err) {
         log.error({ err, action: action.type, workflowId: workflow.id }, 'workflow action failed')
@@ -374,6 +382,18 @@ async function runPlanAndSettle(
       ...ctx,
       assistantOutcome: 'escalated',
     })
+  }
+
+  // A skipped ask ends its step without an answer. Its outgoing paths all
+  // hang off an answer (a request_csat branches on the rating), so the run
+  // ends here rather than parking: a park would hold the conversation's
+  // customer-facing lock until it expired, waiting on a question nobody saw.
+  if (parkedBlockSkipped) {
+    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'block_skipped')
+    const done = await settleRunning(run.id, { state: 'done', endedAt: new Date() })
+    if (!done) return currentRun(run.id)
+    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'completed')
+    return done
   }
 
   if (plan.status === 'waiting' && (plan.waitKind === 'input' || plan.waitKind === 'assistant')) {
