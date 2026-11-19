@@ -132,6 +132,49 @@ describe('createInboxScopeGate', () => {
     expect(loads).toHaveLength(1)
   })
 
+  it('reloads lazily once the scope TTL has passed, with no signal, and judges by the new scope', async () => {
+    let clock = 1_000
+    let loads = 0
+    const forwarded: string[] = []
+    // Connected on team_x; the teammate has since moved to team_y through a
+    // path that sent no scope signal.
+    const gate = createInboxScopeGate({
+      actor,
+      teamIds: new Set(['team_x']),
+      load: async () => {
+        loads += 1
+        return { permissions: scoped, teamIds: new Set(['team_y']) }
+      },
+      runReload: (body) => body(),
+      forward: (m) => forwarded.push(m),
+      sendEvent: () => {},
+      close: () => {},
+      now: () => clock,
+      random: () => 0,
+      ttlMs: 60_000,
+    })
+
+    // Inside the TTL: judged by the cached scope, with no query.
+    const before = frame('team_x', 1)
+    gate.onInboxFrame(before.message, before.meta)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(loads).toBe(0)
+    expect(forwarded).toEqual([before.message])
+
+    // Past the TTL: the next frame triggers one reload and is judged by it.
+    clock += 60_001
+    const stale = frame('team_x', 2)
+    gate.onInboxFrame(stale.message, stale.meta)
+    await vi.waitFor(() => expect(loads).toBe(1))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(forwarded).toEqual([before.message])
+
+    const fresh = frame('team_y', 3)
+    gate.onInboxFrame(fresh.message, fresh.meta)
+    await vi.waitFor(() => expect(forwarded).toEqual([before.message, fresh.message]))
+    expect(loads).toBe(1)
+  })
+
   it('tells the client to refetch once a reload succeeds after a failed one', async () => {
     const events: string[] = []
     let calls = 0

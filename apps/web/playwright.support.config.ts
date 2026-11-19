@@ -39,6 +39,15 @@ for (const key of [
 // Never reuse a server silently: a stale one is the classic false result.
 const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === '1'
 
+// Specs run by the `support-serial` project (see below): routing and
+// presence, plus any `*.serial.spec.ts`.
+const SERIAL_SPECS =
+  /tests\/support\/((routing|routing-teams|presence)\.spec\.ts|.+\.serial\.spec\.ts)$/
+
+// CI runs the two projects as two invocations into one blob folder; the
+// second names its report so the first one's survives.
+const blobFileName = process.env.SUPPORT_BLOB_FILE_NAME
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -49,7 +58,16 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 2 : undefined,
   reporter: process.env.CI
-    ? [['blob', { outputDir: 'blob-report' }], ['list']]
+    ? [
+        [
+          'blob',
+          {
+            outputDir: process.env.SUPPORT_BLOB_DIR ?? 'blob-report',
+            ...(blobFileName ? { fileName: blobFileName } : {}),
+          },
+        ],
+        ['list'],
+      ]
     : [['html', { outputFolder: 'playwright-report-support', open: 'never' }], ['list']],
   use: {
     baseURL: env.baseUrl,
@@ -64,7 +82,22 @@ export default defineConfig({
     {
       name: 'support',
       testMatch: /tests\/support\/.+\.spec\.ts/,
+      testIgnore: SERIAL_SPECS,
       dependencies: ['support-setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1600, height: 1000 },
+      },
+    },
+    // Specs that need the workspace to themselves: routing switched on (every
+    // new conversation goes to whoever is online) and "nobody is online"
+    // checks. One worker, and run as its own invocation after `support`
+    // (`--project support-serial`), so no other test is running meanwhile.
+    {
+      name: 'support-serial',
+      testMatch: SERIAL_SPECS,
+      dependencies: ['support-setup'],
+      workers: 1,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1600, height: 1000 },

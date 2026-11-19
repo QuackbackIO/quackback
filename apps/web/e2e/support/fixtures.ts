@@ -14,10 +14,18 @@
  * - `marker`      a string unique to this test, for subjects, emails, AI rules,
  *                 sink channels (the stand-ins are shared by every worker)
  * - `customerEmail` a fresh customer address on a domain nobody receives
+ * - `newTeammate` a teammate (own role, teams, session) only this test uses
  */
 import { readFileSync } from 'node:fs'
 import { test as base, expect, type Page } from '@playwright/test'
 import { closeSupportDb } from './db'
+import {
+  closeTeammateContexts,
+  createTeammate,
+  retireTeammates,
+  type CreateTeammateOptions,
+  type TestTeammate,
+} from './teammates'
 import {
   SEEDED_PEOPLE_FILE,
   personStatePath,
@@ -29,6 +37,8 @@ interface SupportFixtures {
   marker: string
   customerEmail: string
   asPerson: (name: SupportPersonName) => Promise<Page>
+  /** A teammate only this test uses (teammates.ts); closes their pages after. */
+  newTeammate: (opts: Omit<CreateTeammateOptions, 'marker'>) => Promise<TestTeammate>
 }
 
 interface SupportWorkerFixtures {
@@ -75,6 +85,12 @@ export const test = base.extend<SupportFixtures, SupportWorkerFixtures>({
       return context.newPage()
     })
     for (const context of contexts) await context.close()
+  },
+
+  newTeammate: async ({ marker }, use) => {
+    await use((opts) => createTeammate({ marker, ...opts }))
+    await closeTeammateContexts()
+    await retireTeammates()
   },
 })
 

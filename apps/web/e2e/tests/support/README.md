@@ -24,8 +24,9 @@ bun run --filter @quackback/widget build
 cd apps/web && bun run build
 
 # 3. Run (starts the app, the fake AI and the webhook sink itself)
-bun run test:e2e:support                       # everything
-bun run test:e2e:support --grep @smoke          # the every-PR set
+bun run test:e2e:support --project support          # everything but the serial specs
+bun run test:e2e:support --project support-serial   # then those, one at a time
+bun run test:e2e:support --project support --grep @smoke   # the every-PR set
 ```
 
 Any value in `e2e/support/support.env` can be overridden with
@@ -68,6 +69,18 @@ test('a teammate answers', { tag: '@core' }, async ({ asPerson, marker }) => {
 - **Presence.** Presence assertions read one person's rows. Use a person no
   parallel test opens the inbox as (the inbox's own stream counts as
   presence), or seed your own teammate.
+- **Workspace to yourself.** Routing switched on sends every new conversation
+  to whoever is online, and "nobody is online" cannot hold while other tests
+  keep inboxes open. Specs that need either live in `routing.spec.ts`,
+  `routing-teams.spec.ts`, `presence.spec.ts` or a `*.serial.spec.ts` file:
+  the `support-serial` project runs them one at a time, and CI runs it as a
+  second invocation after `--project support`. Locally, run them the same way
+  (`--project support`, then `--project support-serial`).
+- **Server functions and streams.** `support/server-fns.ts` calls a server
+  function by name as a person (`callServerFn(api, 'getConversationFn', data)`,
+  with the typed error's `code` on a refusal); `support/streams.ts` reads
+  `/api/chat/stream` frames (`openStream({ person, query: { scope: 'inbox' } })`).
+  An inbox or presence stream marks that person online: close it when done.
 - **One database per suite.** The support suite and the older suites
   (`playwright.config.ts`) must not share a database: support tests leave
   conversations behind that the older inbox spec's selectors trip over.
