@@ -76,13 +76,15 @@ test.describe('requester files a ticket', () => {
       const ticketId = fromUuid('ticket', row.id)
       expect(row.requester_principal_id).toBe(principalUuid(customer.principalId))
       expect(row.assignee_principal_id, 'a requester-filed ticket is born unassigned').toBeNull()
-      expect(await ticketWatchers(ticketId)).toContainEqual(
-        expect.objectContaining({
-          principal_id: principalUuid(customer.principalId),
-          reason: 'requester',
-        })
-      )
-      const backing = await pairedConversationId(ticketId)
+      await expect
+        .poll(() => ticketWatchers(ticketId))
+        .toContainEqual(
+          expect.objectContaining({
+            principal_id: principalUuid(customer.principalId),
+            reason: 'requester',
+          })
+        )
+      const backing = await pollFor('backing conversation', () => pairedConversationId(ticketId))
       expect(backing).not.toBeNull()
       expect(
         (await conversationMessages(backing!)).find((m) =>
