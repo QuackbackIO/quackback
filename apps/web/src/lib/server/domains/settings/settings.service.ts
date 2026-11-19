@@ -1218,7 +1218,15 @@ export async function updateFeatureFlags(
     return updated
   }
   const flags = options.executor ? await write(options.executor) : await db.transaction(write)
-  if (!options.executor) await invalidateSettingsCache()
+  if (!options.executor) {
+    await invalidateSettingsCache()
+    // Turning plan limits on detects at once rather than on the next read.
+    if (input.planLimits === true) {
+      const { detectPlanLimitsQuietly } =
+        await import('@/lib/server/domains/plan-limits/plan-limits.service')
+      await detectPlanLimitsQuietly()
+    }
+  }
   return flags
 }
 

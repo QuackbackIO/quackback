@@ -5,13 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
-  begin: vi.fn(),
-  cancel: vi.fn(),
+  preview: vi.fn(),
 }))
 
 vi.mock('@/lib/client/queries/billing', () => ({
-  beginPlanDowngradeFn: hoisted.begin,
-  cancelPlanDowngradeFn: hoisted.cancel,
+  fetchDowngradePreviewFn: hoisted.preview,
   billingQueries: { all: ['billing'] },
 }))
 
@@ -20,6 +18,7 @@ const { FreeDowngradeDialog } = await import('../free-downgrade-dialog')
 const OVER_LIMITS = {
   planName: 'Free',
   featuresDisabled: [],
+  info: [],
   issues: [
     {
       key: 'maxBoards',
@@ -42,24 +41,35 @@ function renderDialog(onOpenChange = vi.fn()) {
 }
 
 beforeEach(() => {
-  hoisted.begin.mockReset()
-  hoisted.cancel.mockReset().mockResolvedValue({ ok: true })
+  hoisted.preview.mockReset()
 })
 
 afterEach(() => cleanup())
 
 describe('FreeDowngradeDialog', () => {
-  it('drops the pending switch when closed while blocked, so a look is not a choice', async () => {
-    hoisted.begin.mockResolvedValue(OVER_LIMITS)
+  it('only reads the preview: a look is not a choice, and closing just closes', async () => {
+    hoisted.preview.mockResolvedValue(OVER_LIMITS)
     const onOpenChange = renderDialog()
     await screen.findByText('You have 3 out of 1 boards')
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
-    await waitFor(() => expect(hoisted.cancel).toHaveBeenCalledTimes(1))
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(hoisted.preview).toHaveBeenCalledWith({ data: { planId: 'free' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Back to plans' }))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(hoisted.preview).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows posts over the cap without blocking the switch', async () => {
+    hoisted.preview.mockResolvedValue({
+      ...OVER_LIMITS,
+      issues: [],
+      info: [{ key: 'maxPosts', used: 400, cap: 50, message: 'You have 400 out of 50 posts' }],
+    })
+    renderDialog()
+    await screen.findByText(/You have 400 out of 50 posts/)
+    expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeEnabled()
   })
 
   it('keeps one title while it checks and says why the switch waits', async () => {
-    hoisted.begin.mockResolvedValue(OVER_LIMITS)
+    hoisted.preview.mockResolvedValue(OVER_LIMITS)
     renderDialog()
     expect(screen.getByRole('heading', { name: 'Switch to Free' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled()
@@ -70,7 +80,7 @@ describe('FreeDowngradeDialog', () => {
   })
 
   it('leaves out the clean-up warning when the workspace fits Free', async () => {
-    hoisted.begin.mockResolvedValue({ ...OVER_LIMITS, issues: [] })
+    hoisted.preview.mockResolvedValue({ ...OVER_LIMITS, issues: [] })
     renderDialog()
     await screen.findByText('This workspace fits the Free plan.')
     expect(screen.queryByText(/Delete extra resources first/)).not.toBeInTheDocument()

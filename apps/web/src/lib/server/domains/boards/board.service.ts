@@ -8,6 +8,7 @@
  * - Validation
  */
 
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import {
   db,
   type Board,
@@ -169,6 +170,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     context: { source: 'admin' },
   })
 
+  await invalidatePlanLimits()
   return board
 }
 
@@ -268,6 +270,7 @@ export async function deleteBoard(id: BoardId): Promise<void> {
   if (result.length === 0) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
+  await invalidatePlanLimits()
 
   // WO-6b: audit-relevant board deletion event.
   void emitBestEffort(boardDeleted, {

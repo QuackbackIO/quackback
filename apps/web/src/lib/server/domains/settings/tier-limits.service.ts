@@ -244,3 +244,19 @@ export async function getTierLimits(now = new Date()): Promise<TierLimits> {
 export function invalidateTierLimitsCache(): void {
   cachedLimits.delete(LIMITS_KEY)
 }
+
+/**
+ * The limits a settings row resolves to at `at`, without the cache: for
+ * looking back at the limits in force before a drop.
+ */
+export function resolveTierLimitsFromRow(
+  rawTierLimits: string | null | undefined,
+  rawProjection: unknown,
+  at: Date
+): TierLimits {
+  return resolveEffectiveTierLimits(
+    parseStoredTierLimits(rawTierLimits),
+    parseBillingProjection(rawProjection),
+    at
+  )
+}

@@ -43,6 +43,7 @@ import { addPrincipalToDefaultTeam } from '@/lib/server/domains/teams'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { enqueueMembershipSync } from './membership-sync'
 import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 
 /** The live db or an open transaction — both expose insert/update/query. */
 export type Executor = Database | Transaction
@@ -62,6 +63,15 @@ function shouldSyncMembership(args: {
 
 async function noteMembershipChanged(executor?: Executor): Promise<void> {
   await enqueueMembershipSync(executor && executor !== db ? { executor } : undefined)
+}
+
+/**
+ * A new team seat: sync membership, and recount seats for plan limits once the
+ * caller's transaction commits (`invalidatePlanLimits` waits for it).
+ */
+async function noteSeatAdded(executor?: Executor): Promise<void> {
+  await noteMembershipChanged(executor)
+  await invalidatePlanLimits()
 }
 
 /** Address a principal by its id (exact) or by its owning user. */
@@ -124,7 +134,7 @@ export async function createPrincipal(
 ): Promise<Principal> {
   const [created] = await exec.insert(principal).values(toRow(input)).returning()
   await enrollTeamTierInDefaultTeam(created, exec)
-  if (isTeamSeat(created.type, created.role)) await noteMembershipChanged(exec)
+  if (isTeamSeat(created.type, created.role)) await noteSeatAdded(exec)
   return created
 }
 
@@ -136,7 +146,7 @@ export async function createPrincipals(
   if (inputs.length === 0) return []
   const created = await exec.insert(principal).values(inputs.map(toRow)).returning()
   for (const row of created) await enrollTeamTierInDefaultTeam(row, exec)
-  if (created.some((row) => isTeamSeat(row.type, row.role))) await noteMembershipChanged(exec)
+  if (created.some((row) => isTeamSeat(row.type, row.role))) await noteSeatAdded(exec)
   return created
 }
 
@@ -187,7 +197,7 @@ export async function ensurePrincipalForUser(
   if (inserted) {
     await enrollTeamTierInDefaultTeam(inserted, exec)
     await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(input.userId))
-    if (isTeamSeat(inserted.type, inserted.role)) await noteMembershipChanged(exec)
+    if (isTeamSeat(inserted.type, inserted.role)) await noteSeatAdded(exec)
     return { principal: inserted, created: true }
   }
 
@@ -389,7 +399,10 @@ export async function setPrincipalRole(
   if (roleMoved && shouldSyncMembership({ type, fromRole, toRole: role })) {
     await noteMembershipChanged(opts.executor)
   }
-  const keys = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
+  const keys: string[] = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
+  // Seats and billing rights are counted from people's roles, so a person's
+  // role change recounts them; inside a caller's transaction, after it commits.
+  if (type === 'user') keys.push(CACHE_KEYS.PLAN_LIMITS_INPUTS)
   if (!opts.executor) for (const k of keys) await cacheDel(k)
   const scopeChanged = target !== undefined && (target.role !== role || reassign)
   return { cacheKeysToBust: keys, scopeChangedFor: scopeChanged ? target?.id : undefined }

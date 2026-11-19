@@ -60,8 +60,8 @@ Edges (30):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (153):
+Nodes (56): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, plan-limits, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (166):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -94,8 +94,10 @@ Edges (153):
 - assistant -> workflows
 - billing -> ai
 - billing -> api
+- billing -> plan-limits
 - billing -> principals
 - billing -> settings
+- boards -> plan-limits
 - boards -> posts
 - boards -> settings
 - changelog -> ai
@@ -104,6 +106,7 @@ Edges (153):
 - channel-accounts -> conversation
 - channel-accounts -> domain-proof
 - channel-accounts -> notifications
+- channel-accounts -> plan-limits
 - channel-accounts -> settings
 - channel-accounts -> subscriptions
 - channels -> conversation
@@ -164,6 +167,10 @@ Edges (153):
 - onboarding -> principals
 - onboarding -> settings
 - onboarding -> users
+- plan-limits -> ai
+- plan-limits -> billing
+- plan-limits -> platform-credentials
+- plan-limits -> settings
 - posts -> activity
 - posts -> ai
 - posts -> changelog
@@ -172,16 +179,19 @@ Edges (153):
 - posts -> principals
 - posts -> settings
 - posts -> subscriptions
+- principals -> plan-limits
 - principals -> roles
 - principals -> settings
 - principals -> teams
 - roadmaps -> posts
+- roles -> plan-limits
 - roles -> settings
 - sentiment -> ai
 - sentiment -> settings
 - settings -> ai
 - settings -> channel-accounts
 - settings -> domain-proof
+- settings -> plan-limits
 - settings -> platform-credentials
 - settings -> sla
 - settings-registry -> api
@@ -190,6 +200,7 @@ Edges (153):
 - settings-registry -> settings
 - sla -> office-hours
 - sla -> settings
+- status -> plan-limits
 - status -> settings
 - subscriptions -> changelog
 - subscriptions -> posts
@@ -205,12 +216,14 @@ Edges (153):
 - tickets -> teams
 - user-attributes -> attribute-definitions
 - users -> principals
+- webhooks -> plan-limits
 - webhooks -> settings
 - workflows -> assistant
 - workflows -> conversation
 - workflows -> conversation-attributes
 - workflows -> inbox
 - workflows -> office-hours
+- workflows -> plan-limits
 - workflows -> segments
 - workflows -> settings
 - workflows -> sla
@@ -221,4 +234,4 @@ Edges (153):
 
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
-- activity <-> ai <-> api <-> api-keys <-> assistant <-> boards <-> changelog <-> channel-accounts <-> channels <-> comments <-> conversation <-> conversation-attributes <-> domain-proof <-> embeddings <-> files <-> help-center <-> inbox <-> merge-suggestions <-> posts <-> principals <-> roles <-> settings <-> sla <-> status <-> subscriptions <-> tickets <-> users <-> webhooks <-> workflows
+- activity <-> ai <-> api <-> api-keys <-> assistant <-> billing <-> boards <-> changelog <-> channel-accounts <-> channels <-> comments <-> conversation <-> conversation-attributes <-> domain-proof <-> embeddings <-> files <-> help-center <-> inbox <-> merge-suggestions <-> plan-limits <-> posts <-> principals <-> roles <-> settings <-> sla <-> status <-> subscriptions <-> tickets <-> users <-> webhooks <-> workflows

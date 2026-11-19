@@ -169,7 +169,12 @@ export async function invalidateSettingsCache(): Promise<void> {
   // REGISTERED_AUTH_PROVIDERS is derived from authConfig.oauth (part of workspace
   // settings) and the identity_provider list; every identity-provider write
   // funnels through here, so drop it alongside the settings row.
-  await cacheDel(CACHE_KEYS.WORKSPACE_SETTINGS, CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
+  // The plan limits inputs go too, so a fix made through settings shows at once.
+  await cacheDel(
+    CACHE_KEYS.WORKSPACE_SETTINGS,
+    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS,
+    CACHE_KEYS.PLAN_LIMITS_INPUTS
+  )
 }
 
 /**

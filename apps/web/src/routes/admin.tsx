@@ -1,5 +1,5 @@
 import { useEffect, type ComponentProps } from 'react'
-import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
+import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
@@ -85,7 +85,7 @@ export const Route = createFileRoute('/admin')({
     if (typeof search.article === 'string') next.article = search.article
     return next
   },
-  beforeLoad: async ({ location, context }) => {
+  beforeLoad: async ({ location }) => {
     // Skip auth for public admin routes (login, signup)
     // These are child routes but should be publicly accessible
     const publicPaths = ['/admin/login', '/admin/signup']
@@ -95,24 +95,10 @@ export const Route = createFileRoute('/admin')({
 
     // Only team members (admin, member roles) can access admin dashboard
     // Portal users (role='user') don't have access to this.
-    // Role guard first: it throws a sign-in redirect. The billing helper's
-    // requireAuth() throws a plain Error, so racing the two can surface an
-    // error page for an unauthenticated visitor.
+    // The role guard throws a sign-in redirect for an unauthenticated visitor.
     const { user, principal, permissions } = await adminGuard.get(() =>
       loadAdminGuard(location.href)
     )
-
-    // Two billing locks keep billing managers on billing pages: a pending plan
-    // downgrade (to the pages where they get under the new plan's limits), and
-    // a trial that ended with no plan chosen, once its grace period is over (to
-    // the plan picker). Only a billing manager of a workspace with plan billing
-    // (cloudEnabled) can be held, so only they load and pay for the check.
-    if (context.cloudEnabled && permissions.includes(PERMISSIONS.BILLING_MANAGE)) {
-      const { holdOnBilling } = await import('@/lib/client/admin-billing-lock')
-      if (await holdOnBilling(location.pathname)) {
-        throw redirect({ href: '/admin/settings/billing' })
-      }
-    }
 
     return {
       user,

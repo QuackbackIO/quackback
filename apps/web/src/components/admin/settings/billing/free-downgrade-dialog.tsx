@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import {
-  beginPlanDowngradeFn,
-  billingQueries,
-  cancelPlanDowngradeFn,
-} from '@/lib/client/queries/billing'
+import { fetchDowngradePreviewFn } from '@/lib/client/queries/billing'
 import { checkoutPath, isPaidPlanId, type BillingPeriod } from '@/lib/shared/billing/checkout-path'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import type { PlanDowngradeIssue } from '@/lib/shared/billing/plan-downgrade'
+import type { PlanCapInfo, PlanDowngradeIssue } from '@/lib/shared/billing/plan-downgrade'
 import { errorText } from '@/lib/client/error-text'
 
 export type PlanDowngradeCheckout = {
@@ -33,8 +28,8 @@ export function PlanDowngradeDialog(props: {
   /** The way out. An ended trial has no current plan to keep, so it goes back to the plans. */
   cancelLabel?: string
 }) {
-  const queryClient = useQueryClient()
   const [issues, setIssues] = useState<PlanDowngradeIssue[]>([])
+  const [info, setInfo] = useState<PlanCapInfo[]>([])
   const [features, setFeatures] = useState<string[]>([])
   const [resolvedName, setResolvedName] = useState(props.planName)
   const [loading, setLoading] = useState(false)
@@ -46,13 +41,13 @@ export function PlanDowngradeDialog(props: {
     let cancelled = false
     setLoading(true)
     setError(null)
-    void beginPlanDowngradeFn({ data: { planId: props.planId } })
+    void fetchDowngradePreviewFn({ data: { planId: props.planId } })
       .then((preview) => {
         if (cancelled) return
         setIssues(preview.issues)
+        setInfo(preview.info)
         setFeatures(preview.featuresDisabled)
         setResolvedName(preview.planName)
-        void queryClient.invalidateQueries({ queryKey: billingQueries.all })
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -64,30 +59,13 @@ export function PlanDowngradeDialog(props: {
     return () => {
       cancelled = true
     }
-  }, [props.open, props.planId, queryClient])
-
-  async function keepCurrentPlan() {
-    await cancelPlanDowngradeFn()
-    await queryClient.invalidateQueries({ queryKey: billingQueries.all })
-    props.onOpenChange(false)
-  }
-
-  // Closing the dialog is not choosing the plan. Opening it records the
-  // downgrade as pending so its issue links keep their pages open; leaving it
-  // by Esc, the close button or the overlay must not leave that lock behind.
-  function handleOpenChange(open: boolean) {
-    if (!open && blocked) {
-      void keepCurrentPlan()
-      return
-    }
-    props.onOpenChange(open)
-  }
+  }, [props.open, props.planId])
 
   const planName = resolvedName || props.planName
   const confirmLabel = props.planId === 'free' ? 'Switch to Free' : `Continue to ${planName}`
 
   return (
-    <Dialog open={props.open} onOpenChange={handleOpenChange}>
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Switch to {planName}</DialogTitle>
@@ -132,6 +110,14 @@ export function PlanDowngradeDialog(props: {
           <p className="text-sm text-muted-foreground">This workspace fits the {planName} plan.</p>
         )}
 
+        {!loading && !error && info.length > 0 ? (
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {info.map((row) => (
+              <li key={row.key}>{row.message}. Existing ones stay; new ones stop at the cap.</li>
+            ))}
+          </ul>
+        ) : null}
+
         {features.length > 0 ? (
           <div className="space-y-2">
             <p className="text-sm font-medium">Features that will be disabled:</p>
@@ -147,7 +133,7 @@ export function PlanDowngradeDialog(props: {
         ) : null}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => void keepCurrentPlan()}>
+          <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)}>
             {props.cancelLabel ?? 'Keep current plan'}
           </Button>
           {blocked || loading || error ? (

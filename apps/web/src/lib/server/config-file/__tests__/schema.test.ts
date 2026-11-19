@@ -2,6 +2,16 @@ import { describe, it, expect } from 'vitest'
 import { getDeprecatedConfigKeys, parseQuackbackConfig, quackbackConfigSchema } from '../schema'
 
 describe('parseQuackbackConfig', () => {
+  it('accepts the plan limits rollout flag and nothing else under rollout', () => {
+    const base = { apiVersion: 'quackback.io/v1', kind: 'QuackbackConfig' }
+    expect(parseQuackbackConfig({ ...base, spec: { rollout: { planLimits: true } } }).success).toBe(
+      true
+    )
+    expect(parseQuackbackConfig({ ...base, spec: { rollout: { feedback: false } } }).success).toBe(
+      false
+    )
+  })
+
   it('accepts a fully-populated valid config', () => {
     const result = parseQuackbackConfig({
       apiVersion: 'quackback.io/v1',

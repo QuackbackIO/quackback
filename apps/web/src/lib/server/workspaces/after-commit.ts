@@ -32,6 +32,8 @@ interface AfterCommitFrame {
   depth: number
   /** workspaceKey → job ids (empty set = nudge only). */
   pending: Map<string, Set<string>>
+  /** Work to run once the outer transaction commits (see {@link afterCommit}). */
+  callbacks: Array<() => unknown>
 }
 
 const frames = new AsyncLocalStorage<AfterCommitFrame>()
@@ -111,29 +113,58 @@ export async function runInAfterCommitFrame<T>(fn: () => Promise<T>): Promise<T>
   const parent = frames.getStore()
   if (parent) {
     const snapshot = clonePending(parent.pending)
+    const callbackCount = parent.callbacks.length
     parent.depth += 1
     try {
       return await fn()
     } catch (err) {
       parent.pending.clear()
       for (const [key, ids] of snapshot) parent.pending.set(key, ids)
+      parent.callbacks.length = callbackCount
       throw err
     } finally {
       parent.depth -= 1
     }
   }
 
-  const frame: AfterCommitFrame = { depth: 1, pending: new Map() }
-  return frames.run(frame, async () => {
+  const frame: AfterCommitFrame = { depth: 1, pending: new Map(), callbacks: [] }
+  const result = await frames.run(frame, async () => {
     try {
-      const result = await fn()
+      const value = await fn()
       flushPending(frame.pending)
-      return result
+      return value
     } catch (err) {
       frame.pending.clear()
+      frame.callbacks.length = 0
       throw err
     }
   })
+  // Outside the frame, so whatever a callback writes is its own commit.
+  for (const callback of frame.callbacks.splice(0)) await runCallback(callback)
+  return result
+}
+
+async function runCallback(callback: () => unknown): Promise<void> {
+  try {
+    await callback()
+  } catch (err) {
+    log.error({ err }, 'after-commit callback threw')
+  }
+}
+
+/**
+ * Run `callback` once the current transaction commits, or now when none is
+ * open. Dropped if the transaction (or the savepoint it was registered in)
+ * rolls back. For cache drops that must not run before the write they follow
+ * is visible to other connections. A throwing callback is logged.
+ */
+export async function afterCommit(callback: () => unknown): Promise<void> {
+  const frame = frames.getStore()
+  if (frame && frame.depth > 0) {
+    frame.callbacks.push(callback)
+    return
+  }
+  await runCallback(callback)
 }
 
 /** Bind a drizzle `transaction` method so its commit flushes pending work. */

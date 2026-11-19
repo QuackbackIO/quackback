@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 768 surfaces
+### Server functions (`requireAuth`) — 769 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -269,10 +269,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/billing.ts`::fetchPlanUsageFn | billing.manage |
 | `lib/server/functions/billing.ts`::fetchDowngradePreviewFn | billing.manage |
 | `lib/server/functions/billing.ts`::fetchFreeDowngradePreviewFn | billing.manage |
-| `lib/server/functions/billing.ts`::fetchPendingDowngradeFn | billing.manage |
-| `lib/server/functions/billing.ts`::beginPlanDowngradeFn | billing.manage |
-| `lib/server/functions/billing.ts`::cancelPlanDowngradeFn | billing.manage |
-| `lib/server/functions/billing.ts`::getAdminBillingLockFn | END_USER (any authenticated) |
 | `lib/server/functions/blocking.ts`::getPersonBlockStatusFn | people.view |
 | `lib/server/functions/blocking.ts`::blockPersonFn | people.manage |
 | `lib/server/functions/blocking.ts`::unblockPersonFn | people.manage |
@@ -542,6 +538,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/personal-api-keys.ts`::revokeMyApiKeyFn | END_USER (any authenticated) |
 | `lib/server/functions/personal-api-keys.ts`::revokeMyApiKeyFn | TEAM-ONLY |
 | `lib/server/functions/personal-key-policy.ts`::setPersonalKeyPolicyFn | api_key.manage |
+| `lib/server/functions/plan-limits.ts`::getPlanLimitsFn | member.view |
+| `lib/server/functions/plan-limits.ts`::setKeptBoardFn | DYNAMIC (billing.manage | settings.manage) |
+| `lib/server/functions/plan-limits.ts`::setSeatHoldersFn | DYNAMIC (billing.manage | member.manage) |
+| `lib/server/functions/plan-limits.ts`::setVisibleStatusComponentsFn | DYNAMIC (billing.manage | status_page.manage) |
+| `lib/server/functions/plan-limits.ts`::setKeptSendingDomainsFn | DYNAMIC (billing.manage | channel_account.manage) |
 | `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
@@ -1095,7 +1096,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-233 of 1110 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+233 of 1111 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

@@ -11,7 +11,6 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { TRIAL_CHOICE_GATE_FROM } from '@/lib/shared/billing/trial-state'
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
 
 const hoisted = vi.hoisted(() => ({
@@ -243,10 +242,7 @@ describe('getPlanNotice — the trial countdown', () => {
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        actionLabel: 'Choose a plan',
-        choiceDueAt: new Date(
-          Math.max(Date.parse(ENDS) + 2 * 86_400_000, TRIAL_CHOICE_GATE_FROM)
-        ).toISOString(),
+        actionLabel: 'Compare plans',
       })
     )
   })
@@ -260,7 +256,7 @@ describe('getPlanNotice — the trial countdown', () => {
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        message: expect.stringMatching(/workspace owner needs to choose a plan/),
+        message: expect.stringMatching(/Ask someone who manages billing to upgrade/),
       })
     )
     expect(notice).not.toHaveProperty('actionUrl')
@@ -276,7 +272,7 @@ describe('getPlanNotice — the trial countdown', () => {
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        actionLabel: 'Choose a plan',
+        actionLabel: 'Compare plans',
       })
     )
   })

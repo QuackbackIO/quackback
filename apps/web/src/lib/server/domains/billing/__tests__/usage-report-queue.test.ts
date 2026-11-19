@@ -9,6 +9,11 @@ const hoisted = vi.hoisted(() => ({
   cancelJob: vi.fn(async (_opts?: unknown) => 0),
   postCount: 8,
   boardCount: 2,
+  detectPlanLimitsQuietly: vi.fn(async () => {}),
+}))
+
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  detectPlanLimitsQuietly: () => hoisted.detectPlanLimitsQuietly(),
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
@@ -75,6 +80,7 @@ describe('usage-report job', () => {
     hoisted.reportWorkspaceUsage.mockClear()
     hoisted.enqueueJob.mockClear()
     hoisted.cancelJob.mockClear()
+    hoisted.detectPlanLimitsQuietly.mockClear()
     vi.useRealTimers()
     if (previous === undefined) delete process.env.QUACKBACK_CONTROL_PLANE_URL
     else process.env.QUACKBACK_CONTROL_PLANE_URL = previous
@@ -133,6 +139,17 @@ describe('usage-report job', () => {
     )
     expect(hoisted.reportWorkspaceUsage).not.toHaveBeenCalled()
     expect(hoisted.cancelJob).not.toHaveBeenCalled()
+  })
+
+  it('detects plan limits from the hourly slot only, not the monthly report', async () => {
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    vi.useFakeTimers({ now: new Date('2026-08-01T00:10:00.000Z') })
+    await runUsageReport(job({ month: '2026-07' }, 'usage-report:2026-07'))
+    expect(hoisted.detectPlanLimitsQuietly).not.toHaveBeenCalled()
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+    )
+    expect(hoisted.detectPlanLimitsQuietly).toHaveBeenCalledTimes(1)
   })
 
   it('skips the post when the month is already recorded', async () => {
