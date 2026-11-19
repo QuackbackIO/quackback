@@ -393,6 +393,7 @@ describe('replayGateVerdict', () => {
       '0316_personal_key_reply_cutoff',
       '0317_plan_limits_state',
       '0318_board_read_only',
+      '0319_outbound_email_sent_message_id',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

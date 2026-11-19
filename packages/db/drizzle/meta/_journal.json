@@ -2073,6 +2073,13 @@
       "when": 1791002300000,
       "tag": "0318_board_read_only",
       "breakpoints": true
+    },
+    {
+      "idx": 296,
+      "version": "7",
+      "when": 1791002400000,
+      "tag": "0319_outbound_email_sent_message_id",
+      "breakpoints": true
     }
   ]
 }
