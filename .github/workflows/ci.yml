@@ -627,8 +627,17 @@ jobs:
       - name: Run support @smoke
         working-directory: apps/web
         run: |
-          ./node_modules/.bin/playwright test -c playwright.support.config.ts \
-            --grep @smoke --grep-invert @quarantine --global-timeout=900000
+          main=0
+          ./node_modules/.bin/playwright test -c playwright.support.config.ts --project support \
+            --grep @smoke --grep-invert @quarantine --global-timeout=720000 || main=$?
+          # The smoke specs that need the workspace to themselves, after the rest.
+          serial=0
+          SUPPORT_BLOB_DIR=blob-report-serial SUPPORT_BLOB_FILE_NAME=report-serial.zip \
+            ./node_modules/.bin/playwright test -c playwright.support.config.ts --project support-serial \
+            --grep @smoke --grep-invert @quarantine --pass-with-no-tests --global-timeout=300000 || serial=$?
+          mkdir -p blob-report
+          mv blob-report-serial/*.zip blob-report/ 2>/dev/null || true
+          test "$main" = 0 && test "$serial" = 0
       - name: Server log
         if: failure()
         run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
@@ -768,9 +777,20 @@ jobs:
           if [ "$FULL_RUN" = 'true' ]; then grep_args=(); fi
           # A shard can be empty while the suite is small; the report job
           # fails the run when no shard ran a test.
+          main=0
           ./node_modules/.bin/playwright test -c playwright.support.config.ts \
-            --shard=${{ matrix.shard }}/4 "${grep_args[@]}" --grep-invert @quarantine \
-            --pass-with-no-tests --global-timeout=1500000
+            --project support --shard=${{ matrix.shard }}/4 "${grep_args[@]}" \
+            --grep-invert @quarantine --pass-with-no-tests --global-timeout=1200000 || main=$?
+          # Then the specs that need the workspace to themselves (routing on,
+          # nobody online), one at a time, once nothing else is running.
+          serial=0
+          SUPPORT_BLOB_DIR=blob-report-serial SUPPORT_BLOB_FILE_NAME=report-serial-${{ matrix.shard }}.zip \
+            ./node_modules/.bin/playwright test -c playwright.support.config.ts \
+            --project support-serial --shard=${{ matrix.shard }}/4 "${grep_args[@]}" \
+            --grep-invert @quarantine --pass-with-no-tests --global-timeout=600000 || serial=$?
+          mkdir -p blob-report
+          mv blob-report-serial/*.zip blob-report/ 2>/dev/null || true
+          test "$main" = 0 && test "$serial" = 0
       - name: Server log
         if: failure()
         run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
