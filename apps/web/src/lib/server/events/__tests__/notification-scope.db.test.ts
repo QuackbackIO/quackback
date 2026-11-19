@@ -518,6 +518,38 @@ describe('SLA email', () => {
     const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
     expect(emailsOf(targets)).toEqual([w.onTeam.email])
   })
+
+  // The SLA events fire on every workspace now, and a conversation closed
+  // without a reply keeps an unsettled first-response clock that still
+  // breaches later. There is nothing left for anyone to answer.
+  it('mails nobody about a conversation that is closed', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    await testDb
+      .update(conversations)
+      .set({ status: 'closed' })
+      .where(eq(conversations.id, conversation.id as ConversationId))
+    const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
+    expect(emailsOf(targets)).toEqual([])
+  })
+
+  it("still mails about a ticket's clock when its conversation is closed", async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    await testDb
+      .update(conversations)
+      .set({ status: 'closed' })
+      .where(eq(conversations.id, conversation.id as ConversationId))
+    const event = sla(conversation.id as ConversationId)
+    const data = event.data as unknown as Record<string, unknown>
+    event.data = {
+      ...data,
+      clock: 'time_to_resolve',
+      ticketId: 'ticket_1',
+    } as unknown as typeof event.data
+    const targets = await getSlaEmailTargets(event, context)
+    expect(emailsOf(targets)).toEqual([w.solo.email])
+  })
 })
 
 // ============================================================================

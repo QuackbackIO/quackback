@@ -1776,16 +1776,18 @@ function formatSlaDue(iso: string): string {
  * (preferred) else the assigned team's members (getAssistantHandedOffTargets
  * pattern). kinds `sla_warning` / `sla_breach`, matrix keys of the same name,
  * inbox CTA on the conversation. No ticket threading (there is no ticket).
+ * A conversation clock on a closed conversation mails nobody.
  */
 export async function getSlaEmailTargets(
   event: EventData,
   context: HookContext
 ): Promise<HookTarget[]> {
   if (event.type !== 'sla.approaching_breach' && event.type !== 'sla.breached') return []
-  const { conversationId, clock, dueAt } = event.data
+  const { conversationId, clock, dueAt, ticketId } = event.data
 
   const [conv] = await db
     .select({
+      status: conversations.status,
       assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
       assignedTeamId: conversations.assignedTeamId,
       visitorName: principal.displayName,
@@ -1795,6 +1797,11 @@ export async function getSlaEmailTargets(
     .where(eq(conversations.id, conversationId as ConversationId))
     .limit(1)
   if (!conv) return []
+  // A closed conversation keeps an unsettled first-response clock when it was
+  // closed without a reply (spam, a duplicate), and that clock still breaches.
+  // Nobody can act on it, so nobody is mailed. A ticket's clock runs on even
+  // after its conversation closes, so it still mails.
+  if (!ticketId && conv.status === 'closed') return []
 
   let recipientIds: PrincipalId[]
   if (conv.assignedAgentPrincipalId) {
