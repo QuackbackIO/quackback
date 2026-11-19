@@ -1,9 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import {
-  fetchConversationRoutingFn,
-  fetchEmailAutoAckFn,
-  getEmailChannelStatusFn,
-} from '@/lib/server/functions/settings'
+import { fetchEmailAutoAckFn, getEmailChannelStatusFn } from '@/lib/server/functions/settings'
 import { listRecentEmailLogFn } from '@/lib/server/functions/channel-accounts'
 
 /**
@@ -19,13 +15,6 @@ export const channelSettingsQueries = {
       queryKey: ['settings', 'email-channel-status'],
       queryFn: () => getEmailChannelStatusFn(),
       staleTime: 60_000,
-    }),
-
-  /** The conversation routing switch on the Channels hub (routing.manage). */
-  routing: () =>
-    queryOptions({
-      queryKey: ['conversation-routing'],
-      queryFn: () => fetchConversationRoutingFn(),
     }),
 
   /** Email auto-acknowledgement (channel_account.manage). */

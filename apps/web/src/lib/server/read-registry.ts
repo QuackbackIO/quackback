@@ -22,6 +22,7 @@ type BatchedRead = () => Pick<FetchQueryOptions, 'queryKey'>
 export const BATCHED_READS: readonly BatchedRead[] = [
   settingsQueries.authConfig,
   settingsQueries.branding,
+  settingsQueries.conversationRouting,
   settingsQueries.customCss,
   settingsQueries.developerConfig,
   settingsQueries.exportRuns,
@@ -54,7 +55,6 @@ export const BATCHED_READS: readonly BatchedRead[] = [
   channelSettingsQueries.emailActivity,
   channelSettingsQueries.emailAutoAck,
   channelSettingsQueries.emailStatus,
-  channelSettingsQueries.routing,
   emailChannelConfigQuery,
   githubChannelStatusQuery,
   // The public roadmap page's shell.

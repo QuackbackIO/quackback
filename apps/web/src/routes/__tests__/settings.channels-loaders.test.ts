@@ -31,26 +31,26 @@ async function warmedKeys(route: unknown, permissions: PermissionKey[]) {
 const key = (...parts: string[]) => JSON.stringify(parts)
 
 describe('channels settings loaders', () => {
-  it('hub: warms the configs, the email and GitHub status and the routing switch', async () => {
-    const keys = await warmedKeys(HubRoute, [
-      PERMISSIONS.SETTINGS_MANAGE,
-      PERMISSIONS.ROUTING_MANAGE,
-    ])
+  it('hub: warms the configs and the email and GitHub status', async () => {
+    const keys = await warmedKeys(HubRoute, [PERMISSIONS.SETTINGS_MANAGE])
     expect(keys).toEqual(
       expect.arrayContaining([
         key('settings', 'widgetConfig'),
         key('settings', 'portalConfig'),
         key('settings', 'email-channel-status'),
         key('settings', 'github-channel-status'),
-        key('conversation-routing'),
       ])
     )
   })
 
-  it('hub: leaves the routing switch out without routing.manage', async () => {
-    const keys = await warmedKeys(HubRoute, [PERMISSIONS.SETTINGS_MANAGE])
-    expect(keys).toContain(key('settings', 'widgetConfig'))
-    expect(keys).not.toContain(key('conversation-routing'))
+  it('hub: never warms the routing switch, which lives on the Workflows page', async () => {
+    const keys = await warmedKeys(HubRoute, [
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.ROUTING_MANAGE,
+    ])
+    expect(
+      keys.some((k) => k.includes('onversation-routing') || k.includes('conversationRouting'))
+    ).toBe(false)
   })
 
   it('email: warms every card on the page', async () => {

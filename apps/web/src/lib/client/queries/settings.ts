@@ -14,6 +14,7 @@ import {
   fetchWidgetSecret,
   fetchWorkflowAbandonedAutoCloseFn,
   fetchWorkflowCloseSpamFn,
+  fetchConversationRoutingFn,
   fetchDefaultSlaPolicyFn,
   getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
@@ -208,6 +209,14 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'workflowCloseSpam'],
       queryFn: fetchWorkflowCloseSpamFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  /** The auto-assign switch on the Workflows page (routing.manage). */
+  conversationRouting: () =>
+    queryOptions({
+      queryKey: ['settings', 'conversationRouting'],
+      queryFn: () => fetchConversationRoutingFn(),
       staleTime: STALE_TIME_MEDIUM,
     }),
 

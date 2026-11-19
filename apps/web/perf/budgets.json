@@ -340,7 +340,7 @@
     },
     "sweep:doc:admin:/admin/settings/workflows": {
       "dbQueries": 7,
-      "htmlKB": 79.3
+      "htmlKB": 83.9
     },
     "sweep:ui:admin:/admin/settings/workflows": {
       "dbQueries": 13,
@@ -488,9 +488,9 @@
     "sweep:ui:admin:/admin/settings/channels": {
       "dbQueries": 8,
       "serverRequests": 1,
-      "requests": 111,
-      "jsRequests": 106,
-      "jsKB": 403.3,
+      "requests": 103,
+      "jsRequests": 96,
+      "jsKB": 400.7,
       "htmlTransferKB": 31.6,
       "componentRenders": 414
     },

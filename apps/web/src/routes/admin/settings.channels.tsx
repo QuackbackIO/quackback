@@ -22,8 +22,8 @@ export const Route = createFileRoute('/admin/settings/channels')({
         import('@/lib/client/queries/channel-settings'),
         import('@/integrations/github/ui/github-channel-status-query'),
       ])
-    // The status rows and the routing switch are warmed with the configs so
-    // the hub renders complete from the document. A miss leaves a row to its
+    // The status rows are warmed with the configs so the hub renders
+    // complete from the document. A miss leaves a row to its
     // own fetch and its defaults, as before.
     const ensure = readBatch(queryClient)
     await Promise.all([
@@ -31,10 +31,6 @@ export const Route = createFileRoute('/admin/settings/channels')({
       ensure(settingsQueries.portalConfig()),
       warmQuery(ensure, channels.emailStatus()),
       warmQuery(ensure, githubStatus()),
-      // The routing switch shows only to routing.manage holders.
-      context.permissions?.includes(PERMISSIONS.ROUTING_MANAGE)
-        ? warmQuery(ensure, channels.routing())
-        : undefined,
     ])
     return {}
   },
