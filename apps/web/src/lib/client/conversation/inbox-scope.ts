@@ -199,13 +199,39 @@ export interface InboxSearch {
  * Resolve the active left-nav scope from the URL. Scopes are mutually exclusive;
  * precedence custom > team > tag > segment > view if the URL somehow carries
  * more than one.
+ *
+ * With support conversations off (a tickets-only workspace) a scope that only
+ * lists conversations resolves to All tickets instead, so a stale link or the
+ * default never opens a conversation view the nav does not offer.
  */
-export function navFromSearch(search: InboxSearch): InboxNavItem {
+export function navFromSearch(
+  search: InboxSearch,
+  opts: { conversations?: boolean } = {}
+): InboxNavItem {
+  const nav = scopeFromSearch(search)
+  if (opts.conversations === false && listsOnlyConversations(nav)) {
+    return { kind: 'view', view: 'tickets_all' }
+  }
+  return nav
+}
+
+function scopeFromSearch(search: InboxSearch): InboxNavItem {
   if (search.viewId) return { kind: 'custom', viewId: search.viewId as ConversationViewId }
   if (search.team) return { kind: 'team', teamId: search.team as TeamId }
   if (search.tag) return { kind: 'tag', tagId: search.tag as ConversationTagId }
   if (search.segment) return { kind: 'segment', segmentId: search.segment as SegmentId }
   return { kind: 'view', view: search.view ?? 'all' }
+}
+
+/**
+ * Whether a scope lists conversations and nothing else: every built-in view
+ * outside the Tickets section, and the team, tag and segment scopes. A saved
+ * view may carry ticket rules, so it is not one.
+ */
+export function listsOnlyConversations(nav: InboxNavItem): boolean {
+  if (nav.kind === 'custom') return false
+  if (nav.kind === 'view') return !isTicketInboxView(nav.view)
+  return true
 }
 
 /**

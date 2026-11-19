@@ -245,7 +245,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // so `?q=123` is a string, `?c=` maps onto `i`, and rejected facets
     // never reach the prefetch queries.
     const search = validateInboxSearch(location.search as Record<string, unknown>)
-    const nav = navFromSearch(search)
+    const nav = navFromSearch(search, { conversations: !!flags?.supportInbox })
     const facet: InboxTriageFacet = search.status ?? 'open'
     const priority = search.priority ?? 'all'
     const searchTerm = (search.q ?? '').trim()
@@ -463,16 +463,21 @@ function InboxPage() {
   // custom saved view. Scopes are mutually exclusive; precedence custom > team >
   // tag > segment > view. Status/priority chips refine WITHIN a built-in scope;
   // Mentions + custom views are self-contained so those chips are hidden.
+  // A tickets-only workspace never lands on a conversation view.
+  const conversationsEnabled = useFeatureFlag('supportInbox')
   const nav = useMemo<InboxNavItem>(
     () =>
-      navFromSearch({
-        tag: urlTag,
-        segment: urlSegment,
-        team: urlTeam,
-        viewId: urlViewId,
-        view: urlView,
-      }),
-    [urlTag, urlSegment, urlTeam, urlViewId, urlView]
+      navFromSearch(
+        {
+          tag: urlTag,
+          segment: urlSegment,
+          team: urlTeam,
+          viewId: urlViewId,
+          view: urlView,
+        },
+        { conversations: conversationsEnabled }
+      ),
+    [urlTag, urlSegment, urlTeam, urlViewId, urlView, conversationsEnabled]
   )
   // Per-scope memory: each scope (view / tag / segment, keyed by inboxNavKey)
   // remembers the item last open in it, so returning to a scope resumes where
