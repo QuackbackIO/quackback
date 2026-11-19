@@ -27,7 +27,7 @@ import { NewTabHint } from '@/components/ui/button'
 /** The `integration` object returned by `fetchIntegrationByType`. */
 export interface IntegrationSettingsData {
   id: string
-  status: 'active' | 'paused' | 'pending' | null
+  status: 'active' | 'paused' | 'pending' | 'disconnected' | null
   workspaceName?: string | null
   config: Record<string, string | number | boolean | null>
   eventMappings: { id: string; eventType: string; enabled: boolean }[]

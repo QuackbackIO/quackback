@@ -162,6 +162,39 @@ describe('IntegrationDetail once connected', () => {
 })
 
 describe('IntegrationDetail states', () => {
+  it('offers Connect for a disconnected integration without deleting its stored configuration', () => {
+    const { container } = renderDetail({
+      data: { ...baseData, integration: { ...connected, status: 'disconnected' } },
+    })
+    expect(
+      within(header(container)).getByRole('button', { name: 'Connect Slack' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull()
+    expect(screen.getByText('Authorize Quackback')).toBeInTheDocument()
+    expect(screen.queryByText('Connected to Acme')).toBeNull()
+  })
+
+  it('offers a disconnected provider its typed connect form in the setup card', () => {
+    const { container } = renderDetail({
+      entry: makeEntry({ connectForm: true }),
+      data: { ...baseData, integration: { ...connected, status: 'disconnected' } },
+    })
+    expect(within(header(container)).queryByRole('button', { name: 'Connect Slack' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Connect Slack' })).toBeInTheDocument()
+  })
+
+  it('keeps the credential gate when a disconnected provider lacks platform credentials', () => {
+    renderDetail({
+      data: {
+        ...baseData,
+        integration: { ...connected, status: 'disconnected' },
+        platformCredentialFields: [{ key: 'clientId', label: 'Client ID' }] as never,
+      },
+    })
+    expect(screen.queryByRole('button', { name: 'Connect Slack' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Configure credentials' })).toBeInTheDocument()
+  })
+
   it('hides Health while the integration is pending', () => {
     renderDetail({ data: { ...baseData, integration: { ...connected, status: 'pending' } } })
     expect(screen.queryByText('Health')).toBeNull()

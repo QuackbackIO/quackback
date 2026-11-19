@@ -1,3 +1,4 @@
+import { SlackConnectionActions } from './slack-connection-actions'
 import { SlackAgentCard } from './slack-agent-card'
 import { missingSlackScopes } from '../scopes'
 import { useState } from 'react'
@@ -149,9 +150,11 @@ export function SlackConfig({
           <p className="text-muted-foreground">
             Grant the new Slack permissions to use the assistant. Your notifications keep working.
           </p>
-          <a className="underline" href="/oauth/slack/connect">
-            Reconnect Slack
-          </a>
+          <SlackConnectionActions
+            integrationId={integrationId}
+            isConnected={false}
+            connectLabel="Reconnect Slack"
+          />
         </div>
       )}
       <SlackAgentCard />
