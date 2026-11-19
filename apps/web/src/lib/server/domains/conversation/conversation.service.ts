@@ -424,6 +424,24 @@ export async function sendVisitorMessage(
         }
         throw new ForbiddenError('FORBIDDEN', decision.reason)
       }
+      // A rating is only taken on a closed conversation. A rating tapped
+      // while it is open (or snoozed) is refused before anything is stored:
+      // a stored reply would mark the block answered, and the customer could
+      // not rate once the conversation closes. Read under the row lock, as
+      // recordCsat does, so a close or reopen that lands first wins.
+      if (resolvedBlockReply?.metadata.blockReply?.kind === 'csat') {
+        const [locked] = await tx
+          .select({ status: conversations.status })
+          .from(conversations)
+          .where(eq(conversations.id, existing.id))
+          .for('update')
+        if (locked?.status !== 'closed') {
+          throw new ConflictError(
+            CSAT_CONVERSATION_OPEN,
+            'This conversation is still open. It can be rated once it is resolved.'
+          )
+        }
+      }
       conversation = existing
       priorStatus = existing.status
       heldInSpam = isHeldInSpam(existing)

@@ -277,6 +277,9 @@ async function assertVisitorConversationAccess(ctx: AuthContext): Promise<void> 
 
 // ── Visitor functions ────────────────────────────────────────────────────
 
+/** A rating tapped on a csat block while the conversation is open: nothing was stored. */
+export type SendRatingRefusal = { ok: false; code: 'CSAT_CONVERSATION_OPEN' }
+
 /** Send a visitor message; creates the conversation on the first message. */
 export const runSendConversationMessage = createServerOnlyFn(
   async function runSendConversationMessage(ctx: AuthContext, data: SendConversationMessageInput) {
@@ -348,24 +351,34 @@ export const runSendConversationMessage = createServerOnlyFn(
 
     const actor = await policyActorFromAuth(ctx)
 
-    const { sendVisitorMessage } =
+    const { sendVisitorMessage, CSAT_CONVERSATION_OPEN } =
       await import('@/lib/server/domains/conversation/conversation.service')
-    return await sendVisitorMessage(
-      {
-        conversationId: data.conversationId as ConversationId | undefined,
-        content: data.content,
-        attachments: data.attachments as ConversationAttachment[] | undefined,
-        blockReply: data.blockReply,
-      },
-      {
-        principalId: ctx.principal.id,
-        displayName: ctx.user.name,
-        avatarUrl: ctx.user.image,
-        email: ctx.user.email,
-      },
-      actor,
-      (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
-    )
+    try {
+      return await sendVisitorMessage(
+        {
+          conversationId: data.conversationId as ConversationId | undefined,
+          content: data.content,
+          attachments: data.attachments as ConversationAttachment[] | undefined,
+          blockReply: data.blockReply,
+        },
+        {
+          principalId: ctx.principal.id,
+          displayName: ctx.user.name,
+          avatarUrl: ctx.user.image,
+          email: ctx.user.email,
+        },
+        actor,
+        (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
+      )
+    } catch (err) {
+      // A rating tapped while the conversation is open: returned as a value
+      // (a thrown typed error reaches the client without its code), so the
+      // surface can say so and keep the rating block tappable.
+      if (err instanceof ConflictError && err.code === CSAT_CONVERSATION_OPEN) {
+        return { ok: false, code: CSAT_CONVERSATION_OPEN } satisfies SendRatingRefusal
+      }
+      throw err
+    }
   }
 )
 

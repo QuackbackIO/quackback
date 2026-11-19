@@ -18,6 +18,7 @@ import {
   BlockButtonsRow,
   BlockCollectField,
   BlockCsatRow,
+  type CsatSubmitOutcome,
   BlockReplyTimeCaption,
 } from './block-affordance'
 import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
@@ -703,27 +704,35 @@ export function VisitorConversationThread({
   // the SSE echo (or refetch) is what actually flips the block's derived
   // state to 'chosen', collapsing the affordance — no local "chosen" flag.
   const sendBlockReply = useCallback(
-    async (blockReply: BlockReplyMetadata, displayText: string) => {
-      if (!conversationId || submittingBlockId) return
+    async (blockReply: BlockReplyMetadata, displayText: string): Promise<CsatSubmitOutcome> => {
+      if (!conversationId || submittingBlockId) return 'failed'
       setSubmittingBlockId(blockReply.inReplyToMessageId)
       try {
         const res = await rpc.sendConversationMessage({
           data: { conversationId, content: displayText, blockReply },
           headers: getAuthHeaders(),
         })
+        if ('ok' in res) {
+          // A rating tapped while the conversation is open: nothing was
+          // stored, so the block stays answerable once it is closed.
+          markReopened()
+          return 'refused'
+        }
         queryClient.setQueryData(
           conversationKeys.visitorThread(conversationId),
           (prev: VisitorThreadCache | undefined) => appendSentVisitorMessage(prev, res)
         )
         sendThrottle.clear()
+        return 'recorded'
       } catch (error) {
         // Leave it tappable again for a retry.
         sendThrottle.noteFailure(error)
+        return 'failed'
       } finally {
         setSubmittingBlockId(null)
       }
     },
-    [conversationId, submittingBlockId, getAuthHeaders, queryClient, sendThrottle]
+    [conversationId, submittingBlockId, getAuthHeaders, queryClient, sendThrottle, markReopened]
   )
 
   const handleButtonTap = useCallback(
@@ -739,12 +748,11 @@ export function VisitorConversationThread({
     [sendBlockReply]
   )
   const handleCsatRate = useCallback(
-    (messageId: string, rating: number) => {
-      void sendBlockReply(
+    (messageId: string, rating: number) =>
+      sendBlockReply(
         { kind: 'csat', inReplyToMessageId: messageId, rating },
         CSAT_FACES[rating - 1]
-      )
-    },
+      ),
     [sendBlockReply]
   )
   // The optional comment (amendment 1: "updates the same record best-effort
@@ -755,14 +763,21 @@ export function VisitorConversationThread({
   // the post-conversation star prompt below uses) — amendment 1's "CSAT
   // writes through recordCsat, latest-wins" is exactly this reuse.
   const handleCsatComment = useCallback(
-    (rating: number, comment: string) => {
-      if (!conversationId) return
-      void rpc.submitCsat({
-        data: { conversationId, rating, comment: comment || undefined },
-        headers: getAuthHeaders(),
-      })
+    async (rating: number, comment: string): Promise<CsatSubmitOutcome> => {
+      if (!conversationId) return 'failed'
+      try {
+        const result = await rpc.submitCsat({
+          data: { conversationId, rating, comment: comment || undefined },
+          headers: getAuthHeaders(),
+        })
+        if (result.ok) return 'recorded'
+        markReopened()
+        return 'refused'
+      } catch {
+        return 'failed'
+      }
     },
-    [conversationId, getAuthHeaders]
+    [conversationId, getAuthHeaders, markReopened]
   )
 
   // A workflow `request_csat` block message already IS the CSAT ask for this
@@ -1010,6 +1025,8 @@ export function VisitorConversationThread({
         },
         headers: getAuthHeaders(),
       })
+      // Only a rating can be refused this way, and the composer never sends one.
+      if ('ok' in res) throw new Error('The message was not sent')
       const isNewConversation = !conversationId
       const newId = res.conversation.id as ConversationId
       createdConversationIdRef.current = newId

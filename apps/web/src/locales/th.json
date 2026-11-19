@@ -867,6 +867,7 @@
   "widget.messenger.csat.prompt": "การสนทนาของคุณเป็นอย่างไรบ้าง",
   "widget.messenger.csat.send": "ส่งความคิดเห็น",
   "widget.messenger.csat.thanks": "ขอบคุณสำหรับความคิดเห็น!",
+  "widget.messenger.csat.notClosed": "คุณให้คะแนนได้เมื่อการสนทนานี้ปิดแล้ว",
   "widget.messenger.jumpToLatest": "ไปยังข้อความล่าสุด",
   "widget.messenger.loadOlder": "โหลดข้อความก่อนหน้า",
   "widget.messenger.loadingOlder": "กำลังโหลด…",

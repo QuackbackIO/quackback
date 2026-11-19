@@ -6,7 +6,7 @@
  * 'chosen'), and inline collect validation.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import {
   BlockButtonsRow,
@@ -15,6 +15,13 @@ import {
   BlockReplyTimeCaption,
 } from '../block-affordance'
 import type { WorkflowBlockPayload } from '@/lib/shared/db-types'
+
+// Reduced motion: no entrance animations, so a test that ends mid-animation
+// leaves no cancelled happy-dom animation behind.
+vi.mock('framer-motion', async (original) => ({
+  ...(await original<typeof import('framer-motion')>()),
+  useReducedMotion: () => true,
+}))
 
 afterEach(cleanup)
 
@@ -207,69 +214,132 @@ describe('BlockCollectField — collectReply', () => {
 })
 
 describe('BlockCsatRow', () => {
-  it('pending: tapping a face rates immediately and reveals the comment box', () => {
-    const onRate = vi.fn()
+  const recorded = () => vi.fn().mockResolvedValue('recorded')
+  const NOT_CLOSED = 'You can rate once this conversation is closed.'
+
+  it('pending: tapping a face rates and, once taken, reveals the comment box', async () => {
+    const onRate = recorded()
     withIntl(
       <BlockCsatRow
         block={csatBlock}
         state="pending"
         submitting={false}
         onRate={onRate}
-        onComment={vi.fn()}
+        onComment={recorded()}
       />
     )
     fireEvent.click(screen.getByLabelText('4 of 5'))
     expect(onRate).toHaveBeenCalledWith(4)
-    expect(screen.getByText('Thanks! Anything we could improve?')).toBeInTheDocument()
+    expect(await screen.findByText('Thanks! Anything we could improve?')).toBeInTheDocument()
   })
 
-  it('submitting the comment calls onComment with the picked rating, then shows thanks', () => {
-    const onComment = vi.fn()
+  it('submitting the comment calls onComment with the picked rating, then shows thanks', async () => {
+    const onComment = recorded()
     withIntl(
       <BlockCsatRow
         block={csatBlock}
         state="pending"
         submitting={false}
-        onRate={vi.fn()}
+        onRate={recorded()}
         onComment={onComment}
       />
     )
     fireEvent.click(screen.getByLabelText('5 of 5'))
-    fireEvent.change(screen.getByPlaceholderText('Add a comment (optional)'), {
+    fireEvent.change(await screen.findByPlaceholderText('Add a comment (optional)'), {
       target: { value: 'Great experience!' },
     })
     fireEvent.click(screen.getByText('Send feedback'))
     expect(onComment).toHaveBeenCalledWith(5, 'Great experience!')
-    expect(screen.getByText('Thanks for your feedback!')).toBeInTheDocument()
+    expect(await screen.findByText('Thanks for your feedback!')).toBeInTheDocument()
   })
 
-  it('survives the state flipping to chosen mid-flow (the echo lands while composing a comment)', () => {
+  it('a refused rating says why and keeps the faces tappable, never thanks', async () => {
+    const onRate = vi.fn().mockResolvedValue('refused')
+    withIntl(
+      <BlockCsatRow
+        block={csatBlock}
+        state="pending"
+        submitting={false}
+        onRate={onRate}
+        onComment={recorded()}
+      />
+    )
+    fireEvent.click(screen.getByLabelText('4 of 5'))
+    expect(await screen.findByText(NOT_CLOSED)).toBeInTheDocument()
+    expect(screen.queryByText('Thanks for your feedback!')).not.toBeInTheDocument()
+    expect(screen.queryByText('Thanks! Anything we could improve?')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('4 of 5')).toBeEnabled()
+
+    // Closed now: the next tap is taken.
+    onRate.mockResolvedValue('recorded')
+    fireEvent.click(screen.getByLabelText('5 of 5'))
+    expect(await screen.findByText('Thanks! Anything we could improve?')).toBeInTheDocument()
+    expect(screen.queryByText(NOT_CLOSED)).not.toBeInTheDocument()
+    expect(onRate).toHaveBeenLastCalledWith(5)
+  })
+
+  it('a failed rating puts the faces back for a retry, with no thanks', async () => {
+    withIntl(
+      <BlockCsatRow
+        block={csatBlock}
+        state="pending"
+        submitting={false}
+        onRate={vi.fn().mockResolvedValue('failed')}
+        onComment={recorded()}
+      />
+    )
+    fireEvent.click(screen.getByLabelText('2 of 5'))
+    await waitFor(() => expect(screen.getByLabelText('2 of 5')).toBeEnabled())
+    expect(screen.queryByText('Thanks! Anything we could improve?')).not.toBeInTheDocument()
+    expect(screen.queryByText(NOT_CLOSED)).not.toBeInTheDocument()
+  })
+
+  it('a refused comment says why instead of thanks', async () => {
+    withIntl(
+      <BlockCsatRow
+        block={csatBlock}
+        state="pending"
+        submitting={false}
+        onRate={recorded()}
+        onComment={vi.fn().mockResolvedValue('refused')}
+      />
+    )
+    fireEvent.click(screen.getByLabelText('5 of 5'))
+    fireEvent.click(await screen.findByText('Send feedback'))
+    expect(await screen.findByText(NOT_CLOSED)).toBeInTheDocument()
+    expect(screen.queryByText('Thanks for your feedback!')).not.toBeInTheDocument()
+  })
+
+  it('survives the state flipping to chosen mid-flow (the echo lands before the send answers)', async () => {
+    let answer: (outcome: 'recorded') => void = () => {}
+    const onRate = vi.fn(() => new Promise<'recorded'>((resolve) => (answer = resolve)))
     const { rerender } = withIntl(
       <BlockCsatRow
         block={csatBlock}
         state="pending"
         submitting={false}
-        onRate={vi.fn()}
-        onComment={vi.fn()}
+        onRate={onRate}
+        onComment={recorded()}
       />
     )
     fireEvent.click(screen.getByLabelText('3 of 5'))
-    expect(screen.getByText('Thanks! Anything we could improve?')).toBeInTheDocument()
 
-    // The rating's own SSE echo lands, flipping the derived state — the
-    // comment step must stay visible rather than collapsing to nothing.
+    // The rating's own SSE echo lands, flipping the derived state — the row
+    // must not collapse to nothing while the send is still out.
     rerender(
       <IntlProvider locale="en-US" messages={{}}>
         <BlockCsatRow
           block={csatBlock}
           state="chosen"
           submitting={false}
-          onRate={vi.fn()}
-          onComment={vi.fn()}
+          onRate={onRate}
+          onComment={recorded()}
         />
       </IntlProvider>
     )
-    expect(screen.getByText('Thanks! Anything we could improve?')).toBeInTheDocument()
+    expect(screen.getByLabelText('3 of 5')).toBeDisabled()
+    answer('recorded')
+    expect(await screen.findByText('Thanks! Anything we could improve?')).toBeInTheDocument()
   })
 
   it('a fresh mount on an already-chosen block (refresh) collapses to nothing', () => {
@@ -278,8 +348,8 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="chosen"
         submitting={false}
-        onRate={vi.fn()}
-        onComment={vi.fn()}
+        onRate={recorded()}
+        onComment={recorded()}
       />
     )
     expect(container).toBeEmptyDOMElement()
@@ -291,8 +361,8 @@ describe('BlockCsatRow', () => {
         block={csatBlock}
         state="superseded"
         submitting={false}
-        onRate={vi.fn()}
-        onComment={vi.fn()}
+        onRate={recorded()}
+        onComment={recorded()}
       />
     )
     // Inert faces render as plain text, not buttons — nothing to tap.

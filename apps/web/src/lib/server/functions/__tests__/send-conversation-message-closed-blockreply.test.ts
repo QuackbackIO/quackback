@@ -70,6 +70,7 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   getConversationForVisitor: hoisted.getConversationForVisitor,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  CSAT_CONVERSATION_OPEN: 'CSAT_CONVERSATION_OPEN',
   resolveVisitorBlockReply: hoisted.resolveVisitorBlockReply,
   sendVisitorMessage: hoisted.sendVisitorMessage,
 }))
@@ -77,6 +78,7 @@ vi.mock('@/lib/server/domains/conversation/conversation.ratelimit', () => ({
   assertConversationSendRate: hoisted.assertConversationSendRate,
 }))
 
+import { ConflictError } from '@/lib/shared/errors'
 import { sendConversationMessageFn } from '../conversation'
 
 beforeEach(() => {
@@ -180,5 +182,30 @@ describe('sendConversationMessageFn: prevent-replies-when-closed carve-out (SF3)
       sendConversationMessageFn({ data: { ...baseData, content: 'hi again' } })
     ).resolves.toBeDefined()
     expect(hoisted.sendVisitorMessage).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('sendConversationMessageFn: a rating tapped on an open conversation', () => {
+  it('returns the refusal as a value, so the surface can show it', async () => {
+    hoisted.getMessengerConfig.mockResolvedValue({ preventRepliesWhenClosed: false })
+    hoisted.sendVisitorMessage.mockRejectedValue(
+      new ConflictError('CSAT_CONVERSATION_OPEN', 'This conversation is still open.')
+    )
+    await expect(
+      sendConversationMessageFn({
+        data: {
+          ...baseData,
+          blockReply: { kind: 'csat', inReplyToMessageId: 'conversation_msg_block1', rating: 4 },
+        },
+      })
+    ).resolves.toEqual({ ok: false, code: 'CSAT_CONVERSATION_OPEN' })
+  })
+
+  it('still throws any other failure', async () => {
+    hoisted.getMessengerConfig.mockResolvedValue({ preventRepliesWhenClosed: false })
+    hoisted.sendVisitorMessage.mockRejectedValue(new ConflictError('OTHER', 'Something else'))
+    await expect(
+      sendConversationMessageFn({ data: { ...baseData, content: 'hi' } })
+    ).rejects.toThrow('Something else')
   })
 })

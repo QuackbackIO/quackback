@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "Як пройшла ваша розмова?",
   "widget.messenger.csat.send": "Надіслати відгук",
   "widget.messenger.csat.thanks": "Дякуємо за ваш відгук!",
+  "widget.messenger.csat.notClosed": "Оцінити можна, коли цю розмову буде закрито.",
   "widget.messenger.jumpToLatest": "Перейти до останніх",
   "widget.messenger.loadOlder": "Завантажити попередні повідомлення",
   "widget.messenger.loadingOlder": "Завантаження…",

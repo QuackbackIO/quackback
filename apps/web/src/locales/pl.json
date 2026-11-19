@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "Jak oceniasz rozmowę?",
   "widget.messenger.csat.send": "Wyślij opinię",
   "widget.messenger.csat.thanks": "Dziękujemy za opinię!",
+  "widget.messenger.csat.notClosed": "Możesz ocenić, gdy ta rozmowa zostanie zamknięta.",
   "widget.messenger.jumpToLatest": "Przejdź do najnowszych",
   "widget.messenger.loadOlder": "Wczytaj wcześniejsze wiadomości",
   "widget.messenger.loadingOlder": "Wczytywanie…",

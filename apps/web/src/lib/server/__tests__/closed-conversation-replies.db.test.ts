@@ -54,6 +54,7 @@ async function seed(preventRepliesWhenClosed: boolean): Promise<AuthContext> {
 
 async function closedThread(ctx: AuthContext): Promise<string> {
   const sent = await runSendConversationMessage(ctx, { content: 'Hi! Is anyone there?' })
+  if ('ok' in sent) throw new Error('A plain message is never refused as a rating')
   const id = sent.conversation.id
   await testDb
     .update(conversations)

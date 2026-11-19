@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "كيف كانت محادثتك؟",
   "widget.messenger.csat.send": "إرسال الملاحظات",
   "widget.messenger.csat.thanks": "شكرًا على ملاحظاتك!",
+  "widget.messenger.csat.notClosed": "يمكنك التقييم بعد إغلاق هذه المحادثة.",
   "widget.messenger.jumpToLatest": "الانتقال إلى الأحدث",
   "widget.messenger.loadOlder": "تحميل الرسائل السابقة",
   "widget.messenger.loadingOlder": "جارٍ التحميل…",

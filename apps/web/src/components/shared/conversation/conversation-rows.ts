@@ -44,7 +44,9 @@ import { INTERACTIVE_BLOCK_KINDS } from '@/lib/shared/db-types'
  * catch it). When no `chat_ended` row exists at all (older data predating
  * this event, or a status derived without ever routing through the emitter)
  * there's no in-list signal to key on, so every block conservatively counts
- * as predating the close — the exact pre-amendment-3 behavior.
+ * as predating the close — the exact pre-amendment-3 behavior. A csat block
+ * is the exception: a close never supersedes it, since a rating is only
+ * taken once the conversation is closed.
  *
  * The `BlockState` union itself now lives in lib/shared/conversation/types.ts
  * (re-exported here unchanged) so lib/client code can type a block-states map
@@ -113,7 +115,11 @@ export function computeBlockStates(
       continue
     }
     const id = m.id as unknown as string
-    const predatesLastClose = !hasCloseSignal || i < lastCloseIndex
+    // A csat block is never superseded by a close alone: a rating is only
+    // taken once the conversation is closed, so a close is exactly when the
+    // ask should be answerable (a tap refused while it was open stored
+    // nothing, and must work after the next close).
+    const predatesLastClose = m.block.kind !== 'csat' && (!hasCloseSignal || i < lastCloseIndex)
     if (replyTargets.has(id)) {
       states.set(id, 'chosen')
     } else if (

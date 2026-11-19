@@ -612,6 +612,7 @@
   "widget.messenger.csat.prompt": "¿Qué te pareció la conversación?",
   "widget.messenger.csat.send": "Enviar comentarios",
   "widget.messenger.csat.thanks": "¡Gracias por tus comentarios!",
+  "widget.messenger.csat.notClosed": "Podrás valorar cuando esta conversación esté cerrada.",
   "widget.messenger.jumpToLatest": "Ir a lo más reciente",
   "widget.messenger.loadOlder": "Cargar mensajes anteriores",
   "widget.messenger.loadingOlder": "Cargando…",
