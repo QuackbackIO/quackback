@@ -232,7 +232,8 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'widget/install',
     'workflows',
   ].map((page) => ({ path: `/admin/settings/${page}`, as: 'admin' as const })),
-  ...['/roadmap', '/changelog', '/hc', '/support', '/notifications'].map((path) => ({
+  // /notifications is left out for a visitor: it sends them to sign in.
+  ...['/roadmap', '/changelog', '/hc', '/support'].map((path) => ({
     path,
     as: 'anon' as const,
   })),
