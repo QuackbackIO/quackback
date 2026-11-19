@@ -16,7 +16,9 @@
  *
  * TRUSTED-SENDER BYPASS. A sender on the workspace trust list
  * (settings.spam) never reaches the model at all: the workspace's explicit
- * "never spam" list outranks any classifier verdict.
+ * "never spam" list outranks any classifier verdict. Only an address the
+ * sender is known to own is matched against it (`trustedSenderEmail`): an
+ * address someone merely typed proves nothing about who they are.
  *
  * WORKSPACE SWITCH. `aiClassifier` in the same settings turns the model call
  * off entirely. The deterministic sender signals are not AI and still run.
@@ -61,9 +63,14 @@ const VerdictSchema = z.object({ spam: z.boolean().catch(false) }).catch({ spam:
 
 export interface ClassifyInboundSpamInput {
   /** Canonical sender address (already normalized by the ingest path), or
-   *  null when the channel has none — a null sender can never be trusted, so
-   *  classification proceeds. */
+   *  null when the channel has none. Keys the burst signal and logging. */
   senderEmail: string | null
+  /** The address the workspace trust list may match: one the sender is known
+   *  to own. On email it is the From the ingest path already authenticated;
+   *  on the messenger only a confirmed account email (a verified sign-in or
+   *  widget identity token), never an address the visitor typed. Null means
+   *  the sender can never be trusted, so classification proceeds. */
+  trustedSenderEmail: string | null
   /** The sender's principal, for a channel that knows it (the messenger).
    *  The burst signal counts on it when there is no sender address. */
   senderPrincipalId?: string | null
@@ -112,8 +119,8 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
     return false
   }
   if (!spamConfig.aiClassifier) return false
-  if (isTrustedSender(input.senderEmail, spamConfig.trustedSenders)) {
-    log.info({ sender: input.senderEmail }, 'spam filing bypassed: trusted sender')
+  if (isTrustedSender(input.trustedSenderEmail, spamConfig.trustedSenders)) {
+    log.info({ sender: input.trustedSenderEmail }, 'spam filing bypassed: trusted sender')
     return false
   }
 
@@ -181,7 +188,7 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
  * once per message.
  */
 export async function fixedSpamSignalFor(
-  input: Pick<ClassifyInboundSpamInput, 'senderEmail'> & {
+  input: Pick<ClassifyInboundSpamInput, 'senderEmail' | 'trustedSenderEmail'> & {
     signals?: SpamSignalHints
   },
   visitorPrincipalId: string
@@ -189,7 +196,7 @@ export async function fixedSpamSignalFor(
   try {
     const { isTestCustomer } = await import('@/lib/server/test-data')
     if (await isTestCustomer(visitorPrincipalId)) return null
-    if (await isTrustedInboundSender(input.senderEmail)) return null
+    if (await isTrustedInboundSender(input.trustedSenderEmail)) return null
     const { detectSpamSignal } = await import('./conversation.spam-signals')
     return await detectSpamSignal({
       senderEmail: input.senderEmail,
@@ -225,7 +232,7 @@ export async function maybeAutoFileSpam(
     // A teammate's test thread is never spam, and spends no classification.
     const { isTestConversation } = await import('@/lib/server/test-data')
     if (await isTestConversation(conversationId)) return false
-    if (await isTrustedInboundSender(input.senderEmail)) return false
+    if (await isTrustedInboundSender(input.trustedSenderEmail)) return false
     const { detectSpamSignal } = await import('./conversation.spam-signals')
     const signal = input.signalsChecked
       ? null

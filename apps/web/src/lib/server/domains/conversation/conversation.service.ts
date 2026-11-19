@@ -275,6 +275,31 @@ export async function resolveVisitorBlockReply(
   return resolveBlockReply(belongsHere ? blockMessage : null, !!alreadyAnswered, input)
 }
 
+/**
+ * The account email a visitor has proven they own, or null. Confirmed means
+ * the account's address is verified: a sign-in through the mailbox or an
+ * identity provider, or a widget identity token the host app signed. An
+ * anonymous visitor has none, and neither does a password sign-up nobody
+ * confirmed. Read from the account, never from what the caller passed, so no
+ * channel can vouch for an address on the visitor's behalf.
+ */
+async function confirmedAccountEmail(principalId: PrincipalId): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ email: user.email, emailVerified: user.emailVerified, type: principal.type })
+      .from(principal)
+      .innerJoin(user, eq(user.id, principal.userId))
+      .where(eq(principal.id, principalId))
+      .limit(1)
+    if (!row || row.type === 'anonymous' || !row.emailVerified) return null
+    return normalizeEmail(realEmail(row.email) ?? undefined) ?? null
+  } catch (err) {
+    // Unreadable means unproven: the spam filter still runs, just untrusted.
+    log.warn({ err, principal_id: principalId }, 'confirmed account email unreadable')
+    return null
+  }
+}
+
 /** Visitor send. Starts a conversation when no conversationId is supplied. */
 export async function sendVisitorMessage(
   input: SendVisitorMessageInput,
@@ -358,10 +383,19 @@ export async function sendVisitorMessage(
     : (normalizeEmail(realEmail(author.email) ?? undefined) ??
       normalizeEmail(input.visitorEmail) ??
       null)
+  // Only an address the visitor proved they own may match the workspace trust
+  // list. One typed before the chat still keys the burst rule, but proves
+  // nothing about who they are.
+  const trustedSpamSenderEmail = input.conversationId
+    ? null
+    : await confirmedAccountEmail(author.principalId)
   const fixedSpamSignal = input.conversationId
     ? null
     : await import('./conversation.spam-filter').then((m) =>
-        m.fixedSpamSignalFor({ senderEmail: spamSenderEmail }, author.principalId)
+        m.fixedSpamSignalFor(
+          { senderEmail: spamSenderEmail, trustedSenderEmail: trustedSpamSenderEmail },
+          author.principalId
+        )
       )
 
   let created = false
@@ -626,6 +660,7 @@ export async function sendVisitorMessage(
       .then((m) =>
         m.maybeAutoFileSpam(txResult.conversation.id, {
           senderEmail: spamSenderEmail,
+          trustedSenderEmail: trustedSpamSenderEmail,
           senderPrincipalId: author.principalId,
           subject: null,
           content: content || fallbackLabel,

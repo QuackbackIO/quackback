@@ -92,6 +92,13 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: vi.fn().mockResolvedValue(undefined),
 }))
 
+// The real filter, wrapped so a test can await the outcome of the run the
+// visitor send starts in the background.
+vi.mock('../conversation.spam-filter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../conversation.spam-filter')>()
+  return { ...actual, maybeAutoFileSpam: vi.fn(actual.maybeAutoFileSpam) }
+})
+
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
 import { listConversationsForAgent } from '../conversation.query'
 import { maybeAutoFileSpam } from '../conversation.spam-filter'
@@ -239,6 +246,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
       .returning()
     const filed = await maybeAutoFileSpam(thread.id, {
       senderEmail: null,
+      trustedSenderEmail: null,
       subject: null,
       content: 'Hi! Is anyone there? Claim your prize now.',
       signals: { autoResponder: true },
@@ -515,5 +523,170 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     await expect(spamViewIds()).resolves.toContain(res.conversationId)
     await expect(spamViewReason(res.conversationId)).resolves.toBe('sender_auth_reject')
     expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  // A widget visitor can type any address before a chat, so that address may
+  // key the burst counter and carry replies, but it never makes them a
+  // trusted sender. Only an address the person proved they own does: a
+  // confirmed account email (a verified sign-in or widget identity token).
+  describe('the trust list on the messenger', () => {
+    // An earlier burst test leaves its counter in place; start each one quiet.
+    beforeEach(async () => {
+      const { incrementBucket } = await import('@/lib/server/utils/rate-bucket')
+      vi.mocked(incrementBucket).mockImplementation(async () => ({ count: 1 }))
+    })
+
+    /** The settled result of the filter run the most recent send started. */
+    async function filterOutcome(): Promise<boolean> {
+      const run = vi.mocked(maybeAutoFileSpam)
+      await vi.waitFor(() => expect(run).toHaveBeenCalled(), { timeout: 5000, interval: 20 })
+      return await run.mock.results.at(-1)!.value
+    }
+
+    async function seedVisitor(opts: {
+      type: 'anonymous' | 'user'
+      email?: string
+      emailVerified?: boolean
+    }): Promise<{ principalId: PrincipalId; email: string }> {
+      const userId = createId('user') as UserId
+      const principalId = createId('principal') as PrincipalId
+      const email = opts.email ?? `temp-${userId}@anon.quackback.io`
+      await testDb.insert(user).values({
+        id: userId,
+        name: 'Visitor',
+        email,
+        emailVerified: opts.emailVerified ?? false,
+      })
+      await testDb.insert(principal).values({
+        id: principalId,
+        userId,
+        role: 'user',
+        type: opts.type,
+        createdAt: new Date(),
+      })
+      return { principalId, email }
+    }
+
+    const visitorActor = (principalId: PrincipalId, type: 'anonymous' | 'user'): Actor => ({
+      principalId,
+      role: 'user',
+      principalType: type,
+      segmentIds: new Set(),
+    })
+
+    async function storedConversation(id: string) {
+      return testDb.query.conversations.findFirst({ where: eq(conversations.id, id as never) })
+    }
+
+    it('does not let a typed pre-chat email on a trusted domain skip the filter', async () => {
+      await seedWorkspace(['acme.com'])
+      mockChat.mockResolvedValue({ spam: true })
+      const visitor = await seedVisitor({ type: 'anonymous' })
+
+      const res = await sendVisitorMessage(
+        { content: 'Cheap watches, best prices', visitorEmail: 'boss@acme.com' },
+        { principalId: visitor.principalId, displayName: null, email: visitor.email },
+        visitorActor(visitor.principalId, 'anonymous')
+      )
+
+      await expect(filterOutcome()).resolves.toBe(true)
+      expect(mockChat).toHaveBeenCalledTimes(1)
+      const stored = await storedConversation(res.conversation.id)
+      expect(stored?.visitorEmail).toBe('boss@acme.com')
+      expect(stored?.spamReason).toBe('ai_classifier')
+    })
+
+    // The burst rule runs before the thread exists, so the thread is filed in
+    // its insert, with no trust bypass for the typed address.
+    it('still counts a burst on the typed pre-chat email, on a trusted domain too', async () => {
+      await seedWorkspace(['example.com'])
+      mockChat.mockResolvedValue({ spam: false })
+      const { incrementBucket } = await import('@/lib/server/utils/rate-bucket')
+      vi.mocked(incrementBucket).mockImplementation(async (spec: { key: string }) => ({
+        count: spec.key.includes(':burst:') ? 5 : 1,
+      }))
+      const visitor = await seedVisitor({ type: 'anonymous' })
+
+      const res = await sendVisitorMessage(
+        { content: 'Hello', visitorEmail: 'Typed@Example.com' },
+        { principalId: visitor.principalId, displayName: null, email: visitor.email },
+        visitorActor(visitor.principalId, 'anonymous')
+      )
+
+      expect((await storedConversation(res.conversation.id))?.spamReason).toBe('burst_rate')
+      expect(maybeAutoFileSpam).not.toHaveBeenCalled()
+      const burstKeys = vi
+        .mocked(incrementBucket)
+        .mock.calls.map(([spec]) => (spec as { key: string }).key)
+        .filter((key) => key.includes(':burst:'))
+      expect(burstKeys).toEqual(['conversation:cold:burst:typed@example.com'])
+    })
+
+    it('does not trust an account email the person never confirmed', async () => {
+      await seedWorkspace(['acme.com'])
+      mockChat.mockResolvedValue({ spam: true })
+      // A password sign-up is signed in at once, before any address check.
+      const visitor = await seedVisitor({
+        type: 'user',
+        email: `signup-${suffix()}@acme.com`,
+        emailVerified: false,
+      })
+
+      const res = await sendVisitorMessage(
+        { content: 'Cheap watches, best prices' },
+        { principalId: visitor.principalId, displayName: 'Signup', email: visitor.email },
+        visitorActor(visitor.principalId, 'user')
+      )
+
+      await expect(filterOutcome()).resolves.toBe(true)
+      expect((await storedConversation(res.conversation.id))?.spamReason).toBe('ai_classifier')
+    })
+
+    it('keeps the bypass for a confirmed account email on a trusted domain', async () => {
+      await seedWorkspace(['acme.com'])
+      mockChat.mockResolvedValue({ spam: true })
+      const visitor = await seedVisitor({
+        type: 'user',
+        email: `known-${suffix()}@acme.com`,
+        emailVerified: true,
+      })
+
+      const res = await sendVisitorMessage(
+        { content: 'Cheap watches, best prices' },
+        { principalId: visitor.principalId, displayName: 'Known', email: visitor.email },
+        visitorActor(visitor.principalId, 'user')
+      )
+
+      await expect(filterOutcome()).resolves.toBe(false)
+      expect(mockChat).not.toHaveBeenCalled()
+      const stored = await storedConversation(res.conversation.id)
+      expect(stored?.status).toBe('open')
+      expect(stored?.endReason).toBeNull()
+    })
+
+    it('keeps the bypass for a confirmed account email even when the burst rule matches', async () => {
+      await seedWorkspace(['acme.com'])
+      mockChat.mockResolvedValue({ spam: true })
+      const { incrementBucket } = await import('@/lib/server/utils/rate-bucket')
+      vi.mocked(incrementBucket).mockImplementation(async (spec: { key: string }) => ({
+        count: spec.key.includes(':burst:') ? 5 : 1,
+      }))
+      const visitor = await seedVisitor({
+        type: 'user',
+        email: `busy-${suffix()}@acme.com`,
+        emailVerified: true,
+      })
+
+      const res = await sendVisitorMessage(
+        { content: 'Another question' },
+        { principalId: visitor.principalId, displayName: 'Busy', email: visitor.email },
+        visitorActor(visitor.principalId, 'user')
+      )
+
+      await expect(filterOutcome()).resolves.toBe(false)
+      const stored = await storedConversation(res.conversation.id)
+      expect(stored?.status).toBe('open')
+      expect(stored?.spamReason).toBeNull()
+    })
   })
 })
