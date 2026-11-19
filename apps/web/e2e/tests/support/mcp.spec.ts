@@ -684,7 +684,8 @@ test.describe('MCP tickets', () => {
     async ({ playwright, baseURL, people, marker }) => {
       const customer = await seedCustomer(`${marker}@customers.example`)
       const api = await keyApi(playwright, baseURL, { creatorEmail: people.people.admin.email })
-      const description = 'd'.repeat(6000) // over REST's 4000 characters, within MCP's 10000
+      // The description opens the thread, so it has the message limit (4000).
+      const description = 'd'.repeat(4000)
       const res = await mcpCall(api, 'create_ticket', {
         type: 'customer',
         title: `MCP ${marker}`,
@@ -696,8 +697,23 @@ test.describe('MCP tickets', () => {
         ['id', 'number', 'priority', 'reference', 'stage', 'status', 'title', 'type'].sort()
       )
       expect(res.json).toMatchObject({ type: 'customer', title: `MCP ${marker}` })
-      expect(await backingConversationOf(res.json.id)).toMatch(/^conversation_/)
+      const conversationId = await backingConversationOf(res.json.id)
+      expect(conversationId).toMatch(/^conversation_/)
+      // The opening message landed on the backing conversation.
+      const opening = await supportDb()`SELECT content FROM conversation_messages
+                           WHERE conversation_id = ${uuidOf(conversationId!)}`
+      expect(opening.map((r) => r.content)).toEqual([description])
       await waitForEvent(res.json.id, 'ticket.created')
+
+      // Longer text is refused up front instead of opening a ticket without it.
+      const tooLong = await mcpCall(api, 'create_ticket', {
+        type: 'customer',
+        title: `MCP long ${marker}`,
+        description: 'd'.repeat(4001),
+        requesterPrincipalId: customer.principalId,
+      })
+      expect(tooLong.isError).toBe(true)
+      expect(tooLong.text).toContain('4000')
 
       const ro = await keyApi(playwright, baseURL, {
         creatorEmail: people.people.admin.email,
@@ -740,15 +756,8 @@ test.describe('MCP tickets', () => {
   )
 
   test(
-    'API-63 reply_to_ticket and add_ticket_note take up to 10000 characters as advertised',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The tools advertise content up to 10000 characters (mcp/tools/tickets.ts:328,371) but the shared message write refuses over 4000 (messages/message-core.ts:93).',
-      },
-    },
+    'API-63 reply_to_ticket and add_ticket_note take up to 4000 characters, the message limit',
+    { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await keyApi(playwright, baseURL, { creatorEmail: people.people.admin.email })
       const created = await mcpCall(api, 'create_ticket', {
@@ -757,8 +766,11 @@ test.describe('MCP tickets', () => {
       })
       const ticketId = created.json.id as string
       for (const tool of ['reply_to_ticket', 'add_ticket_note']) {
-        const res = await mcpCall(api, tool, { ticketId, content: 'x'.repeat(9000) })
+        const res = await mcpCall(api, tool, { ticketId, content: 'x'.repeat(4000) })
         expect(res.isError, `${tool}: ${res.text}`).toBe(false)
+        const tooLong = await mcpCall(api, tool, { ticketId, content: 'x'.repeat(4001) })
+        expect(tooLong.isError, `${tool}: ${tooLong.text}`).toBe(true)
+        expect(tooLong.text).toContain('4000')
       }
       await api.dispose()
     }
