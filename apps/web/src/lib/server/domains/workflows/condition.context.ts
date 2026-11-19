@@ -12,7 +12,8 @@
  * first-class person.country / person.locale / person.plan) are
  * resolved by one extra query alongside the rest (resolvePersonCompanyContext
  * below): the visitor principal's own user row (email, country, locale
- * columns; metadata for attributes and plan), plus their linked
+ * columns; metadata for attributes and plan), the principal's contact email
+ * (an email sender with no account has only that), plus their linked
  * company's attributes via principal.company_id. An anonymous visitor or one
  * with no company simply misses the corresponding join — the evaluator's
  * unresolved-subject contract (condition.evaluator.ts) already handles an
@@ -77,6 +78,7 @@ async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
   const [row] = await db
     .select({
       userEmail: user.email,
+      contactEmail: principal.contactEmail,
       userMetadata: user.metadata,
       userCountry: user.country,
       userLocale: user.locale,
@@ -90,10 +92,13 @@ async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
 
   const attributes = parseUserAttributes(row?.userMetadata ?? null)
   return {
-    // realEmail() strips the synthetic anonymous placeholder — an anonymous
-    // visitor (no user row at all) already reads null via the left join.
+    // The account email first, then the contact email: a sender who wrote in
+    // by email and has no account is a lead with no user row, whose address
+    // lives only on the principal (conversation.email-cold-inbound.ts). The
+    // same precedence every reply email uses (contactRecipientFrom).
+    // realEmail() strips the synthetic anonymous placeholder from either.
     person: {
-      email: realEmail(row?.userEmail ?? null),
+      email: realEmail(row?.userEmail) ?? realEmail(row?.contactEmail),
       country: row?.userCountry ?? null,
       locale: row?.userLocale ?? null,
       // The plan label lives in user.metadata under the `plan` key — the
