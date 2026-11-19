@@ -41,32 +41,45 @@ async function ring(
 }
 
 /**
- * The hostname stopped reaching this server; it stays verified until
- * `deadline`. Worded as the Custom domains card words it: Needs attention, Not
- * answering, and the date.
+ * Why a hostname was marked: its DNS (no address, or something else answers),
+ * or the verification record that covered it.
+ */
+export type SectionDomainMarkReason = 'dns' | 'record'
+
+/**
+ * The hostname was marked; it stays verified until `deadline`. Worded as the
+ * Custom domains card words it, naming the real fix: DNS only when DNS is
+ * what is wrong, otherwise verifying its domain.
  */
 export async function notifySectionDomainNotAnswering(
   section: PortalSection,
   hostname: string,
-  deadline: Date
+  deadline: Date,
+  reason: SectionDomainMarkReason
 ): Promise<void> {
+  const label = usedForLabel(section)
+  const by = formatDeadline(deadline)
   await ring(
     section,
     hostname,
     `${hostname} needs attention`,
-    `The ${usedForLabel(section)} domain is not answering. Fix its DNS by ${formatDeadline(deadline)} to keep it verified.`
+    reason === 'record'
+      ? `Domain verification failed for the ${label} domain. Verify its domain in Settings > Domains by ${by} to keep it.`
+      : `The ${label} domain is not answering. Fix its DNS by ${by} to keep it verified.`
   )
 }
 
 /** The hostname still did not reach this server when its grace ran out: its section is back on the primary domain. */
 export async function notifySectionDomainLapsed(
   section: PortalSection,
-  hostname: string
+  hostname: string,
+  reason: SectionDomainMarkReason
 ): Promise<void> {
+  const fix = reason === 'record' ? 'Verify its domain in Settings > Domains' : 'Fix the DNS'
   await ring(
     section,
     hostname,
     `${hostname} is no longer verified`,
-    `${usedForLabel(section)} is back on the primary domain. Fix the DNS, then verify it again.`
+    `${usedForLabel(section)} is back on the primary domain. ${fix}, then verify it again.`
   )
 }

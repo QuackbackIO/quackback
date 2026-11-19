@@ -25,6 +25,8 @@ const side = vi.hoisted(() => ({
   status: { dnsResolved: true, instanceReachable: true, verified: true },
   dnsAnswered: true,
   primaryHosts: [] as (string | null | undefined)[],
+  /** What answered when this server did not: nothing, or another server. */
+  instance: 'unreachable' as 'unreachable' | 'other',
 }))
 vi.mock('@/lib/server/domains/domain-proof/ensure-domain', () => ({
   ensureDomainForCustomDomain: async (hostname: string) => {
@@ -46,7 +48,7 @@ vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
       status: side.status,
       dnsAnswered: side.dnsAnswered,
       dns: side.status.dnsResolved ? 'resolved' : side.dnsAnswered ? 'absent' : 'unknown',
-      instance: side.status.instanceReachable ? 'ok' : 'unreachable',
+      instance: side.status.instanceReachable ? 'ok' : side.instance,
     }
   },
 }))
@@ -129,6 +131,7 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
     side.status = { dnsResolved: true, instanceReachable: true, verified: true }
     side.dnsAnswered = true
     side.primaryHosts = []
+    side.instance = 'unreachable'
     zone.txt = new Map()
     await fixture.begin()
   })
@@ -250,9 +253,10 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       })
     })
 
-    it('marks, never drops, a verified hostname that stops answering with no record to vouch for it', async () => {
+    it('marks, never drops, a verified hostname another server now answers on', async () => {
       await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
       side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      side.instance = 'other'
       await verifySectionDomain('help')
 
       // Sign-in stops there (marked); routing keeps the grace; the daily run ends it.
@@ -260,6 +264,19 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
         hostname: 'help.acme.com',
         verifiedAt: NOW,
         unconfirmedSince: expect.any(String),
+        unconfirmedReason: 'dns',
+      })
+    })
+
+    it('keeps a verified hostname no record covers with a warning to verify its domain', async () => {
+      await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
+      side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      await verifySectionDomain('help')
+
+      expect((await getSectionDomains()).help).toEqual({
+        hostname: 'help.acme.com',
+        verifiedAt: NOW,
+        reachWarning: { reason: 'unverified', since: expect.any(String) },
       })
     })
 
@@ -273,6 +290,7 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
         }),
       })
       side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      side.instance = 'other'
       await verifySectionDomain('help')
       expect((await getSectionDomains()).help?.unconfirmedSince).toBe(since)
     })
@@ -376,6 +394,7 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
           hostname: 'help.acme.com',
           verifiedAt: NOW,
           unconfirmedSince: expect.any(String),
+          unconfirmedReason: 'record',
         })
       })
 

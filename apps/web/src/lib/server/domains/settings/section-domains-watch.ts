@@ -17,6 +17,9 @@
  *   through a hostname that works for everyone else, and must not lose the
  *   hostname for it. An unreachable check also ends a mark: the record says
  *   the hostname is still ours.
+ * - unverified (the same as unreachable, but no verification record covers
+ *   the hostname and none ever did): a warning asking for its domain to be
+ *   verified on Settings > Domains. No grace: nothing says it changed hands.
  * - failed (no address, something else answers, or the record is gone): it
  *   is judged much as a domain added by name is (`domain-ownership-watch.ts`).
  *   A hostname that fails on two daily runs in a row is marked unconfirmed
@@ -115,7 +118,13 @@ async function check(
 
 /** The entry without any of the watch's own notes. */
 function bare(entry: SectionDomain): SectionDomain {
-  const { unconfirmedSince: _mark, missedAt: _missed, reachWarning: _warning, ...rest } = entry
+  const {
+    unconfirmedSince: _mark,
+    unconfirmedReason: _reason,
+    missedAt: _missed,
+    reachWarning: _warning,
+    ...rest
+  } = entry
   return rest
 }
 
@@ -141,6 +150,14 @@ function decide(entry: SectionDomain, result: SectionDomainCheck, now: Date): De
     if (same(entry, next)) return null
     return { next, event: entry.reachWarning ? 'cleared' : 'warned' }
   }
+  if (result === 'unverified') {
+    // Nothing says it changed hands, and nothing proves it did not: no grace,
+    // but a mark from an earlier failure stays as it was.
+    if (entry.unconfirmedSince) return null
+    const next = { ...bare(entry), reachWarning: warning(entry, 'unverified', now) }
+    if (same(entry, next)) return null
+    return { next, event: entry.reachWarning ? 'cleared' : 'warned' }
+  }
   if (result === 'unsure') {
     // Says nothing either way: a mark or a first miss stays as it was.
     if (entry.unconfirmedSince) return null
@@ -157,7 +174,14 @@ function decide(entry: SectionDomain, result: SectionDomainCheck, now: Date): De
     if (now.getTime() - missed < SECOND_MISS_AFTER_MS) {
       return entry.reachWarning ? { next: rest, event: 'cleared' } : null
     }
-    return { next: { ...bare(entry), unconfirmedSince: now.toISOString() }, event: 'unconfirmed' }
+    return {
+      next: {
+        ...bare(entry),
+        unconfirmedSince: now.toISOString(),
+        unconfirmedReason: result === 'failed-record' ? 'record' : 'dns',
+      },
+      event: 'unconfirmed',
+    }
   }
   const since = Date.parse(entry.unconfirmedSince)
   // The same boundary routing uses: a mark it cannot read has no grace left.
@@ -172,6 +196,7 @@ function same(a: SectionDomain | undefined, b: SectionDomain): boolean {
     a.hostname === b.hostname &&
     a.verifiedAt === b.verifiedAt &&
     (a.unconfirmedSince ?? null) === (b.unconfirmedSince ?? null) &&
+    (a.unconfirmedReason ?? null) === (b.unconfirmedReason ?? null) &&
     (a.missedAt ?? null) === (b.missedAt ?? null) &&
     (a.reachWarning?.reason ?? null) === (b.reachWarning?.reason ?? null) &&
     (a.reachWarning?.since ?? null) === (b.reachWarning?.since ?? null)
@@ -271,7 +296,8 @@ export async function watchSectionDomains(
         await notifySectionDomainNotAnswering(
           section,
           hostname,
-          new Date(since + UNCONFIRMED_GRACE_MS)
+          new Date(since + UNCONFIRMED_GRACE_MS),
+          decision.next.unconfirmedReason ?? 'dns'
         )
         break
       }
@@ -281,7 +307,7 @@ export async function watchSectionDomains(
           { section, hostname },
           'section domain still does not reach this server after the grace; it is no longer verified'
         )
-        await notifySectionDomainLapsed(section, hostname)
+        await notifySectionDomainLapsed(section, hostname, entry.unconfirmedReason ?? 'dns')
         break
       case 'cleared':
         break

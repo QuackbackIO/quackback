@@ -121,11 +121,18 @@ vi.mock('@/lib/server/dns/resolver', () => {
 
 const notices = vi.hoisted(() => ({
   notAnswering: [] as { hostname: string; deadline: Date }[],
+  reasons: [] as string[],
   lapsed: [] as string[],
 }))
 vi.mock('../section-domains-notify', () => ({
-  notifySectionDomainNotAnswering: async (_section: string, hostname: string, deadline: Date) => {
+  notifySectionDomainNotAnswering: async (
+    _section: string,
+    hostname: string,
+    deadline: Date,
+    reason: string
+  ) => {
     notices.notAnswering.push({ hostname, deadline })
+    notices.reasons.push(reason)
   },
   notifySectionDomainLapsed: async (_section: string, hostname: string) => {
     notices.lapsed.push(hostname)
@@ -177,6 +184,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     zone.txt = new Map()
     zone.asked = []
     notices.notAnswering = []
+    notices.reasons = []
     notices.lapsed = []
     await fixture.begin()
   })
@@ -234,6 +242,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
         hostname: 'help.acme.com',
         verifiedAt: VERIFIED,
         unconfirmedSince: NOW.toISOString(),
+        unconfirmedReason: 'dns',
       },
     })
     // The grace counts from the mark, not the first miss.
@@ -242,11 +251,11 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     ])
   })
 
-  it('marks a hostname that resolves but no longer reaches this server, with no verification record, the same way', async () => {
+  it('marks a hostname another server now answers on, with no verification record, the same way', async () => {
     await seed({
       status: { hostname: 'status.acme.com', verifiedAt: VERIFIED, missedAt: MISSED_YESTERDAY },
     })
-    probe.script.set('status.acme.com', ['refused'])
+    probe.script.set('status.acme.com', ['other'])
 
     await run()
 
@@ -254,7 +263,9 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       hostname: 'status.acme.com',
       verifiedAt: VERIFIED,
       unconfirmedSince: NOW.toISOString(),
+      unconfirmedReason: 'dns',
     })
+    expect(notices.reasons).toEqual(['dns'])
   })
 
   it('never takes a retry of the same run for the second miss', async () => {
@@ -350,7 +361,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
       status: { hostname: 'status.acme.com', verifiedAt: VERIFIED },
     })
-    probe.script.set('help.acme.com', ['refused'])
+    probe.script.set('help.acme.com', ['other'])
 
     const result = await run()
 
@@ -367,7 +378,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     await seed({
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
     })
-    probe.script.set('help.acme.com', ['refused'])
+    probe.script.set('help.acme.com', ['other'])
 
     expect((await run()).lapsed).toBe(0)
     expect((await stored()).help?.verifiedAt).toBe(VERIFIED)
@@ -399,6 +410,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
         hostname: 'status.acme.com',
         verifiedAt: VERIFIED,
         unconfirmedSince: NOW.toISOString(),
+        unconfirmedReason: 'dns',
       },
     })
     expect(notices.notAnswering.map((n) => n.hostname)).toEqual(['status.acme.com'])
@@ -494,6 +506,69 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       expect(notices.lapsed).toEqual([])
     })
 
+    it('only warns, asking for its domain to be verified, when no verification record ever covered it', async () => {
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      for (let day = 0; day < 10; day++) {
+        await watchSectionDomains(new Date(NOW.getTime() + day * DAY), { wait: noWait })
+      }
+
+      expect(await stored()).toEqual({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'unverified', since: NOW.toISOString() },
+        },
+      })
+      expect(await inUse(new Date(NOW.getTime() + 10 * DAY))).toEqual({
+        signIn: VERIFIED,
+        routing: VERIFIED,
+      })
+      expect(notices.notAnswering).toEqual([])
+      expect(notices.lapsed).toEqual([])
+    })
+
+    it('counts a domain added by name that was pending all along as no record', async () => {
+      await testDb.insert(domains).values({
+        name: 'acme.com',
+        ownershipToken: 'tok-acme',
+        status: 'pending',
+      })
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ warned: 1, missed: 0 })
+      expect((await stored()).help?.reachWarning?.reason).toBe('unverified')
+    })
+
+    it('keeps the grace once a domain that covered it lost its verification', async () => {
+      // Demoted by the ownership watch: pending again, but it was verified.
+      await testDb.insert(domains).values({
+        name: 'acme.com',
+        ownershipToken: 'tok-acme',
+        status: 'pending',
+        verifiedAt: new Date(VERIFIED),
+      })
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ missed: 1, warned: 0 })
+    })
+
+    it('still lapses with no record when another server answers', async () => {
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['other'])
+
+      for (let day = 0; day < 10; day++) {
+        await watchSectionDomains(new Date(NOW.getTime() + day * DAY), { wait: noWait })
+      }
+
+      expect(await stored()).toEqual({ help: { hostname: 'help.acme.com', verifiedAt: null } })
+      expect(notices.reasons).toEqual(['dns'])
+      expect(notices.lapsed).toEqual(['help.acme.com'])
+    })
+
     it('reads a long verification record published as several strings whole', async () => {
       const longToken = 'k'.repeat(400)
       await testDb.insert(domains).values({
@@ -519,6 +594,8 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
 
       expect(await run()).toMatchObject({ unconfirmed: 1, warned: 0 })
       expect((await stored()).help?.unconfirmedSince).toBe(NOW.toISOString())
+      expect((await stored()).help?.unconfirmedReason).toBe('record')
+      expect(notices.reasons).toEqual(['record'])
       expect((await inUse()).signIn).toBeNull()
       expect(notices.notAnswering.map((n) => n.hostname)).toEqual(['help.acme.com'])
     })

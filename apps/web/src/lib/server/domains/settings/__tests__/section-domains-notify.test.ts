@@ -37,7 +37,12 @@ describe('section domain notices', () => {
   })
 
   it('tells whoever may set a section domain that one stopped reaching this server, and by when', async () => {
-    await notifySectionDomainNotAnswering('help', 'help.acme.com', new Date('2026-11-23T07:00:00Z'))
+    await notifySectionDomainNotAnswering(
+      'help',
+      'help.acme.com',
+      new Date('2026-11-23T07:00:00Z'),
+      'dns'
+    )
 
     expect(calls.permissions).toEqual(['settings.custom_domain'])
     expect(calls.rings).toEqual([
@@ -52,8 +57,23 @@ describe('section domain notices', () => {
     ])
   })
 
+  it('names verifying its domain, not DNS, when its verification record is what failed', async () => {
+    await notifySectionDomainNotAnswering(
+      'help',
+      'help.acme.com',
+      new Date('2026-11-23T07:00:00Z'),
+      'record'
+    )
+    await notifySectionDomainLapsed('help', 'help.acme.com', 'record')
+
+    expect(calls.rings.map((r) => (r as { bell: { body: string } }).bell.body)).toEqual([
+      'Domain verification failed for the Help center domain. Verify its domain in Settings > Domains by 2026-11-23 to keep it.',
+      'Help center is back on the primary domain. Verify its domain in Settings > Domains, then verify it again.',
+    ])
+  })
+
   it('says when one stopped being verified', async () => {
-    await notifySectionDomainLapsed('help', 'help.acme.com')
+    await notifySectionDomainLapsed('help', 'help.acme.com', 'dns')
 
     expect(calls.rings).toEqual([
       {
@@ -70,9 +90,9 @@ describe('section domain notices', () => {
   it('swallows a failure, so the watch keeps what it found', async () => {
     calls.fail = true
     await expect(
-      notifySectionDomainNotAnswering('help', 'help.acme.com', new Date())
+      notifySectionDomainNotAnswering('help', 'help.acme.com', new Date(), 'dns')
     ).resolves.toBeUndefined()
-    await expect(notifySectionDomainLapsed('help', 'help.acme.com')).resolves.toBeUndefined()
+    await expect(notifySectionDomainLapsed('help', 'help.acme.com', 'dns')).resolves.toBeUndefined()
     expect(calls.rings).toEqual([])
   })
 })

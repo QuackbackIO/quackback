@@ -255,6 +255,7 @@ export async function verifySectionDomain(
   // A person's check stands in for the daily run's: its first miss is forgotten.
   const {
     unconfirmedSince: _previous,
+    unconfirmedReason: previousReason,
     missedAt: _missed,
     reachWarning: previousWarning,
     ...rest
@@ -281,20 +282,27 @@ export async function verifySectionDomain(
       checked = { ...rest, verifiedAt: new Date().toISOString() }
     } else if (!entry.verifiedAt) {
       checked = { ...rest, verifiedAt: null }
-    } else if (judged === 'failed') {
+    } else if (judged === 'failed-dns' || judged === 'failed-record') {
       // One check never takes a verified hostname down: it is marked, so sign-in
       // stops there at once (it may be someone else's now) while routing keeps
       // the grace, and the daily run ends it if it still fails then.
       checked = {
         ...rest,
         unconfirmedSince: entry.unconfirmedSince ?? new Date().toISOString(),
+        unconfirmedReason: entry.unconfirmedSince
+          ? (previousReason ?? 'dns')
+          : judged === 'failed-record'
+            ? 'record'
+            : 'dns',
       }
     } else if (judged === 'unreachable') {
       // The verification record says the hostname is still ours: a mark ends too.
       checked = { ...rest, reachWarning: warning('unreachable') }
     } else {
-      // Unanswered says nothing either way: a mark and its grace stay as they were.
-      checked = entry.unconfirmedSince ? entry : { ...entry, reachWarning: warning('dns') }
+      // Unanswered, or no record to say either way: a mark and its grace stay
+      // as they were; otherwise a warning, and no grace.
+      const reason = judged === 'unverified' ? 'unverified' : 'dns'
+      checked = entry.unconfirmedSince ? entry : { ...rest, reachWarning: warning(reason) }
     }
     log.info(
       {

@@ -178,6 +178,34 @@ describe('Custom domains card', () => {
     expect(within(row('Help center')).queryByRole('button', { name: 'Verify' })).toBeNull()
   })
 
+  it('asks for its domain to be verified on Settings > Domains, linked, when no record covers it', () => {
+    renderCard({
+      map: {
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: AT,
+          reachWarning: { reason: 'unverified', since: AT },
+        },
+        status: {
+          hostname: 'status.acme.com',
+          verifiedAt: AT,
+          unconfirmedSince: AT,
+          unconfirmedReason: 'record',
+        },
+      },
+    })
+    expect(row('Help center')).toHaveTextContent(
+      "This server can't reach itself through this domain. Verify its domain in Settings > Domains to keep it working."
+    )
+    expect(
+      within(row('Help center')).getByRole('link', { name: 'Settings > Domains' })
+    ).toHaveAttribute('href', '/admin/settings/domains')
+    // The fix named is verifying its domain, not DNS.
+    expect(row('Status')).toHaveTextContent(
+      'Domain verification failed. Verify its domain in Settings > Domains by November 8, 2026.'
+    )
+  })
+
   it('puts Verify on the row of a domain that needs it, and keeps a verified row quiet', () => {
     renderCard({
       map: {
