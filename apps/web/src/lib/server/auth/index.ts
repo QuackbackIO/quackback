@@ -13,6 +13,7 @@ import {
 import { mcp } from '@better-auth/mcp'
 import { oauthDeviceAuthorization } from '@better-auth/oauth-provider'
 import { betterAuthMcpResource } from './mcp-plugin-resource'
+import { mcpCimdPlugin } from './cimd'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
@@ -781,6 +782,13 @@ async function createAuth() {
           }
         },
       }),
+
+      // Client ID Metadata Documents: an MCP client may use an HTTPS URL as
+      // its client_id instead of registering. Advertises
+      // `client_id_metadata_document_supported`. Must follow `mcp()`. DCR
+      // above stays for clients without CIMD; its workspace toggle does not
+      // affect this. See ./cimd.ts for the fetch transport and policy.
+      mcpCimdPlugin(),
 
       // RFC 8628 device authorization grant on the same OAuth server: a
       // headless client asks `/device/code`, the person approves the code at
