@@ -174,7 +174,9 @@ export async function waitForRun(
   conversationId: string,
   workflowId: string,
   state?: string | string[],
-  timeoutMs = 20_000
+  // The workflow-dispatch queue hands out one job at a time for the whole
+  // workspace, so a busy shard can delay a run by tens of seconds.
+  timeoutMs = 45_000
 ): Promise<RunRow> {
   const states = state === undefined ? null : Array.isArray(state) ? state : [state]
   return pollFor(

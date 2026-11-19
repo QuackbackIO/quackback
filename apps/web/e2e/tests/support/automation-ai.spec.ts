@@ -156,7 +156,7 @@ test.describe('AI agent in the widget', { tag: '@isolated' }, () => {
         ],
         async ([id]) => {
           const conversationId = await widgetStartConversation(page, `Step ${marker}`)
-          const run = await waitForRun(conversationId, id, 'waiting', 30_000)
+          const run = await waitForRun(conversationId, id, 'waiting', 60_000)
           expect(run.cursor).toMatchObject({ waitKind: 'assistant' })
           expect(run.cursor.expiresAt).toBeTruthy()
           await expect(page.getByText(`Step answer ${marker}`).first()).toBeVisible({
@@ -408,7 +408,7 @@ test(
       ],
       async ([id]) => {
         await widgetSend(page, `Over to the step ${marker}`)
-        const run = await waitForRun(conversationId, id, 'done')
+        const run = await waitForRun(conversationId, id, 'done', 45_000)
         await widgetExpectText(page, `Escalated path ${marker}`, `Over to the step ${marker}`)
         // Declined in the same pass: the step never parked.
         expect(await runEventKinds(run.id)).not.toContain('waiting')
