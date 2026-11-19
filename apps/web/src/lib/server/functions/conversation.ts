@@ -1021,7 +1021,15 @@ const agentConversationSchema = listMessagesSchema.extend({
 export const getConversationFn = createServerFn({ method: 'GET' })
   .validator(agentConversationSchema)
   .handler(async ({ data }) => {
-    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    // A teammate without conversation.view sees no conversation, so opening
+    // one answers NotFound like any other conversation they cannot see (the
+    // inbox shows its not-found state for exactly that answer). Checked here,
+    // not left to the visibility query, whose visitor-owner branch would hand
+    // this agent view to the customer who owns the thread.
+    const ctx = await requireAuth()
+    if (!ctx.permissions.includes(PERMISSIONS.CONVERSATION_VIEW)) {
+      throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+    }
     const actor = await policyActorFromAuth(ctx)
     const { conversationToDTO, listMessages, enrichMessagesForAgent } =
       await import('@/lib/server/domains/conversation/conversation.query')

@@ -25,7 +25,7 @@ import {
   type TicketStatusId,
 } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
-import type { PermissionKey } from '@/lib/shared/permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 const session = vi.hoisted(() => ({ actor: null as unknown as Actor }))
 const translation = vi.hoisted(() => ({ calls: 0 }))
@@ -773,5 +773,46 @@ describe('conversation server functions check visibility (real DB, rolled back)'
       ).rejects.toMatchObject(NOT_FOUND)
       expect(await testDb.select().from(tickets)).toHaveLength(before.length)
     })
+  })
+
+  /**
+   * A teammate whose role holds every conversation key except
+   * `conversation.view` sees no conversation at all, the Unassigned queue
+   * included. Opening one answers NotFound, as for any conversation they
+   * cannot see, and no other call acts on it.
+   */
+  describe('a teammate without conversation.view', () => {
+    async function seedNoViewWorld() {
+      const w = await seedWorld()
+      const permissions = new Set(w.actor.permissions)
+      permissions.delete(PERMISSIONS.CONVERSATION_VIEW)
+      session.actor = { ...w.actor, permissions }
+      return w
+    }
+
+    it('opening an Unassigned-queue conversation is NotFound', async () => {
+      const w = await seedNoViewWorld()
+      const unassigned = await w.conversation(null)
+      await expect(
+        getConversationFn({ data: { conversationId: unassigned.id } })
+      ).rejects.toMatchObject(NOT_FOUND)
+    })
+
+    it.each(calls)(
+      '%s: refused on an Unassigned-queue conversation, which stays as it was',
+      async (_, call) => {
+        const w = await seedNoViewWorld()
+        const unassigned = await w.conversation(null, { channel: 'github' })
+        const before = await row(unassigned.id)
+        const thread = await messagesOn(unassigned.id)
+        const outcome = await call(w, unassigned).then(
+          () => null,
+          (err: { statusCode?: number }) => err
+        )
+        expect([403, 404]).toContain(outcome?.statusCode)
+        expect(await row(unassigned.id)).toEqual(before)
+        expect(await messagesOn(unassigned.id)).toEqual(thread)
+      }
+    )
   })
 })

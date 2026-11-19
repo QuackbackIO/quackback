@@ -70,13 +70,11 @@ test.describe('people fixtures', { tag: '@smoke' }, () => {
     await scoped.goto(threadUrl)
     await expect(scoped.getByText(firstMessage).first()).toBeVisible({ timeout: 15_000 })
 
-    // On main the pane itself still opens (with no messages) for a teammate
-    // without conversation.view; the messages are what must never show.
+    // A teammate without conversation.view gets the same not-found state as
+    // for any conversation they cannot see (access/no-view-deep-link.spec.ts).
     const noAccess = await asPerson('noAccess')
     await noAccess.goto(threadUrl)
-    await expect(noAccess.getByText(/No messages yet|Conversation not found/)).toBeVisible({
-      timeout: 15_000,
-    })
+    await expect(noAccess.getByText('Conversation not found')).toBeVisible({ timeout: 15_000 })
     await expect(noAccess.getByText(firstMessage)).toHaveCount(0)
   })
 
