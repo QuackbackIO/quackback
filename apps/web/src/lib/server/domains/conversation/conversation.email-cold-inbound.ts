@@ -156,8 +156,9 @@ export async function resolveColdInboundSender(
  * signals a widget-started one does. Direct inserts (the visitor-message create
  * path hardcodes channel='messenger'); the emit bridge is error-isolated.
  *
- * `quarantine` inverts both halves of that for a message we REFUSED. It files
- * the thread to Spam in the same INSERT, and it fires neither emit.
+ * `quarantine` inverts both halves of that for a message we REFUSED, and for
+ * one a fixed spam rule filed. It files the thread to Spam in the same INSERT,
+ * and it fires neither emit.
  *
  * Filing in the insert rather than with a follow-up update is what makes the
  * refusal hold: there is no instant at which a refused message sits in the open
@@ -183,8 +184,9 @@ export async function createEmailConversation(input: {
   contentJson?: TiptapContent | null
   /** Discrete files rehosted from the inbound MIME parts, or none. */
   attachments?: ConversationAttachment[]
-  /** Refused mail: file to Spam in the insert and raise no signals. The cause
-   *  is the enumerated one the Spam view badges the row with. */
+  /** Refused mail, or mail a fixed spam rule filed: file to Spam in the
+   *  insert and raise no signals. The cause is the enumerated one the Spam
+   *  view badges the row with. */
   quarantine?: { cause: ConversationSpamFiledBy; note: string } | null
 }): Promise<ConversationId> {
   const { parsed, channelAccountId, principalId, unverified, content, contentJson } = input

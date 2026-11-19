@@ -36,7 +36,7 @@ import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
 import type { SpamFilterConfig } from '@/lib/server/domains/settings/settings.spam'
-import type { SpamSignalHints } from './conversation.spam-signals'
+import type { SpamSignal, SpamSignalHints } from './conversation.spam-signals'
 
 const log = logger.child({ component: 'spam-filter' })
 
@@ -168,6 +168,41 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
 }
 
 /**
+ * The fixed rule (a deterministic signal, never the AI) that files a new
+ * conversation's first message to Spam, decided BEFORE the conversation
+ * exists so the caller can file it in the insert and raise nothing: no
+ * created/message events, no webhook, no bell, no workflow, no SLA clock.
+ * Null when no rule matches, and when the sender is a test customer or is on
+ * the workspace trust list (which outranks every filing path). Never throws:
+ * any failure is "no rule", leaving the message in triage.
+ *
+ * A caller that uses this runs `maybeAutoFileSpam` afterwards with
+ * `signalsChecked`, so the signals (the burst count above all) are evaluated
+ * once per message.
+ */
+export async function fixedSpamSignalFor(
+  input: Pick<ClassifyInboundSpamInput, 'senderEmail'> & {
+    signals?: SpamSignalHints
+  },
+  visitorPrincipalId: string
+): Promise<SpamSignal | null> {
+  try {
+    const { isTestCustomer } = await import('@/lib/server/test-data')
+    if (await isTestCustomer(visitorPrincipalId)) return null
+    if (await isTrustedInboundSender(input.senderEmail)) return null
+    const { detectSpamSignal } = await import('./conversation.spam-signals')
+    return await detectSpamSignal({
+      senderEmail: input.senderEmail,
+      senderPrincipalId: visitorPrincipalId,
+      ...input.signals,
+    })
+  } catch (err) {
+    log.warn({ err }, 'fixed spam rule check failed, leaving the message in triage')
+    return null
+  }
+}
+
+/**
  * Classify, then file the conversation as spam on an affirmative verdict.
  * The one call both ingest paths make; error-isolated so a filing failure
  * never breaks ingestion — the conversation simply stays in triage. Returns
@@ -179,7 +214,12 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
  */
 export async function maybeAutoFileSpam(
   conversationId: ConversationId,
-  input: ClassifyInboundSpamInput & { signals?: SpamSignalHints }
+  input: ClassifyInboundSpamInput & {
+    signals?: SpamSignalHints
+    /** The caller already ran the fixed rules (`fixedSpamSignalFor`) and none
+     *  matched: only the AI classifier is left. */
+    signalsChecked?: boolean
+  }
 ): Promise<boolean> {
   try {
     // A teammate's test thread is never spam, and spends no classification.
@@ -187,11 +227,13 @@ export async function maybeAutoFileSpam(
     if (await isTestConversation(conversationId)) return false
     if (await isTrustedInboundSender(input.senderEmail)) return false
     const { detectSpamSignal } = await import('./conversation.spam-signals')
-    const signal = await detectSpamSignal({
-      senderEmail: input.senderEmail,
-      senderPrincipalId: input.senderPrincipalId ?? null,
-      ...input.signals,
-    })
+    const signal = input.signalsChecked
+      ? null
+      : await detectSpamSignal({
+          senderEmail: input.senderEmail,
+          senderPrincipalId: input.senderPrincipalId ?? null,
+          ...input.signals,
+        })
     if (signal) {
       log.info({ conversation_id: conversationId, signal }, 'spam signal matched; filing')
       const { autoFileConversationAsSpam } = await import('./conversation.service')
