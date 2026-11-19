@@ -40,7 +40,6 @@ import type { Page } from '@playwright/test'
 import { createHmac } from 'node:crypto'
 import { seedConversation } from '../../utils/db-helpers'
 import { sink } from '../../support/webhook-sink-client'
-import { pollFor } from '../../support/db'
 import { conversationReplyAddress } from '../../support/inbound-email'
 import { emailConversation } from '../../support/webhooks'
 import {
