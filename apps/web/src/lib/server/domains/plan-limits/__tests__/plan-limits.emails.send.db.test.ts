@@ -22,6 +22,7 @@ import {
   roles,
   settings,
   user,
+  webhooks,
 } from '@/lib/server/db'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
@@ -241,6 +242,13 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
   })
 
   it('names the workspace, both plans and the links after a drop from Business to Free', async () => {
+    // A webhook Business includes and Free does not, running when the plan drops.
+    await testDb.insert(webhooks).values({
+      url: 'https://example.com/hook',
+      secret: 'acme-secret',
+      events: ['post.created'],
+      createdById: owner.id,
+    } as never)
     await configure(null, { enabled: true, projection: projection(1, 'business', null) })
     expect((await getPlanLimits()).phase).toBe('ok')
     await writeBillingProjection('ws_acme', parseBillingProjection(projection(2, 'free', 1))!)
@@ -258,7 +266,7 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
       planUrl: 'https://app.example.com/admin/settings/billing',
       // Other test files commit rows of their own, so counts are at least ours.
       rows: [expect.objectContaining({ label: 'Boards', used: expect.any(Number), cap: 1 })],
-      pausingFeatures: expect.arrayContaining(['AI assistant']),
+      pausingFeatures: expect.arrayContaining(['Webhooks']),
       ...deadlineText(new Date(`${view.deadlineDay}T12:00:00.000Z`), new Date()),
     })
   })
