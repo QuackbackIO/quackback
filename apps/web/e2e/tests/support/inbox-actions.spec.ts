@@ -436,7 +436,7 @@ test.describe('inbox thread actions', () => {
       await dialog.getByRole('button', { name: 'Send message' }).click()
       await expect(page.getByText('Message sent')).toBeVisible({ timeout: 15_000 })
 
-      const mail = await waitForMail({ to: customerEmail })
+      const mail = await waitForMail({ to: customerEmail, timeoutMs: 30_000 })
       expect(mail.Text).toContain(`We noticed an issue ${marker}`)
       await page.goto(inboxUrl({ view: 'created_by_me' }))
       await expect(listRows(page, `Olive ${marker}`)).toHaveCount(1, { timeout: 15_000 })

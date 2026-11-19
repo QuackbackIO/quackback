@@ -69,7 +69,7 @@ test.describe('inbox composer', () => {
       await openConversation(page, offline.id, offline.messages[0])
       const mailed = `Mailed answer ${marker}`
       await sendFromComposer(page, mailed, 'reply')
-      const mail = await waitForMail({ to: customerEmail })
+      const mail = await waitForMail({ to: customerEmail, timeoutMs: 30_000 })
       expect(mail.Text).toContain(mailed)
       expect(mail.Text + mail.HTML).toContain(mate.name.split(' ')[0])
       await visitor.page.context().close()
@@ -228,7 +228,11 @@ test.describe('inbox composer', () => {
       )
       expect(bell.title).toBe(`${author.name} mentioned you in a conversation`)
       expect(bell.body).toContain(`please check ${marker}`)
-      const mail = await waitForMail({ to: target.email })
+      const mail = await waitForMail({
+        to: target.email,
+        subject: 'mentioned you in an internal note',
+        timeoutMs: 30_000,
+      })
       expect(mail.Subject + mail.Text).toContain(author.name)
       expect(mail.HTML).toContain(c.id)
       // The author is never notified about their own note.

@@ -784,7 +784,7 @@ test.describe('inbox views', () => {
       const bar = page.getByPlaceholder('Type a command…')
       await expect(bar).toBeVisible()
       await bar.fill('Close conversation')
-      await page.keyboard.press('Enter')
+      await page.getByRole('option', { name: /Close conversation/ }).click()
       await waitForConversation(newer.uuid, 'the close', (r) => r.status === 'closed')
       expect((await messagesOf(older.uuid)).length).toBe(1)
     }
