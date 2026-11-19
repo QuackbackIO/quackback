@@ -13,7 +13,7 @@ import { pollFor, supportDb } from '../../support/db'
 import { supportEnv } from '../../support/env'
 import { conversationReplyAddress } from '../../support/inbound-email'
 import { linksIn } from '../../support/mailpit'
-import { apiAs as sessionApiAs, fnOk, withLiveWorkflow, workflowRuns } from '../../support/sla-csat'
+import { apiAs as sessionApiAs, withLiveWorkflow, workflowRuns } from '../../support/sla-csat'
 import {
   agentReply,
   apiAs,
@@ -90,10 +90,6 @@ async function csatEvents(conversationId: string, type: string) {
   return (await eventsFor(conversationId)).filter((e) => e.type === type)
 }
 
-async function closeAsTeammate(admin: APIRequestContext, conversationId: string) {
-  await fnOk(admin, 'setConversationStatusFn', { conversationId, status: 'closed' })
-}
-
 /** The rating blocks in a conversation's thread. */
 async function csatBlocks(conversationUuid: string) {
   return (await messagesIn(conversationUuid)).filter(
@@ -136,10 +132,10 @@ test.describe('rating request emails', () => {
             ],
           },
           async (workflow) => {
-            // A rating is only asked for once the conversation is closed. A
-            // teammate closes it in the app: a close made with an API key is
-            // automated, and automated changes do not start workflows.
-            await closeAsTeammate(admin, thread.id)
+            // A rating is only asked for once the conversation is closed. The
+            // teammate closes it with their personal key, which counts as them
+            // and so starts the workflow like a close in the app.
+            await setConversationStatus(api, thread.id, 'closed')
 
             const mail = await waitForMailMatching({ to: customerEmail, body: prompt })
             expect(mail.Subject).toBe(`Re: ${thread.subject}`)
@@ -182,7 +178,7 @@ test.describe('rating request emails', () => {
             await waitForConversation(thread.row.id, 'reopened', (r) => r.status === 'open')
             await agentReply(api, thread.id, `Sentinel answer ${marker}`)
             await waitForMailMatching({ to: customerEmail, body: `Sentinel answer ${marker}` })
-            await closeAsTeammate(admin, thread.id)
+            await setConversationStatus(api, thread.id, 'closed')
             await expect
               .poll(async () => (await workflowRuns(workflow.id)).length, { timeout: 20_000 })
               .toBe(2)
