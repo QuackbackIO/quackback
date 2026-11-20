@@ -537,8 +537,9 @@ proved by a separate test that is not quarantined where one exists.
 
 ### Product suite: status page
 
-Each test asserts the right behaviour; the working part of each journey is
-proved by a separate test that is not quarantined.
+Each test asserts the right behaviour. Where the rest of a journey works, a
+separate test that is not quarantined proves it (STA-A-30 and STA-S-23 have
+no such part beyond the wrong notification).
 
 - `status/admin-incidents.spec.ts` › STA-A-30 an incident created already
   resolved announces nothing. `createIncident` sets

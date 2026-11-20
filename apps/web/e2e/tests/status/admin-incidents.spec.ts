@@ -740,13 +740,14 @@ test.describe('delete and lists', () => {
     { tag: '@nightly' },
     async ({ asPerson, marker }) => {
       const svc = await createService(admin, `${marker} List`)
-      const minor = await createIncident(admin, {
-        title: `${marker} minor one`,
-        services: [[svc.id, 'degraded_performance']],
-      })
-      const critical = await createIncident(admin, {
+      // Critical first, so newest-first puts minor on top and the Impact sort flips it.
+      await createIncident(admin, {
         title: `${marker} critical one`,
         services: [[svc.id, 'major_outage']],
+      })
+      await createIncident(admin, {
+        title: `${marker} minor one`,
+        services: [[svc.id, 'degraded_performance']],
       })
       const resolved = await createIncident(admin, {
         title: `${marker} resolved one`,
@@ -759,10 +760,11 @@ test.describe('delete and lists', () => {
       await searchList(ui, marker, ui.getByRole('heading', { name: `${marker} minor one` }))
       await expect(ui.getByRole('heading', { name: `${marker} critical one` })).toBeVisible()
       await expect(ui.getByRole('heading', { name: `${marker} resolved one` })).toHaveCount(0)
-      // Newest first, then the local Impact sort puts critical before minor.
       const titles = ui.locator('h3', { hasText: marker })
+      await expect(titles).toHaveText([`${marker} minor one`, `${marker} critical one`])
+      await ui.getByRole('button', { name: /Newest/ }).click()
+      await ui.getByRole('menuitemradio', { name: 'Impact' }).click()
       await expect(titles).toHaveText([`${marker} critical one`, `${marker} minor one`])
-      expect(minor.id).not.toBe(critical.id)
 
       // Search matches an update body, case-insensitively, on All.
       await openAdmin(ui, '/admin/status?view=all')

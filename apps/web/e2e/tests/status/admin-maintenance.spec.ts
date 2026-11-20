@@ -10,7 +10,6 @@
  * (every overdue window in the workspace); it asserts only on its own rows.
  */
 import type { APIRequestContext } from '@playwright/test'
-import { toUuid } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { pollFor } from '../../support/db'
@@ -461,7 +460,6 @@ test('STA-A-45 delete a scheduled or running window', { tag: '@core' }, async ({
   expect(ids).not.toContain(scheduled.id)
   expect(ids).not.toContain(running.id)
   expect((await incidentRow(running.id)).deleted_at).not.toBeNull()
-  expect(toUuid(running.id as never)).toBeTruthy()
 })
 
 test(
