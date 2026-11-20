@@ -725,3 +725,33 @@ no such part beyond the wrong notification).
   author's public profile (red run: the held comment's post was listed).
   Smallest fix: add `eq(postComments.moderationState, 'published')` to both.
   owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-widget.spec.ts` › FBP-W-07 a board with a required custom
+  field tells the widget visitor what is missing (FBP-B28). The widget
+  composer never sends `customFields`
+  (`apps/web/src/components/widget/widget-home-animated.tsx:864-873`);
+  `createPost` refuses the required field
+  (`apps/web/src/lib/server/domains/posts/post.service.ts:158-166`) and the
+  widget shows "Network error. Please try again."
+  (`widget-home-animated.tsx:905-915`), so such a board takes no widget posts
+  and the visitor is not told why. Smallest fix: render the board's fields in
+  the widget composer (the portal's `BoardCustomFields`) and send them; at
+  least show the server's validation message. Runs in product-isolated (the
+  widget is off on a fresh workspace). owner: unassigned, review by:
+  2026-12-03.
+- `feedback/portal-widget.spec.ts` › FBP-W-07 a held widget post is confirmed
+  as waiting for review (FBP-B07, widget half). The success view says "Thanks
+  for your feedback! Your post has been submitted."
+  (`apps/web/src/routes/widget/index.tsx:1203-1209`) for a held post, and no
+  widget component shows a pending state. Smallest fix: return
+  `moderationState` from the create call and show "waiting for review" in the
+  success view and on the author's own pending row. The right copy does not
+  exist yet: the test only asks for the word "review". Runs in
+  product-isolated. owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-widget.spec.ts` › FBP-W-12 the widget counts agree with the
+  public profile (FBP-B29). `runGetUserStats`
+  (`apps/web/src/lib/server/functions/user.ts:349-371`) counts every post the
+  person wrote (held ones too) and every vote (on deleted posts too) (red run:
+  ideas 2 and votes 1, expected 1 and 0). Smallest fix: apply the
+  `published`, `deleted_at IS NULL` and board-not-deleted filters the public
+  profile uses (`user.public-profile.ts`). owner: unassigned, review by:
+  2026-12-03.
