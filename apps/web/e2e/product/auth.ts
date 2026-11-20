@@ -20,6 +20,7 @@ import type {
   Page,
   PlaywrightWorkerArgs,
 } from '@playwright/test'
+import { createHmac } from 'node:crypto'
 import { test as base, expect } from '../support/fixtures'
 import { clientIp } from '../support/api-client'
 import { ISOLATED } from '../support/automation'
@@ -35,6 +36,62 @@ export const PASSWORD = 'correct-horse-battery-1'
 
 export function baseUrl(): string {
   return supportEnv().baseUrl
+}
+
+// ---------------------------------------------------------------------------
+// TOTP (RFC 6238: SHA-1, 30 s, 6 digits), as an authenticator app computes it
+// ---------------------------------------------------------------------------
+
+function base32Decode(input: string): Buffer {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  let bits = ''
+  for (const ch of input.replace(/=+$/, '').toUpperCase()) {
+    const v = alphabet.indexOf(ch)
+    if (v < 0) throw new Error(`not base32: ${ch}`)
+    bits += v.toString(2).padStart(5, '0')
+  }
+  const bytes: number[] = []
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2))
+  return Buffer.from(bytes)
+}
+
+/** The current code for a base32 secret (or an otpauth:// URI). */
+export function totp(secretOrUri: string, at = Date.now()): string {
+  const secret = secretOrUri.startsWith('otpauth://')
+    ? (new URL(secretOrUri).searchParams.get('secret') ?? '')
+    : secretOrUri
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 1000 / 30)))
+  const mac = createHmac('sha1', base32Decode(secret)).update(counter).digest()
+  const offset = mac[mac.length - 1] & 0xf
+  const value = (mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000
+  return String(value).padStart(6, '0')
+}
+
+/**
+ * Turn on two-factor for the signed-in person behind `api` through the
+ * library's endpoints (what the profile page calls). Returns the otpauth URI
+ * and the backup codes.
+ */
+export async function enrollTwoFactor(
+  api: APIRequestContext,
+  password = PASSWORD
+): Promise<{ totpURI: string; backupCodes: string[] }> {
+  const enable = await api.post('/api/auth/two-factor/enable', { data: { password } })
+  expect(enable.status(), await enable.text()).toBe(200)
+  const body = (await enable.json()) as { totpURI: string; backupCodes: string[] }
+  const verify = await api.post('/api/auth/two-factor/verify-totp', {
+    data: { code: await freshTotp(body.totpURI) },
+  })
+  expect(verify.status(), await verify.text()).toBe(200)
+  return body
+}
+
+/** A code with at least 5 s left in its window (waits past a boundary). */
+export async function freshTotp(secretOrUri: string): Promise<string> {
+  const left = 30_000 - (Date.now() % 30_000)
+  if (left < 5_000) await new Promise((r) => setTimeout(r, left + 250))
+  return totp(secretOrUri)
 }
 
 // ---------------------------------------------------------------------------
