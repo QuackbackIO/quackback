@@ -172,8 +172,22 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     }
   }
 
-  // Include existing summary for continuity when refreshing
-  const existingSummary = post.summaryJson as PostSummaryJson | null
+  // Include existing summary for continuity when refreshing, unless the post
+  // has a live comment the summary leaves out (a private note or a held
+  // comment): a summary stored before those were left out may quote one, so
+  // such a post is summarised afresh from what the model may see.
+  const [excluded] = await db
+    .select({ id: postComments.id })
+    .from(postComments)
+    .where(
+      and(
+        eq(postComments.postId, postId),
+        isNull(postComments.deletedAt),
+        or(eq(postComments.isPrivate, true), ne(postComments.moderationState, 'published'))
+      )
+    )
+    .limit(1)
+  const existingSummary = excluded ? null : (post.summaryJson as PostSummaryJson | null)
   if (existingSummary) {
     input += '\n\n## Previous Summary\n'
     input += JSON.stringify(existingSummary)

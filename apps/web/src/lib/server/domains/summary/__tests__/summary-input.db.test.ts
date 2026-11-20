@@ -99,4 +99,40 @@ describe.skipIf(!fixture.available)('summary input (real DB)', () => {
       .where(eq(posts.id, postId))
     expect(row.count).toBe(1)
   })
+
+  it('starts afresh, without the stored summary, when the post has a comment it leaves out', async () => {
+    // A summary stored before private notes were left out may quote one.
+    await testDb
+      .update(posts)
+      .set({
+        summaryJson: {
+          summary: 'Old',
+          urgency: 'low',
+          keyQuotes: [`leaked-${tag}`],
+          nextSteps: [],
+        },
+      })
+      .where(eq(posts.id, postId))
+    await comment(`public-${tag}`)
+    await comment(`secret-${tag}`, { isPrivate: true })
+
+    await generateAndSavePostSummary(postId)
+
+    expect(prompts[0]).not.toContain(`leaked-${tag}`)
+    expect(prompts[0]).not.toContain('Previous Summary')
+  })
+
+  it('keeps the stored summary for continuity when every comment is public', async () => {
+    await testDb
+      .update(posts)
+      .set({
+        summaryJson: { summary: 'Old', urgency: 'low', keyQuotes: [`kept-${tag}`], nextSteps: [] },
+      })
+      .where(eq(posts.id, postId))
+    await comment(`public-${tag}`)
+
+    await generateAndSavePostSummary(postId)
+
+    expect(prompts[0]).toContain(`kept-${tag}`)
+  })
 })
