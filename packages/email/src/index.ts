@@ -63,6 +63,7 @@ import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
 import { ConversationReplyEmail } from './templates/conversation-reply'
 import { conversationMessageCopy, conversationReplySubject } from './conversation-copy'
+import { singleLineSubject } from './subject'
 import { ConversationClosedEmail } from './templates/conversation-closed'
 import { isEmailBillable } from './mail-class'
 import { PostMentionEmail } from './templates/post-mention'
@@ -397,6 +398,9 @@ async function dispatch(
     attachments?: EmailAttachment[]
   } & ThreadingOptions
 ): Promise<EmailResult> {
+  // One line, whatever the template built: a provider may reject a subject with
+  // a line break outright. Rebound so every rung and ledger row sees the same.
+  options = { ...options, subject: singleLineSubject(options.subject) }
   const threadingHeaders = buildThreadingHeaders(options)
 
   // Defense in depth: the synthetic anonymous placeholder domain
