@@ -305,3 +305,24 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   insert hits the principal foreign key and the route answers 500. Fix: look
   the principal up first and answer 404 "User not found". owner: unassigned,
   review by: 2026-12-03.
+
+### Product suite: API REST (comments, moderation, boards, statuses, tags, roadmaps, suggestions, apps)
+
+- `platform/rest-taxonomy.spec.ts` › API-R-072 a status PATCH holding only
+  ignored fields answers 200 with nothing changed. Product bug: a body with
+  only stripped fields (`slug`, `category`, `position`) leaves `updateData`
+  empty and the UPDATE runs with no SET, answering 500
+  (`apps/web/src/lib/server/domains/statuses/status.service.ts:131-142`).
+  Fix: return the existing row when nothing is set. owner: unassigned, review
+  by: 2026-12-03.
+- `platform/rest-taxonomy.spec.ts` › API-R-076 a missing tag answers "Tag not
+  found". Product bug: `TAG_NOT_FOUND` maps to the public text "PostTag not
+  found" (`apps/web/src/lib/server/domains/api/responses.ts:180`). Fix: map it
+  to `Tag`. owner: unassigned, review by: 2026-12-03.
+- `platform/rest-taxonomy.spec.ts` › API-R-077 deleted boards, statuses and
+  tags answer 404 on GET and PATCH. Product bug: the by-id reads and updates
+  have no `deletedAt` filter, so a deleted row stays readable and editable
+  and the body has no `deletedAt` (`board.service.ts:184-186,321-324`,
+  `status.service.ts:103-105,204-207`, `post-tag.service.ts:93-95,165-169`).
+  Fix: filter `isNull(deletedAt)` as DELETE already does. owner: unassigned,
+  review by: 2026-12-03.
