@@ -19,3 +19,17 @@ export const commentMentioned = decl(
   { notification: 'mention' },
   S
 )
+
+/** The team's decision on a held comment; tells its author, like post.approved. */
+export const commentApproved = decl(
+  'comment.approved',
+  'post_comment',
+  { notification: 'post_moderated' },
+  S
+)
+export const commentRejected = decl(
+  'comment.rejected',
+  'post_comment',
+  { notification: 'post_moderated' },
+  S
+)

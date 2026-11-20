@@ -28,8 +28,17 @@ import {
   sql,
   exists,
 } from '@/lib/server/db'
-import type { PostId, PostCommentId } from '@quackback/ids'
+import type { PostId, PostCommentId, PrincipalId } from '@quackback/ids'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
+import { emitBestEffort } from '@/lib/server/events/emit'
+import {
+  postApproved,
+  postRejected,
+  commentApproved,
+  commentRejected,
+} from '@/lib/server/events/catalogue'
+import type { EventDefinition } from '@/lib/server/events/catalogue/define'
+import type { ModerationDecisionPayload } from '@/lib/server/events/types'
 import { NotFoundError, ConflictError } from '@/lib/shared/errors'
 import { announcePublishedPost } from '@/lib/server/domains/posts/post.announce'
 import { announcePublishedComment } from '@/lib/server/domains/comments/comment.announce'
@@ -65,6 +74,51 @@ export interface ModerationAudit {
   actor: AuditActor
   headers?: Headers
   metadata?: Record<string, unknown>
+  /** The moderator's principal (a teammate, or the API key's own principal).
+   *  Carried on the decision event so the author notice skips a teammate who
+   *  moderates their own item. */
+  principalId?: PrincipalId
+}
+
+/**
+ * Record the team's decision so its author hears about it (email + bell,
+ * resolved by the notification sink). Runs after the decision is written and
+ * audited, and never throws: like the announce step, a failure here must not
+ * turn a done decision into a 500 the guard then refuses to retry.
+ */
+async function emitModerationDecision(
+  def: EventDefinition<Record<string, unknown>>,
+  item: { postId: PostId; commentId?: PostCommentId; authorPrincipalId: PrincipalId | null },
+  audit: ModerationAudit
+): Promise<void> {
+  try {
+    const [post] = await db
+      .select({ title: posts.title, boardId: posts.boardId, boardSlug: boards.slug })
+      .from(posts)
+      .innerJoin(boards, eq(boards.id, posts.boardId))
+      .where(eq(posts.id, item.postId))
+      .limit(1)
+    if (!post) return
+    const payload: ModerationDecisionPayload = {
+      postId: item.postId,
+      postTitle: post.title,
+      boardId: post.boardId,
+      boardSlug: post.boardSlug,
+      authorPrincipalId: item.authorPrincipalId,
+      ...(item.commentId ? { commentId: item.commentId } : {}),
+    }
+    await emitBestEffort(def, {
+      payload: payload as unknown as Record<string, unknown>,
+      actor: {
+        type: audit.actor.type === 'service' ? 'service' : 'user',
+        id: audit.principalId,
+      },
+      entityId: item.commentId ?? item.postId,
+      context: { source: audit.actor.authMethod === 'api_key' ? 'api' : 'admin' },
+    })
+  } catch (err) {
+    log.error({ err, event_type: def.type }, 'record moderation decision failed')
+  }
 }
 
 /** A pending post row as surfaced to the moderation queue. */
@@ -222,6 +276,11 @@ export async function approvePost(postId: PostId, audit: ModerationAudit): Promi
     after: { moderationState: 'published' },
     metadata: audit.metadata,
   })
+  await emitModerationDecision(
+    postApproved,
+    { postId, authorPrincipalId: before.principalId as PrincipalId | null },
+    audit
+  )
   // Dispatch deferred external notifications. The actor must be the post's
   // author — not the moderator — so announcePublishedPost loads author data
   // from the post row (which carries principalId, not the moderator's id).
@@ -277,6 +336,12 @@ export async function rejectPost(
     after: { moderationState: before.moderationState, deletedAt },
     metadata: { reason: reason ?? null, ...(audit.metadata ?? {}) },
   })
+  // The reason stays in the audit log; the author is told the decision only.
+  await emitModerationDecision(
+    postRejected,
+    { postId, authorPrincipalId: before.principalId as PrincipalId | null },
+    audit
+  )
 }
 
 /** Guarded transition: a pending comment → published, reconciling commentCount. */
@@ -346,6 +411,15 @@ export async function approveComment(
     after: { moderationState: 'published' },
     metadata: audit.metadata,
   })
+  await emitModerationDecision(
+    commentApproved,
+    {
+      postId: before.postId as PostId,
+      commentId,
+      authorPrincipalId: before.principalId as PrincipalId | null,
+    },
+    audit
+  )
   // Dispatch deferred external notifications. Mirrors approvePost: the
   // comment is already published and audited, so swallow failures rather
   // than surface a 500 to the moderator with no retry path.
@@ -395,4 +469,13 @@ export async function rejectComment(
     after: { moderationState: before.moderationState, deletedAt },
     metadata: { reason: reason ?? null, ...(audit.metadata ?? {}) },
   })
+  await emitModerationDecision(
+    commentRejected,
+    {
+      postId: before.postId as PostId,
+      commentId,
+      authorPrincipalId: before.principalId as PrincipalId | null,
+    },
+    audit
+  )
 }

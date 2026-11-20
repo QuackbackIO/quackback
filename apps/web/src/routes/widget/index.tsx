@@ -345,6 +345,8 @@ interface SuccessPost {
   voteCount: number
   statusId: string | null
   board: { id: string; name: string; slug: string }
+  /** Held for review: only its author sees it until the team approves it. */
+  pendingReview?: boolean
 }
 
 /**
@@ -1204,10 +1206,17 @@ function SuccessView({
             />
           </p>
           <p className="text-[11px] text-muted-foreground">
-            <FormattedMessage
-              id="widget.success.subtitle"
-              defaultMessage="Your post has been submitted."
-            />
+            {post.pendingReview ? (
+              <FormattedMessage
+                id="widget.success.pendingSubtitle"
+                defaultMessage="Your post is waiting for review. Others will see it once the team approves it."
+              />
+            ) : (
+              <FormattedMessage
+                id="widget.success.subtitle"
+                defaultMessage="Your post has been submitted."
+              />
+            )}
           </p>
         </div>
       </div>

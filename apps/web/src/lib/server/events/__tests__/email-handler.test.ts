@@ -10,6 +10,7 @@ vi.mock('@quackback/email', () => ({
   sendNoteMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendStatusIncidentPublishedEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendStatusMaintenanceScheduledEmail: vi.fn().mockResolvedValue({ sent: true }),
+  sendModerationDecisionEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
 /**
@@ -79,6 +80,7 @@ import {
   sendNoteMentionEmail,
   sendStatusIncidentPublishedEmail,
   sendStatusMaintenanceScheduledEmail,
+  sendModerationDecisionEmail,
 } from '@quackback/email'
 import type {
   EmailTarget,
@@ -863,6 +865,8 @@ describe('emailHook: feedback, changelog and status senders', () => {
     'changelog.published': vi.mocked(sendChangelogPublishedEmail),
     'status.incident_created': vi.mocked(sendStatusIncidentPublishedEmail),
     'status.maintenance_scheduled': vi.mocked(sendStatusMaintenanceScheduledEmail),
+    'post.approved': vi.mocked(sendModerationDecisionEmail),
+    'comment.rejected': vi.mocked(sendModerationDecisionEmail),
   } as const
   const event = (type: string) =>
     ({
@@ -936,4 +940,42 @@ describe('emailHook: feedback, changelog and status senders', () => {
       )
     }
   )
+})
+
+describe('emailHook: the team decision on a held item', () => {
+  const mock = vi.mocked(sendModerationDecisionEmail)
+  const event = (type: string) =>
+    ({
+      id: 'evt-moderation',
+      type,
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_mod' },
+      data: {},
+    }) as unknown as EventData
+
+  beforeEach(() => {
+    mock.mockReset().mockResolvedValue({ sent: true })
+    permittedSendingIdentity.mockReset().mockImplementation(async (from) => from)
+  })
+
+  it('sends what was decided on which item, with the unsubscribe link', async () => {
+    const result = await emailHook.run(event('post.rejected'), baseTarget, {
+      workspaceName: 'Acme',
+      item: 'post',
+      decision: 'rejected',
+      postTitle: 'Dark mode',
+      preferencesUrl: 'https://p/settings/preferences',
+    })
+    expect(result).toEqual({ success: true })
+    expect(mock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'user@example.com',
+        item: 'post',
+        decision: 'rejected',
+        postTitle: 'Dark mode',
+        postUrl: undefined,
+        unsubscribeUrl: 'https://example.com/unsubscribe',
+      })
+    )
+  })
 })

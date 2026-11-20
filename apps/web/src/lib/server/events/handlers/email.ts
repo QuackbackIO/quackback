@@ -12,6 +12,7 @@ import {
   sendStatusMaintenanceScheduledEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
+  sendModerationDecisionEmail,
 } from '@quackback/email'
 import type { EmailResult, IncidentImpact, SendingIdentity } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
@@ -23,8 +24,13 @@ import type {
   EmailConfig,
   TicketEmailConfig,
   NoteMentionEmailConfig,
+  ModerationDecisionEmailConfig,
 } from '../hook-types'
-import type { EventData, EventPostMentionedData } from '../types'
+import {
+  isModerationDecisionEventType,
+  type EventData,
+  type EventPostMentionedData,
+} from '../types'
 import {
   ticketRootMessageId,
   mintTicketOutboundMessageId,
@@ -270,6 +276,20 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...sender,
+      })
+    } else if (isModerationDecisionEventType(event.type)) {
+      const c = config as unknown as ModerationDecisionEmailConfig
+      result = await sendModerationDecisionEmail({
+        to: email,
+        item: c.item,
+        decision: c.decision,
+        postTitle: c.postTitle,
+        postUrl: c.postUrl,
+        workspaceName: c.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: c.preferencesUrl,
+        logoUrl: c.logoUrl,
         ...sender,
       })
     } else if (event.type === 'conversation.note_mentioned') {

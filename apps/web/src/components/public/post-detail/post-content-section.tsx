@@ -88,6 +88,8 @@ interface PostContentSectionProps {
   /** Editor features for inline editing (defaults to simple user-friendly options) */
   editorFeatures?: EditorFeatures
   canModerate?: boolean
+  /** A held post is shown to its author: tell them it waits for review. */
+  pendingForAuthor?: boolean
   moderationBusy?: boolean
   onApprove?: () => void
   onReject?: () => void
@@ -126,6 +128,7 @@ export function PostContentSection({
   isSaving = false,
   editorFeatures = DEFAULT_USER_EDITOR_FEATURES,
   canModerate = false,
+  pendingForAuthor = false,
   moderationBusy = false,
   onApprove,
   onReject,
@@ -272,6 +275,7 @@ export function PostContentSection({
         <InlineModerationActions
           pending
           noun="post"
+          forAuthor={pendingForAuthor && !canModerate}
           className="mb-4"
           busy={moderationBusy}
           onApprove={canModerate ? onApprove : undefined}

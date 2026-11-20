@@ -971,7 +971,7 @@
     },
     "sweep:doc:admin:/settings/preferences": {
       "dbQueries": 6,
-      "htmlKB": 45
+      "htmlKB": 49.5
     },
     "sweep:ui:admin:/settings/preferences": {
       "dbQueries": 11,

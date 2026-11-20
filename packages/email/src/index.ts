@@ -66,6 +66,13 @@ import { conversationMessageCopy, conversationReplySubject } from './conversatio
 import { ConversationClosedEmail } from './templates/conversation-closed'
 import { isEmailBillable } from './mail-class'
 import { PostMentionEmail } from './templates/post-mention'
+import {
+  ModerationDecisionEmail,
+  moderationDecisionHeadline,
+  type ModerationDecision,
+  type ModeratedItem,
+} from './templates/moderation-decision'
+export type { ModerationDecision, ModeratedItem } from './templates/moderation-decision'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
@@ -1712,6 +1719,55 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     emailType: 'PostMentionEmail',
     workspaceName,
     preview: { postUrl },
+  })
+}
+
+// ============================================================================
+// Moderation Decision Email
+// ============================================================================
+
+export interface SendModerationDecisionEmailArgs {
+  to: string
+  item: ModeratedItem
+  decision: ModerationDecision
+  postTitle: string
+  /** Where the approved item now shows; absent for a rejection. */
+  postUrl?: string
+  workspaceName: string
+  unsubscribeUrl?: string
+  preferencesUrl?: string
+  logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
+}
+
+/** Tell the author of a held post or comment what the team decided. */
+export async function sendModerationDecisionEmail(
+  args: SendModerationDecisionEmailArgs
+): Promise<EmailResult> {
+  const { to, item, decision, postTitle, postUrl, workspaceName, unsubscribeUrl } = args
+  return sendEmail({
+    to,
+    subject: moderationDecisionHeadline(item, decision),
+    react: ModerationDecisionEmail({
+      item,
+      decision,
+      postTitle,
+      postUrl,
+      workspaceName,
+      unsubscribeUrl,
+      preferencesUrl: args.preferencesUrl,
+      logoUrl: args.logoUrl,
+    }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from: args.from,
+    fromDisplayName: args.fromDisplayName,
+    emailType: 'ModerationDecisionEmail',
+    workspaceName,
+    preview: { item, decision, postUrl },
   })
 }
 

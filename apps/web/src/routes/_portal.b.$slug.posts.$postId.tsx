@@ -347,6 +347,9 @@ function PostDetailPage() {
             onImageUpload={canUploadPostMedia ? uploadMediaWithSession : undefined}
             isSaving={isSavingEdit || team.isTeamSavingEdit}
             canModerate={canModerate}
+            // Only the author and those who may see unpublished posts are
+            // shown a held post, so a viewer without that permission wrote it.
+            pendingForAuthor={!can(PERMISSIONS.POST_VIEW_PRIVATE)}
             moderationBusy={approvePost.isPending || rejectPost.isPending}
             onApprove={() => approvePost.mutate(postId)}
             onReject={() => rejectPost.mutate({ postId })}

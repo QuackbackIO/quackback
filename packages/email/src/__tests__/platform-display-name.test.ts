@@ -182,6 +182,16 @@ const workspaceSenders: Record<string, Drive> = {
       workspaceName: w!,
       ...extra,
     }),
+  sendModerationDecisionEmail: (w, extra) =>
+    email.sendModerationDecisionEmail({
+      to,
+      item: 'post',
+      decision: 'approved',
+      postTitle: 'Dark mode',
+      postUrl: 'https://acme.test/p/1',
+      workspaceName: w!,
+      ...extra,
+    }),
   sendNoteMentionEmail: (w) =>
     email.sendNoteMentionEmail({
       to,

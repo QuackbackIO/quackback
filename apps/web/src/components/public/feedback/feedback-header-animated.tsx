@@ -282,10 +282,15 @@ export function FeedbackHeaderAnimated({
       onPostCreated?.(result.id, result.board.slug)
 
       toast.success(
-        intl.formatMessage({
-          id: 'portal.feedback.header.toastSubmitted',
-          defaultMessage: 'Feedback submitted',
-        }),
+        result.pendingReview
+          ? intl.formatMessage({
+              id: 'portal.feedback.header.toastPending',
+              defaultMessage: 'Your post is waiting for review',
+            })
+          : intl.formatMessage({
+              id: 'portal.feedback.header.toastSubmitted',
+              defaultMessage: 'Feedback submitted',
+            }),
         {
           action: {
             label: intl.formatMessage({

@@ -809,6 +809,7 @@ function CommentItem({
             <InlineModerationActions
               pending
               noun="comment"
+              forAuthor={isAuthor && !canModerate}
               className="mt-2 ms-10"
               busy={approveComment.isPending || rejectComment.isPending}
               onApprove={canModerate ? () => approveComment.mutate(comment.id) : undefined}

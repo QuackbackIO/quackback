@@ -324,10 +324,10 @@ export async function createComment(
     })
   }
 
-  // Auto-subscribe commenter to the post even when held — so the author
-  // receives the approval/rejection notification and any subsequent thread
-  // activity once approved. Mirrors post.service.ts which subscribes
-  // authors of held posts.
+  // Auto-subscribe commenter to the post even when held, so they follow the
+  // thread once approved. Mirrors post.service.ts, which subscribes authors
+  // of held posts. The approval or rejection notice itself reaches the
+  // commenter from the comment.approved / comment.rejected events.
   if (!options?.skipDispatch && author.principalId) {
     await subscribeToPost(author.principalId, input.postId, 'comment')
   }

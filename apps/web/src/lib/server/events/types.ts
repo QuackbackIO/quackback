@@ -96,9 +96,16 @@ export const NOTIFICATION_ONLY_EVENT_TYPES = [
   'comment.mentioned',
 ] as const satisfies readonly EventType[]
 
-/** Whether an event type only ever notifies people and never leaves the workspace. */
+/**
+ * Whether an event type only ever notifies people and never leaves the
+ * workspace. Besides the listed EVENT_TYPES members, the moderation decisions
+ * (catalogue-only, so never webhook events) exist only to tell the author.
+ */
 export function isNotificationOnlyEvent(type: string): boolean {
-  return (NOTIFICATION_ONLY_EVENT_TYPES as readonly string[]).includes(type)
+  return (
+    (NOTIFICATION_ONLY_EVENT_TYPES as readonly string[]).includes(type) ||
+    isModerationDecisionEventType(type)
+  )
 }
 
 /**
@@ -214,6 +221,33 @@ export interface PostOwnerAssignedPayload {
   boardId?: string
   ownerPrincipalId: string
   previousOwnerPrincipalId: string | null
+}
+
+/**
+ * The team's decision on a held post or comment. Catalogue-only events (not in
+ * EVENT_TYPES, so off the webhook surface): they exist to tell the author.
+ */
+export const MODERATION_DECISION_EVENT_TYPES = [
+  'post.approved',
+  'post.rejected',
+  'comment.approved',
+  'comment.rejected',
+] as const
+export type ModerationDecisionEventType = (typeof MODERATION_DECISION_EVENT_TYPES)[number]
+
+export interface ModerationDecisionPayload {
+  postId: string
+  postTitle: string
+  boardId: string
+  boardSlug: string
+  /** Who wrote the held item; null for an item with no author left. */
+  authorPrincipalId: string | null
+  /** comment.approved / comment.rejected only. */
+  commentId?: string
+}
+
+export function isModerationDecisionEventType(type: string): type is ModerationDecisionEventType {
+  return (MODERATION_DECISION_EVENT_TYPES as readonly string[]).includes(type)
 }
 
 export interface PostDeletedPayload {

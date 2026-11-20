@@ -57,7 +57,14 @@ import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { type HookContext } from './hook-context'
 import { hookOrigins } from './hook-origins'
 import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
-import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
+import {
+  isModerationDecisionEventType,
+  type EventData,
+  type EventActor,
+  type ModerationDecisionPayload,
+  type PostMergedPayload,
+  type PostUnmergedPayload,
+} from './types'
 import { logger } from '@/lib/server/logger'
 import { isTestEvent } from './test-event'
 import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
@@ -753,6 +760,121 @@ export async function getMentionTargets(
     }
   }
 
+  return targets
+}
+
+// ============================================================================
+// Moderation Decision Targets
+// ============================================================================
+
+/**
+ * Resolve hook targets for the team's decision on a held post or comment
+ * (`post.approved`, `post.rejected`, `comment.approved`, `comment.rejected`):
+ * one bell and, under their preferences, one email to the item's author.
+ *
+ * Nobody else hears about it, and the author does not when they moderated
+ * their own item, when they are not a signed-in person (an anonymous author
+ * has no inbox), or when it is test feedback. An approved item links to where
+ * it now shows, once the author can still see it there; a rejected one is
+ * gone, so its notice links nowhere. The moderator's reason never travels.
+ */
+export async function getModerationDecisionTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  const type: string = event.type
+  if (!isModerationDecisionEventType(type)) return []
+  const data = event.data as unknown as ModerationDecisionPayload
+  const authorId = data.authorPrincipalId as PrincipalId | null
+  if (!authorId) return []
+  if (authorId === event.actor.principalId) return []
+  if (
+    await isTestEvent({
+      entityId: data.commentId ?? data.postId,
+      payload: data,
+      actorId: event.actor.principalId,
+    })
+  )
+    return []
+
+  const [row] = await db
+    .select({
+      id: principal.id,
+      type: principal.type,
+      email: user.email,
+      contactEmail: principal.contactEmail,
+    })
+    .from(principal)
+    .leftJoin(user, eq(principal.userId, user.id))
+    .where(eq(principal.id, authorId))
+    .limit(1)
+  if (!row || row.type !== 'user') return []
+
+  const [item, decision] = type.split('.') as ['post' | 'comment', 'approved' | 'rejected']
+  const approved = decision === 'approved'
+  const postId = data.postId as PostId
+
+  // An approved item is only worth a link the author can open.
+  if (approved) {
+    const allowed = await filterSubscribersByPostAudience(postId, [
+      {
+        principalId: authorId,
+        userId: '',
+        email: row.email ?? '',
+        contactEmail: null,
+        name: null,
+        reason: 'manual',
+        notifyComments: false,
+        notifyStatusChanges: false,
+      },
+    ])
+    if (allowed.length === 0) return []
+  }
+
+  const postUrl = approved
+    ? `${buildPostUrl(hookOrigins(context), { boardSlug: data.boardSlug, id: data.postId })}${
+        data.commentId ? `#comment-${data.commentId}` : ''
+      }`
+    : undefined
+  const notice = { postTitle: data.postTitle, decision, item }
+
+  const targets: HookTarget[] = [
+    {
+      type: 'notification',
+      target: { principalIds: [authorId] },
+      config: {
+        ...notice,
+        ...(approved
+          ? { postId, boardSlug: data.boardSlug, postUrl, commentId: data.commentId }
+          : {}),
+      },
+    },
+  ]
+
+  const to = contactRecipientFrom({ accountEmail: row.email, contactEmail: row.contactEmail })
+  if (!to) return targets
+  const prefs = (await batchGetNotificationPreferences([authorId])).get(authorId)
+  if (prefs && !shouldNotify(prefs, 'post_moderated', 'email')) return targets
+
+  const [sender, tokenMap] = await Promise.all([
+    surfaceSender('feedback'),
+    batchGenerateUnsubscribeTokens([{ principalId: authorId, postId, action: 'unsubscribe_all' }]),
+  ])
+  const token = tokenMap.get(authorId)
+  targets.push(
+    emailTarget(
+      { principalId: authorId, email: to },
+      token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : '',
+      {
+        ...notice,
+        ...(postUrl ? { postUrl } : {}),
+        workspaceName: context.workspaceName,
+        logoUrl: context.logoUrl ?? undefined,
+        preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+        ...sender,
+      }
+    )
+  )
   return targets
 }
 

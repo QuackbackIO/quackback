@@ -528,7 +528,7 @@ test.describe('portal feed', () => {
       const res = await author.page.goto(postPath(held))
       expect(res?.status()).toBe(200)
       await expect(author.page.getByRole('heading', { level: 1, name: held.title })).toBeVisible()
-      await expect(author.page.getByText('Pending review').first()).toBeVisible()
+      await expect(author.page.getByText('Waiting for review').first()).toBeVisible()
     }
   )
 
@@ -553,7 +553,7 @@ test.describe('portal feed', () => {
       await author.page.goto(`/?board=${board.slug}`)
       const card = cardFor(author.page, held.title)
       await expect(card).toBeVisible()
-      await expect(card.getByText('Pending review')).toBeVisible()
+      await expect(card.getByText('Waiting for review')).toBeVisible()
     }
   )
 
