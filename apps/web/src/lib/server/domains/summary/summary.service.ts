@@ -34,6 +34,18 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'summary' })
 
 /**
+ * The comments a summary is built from: live, public and published. A private
+ * team note or a comment held for moderation never reaches the model, so it
+ * cannot surface in keyQuotes. The sweep counts the same rows, so a post whose
+ * only change is such a comment is not re-summarised for ever.
+ */
+const summarisedComment = and(
+  isNull(postComments.deletedAt),
+  eq(postComments.isPrivate, false),
+  eq(postComments.moderationState, 'published')
+)
+
+/**
  * `chat({ outputSchema })` collapses "empty response", "response wasn't
  * valid JSON", and "response didn't match the schema" into one thrown
  * `Error` tagged with one of these `code`s (see @tanstack/ai's
@@ -146,7 +158,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
       isTeamMember: postComments.isTeamMember,
     })
     .from(postComments)
-    .where(and(eq(postComments.postId, postId), isNull(postComments.deletedAt)))
+    .where(and(eq(postComments.postId, postId), summarisedComment))
     .orderBy(postComments.createdAt)
 
   // Build prompt input
@@ -248,7 +260,7 @@ async function _doSweep(): Promise<void> {
       count: sql<number>`count(*)::int`.as('live_count'),
     })
     .from(postComments)
-    .where(isNull(postComments.deletedAt))
+    .where(summarisedComment)
     .groupBy(postComments.postId)
     .as('live_cc')
 
