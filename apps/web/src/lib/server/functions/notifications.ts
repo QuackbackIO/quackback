@@ -116,7 +116,8 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'get unread count')
   const auth = await requireAuth()
-  const count = await getUnreadCount(auth.principal.id)
+  // The same actor the list uses, so the badge leaves out the bells it redacts.
+  const count = await getUnreadCount(auth.principal.id, await policyActorFromAuth(auth))
   return { count }
 })
 
