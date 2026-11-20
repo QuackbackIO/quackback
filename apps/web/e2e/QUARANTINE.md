@@ -365,3 +365,57 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   `apps/web/src/lib/server/domains/api/responses.ts:21-33`). Fix: wrap the
   apps error responses with `corsHeaders()`. owner: unassigned, review by:
   2026-12-03.
+
+### Product suite: API REST (changelog, status page, help center, settings, platform)
+
+- `platform/rest-changelog.spec.ts` › API-R-106 a malformed cursor is refused
+  as bad input, not a server error. `GET /api/v1/changelog?cursor=not-an-id`
+  answers 500 INTERNAL_ERROR: the cursor goes unvalidated into a typeid column
+  whose driver throws (`apps/web/src/routes/api/v1/changelog/index.ts:41`,
+  `domains/changelog/changelog.query.ts:72`). Fix: validate it with
+  `parseTypeId(cursor, 'changelog', 'cursor')` (400). owner: unassigned, review by:
+  2026-12-03.
+- `platform/rest-changelog.spec.ts` › API-R-111 a body that is not JSON is
+  refused as bad input, not a server error. POST and PATCH answer 500:
+  `request.json()` throws a plain SyntaxError that `handleDomainError` maps to
+  500 (`apps/web/src/routes/api/v1/changelog/index.ts:78`, `$entryId.ts:68`).
+  Fix: catch the parse error and answer 400 BAD_REQUEST. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/rest-status-page.spec.ts` › API-R-127 the services path names a
+  service, not a component, in its errors. `GET /api/v1/status/services/nope`
+  answers "Invalid component ID format" and a missing one "Status component not
+  found" (`apps/web/src/routes/api/v1/status/-service-handlers.ts:148`, `:153`).
+  Fix: name the resource "service" on the services path. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/rest-status-page.spec.ts` › API-R-132 a service id that never
+  existed is reported as unknown, not as deleted. A well-formed id that names
+  no service gets "An affected service has been deleted. Choose the services
+  again." (`apps/web/src/lib/server/domains/status/status.service.ts:137`).
+  Fix: tell an unknown id apart from a deleted one. owner: unassigned, review
+  by: 2026-12-03.
+- `platform/rest-status-page.spec.ts` › API-R-126 a status body that is not
+  JSON is refused as bad input, not a server error. POST services and incidents
+  answer 500 on an unparsable body (`-service-handlers.ts:94`,
+  `status/incidents/index.ts:104`): `request.json()` throws outside
+  `handleDomainError`. owner: unassigned, review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-165 a malformed categoryId filter
+  is refused as bad input. `GET /api/v1/help-center/articles?categoryId=garbage`
+  answers 500: the value reaches a typeid column unvalidated
+  (`apps/web/src/routes/api/v1/help-center/articles/index.ts:76`). Fix:
+  `parseOptionalTypeId(categoryId, 'kb_category', 'category ID')`. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-166 an article in a malformed or
+  unknown category is refused, not a server error. `POST
+/api/v1/help-center/articles` with `categoryId` "garbage" or a well-formed
+  unknown id answers 500 (`articles/index.ts:21`, no TypeID check; the FK then
+  fails). Fix: validate the id and answer 404 "Help center category not found".
+  owner: unassigned, review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-171 feedback for an unknown article
+  is not found, not a server error. The insert violates the
+  `kb_article_feedback.article_id` FK: 500
+  (`domains/help-center/help-center.article-feedback.service.ts:63`). Fix: check
+  the article exists first (404). owner: unassigned, review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-163 a help center body that is not
+  JSON is refused as bad input. Categories POST/PATCH answer 500 on an
+  unparsable body (`categories/index.ts:81`, `$categoryId.ts:91`). owner:
+  unassigned, review by: 2026-12-03.
