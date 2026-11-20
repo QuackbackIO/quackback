@@ -4,7 +4,7 @@
  *
  * Journeys: CHG-S-08, CHG-S-09, CHG-S-10, CHG-S-11, CHG-S-12, CHG-S-13,
  * CHG-S-14, CHG-S-15, CHG-S-16, CHG-S-17 (@isolated), CHG-S-18,
- * CHG-S-19, CHG-S-21, CHG-S-27, CHG-S-28 (quarantined), CHG-A-15.
+ * CHG-S-19, CHG-S-21, CHG-S-27, CHG-S-28, CHG-A-15.
  *
  * Every publish mails every active subscriber in the workspace, so each test
  * reads only its own subscribers' mail, matched by the entry's title, and
@@ -467,14 +467,7 @@ test(
 
 test(
   'CHG-S-28 an entry with a segment-gated label is not announced to subscribers outside the segment',
-  {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'targets.ts getChangelogSubscriberTargets ignores the label segment gate (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@core' },
   async ({ playwright, marker }) => {
     const admin = await personApi(playwright, 'admin')
     const member = await changelogSubscriber(marker, 'member')

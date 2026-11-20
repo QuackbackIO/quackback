@@ -805,31 +805,3 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   2026-12-03.
 
 ### Product suite: changelog
-
-- `changelog/publish-notifications.spec.ts` › CHG-S-28 an entry with a
-  segment-gated label is not announced to subscribers outside the segment.
-  Product bug: `getChangelogSubscriberTargets`
-  (`apps/web/src/lib/server/events/targets.ts:1916`) ignores the label
-  segment gate, so subscribers outside the segment get the full body of a
-  gated entry by email and bell. Fix: intersect the fan-out with the members
-  of the entry's gated labels' segments, as the public reads do. owner:
-  unassigned, review by: 2026-12-03.
-- `changelog/admin-settings.spec.ts` › CHG-A-52 a signed-out caller cannot read
-  gated labels or their segment ids. Product bug: `listChangelogCategoriesFn`
-  (`apps/web/src/lib/server/functions/changelog-categories.ts:45`) has no
-  auth, portal-access or gate check and returns every label with its
-  `segmentIds`. Fix: filter gated labels by the viewer (team sees all) and drop
-  `segmentIds` for non-team callers. owner: unassigned, review by: 2026-12-03.
-- `changelog/portal-changelog.spec.ts` › CHG-P-14 with the Changelog product off
-  its public server functions answer nothing (`@isolated`). Product bug:
-  `listPublicChangelogsFn` and `getPublicChangelogFn`
-  (`apps/web/src/lib/server/functions/changelog.ts:226`, `:272`) skip the
-  product flag that the routes, feed and widget honour. Fix: return the empty
-  list / not found when `changelog` is off. owner: unassigned, review by:
-  2026-12-03.
-- `changelog/portal-changelog.spec.ts` › CHG-P-17 the sitemap leaves out entries
-  a crawler cannot read. Product bug: `apps/web/src/routes/sitemap[.]xml.ts:73`
-  lists every published entry without the label segment gate (or the
-  audience), so gated entry URLs reach crawlers. Fix: apply
-  `categoryGateCondition` for an anonymous actor and skip entries when the
-  audience is signed-in only. owner: unassigned, review by: 2026-12-03.

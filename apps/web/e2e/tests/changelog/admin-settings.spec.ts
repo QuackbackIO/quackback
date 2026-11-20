@@ -3,7 +3,7 @@
  * labels (create, edit, delete, validation, segment gates).
  *
  * Journeys: CHG-A-43 (@isolated), CHG-A-46, CHG-A-47 (@isolated), CHG-A-48
- * (@isolated), CHG-A-49, CHG-A-50, CHG-A-51, CHG-A-52 (quarantined),
+ * (@isolated), CHG-A-49, CHG-A-50, CHG-A-51, CHG-A-52,
  * CHG-A-53.
  *
  * Workspace-wide switches (audience, emails, auto-subscribe, the product
@@ -231,14 +231,7 @@ test(
 
 test(
   'CHG-A-52 a signed-out caller cannot read gated labels or their segment ids',
-  {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'functions/changelog-categories.ts listChangelogCategoriesFn is unauthenticated and returns every label with its segmentIds (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@core' },
   async ({ playwright, marker }) => {
     const admin = await personApi(playwright, 'admin')
     const segment = await segmentWith(marker, [])

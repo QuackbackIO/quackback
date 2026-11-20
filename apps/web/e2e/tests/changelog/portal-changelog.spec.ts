@@ -4,8 +4,8 @@
  * private portal), and the sitemap.
  *
  * Journeys: CHG-P-01, CHG-P-06, CHG-P-07, CHG-P-10, CHG-P-11, CHG-P-12
- * (@isolated), CHG-P-13 (@isolated), CHG-P-14 (@isolated, quarantined),
- * CHG-P-15, CHG-P-17 (quarantined), CHG-P-19, CHG-P-20, CHG-P-26.
+ * (@isolated), CHG-P-13 (@isolated), CHG-P-14 (@isolated),
+ * CHG-P-15, CHG-P-17, CHG-P-19, CHG-P-20, CHG-P-26.
  *
  * Entries are published silently (notify: false) so no subscriber mail.
  */
@@ -343,14 +343,7 @@ test(
 
 test(
   'CHG-P-14 with the Changelog product off its public server functions answer nothing',
-  {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'functions/changelog.ts public reads skip the changelog product flag that routes, feed and widget honour (see QUARANTINE.md)',
-    },
-  },
+  { tag: ['@nightly', '@isolated'] },
   async ({ page, playwright, marker }) => {
     test.skip(!ISOLATED, ISOLATED_SKIP)
     const admin = await personApi(playwright, 'admin')
@@ -373,14 +366,7 @@ test(
 
 test(
   'CHG-P-17 the sitemap leaves out entries a crawler cannot read',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'routes/sitemap[.]xml.ts lists changelog entries without the label segment gate (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@nightly' },
   async ({ playwright, request, marker }) => {
     const admin = await personApi(playwright, 'admin')
     const member = await mintCustomer({ email: `${marker}-in@customers.example` })
