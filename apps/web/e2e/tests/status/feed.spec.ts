@@ -110,9 +110,9 @@ test('STA-P-20 the RSS feed lists every update', { tag: '@core' }, async ({ mark
   expect(first.guid).toMatch(new RegExp(`^.*/status/${inc.id}#status_update_`))
   expect(second.guid).not.toBe(first.guid)
   expect(first.description).toContain(`${marker} first update`)
-  // The services' order is not fixed (the links are read without an ORDER BY).
+  // Services are listed in page order (Alpha was created first).
   const affected = / · Affected: (.+)$/.exec(first.description)?.[1].split(', ') ?? []
-  expect(affected.sort()).toEqual([`${marker} Alpha`, `${marker} Beta`])
+  expect(affected).toEqual([`${marker} Alpha`, `${marker} Beta`])
   expect(windowItem.link).toMatch(new RegExp(`/status/${w.id}$`))
   expect(windowItem.description).toMatch(/Window: .+ to .+ UTC/)
   expect(xml).toMatch(/<guid isPermaLink="false">/)

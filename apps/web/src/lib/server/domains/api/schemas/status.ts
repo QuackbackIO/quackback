@@ -147,8 +147,14 @@ const CreateStatusIncidentSchema = z
     impactOverride: z.boolean().optional(),
     affectedComponents: z.array(IncidentAffectedComponentSchema).min(1),
     body: z.string().min(1).meta({ description: 'Body of the first status update' }),
-    scheduledStartAt: z.string().datetime().nullable().optional(),
-    scheduledEndAt: z.string().datetime().nullable().optional(),
+    scheduledStartAt: z.string().datetime().nullable().optional().meta({
+      description:
+        'Planned start of a maintenance window. Required, with scheduledEndAt, for a window created "scheduled", or "completed" without a backfill',
+    }),
+    scheduledEndAt: z.string().datetime().nullable().optional().meta({
+      description:
+        'Planned end of a maintenance window, after scheduledStartAt. Required with scheduledStartAt for a "scheduled" or (non-backfill) "completed" window; a window created "in_progress" or "verifying" may leave it open',
+    }),
     autoStart: z.boolean().optional(),
     autoComplete: z.boolean().optional(),
     backfill: z

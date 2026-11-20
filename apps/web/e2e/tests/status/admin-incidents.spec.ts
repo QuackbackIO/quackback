@@ -660,15 +660,8 @@ test.describe('backfill and already-resolved', () => {
   })
 
   test(
-    'STA-A-30 an incident created already resolved announces nothing',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'createIncident (status.service.ts:242) defaults notifySubscribers to true for a non-backfill row created already resolved, so it announces status.incident_created for something already over; see QUARANTINE.md',
-      },
-    },
+    'STA-A-30 an incident created already resolved emails no one',
+    { tag: '@nightly' },
     async ({ marker }) => {
       const svc = await createService(admin, `${marker} Over`)
       const inc = await createIncident(admin, {
@@ -681,7 +674,13 @@ test.describe('backfill and already-resolved', () => {
       expect(row.resolved_at).not.toBeNull()
       expect(await statusOf(svc.id)).toBe('operational')
       expect(await serviceEvents(svc.id)).toEqual([])
-      expect(await domainEventTypes(inc.id)).not.toContain('status.incident_created')
+      // Webhooks and workflows still hear of it; subscribers are not emailed.
+      expect(row.notify_subscribers).toBe(false)
+      const created = (await domainEvents(inc.id)).filter(
+        (e) => e.type === 'status.incident_created'
+      )
+      expect(created).toHaveLength(1)
+      expect(created[0].payload).toMatchObject({ incident: { notifySubscribers: false } })
     }
   )
 })
@@ -802,12 +801,7 @@ test.describe('delete and lists', () => {
   test(
     'STA-A-33 editor deep link to a malformed id says not found',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'findStatusIncidentById (status.service.ts:866) throws on a malformed id instead of returning null, so the editor shows "Couldn\'t load this incident"; see QUARANTINE.md',
-      },
+      tag: '@nightly',
     },
     async ({ asPerson }) => {
       const res = await callServerFn(

@@ -16,12 +16,7 @@ import { createSegment, createService, must, publicSnapshot } from '../../produc
 test(
   'STA-A-57 the overview banner shows what visitors see, not gated services',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'getStatusOverviewAdminFn derives topLevelStatus from every service, segment-gated and plan-hidden ones included (functions/status.ts:624), so "Visitors currently see" can say a status no visitor sees; see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ playwright, marker }) => {
     const sql = supportDb()

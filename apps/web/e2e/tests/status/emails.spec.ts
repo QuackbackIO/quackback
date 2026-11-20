@@ -417,12 +417,7 @@ test(
 test(
   'STA-S-23 nothing is emailed for an incident or window created already over',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'createIncident (status.service.ts:242, :317) defaults notifySubscribers to true for a non-backfill row created resolved or completed, so subscribers are emailed about something already over; see QUARANTINE.md (STA-A-30)',
-    },
+    tag: '@nightly',
   },
   async ({ playwright, marker }) => {
     const svc = await createService(admin, `${marker} Over`)
@@ -524,12 +519,7 @@ test(
 test(
   'STA-S-30 an incident cannot be pinned to the "maintenance" impact',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'Incident impact "maintenance" is accepted (REST -validation.ts:33 and the server fn), and the incident email template has no label or colour for it (status-incident-published.tsx:29); see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ marker }) => {
     const svc = await createService(admin, `${marker} Pin`)

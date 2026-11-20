@@ -132,6 +132,7 @@ export async function createStatusComponentHandler({ request }: { request: Reque
       status: parsed.data.status,
       showUptime: parsed.data.showUptime,
       segmentIds,
+      source: 'api',
     })
 
     return createdResponse(serializeStatusComponent(component))
