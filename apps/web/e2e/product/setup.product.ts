@@ -36,6 +36,12 @@ setup('prepare the product suite', async ({ request }) => {
            || '{"enabled": true}'::jsonb)
     )::text`
   await bustSettingsCache()
+  // The seed's published and scheduled changelog entries were never announced
+  // (notified_at NULL). The changelog reconciler, armed 25 s after boot, would
+  // email them to every subscriber while tests read Mailpit. Mark them done.
+  await supportDb()`
+    UPDATE changelog_entries SET notified_at = now()
+    WHERE notified_at IS NULL AND published_at IS NOT NULL`
   ensureStorageBucket()
   const people = seedSupportPeople()
   mintSupportSessions(SUPPORT_RUN_DIR, people)
