@@ -97,3 +97,28 @@ by a separate test that is not quarantined.
     checks on both single-column paths.
 
   owner: unassigned, review by: 2026-12-03.
+### Product suite: people (users and companies)
+- `people/users.spec.ts` › removing a person › PPL-U-43 removing a voter
+  withdraws their vote from the post count. Product bug: `removePortalUser`
+  deletes the principal and lets `post_votes` cascade
+  (`apps/web/src/lib/server/domains/users/user.service.ts:514`), but nothing
+  decrements `posts.vote_count`, so every post the person voted on keeps a
+  count one too high on the portal and the admin, although the remove dialog
+  promises "their votes are withdrawn". Fix: in the same transaction, before
+  the delete, `UPDATE posts SET vote_count = greatest(vote_count - 1, 0) WHERE
+id IN (SELECT post_id FROM post_votes WHERE principal_id = $1)`. owner:
+  unassigned, review by: 2026-12-03.
+- `people/users-api.spec.ts` › REST /api/v1/users › PPL-U-59 a teammate id
+  answers a plain "Portal user not found". Product bug: the route passes a
+  full sentence to `notFoundResponse`, which appends " not found" again, so
+  the answer reads "Portal user not found not found"
+  (`apps/web/src/routes/api/v1/users/$principalId.ts:46`). Fix: pass
+  `'Portal user'`. owner: unassigned, review by: 2026-12-03.
+- `people/users-api.spec.ts` › REST /api/v1/users › PPL-U-64 an unknown or
+  teammate id is refused as a missing user, not a "Member". Product bug:
+  `removePortalUser` throws `MEMBER_NOT_FOUND`, which `handleDomainError` maps
+  to "Member not found" (`apps/web/src/lib/server/domains/api/responses.ts:182`),
+  so DELETE /api/v1/users/:id on an unknown portal user talks about a member.
+  Fix: throw a `USER_NOT_FOUND` (or a portal-user code) from
+  `removePortalUser` (`user.service.ts:476`), or map the error in the route.
+  owner: unassigned, review by: 2026-12-03.
