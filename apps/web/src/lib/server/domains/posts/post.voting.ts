@@ -268,13 +268,8 @@ export async function addVoteOnBehalf(
   const addedByUuid = addedByPrincipalId ? toUuid(addedByPrincipalId) : null
   const createdAtSql = createdAt ? sql`${createdAt.toISOString()}::timestamptz` : sql`NOW()`
 
-  // Single atomic CTE: validate post/board, insert vote (never delete), update count, auto-subscribe
-  const result = await db.execute<{
-    post_exists: boolean
-    board_exists: boolean
-    newly_voted: boolean
-    vote_count: number
-  }>(sql`
+  // Single atomic CTE: validate post/board/voter, insert vote (never delete), update count, auto-subscribe
+  const result = await db.execute(sql`
     WITH post_check AS (
       SELECT c.id, c.board_id, c.vote_count
       FROM ${posts} p
@@ -294,11 +289,15 @@ export async function addVoteOnBehalf(
       WHERE id = (SELECT board_id FROM post_check)
         AND deleted_at IS NULL
     ),
+    voter_check AS (
+      SELECT 1 FROM ${principal} WHERE id = ${principalUuid}::uuid
+    ),
     inserted AS (
       INSERT INTO ${postVotes} (id, post_id, principal_id, source_type, source_external_url, added_by_principal_id, created_at, updated_at)
       SELECT ${voteId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
+        AND EXISTS (SELECT 1 FROM voter_check)
         AND NOT COALESCE((SELECT closed FROM board_closed), false)
         AND NOT EXISTS (
           SELECT 1 FROM ${postVotes}
@@ -327,6 +326,7 @@ export async function addVoteOnBehalf(
     SELECT
       EXISTS(SELECT 1 FROM post_check) as post_exists,
       EXISTS(SELECT 1 FROM board_check) as board_exists,
+      EXISTS(SELECT 1 FROM voter_check) as voter_exists,
       EXISTS(SELECT 1 FROM inserted) as newly_voted,
       COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count,
       COALESCE((SELECT closed FROM board_closed), false) as blocked
@@ -335,6 +335,7 @@ export async function addVoteOnBehalf(
   type VoteResultRow = {
     post_exists: boolean
     board_exists: boolean
+    voter_exists: boolean
     newly_voted: boolean
     vote_count: number
     blocked: boolean
@@ -348,6 +349,10 @@ export async function addVoteOnBehalf(
 
   if (!row?.board_exists) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board not found for post ${postId}`)
+  }
+
+  if (!row.voter_exists) {
+    throw new NotFoundError('PRINCIPAL_NOT_FOUND', `Voter with ID ${principalId} not found`)
   }
 
   if (row.blocked) throw new BoardReadOnlyError()

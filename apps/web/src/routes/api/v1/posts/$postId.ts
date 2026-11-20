@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { withApiKeyAuth, assertApiPermissions } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth, assertApiPermissions, assertApiScope } from '@/lib/server/domains/api/auth'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { scopeForPermission } from '@/lib/shared/api-key-scopes'
 import {
   successResponse,
   noContentResponse,
@@ -128,8 +129,14 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           }
 
           // The PATCH body can touch several permission-scoped fields; require the
-          // granular permission for each field actually present.
-          assertApiPermissions(auth, permissionsForPostPatch(parsed.data))
+          // granular permission for each field actually present. The answer carries
+          // the post, so the caller must also be able to read it, whatever the body.
+          const fieldPermissions = permissionsForPostPatch(parsed.data)
+          assertApiPermissions(auth, [...fieldPermissions, PERMISSIONS.POST_VIEW_PRIVATE])
+          if (fieldPermissions.length === 0) {
+            assertApiScope(auth, scopeForPermission(PERMISSIONS.POST_EDIT))
+            return badRequestResponse('The request body has no field to update')
+          }
 
           const statusId = parseOptionalTypeId<PostStatusId>(
             parsed.data.statusId,

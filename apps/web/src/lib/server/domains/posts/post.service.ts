@@ -67,6 +67,32 @@ import { assertBoardOpen } from '@/lib/server/domains/plan-limits/plan-limits.bo
 const log = logger.child({ component: 'posts' })
 
 /**
+ * Refuse a tag list the assignment insert would fail on or should not write:
+ * a repeated id, or one naming no live tag. `kept` are the tags the post
+ * already carries; they stay assignable after the tag itself is deleted, so
+ * re-sending a post's current tags never fails.
+ */
+async function assertAssignableTags(
+  tagIds: readonly PostTagId[],
+  kept: readonly PostTagId[] = []
+): Promise<void> {
+  if (new Set(tagIds).size !== tagIds.length) {
+    throw new ValidationError('VALIDATION_ERROR', 'Tag IDs must not repeat')
+  }
+  const wanted = tagIds.filter((tagId) => !kept.includes(tagId))
+  if (wanted.length === 0) return
+  const live = await db
+    .select({ id: postTags.id })
+    .from(postTags)
+    .where(and(inArray(postTags.id, wanted), isNull(postTags.deletedAt)))
+  const found = new Set(live.map((t) => t.id))
+  const missing = wanted.find((tagId) => !found.has(tagId))
+  if (missing) {
+    throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${missing} not found`)
+  }
+}
+
+/**
  * Create a new post
  *
  * Validates that:
@@ -128,6 +154,9 @@ export async function createPost(
       },
     })
 
+  // Refuse a bad tag list before anything is written, so it leaves no post.
+  if (input.tagIds) await assertAssignableTags(input.tagIds)
+
   // Validate board exists and get status in parallel.
   // The deletedAt filter here is load-bearing: rehostExternalImages (below) uploads
   // to S3 before the locked recheck inside the transaction. Without this filter, a
@@ -142,10 +171,12 @@ export async function createPost(
       ? db
           .select()
           .from(postStatuses)
-          .where(eq(postStatuses.slug, 'open'))
+          .where(and(eq(postStatuses.slug, 'open'), isNull(postStatuses.deletedAt)))
           .limit(1)
           .then((rows) => rows[0])
-      : db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId!) }),
+      : db.query.postStatuses.findFirst({
+          where: and(eq(postStatuses.id, input.statusId!), isNull(postStatuses.deletedAt)),
+        }),
   ])
 
   if (!board) {
@@ -376,8 +407,10 @@ export async function updatePost(
     throw new ValidationError('VALIDATION_ERROR', 'Actor principal ID is required for post updates')
   }
 
-  // Get existing post
-  const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, id) })
+  // Get existing post; a deleted post is not found, so it cannot be edited
+  const existingPost = await db.query.posts.findFirst({
+    where: and(eq(posts.id, id), isNull(posts.deletedAt)),
+  })
   if (!existingPost) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
   }
@@ -391,7 +424,9 @@ export async function updatePost(
       ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, existingPost.statusId) })
       : null,
     statusChanged
-      ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId!) })
+      ? db.query.postStatuses.findFirst({
+          where: and(eq(postStatuses.id, input.statusId!), isNull(postStatuses.deletedAt)),
+        })
       : null,
   ])
 
@@ -417,14 +452,16 @@ export async function updatePost(
     }
   }
 
-  // Capture current tag IDs before update (for activity diff)
-  let currentTagIds: string[] = []
+  // Capture current tag IDs before update (for activity diff), and refuse a
+  // tag list the replacement would fail on before anything is written
+  let currentTagIds: PostTagId[] = []
   if (input.tagIds !== undefined) {
     const currentTags = await db
       .select({ tagId: postTagAssignments.tagId })
       .from(postTagAssignments)
       .where(eq(postTagAssignments.postId, id))
     currentTagIds = currentTags.map((t) => t.tagId)
+    await assertAssignableTags(input.tagIds, currentTagIds)
   }
 
   // Build update data
@@ -453,17 +490,31 @@ export async function updatePost(
     updateData.pinnedAt = input.pinned ? new Date() : null
   }
 
-  // Update the post only if there's data to update
-  let updatedPost: Post
-  if (Object.keys(updateData).length > 0) {
-    const [result] = await db.update(posts).set(updateData).where(eq(posts.id, id)).returning()
-    if (!result) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+  // Update the post row and replace its tags together: a failed tag insert
+  // must never leave the post with its old tags deleted.
+  const updatedPost = await db.transaction(async (tx) => {
+    let row = existingPost
+    if (Object.keys(updateData).length > 0) {
+      const [result] = await tx
+        .update(posts)
+        .set(updateData)
+        .where(and(eq(posts.id, id), isNull(posts.deletedAt)))
+        .returning()
+      if (!result) {
+        throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+      }
+      row = result
     }
-    updatedPost = result
-  } else {
-    updatedPost = existingPost
-  }
+    if (input.tagIds !== undefined) {
+      await tx.delete(postTagAssignments).where(eq(postTagAssignments.postId, id))
+      if (input.tagIds.length > 0) {
+        await tx
+          .insert(postTagAssignments)
+          .values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
+      }
+    }
+    return row
+  })
 
   // Regenerate embedding (and cascade to merge check) if title or content changed
   if (input.title !== undefined || input.content !== undefined || input.contentJson !== undefined) {
@@ -472,17 +523,6 @@ export async function updatePost(
         generatePostEmbedding(id, updatedPost.title, updatedPost.content)
       )
       .catch((err) => log.error({ err, post_id: id }, 'embedding regen failed'))
-  }
-
-  // Update tags if provided
-  if (input.tagIds !== undefined) {
-    // Remove all existing tags then add new ones if any
-    await db.delete(postTagAssignments).where(eq(postTagAssignments.postId, id))
-    if (input.tagIds.length > 0) {
-      await db
-        .insert(postTagAssignments)
-        .values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
-    }
   }
 
   if (statusChanged && newStatus) {
@@ -565,13 +605,13 @@ export async function updatePost(
 
   // Record activity for tag changes
   if (input.tagIds !== undefined) {
-    const newTagIds = input.tagIds.map((t) => String(t))
+    const newTagIds = input.tagIds
     const added = newTagIds.filter((t) => !currentTagIds.includes(t))
     const removed = currentTagIds.filter((t) => !newTagIds.includes(t))
 
     if (added.length > 0 || removed.length > 0) {
       // Resolve all tag names in one query
-      const allChangedIds = [...added, ...removed] as PostTagId[]
+      const allChangedIds = [...added, ...removed]
       const tagRows =
         allChangedIds.length > 0
           ? await db
