@@ -434,9 +434,10 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
   } else {
     assigneePrincipalId = sourceAssignee
   }
-  // A personal API key assigns to its creator, so the ticket stays inside the
-  // scope the key reads with; the key itself stays the author for attribution.
-  const defaultAssignee = rowScopePrincipalId(actor)
+  // The person filing it is the default assignee: a personal API key's
+  // creator, so the ticket stays inside the scope the key reads with (the key
+  // itself stays the author for attribution); a workspace key is nobody.
+  const defaultAssignee = await filingPerson(actor)
   if (!assigneePrincipalId && defaultAssignee) {
     const [creator] = await db
       .select({ role: principal.role })
@@ -484,8 +485,27 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
       companyId,
       withBackingConversation,
     },
-    actor
+    actor,
+    { creatorWatcher: defaultAssignee }
   )
+}
+
+/**
+ * The person filing a ticket as an agent, who is its default assignee and
+ * watches it: the teammate, or the teammate behind a personal API key. A
+ * workspace API key belongs to nobody, so it is neither: a watcher exists to
+ * be told about the ticket, and a key has nobody to tell. Any other service
+ * actor (the AI agent) files as itself, as before.
+ */
+async function filingPerson(actor: Actor): Promise<PrincipalId | null> {
+  if (actor.scopePrincipalId) return actor.scopePrincipalId
+  if (!actor.principalId || actor.principalType !== 'service') return actor.principalId ?? null
+  const [row] = await db
+    .select({ serviceMetadata: principal.serviceMetadata })
+    .from(principal)
+    .where(eq(principal.id, actor.principalId))
+    .limit(1)
+  return row?.serviceMetadata?.kind === 'api_key' ? null : actor.principalId
 }
 
 /**
