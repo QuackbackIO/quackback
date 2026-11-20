@@ -354,7 +354,7 @@ async function buildEmailTargets(
   if (eligibleSubscribers.length === 0) return []
 
   // Batch generate unsubscribe tokens (single insert instead of N inserts)
-  const [sender, tokenMap] = await Promise.all([
+  const [sender, tokenMap, postAuthorId] = await Promise.all([
     surfaceSender('feedback'),
     batchGenerateUnsubscribeTokens(
       eligibleSubscribers.map((s) => ({
@@ -363,6 +363,7 @@ async function buildEmailTargets(
         action: 'unsubscribe_post' as const,
       }))
     ),
+    postAuthorOf(postId),
   ])
 
   // `Subscriber.email` is the IDENTITY field `isActorSubscriber` compares
@@ -386,10 +387,24 @@ async function buildEmailTargets(
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           ...eventConfig,
           ...sender,
+          isPostAuthor: subscriber.principalId === postAuthorId,
         }
       ),
     ]
   })
+}
+
+/**
+ * Who wrote the post, so only they are told it is "your feedback". Read from
+ * the post, not the subscription reason: a merged duplicate's author follows
+ * the canonical post with reason 'author' without having written it.
+ */
+async function postAuthorOf(postId: PostId): Promise<PrincipalId | null> {
+  const row = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    columns: { principalId: true },
+  })
+  return (row?.principalId as PrincipalId | undefined) ?? null
 }
 
 /**

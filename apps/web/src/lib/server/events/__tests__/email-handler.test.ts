@@ -190,6 +190,8 @@ describe('emailHook', () => {
         postUrl: 'https://example.com/post/1',
         previousStatus: 'open',
         newStatus: 'in_progress',
+        // No isPostAuthor on the config (a job queued before it existed): a follower.
+        isPostAuthor: false,
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
@@ -217,6 +219,7 @@ describe('emailHook', () => {
         commenterName: 'Commenter',
         commentPreview: 'Hello',
         isTeamMember: true,
+        isPostAuthor: false,
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',

@@ -137,6 +137,8 @@ export interface EmailConfig {
   commenterName?: string
   commentPreview?: string
   isTeamMember?: boolean
+  /** The recipient wrote the post. Absent (a job queued before this field) reads as a follower. */
+  isPostAuthor?: boolean
   /** post.mentioned: who mentioned the recipient (null when unknown). */
   mentionerName?: string | null
   logoUrl?: string
