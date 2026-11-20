@@ -1477,7 +1477,7 @@
   "ask.results.filter.person": "Personnes",
   "ask.results.filter.teammate": "Coéquipiers",
   "ask.results.filter.company": "Entreprises",
-  "apiKeys.scopes.settingsDescription": "Identité visuelle, Messenger, modules et horaires d’ouverture",
+  "apiKeys.scopes.settingsDescription": "Identité visuelle, Messenger, modules, horaires d’ouverture et webhooks",
   "apiKeys.scopes.settingsRead": "Paramètres : lecture",
   "apiKeys.scopes.settingsReadWrite": "Paramètres : lecture et écriture",
   "apiKeys.scopes.readWrite": "Lecture et écriture",

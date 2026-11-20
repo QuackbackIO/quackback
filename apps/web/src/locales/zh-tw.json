@@ -1476,7 +1476,7 @@
   "ask.results.filter.teammate": "團隊成員",
   "ask.results.filter.company": "公司",
   "apiKeys.scopes.settings": "設定",
-  "apiKeys.scopes.settingsDescription": "品牌、Messenger、模組和營業時間",
+  "apiKeys.scopes.settingsDescription": "品牌、Messenger、模組、營業時間和 Webhook",
   "apiKeys.scopes.settingsRead": "設定：讀取",
   "apiKeys.scopes.read": "已讀取",
   "apiKeys.scopes.settingsReadWrite": "設定：讀寫",

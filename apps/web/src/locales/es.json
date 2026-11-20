@@ -1477,7 +1477,7 @@
   "ask.results.filter.person": "Personas",
   "ask.results.filter.teammate": "Compañeros",
   "ask.results.filter.company": "Empresas",
-  "apiKeys.scopes.settingsDescription": "Marca, Messenger, módulos y horario de atención",
+  "apiKeys.scopes.settingsDescription": "Marca, Messenger, módulos, horario de atención y webhooks",
   "apiKeys.scopes.settingsRead": "Configuración: Lectura",
   "apiKeys.scopes.settingsReadWrite": "Configuración: Lectura y escritura",
   "apiKeys.scopes.readWrite": "Lectura y escritura",

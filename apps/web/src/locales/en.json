@@ -1476,7 +1476,7 @@
   "ask.results.filter.teammate": "Teammates",
   "ask.results.filter.company": "Companies",
   "apiKeys.scopes.settings": "Settings",
-  "apiKeys.scopes.settingsDescription": "Branding, Messenger, modules, and office hours",
+  "apiKeys.scopes.settingsDescription": "Branding, Messenger, modules, office hours, and webhooks",
   "apiKeys.scopes.settingsRead": "Settings: Read",
   "apiKeys.scopes.read": "Read",
   "apiKeys.scopes.settingsReadWrite": "Settings: Read and write",

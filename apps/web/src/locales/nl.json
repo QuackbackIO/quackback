@@ -1477,7 +1477,7 @@
   "ask.results.filter.person": "Personen",
   "ask.results.filter.teammate": "Teamleden",
   "ask.results.filter.company": "Bedrijven",
-  "apiKeys.scopes.settingsDescription": "Huisstijl, Messenger, modules en openingstijden",
+  "apiKeys.scopes.settingsDescription": "Huisstijl, Messenger, modules, openingstijden en webhooks",
   "apiKeys.scopes.settingsRead": "Instellingen: Lezen",
   "apiKeys.scopes.settingsReadWrite": "Instellingen: Lezen en schrijven",
   "apiKeys.scopes.readWrite": "Lezen en schrijven",

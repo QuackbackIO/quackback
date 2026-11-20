@@ -1477,7 +1477,7 @@
   "ask.results.filter.person": "الأشخاص",
   "ask.results.filter.teammate": "الزملاء",
   "ask.results.filter.company": "الشركات",
-  "apiKeys.scopes.settingsDescription": "العلامة التجارية وMessenger والوحدات وساعات العمل",
+  "apiKeys.scopes.settingsDescription": "العلامة التجارية وMessenger والوحدات وساعات العمل وWebhooks",
   "apiKeys.scopes.settingsRead": "الإعدادات: قراءة",
   "apiKeys.scopes.settingsReadWrite": "الإعدادات: قراءة وكتابة",
   "apiKeys.scopes.readWrite": "قراءة وكتابة",

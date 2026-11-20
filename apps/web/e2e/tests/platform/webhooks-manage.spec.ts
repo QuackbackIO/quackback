@@ -181,14 +181,24 @@ test.describe('webhooks over REST', () => {
   )
 
   test(
-    'API-W-05 webhook management rides the feedback scopes and the admin permissions',
+    'API-W-05 webhook management rides the settings scopes and the admin permissions',
     { tag: '@core' },
     async ({ playwright, baseURL, people, marker }) => {
       const admin = people.people.admin.email
       const readOnly = await apiFor(
         playwright,
         baseURL,
-        createKey({ creatorEmail: admin, kind: 'personal', scopes: ['read:feedback'] }).key
+        createKey({ creatorEmail: admin, kind: 'personal', scopes: ['read:settings'] }).key
+      )
+      // Feedback scopes no longer manage webhooks: a webhook can carry any domain's events.
+      const feedbackOnly = await apiFor(
+        playwright,
+        baseURL,
+        createKey({
+          creatorEmail: admin,
+          kind: 'personal',
+          scopes: ['read:feedback', 'write:feedback'],
+        }).key
       )
       const chatOnly = await apiFor(
         playwright,
@@ -214,13 +224,24 @@ test.describe('webhooks over REST', () => {
         expect((await json<{ error: Json }>(refusedCreate, 403)).error).toEqual({
           code: 'FORBIDDEN',
           message:
-            "This API key is missing the 'write:feedback' scope required by 'webhook.manage'",
+            "This API key is missing the 'write:settings' scope required by 'webhook.manage'",
         })
         await json(await readOnly.get('/api/v1/webhooks'), 200)
 
+        const feedbackCreate = await feedbackOnly.post('/api/v1/webhooks', {
+          data: { url: sink.url(marker), events: ['post.created'] },
+        })
+        expect((await json<{ error: Json }>(feedbackCreate, 403)).error.message).toBe(
+          "This API key is missing the 'write:settings' scope required by 'webhook.manage'"
+        )
+        expect(
+          (await json<{ error: Json }>(await feedbackOnly.get('/api/v1/webhooks'), 403)).error
+            .message
+        ).toBe("This API key is missing the 'read:settings' scope required by 'webhook.view'")
+
         expect(
           (await json<{ error: Json }>(await chatOnly.get('/api/v1/webhooks'), 403)).error.message
-        ).toBe("This API key is missing the 'read:feedback' scope required by 'webhook.view'")
+        ).toBe("This API key is missing the 'read:settings' scope required by 'webhook.view'")
 
         expect(
           (await json<{ error: Json }>(await contributor.get('/api/v1/webhooks'), 403)).error
@@ -233,12 +254,12 @@ test.describe('webhooks over REST', () => {
 
         const rotate = await readOnly.post(`/api/v1/webhooks/${id}/rotate`)
         expect((await json<{ error: Json }>(rotate, 403)).error.message).toBe(
-          "This API key is missing the 'write:feedback' scope required by 'webhook.manage'"
+          "This API key is missing the 'write:settings' scope required by 'webhook.manage'"
         )
         await json(await legacy.post(`/api/v1/webhooks/${id}/rotate`), 200)
       } finally {
         if (id) await legacy.delete(`/api/v1/webhooks/${id}`)
-        for (const a of [readOnly, chatOnly, contributor, legacy]) await a.dispose()
+        for (const a of [readOnly, feedbackOnly, chatOnly, contributor, legacy]) await a.dispose()
       }
     }
   )

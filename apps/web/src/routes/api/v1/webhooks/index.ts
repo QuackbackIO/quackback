@@ -47,7 +47,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       POST: async ({ request }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, {
+          const auth = await withApiKeyAuth(request, {
             permission: PERMISSIONS.WEBHOOK_MANAGE,
           })
 
@@ -60,6 +60,13 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
             })
           }
 
+          const { assertCanSubscribeToEvents } =
+            await import('@/lib/server/domains/webhooks/webhook-event-access')
+          assertCanSubscribeToEvents(parsed.data.events, {
+            scopes: auth.apiKey.scopes,
+            permissions: auth.permissions,
+          })
+
           const boardIds = parseTypeIdArray<BoardId>(parsed.data.boardIds, 'board', 'board IDs')
 
           const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
@@ -69,7 +76,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
               events: parsed.data.events,
               boardIds,
             },
-            principalId
+            auth.principalId
           )
 
           // Return with secret (only shown once)
