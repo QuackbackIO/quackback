@@ -239,6 +239,21 @@ export async function statusIdBySlug(slug: string): Promise<string> {
   return fromUuid('post_status', row.id as string)
 }
 
+/**
+ * A short token unique to the test (the marker's time and worker parts), for
+ * names and slugs with a 50-character cap or an underscore-only rule.
+ */
+export function shortToken(marker: string): string {
+  return `e2e_${marker.split('-').slice(-2).join('_')}`
+}
+
+/** The id of the workspace's default status. */
+export async function defaultStatusId(): Promise<string> {
+  const [row] = await supportDb()`SELECT id FROM post_statuses
+    WHERE is_default = true AND deleted_at IS NULL LIMIT 1`
+  return fromUuid('post_status', row.id as string)
+}
+
 /** An error body: `{ error: { code, message } }` with the given status. */
 export async function expectError(
   res: Awaited<ReturnType<APIRequestContext['get']>>,
