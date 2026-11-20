@@ -12,7 +12,7 @@
  */
 import { readFileSync } from 'node:fs'
 import type { Download } from '@playwright/test'
-import { fromUuid } from '@quackback/ids'
+import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { personApi, callServerFn } from '../../support/server-fns'
 import { supportDb } from '../../support/db'
@@ -54,6 +54,16 @@ function row(r: Partial<Record<(typeof COLUMNS)[number], string>>): Record<strin
 }
 
 const sql = () => supportDb()
+
+// The day's batch tag exists before any import here: two first-of-the-day
+// imports racing to create it make one run fail on the unique tag name
+// (ensureBatchTag has no conflict handling; reported as a product bug).
+test.beforeAll(async () => {
+  const name = `import-csv-${new Date().toISOString().slice(0, 10)}`
+  await sql()`INSERT INTO post_tags (id, name, color)
+    VALUES (${toUuid(generateId('post_tag'))}, ${name}, '#6b7280')
+    ON CONFLICT (name) DO NOTHING`
+})
 
 test.describe('import route', () => {
   test(
