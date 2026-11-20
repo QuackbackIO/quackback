@@ -256,13 +256,11 @@ export async function getNotificationsForMember(
 
 /**
  * Get unread notification count for a member (optimized for badge display).
- * Counts only bells the list would show unredacted, so a bell about a deleted
- * or hidden post never holds the badge up.
+ * Counts only bells the list would show unredacted to `actor`, so a bell about
+ * a deleted or hidden post never holds the badge up. The actor is required: an
+ * anonymous default would leave out bells on boards the reader can see.
  */
-export async function getUnreadCount(
-  principalId: PrincipalId,
-  actor: Actor = ANONYMOUS_ACTOR
-): Promise<number> {
+export async function getUnreadCount(principalId: PrincipalId, actor: Actor): Promise<number> {
   const result = await db
     .select({ count: sql<number>`count(*)::int`.as('count') })
     .from(inAppNotifications)

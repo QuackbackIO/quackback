@@ -107,7 +107,6 @@ describe.skipIf(!fixture.available)('summary input (real DB)', () => {
       .set({
         summaryJson: {
           summary: 'Old',
-          urgency: 'low',
           keyQuotes: [`leaked-${tag}`],
           nextSteps: [],
         },
@@ -126,7 +125,7 @@ describe.skipIf(!fixture.available)('summary input (real DB)', () => {
     await testDb
       .update(posts)
       .set({
-        summaryJson: { summary: 'Old', urgency: 'low', keyQuotes: [`kept-${tag}`], nextSteps: [] },
+        summaryJson: { summary: 'Old', keyQuotes: [`kept-${tag}`], nextSteps: [] },
       })
       .where(eq(posts.id, postId))
     await comment(`public-${tag}`)
