@@ -574,6 +574,8 @@ test.describe('password', () => {
       const page = await visitor()
       await page.goto(link)
       await page.waitForURL(/\/auth\/reset-password\?token=/)
+      // A server-rendered form: let it hydrate before typing.
+      await page.waitForLoadState('networkidle')
       const newPassword = 'a-brand-new-password-2'
       await page.locator('#new-password').fill(newPassword)
       await page.locator('#confirm-password').fill(newPassword)
@@ -604,6 +606,7 @@ test.describe('password', () => {
     await expect(page.getByRole('button', { name: 'Reset password' })).toBeDisabled()
 
     await page.goto('/auth/reset-password?token=not-a-real-token')
+    await page.waitForLoadState('networkidle')
     await page.locator('#new-password').fill('first-password-1')
     await page.locator('#confirm-password').fill('second-password-1')
     await expect(page.getByRole('button', { name: 'Reset password' })).toBeDisabled()
