@@ -7,6 +7,7 @@
  * FBA-P-20 FBA-P-21 FBA-P-35 FBA-P-36 FBA-P-37 FBA-P-41, and the lower rows
  * FBA-P-03 FBA-P-06 FBA-P-10 FBA-P-24 FBA-P-31 at the server-function boundary.
  */
+import type { Page } from '@playwright/test'
 import { fromUuid } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { callServerFn, personApi } from '../../support/server-fns'
@@ -42,6 +43,7 @@ import {
   subscriptionsOf,
   votesOf,
   waitForPostEvent,
+  waitForActivity,
 } from '../../product/feedback-admin-posts'
 
 // Well-formed ids nothing has.
@@ -49,6 +51,19 @@ const NOBODY = '01900000-0000-7000-8000-000000000000'
 const UNKNOWN_POST = fromUuid('post', NOBODY)
 const UNKNOWN_BOARD = fromUuid('board', NOBODY)
 const UNKNOWN_STATUS = fromUuid('post_status', NOBODY)
+
+/**
+ * Open the New post dialog. A press that lands before the inbox has
+ * hydrated does nothing, so press again until the form is there.
+ */
+async function openNewPost(page: Page): Promise<void> {
+  await expect(async () => {
+    await page.getByRole('button', { name: 'New post' }).click()
+    await expect(page.getByPlaceholder("What's the feedback about?")).toBeVisible({
+      timeout: 3_000,
+    })
+  }).toPass({ timeout: 20_000 })
+}
 
 /** Make one status the workspace default (isolated tests only). */
 async function setDefaultStatus(statusId: string): Promise<void> {
@@ -67,7 +82,7 @@ test(
     try {
       const admin = await asPerson('admin')
       await openInbox(admin, { board: [board.id] })
-      await admin.getByRole('button', { name: 'New post' }).click()
+      await openNewPost(admin)
       const dialog = admin.getByRole('dialog')
       const title = `${marker} dark mode please`
       await dialog.getByPlaceholder("What's the feedback about?").fill(title)
@@ -92,7 +107,9 @@ test(
       const { fromUuid } = await import('@quackback/ids')
       const postId = fromUuid('post', String(row.id))
       expect((await votesOf(postId)).map((v) => v.principal_id)).toEqual([adminUuid])
-      expect((await subscriptionsOf(postId)).map((s) => s.principal_id)).toEqual([adminUuid])
+      await expect
+        .poll(async () => (await subscriptionsOf(postId)).map((s) => s.principal_id))
+        .toEqual([adminUuid])
 
       const [delivery] = await deliveriesOf(marker, 'post.created', postId)
       expect(bodyOf<{ post: { id: string; title: string } }>(delivery).data.post).toMatchObject({
@@ -131,7 +148,7 @@ test(
       return r?.slug === 'planned' ? r.slug : undefined
     })
     expect(status).toBe('planned')
-    const changed = (await activityOf(post.id)).filter((a) => a.type === 'status.changed')
+    const changed = await waitForActivity(post.id, 'status.changed')
     expect(changed).toHaveLength(1)
     expect(changed[0].metadata).toMatchObject({ fromName: 'Open', toName: 'Planned' })
 
@@ -156,7 +173,7 @@ test(
 
     const admin = await asPerson('admin')
     await openInbox(admin, { board: [board.id] })
-    await admin.getByRole('button', { name: 'New post' }).click()
+    await openNewPost(admin)
     const dialog = admin.getByRole('dialog')
     const title = `${marker} on behalf`
     await dialog.getByPlaceholder("What's the feedback about?").fill(title)
@@ -185,9 +202,9 @@ test(
     expect(row.principal_id).toBe(person.principalUuid)
     const postId = fromUuid('post', String(row.id))
     expect((await votesOf(postId)).map((v) => v.principal_id)).toEqual([person.principalUuid])
-    expect((await subscriptionsOf(postId)).map((s) => s.principal_id)).toEqual([
-      person.principalUuid,
-    ])
+    await expect
+      .poll(async () => (await subscriptionsOf(postId)).map((s) => s.principal_id))
+      .toEqual([person.principalUuid])
 
     // The Contributor preset has no post.set_author: the chosen author is ignored.
     const contributor = await personApi(playwright, 'contributor')
@@ -369,7 +386,7 @@ test(
     await expect(admin.getByText('Owner unassigned')).toBeVisible()
     expect((await postRow(post.id))?.owner_principal_id).toBeNull()
     await expect.poll(() => activityTypesOf(post.id)).toContain('owner.unassigned')
-    expect(await activityTypesOf(post.id)).toContain('owner.assigned')
+    await waitForActivity(post.id, 'owner.assigned')
     await openActivity(admin, /assigned Ben Agent/)
     await expect(admin.getByRole('dialog').getByText(/removed assignee/)).toBeVisible()
   }
@@ -526,9 +543,8 @@ test(
       content: `${marker} thanks`,
     })
     expect(allowed.ok, allowed.raw).toBe(true)
-    const types = await activityTypesOf(post.id)
-    expect(types).toContain('comments.locked')
-    expect(types).toContain('comments.unlocked')
+    await waitForActivity(post.id, 'comments.locked')
+    await waitForActivity(post.id, 'comments.unlocked')
     await customer.close()
     await api.dispose()
   }
@@ -623,7 +639,7 @@ test(
     expect((await postRow(post.id))?.deleted_at).toBeNull()
     expect(await votesOf(post.id)).toHaveLength(1)
     await waitForPostEvent(post.id, 'post.restored')
-    expect(await activityTypesOf(post.id)).toContain('post.restored')
+    await waitForActivity(post.id, 'post.restored')
     await openInbox(admin, { board: [board.id] })
     await expect(admin.locator('h3', { hasText: post.title })).toBeVisible()
   }
@@ -761,7 +777,8 @@ test(
     const page = await asPerson('contributor')
     await openPost(page, post.id, post.title)
     await pickStatus(page, 'Open', 'Planned')
-    await expect.poll(() => statusSlugOf(post.id)).toBe('planned')
+    await expect(sidebarRow(page, 'Status').getByRole('button', { name: 'Planned' })).toBeVisible()
+    await expect.poll(() => statusSlugOf(post.id), { timeout: 15_000 }).toBe('planned')
 
     const contributor = await personApi(playwright, 'contributor')
     const tags = await callServerFn(contributor, 'updatePostTagsFn', {

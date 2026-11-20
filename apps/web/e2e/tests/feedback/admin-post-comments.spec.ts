@@ -25,6 +25,7 @@ import {
   principalUuid,
   subscriptionsOf,
   waitForPostEvent,
+  waitForActivity,
 } from '../../product/feedback-admin-posts'
 import type { Page } from '@playwright/test'
 
@@ -73,6 +74,9 @@ test(
     const [row] = (await commentsOf(post.id)).filter((c) => c.content.includes(text))
     expect(row).toMatchObject({ is_team_member: true, is_private: false })
     expect((await postRow(post.id))?.comment_count).toBe(1)
+    await pollFor('the commenter subscription', async () =>
+      (await subscriptionsOf(post.id)).length > 1 ? true : undefined
+    )
     const subs = await subscriptionsOf(post.id)
     expect(
       subs.find((s) => s.principal_id === principalUuid(people.people.agentB.principalId))
@@ -164,7 +168,7 @@ test(
       status_change_from_id: uuid(open),
       status_change_to_id: uuid(planned),
     })
-    expect((await activityOf(post.id)).filter((a) => a.type === 'status.changed')).toHaveLength(1)
+    expect(await waitForActivity(post.id, 'status.changed')).toHaveLength(1)
     await waitForPostEvent(post.id, 'post.status_changed')
     const types = (await eventsOfPost(post.id)).map((e) => e.type)
     expect(types.indexOf('comment.created')).toBeLessThan(types.indexOf('post.status_changed'))
@@ -244,6 +248,7 @@ test(
     await pollFor('unpinned', async () =>
       (await postRow(post.id))?.pinned_comment_id === null ? true : undefined
     )
+    await waitForActivity(post.id, 'comment.unpinned')
     const types = (await activityOf(post.id)).map((a) => a.type)
     expect(types.filter((t) => t === 'comment.pinned')).toHaveLength(2)
     expect(types.filter((t) => t === 'comment.unpinned')).toHaveLength(1)

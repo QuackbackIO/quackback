@@ -26,6 +26,7 @@ import {
   principalUuid,
   subscriptionsOf,
   votesOf,
+  waitForActivity,
 } from '../../product/feedback-admin-posts'
 
 /** Open the Voters dialog from the sidebar's avatar stack. */
@@ -77,7 +78,7 @@ test(
       added_by_principal_id: principalUuid(people.people.admin.principalId),
     })
     expect((await postRow(post.id))?.vote_count).toBe(2)
-    const proxy = (await activityOf(post.id)).find((a) => a.type === 'vote.proxy')
+    const [proxy] = await waitForActivity(post.id, 'vote.proxy')
     expect(proxy?.metadata).toMatchObject({ voterName: person.name })
     const sub = (await subscriptionsOf(post.id)).find(
       (s) => s.principal_id === person.principalUuid

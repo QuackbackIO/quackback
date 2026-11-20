@@ -26,6 +26,21 @@ export async function activityTypesOf(postId: string): Promise<string[]> {
   return (await activityOf(postId)).map((a) => a.type)
 }
 
+/**
+ * Activity rows are written after the action answers: wait until the post
+ * has at least `count` rows of `type`, then return them all.
+ */
+export async function waitForActivity(
+  postId: string,
+  type: string,
+  count = 1
+): Promise<ActivityRow[]> {
+  return pollFor(`${count} ${type} activity row(s) on ${postId}`, async () => {
+    const rows = (await activityOf(postId)).filter((a) => a.type === type)
+    return rows.length >= count ? rows : undefined
+  })
+}
+
 export interface PostEvent {
   type: string
   payload: Record<string, unknown>
