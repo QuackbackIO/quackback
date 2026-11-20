@@ -88,6 +88,28 @@ export const widgetRecordArticleFeedbackFn = createServerFn({ method: 'POST' })
     return { success: true, feedbackId }
   })
 
+/**
+ * Count a widget open of an article, once per open, through the same
+ * rate-limited view count as the help center page (once per article per
+ * address an hour). Embeds do not call this, so they never count.
+ */
+export const widgetRecordArticleViewFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ articleId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { resolveHelpPublicViewer } = await import('../help-center')
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
+    const { countPublicArticleView } =
+      await import('@/lib/server/domains/help-center/help-center.service')
+    const counted = await countPublicArticleView(
+      data.articleId,
+      getClientIp(getRequestHeaders()),
+      await resolveHelpPublicViewer(await getOptionalWidgetAuth())
+    )
+    return { success: true, counted }
+  })
+
 export const widgetListPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(listPublicArticlesSchema)
   .handler(async ({ data }) => {

@@ -13,6 +13,8 @@ describe('delete confirm copy', () => {
     expect(ARTICLE_DELETE_DESCRIPTION).toMatch(/Deleted items/)
     expect(ARTICLE_DELETE_DESCRIPTION).toMatch(/restore/i)
     expect(ARTICLE_DELETE_DESCRIPTION).toMatch(/30 days/)
+    // Deleting removes the redirect rules that point at it; a restore does not bring them back.
+    expect(ARTICLE_DELETE_DESCRIPTION).toMatch(/redirects to it are removed/i)
   })
 
   it('tells an empty category can be restored from Deleted items', () => {
@@ -21,15 +23,19 @@ describe('delete confirm copy', () => {
     expect(copy).toMatch(/"Billing"/)
     expect(copy).toMatch(/Deleted items/)
     expect(copy).toMatch(/30 days/)
+    expect(copy).toMatch(/redirects to it are removed/i)
   })
 
-  it('names what goes with a category and that all of it can be restored', () => {
+  it('names what goes with a category and that each item can be restored', () => {
     const copy = categoryDeleteDescription('Billing', { descendantCount: 2, articleCount: 1 })
     expect(copy).not.toMatch(NEVER)
-    expect(copy).toMatch(/2 sub-categories/)
-    expect(copy).toMatch(/1 article\b/)
+    // HC-A-36 reads this phrase.
+    expect(copy).toContain('"Billing" along with 2 sub-categories and 1 article')
     expect(copy).toMatch(/Deleted items/)
     expect(copy).toMatch(/30 days/)
+    // Restore is one item at a time, so one restore must not sound like it brings all back.
+    expect(copy).toMatch(/restore each/i)
+    expect(copy).toMatch(/redirects to them are removed/i)
     expect(copy).not.toContain('—')
   })
 })

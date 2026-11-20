@@ -66,6 +66,7 @@ const hoisted = vi.hoisted(() => {
     listPublicArticlesForCategoryLocale: vi.fn(),
     getPublicArticleBySlugForLocale: vi.fn(),
     recordArticleFeedback: vi.fn(),
+    countPublicArticleView: vi.fn(),
     listPublicArticles: vi.fn(),
     resolveHelpPublicViewer: vi.fn(),
     serializeCategory: vi.fn((c: unknown) => c),
@@ -145,6 +146,13 @@ vi.mock('@/lib/server/domains/help-center/help-center.article.query', () => ({
 }))
 vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
   recordArticleFeedback: hoisted.run.recordArticleFeedback,
+  countPublicArticleView: hoisted.run.countPublicArticleView,
+}))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers({ 'x-forwarded-for': '203.0.113.7' }),
+}))
+vi.mock('@/lib/server/domains/api/rate-limit', () => ({
+  getClientIp: (headers: Headers) => headers.get('x-forwarded-for') ?? 'unknown',
 }))
 vi.mock('@/lib/shared/widget/article-ref', () => ({ canonicalArticleTypeId: () => null }))
 vi.mock('@/lib/shared/widget/article-locale', () => ({
@@ -197,6 +205,7 @@ import {
   widgetListPublicArticlesForCategoryFn,
   widgetResolvePublicArticleRefFn,
   widgetRecordArticleFeedbackFn,
+  widgetRecordArticleViewFn,
   widgetListPublicArticlesFn,
 } from '../help'
 
@@ -231,6 +240,7 @@ beforeEach(() => {
     notHelpfulCount: 0,
   })
   hoisted.run.recordArticleFeedback.mockResolvedValue('feedback_1')
+  hoisted.run.countPublicArticleView.mockResolvedValue(true)
   hoisted.run.getUserStats.mockResolvedValue({ ideas: 0, votes: 0, comments: 0 })
 })
 
@@ -419,6 +429,10 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
       name: 'widgetListPublicArticlesFn',
       call: () => widgetListPublicArticlesFn({ data: {} }),
     },
+    {
+      name: 'widgetRecordArticleViewFn',
+      call: () => widgetRecordArticleViewFn({ data: { articleId: 'article_1' } }),
+    },
   ]
 
   it.each(optional)('$name uses getOptionalWidgetAuth and not site auth', async ({ call }) => {
@@ -432,6 +446,19 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
     hoisted.getOptionalWidgetAuth.mockResolvedValue(null)
     await expect(call()).resolves.toBeDefined()
     expectWidgetAuthOnly()
+  })
+})
+
+describe('widgetRecordArticleViewFn', () => {
+  it('counts the open through the shared, rate-limited view count, as the widget viewer', async () => {
+    await widgetRecordArticleViewFn({ data: { articleId: 'article_1' } })
+    const viewer = await hoisted.run.resolveHelpPublicViewer.mock.results[0]?.value
+    expect(hoisted.run.resolveHelpPublicViewer).toHaveBeenCalledWith(WIDGET_CTX)
+    expect(hoisted.run.countPublicArticleView).toHaveBeenCalledWith(
+      'article_1',
+      '203.0.113.7',
+      viewer
+    )
   })
 })
 

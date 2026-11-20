@@ -32,6 +32,8 @@ import {
   resolveUserAvatarUrl,
 } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
+import { reserveArticleView } from '@/lib/server/utils/anon-rate-limit'
+import { canonicalArticleTypeId } from '@/lib/shared/widget/article-ref'
 
 const log = logger.child({ component: 'help-center-articles' })
 
@@ -206,6 +208,25 @@ export async function recordArticleView(
     .update(helpCenterArticles)
     .set({ viewCount: sql`${helpCenterArticles.viewCount} + 1` })
     .where(inArray(helpCenterArticles.id, visible))
+}
+
+/**
+ * A visitor's view of an article, from the help center page or the widget.
+ * Counted once per article per address an hour, within a per-address cap
+ * (reserveArticleView), so reloads and a scripted loop do not inflate the
+ * popular list. `articleRef` is the id the client sent; anything that is not
+ * an article id is ignored. Returns whether the view was counted.
+ */
+export async function countPublicArticleView(
+  articleRef: string,
+  clientIp: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<boolean> {
+  const id = canonicalArticleTypeId(articleRef)
+  if (!id) return false
+  if (!(await reserveArticleView(clientIp, id))) return false
+  await recordArticleView(id as KbArticleId, viewer)
+  return true
 }
 
 // Fallback slug base for article titles that romanize to nothing (see

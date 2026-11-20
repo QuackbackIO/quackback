@@ -30,8 +30,19 @@ vi.mock('@/lib/server/db', async (original) => ({
 vi.mock('../help-center-embedding.service', () => ({
   generateArticleEmbedding: async () => undefined,
 }))
+const viewLimit = vi.hoisted(() => ({ allow: true, calls: [] as unknown[][] }))
+vi.mock('@/lib/server/utils/anon-rate-limit', () => ({
+  reserveArticleView: async (...args: unknown[]) => {
+    viewLimit.calls.push(args)
+    return viewLimit.allow
+  },
+}))
 
-import { getPublicArticleBySlug, recordArticleView } from '../help-center.article.service'
+import {
+  countPublicArticleView,
+  getPublicArticleBySlug,
+  recordArticleView,
+} from '../help-center.article.service'
 import { localizeRelatedArticles } from '../help-center-locale.query'
 
 const fixture = await createDbTestFixture({
@@ -83,6 +94,32 @@ async function views(id: KbArticleId): Promise<number> {
     .where(eq(helpCenterArticles.id, id))
   return row!.viewCount
 }
+
+describe('a visitor viewing an article', () => {
+  beforeEach(() => {
+    viewLimit.allow = true
+    viewLimit.calls = []
+  })
+
+  it('counts when the address has not viewed it in the last hour', async () => {
+    const article = await seedArticle(await seedCategory())
+    expect(await countPublicArticleView(article.id, '203.0.113.7')).toBe(true)
+    expect(viewLimit.calls).toEqual([['203.0.113.7', article.id]])
+    expect(await views(article.id)).toBe(1)
+  })
+
+  it('does not count a repeat view or a rate-limited address', async () => {
+    const article = await seedArticle(await seedCategory())
+    viewLimit.allow = false
+    expect(await countPublicArticleView(article.id, '203.0.113.7')).toBe(false)
+    expect(await views(article.id)).toBe(0)
+  })
+
+  it('ignores a reference that is not an article id, spending no budget', async () => {
+    expect(await countPublicArticleView('not-an-id', '203.0.113.7')).toBe(false)
+    expect(viewLimit.calls).toEqual([])
+  })
+})
 
 describe('article views', () => {
   it('counts one view of a published public article', async () => {

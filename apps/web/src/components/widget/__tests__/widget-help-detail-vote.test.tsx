@@ -14,11 +14,13 @@ import { IntlProvider } from 'react-intl'
 const fns = vi.hoisted(() => ({
   resolveArticle: vi.fn(),
   recordFeedback: vi.fn(async () => ({ success: true, feedbackId: 'kb_article_feedback_1' })),
+  recordView: vi.fn(async () => ({ success: true, counted: true })),
 }))
 
 vi.mock('@/lib/server/functions/widget/help', () => ({
   widgetResolvePublicArticleRefFn: fns.resolveArticle,
   widgetRecordArticleFeedbackFn: fns.recordFeedback,
+  widgetRecordArticleViewFn: fns.recordView,
 }))
 vi.mock('@/lib/client/widget-auth', () => ({
   getWidgetAuthHeaders: () => ({}),
@@ -94,5 +96,11 @@ describe('WidgetHelpDetail vote', () => {
       screen.getByRole('button', { name: 'Yes, this helped' }).getAttribute('aria-pressed')
     ).toBe('true')
     expect(fns.recordFeedback).toHaveBeenCalledTimes(1)
+    // The open counts one view; the session minted by the vote does not add one.
+    expect(fns.recordView).toHaveBeenCalledTimes(1)
+    expect(fns.recordView).toHaveBeenCalledWith({
+      data: { articleId: 'kb_article_1' },
+      headers: {},
+    })
   })
 })

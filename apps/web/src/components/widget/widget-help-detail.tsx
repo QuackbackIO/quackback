@@ -1,9 +1,12 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { widgetResolvePublicArticleRefFn } from '@/lib/server/functions/widget/help'
+import {
+  widgetRecordArticleViewFn,
+  widgetResolvePublicArticleRefFn,
+} from '@/lib/server/functions/widget/help'
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { appendWidgetOtt } from './build-portal-url'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
@@ -68,6 +71,19 @@ export function WidgetHelpDetail({
     )
     sendToHost({ type: 'quackback:navigate', url })
   }, [article, isIdentified, canPortalHandoff])
+
+  // One view per open. Keyed by the article, so the refetch a new session
+  // triggers does not count again.
+  const articleId = article?.id
+  useEffect(() => {
+    if (!articleId) return
+    widgetRecordArticleViewFn({
+      data: { articleId },
+      headers: getWidgetAuthHeaders(),
+    }).catch(() => {
+      // A missed view count never gets in the reader's way.
+    })
+  }, [articleId])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

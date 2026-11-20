@@ -26,7 +26,7 @@ import {
   listPublicArticles,
   listPopularPublicArticles,
   getArticleById,
-  recordArticleView,
+  countPublicArticleView,
   createArticle,
   updateArticle,
   publishArticle,
@@ -487,15 +487,20 @@ export const getRelatedPublicArticlesFn = createServerFn({ method: 'GET' })
 /**
  * Count a view of a public article, called once by the canonical article page
  * when it shows the article. Not from the page's loader: the loader also runs
- * when a link is hovered (preload), which is not a visit.
+ * when a link is hovered (preload), which is not a visit. Rate limited and
+ * counted once per article per address an hour (countPublicArticleView).
  */
 export const recordPublicArticleViewFn = createServerFn({ method: 'POST' })
   .validator(z.object({ articleId: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const { canonicalArticleTypeId } = await import('@/lib/shared/widget/article-ref')
-    const id = canonicalArticleTypeId(data.articleId)
-    if (id) await recordArticleView(id as KbArticleId, await publicViewer())
-    return { success: true }
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
+    const counted = await countPublicArticleView(
+      data.articleId,
+      getClientIp(getRequestHeaders()),
+      await publicViewer()
+    )
+    return { success: true, counted }
   })
 
 export const createArticleFn = createServerFn({ method: 'POST' })

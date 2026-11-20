@@ -10,7 +10,7 @@
  */
 
 import { db, principal, session, eq, and, sql } from '@/lib/server/db'
-import { incrementBucket } from '@/lib/server/utils/rate-bucket'
+import { incrementBucket, incrementBuckets } from '@/lib/server/utils/rate-bucket'
 
 const ANON_RATE_LIMIT = 50
 
@@ -53,4 +53,26 @@ export async function reserveAnonPostSlot(clientIp: string): Promise<boolean> {
     windowSeconds: ANON_POST_WINDOW_S,
   })
   return count === null || count <= ANON_POST_RATE_LIMIT
+}
+
+/** Articles one address may count a view of in an hour. */
+export const ARTICLE_VIEW_RATE_LIMIT = 120
+const ARTICLE_VIEW_WINDOW_S = 60 * 60
+
+/**
+ * Reserve one article view for an address. A view counts once per article per
+ * address in an hour (a reload or reopen does not count again), and one
+ * address counts at most {@link ARTICLE_VIEW_RATE_LIMIT} views an hour, so the
+ * public view endpoint cannot push an article up the popular list. Both
+ * buckets move in one statement. Fails open, like the other rate limits.
+ * @returns true if the view should be counted
+ */
+export async function reserveArticleView(clientIp: string, articleId: string): Promise<boolean> {
+  const [perAddress, perArticle] = await incrementBuckets([
+    { key: `hc:view:ip:${clientIp}`, windowSeconds: ARTICLE_VIEW_WINDOW_S },
+    { key: `hc:view:ip:${clientIp}:article:${articleId}`, windowSeconds: ARTICLE_VIEW_WINDOW_S },
+  ])
+  const underCap = perAddress === null || perAddress <= ARTICLE_VIEW_RATE_LIMIT
+  const firstView = perArticle === null || perArticle === 1
+  return underCap && firstView
 }
