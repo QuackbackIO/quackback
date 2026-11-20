@@ -1,4 +1,6 @@
 import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
+import { PermissionDeniedPage } from '@/components/shared/error-page'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -131,7 +133,11 @@ import {
   isProductEnabled,
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
-import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useFeatureFlag,
+  usePermissions,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
 import { TestViewHeader } from '@/components/admin/conversation/test-view-header'
@@ -238,6 +244,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // still reaches this route (§2.3 decision log): the shell renders with
     // conversation affordances hidden.
     if (!flags?.supportInbox && !flags?.supportTickets) return {}
+    if (!canOpenAdminPage(context.permissions ?? [], '/admin/inbox')) return {}
     const { queryClient } = context
     // No loaderDeps (so filter/selection changes do not remount the outlet),
     // which also means the loader is not given the validateSearch result.
@@ -350,10 +357,15 @@ export const Route = createFileRoute('/admin/inbox')({
  */
 function InboxRoute() {
   const settings = useWorkspaceSettings()
+  const permissions = usePermissions()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox && !flags?.supportTickets) {
     return <Navigate to={getFirstEnabledAdminProductPath(flags)} />
   }
+  // A viewer who can list neither conversations nor tickets gets the
+  // no-access state (as AdminPageGate renders it, without its extra chunk).
+  if (!canOpenAdminPage(permissions, '/admin/inbox'))
+    return <PermissionDeniedPage fullPage={false} />
   return <InboxPage />
 }
 

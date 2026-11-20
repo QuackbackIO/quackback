@@ -7,6 +7,8 @@ import { readBatch } from '@/lib/client/queries/read-batch'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { RoadmapAdmin } from '@/components/admin/roadmap-admin'
 import { RoadmapModal } from '@/components/admin/roadmap-modal'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
@@ -65,15 +67,18 @@ export const Route = createFileRoute('/admin/roadmap')({
     // server will serve it to.
     const can = (permission: PermissionKey) => (context.permissions ?? []).includes(permission)
     const ensure = readBatch(queryClient)
-    await Promise.all([
-      can(PERMISSIONS.STATUS_VIEW) ? ensure(adminQueries.statuses()) : undefined,
-      can(PERMISSIONS.BOARD_MANAGE) ? ensure(adminQueries.boards()) : undefined,
-      can(PERMISSIONS.TAG_VIEW) ? ensure(adminQueries.tags()) : undefined,
-      can(PERMISSIONS.SEGMENT_VIEW) ? ensure(adminQueries.segments()) : undefined,
-      warmRoadmapBoard(queryClient, location.search as Record<string, unknown>).catch(
-        () => undefined
-      ),
-    ])
+    // A viewer who cannot list roadmaps gets the no-access state and no reads.
+    if (canOpenAdminPage(context.permissions ?? [], '/admin/roadmap')) {
+      await Promise.all([
+        can(PERMISSIONS.STATUS_VIEW) ? ensure(adminQueries.statuses()) : undefined,
+        can(PERMISSIONS.BOARD_MANAGE) ? ensure(adminQueries.boards()) : undefined,
+        can(PERMISSIONS.TAG_VIEW) ? ensure(adminQueries.tags()) : undefined,
+        can(PERMISSIONS.SEGMENT_VIEW) ? ensure(adminQueries.segments()) : undefined,
+        warmRoadmapBoard(queryClient, location.search as Record<string, unknown>).catch(
+          () => undefined
+        ),
+      ])
+    }
 
     return {
       currentUser: {
@@ -83,7 +88,11 @@ export const Route = createFileRoute('/admin/roadmap')({
       },
     }
   },
-  component: RoadmapPage,
+  component: () => (
+    <AdminPageGate page="/admin/roadmap">
+      <RoadmapPage />
+    </AdminPageGate>
+  ),
 })
 
 function RoadmapPage() {

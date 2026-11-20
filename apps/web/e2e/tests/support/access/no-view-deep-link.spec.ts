@@ -1,7 +1,7 @@
 /**
- * ACC-05 for a teammate whose role has no `conversation.view`: opening a
- * conversation by its link shows the same "not found" state as any other
- * conversation they cannot see, with nothing to close or reply to. Both an
+ * ACC-05 for a teammate whose role has no inbox view permission: opening a
+ * conversation by its link shows the in-shell "You don't have access" page,
+ * as any admin page they cannot open, with nothing to close or reply to. Both an
  * Unassigned-queue conversation (no assignee, no team) and one assigned to
  * someone else.
  */
@@ -36,7 +36,7 @@ async function coldConversation(
 }
 
 test.describe('a teammate without conversation.view', { tag: '@core' }, () => {
-  test('opening a conversation by link shows not found, with no Close or reply', async ({
+  test('opening a conversation by link shows no access, with no Close or reply', async ({
     request,
     people,
     asPerson,
@@ -57,7 +57,9 @@ test.describe('a teammate without conversation.view', { tag: '@core' }, () => {
     const page = await asPerson('noAccess')
     for (const id of [unassigned, assigned]) {
       await page.goto(`/admin/inbox?i=${id}`)
-      await expect(page.getByText('Conversation not found')).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByRole('heading', { name: "You don't have access" })).toBeVisible({
+        timeout: 15_000,
+      })
       await expect(page.getByRole('button', { name: /^close$/i })).toHaveCount(0)
       await expect(page.locator('[contenteditable="true"]')).toHaveCount(0)
     }

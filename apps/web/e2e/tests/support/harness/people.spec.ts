@@ -70,11 +70,13 @@ test.describe('people fixtures', { tag: '@smoke' }, () => {
     await scoped.goto(threadUrl)
     await expect(scoped.getByText(firstMessage).first()).toBeVisible({ timeout: 15_000 })
 
-    // A teammate without conversation.view gets the same not-found state as
-    // for any conversation they cannot see (access/no-view-deep-link.spec.ts).
+    // A teammate with no inbox view permission gets the in-shell no-access
+    // page, as for any admin page they cannot open (access/no-view-deep-link.spec.ts).
     const noAccess = await asPerson('noAccess')
     await noAccess.goto(threadUrl)
-    await expect(noAccess.getByText('Conversation not found')).toBeVisible({ timeout: 15_000 })
+    await expect(noAccess.getByRole('heading', { name: "You don't have access" })).toBeVisible({
+      timeout: 15_000,
+    })
     await expect(noAccess.getByText(firstMessage)).toHaveCount(0)
   })
 

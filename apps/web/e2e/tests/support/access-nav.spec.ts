@@ -67,13 +67,16 @@ test(
       await expect(nav.getByRole('link', { name, exact: true }), name).toBeVisible()
     }
     await expect(nav.getByRole('link', { name: 'Help center' })).toHaveCount(0)
+    // Nor roadmap.manage, which the Roadmap board's roadmap list needs.
+    await expect(nav.getByRole('link', { name: 'Roadmap', exact: true })).toHaveCount(0)
     await expectNoAccessPage(contributor, '/admin/help-center')
+    await expectNoAccessPage(contributor, '/admin/roadmap')
     expect(failures).toEqual([])
   }
 )
 
 test(
-  'ACC-19 a support-only role gets the in-shell "You don\'t have access" page with Back to Home, and a rail of Home, Roadmap and Support',
+  'ACC-19 a support-only role gets the in-shell "You don\'t have access" page with Back to Home, and a rail of Home and Support',
   { tag: '@core' },
   async ({ browser, marker, newTeammate }) => {
     const t = await newTeammate({ roleKey: await createRole(marker, SUPPORT_ONLY) })
@@ -84,10 +87,12 @@ test(
     await expect(nav.getByRole('link', { name: 'Support', exact: true })).toBeVisible({
       timeout: 15_000,
     })
-    await expect(nav.getByRole('link')).toHaveText(['Home', 'Roadmap', 'Support'])
+    // No roadmap.manage, so no Roadmap: the board opens on the roadmap list.
+    await expect(nav.getByRole('link')).toHaveText(['Home', 'Support'])
 
     for (const path of [
       '/admin/feedback',
+      '/admin/roadmap',
       '/admin/users',
       '/admin/help-center',
       '/admin/changelog',

@@ -12,6 +12,16 @@ import { PERMISSIONS, type PermissionKey } from './permissions'
 export const ADMIN_PAGE_ACCESS = {
   // fetchInboxPosts
   '/admin/feedback': [PERMISSIONS.POST_VIEW_PRIVATE],
+  // fetchRoadmaps: the board opens on the roadmap list.
+  '/admin/roadmap': [PERMISSIONS.ROADMAP_MANAGE],
+  // listInboxItemsFn: refused unless the viewer may see conversations or
+  // tickets (canViewInboxAtAll).
+  '/admin/inbox': [
+    PERMISSIONS.CONVERSATION_VIEW,
+    PERMISSIONS.CONVERSATION_VIEW_ALL,
+    PERMISSIONS.TICKET_VIEW,
+    PERMISSIONS.TICKET_VIEW_ALL,
+  ],
   // listChangelogsFn
   '/admin/changelog': [PERMISSIONS.CHANGELOG_VIEW_DRAFT],
   // listCategoriesFn and listArticlesFn

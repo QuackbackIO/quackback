@@ -154,6 +154,7 @@ describe('AdminSidebar renders', () => {
         PERMISSIONS.AI_CUSTOMER_MANAGE,
         PERMISSIONS.WORKFLOW_MANAGE,
         PERMISSIONS.POST_VIEW_PRIVATE,
+        PERMISSIONS.ROADMAP_MANAGE,
       ],
     }
     const { router, container } = await mount()
@@ -177,6 +178,7 @@ describe('AdminSidebar renders', () => {
         PERMISSIONS.AI_CUSTOMER_MANAGE,
         PERMISSIONS.WORKFLOW_MANAGE,
         PERMISSIONS.POST_VIEW_PRIVATE,
+        PERMISSIONS.ROADMAP_MANAGE,
       ],
     }
     const { router, container } = await mount()
