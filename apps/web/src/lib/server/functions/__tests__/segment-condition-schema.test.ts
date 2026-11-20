@@ -107,32 +107,3 @@ describe('createSegmentSchema — new built-in field conditions', () => {
     expect(result.success).toBe(false)
   })
 })
-
-// ---------------------------------------------------------------------------
-// evaluationSchedule: only patterns the scheduler can run
-// ---------------------------------------------------------------------------
-
-describe('createSegmentSchema — evaluation schedule', () => {
-  const withPattern = (pattern: string) => ({
-    name: 'Scheduled',
-    type: 'dynamic' as const,
-    rules: {
-      match: 'all' as const,
-      conditions: [{ attribute: 'email', operator: 'eq', value: 'a' }],
-    },
-    evaluationSchedule: { enabled: true, pattern },
-  })
-
-  it.each(['0 * * * *', '*/15 9-17 * * 1-5', '0 0 1,15 * *'])('accepts %s', (pattern) => {
-    expect(createSegmentSchema.safeParse(withPattern(pattern)).success).toBe(true)
-  })
-
-  it.each(['99 99 * * *', '0 0 32 * *', '0 0 * 13 *', '0 0 * * * *', 'every hour'])(
-    'refuses %s, which the scheduler cannot parse',
-    (pattern) => {
-      const result = createSegmentSchema.safeParse(withPattern(pattern))
-      expect(result.success).toBe(false)
-      expect(result.error?.issues[0]?.message).toBe('Must be a valid cron expression')
-    }
-  )
-})

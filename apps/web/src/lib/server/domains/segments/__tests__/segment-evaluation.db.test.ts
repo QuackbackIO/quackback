@@ -221,4 +221,46 @@ describe.skipIf(!fixture.available)('dynamic segment evaluation (real DB)', () =
     const seg = await createSegment({ name: `Manual ${suffix()}`, type: 'manual' })
     await expect(updateSegment(seg.id, { rules: null })).resolves.toMatchObject({ rules: null })
   })
+
+  describe('evaluation schedule', () => {
+    const scheduled = (name: string, pattern: string) =>
+      createSegment({
+        name,
+        type: 'dynamic',
+        rules: { match: 'all', conditions: [{ attribute: 'email', operator: 'eq', value: 'a' }] },
+        evaluationSchedule: { enabled: true, pattern },
+      })
+
+    it.each(['0 * * * *', '*/15 9-17 * * 1-5', '0 0 1,15 * *'])('accepts %s', async (pattern) => {
+      await expect(scheduled(`Ok ${suffix()}`, pattern)).resolves.toMatchObject({
+        evaluationSchedule: { enabled: true, pattern },
+      })
+    })
+
+    it.each(['99 99 * * *', '0 0 32 * *', '0 0 * 13 *', '0 0 * * * *', 'every hour'])(
+      'refuses %s, which the scheduler cannot parse, and saves nothing',
+      async (pattern) => {
+        const name = `Bad ${suffix()}`
+        await expect(scheduled(name, pattern)).rejects.toMatchObject({
+          code: 'VALIDATION_ERROR',
+          message: 'Must be a valid cron expression',
+        })
+        expect(
+          await testDb.select({ id: segments.id }).from(segments).where(eq(segments.name, name))
+        ).toEqual([])
+      }
+    )
+
+    it('refuses an unparseable schedule on update and keeps the old one', async () => {
+      const seg = await scheduled(`Upd ${suffix()}`, '0 * * * *')
+      await expect(
+        updateSegment(seg.id, { evaluationSchedule: { enabled: true, pattern: '99 99 * * *' } })
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+      const [row] = await testDb
+        .select({ schedule: segments.evaluationSchedule })
+        .from(segments)
+        .where(eq(segments.id, seg.id))
+      expect(row.schedule).toEqual({ enabled: true, pattern: '0 * * * *' })
+    })
+  })
 })
