@@ -108,6 +108,7 @@ import {
   and,
   apiKeys,
   boards,
+  conversationMessageFlags,
   conversationMessages,
   postComments,
   posts,
@@ -135,6 +136,10 @@ import { notifyAgentReply } from '@/lib/server/domains/conversation/conversation
 import { publishConversationMessage } from '@/lib/server/realtime/conversation-channels'
 import { replyAuthorNameForRequester } from '../ticket-reply-email'
 import { createTicket } from '../ticket.service'
+import { listTicketActivity } from '../ticket-activity.service'
+import { listFlaggedMessages } from '@/lib/server/domains/conversation/conversation.query'
+import { resolveActorPermissions } from '@/lib/server/policy/permissions'
+import type { Actor } from '@/lib/server/policy/types'
 import { getPostWithDetails } from '@/lib/server/domains/posts/post.query'
 import { dispatchMessageCreated, dispatchMessageNoteCreated } from '@/lib/server/events/dispatch'
 import { Route as ReplyRoute } from '@/routes/api/v1/conversations/$conversationId.reply'
@@ -569,5 +574,78 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     const authors = await loadAuthors([teammate], { preferAccountName: true })
     expect(authors.get(teammate)?.displayName).toBe(ACCOUNT_NAME)
     expect(authors.get(teammate)?.viaApi).toBeUndefined()
+  })
+})
+
+/**
+ * The Saved messages list and the ticket activity feed name an API key's
+ * messages and actions as the inbox does: a key that shows as itself by its
+ * own name with the "via API" mark, a personal key made after the cutoff by
+ * its creator with no mark.
+ */
+describe.skipIf(!fixture.available)('team lists that name an API key', () => {
+  const adminActor = (principalId: PrincipalId): Actor => ({
+    principalId,
+    role: 'admin',
+    principalType: 'user',
+    segmentIds: new Set(),
+    permissions: resolveActorPermissions('admin'),
+  })
+
+  /** The creator flags the ticket's opening message, then reads both lists. */
+  async function listsFor(token: string, creator: PrincipalId) {
+    const { ticketId } = await openTicketThroughKey(token)
+    const [opening] = await testDb
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.content, 'Opening words from the team'))
+      .orderBy(sql`${conversationMessages.createdAt} desc`)
+      .limit(1)
+    await testDb
+      .insert(conversationMessageFlags)
+      .values({ conversationMessageId: opening.id, principalId: creator })
+    const flagged = (await listFlaggedMessages(adminActor(creator))).find(
+      (f) => f.messageId === opening.id
+    )
+    const created = (await listTicketActivity(ticketId)).find((a) => a.type === 'ticket.created')
+    expect(flagged).toBeDefined()
+    expect(created).toBeDefined()
+    return { flagged: flagged!, created: created! }
+  }
+
+  it('a workspace key: its own name, marked via API', async () => {
+    await setCutoff(anHourAgo())
+    await seedDefaultStatus()
+    const creator = await seedCreator()
+    const { plainTextKey } = await createApiKey(
+      { name: 'ops-bot', kind: 'workspace', roleId: await managerRoleId() },
+      creator,
+      { permissions: ALL_PERMISSIONS, role: 'admin' }
+    )
+    const { flagged, created } = await listsFor(plainTextKey, creator)
+    expect(flagged).toMatchObject({ authorName: 'ops-bot', authorViaApi: true })
+    expect(created).toMatchObject({ actorName: 'ops-bot', actorViaApi: true })
+  })
+
+  it('a personal key made before the cutoff: its own name, marked via API', async () => {
+    await setCutoff(inAnHour())
+    await seedDefaultStatus()
+    const creator = await seedCreator()
+    const { plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
+    const { flagged, created } = await listsFor(plainTextKey, creator)
+    expect(flagged).toMatchObject({ authorName: KEY_NAME, authorViaApi: true })
+    expect(created).toMatchObject({ actorName: KEY_NAME, actorViaApi: true })
+  })
+
+  it('a personal key made after the cutoff: its creator, unmarked', async () => {
+    await setCutoff(anHourAgo())
+    await seedDefaultStatus()
+    const creator = await seedCreator()
+    const { plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
+    const { flagged, created } = await listsFor(plainTextKey, creator)
+    expect(flagged.authorName).toBe(ACCOUNT_NAME)
+    expect(flagged).not.toHaveProperty('authorViaApi')
+    expect(created.actorName).toBe(ACCOUNT_NAME)
+    expect(created).not.toHaveProperty('actorViaApi')
   })
 })

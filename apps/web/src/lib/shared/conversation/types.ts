@@ -306,6 +306,8 @@ export interface FlaggedMessageDTO {
   preview: string
   /** Who wrote the flagged message. */
   authorName: string | null
+  /** The author shows as an API key (see ConversationAuthorDTO.viaApi). */
+  authorViaApi?: boolean
   /** The conversation's visitor (so the list reads "in <conversation>"). */
   conversationLabel: string | null
   flaggedAt: string

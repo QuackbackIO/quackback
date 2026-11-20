@@ -27,7 +27,6 @@ import {
   conversationMessageMentions,
   conversationMessageReactions,
   conversationMessageFlags,
-  user,
   userSegments,
   segments,
   assistantInvolvements,
@@ -85,8 +84,6 @@ import {
 } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
-import { supportContactName } from '@/lib/shared/support-contact-name'
-import { displayAssistantName } from '@/lib/shared/assistant/config'
 import { truncate } from '@/lib/shared/utils/string'
 import type { Channel } from '@/lib/shared/channels'
 import { keywordInContext, type TermSegment } from '@/lib/shared/utils/keyword-context'
@@ -331,9 +328,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         conversationId: conversationMessages.conversationId,
         content: conversationMessages.content,
         senderType: conversationMessages.senderType,
-        authorPublicName: principal.displayName,
-        authorIsAssistant: sql<boolean>`${principal.serviceMetadata}->>'integrationType' = 'assistant'`,
-        authorAccountName: user.name,
+        authorPrincipalId: conversationMessages.principalId,
         visitorPrincipalId: conversations.visitorPrincipalId,
         flaggedAt: conversationMessageFlags.flaggedAt,
       })
@@ -349,8 +344,6 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         conversations,
         and(eq(conversations.id, conversationMessages.conversationId), conversationFilter(actor))
       )
-      .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
-      .leftJoin(user, eq(user.id, principal.userId))
       .where(eq(conversationMessageFlags.principalId, viewerPrincipalId))
       .orderBy(desc(conversationMessageFlags.flaggedAt))
       .limit(100),
@@ -360,9 +353,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         ticketId: conversationMessages.ticketId,
         content: conversationMessages.content,
         senderType: conversationMessages.senderType,
-        authorPublicName: principal.displayName,
-        authorIsAssistant: sql<boolean>`${principal.serviceMetadata}->>'integrationType' = 'assistant'`,
-        authorAccountName: user.name,
+        authorPrincipalId: conversationMessages.principalId,
         ticketTitle: tickets.title,
         ticketNumber: tickets.number,
         flaggedAt: conversationMessageFlags.flaggedAt,
@@ -376,38 +367,38 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         )
       )
       .innerJoin(tickets, and(eq(tickets.id, conversationMessages.ticketId), ticketFilter(actor)))
-      .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
-      .leftJoin(user, eq(user.id, principal.userId))
       .where(eq(conversationMessageFlags.principalId, viewerPrincipalId))
       .orderBy(desc(conversationMessageFlags.flaggedAt))
       .limit(100),
   ])
 
-  const visitorNames = await loadAuthors(
-    conversationRows.map((r) => r.visitorPrincipalId),
+  // One batched read names every author and visitor as the inbox does: the
+  // account name, a personal key's creator, an API key with its "via API" mark.
+  const names = await loadAuthors(
+    [
+      ...conversationRows.map((r) => r.visitorPrincipalId),
+      ...conversationRows.map((r) => r.authorPrincipalId),
+      ...ticketRows.map((r) => r.authorPrincipalId),
+    ],
     { preferAccountName: true }
   )
   const flaggedAuthor = (row: {
-    authorAccountName: string | null
-    authorPublicName: string | null
-    authorIsAssistant: boolean | null
+    authorPrincipalId: PrincipalId | null
     senderType: string
-  }) =>
-    supportContactName({
-      accountName: row.authorAccountName,
-      publicName:
-        row.authorIsAssistant && row.authorPublicName
-          ? displayAssistantName(row.authorPublicName)
-          : row.authorPublicName,
-      fallback: row.senderType === 'agent' ? 'Agent' : 'Visitor',
-    })
+  }): Pick<FlaggedMessageDTO, 'authorName' | 'authorViaApi'> => {
+    const author = row.authorPrincipalId ? names.get(row.authorPrincipalId) : undefined
+    return {
+      authorName: author?.displayName ?? (row.senderType === 'agent' ? 'Agent' : 'Visitor'),
+      ...(author?.viaApi ? { authorViaApi: true } : {}),
+    }
+  }
   const fromConversations: FlaggedMessageDTO[] = conversationRows.map((r) => ({
     messageId: r.messageId,
     conversationId: r.conversationId,
     ticketId: null,
     preview: truncate(r.content, 120),
-    authorName: flaggedAuthor(r),
-    conversationLabel: visitorNames.get(r.visitorPrincipalId)?.displayName ?? 'Visitor',
+    ...flaggedAuthor(r),
+    conversationLabel: names.get(r.visitorPrincipalId)?.displayName ?? 'Visitor',
     flaggedAt: r.flaggedAt.toISOString(),
   }))
   const fromTickets: FlaggedMessageDTO[] = ticketRows.map((r) => ({
@@ -415,7 +406,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
     conversationId: null,
     ticketId: r.ticketId,
     preview: truncate(r.content, 120),
-    authorName: flaggedAuthor(r),
+    ...flaggedAuthor(r),
     conversationLabel: `#${r.ticketNumber} · ${r.ticketTitle}`,
     flaggedAt: r.flaggedAt.toISOString(),
   }))

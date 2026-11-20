@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/shared/spinner'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { ViaApiBadge } from './via-api-badge'
 
 /** A flagged-message row's navigation target, discriminated by which parent it
  *  belongs to (exactly one of `conversationId`/`ticketId` is ever set on the
@@ -78,7 +79,10 @@ export function SavedMessagesColumn({
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-medium">{m.authorName ?? 'Unknown'}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-medium">{m.authorName ?? 'Unknown'}</span>
+                  <ViaApiBadge author={{ viaApi: m.authorViaApi }} />
+                </span>
                 <TimeAgo
                   date={m.flaggedAt}
                   short
