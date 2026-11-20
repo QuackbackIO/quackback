@@ -9,6 +9,8 @@
  * workflow-wait (promotes delayed workflow jobs due by then). Wall clock only:
  * email-log-retention, workflow-retention, spam-retention, anon-sweep,
  * status-maintenance, status-notify.
+ * email-log-retention, workflow-retention, spam-retention, anon-sweep,
+ * segment-evaluation (every scheduled dynamic segment, once).
  */
 import { expect, type APIRequestContext } from '@playwright/test'
 
@@ -23,6 +25,7 @@ export type SweepName =
   | 'anon-sweep'
   | 'status-maintenance'
   | 'status-notify'
+  | 'segment-evaluation'
 
 export interface SweepRun {
   ok: true
