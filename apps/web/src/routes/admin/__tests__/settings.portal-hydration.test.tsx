@@ -93,7 +93,7 @@ vi.mock('@/lib/client/queries/portal-custom-domains', () => ({
 }))
 
 vi.mock('@/lib/client/mutations/settings', () => ({
-  useUpdatePortalConfig: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdatePortalDesign: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSaveBrandingTheme: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
@@ -211,10 +211,10 @@ describe('portal settings page hydration', () => {
     expect(container.querySelector('[data-slot="draft-bar"]')).toBeNull()
   })
 
-  it('gives settings.branding alone the look, without the tabs and welcome message it cannot save', async () => {
+  it('gives settings.branding alone the look, the tabs and the welcome message, all of which it saves', async () => {
     rootContext.permissions = ['settings.branding']
     const container = await hydratePage()
-    expect([...cardRenders.keys()]).toEqual(['Appearance'])
+    expect([...cardRenders.keys()]).toEqual(['Appearance', 'Navigation', 'Welcome message'])
     expect(container.querySelector('[data-testid="portal-preview"]')).toBeTruthy()
   })
 

@@ -21,6 +21,7 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import {
   GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+  PORTAL_DESIGN_WRITE_PERMISSIONS,
   PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
 } from '@/lib/shared/settings-read-permissions'
 
@@ -208,6 +209,10 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/settings.ts::fetchPortalPageConfigFn': DYNAMIC_PERMISSION(
     PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
     'any one of these reads; the moderation default goes only to settings.manage or settings.moderation, the portal tabs and welcome message only to settings.manage or settings.branding, and nothing else of the portal config'
+  ),
+  'lib/server/functions/settings.ts::updatePortalDesignFn': DYNAMIC_PERMISSION(
+    PORTAL_DESIGN_WRITE_PERMISSIONS,
+    "saves only the portal's tabs and welcome message (Settings > Portal > Design); any other portal config field is refused and saves through updatePortalConfigFn under settings.manage"
   ),
   'integrations/github/server/functions.ts::getGitHubChannelStatusFn': DYNAMIC_PERMISSION(
     GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,

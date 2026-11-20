@@ -19,6 +19,7 @@ import {
   saveWidgetHeroImageKeyFn,
   deleteWidgetHeroImageFn,
   updatePortalConfigFn,
+  updatePortalDesignFn,
   updateModerationDefaultFn,
   updateWidgetConfigFn,
   regenerateWidgetSecretFn,
@@ -274,6 +275,21 @@ export function useUpdatePortalConfig(
     meta: { ...AUTOSAVE, ...meta },
     mutationFn: (data: Parameters<typeof updatePortalConfigFn>[0]['data']) =>
       updatePortalConfigFn({ data }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey }),
+  })
+}
+
+/** Saves the portal's tabs and welcome message (settings.manage or settings.branding). */
+export function useUpdatePortalDesign(
+  meta: { showServerMessage?: boolean; ownsError?: (error: unknown) => boolean } = {}
+) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    meta: { ...AUTOSAVE, ...meta },
+    mutationFn: (data: Parameters<typeof updatePortalDesignFn>[0]['data']) =>
+      updatePortalDesignFn({ data }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey }),
   })

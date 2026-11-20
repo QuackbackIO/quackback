@@ -60,9 +60,7 @@ import {
 } from '@/components/admin/settings/branding/use-branding-state'
 import type { ThemeConfig } from '@/lib/shared/theme'
 import { primaryPresetIds, themePresets } from '@/lib/shared/theme/presets'
-import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
-import { usePermission } from '@/lib/client/hooks/use-permission'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { useUpdatePortalDesign } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 import { UpgradeModal } from '@/components/admin/upgrade'
@@ -257,11 +255,7 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
   const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalPageConfig())
   const config: PortalPageConfig = portalConfigQuery.data
-  // The portal's tabs and welcome message save under settings.manage; without
-  // it the Design tab is the look alone.
-  const canEditContent = usePermission(PERMISSIONS.SETTINGS_MANAGE)
-
-  const updatePortalConfig = useUpdatePortalConfig({
+  const updatePortalDesign = useUpdatePortalDesign({
     showServerMessage: true,
     ownsError: isPlanRefusal,
   })
@@ -342,7 +336,7 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
       if (welcomeDirty || navDirty) {
         // Placeholder link rows (no URL yet) are drafts, not config.
         const items = navItems.filter((i) => i.type !== 'link' || !!i.url)
-        await updatePortalConfig.mutateAsync({
+        await updatePortalDesign.mutateAsync({
           ...(welcomeDirty ? { welcomeCard: { body: welcomeBody } } : {}),
           ...(navDirty ? { nav: { items } } : {}),
         })
@@ -452,33 +446,29 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
           />
         </SettingsCard>
 
-        {canEditContent && (
-          <>
-            <SettingsCard
-              title="Navigation"
-              description="The portal's top tabs. They apply to the help center and status pages too."
-            >
-              <PortalNavEditor
-                items={navItems}
-                onChange={setNavItems}
-                gatedTypes={gatedTypes}
-                onReset={resetNavItems}
-                sectionHosts={sectionHosts}
-                linkSectionHosts={tabs.includes('custom-domains')}
-              />
-              <p className="mt-3 text-xs text-muted-foreground">
-                Renamed tabs show your text in every language; untouched labels stay translated.
-              </p>
-            </SettingsCard>
+        <SettingsCard
+          title="Navigation"
+          description="The portal's top tabs. They apply to the help center and status pages too."
+        >
+          <PortalNavEditor
+            items={navItems}
+            onChange={setNavItems}
+            gatedTypes={gatedTypes}
+            onReset={resetNavItems}
+            sectionHosts={sectionHosts}
+            linkSectionHosts={tabs.includes('custom-domains')}
+          />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Renamed tabs show your text in every language; untouched labels stay translated.
+          </p>
+        </SettingsCard>
 
-            <SettingsCard
-              title="Welcome message"
-              description="Shown above the post list on your portal home. Leave empty to show nothing."
-            >
-              <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
-            </SettingsCard>
-          </>
-        )}
+        <SettingsCard
+          title="Welcome message"
+          description="Shown above the post list on your portal home. Leave empty to show nothing."
+        >
+          <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
+        </SettingsCard>
       </div>
 
       {/* ── Live portal preview ── */}
