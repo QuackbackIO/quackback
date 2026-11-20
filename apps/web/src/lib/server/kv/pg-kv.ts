@@ -93,6 +93,34 @@ export async function kvSet(
   `)
 }
 
+/**
+ * SET … EX, but only when `condition` holds as this statement runs. For a cache
+ * fill that must not land once what it was built from has changed. The check
+ * and the write are one statement, so a change committed before the statement
+ * starts is seen; a change still uncommitted is not, and its writer must drop
+ * the key after it commits. True iff the value was written.
+ */
+export async function kvSetIf(
+  key: string,
+  value: unknown,
+  seconds: number,
+  condition: SQL
+): Promise<boolean> {
+  const result = await db.execute(sql`
+    INSERT INTO kv_store (workspace_key, key, value, expires_at)
+    SELECT
+      ${currentWorkspaceNamespace()},
+      ${key},
+      ${JSON.stringify(value ?? null)}::jsonb,
+      now() + make_interval(secs => ${ttlSeconds(seconds)})
+    WHERE ${condition}
+    ON CONFLICT (workspace_key, key) DO UPDATE
+      SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+    RETURNING 1 AS written
+  `)
+  return getExecuteRows(result).length > 0
+}
+
 /** DEL. Variadic like the Redis helper it replaces; a no-op on an empty list. */
 export async function kvDel(...keys: string[]): Promise<void> {
   if (keys.length === 0) return

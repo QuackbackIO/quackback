@@ -9,7 +9,12 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
-import { localCacheGet, localCacheSet, settingsLocalTtlMs } from '@/lib/server/local-cache'
+import {
+  localCacheGeneration,
+  localCacheGet,
+  localCacheSet,
+  settingsLocalTtlMs,
+} from '@/lib/server/local-cache'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
@@ -1093,10 +1098,36 @@ export async function deriveFromWorkspaceSettingsRow<T>(
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   const local = localCacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
   if (local) return local
+  // A write that drops the settings while this read is in flight leaves the
+  // copy unkept, as fillIfRowUnchanged does for the shared cache.
+  const readSince = localCacheGeneration(CACHE_KEYS.WORKSPACE_SETTINGS)
   const settings = await readWorkspaceSettings()
   const ttlMs = settingsLocalTtlMs()
-  if (settings && ttlMs > 0) localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, ttlMs)
+  if (settings && ttlMs > 0) {
+    localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, ttlMs, readSince)
+  }
   return settings
+}
+
+/**
+ * Cache settings built from the row at `rowVersion` (its `xmin`, which every
+ * update of the row changes, raw SQL included), unless the row has changed
+ * since. A save that commits and drops the cache while this read is still
+ * building would otherwise have the old row cached after the drop, and every
+ * page would serve it for the hour (an admin saves, reloads, and sees the old
+ * value).
+ *
+ * The check takes no lock, so a fill never holds up a save. A save still in
+ * flight is not visible to it: the fill may cache the row that save is
+ * replacing, and the save drops it when it invalidates after its commit, as
+ * every settings writer does. Writes to other tables the settings are built
+ * from (identity providers, verified domains) bump the row's auth config
+ * version in the same transaction, so they change the version too.
+ */
+async function fillIfRowUnchanged(result: WorkspaceSettings, rowVersion: string): Promise<void> {
+  await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600, {
+    onlyIf: sql`(SELECT xmin::text FROM settings LIMIT 1) = ${rowVersion}`,
+  })
 }
 
 async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
@@ -1120,8 +1151,13 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
       }
     }
 
-    const org = await db.query.settings.findFirst()
-    if (!org) return null
+    // The row with its version: the fill below lands only if the row is
+    // still this version (see fillIfRowUnchanged).
+    const read = await db.query.settings.findFirst({
+      extras: { rowVersion: sql<string>`xmin::text`.as('row_version') },
+    })
+    if (!read) return null
+    const { rowVersion, ...org } = read
 
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     const portalConfig = parsePortalConfig(org.portalConfig)
@@ -1210,7 +1246,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     // 1h TTL: settings change rarely and every mutation in this file
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
     // the per-request cost of getWorkspaceSettings to a single Redis GET.
-    await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
+    await fillIfRowUnchanged(result, rowVersion)
     return result
   } catch (error) {
     logSettingsReadError(log, error, 'get workspace settings failed')

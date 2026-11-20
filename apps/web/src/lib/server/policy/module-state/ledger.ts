@@ -378,6 +378,27 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'for up to the copy lifetime.',
   },
   {
+    file: 'apps/web/src/lib/server/cache.ts',
+    name: 'refusedFills',
+    category: 'process-lifetime',
+    reason:
+      'A count of cache fills this process refused, logged so a fill that never lands is visible. It holds no workspace data; shared across workspaces it only sums their refusals in one log field.',
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'dropStamps',
+    category: 'workspace-keyed',
+    reason:
+      'Per cache key, when this process last dropped it, so a read that overlapped the drop does not keep its copy. Shared, a drop in one workspace would only make another workspace skip keeping one copy (a cache read, never wrong data); keyed, it does not even do that.',
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'lastStamp',
+    category: 'process-lifetime',
+    reason:
+      'The last stamp handed to dropStamps: a plain counter holding no workspace data. Shared across workspaces it only makes stamps unique; no value read from it says anything about a workspace.',
+  },
+  {
     file: 'apps/web/src/lib/server/domains/settings/settings.service.ts',
     name: 'derivedFromSettings',
     category: 'workspace-scoped-key',

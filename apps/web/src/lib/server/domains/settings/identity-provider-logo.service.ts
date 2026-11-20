@@ -4,10 +4,13 @@
  *
  * Split out of `identity-providers.service.ts` so an image upload is never
  * entangled with a connection edit: the logo feeds only the rendered sign-in
- * button, not what Better-Auth registers, so these writes bump nothing
- * auth-related — just the settings cache that backs `getPublicOidcProviders`.
+ * button, which the settings cache holds (`getPublicOidcProviders`). Each write
+ * bumps the settings row's auth config version in the same transaction, as
+ * every other identity provider write does, so a settings read that overlapped
+ * it cannot cache the old button (see `fillIfRowUnchanged`).
  */
 import { db, eq, identityProvider } from '@/lib/server/db'
+import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import type { IdentityProviderId } from '@quackback/ids'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
@@ -43,7 +46,10 @@ export async function saveIdentityProviderLogoKey(
       }
     }
 
-    await db.update(identityProvider).set({ logoKey: key }).where(eq(identityProvider.id, id))
+    await db.transaction(async (tx) => {
+      await tx.update(identityProvider).set({ logoKey: key }).where(eq(identityProvider.id, id))
+      await bumpAuthConfigVersionInTx(tx)
+    })
     await invalidateSettingsCache()
     return { success: true, key }
   } catch (error) {
@@ -67,7 +73,10 @@ export async function deleteIdentityProviderLogoKey(
       }
     }
 
-    await db.update(identityProvider).set({ logoKey: null }).where(eq(identityProvider.id, id))
+    await db.transaction(async (tx) => {
+      await tx.update(identityProvider).set({ logoKey: null }).where(eq(identityProvider.id, id))
+      await bumpAuthConfigVersionInTx(tx)
+    })
     await invalidateSettingsCache()
     return { success: true }
   } catch (error) {

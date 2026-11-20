@@ -286,18 +286,24 @@ describe('getWorkspaceSettings', () => {
 
   it('queries DB and caches result on cache miss', async () => {
     mockCacheGet.mockResolvedValue(null)
-    mockFindFirst.mockResolvedValue(makeSettingsRow())
+    mockFindFirst.mockResolvedValue({ ...makeSettingsRow(), rowVersion: '4242' })
 
     const result = await getWorkspaceSettings()
 
     expect(result).not.toBeNull()
     expect(result).not.toHaveProperty('visualTheme')
     expect(mockFindFirst).toHaveBeenCalled()
+    // Filled only while the row is still the version it was read at, so a
+    // save racing this read cannot leave the old row cached.
     expect(mockCacheSet).toHaveBeenCalledWith(
       'settings:workspace',
       expect.objectContaining({ name: 'Test Workspace' }),
-      3600
+      3600,
+      { onlyIf: expect.anything() }
     )
+    // The version is not part of the settings row callers see.
+    expect(result?.settings).not.toHaveProperty('rowVersion')
+    expect(mockCacheSet.mock.calls[0][1].settings).not.toHaveProperty('rowVersion')
   })
 
   it('returns null when no settings exist (does not cache null)', async () => {

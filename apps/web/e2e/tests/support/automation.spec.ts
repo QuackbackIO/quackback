@@ -455,6 +455,10 @@ test(
         { timeout: 10_000 }
       )
       .toMatch(/"workflowAbandonedAutoClose": ?\{"enabled": ?true/)
+    // The row commits before the save's response is sent, and the server drops
+    // its cached settings in between: reload once the save has answered (the
+    // switch is disabled until then), as a person would.
+    await expect(toggle).toBeEnabled({ timeout: 20_000 })
     // Saved: still on after a reload.
     await admin.reload()
     await expect(admin.getByRole('switch', { name: 'Auto-close abandoned journeys' })).toBeChecked({

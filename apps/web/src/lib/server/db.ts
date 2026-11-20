@@ -8,7 +8,7 @@
  * import { db, eq, and, posts } from '@/lib/server/db'
  */
 
-import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
+import { createDb, createDbFromSql, type Database as PostgresDatabase } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import {
@@ -154,6 +154,14 @@ export const db: Database = new Proxy({} as Database, {
     return bound
   },
 })
+
+/**
+ * A client on a connection of the caller's own, for a suite that must commit
+ * rows other connections see (a schema of its own, for example).
+ */
+export function createDbOnConnection(sql: Parameters<typeof createDbFromSql>[0]): PostgresDatabase {
+  return createDbFromSql(sql)
+}
 
 // Re-export everything from the db package
 // Note: We explicitly import and re-export drizzle-orm operators here
