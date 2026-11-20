@@ -20,7 +20,7 @@ import {
   type Page,
   type PlaywrightWorkerArgs,
 } from '@playwright/test'
-import { toUuid } from '@quackback/ids'
+import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { pollFor, supportDb } from '../support/db'
 import { supportEnv } from '../support/env'
 import { callServerFn, type ServerFnResult } from '../support/server-fns'
@@ -360,6 +360,18 @@ export async function pollIncident(
     },
     { timeoutMs }
   )
+}
+
+/** A manual segment only this test uses, with the given members (principal uuids). */
+export async function createSegment(marker: string, memberUuids: string[] = []) {
+  const id = toUuid(generateId('segment'))
+  const slug = `${marker}-${Math.random().toString(36).slice(2, 7)}`.toLowerCase()
+  await supportDb()`INSERT INTO segments (id, name, slug, type)
+    VALUES (${id}, ${`Segment ${slug}`}, ${slug}, 'manual')`
+  for (const principalId of memberUuids) {
+    await supportDb()`INSERT INTO user_segments (principal_id, segment_id) VALUES (${principalId}, ${id})`
+  }
+  return { id: fromUuid('segment', id), uuid: id }
 }
 
 // ---------------------------------------------------------------------------
