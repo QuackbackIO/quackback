@@ -455,3 +455,34 @@ unassigned, review by: 2026-12-03.
 - `platform/keys.spec.ts` › API-K-35 a users cursor replayed with a different
   limit. The users route turns the offset cursor into a page number, so a new
   limit repeats or skips rows (`routes/api/v1/users/index.ts:47-48`).
+
+### Product suite: API webhooks
+
+- `platform/webhooks-manage.spec.ts` › API-W-09 a deleted webhook reads as
+  not found, and API-W-10 a deleted webhook cannot be updated or rotated.
+  Product bug: `getWebhookById`, `updateWebhook` and `rotateWebhookSecret`
+  look the row up by id only and ignore `deleted_at`
+  (`apps/web/src/lib/server/domains/webhooks/webhook.service.ts:127`, `:177`,
+  `:229`), so `GET /api/v1/webhooks/{id}` answers 200 for a deleted webhook and
+  PATCH and rotate succeed on it (rotate mints a new secret), while the list
+  and a second DELETE treat it as gone. Fix: add `isNull(webhooks.deletedAt)`
+  to the three `where` clauses, as `deleteWebhook` does. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/webhooks-manage.spec.ts` › API-W-22 saving an unrelated edit keeps
+  a failing webhook's failure count. Product bug: the edit dialog always sends
+  `status: 'active'` for an enabled webhook
+  (`apps/web/src/components/admin/settings/webhooks/edit-webhook-dialog.tsx:80`)
+  and `updateWebhook` resets `failureCount` and `lastError` whenever it gets
+  `active` (`webhook.service.ts:171`), so changing only the events hides a
+  failing endpoint. The switch copy promises a reset only when an
+  auto-disabled webhook is turned back on. Fix: send `status` only when the
+  switch changed, or reset the counters only on a disabled-to-active change.
+  owner: unassigned, review by: 2026-12-03.
+- `platform/webhooks-feedback.spec.ts` › API-W-48 post.deleted says who deleted
+  the post. Product bug: `softDeletePost` dispatches `post.deleted` with an
+  actor built from ids only
+  (`apps/web/src/lib/server/domains/posts/post.user-actions.ts:332`), and the
+  payload's `deletedBy` reads `actor.email || actor.displayName`
+  (`apps/web/src/lib/server/events/dispatch.ts:265`), so it is always missing.
+  Fix: pass the deleter's email and display name into `buildEventActor` there.
+  owner: unassigned, review by: 2026-12-03.
