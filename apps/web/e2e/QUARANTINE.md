@@ -716,3 +716,12 @@ no such part beyond the wrong notification).
   Smallest fix: check `canViewPost` first and throw `POST_NOT_FOUND` on a view
   denial, keeping `FORBIDDEN` only for "viewable but not commentable". owner:
   unassigned, review by: 2026-12-03.
+- `feedback/portal-profile.spec.ts` › FBP-U-04 a held comment neither lists
+  its post nor counts on the public profile (FBP-B30). The "Commented on"
+  list and `commentCount` filter `is_private = false` and
+  `deleted_at IS NULL` but not `moderation_state`
+  (`apps/web/src/lib/server/domains/users/user.public-profile.ts:185-189`,
+  `:220-224`), so a comment still waiting for review shows its post on the
+  author's public profile (red run: the held comment's post was listed).
+  Smallest fix: add `eq(postComments.moderationState, 'published')` to both.
+  owner: unassigned, review by: 2026-12-03.
