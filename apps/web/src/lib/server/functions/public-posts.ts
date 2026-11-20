@@ -40,7 +40,7 @@ import {
   getVoteAndSubscriptionStatus,
 } from '@/lib/server/domains/posts/post.public.utils'
 import { createPost } from '@/lib/server/domains/posts/post.service'
-import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
+import { blockedVoteToggle, voteOnPost } from '@/lib/server/domains/posts/post.voting'
 import {
   isBoardOpenFor,
   withVisitorPostCapCopy,
@@ -52,6 +52,7 @@ import { userEditPost, softDeletePost } from '@/lib/server/domains/posts/post.us
 import { getPublicBoardById } from '@/lib/server/domains/boards/board.public'
 import { getDefaultStatus } from '@/lib/server/domains/statuses/status.service'
 import { getMemberByUser } from '@/lib/server/domains/principals/principal.service'
+import { assertNotBlocked } from '@/lib/server/domains/principals/blocking'
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
@@ -349,6 +350,9 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
   data: ToggleVoteInput
 ): Promise<{ voted: boolean; voteCount: number }> {
   log.debug({ post_id: data.postId }, 'toggle vote')
+  // A blocked person may only take back a vote they gave.
+  const blockedAnswer = await blockedVoteToggle(data.postId as PostId, ctx.principal.id)
+  if (blockedAnswer) return blockedAnswer
   // Per-post audience gate: portal-access alone is not enough — an
   // authenticated caller could still vote on a team-only / segment-
   // restricted post if they knew the id. `assertPostVotable`
@@ -408,6 +412,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   data: CreatePublicPostInput
 ) {
   log.debug({ board_id: data.boardId }, 'create public post')
+  await assertNotBlocked(ctx.principal.id)
   const { boardId: boardIdRaw, title, content, contentJson, metadata, customFields } = data
   const boardId = boardIdRaw as BoardId
 

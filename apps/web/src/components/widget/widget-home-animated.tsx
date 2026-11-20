@@ -131,6 +131,9 @@ interface SearchResult {
 // local so this file shares no module with the lazy chunks.
 const isReadOnlyRefusal = (err: unknown): boolean =>
   err instanceof Error && err.message === "This board isn't taking new feedback right now."
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+const isBlockedRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'BLOCKED'
 
 const SIMILAR_SEARCH_CACHE_LIMIT = 40
 /** Shorter titles match too much to be similar to anything, as in the portal composer. */
@@ -904,15 +907,20 @@ export function WidgetHomeAnimated({
       collapseForm()
     } catch (err) {
       setError(
-        isReadOnlyRefusal(err)
+        isBlockedRefusal(err)
           ? intl.formatMessage({
-              id: 'widget.readOnly',
-              defaultMessage: "This board isn't taking new feedback right now.",
+              id: 'widget.blocked',
+              defaultMessage: "You can't post, vote or comment here.",
             })
-          : intl.formatMessage({
-              id: 'widget.home.form.errorNetwork',
-              defaultMessage: 'Network error. Please try again.',
-            })
+          : isReadOnlyRefusal(err)
+            ? intl.formatMessage({
+                id: 'widget.readOnly',
+                defaultMessage: "This board isn't taking new feedback right now.",
+              })
+            : intl.formatMessage({
+                id: 'widget.home.form.errorNetwork',
+                defaultMessage: 'Network error. Please try again.',
+              })
       )
     } finally {
       setIsSubmitting(false)

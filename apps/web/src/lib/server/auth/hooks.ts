@@ -1225,6 +1225,66 @@ export async function revokeSession(ctx: SessionCtx, token: string): Promise<voi
   }
 }
 
+/**
+ * Paths that are not someone proving who they are. `/sign-in/anonymous` mints
+ * a session for a brand-new anonymous person, who cannot be blocked yet.
+ * `/get-session` mints nothing: it reads the session the request already
+ * holds, and may refresh its cookie. Skipping it means a blocked person keeps a
+ * session they held before the block; every portal and widget write refuses
+ * them (blocking.ts), and ending an anonymous visitor's session would only hand
+ * them a fresh, unblocked identity.
+ */
+const NOT_A_SIGN_IN = new Set<string>(['/sign-in/anonymous', '/get-session'])
+
+/** Paths a browser navigates to (not an XHR), so the refusal is a redirect. */
+const NAVIGATED_SIGN_IN_PATHS = new Set<string>(['/callback/:id', '/oauth2/callback/:providerId'])
+
+/**
+ * A blocked person cannot sign in again (blocking.ts). Asked after the session
+ * is minted, because only then has the person proved who they are (a password,
+ * a followed link, an emailed code, a provider's assertion): refusing earlier
+ * would tell anyone who types an address that it is blocked. The new session
+ * is revoked and the refusal says no more than widget identify's blocked
+ * message. A navigated sign-in lands on the sign-in page with the code; an
+ * XHR one gets it as a 403 the auth form shows.
+ */
+export async function handleBlockedSignInAfter(ctx: {
+  path?: string
+  request?: { method?: string }
+  context?: {
+    newSession?: {
+      user?: { id?: string }
+      session?: { token?: string }
+    } | null
+  }
+  redirect: (url: string) => Error
+}): Promise<void> {
+  if (NOT_A_SIGN_IN.has(ctx.path ?? '')) return
+  const userId = ctx.context?.newSession?.user?.id
+  const token = ctx.context?.newSession?.session?.token
+  if (typeof userId !== 'string' || typeof token !== 'string') return
+
+  const { db, principal: principalTable, eq } = await import('@/lib/server/db')
+  const row = await db.query.principal.findFirst({
+    where: eq(principalTable.userId, userId as UserId),
+    columns: { id: true, role: true, blockedAt: true },
+  })
+  // A teammate is never refused here: blocking is for customers, and joining
+  // the team clears a block (principal.factory.ts).
+  const { isBlockedCustomer } = await import('@/lib/server/domains/principals/blocking')
+  if (!row || !isBlockedCustomer(row)) return
+
+  await revokeSession(ctx as unknown as SessionCtx, token)
+  log.info({ principal_id: row.id, path: ctx.path }, 'sign-in refused: the person is blocked')
+  if (ctx.request?.method === 'GET' || NAVIGATED_SIGN_IN_PATHS.has(ctx.path ?? '')) {
+    throw ctx.redirect('/?auth=signin&error=account_blocked')
+  }
+  throw new APIError('FORBIDDEN', {
+    code: 'account_blocked',
+    message: AUTH_BLOCK_MESSAGES.account_blocked,
+  })
+}
+
 export async function handleCallbackPolicyCleanup(
   ctx: {
     path?: string
@@ -1936,6 +1996,10 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     providers,
     registeredOidcIds
   )
+  // After auto-provision, so a person the identity provider puts on the team
+  // joins it (which ends their block) before this asks; before the profile,
+  // audit and device steps, so a refused sign-in reaches none of them.
+  await handleBlockedSignInAfter(ctx as Parameters<typeof handleBlockedSignInAfter>[0])
   // After cleanup, so a revoked session changes no profile. Never throws.
   await handleProfileRefreshAfter(
     ctx as Parameters<typeof handleProfileRefreshAfter>[0],

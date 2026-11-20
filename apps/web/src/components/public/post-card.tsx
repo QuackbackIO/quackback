@@ -33,6 +33,11 @@ import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { ChangelogId, PostId, PostStatusId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
+
 interface PostCardProps {
   id: PostId
   title: string
@@ -166,12 +171,22 @@ export function PostCard({
   const createdAtDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
 
   // Vote handling - only used in portal mode
+  // A blocked person's vote is refused; say why, in their language.
+  const sayIfBlocked = (err: unknown) => {
+    if (!isBlockedRefusal(err)) return
+    toast.error(
+      intl.formatMessage({
+        id: 'portal.blocked',
+        defaultMessage: "You can't post, vote or comment here.",
+      })
+    )
+  }
   const {
     voteCount: currentVoteCount,
     hasVoted: currentHasVoted,
     isPending: isVotePending,
     handleVote,
-  } = usePostVote({ postId: id, voteCount })
+  } = usePostVote({ postId: id, voteCount, onError: sayIfBlocked })
 
   const [isAnonSigningIn, setIsAnonSigningIn] = useState(false)
   const ensureAnonSession = useEnsureAnonSession()

@@ -3,6 +3,10 @@ import { auth } from '@/lib/server/auth'
 import { isS3Usable, uploadMediaFromFormData } from '@/lib/server/storage/s3'
 import { enforceWidgetQuota, widgetJsonError } from '@/lib/server/widget/public-endpoint'
 import { getSettings } from '@/lib/server/functions/workspace'
+import type { UserId } from '@quackback/ids'
+import { db, eq, principal } from '@/lib/server/db'
+import { isBlockedCustomer } from '@/lib/server/domains/principals/blocking'
+import { PERSON_BLOCKED_CODE, PERSON_BLOCKED_MESSAGE } from '@/lib/shared/person-blocked'
 
 export async function handleWidgetUpload({ request }: { request: Request }): Promise<Response> {
   // Any valid widget session may attach images — identified or anonymous. We
@@ -12,6 +16,18 @@ export async function handleWidgetUpload({ request }: { request: Request }): Pro
   const sessionData = await auth.api.getSession({ headers: request.headers })
   if (!sessionData?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  // A blocked person adds no media to posts or comments (blocking.ts). The
+  // messenger's attachments go through /api/widget/files, which is unchanged.
+  const person = await db.query.principal.findFirst({
+    where: eq(principal.userId, sessionData.user.id as UserId),
+    columns: { role: true, blockedAt: true },
+  })
+  if (person && isBlockedCustomer(person)) {
+    return Response.json(
+      { error: PERSON_BLOCKED_MESSAGE, code: PERSON_BLOCKED_CODE },
+      { status: 403 }
+    )
   }
   // Key the workspace bucket on the resolved workspace, not the `Host` header:
   // the header is caller-controlled, so varying it would let an attacker

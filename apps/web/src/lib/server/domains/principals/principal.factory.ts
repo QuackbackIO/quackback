@@ -29,6 +29,7 @@ import {
   ne,
   and,
   isNull,
+  isNotNull,
   sql,
   type Principal,
   type ServiceMetadata,
@@ -394,6 +395,12 @@ export async function setPrincipalRole(
   if (target?.type === 'user' && isTeamMember(target.role) !== isTeamMember(role)) {
     await revokeApiKeysCreatedBy(exec, target.id)
   }
+  // A teammate cannot be blocked (blocking.ts), so joining the team ends a
+  // block the person held as a customer, with an audit row saying why.
+  // Otherwise the block would lock the new teammate out of signing in.
+  if (reconcilable && target?.type === 'user' && !isTeamMember(target.role) && isTeamMember(role)) {
+    await clearBlockOnJoiningTeam(exec, target.id, opts.assignGrantedBy ?? null)
+  }
   const type = target?.type ?? current?.type
   const fromRole = target?.role ?? current?.role
   if (roleMoved && shouldSyncMembership({ type, fromRole, toRole: role })) {
@@ -406,6 +413,30 @@ export async function setPrincipalRole(
   if (!opts.executor) for (const k of keys) await cacheDel(k)
   const scopeChanged = target !== undefined && (target.role !== role || reassign)
   return { cacheKeysToBust: keys, scopeChangedFor: scopeChanged ? target?.id : undefined }
+}
+
+/**
+ * Clear a person's block as they join the team, inside the caller's executor,
+ * and record `person.unblocked` beside it. A no-op for someone not blocked.
+ */
+async function clearBlockOnJoiningTeam(
+  exec: Executor,
+  principalId: PrincipalId,
+  grantedBy: PrincipalId | null
+): Promise<void> {
+  const cleared = await exec
+    .update(principal)
+    .set({ blockedAt: null, blockedByPrincipalId: null })
+    .where(and(eq(principal.id, principalId), isNotNull(principal.blockedAt)))
+    .returning({ id: principal.id })
+  if (cleared.length === 0) return
+  const { recordAuditEventInTransaction } = await import('@/lib/server/audit/log')
+  await recordAuditEventInTransaction(exec as Parameters<typeof recordAuditEventInTransaction>[0], {
+    event: 'person.unblocked',
+    actor: { type: 'system' },
+    target: { type: 'principal', id: principalId },
+    metadata: { reason: 'joined_team', granted_by: grantedBy },
+  })
 }
 
 /**

@@ -71,6 +71,7 @@ const mockReserveAnonPostSlot = vi.fn().mockResolvedValue(true)
 
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: (...args: unknown[]) => mockVoteOnPost(...args),
+  blockedVoteToggle: async () => null,
 }))
 
 // The per-post audience gate inside toggleVoteFn dynamically imports
@@ -107,6 +108,11 @@ vi.mock('@/lib/server/domains/boards/board.public', () => ({
 
 vi.mock('@/lib/server/domains/principals/principal.service', () => ({
   getMemberByUser: (...args: unknown[]) => mockGetMemberByUser(...args),
+}))
+
+// No one here is blocked; blocked-person-actions.db.test.ts drives the guard.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  assertNotBlocked: async () => undefined,
 }))
 
 vi.mock('@/lib/server/domains/statuses/status.service', () => ({
