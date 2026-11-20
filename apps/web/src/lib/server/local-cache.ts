@@ -39,8 +39,27 @@ export function localCacheGet<T>(key: string): T | undefined {
   return undefined
 }
 
-export function localCacheSet(key: string, value: unknown, ttlMs: number): void {
+/** Counts `forgetCachedKeys` calls, so a copy read before one is not kept after it. */
+let forgets = 0
+
+/** Pass to {@link localCacheSet} as `readSince`, taken before reading the value. */
+export function localCacheGeneration(): number {
+  return forgets
+}
+
+/**
+ * Keep `value` for `ttlMs`. With `readSince` (a {@link localCacheGeneration}
+ * taken before the value was read), a value read before a write dropped the
+ * key is not kept: it may be what the write replaced.
+ */
+export function localCacheSet(
+  key: string,
+  value: unknown,
+  ttlMs: number,
+  readSince?: number
+): void {
   if (process.env.NODE_ENV !== 'production') return
+  if (readSince !== undefined && readSince !== forgets) return
   localCopies.set(key, { value, expiresAt: Date.now() + ttlMs })
 }
 
@@ -50,6 +69,7 @@ export function localCacheSet(key: string, value: unknown, ttlMs: number): void 
  * invalidated it) and the short-lived copies above.
  */
 export function forgetCachedKeys(...keys: string[]): void {
+  forgets++
   forgetPerRequest(...keys)
   for (const key of keys) localCopies.delete(key)
 }
