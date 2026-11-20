@@ -166,12 +166,7 @@ test.describe('MCP resources', () => {
   test(
     "API-M-34 a portal user's OAuth token does not read team-only boards, internal tags, team roadmaps or the team roster",
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: the boards, tags, roadmaps and members resources have no team-role check (mcp/server.ts registerResources), so a portal user reads team-only names. See QUARANTINE.md.',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people, marker }) => {
       fixture({ op: 'enablePortalMcp' })
@@ -680,12 +675,7 @@ test.describe('MCP post write tools', () => {
   test(
     "API-M-55 a portal user's create_post takes the board default status and no tags",
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: create_post applies statusId and tagIds for portal users (mcp/tools/posts.ts create_post, post.service createPost). See QUARANTINE.md.',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people, marker }) => {
       fixture({ op: 'enablePortalMcp' })

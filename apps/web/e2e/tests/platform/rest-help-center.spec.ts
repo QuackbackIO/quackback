@@ -588,17 +588,9 @@ test.describe('REST help center: refusals', () => {
 })
 
 test.describe('REST help center: bad input', () => {
-  const quarantine = (description: string) => ({
-    tag: ['@nightly', '@quarantine'],
-    annotation: { type: 'quarantine', description },
-  })
-
   test(
     'API-R-165 a malformed categoryId filter is refused as bad input',
-    quarantine(
-      'categoryId is not TypeID-validated; the driver throws: 500 ' +
-        '(apps/web/src/routes/api/v1/help-center/articles/index.ts:76)'
-    ),
+    { tag: '@nightly' },
     async ({ playwright, baseURL, people }) => {
       const { api } = await adminApi(playwright, baseURL, people)
       const res = await api.get('/api/v1/help-center/articles?categoryId=garbage')
@@ -609,10 +601,7 @@ test.describe('REST help center: bad input', () => {
 
   test(
     'API-R-166 an article in a malformed or unknown category is refused, not a server error',
-    quarantine(
-      'categoryId is neither validated nor existence-checked: malformed and unknown ids give 500 ' +
-        '(apps/web/src/routes/api/v1/help-center/articles/index.ts:21)'
-    ),
+    { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await adminApi(playwright, baseURL, people)
       for (const categoryId of ['garbage', generateId('kb_category')]) {
@@ -632,10 +621,7 @@ test.describe('REST help center: bad input', () => {
 
   test(
     'API-R-171 feedback for an unknown article is not found, not a server error',
-    quarantine(
-      'The feedback insert violates the kb_article_feedback FK: 500 ' +
-        '(apps/web/src/lib/server/domains/help-center/help-center.article-feedback.service.ts:63)'
-    ),
+    { tag: '@nightly' },
     async ({ playwright, baseURL, people }) => {
       const { api } = await adminApi(playwright, baseURL, people)
       const res = await api.post(`/api/v1/help-center/articles/${generateId('article')}/feedback`, {
@@ -649,10 +635,7 @@ test.describe('REST help center: bad input', () => {
 
   test(
     'API-R-163 a help center body that is not JSON is refused as bad input',
-    quarantine(
-      'request.json() throws outside the domain error mapping: 500 ' +
-        '(apps/web/src/routes/api/v1/help-center/categories/index.ts:81, $categoryId.ts:91)'
-    ),
+    { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await adminApi(playwright, baseURL, people)
       const cat = await createCategory(api, { name: `${marker} cat` })

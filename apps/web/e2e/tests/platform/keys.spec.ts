@@ -913,12 +913,7 @@ test.describe('Error envelope, pagination and repeats', () => {
   test(
     'API-K-34 a garbage cursor never answers 500',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'posts, changelog, status incidents and help center articles pass an undecodable cursor to their service, which throws: 500 (routes/api/v1/posts/index.ts:48, changelog/index.ts, status/incidents/index.ts, help-center/articles/index.ts:75)',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people }) => {
       const owner = await ownerKey(playwright, baseURL, people.people.admin.email)
@@ -933,12 +928,7 @@ test.describe('Error envelope, pagination and repeats', () => {
   test(
     'API-K-35 a users cursor replayed with a different limit continues where it stopped',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The users route turns the offset cursor into a page number, so a different limit repeats or skips rows (routes/api/v1/users/index.ts:47-48)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const owner = await ownerKey(playwright, baseURL, people.people.admin.email)

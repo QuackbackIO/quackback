@@ -290,12 +290,7 @@ test.describe('REST /api/v1/users', () => {
   test(
     'PPL-U-59 a teammate id answers a plain "Portal user not found"',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'GET /api/v1/users/:id passes a full sentence to notFoundResponse, which appends "not found" again; see QUARANTINE.md',
-      },
+      tag: '@core',
     },
     async ({ playwright, people }) => {
       const rest = await restAdmin(playwright)

@@ -51,18 +51,6 @@ const TEAM_ROLE_ERROR = 'Error: This operation requires a team member (admin or 
 const CHALLENGE_SCOPES =
   'read:feedback write:feedback write:changelog read:article write:article read:chat write:chat read:settings write:settings'
 
-/**
- * Every consent submit (Authorize or Deny) fails today: the router rewrites
- * the repeated `ba_param` query parameter into one JSON array before the page
- * posts `window.location.search` as `oauth_query`, so Better Auth answers
- * 400 `invalid_signature`. See QUARANTINE.md.
- */
-const CONSENT_QUARANTINE = {
-  type: 'quarantine',
-  description:
-    'Product bug: /oauth/consent posts a router-rewritten query (ba_param as a JSON array) and Better Auth refuses it with invalid_signature (routes/oauth/consent.tsx handleConsent). See QUARANTINE.md.',
-}
-
 function stepUpDescription(what: string, scopes: string): string {
   return `This connection is not allowed to ${what} (missing scope: ${scopes}). Reconnect and choose Full access to allow it.`
 }
@@ -613,7 +601,7 @@ test.describe('MCP OAuth consent', () => {
 
   test(
     'API-M-22 authorizing Full access yields a token that writes',
-    { tag: ['@core', '@quarantine'], annotation: CONSENT_QUARANTINE },
+    { tag: '@core' },
     async ({ asPerson, playwright, baseURL, people, marker }) => {
       const page = await asPerson('admin')
       const request = await apiFor(playwright, baseURL, null)
@@ -679,7 +667,7 @@ test.describe('MCP OAuth consent', () => {
 
   test(
     'API-M-23 authorizing a step-up grants exactly the selection',
-    { tag: ['@nightly', '@quarantine'], annotation: CONSENT_QUARANTINE },
+    { tag: '@nightly' },
     async ({ asPerson, playwright, baseURL, marker }) => {
       const page = await asPerson('admin')
       const request = await apiFor(playwright, baseURL, null)
@@ -728,7 +716,7 @@ test.describe('MCP OAuth consent', () => {
 
   test(
     'API-M-24 the Read only choice yields a token that reads but is stepped up on a write',
-    { tag: ['@core', '@quarantine'], annotation: CONSENT_QUARANTINE },
+    { tag: '@core' },
     async ({ asPerson, playwright, baseURL, people, marker }) => {
       const page = await asPerson('admin')
       const request = await apiFor(playwright, baseURL, null)
@@ -799,7 +787,7 @@ test.describe('MCP OAuth consent', () => {
 
   test(
     'API-M-26 Deny returns to the client with access_denied and its state, without a code',
-    { tag: ['@nightly', '@quarantine'], annotation: CONSENT_QUARANTINE },
+    { tag: '@nightly' },
     async ({ asPerson, playwright, baseURL, marker }) => {
       const page = await asPerson('admin')
       const request = await apiFor(playwright, baseURL, null)
