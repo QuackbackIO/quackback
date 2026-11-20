@@ -60,20 +60,18 @@ test(
       await admin.goto('/admin/feedback/moderation')
       const row = queueRow(admin, title)
       await expect(row).toContainText(`by Held ${marker} in ${board.name}`)
-      // Nothing announced while held: no webhook, no AI work on the post.
+      // Nothing announced while held: no webhook, and none of the post.created AI
+      // hooks (the embedding). The hourly summary sweep is not a post.created
+      // hook and does pick up held posts, so chat requests are not asserted here.
       expect((await sink.deliveries(marker)).filter((d) => d.body.includes(postId))).toEqual([])
-      expect(
-        (await fakeAi.requests({ contains: title })).map(
-          (r) => `${r.endpoint}: ${r.text.slice(0, 160)}`
-        )
-      ).toEqual([])
+      expect(await fakeAi.requests({ contains: title, endpoint: 'embeddings' })).toEqual([])
 
       await decide(row, 'Approve')
       await expect(row).toHaveCount(0)
       expect((await postRow(postId))?.moderation_state).toBe('published')
       await expect.poll(() => auditActions(postId)).toContain('post.moderation.approved')
       await deliveriesOf(marker, 'post.created', postId)
-      await fakeAi.waitForRequests({ contains: title })
+      await fakeAi.waitForRequests({ contains: title, endpoint: 'embeddings' })
       // The author is told nothing about the decision.
       expect(await emailLogFor(customer.email)).toEqual([])
     } finally {
@@ -535,14 +533,14 @@ test(
         await admin.locator('#moderate-anonymous').click()
         await expect.poll(policy).toBe('authenticated')
 
-        const audits = await supportDb()`SELECT before_value, after_value FROM audit_log
-        WHERE event_type = 'moderation.default.changed' AND occurred_at >= ${since}
-        ORDER BY occurred_at`
-        expect(audits.map((a) => JSON.stringify(a.after_value))).toEqual([
-          expect.stringContaining('"anonymous"'),
-          expect.stringContaining('"all"'),
-          expect.stringContaining('"authenticated"'),
-        ])
+        // Audit rows are written after the save answers: wait for all three.
+        const audits = async () =>
+          (
+            await supportDb()`SELECT after_value FROM audit_log
+              WHERE event_type = 'moderation.default.changed' AND occurred_at >= ${since}
+              ORDER BY occurred_at`
+          ).map((a) => JSON.stringify(a.after_value).match(/none|anonymous|authenticated|all/)?.[0])
+        await expect.poll(audits).toEqual(['anonymous', 'all', 'authenticated'])
         await expect(admin.getByRole('link', { name: 'Open queue' })).toHaveAttribute(
           'href',
           '/admin/feedback/moderation'
