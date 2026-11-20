@@ -80,3 +80,20 @@ by a separate test that is not quarantined.
   roadmap keeps a permanently empty column the builder cannot show or untick.
   Fix: delete the status's `roadmap_columns` rows in the same transaction (or
   refuse while a roadmap uses it). owner: unassigned, review by: 2026-12-03.
+- Vitest `it.fails` (fails today, passes once fixed, then flip it to `it`),
+  under `apps/web/src/lib/server/domains/roadmaps/__tests__/`:
+  - `roadmap-slug-reuse.test.ts` › RMP-A-05 a deleted roadmap frees its slug
+    for a new one. The slug check in `createRoadmap` ignores `deletedAt`
+    (`roadmap.service.ts:143`), and `roadmaps_slug_unique` is not partial
+    (`packages/db/src/schema/boards.ts:71`), so a deleted roadmap keeps its
+    name and slug forever. Fix: filter `isNull(deletedAt)` and make the
+    unique index partial (`WHERE deleted_at IS NULL`), as segments do.
+  - `roadmap-columns.test.ts` › RMP-A-12 refuses a second column for a status
+    the roadmap already has / refuses renaming a column to whitespace.
+    `createRoadmapColumn` (`roadmap.service.ts:339`) skips the duplicate-status
+    check that the bulk path's `validateColumns` does, so only the DB unique
+    index stops it, as a raw error. `updateRoadmapColumn` (`:358`) trims the
+    name but never rejects an empty result. Fix: reuse `validateColumns`'
+    checks on both single-column paths.
+
+  owner: unassigned, review by: 2026-12-03.
