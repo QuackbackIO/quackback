@@ -27,6 +27,7 @@ import {
   session,
   user,
   userSegments,
+  widgetIdentifiedSession,
   widgetOriginSession,
 } from '@/lib/server/db'
 import { createId, type PrincipalId, type SegmentId, type UserId } from '@quackback/ids'
@@ -172,6 +173,33 @@ describe.skipIf(!fixture.available)('principalsWithPortalAccess', () => {
 
     privatePortal({ widgetSignIn: true })
     expect([...(await principalsWithPortalAccess(ids))]).toEqual([handedOff.principalId])
+
+    privatePortal({ widgetSignIn: false })
+    expect([...(await principalsWithPortalAccess(ids))]).toEqual([])
+  })
+
+  it('lets a widget-only customer identified with a verified ssoToken through while widget sign-in is on', async () => {
+    const verified = await person('verified-widget')
+    const unverified = await person('unverified-widget')
+    for (const [who, hmacVerified] of [
+      [verified, true],
+      [unverified, false],
+    ] as const) {
+      const sessionId = `w-${createId('user')}`
+      await testDb.insert(session).values({
+        id: sessionId,
+        userId: who.userId,
+        token: `t-${sessionId}`,
+        expiresAt: new Date(Date.now() + 86_400_000),
+        updatedAt: new Date(),
+        scope: 'widget',
+      })
+      await testDb.insert(widgetIdentifiedSession).values({ sessionId, hmacVerified })
+    }
+    const ids = [verified.principalId, unverified.principalId]
+
+    privatePortal({ widgetSignIn: true })
+    expect([...(await principalsWithPortalAccess(ids))]).toEqual([verified.principalId])
 
     privatePortal({ widgetSignIn: false })
     expect([...(await principalsWithPortalAccess(ids))]).toEqual([])

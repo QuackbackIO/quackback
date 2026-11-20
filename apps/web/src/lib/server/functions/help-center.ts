@@ -68,18 +68,52 @@ import { formatHcIdSlug, parseHcIdSlug } from '@/lib/shared/help-center-url'
 
 const log = logger.child({ component: 'help-center' })
 
+/** Whether the portal lets the caller in; a private portal keeps its help
+ *  center from whoever it turns away, on every public read (portal and
+ *  widget) and not just the page. */
+async function portalLetsCallerIn(): Promise<boolean> {
+  const { resolvePortalAccessForRequest } = await import('./portal-access')
+  return (await resolvePortalAccessForRequest()).granted
+}
+
+/** For a write or a single read: "not found" when the portal turns the
+ *  caller away, as the page's sign-in wall has it. */
+export const assertHelpCenterOpenToRequest = createServerOnlyFn(
+  async function assertHelpCenterOpenToRequest(): Promise<void> {
+    if (!(await portalLetsCallerIn())) {
+      const { NotFoundError } = await import('@/lib/shared/errors')
+      throw new NotFoundError('HELP_CENTER_NOT_FOUND', 'Help center not found')
+    }
+  }
+)
+
 /**
- * Resolve the public help-center viewer for the category segment gate.
- * Anonymous requests skip the DB entirely (fail closed: gated content is
- * invisible); signed-in requests resolve segment memberships via the
- * standard policy-actor path.
+ * The public help-center reader for the category segment gate, or null when
+ * the portal turns the caller away (collections then come back empty, as
+ * the other portal reads do). Anonymous requests skip the DB entirely (fail
+ * closed: gated content is invisible); signed-in requests resolve segment
+ * memberships via the standard policy-actor path.
  */
-export const resolveHelpPublicViewer = createServerOnlyFn(async function resolveHelpPublicViewer(
+export const resolveHelpPublicReader = createServerOnlyFn(async function resolveHelpPublicReader(
   auth?: Awaited<ReturnType<typeof getOptionalAuth>> | undefined
-): Promise<Actor> {
+): Promise<Actor | null> {
+  if (!(await portalLetsCallerIn())) return null
   if (auth !== undefined) return policyActorFromAuth(auth)
   if (!hasAuthCredentials()) return ANONYMOUS_ACTOR
   return policyActorFromAuth(await getOptionalAuth())
+})
+
+/** The reader for a single read: "not found" when the portal turns the
+ *  caller away. */
+export const resolveHelpPublicViewer = createServerOnlyFn(async function resolveHelpPublicViewer(
+  auth?: Awaited<ReturnType<typeof getOptionalAuth>> | undefined
+): Promise<Actor> {
+  const reader = await resolveHelpPublicReader(auth)
+  if (!reader) {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    throw new NotFoundError('HELP_CENTER_NOT_FOUND', 'Help center not found')
+  }
+  return reader
 })
 
 async function publicViewer(): Promise<Actor> {
@@ -135,13 +169,12 @@ export const listCategoriesFn = createServerFn({ method: 'GET' })
 export const listPublicCategoriesFn = createServerFn({ method: 'GET' })
   .validator(z.object({ locale: z.string().optional() }))
   .handler(async ({ data }) => {
+    const reader = await resolveHelpPublicReader()
+    if (!reader) return []
     const { listPublicCategoriesForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
-    const categories = await listPublicCategoriesForLocale(
-      data.locale ?? DEFAULT_LOCALE,
-      await publicViewer()
-    )
+    const categories = await listPublicCategoriesForLocale(data.locale ?? DEFAULT_LOCALE, reader)
     return categories.map(serializeCategory)
   })
 
@@ -250,7 +283,9 @@ export const restoreArticleFn = createServerFn({ method: 'POST' })
 export const listPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(listPublicArticlesSchema)
   .handler(async ({ data }) => {
-    const result = await listPublicArticles(data, await publicViewer())
+    const reader = await resolveHelpPublicReader()
+    if (!reader) return { items: [], nextCursor: null, hasMore: false }
+    const result = await listPublicArticles(data, reader)
     return {
       ...result,
       items: result.items.map(serializeArticle),
@@ -260,13 +295,15 @@ export const listPublicArticlesFn = createServerFn({ method: 'GET' })
 export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
   .validator(z.object({ categoryId: z.string(), locale: z.string().optional() }))
   .handler(async ({ data }) => {
+    const reader = await resolveHelpPublicReader()
+    if (!reader) return []
     const { listPublicArticlesForCategoryLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const articles = await listPublicArticlesForCategoryLocale(
       data.categoryId,
       data.locale ?? DEFAULT_LOCALE,
-      await publicViewer()
+      reader
     )
     return articles.map((a) => ({
       ...a,
@@ -435,13 +472,16 @@ export const getPublicCollectionPageFn = createServerFn({ method: 'GET' })
 export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {
+    if (!(await portalLetsCallerIn())) return []
     return listPublicCategoryEditors()
   })
 
 export const listPopularPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(z.object({ limit: z.number().int().min(1).max(20).optional() }))
   .handler(async ({ data }) => {
-    return listPopularPublicArticles(data.limit ?? 6, await publicViewer())
+    const reader = await resolveHelpPublicReader()
+    if (!reader) return []
+    return listPopularPublicArticles(data.limit ?? 6, reader)
   })
 
 export const getArticleFn = createServerFn({ method: 'GET' })
@@ -475,13 +515,11 @@ export const getRelatedPublicArticlesFn = createServerFn({ method: 'GET' })
     })
   )
   .handler(async ({ data }) => {
+    const reader = await resolveHelpPublicReader()
+    if (!reader) return []
     const { getRelatedArticles, RELATED_ARTICLES_LIMIT } =
       await import('@/lib/server/domains/help-center/help-center-related.service')
-    return getRelatedArticles(
-      data.articleId,
-      data.limit ?? RELATED_ARTICLES_LIMIT,
-      await publicViewer()
-    )
+    return getRelatedArticles(data.articleId, data.limit ?? RELATED_ARTICLES_LIMIT, reader)
   })
 
 /**
@@ -556,6 +594,7 @@ export const deleteArticleFn = createServerFn({ method: 'POST' })
 export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .validator(articleFeedbackSchema)
   .handler(async ({ data }) => {
+    await assertHelpCenterOpenToRequest()
     const auth = await getOptionalAuth()
     const feedbackId = await recordArticleFeedback(
       data.articleId as KbArticleId,
@@ -571,6 +610,7 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
 export const submitArticleFeedbackReasonFn = createServerFn({ method: 'POST' })
   .validator(articleFeedbackReasonSchema)
   .handler(async ({ data }) => {
+    await assertHelpCenterOpenToRequest()
     await attachArticleFeedbackReason(data.feedbackId as KbArticleFeedbackId, data.reason)
     return { success: true }
   })
@@ -600,6 +640,8 @@ export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
     })
   )
   .handler(async ({ data }) => {
+    const reader = await resolveHelpPublicReader()
+    if (!reader) return []
     const [{ hybridSearchForLocale, resolveSearchLocale }, { getHelpCenterConfig }] =
       await Promise.all([
         import('@/lib/server/domains/help-center/help-center-search.service'),
@@ -611,7 +653,7 @@ export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
       config.locales.additional,
       config.locales.default
     )
-    return hybridSearchForLocale(data.query, locale, data.limit ?? 10, await publicViewer())
+    return hybridSearchForLocale(data.query, locale, data.limit ?? 10, reader)
   })
 
 /**
@@ -629,7 +671,8 @@ export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const { NotFoundError } = await import('@/lib/shared/errors')
     const { withDefaultLocaleFallback } = await import('@/lib/shared/widget/article-locale')
-    const viewer = await publicViewer()
+    const viewer = await resolveHelpPublicReader()
+    if (!viewer) return null
     const locale = data.locale ?? DEFAULT_LOCALE
     try {
       const kbId = canonicalArticleTypeId(data.ref)

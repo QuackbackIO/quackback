@@ -13,6 +13,8 @@ import { allOnPrimary, type SectionOrigins } from '@/lib/shared/section-links'
 const state = vi.hoisted(() => ({
   origins: null as SectionOrigins | null,
   articles: [] as unknown[],
+  visibility: 'public' as 'public' | 'private',
+  noSettings: false,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -25,6 +27,13 @@ vi.mock('@/lib/server/config', () => ({
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: async () => true,
+  getPortalConfig: async () => {
+    if (state.noSettings) {
+      const { NotFoundError } = await import('@/lib/shared/errors')
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+    }
+    return { access: { visibility: state.visibility } }
+  },
   getHelpCenterConfig: async () => ({
     locales: { default: 'en', additional: [] },
     seo: { indexable: true },
@@ -95,5 +104,25 @@ describe('help center sitemap origin', () => {
       'https://feedback.example.com/hc/sitemap.xml?page=1',
       'https://feedback.example.com/hc/sitemap.xml?page=2',
     ])
+  })
+
+  it('advertises nothing on a private portal', async () => {
+    state.origins = allOnPrimary('https://feedback.example.com')
+    state.visibility = 'private'
+    const response = await GET({
+      request: new Request('https://feedback.example.com/hc/sitemap.xml'),
+    })
+    state.visibility = 'public'
+    expect(response.status).toBe(404)
+  })
+
+  it('answers 404, not an error, on a fresh install with no settings row', async () => {
+    state.origins = allOnPrimary('https://feedback.example.com')
+    state.noSettings = true
+    const response = await GET({
+      request: new Request('https://feedback.example.com/hc/sitemap.xml'),
+    })
+    state.noSettings = false
+    expect(response.status).toBe(404)
   })
 })

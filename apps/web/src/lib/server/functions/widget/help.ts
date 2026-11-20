@@ -10,14 +10,13 @@ export const widgetListPublicCategoriesFn = createServerFn({ method: 'GET' })
   .validator(localeSchema)
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
-    const { resolveHelpPublicViewer, serializeCategory } = await import('../help-center')
+    const { resolveHelpPublicReader, serializeCategory } = await import('../help-center')
     const { listPublicCategoriesForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
-    const categories = await listPublicCategoriesForLocale(
-      data.locale ?? DEFAULT_LOCALE,
-      await resolveHelpPublicViewer(await getOptionalWidgetAuth())
-    )
+    const reader = await resolveHelpPublicReader(await getOptionalWidgetAuth())
+    if (!reader) return []
+    const categories = await listPublicCategoriesForLocale(data.locale ?? DEFAULT_LOCALE, reader)
     return categories.map(serializeCategory)
   })
 
@@ -25,14 +24,16 @@ export const widgetListPublicArticlesForCategoryFn = createServerFn({ method: 'G
   .validator(z.object({ categoryId: z.string(), locale: z.string().optional() }))
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
-    const { resolveHelpPublicViewer } = await import('../help-center')
+    const { resolveHelpPublicReader } = await import('../help-center')
     const { listPublicArticlesForCategoryLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const reader = await resolveHelpPublicReader(await getOptionalWidgetAuth())
+    if (!reader) return []
     const articles = await listPublicArticlesForCategoryLocale(
       data.categoryId,
       data.locale ?? DEFAULT_LOCALE,
-      await resolveHelpPublicViewer(await getOptionalWidgetAuth())
+      reader
     )
     return articles.map((a) => ({
       ...a,
@@ -44,14 +45,15 @@ export const widgetResolvePublicArticleRefFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ref: z.string().min(1), locale: z.string().optional() }))
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
-    const { resolveHelpPublicViewer, serializeArticle } = await import('../help-center')
+    const { resolveHelpPublicReader, serializeArticle } = await import('../help-center')
     const { canonicalArticleTypeId } = await import('@/lib/shared/widget/article-ref')
     const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const { NotFoundError } = await import('@/lib/shared/errors')
     const { withDefaultLocaleFallback } = await import('@/lib/shared/widget/article-locale')
-    const viewer = await resolveHelpPublicViewer(await getOptionalWidgetAuth())
+    const viewer = await resolveHelpPublicReader(await getOptionalWidgetAuth())
+    if (!viewer) return null
     const locale = data.locale ?? DEFAULT_LOCALE
     try {
       const kbId = canonicalArticleTypeId(data.ref)
@@ -77,6 +79,8 @@ export const widgetRecordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .validator(z.object({ articleId: z.string(), helpful: z.boolean() }))
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { assertHelpCenterOpenToRequest } = await import('../help-center')
+    await assertHelpCenterOpenToRequest()
     const auth = await getOptionalWidgetAuth()
     const { recordArticleFeedback } =
       await import('@/lib/server/domains/help-center/help-center.service')
@@ -114,13 +118,12 @@ export const widgetListPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(listPublicArticlesSchema)
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
-    const { resolveHelpPublicViewer, serializeArticle } = await import('../help-center')
+    const { resolveHelpPublicReader, serializeArticle } = await import('../help-center')
     const { listPublicArticles } =
       await import('@/lib/server/domains/help-center/help-center.article.query')
-    const result = await listPublicArticles(
-      data,
-      await resolveHelpPublicViewer(await getOptionalWidgetAuth())
-    )
+    const reader = await resolveHelpPublicReader(await getOptionalWidgetAuth())
+    if (!reader) return { items: [], nextCursor: null, hasMore: false }
+    const result = await listPublicArticles(data, reader)
     return {
       ...result,
       items: result.items.map(serializeArticle),

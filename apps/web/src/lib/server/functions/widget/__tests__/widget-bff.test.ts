@@ -61,6 +61,7 @@ const hoisted = vi.hoisted(() => {
     unwatchMyTicket: vi.fn(),
     getPublicChangelog: vi.fn(),
     listPublicChangelogs: vi.fn(),
+    listChangelogCategories: vi.fn(),
     getUserStats: vi.fn(),
     listPublicCategoriesForLocale: vi.fn(),
     listPublicArticlesForCategoryLocale: vi.fn(),
@@ -68,6 +69,7 @@ const hoisted = vi.hoisted(() => {
     recordArticleFeedback: vi.fn(),
     countPublicArticleView: vi.fn(),
     listPublicArticles: vi.fn(),
+    resolveHelpPublicReader: vi.fn(),
     resolveHelpPublicViewer: vi.fn(),
     serializeCategory: vi.fn((c: unknown) => c),
     serializeArticle: vi.fn((a: unknown) => a),
@@ -127,10 +129,15 @@ vi.mock('@/lib/server/functions/changelog', () => ({
   runGetPublicChangelog: hoisted.run.getPublicChangelog,
   runListPublicChangelogs: hoisted.run.listPublicChangelogs,
 }))
+vi.mock('@/lib/server/functions/changelog-categories', () => ({
+  runListChangelogCategories: hoisted.run.listChangelogCategories,
+}))
 vi.mock('@/lib/server/functions/user', () => ({
   runGetUserStats: hoisted.run.getUserStats,
 }))
 vi.mock('@/lib/server/functions/help-center', () => ({
+  assertHelpCenterOpenToRequest: vi.fn(async () => undefined),
+  resolveHelpPublicReader: hoisted.run.resolveHelpPublicReader,
   resolveHelpPublicViewer: hoisted.run.resolveHelpPublicViewer,
   serializeCategory: hoisted.run.serializeCategory,
   serializeArticle: hoisted.run.serializeArticle,
@@ -198,7 +205,11 @@ import {
   widgetWatchMyTicketFn,
   widgetUnwatchMyTicketFn,
 } from '../tickets'
-import { widgetGetPublicChangelogFn, widgetListPublicChangelogsFn } from '../changelog'
+import {
+  widgetGetPublicChangelogFn,
+  widgetListChangelogCategoriesFn,
+  widgetListPublicChangelogsFn,
+} from '../changelog'
 import { widgetGetUserStatsFn } from '../user'
 import {
   widgetListPublicCategoriesFn,
@@ -224,6 +235,7 @@ beforeEach(() => {
     new Error('Access denied: Widget sessions cannot access this resource')
   )
   hoisted.getOptionalAuth.mockResolvedValue(null)
+  hoisted.run.resolveHelpPublicReader.mockResolvedValue({ principalId: 'principal_widget' })
   hoisted.run.resolveHelpPublicViewer.mockResolvedValue({ principalId: 'principal_widget' })
   hoisted.run.serializeCategory.mockImplementation((c: unknown) => c)
   hoisted.run.serializeArticle.mockImplementation((a: unknown) => a)
@@ -407,6 +419,10 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
     {
       name: 'widgetListPublicChangelogsFn',
       call: () => widgetListPublicChangelogsFn({ data: {} }),
+    },
+    {
+      name: 'widgetListChangelogCategoriesFn',
+      call: () => widgetListChangelogCategoriesFn(),
     },
     {
       name: 'widgetListPublicCategoriesFn',
