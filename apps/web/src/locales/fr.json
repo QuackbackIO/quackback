@@ -45,7 +45,6 @@
   "widget.home.form.errorNetwork": "Erreur réseau. Veuillez réessayer.",
   "widget.home.form.noAccess": "Vous n'avez pas l'autorisation de publier dans cette catégorie",
   "widget.home.form.fieldRequired": "Obligatoire",
-  "widget.home.form.fieldInvalid": "Vérifiez cette réponse",
   "widget.home.similar.heading": "Publications similaires",
   "widget.home.popular.heading": "Publications populaires",
   "widget.home.popular.search.placeholder": "Rechercher des publications...",

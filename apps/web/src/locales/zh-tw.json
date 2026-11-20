@@ -45,7 +45,6 @@
   "widget.home.form.errorNetwork": "網路錯誤。請再試一次。",
   "widget.home.form.noAccess": "你沒有權限在這個看板發文",
   "widget.home.form.fieldRequired": "必填",
-  "widget.home.form.fieldInvalid": "請檢查此回答",
   "widget.home.similar.heading": "相似的貼文",
   "widget.home.popular.heading": "熱門貼文",
   "widget.home.popular.search.placeholder": "搜尋貼文...",

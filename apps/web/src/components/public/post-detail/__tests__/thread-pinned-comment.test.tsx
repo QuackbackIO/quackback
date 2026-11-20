@@ -17,7 +17,7 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
-import { ThreadPinnedComment } from '../official-response-section'
+import { ThreadPinnedComment } from '../thread-pinned-comment'
 
 const pinned: PinnedCommentView = {
   id: 'comment_pinned' as PostCommentId,
@@ -53,10 +53,10 @@ function renderPinned(comments: PublicCommentView[]) {
 }
 
 describe('ThreadPinnedComment', () => {
-  it('shows the pinned comment when it is not among the loaded comments', () => {
+  it('shows the pinned comment when it is not among the loaded comments', async () => {
     renderPinned([comment('comment_a'), comment('comment_b')])
-    expect(screen.getByText('The answer is in settings')).toBeTruthy()
-    expect(screen.getByText('Pinned')).toBeTruthy()
+    expect(await screen.findByText('Pinned', {}, { timeout: 8000 })).toBeTruthy()
+    expect(await screen.findByText(/The answer is in settings/, {}, { timeout: 8000 })).toBeTruthy()
   })
 
   it('shows nothing once the thread has loaded it as a root comment', () => {

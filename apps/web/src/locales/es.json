@@ -45,7 +45,6 @@
   "widget.home.form.errorNetwork": "Error de red. Inténtalo de nuevo.",
   "widget.home.form.noAccess": "No tienes permiso para publicar en esta categoría",
   "widget.home.form.fieldRequired": "Obligatorio",
-  "widget.home.form.fieldInvalid": "Revisa esta respuesta",
   "widget.home.similar.heading": "Publicaciones similares",
   "widget.home.popular.heading": "Publicaciones populares",
   "widget.home.popular.search.placeholder": "Buscar publicaciones...",

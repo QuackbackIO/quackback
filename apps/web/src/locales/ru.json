@@ -45,7 +45,6 @@
   "widget.home.form.errorNetwork": "Ошибка сети. Попробуйте снова.",
   "widget.home.form.noAccess": "У вас нет доступа для публикации в этой категории",
   "widget.home.form.fieldRequired": "Обязательно",
-  "widget.home.form.fieldInvalid": "Проверьте этот ответ",
   "widget.home.similar.heading": "Похожие предложения",
   "widget.home.popular.heading": "Популярные предложения",
   "widget.home.popular.search.placeholder": "Поиск предложений...",

@@ -31,7 +31,7 @@ import {
 } from '@/lib/client/mutations/portal-comments'
 import { useLoadMorePortalComments } from '@/lib/client/mutations/load-more-comments'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
-import { ThreadPinnedComment } from '@/components/public/post-detail/official-response-section'
+import { ThreadPinnedComment } from '@/components/public/post-detail/thread-pinned-comment'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
 import { isValidTypeId, type PostCommentId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'

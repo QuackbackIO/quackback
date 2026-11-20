@@ -45,7 +45,6 @@
   "widget.home.form.errorNetwork": "Verbindungsfehler. Bitte versuch es noch einmal.",
   "widget.home.form.noAccess": "Du darfst in diesem Board nicht posten",
   "widget.home.form.fieldRequired": "Pflichtfeld",
-  "widget.home.form.fieldInvalid": "Prüfe diese Antwort",
   "widget.home.similar.heading": "Ähnliche Beiträge",
   "widget.home.popular.heading": "Beliebte Beiträge",
   "widget.home.popular.search.placeholder": "Beiträge durchsuchen …",

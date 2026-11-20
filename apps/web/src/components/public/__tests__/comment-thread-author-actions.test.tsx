@@ -6,7 +6,7 @@
  * asks the server (a reply the viewer cannot see still locks the comment).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
@@ -17,11 +17,13 @@ const permissions = vi.hoisted(() => ({
   asked: [] as string[],
 }))
 
-vi.mock('@/lib/client/hooks/use-comments-query', () => ({
-  useCommentPermissions: ({ commentId, enabled }: { commentId: string; enabled?: boolean }) => {
-    if (enabled !== false) permissions.asked.push(commentId)
-    return { data: enabled === false ? undefined : permissions.value }
-  },
+vi.mock('@/lib/server/functions/comments', () => ({
+  addReactionFn: vi.fn(),
+  removeReactionFn: vi.fn(),
+  getCommentPermissionsFn: vi.fn(async ({ data }: { data: { commentId: string } }) => {
+    permissions.asked.push(data.commentId)
+    return permissions.value
+  }),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -116,11 +118,11 @@ describe("the author's own comment", () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
   })
 
-  it('follows the server when the reply that locks it is not visible to the author', () => {
+  it('follows the server when the reply that locks it is not visible to the author', async () => {
     permissions.value = { canEdit: false, canDelete: false }
     renderThread([comment({})])
-    expect(permissions.asked).toContain('comment_a')
-    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+    await waitFor(() => expect(permissions.asked).toContain('comment_a'))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull())
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
   })
 })

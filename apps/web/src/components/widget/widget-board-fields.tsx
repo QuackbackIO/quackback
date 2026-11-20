@@ -1,7 +1,6 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useIntl } from 'react-intl'
 import type { BoardCustomField } from '@/lib/shared/db-types'
-import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import { lazyOptional } from '@/lib/client/lazy-with-preload'
 
 /**
@@ -22,9 +21,8 @@ function isMissing(field: BoardCustomField, raw: unknown): boolean {
 }
 
 /**
- * The answers to the chosen board's fields. `check` runs the rules the server
- * enforces before the post is sent: it marks each missing or bad answer next
- * to its field and says whether the post can go.
+ * The answers to the chosen board's fields. `check` marks each missing
+ * required answer next to its field and says whether the post can go.
  */
 export function useBoardFieldAnswers(
   fields: BoardCustomField[] = NO_FIELDS,
@@ -47,22 +45,17 @@ export function useBoardFieldAnswers(
   }, [])
 
   function check(): boolean {
-    if (fields.length === 0) return true
-    const parsed = validatePostCustomFieldValues(fields, values)
-    if (parsed.ok) return true
-    const next: Record<string, string> = {}
-    for (const { key } of parsed.errors) {
-      const field = fields.find((f) => f.key === key)
-      next[key] =
-        field && isMissing(field, values[key])
-          ? intl.formatMessage({ id: 'widget.home.form.fieldRequired', defaultMessage: 'Required' })
-          : intl.formatMessage({
-              id: 'widget.home.form.fieldInvalid',
-              defaultMessage: 'Check this answer',
-            })
-    }
-    setErrors(next)
-    document.getElementById(`board-custom-field-${parsed.errors[0].key}`)?.focus()
+    // Only the required check runs here: the shared validator would become a
+    // chunk of its own on the widget's first load. The server still checks
+    // every rule.
+    const missing = fields.filter((f) => f.required && isMissing(f, values[f.key]))
+    if (missing.length === 0) return true
+    const required = intl.formatMessage({
+      id: 'widget.home.form.fieldRequired',
+      defaultMessage: 'Required',
+    })
+    setErrors(Object.fromEntries(missing.map((f) => [f.key, required])))
+    document.getElementById(`board-custom-field-${missing[0].key}`)?.focus()
     return false
   }
 

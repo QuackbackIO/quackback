@@ -45,7 +45,6 @@
   "widget.home.form.errorNetwork": "خطأ في الشبكة. يرجى المحاولة مرة أخرى.",
   "widget.home.form.noAccess": "ليست لديك صلاحية النشر في هذه الفئة",
   "widget.home.form.fieldRequired": "مطلوب",
-  "widget.home.form.fieldInvalid": "تحقق من هذه الإجابة",
   "widget.home.similar.heading": "منشورات مشابهة",
   "widget.home.popular.heading": "منشورات رائجة",
   "widget.home.popular.search.placeholder": "ابحث عن منشورات...",

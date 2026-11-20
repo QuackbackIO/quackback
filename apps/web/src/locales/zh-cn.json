@@ -45,7 +45,6 @@
   "widget.home.form.errorNetwork": "网络错误。请重试。",
   "widget.home.form.noAccess": "你没有权限在此看板发帖",
   "widget.home.form.fieldRequired": "必填",
-  "widget.home.form.fieldInvalid": "请检查此回答",
   "widget.home.similar.heading": "相似帖子",
   "widget.home.popular.heading": "热门帖子",
   "widget.home.popular.search.placeholder": "搜索帖子…",
