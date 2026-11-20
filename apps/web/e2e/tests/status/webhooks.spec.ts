@@ -29,6 +29,7 @@ import {
   createIncident,
   createService,
   deleteMadeIncidents,
+  domainEvents,
   must,
   postUpdate,
   scheduleWindow,
@@ -217,6 +218,10 @@ test(
     await deliveriesOf(marker, 'status.component_changed', svc.id, { count: 3 })
     expect(
       (await typesFor(marker, svc.id)).filter((t) => t === 'status.component_changed')
+    ).toHaveLength(3)
+    // The written events, not only the deliveries: the incident added none.
+    expect(
+      (await domainEvents(svc.id)).filter((e) => e.type === 'status.component_changed')
     ).toHaveLength(3)
   }
 )

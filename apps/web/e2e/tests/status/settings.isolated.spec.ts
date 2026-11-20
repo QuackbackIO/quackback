@@ -255,6 +255,42 @@ test(
 )
 
 test(
+  'STA-A-62 clear history removes resolved incidents and keeps open ones',
+  { tag: ['@core', '@isolated'] },
+  async ({ asPerson, marker }) => {
+    const held = await createService(admin, `${marker} Held`)
+    const done = await createService(admin, `${marker} Done`)
+    const open = await createIncident(admin, {
+      title: `${marker} open`,
+      services: [[held.id, 'major_outage']],
+    })
+    const closed = await createIncident(admin, {
+      title: `${marker} closed`,
+      services: [[done.id, 'major_outage']],
+    })
+    await postUpdate(admin, closed.id, 'resolved', 'fixed')
+    const ui = await asPerson('admin')
+    await ui.goto('/admin/settings/status')
+    await ui.waitForLoadState('networkidle')
+    await ui.getByRole('button', { name: 'Clear history' }).click()
+    const confirm = ui.getByRole('alertdialog').or(ui.getByRole('dialog'))
+    await expect(confirm.getByText('Delete incident history?')).toBeVisible()
+    await confirm.getByRole('button', { name: 'Delete incident history' }).click()
+    await pollFor('the history to clear', async () =>
+      (await callServerFn(admin, 'getStatusIncidentAdminFn', { id: closed.id }, { method: 'GET' }))
+        .data === null
+        ? true
+        : null
+    )
+    expect(
+      (await callServerFn(admin, 'getStatusIncidentAdminFn', { id: open.id }, { method: 'GET' }))
+        .data
+    ).not.toBeNull()
+    expect(await serviceEvents(done.id)).toEqual([])
+  }
+)
+
+test(
   'STA-A-62 clear history keeps the events behind statuses still held',
   {
     tag: ['@nightly', '@isolated', '@quarantine'],
