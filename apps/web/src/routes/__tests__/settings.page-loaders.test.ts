@@ -88,7 +88,8 @@ describe('settings page loaders', () => {
   })
 
   it('access and security: warms the portal access tab segments, with segment.view only', async () => {
-    const perms = [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SEGMENT_VIEW]
+    // The Portal access tab is there only with settings.manage, which its portal config read needs.
+    const perms = [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SEGMENT_VIEW]
     expect(await warmedKeys(AuthenticationRoute, perms)).toContain(key('admin', 'segments'))
     expect(await warmedKeys(AuthenticationRoute, perms, { tab: 'portal-access' })).toContain(
       key('admin', 'segments')
@@ -98,6 +99,15 @@ describe('settings page loaders', () => {
     )
     expect(await warmedKeys(AuthenticationRoute, [PERMISSIONS.AUTH_MANAGE])).not.toContain(
       key('admin', 'segments')
+    )
+  })
+
+  it('access and security: reads the portal config only for a viewer with the Portal access tab', async () => {
+    expect(
+      await warmedKeys(AuthenticationRoute, [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_MANAGE])
+    ).toContain(key('settings', 'portalConfig'))
+    expect(await warmedKeys(AuthenticationRoute, [PERMISSIONS.AUTH_MANAGE])).not.toContain(
+      key('settings', 'portalConfig')
     )
   })
 
