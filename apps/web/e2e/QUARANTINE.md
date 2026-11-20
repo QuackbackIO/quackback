@@ -146,3 +146,21 @@ id IN (SELECT post_id FROM post_votes WHERE principal_id = $1)`. owner:
   `- ${sql.param(metadataRemovals)}::text[]` or
   `- ARRAY[${sql.join(metadataRemovals.map((k) => sql`${k}`), sql`, `)}]::text[]`
   with a guard for the empty case. owner: unassigned, review by: 2026-12-03.
+- `people/companies.spec.ts` › PPL-C-03 a company the admin creates is not
+  labelled as API-sourced. Product bug: `createCompanyFn`'s schema has no
+  `source` and the admin UI sends none, so `createCompany` falls back to
+  `source: input.source ?? 'api'`
+  (`apps/web/src/lib/server/domains/companies/company.service.ts:94`) and
+  every company made in the admin (directory "New company", a person's
+  Company card "Create") shows the "API" badge. Fix: have `createCompanyFn`
+  (`apps/web/src/lib/server/functions/companies.ts`) pass `source: 'manual'`.
+  owner: unassigned, review by: 2026-12-03.
+- `people/companies.spec.ts` › PPL-C-31 a duplicate company attribute key is
+  refused and the dialog says so. Product bug: `handleCreate` awaits
+  `onCreate` with no catch
+  (`apps/web/src/components/admin/settings/scalar-attribute-list.tsx:299`) and
+  the mutation hook has no `onError`, so the server's 409 `DUPLICATE_KEY`
+  "An attribute with that key already exists" never surfaces: the dialog
+  just stays open. Same component backs user attributes (PPL-U-51). Fix:
+  catch in `handleCreate` (and the edit/delete handlers) and toast the
+  error message. owner: unassigned, review by: 2026-12-03.
