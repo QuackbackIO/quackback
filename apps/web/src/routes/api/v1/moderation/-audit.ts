@@ -6,6 +6,7 @@
  */
 import type { ApiAuthContext } from '@/lib/server/domains/api/auth'
 import type { ModerationAudit } from '@/lib/server/domains/moderation'
+import type { PrincipalId } from '@quackback/ids'
 
 export function moderationAuditFromApiAuth(
   auth: ApiAuthContext,
@@ -19,6 +20,9 @@ export function moderationAuditFromApiAuth(
       authMethod: 'api_key',
     },
     principalId: auth.principalId,
+    // The key's creator, so an author who moderates their own post through
+    // their key is not told about it.
+    onBehalfOfPrincipalId: (auth.apiKey.createdById as PrincipalId | null) ?? null,
     headers,
     metadata: { apiKeyId: auth.apiKey.id },
   }

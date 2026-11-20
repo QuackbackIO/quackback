@@ -78,6 +78,9 @@ export interface ModerationAudit {
    *  Carried on the decision event so the author notice skips a teammate who
    *  moderates their own item. */
   principalId?: PrincipalId
+  /** The person behind the decision when the actor is a machine: an API key's
+   *  creator. Absent for a teammate's own session (`principalId` is them). */
+  onBehalfOfPrincipalId?: PrincipalId | null
 }
 
 /**
@@ -105,6 +108,7 @@ async function emitModerationDecision(
       boardId: post.boardId,
       boardSlug: post.boardSlug,
       authorPrincipalId: item.authorPrincipalId,
+      moderatorPrincipalId: audit.onBehalfOfPrincipalId ?? audit.principalId ?? null,
       ...(item.commentId ? { commentId: item.commentId } : {}),
     }
     await emitBestEffort(def, {

@@ -68,6 +68,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import { isTestEvent } from './test-event'
 import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
+import { DELETED_USER_PRINCIPAL_ID } from '@/lib/server/domains/principals/deleted-user-principal'
 
 const log = logger.child({ component: 'targets' })
 
@@ -85,7 +86,8 @@ const log = logger.child({ component: 'targets' })
  */
 async function filterSubscribersByPostAudience(
   postId: PostId,
-  subscribers: Subscriber[]
+  subscribers: Subscriber[],
+  options: { includeDeletedPost?: boolean } = {}
 ): Promise<Subscriber[]> {
   if (subscribers.length === 0) return subscribers
 
@@ -97,7 +99,15 @@ async function filterSubscribersByPostAudience(
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+    .where(
+      and(
+        eq(posts.id, postId),
+        // A rejected post is soft-deleted but still pending: its author may be
+        // told about it as long as they could see it where it was held.
+        options.includeDeletedPost ? undefined : isNull(posts.deletedAt),
+        isNull(boards.deletedAt)
+      )
+    )
     .limit(1)
 
   const post = postRows[0]
@@ -774,9 +784,10 @@ export async function getMentionTargets(
  *
  * Nobody else hears about it, and the author does not when they moderated
  * their own item, when they are not a signed-in person (an anonymous author
- * has no inbox), or when it is test feedback. An approved item links to where
- * it now shows, once the author can still see it there; a rejected one is
- * gone, so its notice links nowhere. The moderator's reason never travels.
+ * has no inbox, and a deleted account has none either), when it is test
+ * feedback, or when they can no longer see the item where it was. An approved
+ * item links to where it now shows; a rejected one is gone, so its notice
+ * links nowhere. The moderator's reason never travels.
  */
 export async function getModerationDecisionTargets(
   event: EventData,
@@ -786,8 +797,11 @@ export async function getModerationDecisionTargets(
   if (!isModerationDecisionEventType(type)) return []
   const data = event.data as unknown as ModerationDecisionPayload
   const authorId = data.authorPrincipalId as PrincipalId | null
-  if (!authorId) return []
-  if (authorId === event.actor.principalId) return []
+  // No author left: none recorded, or a deleted account's placeholder.
+  if (!authorId || authorId === DELETED_USER_PRINCIPAL_ID) return []
+  // A teammate moderating their own item: the session principal, or the person
+  // behind the API key that made the call.
+  if (authorId === event.actor.principalId || authorId === data.moderatorPrincipalId) return []
   if (
     await isTestEvent({
       entityId: data.commentId ?? data.postId,
@@ -814,20 +828,27 @@ export async function getModerationDecisionTargets(
   const approved = decision === 'approved'
   const postId = data.postId as PostId
 
-  // An approved item is only worth a link the author can open.
-  if (approved) {
-    const allowed = await filterSubscribersByPostAudience(postId, [
-      {
-        principalId: authorId,
-        userId: '',
-        email: row.email ?? '',
-        contactEmail: null,
-        name: null,
-        reason: 'manual',
-        notifyComments: false,
-        notifyStatusChanges: false,
-      },
-    ])
+  // Only an author who can still see the item where it was hears about it:
+  // an approved item for its link, a rejected one because the notice names
+  // its post. A rejected post is gone but still pending, so it is checked as
+  // the held post its author could see.
+  {
+    const allowed = await filterSubscribersByPostAudience(
+      postId,
+      [
+        {
+          principalId: authorId,
+          userId: '',
+          email: row.email ?? '',
+          contactEmail: null,
+          name: null,
+          reason: 'manual',
+          notifyComments: false,
+          notifyStatusChanges: false,
+        },
+      ],
+      { includeDeletedPost: !approved && item === 'post' }
+    )
     if (allowed.length === 0) return []
   }
 
