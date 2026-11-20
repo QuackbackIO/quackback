@@ -157,7 +157,9 @@ describe.skipIf(!fixture.available)('role.service (real Postgres)', () => {
     hoisted.maxCustomRoles = 1
     const editor = ownerEditor(await seedPrincipal())
     await createRole({ name: 'First' }, editor)
-    await expect(createRole({ name: 'Second' }, editor)).rejects.toThrow(TierLimitError)
+    const err = await createRole({ name: 'Second' }, editor).catch((e) => e)
+    expect(err).toBeInstanceOf(TierLimitError)
+    expect((err as TierLimitError).limit).toBe('maxCustomRoles')
   })
 
   it('updates name and permission set, bumping updatedAt', async () => {

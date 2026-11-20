@@ -32,7 +32,7 @@
  * instant it expires, whether or not `sweep.ts` has run. The sweeper reclaims
  * space and never decides correctness.
  */
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
@@ -55,9 +55,17 @@ function ttlSeconds(seconds: number): number {
 // Single values — GET / SET / DEL
 // ============================================================================
 
+/**
+ * Where a statement runs: the workspace's `db` by default, or a caller's
+ * transaction when the read or write must commit with the caller's own work.
+ */
+export interface KvOptions {
+  executor?: { execute: (query: SQL) => Promise<unknown> }
+}
+
 /** GET. Returns null for a missing or expired key. */
-export async function kvGet<T>(key: string): Promise<T | null> {
-  const result = await db.execute(sql`
+export async function kvGet<T>(key: string, opts: KvOptions = {}): Promise<T | null> {
+  const result = await (opts.executor ?? db).execute(sql`
     SELECT value FROM kv_store
     WHERE workspace_key = ${currentWorkspaceNamespace()} AND key = ${key} AND expires_at > now()
   `)
@@ -66,8 +74,13 @@ export async function kvGet<T>(key: string): Promise<T | null> {
 }
 
 /** SET … EX. Overwrites value and TTL unconditionally, as Redis does. */
-export async function kvSet(key: string, value: unknown, seconds: number): Promise<void> {
-  await db.execute(sql`
+export async function kvSet(
+  key: string,
+  value: unknown,
+  seconds: number,
+  opts: KvOptions = {}
+): Promise<void> {
+  await (opts.executor ?? db).execute(sql`
     INSERT INTO kv_store (workspace_key, key, value, expires_at)
     VALUES (
       ${currentWorkspaceNamespace()},
@@ -78,6 +91,34 @@ export async function kvSet(key: string, value: unknown, seconds: number): Promi
     ON CONFLICT (workspace_key, key) DO UPDATE
       SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
   `)
+}
+
+/**
+ * SET … EX, but only when `condition` holds as this statement runs. For a cache
+ * fill that must not land once what it was built from has changed. The check
+ * and the write are one statement, so a change committed before the statement
+ * starts is seen; a change still uncommitted is not, and its writer must drop
+ * the key after it commits. True iff the value was written.
+ */
+export async function kvSetIf(
+  key: string,
+  value: unknown,
+  seconds: number,
+  condition: SQL
+): Promise<boolean> {
+  const result = await db.execute(sql`
+    INSERT INTO kv_store (workspace_key, key, value, expires_at)
+    SELECT
+      ${currentWorkspaceNamespace()},
+      ${key},
+      ${JSON.stringify(value ?? null)}::jsonb,
+      now() + make_interval(secs => ${ttlSeconds(seconds)})
+    WHERE ${condition}
+    ON CONFLICT (workspace_key, key) DO UPDATE
+      SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+    RETURNING 1 AS written
+  `)
+  return getExecuteRows(result).length > 0
 }
 
 /** DEL. Variadic like the Redis helper it replaces; a no-op on an empty list. */
@@ -225,6 +266,17 @@ export async function kvSetMemberClaimCounted(
       liveCount: Number(row?.live_count ?? 0),
     }
   })
+}
+
+/** SCARD: how many live members the set has. */
+export async function kvSetCount(setKey: string): Promise<number> {
+  const result = await db.execute(sql`
+    SELECT count(*)::int AS n FROM kv_set_member
+    WHERE workspace_key = ${currentWorkspaceNamespace()}
+      AND set_key = ${setKey}
+      AND expires_at > now()
+  `)
+  return Number(getExecuteRows<{ n: unknown }>(result)[0]?.n ?? 0)
 }
 
 /** SADD + EXPIRE NX, as one statement. True iff the member was not already live. */

@@ -1,6 +1,6 @@
+import { warmQuery } from '@/lib/client/queries/warm-query'
 import { useState } from 'react'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -9,6 +9,7 @@ import { StatusGeneralCard } from '@/components/admin/settings/status/status-gen
 import { StatusVisibilityCard } from '@/components/admin/settings/status/status-visibility-card'
 import { StatusNotificationsCard } from '@/components/admin/settings/status/status-notifications-card'
 import { StatusDangerCard } from '@/components/admin/settings/status/status-danger-card'
+import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
 import { updateStatusSettingsFn } from '@/lib/server/functions/status'
 import { statusSettingsQueries } from '@/lib/client/queries/status'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
@@ -24,8 +25,14 @@ export const Route = createFileRoute('/admin/settings/status')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.STATUS_PAGE_MANAGE)
-    await context.queryClient.ensureQueryData(statusSettingsQueries.get())
+    assertSettingsPageAccess(context.permissions, '/admin/settings/status')
+    // Loaded here, not imported above, so it stays out of every page's script.
+    const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
+    await Promise.all([
+      context.queryClient.ensureQueryData(statusSettingsQueries.get()),
+      // The Notifications card's "Sent from" line, so it renders from the document.
+      warmQuery(context.queryClient, surfaceSenderQuery('status')),
+    ])
     return {}
   },
   component: StatusSettingsPage,
@@ -65,6 +72,7 @@ function StatusSettingsPage() {
   return (
     <SettingsPage page="/admin/settings/status">
       <StatusGeneralCard settings={settings} onChange={onChange} onFlushText={textSave.flush} />
+      <SectionDomainSettingsCard section="status" />
       <StatusVisibilityCard settings={settings} onChange={onChange} disabled={mutation.isPending} />
       <StatusNotificationsCard
         settings={settings}

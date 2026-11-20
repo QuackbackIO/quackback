@@ -10,18 +10,22 @@ import { db, eq, and, isNull, inArray, ticketLinks, tickets } from '@/lib/server
 import type { TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import { ticketFilter } from '@/lib/server/policy/tickets'
+import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
-import { loadTicketOr404 } from './ticket.service'
+import { assertTicketVisible } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
 import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import type { TicketDTO } from './ticket.types'
 
 const log = logger.child({ component: 'ticket-links' })
+
+/** A workspace-wide reader for counting every link, hidden ones included. */
+const SYSTEM_LINK_READER: Actor = boundedServiceActor(new Set())
 
 function assertCan(actor: Actor, permission: PermissionKey, action: string): void {
   if (!can(actor, permission)) throw new ForbiddenError('FORBIDDEN', `You cannot ${action}`)
@@ -32,7 +36,8 @@ function assertCan(actor: Actor, permission: PermissionKey, action: string): voi
  * must be type 'tracker' and the linked ticket type 'customer'. Re-linking to
  * the same tracker is a no-op; linking to a different tracker while one already
  * tracks it is rejected (the partial-unique). Records a team-only 'ticket_linked'
- * note on the linked ticket's thread.
+ * note on the linked ticket's thread. Either ticket hidden from the actor is
+ * NotFound.
  */
 export async function linkTicketToTracker(
   trackerTicketId: TicketId,
@@ -45,8 +50,8 @@ export async function linkTicketToTracker(
   }
 
   const [tracker, linked] = await Promise.all([
-    loadTicketOr404(trackerTicketId),
-    loadTicketOr404(linkedTicketId),
+    assertTicketVisible(trackerTicketId, actor),
+    assertTicketVisible(linkedTicketId, actor),
   ])
   if (tracker.type !== 'tracker') {
     throw new ValidationError('INVALID_LINK', 'The tracking ticket must be a tracker')
@@ -89,13 +94,18 @@ export async function linkTicketToTracker(
   )
 }
 
-/** Remove a tracker link (team-only, TICKET_ASSIGN). No-op if the link is absent. */
+/** Remove a tracker link (team-only, TICKET_ASSIGN). No-op if the link is
+ *  absent. Either ticket hidden from the actor is NotFound. */
 export async function unlinkTicketFromTracker(
   trackerTicketId: TicketId,
   linkedTicketId: TicketId,
   actor: Actor
 ): Promise<void> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'unlink this ticket')
+  await Promise.all([
+    assertTicketVisible(trackerTicketId, actor),
+    assertTicketVisible(linkedTicketId, actor),
+  ])
   await db
     .delete(ticketLinks)
     .where(
@@ -133,46 +143,59 @@ export async function listLinkedTicketIds(
   return rows.map((r) => r.id)
 }
 
-/** The customer tickets a tracker tracks, as full DTOs (for the tracker detail). */
-export async function listLinkedTickets(trackerTicketId: TicketId): Promise<TicketDTO[]> {
-  const rows = await db
-    .select()
-    .from(tickets)
-    .where(
-      and(
-        isNull(tickets.deletedAt),
-        inArray(
-          tickets.id,
-          db
-            .select({ id: ticketLinks.linkedTicketId })
-            .from(ticketLinks)
-            .where(
-              and(
-                eq(ticketLinks.trackerTicketId, trackerTicketId),
-                eq(ticketLinks.relation, 'tracks')
-              )
-            )
-        )
-      )
-    )
+/**
+ * The customer tickets a tracker tracks that the actor can see, as full DTOs,
+ * plus how many more it tracks that the actor cannot see. Nothing about a
+ * hidden ticket but that count leaves here.
+ */
+export async function listLinkedTickets(
+  trackerTicketId: TicketId,
+  actor: Actor
+): Promise<{ items: TicketDTO[]; hiddenCount: number }> {
+  const [allIds, visibleIds] = await Promise.all([
+    listLinkedTicketIds(trackerTicketId, SYSTEM_LINK_READER),
+    listLinkedTicketIds(trackerTicketId, actor),
+  ])
+  const rows =
+    visibleIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(tickets)
+          .where(and(isNull(tickets.deletedAt), inArray(tickets.id, visibleIds)))
   const ctx = await buildTicketContext(rows)
-  return rows.map((r) => ticketToDTO(r, ctx))
+  return {
+    items: rows.map((r) => ticketToDTO(r, ctx)),
+    hiddenCount: allIds.length - visibleIds.length,
+  }
 }
 
-/** The tracker a customer ticket belongs to (reverse lookup), or null. */
-export async function getTrackerForTicket(linkedTicketId: TicketId): Promise<TicketDTO | null> {
+/**
+ * The tracker a customer ticket belongs to (reverse lookup). `tracker` is null
+ * when there is none or the actor cannot see it; `hidden` says which.
+ */
+export async function getTrackerForTicket(
+  linkedTicketId: TicketId,
+  actor: Actor
+): Promise<{ tracker: TicketDTO | null; hidden: boolean }> {
   const [link] = await db
     .select({ trackerId: ticketLinks.trackerTicketId })
     .from(ticketLinks)
     .where(and(eq(ticketLinks.linkedTicketId, linkedTicketId), eq(ticketLinks.relation, 'tracks')))
     .limit(1)
-  if (!link) return null
+  if (!link) return { tracker: null, hidden: false }
   const [row] = await db
     .select()
     .from(tickets)
     .where(and(eq(tickets.id, link.trackerId), isNull(tickets.deletedAt)))
     .limit(1)
-  if (!row) return null
+  if (!row) return { tracker: null, hidden: false }
+  const [visible] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(and(eq(tickets.id, row.id), ticketFilter(actor)))
+    .limit(1)
+  if (!visible) return { tracker: null, hidden: true }
   const ctx = await buildTicketContext([row])
-  return ticketToDTO(row, ctx)
+  return { tracker: ticketToDTO(row, ctx), hidden: false }
 }

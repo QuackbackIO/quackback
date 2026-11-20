@@ -167,6 +167,27 @@ const NO_EMAIL_BEFORE_PATHS = new Set<string>([
   '/oauth2/callback/:providerId',
 ])
 
+/** Paths that start a sign-in with a provider, before any upstream redirect. */
+const OIDC_START_PATHS = new Set<string>(['/sign-in/social', '/sign-in/oauth2'])
+
+/**
+ * Refuse the start of a sign-in with an identity provider that is set up but
+ * not registered right now. The auth instance registers its providers when it
+ * is built and is rebuilt only when `auth_config_version` moves, while single
+ * sign-on can stop on the clock (a plan limits grace ending) with nothing
+ * written. Asking per request keeps the start in step with the sign-in methods
+ * the forms show.
+ */
+async function refuseUnregisteredOidcStart(
+  provider: string,
+  ctx: { redirect: (url: string) => Error }
+): Promise<void> {
+  const { getConfiguredOidcProviderIds, isSsoLive } = await import('./registered-providers')
+  if (!(await getConfiguredOidcProviderIds()).has(provider)) return
+  if (await isSsoLive()) return
+  throw ctx.redirect('/?auth=signin&error=oauth_method_not_allowed')
+}
+
 /**
  * Email-bearing paths that bring a NEW account into existence when no user
  * holds the address yet — the ones `openSignup` is about.
@@ -231,6 +252,7 @@ export async function handleSignInPreCheck(ctx: {
     log.debug({ path: ctx.path, provider }, 'sign-in pre-check')
   }
 
+  if (OIDC_START_PATHS.has(ctx.path ?? '')) await refuseUnregisteredOidcStart(provider, ctx)
   if (NO_EMAIL_BEFORE_PATHS.has(ctx.path ?? '')) return
 
   // The anonymous mint carries no email, so it can't ride the per-email
@@ -492,6 +514,28 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
   await handleRefreshGraceHeal(ctx)
   await handleSignInPreCheck(ctx as Parameters<typeof handleSignInPreCheck>[0])
   await handleWidgetAccountMutationGate(ctx)
+  // Provider sign-in asked for on a section host runs on the primary domain,
+  // where its callback and state cookie live (section-sign-in.ts). Last, so
+  // every gate above has already passed on it.
+  if (ctx.path === '/sign-in/social' && ctx.request) {
+    const { sectionSignInMove } = await import('./section-sign-in')
+    const moved = await sectionSignInMove(ctx)
+    if (moved) return ctx.json(moved)
+  }
+  // Linking a provider asked for on a section host runs on the primary domain
+  // too, for the same reason (section-link.ts).
+  if (ctx.path === '/link-social' && ctx.request) {
+    const { sectionLinkMove } = await import('./section-link')
+    const moved = await sectionLinkMove(ctx)
+    if (moved) return ctx.json(moved)
+  }
+  // Signing out on one host ends the same sign-in on the workspace's other
+  // hosts (section-session-family.ts). Before the library ends this session,
+  // which is how the family is found.
+  if (ctx.path === '/sign-out') {
+    const { signOutHandoffFamily } = await import('./section-session-family')
+    await signOutHandoffFamily(ctx)
+  }
 })
 
 /**
@@ -743,7 +787,8 @@ export async function handleAutoProvisionAfter(
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
   const { DEFAULT_PROVISION_ROLE } = await import('@/lib/shared/sso-mapping-preview')
-  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
+  const defaultRole: Role = provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
+  let targetRole: Role = claimRole ?? defaultRole
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
@@ -770,7 +815,7 @@ export async function handleAutoProvisionAfter(
   // A rule may grant a workspace role on top of the member tier, through the
   // same assignment path custom-role invites and role changes use. Looked up
   // only once this sign-in may change the role.
-  const targetCustom = claimMatch?.roleId
+  let targetCustom = claimMatch?.roleId
     ? await grantableRuleRole(claimMatch.roleId, claimMatch.ruleIndex, provider.id)
     : null
   // A matched rule whose role cannot be granted grants nothing. First match
@@ -778,6 +823,31 @@ export async function handleAutoProvisionAfter(
   // person keeps whatever role they hold. Granting the bare tier instead would
   // hand out the member preset, which can exceed the role the admin chose.
   if (claimMatch?.roleId && !targetCustom) return
+
+  // Past the plan's custom-role cap (after the plan limits grace) a custom role
+  // goes to nobody new. Whoever already holds it keeps it. A teammate is left
+  // as they are; someone joining gets the default role instead.
+  if (targetCustom && !targetCustom.isSystem) {
+    const holds = p
+      ? (await workspaceAssignmentOf(p.id as PrincipalId))?.id === targetCustom.id
+      : false
+    const { customRolesLocked } = await import('@/lib/server/domains/roles/role.plan-lock')
+    if (!holds && (await customRolesLocked())) {
+      log.warn(
+        {
+          code: 'sso_role_rule_role_held',
+          provider_id: provider.id,
+          rule_index: claimMatch?.ruleIndex,
+          role_id: targetCustom.id,
+        },
+        'sso role rule names a custom role the plan holds; granting the default role instead'
+      )
+      if (currentRole !== 'user') return
+      targetCustom = null
+      targetRole = defaultRole
+      if (targetRole === 'user') return
+    }
+  }
 
   // Under sync the provider owns roles: a plain-member outcome (a rule with no
   // workspace role, or the default) moves a member holding another workspace
@@ -858,14 +928,15 @@ async function grantableRuleRole(
   roleId: string,
   ruleIndex: number,
   providerId: string
-): Promise<{ id: RoleId; name: string } | null> {
+): Promise<{ id: RoleId; name: string; isSystem: boolean } | null> {
   const { db, roles, eq } = await import('@/lib/server/db')
   const [row] = await db
-    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .select({ id: roles.id, key: roles.key, name: roles.name, isSystem: roles.isSystem })
     .from(roles)
     .where(eq(roles.id, roleId as RoleId))
     .limit(1)
-  if (row && row.key !== SYSTEM_ROLES.OWNER) return { id: row.id, name: row.name }
+  if (row && row.key !== SYSTEM_ROLES.OWNER)
+    return { id: row.id, name: row.name, isSystem: row.isSystem }
   log.warn(
     {
       code: 'sso_role_rule_role_missing',

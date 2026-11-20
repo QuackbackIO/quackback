@@ -24,6 +24,12 @@ vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service',
   hasPlatformCredentials: (...a: unknown[]) => mockHasPlatformCredentials(...a),
 }))
 
+// Single sign-on is in the plan here, so every method reads exactly as stored.
+// The fallback for a plan without it is covered in `sso-plan-fallback.test.ts`.
+vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
+  getTierLimits: async () => ({ features: { customOidcProvider: true } }),
+}))
+
 const { isAuthMethodAllowed: realIsAuthMethodAllowed } = await import('../auth-restrictions')
 
 // Task 12 added a `registeredOidcProviderIds` set param (3rd) that

@@ -19,7 +19,7 @@ vi.mock('@/components/admin/conversation/new-conversation-dialog', () => ({
 }))
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
-    select({ userRole: 'admin', settings: { featureFlags: {} } }),
+    select({ userRole: 'admin', settings: { featureFlags: { supportInbox: true } } }),
 }))
 vi.mock('@/lib/client/hooks/use-activation-action', () => ({
   useActivationAction: () => null,
@@ -70,7 +70,7 @@ describe('ConversationListColumn toolbar', () => {
   it('searches from the list column at every width', () => {
     const onSearchInput = vi.fn()
     renderColumn({ onSearchInput })
-    const box = screen.getByPlaceholderText('Search conversations...')
+    const box = screen.getByPlaceholderText('Search conversations…')
     expect(box.closest('.lg\\:hidden')).toBeNull()
     fireEvent.change(box, { target: { value: 'refund' } })
     expect(onSearchInput).toHaveBeenCalledWith('refund')

@@ -21,7 +21,7 @@ type ModerationInput = Parameters<ReturnType<typeof useUpdateModerationDefault>[
 export function ModerationPage() {
   const router = useRouter()
   const updateModerationDefault = useUpdateModerationDefault()
-  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalPageConfig())
   const [isPending, startTransition] = useTransition()
 
   // Moderation toggles

@@ -217,10 +217,12 @@ export function generateContentHTML(content: JSONContent): string {
         // display surfaces, so we emit a static placeholder div that survives
         // DOMPurify; EmbedHydration portals a live card into it client-side.
         // A missing/foreign kind or id renders nothing — the embed degrades to
-        // empty rather than breaking the page.
+        // empty rather than breaking the page. A ticket card (shareTicket)
+        // resolves viewer-scoped like the others: a viewer who may not see the
+        // ticket gets "This ticket is unavailable", never its contents.
         const kind = String(node.attrs?.kind ?? '')
         const id = String(node.attrs?.id ?? '')
-        if ((kind !== 'post' && kind !== 'changelog') || !id) return ''
+        if ((kind !== 'post' && kind !== 'changelog' && kind !== 'ticket') || !id) return ''
         return `<div data-quackback-embed="1" data-kind="${escapeHtmlAttr(kind)}" data-id="${escapeHtmlAttr(id)}" class="quackback-embed-placeholder"></div>`
       }
 

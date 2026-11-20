@@ -8,6 +8,7 @@
  * but the layout's route id.
  */
 import { getRouteApi } from '@tanstack/react-router'
+import { expandSectionLinks, sectionUrl, type SectionLinks } from '@/lib/shared/section-links'
 
 const helpCenterLayout = getRouteApi('/_portal/hc')
 
@@ -24,19 +25,29 @@ export function helpCenterHeadMessages(
 
 /**
  * The portal's head inputs for a help center page: the workspace name for the
- * title, and the public base URL canonical links are built on (the verified
- * custom domain when the request arrived on it, else BASE_URL). The base URL is
- * undefined when the request carries none.
+ * title, and `helpUrl`, which makes a help center path absolute for canonical
+ * links: on the help center's own host once it has one (its home written as
+ * `/` there), else on the request's base URL. `helpUrl` gives undefined when
+ * the request carries neither.
  */
 export function helpCenterHeadPortal(
   matches: readonly { routeId: string; loaderData?: unknown; context?: unknown }[]
-): { workspaceName: string; baseUrl: string | undefined } {
+): {
+  workspaceName: string
+  baseUrl: string | undefined
+  helpUrl: (path: string) => string | undefined
+} {
   const portal = matches.find((m) => m.routeId === '/_portal')
+  const context = portal?.context as { baseUrl?: string; sectionLinks?: SectionLinks } | undefined
+  const baseUrl = context?.baseUrl
+  const origins = expandSectionLinks(baseUrl, context?.sectionLinks)?.origins
   return {
     workspaceName:
       (portal?.loaderData as { workspaceName?: string } | undefined)?.workspaceName ??
       'Help Center',
-    baseUrl: (portal?.context as { baseUrl?: string } | undefined)?.baseUrl,
+    baseUrl,
+    helpUrl: (path) =>
+      origins ? sectionUrl('help', path, origins) : helpCenterAbsoluteUrl(baseUrl, path),
   }
 }
 

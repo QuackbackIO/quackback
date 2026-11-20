@@ -7,6 +7,7 @@ import { ChangelogListPublic, ChangelogSubscribeButton } from '@/components/port
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 export const Route = createFileRoute('/_portal/changelog/')({
   loader: async ({ context }) => {
@@ -14,15 +15,14 @@ export const Route = createFileRoute('/_portal/changelog/')({
     if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
     return {
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
+      canonicalUrl: pageCanonical('changelog', '/changelog', context),
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { workspaceName, baseUrl } = loaderData
+    const { workspaceName, canonicalUrl } = loaderData
     const title = `Changelog - ${workspaceName}`
     const description = `Stay up to date with the latest ${workspaceName} product updates and shipped features.`
-    const canonicalUrl = baseUrl ? `${baseUrl}/changelog` : ''
     return {
       meta: [
         { title },

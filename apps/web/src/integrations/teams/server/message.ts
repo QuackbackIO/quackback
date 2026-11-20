@@ -14,6 +14,7 @@ import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate, formatStatus, getStatusEmoji } from '@/lib/server/events/hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { getAuthorName, buildPostUrl } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 interface TeamsMessage {
   body: { contentType: 'html'; content: string }
@@ -58,11 +59,11 @@ function buildCard(body: unknown[], actions?: unknown[]): TeamsMessage {
 /**
  * Build a Teams Adaptive Card message for an event.
  */
-export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessage {
+export function buildTeamsMessage(event: EventData, links: SectionOrigins): TeamsMessage {
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const content = truncate(stripHtml(post.content), 300)
       const author = getAuthorName(post)
 
@@ -79,7 +80,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'post.status_changed': {
       const { post, previousStatus, newStatus } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const emoji = getStatusEmoji(newStatus)
       const actor = event.actor.email || 'System'
 
@@ -95,7 +96,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'post.updated': {
       const { post, changedFields } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const actor = event.actor.email || 'System'
       const fields = changedFields.join(', ')
 
@@ -121,7 +122,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'post.merged': {
       const { duplicatePost, canonicalPost } = event.data
-      const canonicalUrl = buildPostUrl(rootUrl, canonicalPost.boardSlug, canonicalPost.id)
+      const canonicalUrl = buildPostUrl(links, canonicalPost.boardSlug, canonicalPost.id)
       const actor = event.actor.email || 'System'
 
       return buildCard(
@@ -138,7 +139,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'comment.created': {
       const { comment, post } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const content = truncate(commentPlainText(comment), 300)
       const author = getAuthorName(comment)
 

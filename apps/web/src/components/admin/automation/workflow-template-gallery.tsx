@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { TONE_TILE } from './workflow-builder/step-visuals'
+import { STEP_TILE } from './workflow-builder/step-visuals'
 import { cn } from '@/lib/shared/utils'
 import {
   WORKFLOW_TEMPLATE_CATEGORIES,
@@ -117,16 +117,11 @@ export function WorkflowTemplateGallery({
 }
 
 function chipClass(chip: TemplateGalleryChip): string {
-  if (chip.kind === 'class' && chip.label === 'Customer facing') {
-    return `border-transparent ${TONE_TILE.pink}`
-  }
-  if (chip.kind === 'prereq') {
-    return `border-transparent ${TONE_TILE.amber}`
-  }
-  if (chip.kind === 'setup') {
-    return `border-transparent ${TONE_TILE.violet}`
-  }
-  return 'border-transparent bg-muted text-muted-foreground'
+  const highlighted =
+    (chip.kind === 'class' && chip.label === 'Customer facing') ||
+    chip.kind === 'prereq' ||
+    chip.kind === 'setup'
+  return `border-transparent ${highlighted ? STEP_TILE : 'bg-muted text-muted-foreground'}`
 }
 
 function TemplateCard({
@@ -147,12 +142,7 @@ function TemplateCard({
       className="flex flex-col rounded-[11px] border bg-card px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:shadow-sm"
     >
       <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            'grid size-[26px] shrink-0 place-items-center rounded-lg',
-            template.iconClassName
-          )}
-        >
+        <span className={cn('grid size-[26px] shrink-0 place-items-center rounded-lg', STEP_TILE)}>
           <Icon className="size-3.5" />
         </span>
         <span className="text-[13px] font-semibold leading-tight">{template.title}</span>

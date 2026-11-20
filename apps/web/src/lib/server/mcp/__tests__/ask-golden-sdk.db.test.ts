@@ -167,7 +167,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       const seeded = await seedAskGoldenFixture(database, 'owner')
       for (const permission of [
         PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-        PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+        PERMISSIONS.SETTINGS_MANAGE,
         PERMISSIONS.AUTH_MANAGE,
       ]) {
         const sdk = await openAskSdkHarness({
@@ -188,14 +188,62 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       const none = await openAskSdkHarness({
         ...seeded.auth,
         scopes: ['read:settings'],
-        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_MANAGE]),
+        // The support permission alone no longer manages sending domains.
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]),
       })
       try {
         expect((await none.call('navigate_workspace', { destination: 'domains' })).isError).toBe(
           true
         )
+        expect((await none.call('navigate_workspace', { destination: 'email' })).isError).toBe(true)
       } finally {
         await none.close()
+      }
+      const admin = await openAskSdkHarness({
+        ...seeded.auth,
+        scopes: ['read:settings'],
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_MANAGE]),
+      })
+      try {
+        expect(
+          parseAskSdkResult(await admin.call('navigate_workspace', { destination: 'email' }))
+        ).toMatchObject({ navigation: { href: '/admin/settings/email' } })
+      } finally {
+        await admin.close()
+      }
+    })
+  })
+  it('opens Custom domains on Settings > Portal for a holder of settings.custom_domain only', async () => {
+    await fixture.run(async (database) => {
+      const seeded = await seedAskGoldenFixture(database, 'owner')
+      const owner = await openAskSdkHarness({
+        ...seeded.auth,
+        scopes: ['read:settings'],
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]),
+      })
+      try {
+        const result = await owner.call('navigate_workspace', { destination: 'custom_domains' })
+        expect(result.isError, JSON.stringify(result.content)).not.toBe(true)
+        expect(parseAskSdkResult(result)).toMatchObject({
+          navigation: {
+            href: '/admin/settings/portal?tab=custom-domains',
+            label: 'Custom domains',
+          },
+        })
+      } finally {
+        await owner.close()
+      }
+      const branding = await openAskSdkHarness({
+        ...seeded.auth,
+        scopes: ['read:settings'],
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_BRANDING]),
+      })
+      try {
+        expect(
+          (await branding.call('navigate_workspace', { destination: 'custom_domains' })).isError
+        ).toBe(true)
+      } finally {
+        await branding.close()
       }
     })
   })

@@ -121,4 +121,26 @@ describe('handleInboundEmailWebhook', () => {
 
     expect(res.status).toBe(500)
   })
+
+  // CUS-E-32: a transient fault answers 500 so the provider redelivers; the
+  // redelivery ingests, and a later copy is a duplicate the core reports.
+  it('answers 500 then the redelivery outcome, then duplicate', async () => {
+    ingestInboundEmail
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce({ status: 'ingested', conversationId: 'conversation_1' })
+      .mockResolvedValueOnce({ status: 'duplicate' })
+    const event = { type: 'email.received', data: { email_id: 'em_1' } }
+
+    const first = await handleInboundEmailWebhook(req(event))
+    expect(first.status).toBe(500)
+    expect(await first.text()).toBe('Ingest failed')
+
+    const redelivered = await handleInboundEmailWebhook(req(event))
+    expect(redelivered.status).toBe(200)
+    expect(await redelivered.json()).toEqual({ status: 'ingested' })
+
+    const again = await handleInboundEmailWebhook(req(event))
+    expect(await again.json()).toEqual({ status: 'duplicate' })
+    expect(ingestInboundEmail).toHaveBeenCalledTimes(3)
+  })
 })

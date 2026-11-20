@@ -12,6 +12,9 @@ import {
   getPersonBlockStatusFn,
 } from '@/lib/server/functions/blocking'
 import { toastError } from '@/lib/client/error-notice'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { BLOCK_PERSON_DESCRIPTION } from './block-person-copy'
 
 /** Shared query key so the badge and the button dedupe to one fetch per person. */
 function blockStatusKey(principalId: PrincipalId) {
@@ -22,12 +25,15 @@ function blockStatusKey(principalId: PrincipalId) {
  * Block state for a person. React Query dedupes across every caller with the
  * same principal, so a surface can read this for a "Blocked" badge while the
  * {@link BlockPersonControl} button reads it too, with a single request.
+ * Read only by a viewer holding people.view (what the server requires); for
+ * anyone else the person reads as not blocked and no badge shows.
  */
 export function usePersonBlockStatus(principalId: PrincipalId | undefined) {
+  const canView = usePermission(PERMISSIONS.PEOPLE_VIEW)
   const query = useQuery({
     queryKey: blockStatusKey(principalId as PrincipalId),
     queryFn: () => getPersonBlockStatusFn({ data: { principalId: principalId as PrincipalId } }),
-    enabled: !!principalId,
+    enabled: canView && !!principalId,
     staleTime: 30_000,
   })
   return { blocked: query.data?.blockedAt != null, isLoading: query.isLoading }
@@ -72,7 +78,8 @@ export function usePersonBlockActions(principalId: PrincipalId | undefined) {
 
 /**
  * Block / Unblock action for a person (support platform §4.6). Blocking rejects
- * their future messages and re-registration; unblocking restores them. Confirmed
+ * their future messages and re-registration and stops automated email to them
+ * (a teammate's own reply still goes); unblocking restores them. Confirmed
  * before blocking, immediate on unblock. Reused by the People profile and the
  * conversation detail panel.
  */
@@ -135,7 +142,7 @@ export function BlockPersonControl({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Block ${personName || 'this user'}?`}
-        description="They will not be able to send new messages or sign in again. Their existing activity stays, and you can unblock them at any time."
+        description={BLOCK_PERSON_DESCRIPTION}
         confirmLabel="Block"
         variant="destructive"
         isPending={blockPending}

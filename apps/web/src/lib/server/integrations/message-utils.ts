@@ -1,6 +1,7 @@
 /**
  * Shared utilities for integration message builders.
  */
+import { allOnPrimary, sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
 
 /**
  * Resolve author display name from post data, falling back to email or 'Anonymous'.
@@ -13,10 +14,18 @@ export function getAuthorName(post: {
 }
 
 /**
- * Build the Quackback post URL.
+ * Build the Quackback post URL, on the feedback section's own host when it has one.
  */
-export function buildPostUrl(rootUrl: string, boardSlug: string, postId: string): string {
-  return `${rootUrl}/b/${boardSlug}/posts/${postId}`
+export function buildPostUrl(links: SectionOrigins, boardSlug: string, postId: string): string {
+  return sectionUrl('feedback', `/b/${boardSlug}/posts/${postId}`, links)
+}
+
+/**
+ * Where an integration hook links: the section origins the dispatcher passed,
+ * else every section at `rootUrl`, the primary origin.
+ */
+export function hookLinks(config: { rootUrl: string; links?: SectionOrigins }): SectionOrigins {
+  return config.links ?? allOnPrimary(config.rootUrl)
 }
 
 /**

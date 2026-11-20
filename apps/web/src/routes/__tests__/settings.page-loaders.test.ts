@@ -12,6 +12,8 @@ vi.mock('@/lib/server/functions/entitlement-status', () => ({
   hasEntitlementFn: vi.fn(async () => entitled.current),
   listEntitlementsFn: vi.fn(async () => ({ sso: false, auditLog: false })),
 }))
+const { getSsoLiveFn } = vi.hoisted(() => ({ getSsoLiveFn: vi.fn(async () => true) }))
+vi.mock('@/lib/server/functions/sso', () => ({ getSsoLiveFn }))
 
 const { Route: MacrosRoute } = await import('../admin/settings.macros')
 const { Route: SlaRoute } = await import('../admin/settings.sla')
@@ -48,14 +50,12 @@ const key = (...parts: string[]) => JSON.stringify(parts)
 
 describe('settings page loaders', () => {
   it('macros: warms the macro library when the plan includes it', async () => {
+    // The page changes macros (conversation.manage) and lists them (conversation.reply).
+    const perms = [PERMISSIONS.CONVERSATION_MANAGE, PERMISSIONS.CONVERSATION_REPLY]
     entitled.current = true
-    expect(await warmedKeys(MacrosRoute, [PERMISSIONS.CONVERSATION_MANAGE])).toContain(
-      key('macros', 'all')
-    )
+    expect(await warmedKeys(MacrosRoute, perms)).toContain(key('macros', 'all'))
     entitled.current = false
-    expect(await warmedKeys(MacrosRoute, [PERMISSIONS.CONVERSATION_MANAGE])).not.toContain(
-      key('macros', 'all')
-    )
+    expect(await warmedKeys(MacrosRoute, perms)).not.toContain(key('macros', 'all'))
   })
 
   it('SLA: warms the office hours the policies are measured against', async () => {
@@ -86,7 +86,8 @@ describe('settings page loaders', () => {
   })
 
   it('access and security: warms the portal access tab segments, with segment.view only', async () => {
-    const perms = [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SEGMENT_VIEW]
+    // The Portal access tab is there only with settings.manage, which its portal config read needs.
+    const perms = [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SEGMENT_VIEW]
     expect(await warmedKeys(AuthenticationRoute, perms)).toContain(key('admin', 'segments'))
     expect(await warmedKeys(AuthenticationRoute, perms, { tab: 'portal-access' })).toContain(
       key('admin', 'segments')
@@ -97,5 +98,32 @@ describe('settings page loaders', () => {
     expect(await warmedKeys(AuthenticationRoute, [PERMISSIONS.AUTH_MANAGE])).not.toContain(
       key('admin', 'segments')
     )
+  })
+
+  it('access and security: reads the portal config only for a viewer with the Portal access tab', async () => {
+    expect(
+      await warmedKeys(AuthenticationRoute, [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_MANAGE])
+    ).toContain(key('settings', 'portalConfig'))
+    expect(await warmedKeys(AuthenticationRoute, [PERMISSIONS.AUTH_MANAGE])).not.toContain(
+      key('settings', 'portalConfig')
+    )
+  })
+
+  it('access and security: asks whether single sign-on is live only with plan billing on', async () => {
+    const load = (cloudEnabled: boolean) =>
+      loaderOf(AuthenticationRoute)({
+        context: {
+          queryClient: { ensureQueryData: vi.fn(async () => undefined) },
+          permissions: [PERMISSIONS.AUTH_MANAGE],
+          billingEnabled: false,
+          cloudEnabled,
+        },
+        location: { search: { tab: 'sign-in' } },
+      }) as Promise<{ ssoLive?: boolean }>
+    getSsoLiveFn.mockClear()
+    expect((await load(false)).ssoLive).toBeUndefined()
+    expect(getSsoLiveFn).not.toHaveBeenCalled()
+    expect((await load(true)).ssoLive).toBe(true)
+    expect(getSsoLiveFn).toHaveBeenCalledTimes(1)
   })
 })

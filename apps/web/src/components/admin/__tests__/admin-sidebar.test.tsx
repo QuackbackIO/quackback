@@ -48,6 +48,8 @@ vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ mutate: vi.fn() }),
   useQuery: ({ queryKey, enabled }: { queryKey?: unknown[]; enabled?: boolean }) => {
     if (Array.isArray(queryKey) && queryKey.includes('owner-workspaces')) {
+      ownerWorkspacesQueryEnabled.current = enabled !== false
+      if (enabled === false) return { data: undefined }
       return { data: mockBillingEnabled.current ? mockSiblings.current : undefined }
     }
     if (Array.isArray(queryKey) && queryKey[0] === 'admin' && queryKey[1] === 'onboarding') {
@@ -79,7 +81,9 @@ const {
   moderationQueryEnabled,
   mockLaunchStatus,
   launchQueryEnabled,
+  ownerWorkspacesQueryEnabled,
 } = vi.hoisted(() => ({
+  ownerWorkspacesQueryEnabled: { current: false },
   mockLaunchStatus: { current: undefined as unknown },
   launchQueryEnabled: { current: false },
   mockPending: { current: 0 },
@@ -140,7 +144,21 @@ describe('AdminSidebar: workspace switcher', () => {
   afterEach(() => {
     mockSiblings.current = []
     mockBillingEnabled.current = false
+    ownerWorkspacesQueryEnabled.current = false
     cleanup()
+  })
+
+  it('is absent, and not asked for, for a teammate who cannot manage settings', () => {
+    // A custom inbox-only role: the server would refuse the workspace list.
+    mockBillingEnabled.current = true
+    mockSiblings.current = [
+      { instanceId: 'inst_south', displayName: 'South', url: 'https://south.example.com' },
+    ]
+    renderSidebar('member', {
+      permissions: [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    })
+    expect(ownerWorkspacesQueryEnabled.current).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Switch workspace' })).toBeNull()
   })
 
   it('is absent when cloud is off', () => {
@@ -194,7 +212,7 @@ const ALL_ON = {
 
 describe('buildRailItems', () => {
   it('orders Home, Feedback, Roadmap, Changelog, Support, Help center, Status, Analytics, Users', () => {
-    const items = buildRailItems(ALL_ON)
+    const items = buildRailItems(ALL_ON, ALL_PERMISSIONS)
     expect(items.map((i) => [i.label, i.href])).toEqual([
       ['Home', '/admin'],
       ['Feedback', '/admin/feedback'],
@@ -209,12 +227,48 @@ describe('buildRailItems', () => {
   })
 
   it('keeps Home when every product is off', () => {
-    const items = buildRailItems({})
+    const items = buildRailItems({}, ALL_PERMISSIONS)
     expect(items.map((i) => i.label)).toEqual(['Home', 'Analytics', 'Users'])
   })
 
+  it('leaves out the pages a support-only custom role cannot open', () => {
+    const billingAgent = [
+      PERMISSIONS.CONVERSATION_VIEW,
+      PERMISSIONS.TICKET_VIEW,
+      PERMISSIONS.CONVERSATION_REPLY,
+      PERMISSIONS.CONVERSATION_NOTE,
+      PERMISSIONS.CONVERSATION_SET_STATUS,
+    ]
+    // No roadmap.manage, so no Roadmap: its board opens on the roadmap list.
+    expect(buildRailItems(ALL_ON, billingAgent).map((i) => i.label)).toEqual(['Home', 'Support'])
+  })
+
+  it('leaves out Roadmap for a role that cannot list roadmaps, and Support for one that cannot list conversations or tickets', () => {
+    const triager = [PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.POST_SET_STATUS]
+    expect(buildRailItems(ALL_ON, triager).map((i) => i.label)).toEqual(['Home', 'Feedback'])
+    expect(
+      buildRailItems(ALL_ON, [...triager, PERMISSIONS.ROADMAP_MANAGE]).map((i) => i.label)
+    ).toEqual(['Home', 'Feedback', 'Roadmap'])
+    expect(buildRailItems(ALL_ON, [PERMISSIONS.TICKET_VIEW]).map((i) => i.label)).toEqual([
+      'Home',
+      'Support',
+    ])
+  })
+
+  it('leaves out Help center and Roadmap for the built-in Contributor, which cannot manage them', () => {
+    expect(buildRailItems(ALL_ON, SYSTEM_ROLE_PERMISSIONS.contributor).map((i) => i.label)).toEqual(
+      ['Home', 'Feedback', 'Changelog', 'Support', 'Status', 'Analytics', 'Users']
+    )
+  })
+
+  it('shows Status to a role that only manages the page', () => {
+    expect(buildRailItems(ALL_ON, [PERMISSIONS.STATUS_PAGE_MANAGE]).map((i) => i.label)).toContain(
+      'Status'
+    )
+  })
+
   it('matches Home on its own path only', () => {
-    const items = buildRailItems(ALL_ON)
+    const items = buildRailItems(ALL_ON, ALL_PERMISSIONS)
     expect(items.find((i) => i.label === 'Home')!.exact).toBe(true)
     expect(items.filter((i) => i.exact).length).toBe(1)
   })
@@ -270,7 +324,8 @@ describe('AdminSidebar: settings entry', () => {
   })
 
   it('shows Settings to a workflow manager only while the Support inbox is on', () => {
-    const permissions = [PERMISSIONS.WORKFLOW_MANAGE]
+    // Workflows are read under routing.manage and changed under workflow.manage.
+    const permissions = [PERMISSIONS.WORKFLOW_MANAGE, PERMISSIONS.ROUTING_MANAGE]
     const on = renderSidebar('member', { permissions, flags: { supportInbox: true } })
     expect(on.container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
     cleanup()
@@ -357,7 +412,10 @@ describe('AdminSidebar rail', () => {
   it('asks for the pending moderation count only with the post.approve permission', () => {
     mockPending.current = 3
     moderationQueryEnabled.current = null
-    const member = renderSidebar('member', { flags: ALL_ON })
+    const member = renderSidebar('member', {
+      flags: ALL_ON,
+      permissions: [PERMISSIONS.POST_VIEW_PRIVATE],
+    })
     expect(moderationQueryEnabled.current).toBe(false)
     expect(member.container.querySelector('aside nav a[href="/admin/feedback"]')!.textContent).toBe(
       'Feedback'
@@ -365,6 +423,38 @@ describe('AdminSidebar rail', () => {
     cleanup()
     renderSidebar('admin', { flags: ALL_ON })
     expect(moderationQueryEnabled.current).toBe(true)
+  })
+
+  it('links only to the pages the viewer can open, in the rail and the mobile menu', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const { container } = renderSidebar('member', {
+      flags: ALL_ON,
+      permissions: [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    })
+    for (const closed of [
+      '/admin/feedback',
+      '/admin/roadmap',
+      '/admin/changelog',
+      '/admin/help-center',
+      '/admin/status',
+      '/admin/analytics',
+      '/admin/users',
+    ]) {
+      expect(container.querySelector(`aside nav a[href="${closed}"]`)).toBeNull()
+    }
+    expect(container.querySelector('aside nav a[href="/admin/inbox"]')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    const dialog = await screen.findByRole('dialog')
+    const menu = [...dialog.querySelectorAll('nav a')].map((a) => a.getAttribute('href'))
+    expect(menu).toContain('/admin/inbox')
+    expect(menu).toEqual(
+      expect.not.arrayContaining([
+        '/admin/feedback',
+        '/admin/roadmap',
+        '/admin/users',
+        '/admin/help-center',
+      ])
+    )
   })
 
   it('uses a solid icon for Status', () => {

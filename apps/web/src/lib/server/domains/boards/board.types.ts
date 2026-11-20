@@ -16,6 +16,7 @@ export interface CreateBoardInput {
   slug?: string // If not provided, will be auto-generated from name
   access?: BoardAccess
   settings?: BoardSettings
+  readOnly?: boolean
 }
 
 /**
@@ -30,6 +31,8 @@ export interface UpdateBoardInput {
   description?: string | null
   slug?: string
   settings?: BoardSettings
+  /** Set by an admin: posts stay visible, nobody can post, vote or comment. */
+  readOnly?: boolean
 }
 
 /**

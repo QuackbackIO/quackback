@@ -29,8 +29,6 @@ export const EMAIL_BILLABLE: Record<string, boolean> = {
   NewCommentEmail: false,
   PostMentionEmail: false,
   NoteMentionEmail: false,
-  FeedbackLinkedEmail: false,
-  WelcomeEmail: false,
   OnboardingWelcomeEmail: false,
   OnboardingNudgeEmail: false,
   MessengerInstallEmail: false,
@@ -40,6 +38,8 @@ export const EMAIL_BILLABLE: Record<string, boolean> = {
   RecoveryCodeUsedEmail: false,
   NewSignInEmail: false,
   SendingDomainAttentionEmail: false,
+  DomainAttentionEmail: false,
+  PlanLimitsEmail: false,
   InvitationEmail: false,
   PortalInviteEmail: false,
   VerifyAddressEmail: false,
@@ -83,12 +83,12 @@ export const EMAIL_TENANTED: Record<string, boolean> = {
   NewCommentEmail: true,
   PostMentionEmail: true,
   NoteMentionEmail: true,
-  FeedbackLinkedEmail: true,
-  WelcomeEmail: true,
   OnboardingWelcomeEmail: true,
   OnboardingNudgeEmail: true,
   MessengerInstallEmail: true,
   SendingDomainAttentionEmail: true,
+  DomainAttentionEmail: true,
+  PlanLimitsEmail: true,
   RawEmail: true,
 
   MagicLinkEmail: false,
@@ -104,4 +104,56 @@ export const EMAIL_TENANTED: Record<string, boolean> = {
 /** Whether mail of this type may be sent under the workspace's provider tenant. */
 export function isTenantedEmailType(emailType: string | undefined): boolean {
   return EMAIL_TENANTED[emailType ?? 'RawEmail'] === true
+}
+
+/**
+ * Whose name an email goes under when it leaves from the platform address.
+ *
+ * - `workspace`: the workspace's name. Mail a workspace's own customers and
+ *   staff receive is about that workspace, whatever address carries it.
+ * - `product`: the product's own name, on mail about the product itself
+ *   (setting a workspace up, a sending domain that needs fixing).
+ * - `person`: a teammate's name, passed by the caller, on a message they wrote.
+ *
+ * Every type is listed, and a test holds this key set equal to
+ * {@link EMAIL_BILLABLE}'s, so a new type is given a voice on purpose. An
+ * unknown type speaks for the workspace.
+ */
+export type EmailVoice = 'workspace' | 'product' | 'person'
+
+export const EMAIL_VOICE: Record<string, EmailVoice> = {
+  ConversationMessageEmail: 'person',
+  ConversationReplyEmail: 'person',
+
+  OnboardingWelcomeEmail: 'product',
+  OnboardingNudgeEmail: 'product',
+  SendingDomainAttentionEmail: 'product',
+  DomainAttentionEmail: 'product',
+  PlanLimitsEmail: 'product',
+
+  ChangelogPublishedEmail: 'workspace',
+  StatusIncidentPublishedEmail: 'workspace',
+  StatusMaintenanceScheduledEmail: 'workspace',
+  ConversationClosedEmail: 'workspace',
+  ConversationAutoAckEmail: 'workspace',
+  CsatRequestEmail: 'workspace',
+  TicketEventEmail: 'workspace',
+  StatusChangeEmail: 'workspace',
+  NewCommentEmail: 'workspace',
+  PostMentionEmail: 'workspace',
+  NoteMentionEmail: 'workspace',
+  MessengerInstallEmail: 'workspace',
+  MagicLinkEmail: 'workspace',
+  PasswordResetEmail: 'workspace',
+  RecoveryCodeUsedEmail: 'workspace',
+  NewSignInEmail: 'workspace',
+  InvitationEmail: 'workspace',
+  PortalInviteEmail: 'workspace',
+  VerifyAddressEmail: 'workspace',
+  SignupNotAllowedEmail: 'workspace',
+  RawEmail: 'workspace',
+}
+
+export function emailVoice(emailType: string | undefined): EmailVoice {
+  return EMAIL_VOICE[emailType ?? 'RawEmail'] ?? 'workspace'
 }

@@ -59,6 +59,8 @@ vi.mock('@/lib/server/db', () => {
       update: (t: { __name?: string }) => chain(t?.__name ?? 'unknown'),
     },
     eq: vi.fn(),
+    or: vi.fn(),
+    sql: vi.fn(),
     and: vi.fn(),
     isNull: vi.fn(),
     inArray: vi.fn(),

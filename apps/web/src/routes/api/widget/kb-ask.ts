@@ -66,6 +66,8 @@ const log = logger.child({ component: 'widget-kb-ask' })
 
 export const KB_ASK_MAX_QUERY_CHARS = 500
 export const KB_ASK_RATE_LIMIT = 10
+/** Shared by every visitor, so well above one visitor's limit; the AI token budget caps spend. */
+const KB_ASK_WORKSPACE_RATE_LIMIT = 100
 const RATE_WINDOW_SECONDS = 60
 
 /** How many related near-miss articles to suggest alongside a no-answer. */
@@ -188,6 +190,7 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
     keyPrefix: 'kbask',
     workspaceKey: settings.id,
     limit: KB_ASK_RATE_LIMIT,
+    workspaceLimit: KB_ASK_WORKSPACE_RATE_LIMIT,
     windowSeconds: RATE_WINDOW_SECONDS,
     message: 'Too many questions, slow down',
   })

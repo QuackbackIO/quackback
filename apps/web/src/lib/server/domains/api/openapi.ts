@@ -103,6 +103,8 @@ There are two kinds of API key:
 - **Personal keys** act as the teammate who created them. A personal key can see and do only what its creator can, right now, narrowed by its scopes, and it stops working when its creator leaves the workspace. Teammates create them in their own account settings, under API keys.
 - **Workspace keys** belong to nobody. Each one holds its own workspace role, which sets what it can see and do, narrowed by its scopes, and it keeps working when people join or leave. Key managers create them under Settings > Developers.
 
+A reply sent with a personal key created after your workspace upgraded to the release that introduced this rule is its creator's reply: it counts as a teammate's first response and settles the response time targets, like a reply from the inbox. A reply sent with an older personal key, or with a workspace key, is automated: it never counts as a first response, and a customer still waits for a teammate. A reply through an older key that acts as a person's own account is stored exactly like that person's own reply, so first response times, which are worked out from stored replies, may count it. A bot or integration that replies to customers should use a workspace key. It hands a conversation to people by assigning it to a team or a teammate. A conversation such a bot answers still alerts, routes and counts as your team's work, like any other.
+
 ## Rate Limiting
 
 Requests are limited per client IP address. The default is 100 requests per minute, counted in a fixed one-minute window; some plans set a different limit. When the limit is exceeded the API responds with \`429\` and error code \`RATE_LIMITED\`, and the \`Retry-After\` header gives the number of seconds to wait before retrying.

@@ -456,3 +456,43 @@ describe('AgentMessageBubble — note attachments', () => {
     expect(card.className).not.toContain('amber')
   })
 })
+
+describe('AgentMessageBubble — via API mark', () => {
+  function renderAgentMessage(author: AgentConversationMessageDTO['author']) {
+    render(
+      <IntlProvider locale="en-US" messages={{}}>
+        <AgentMessageBubble
+          message={baseMessage({ senderType: 'agent', content: 'Your order shipped.', author })}
+        />
+      </IntlProvider>
+    )
+  }
+
+  it('marks a message a workspace API key wrote under its own name', () => {
+    renderAgentMessage({
+      principalId: 'principal_key' as never,
+      displayName: 'Order sync',
+      avatarUrl: null,
+      viaApi: true,
+    })
+    expect(screen.getByText('Order sync')).toBeInTheDocument()
+    expect(screen.getByText('via API')).toBeInTheDocument()
+  })
+
+  it('leaves a personal key that shows its creator unmarked', () => {
+    // The server shows the creator's name and sets no mark for such a key.
+    renderAgentMessage({
+      principalId: 'principal_key' as never,
+      displayName: 'Alex Rivera',
+      avatarUrl: null,
+    })
+    expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
+    expect(screen.queryByText('via API')).not.toBeInTheDocument()
+  })
+
+  it('leaves a teammate reply unmarked', () => {
+    renderAgentMessage({ principalId: 'principal_a' as never, displayName: 'Sam', avatarUrl: null })
+    expect(screen.getByText('Sam')).toBeInTheDocument()
+    expect(screen.queryByText('via API')).not.toBeInTheDocument()
+  })
+})

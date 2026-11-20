@@ -56,7 +56,7 @@ function DueCountdownLabel({ overdue, remainingMs }: { overdue: boolean; remaini
       title={description}
       className={cn(
         'inline-flex shrink-0 items-center gap-0.5 text-xs font-medium tabular-nums',
-        overdue ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'
+        overdue ? 'text-destructive' : 'text-warning'
       )}
     >
       <ClockIcon className="size-3" aria-hidden />

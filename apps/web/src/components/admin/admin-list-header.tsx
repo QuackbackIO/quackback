@@ -26,7 +26,7 @@ interface AdminListHeaderProps {
 export function AdminListHeader({
   searchValue,
   onSearchChange,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder = 'Search…',
   sortOptions,
   activeSort,
   onSortChange,

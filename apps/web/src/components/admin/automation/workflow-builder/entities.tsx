@@ -7,7 +7,7 @@
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tags'
 import { listSlaPolicyOptionsFn, type SlaPolicyOption } from '@/lib/server/functions/sla'
@@ -83,7 +83,7 @@ export function useEntityLabels(): EntityLabels {
 const toMap = (items: EntityOption[]) => new Map(items.map((i) => [i.id, i.name]))
 
 export function WorkflowEntitiesProvider({ children }: { children: ReactNode }) {
-  const { data: members } = useTeamMembers()
+  const { data: members } = useAdminTeamMembers()
   const { data: teams } = useInboxTeams()
   const { data: tags } = useQuery({
     queryKey: ['admin', 'conversation-tags', 'all'],

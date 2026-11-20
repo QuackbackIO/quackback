@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { sectionSearchValue } from '@/components/admin/analytics/analytics-sections'
 import { AnalyticsPage } from '@/components/admin/analytics/analytics-page'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
 
 export const Route = createFileRoute('/admin/analytics')({
   head: adminPageHead('Analytics'),
@@ -14,9 +15,11 @@ export const Route = createFileRoute('/admin/analytics')({
 
 function AnalyticsRoute() {
   return (
-    <Suspense fallback={<AnalyticsPageSkeleton />}>
-      <AnalyticsPage />
-    </Suspense>
+    <AdminPageGate page="/admin/analytics">
+      <Suspense fallback={<AnalyticsPageSkeleton />}>
+        <AnalyticsPage />
+      </Suspense>
+    </AdminPageGate>
   )
 }
 

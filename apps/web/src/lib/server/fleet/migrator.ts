@@ -77,7 +77,12 @@
 import postgres from 'postgres'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { runMigrations, PooledDsnRefused, type MigrationStep } from '@quackback/db/migrate'
+import {
+  DEFAULT_MIGRATE_LOCK_TIMEOUT_MS,
+  runMigrations,
+  PooledDsnRefused,
+  type MigrationStep,
+} from '@quackback/db/migrate'
 import { connectSessionMode, SessionModeDsnError } from './session-dsn'
 import {
   BUNDLED_MIGRATIONS,
@@ -170,23 +175,6 @@ export interface MigrateWorkspaceOptions {
    */
   directConnectionString?: string
 }
-
-/**
- * How long the lineage will wait for a table lock before giving up.
- *
- * Set here rather than left off, because the migrator runs against workspaces whose
- * worker tier is live. `0250_job_queue` needs ACCESS EXCLUSIVE on `job_queue` to
- * replace its wake trigger, and the job poller holds ROW EXCLUSIVE on that table
- * more or less continuously — measured against the live fleet, that pair
- * deadlocks rather than queues, because the migration transaction is upgrading a
- * lock it already holds. Bounding the wait turns an unbounded stall into a
- * `55P03` that rolls the whole lineage back and is retried by the lease.
- *
- * 30 s is comfortably above the incidental waits a healthy workspace produces and
- * well below the default lease, so a timeout is a diagnosis rather than a lost
- * claim.
- */
-export const DEFAULT_MIGRATE_LOCK_TIMEOUT_MS = 30_000
 
 /**
  * Which bundled migrations drizzle would execute against this ledger.

@@ -49,6 +49,7 @@ vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
   fetchWidgetConfig: stub('widgetConfig', {}),
   fetchWorkflowAbandonedAutoCloseFn: stub('abandonedAutoClose', {}),
   fetchWorkflowCloseSpamFn: stub('closeSpam', {}),
+  fetchConversationRoutingFn: stub('routing', {}),
 }))
 vi.mock('@/lib/server/functions/entitlement-status', () => ({
   hasEntitlementFn: () => Promise.resolve(true),
@@ -124,18 +125,19 @@ describe('AI & Automation loaders', () => {
     expect(warmed).toEqual(['connectors', 'settings', 'tools'])
   })
 
-  it('/admin/settings/workflows warms the list and both toggles', async () => {
+  it('/admin/settings/workflows warms the list and every switch', async () => {
     const { warmed, afterMount } = await fetchesAfterLoader(
       '@/routes/admin/settings.workflows',
       () => {
         useQuery(workflowsQuery())
-        useQuery(settingsQueries.widgetConfig())
         useQuery(settingsQueries.workflowAbandonedAutoClose())
         useQuery(settingsQueries.workflowCloseSpam())
-      }
+        useQuery(settingsQueries.conversationRouting())
+      },
+      { permissions: ['workflow.manage', 'routing.manage'] }
     )
     expect(afterMount).toEqual([])
-    expect(warmed).toEqual(['abandonedAutoClose', 'closeSpam', 'widgetConfig', 'workflows'])
+    expect(warmed).toEqual(['abandonedAutoClose', 'closeSpam', 'routing', 'workflows'])
   })
 
   it('/admin/settings/workflows skips the page reads when the page redirects away', async () => {

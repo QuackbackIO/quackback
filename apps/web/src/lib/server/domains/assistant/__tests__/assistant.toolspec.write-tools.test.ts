@@ -592,6 +592,21 @@ describe('capture_feedback', () => {
     expect(out).toEqual({ created: true, postId: 'post_1' })
   })
 
+  it('hands the model a neutral note when the board is read-only', async () => {
+    const { BoardReadOnlyError } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.board-guard')
+    mockCreatePostFromConversation.mockRejectedValue(new BoardReadOnlyError())
+    const c = ctx({
+      conversationId: 'conversation_1' as never,
+      assistantPrincipalId: 'principal_assistant' as never,
+    })
+    const out = await spec.execute(
+      { boardId: 'board_01h455vb4pex5vsknk084sn02q', title: 'Add dark mode' },
+      c
+    )
+    expect(out).toEqual({ created: false, note: "This board isn't taking new feedback right now." })
+  })
+
   it('fails gracefully on a malformed board id instead of calling the service', async () => {
     const c = ctx({
       conversationId: 'conversation_1' as never,
