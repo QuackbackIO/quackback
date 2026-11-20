@@ -49,6 +49,17 @@ vi.mock('@/lib/server/domains/status/status.service', () => ({
   }),
 }))
 
+vi.mock('@/lib/server/events/segment-scheduler', () => ({
+  segmentEvaluationSchedules: vi.fn(async () => [
+    { key: 'seg_a', cron: '0 * * * *', payload: { segmentId: 'seg_a' } },
+    { key: 'seg_b', cron: '0 * * * *', payload: { segmentId: 'seg_b' } },
+  ]),
+  runSegmentEvaluation: vi.fn(async (job: { payload: { segmentId: string } }) => {
+    calls.push({ job: `segment-evaluation:${job.payload.segmentId}` })
+    if (job.payload.segmentId === 'seg_b') throw new Error('Segment seg_b not found')
+  }),
+}))
+
 import { E2E_SWEEP_NAMES, runE2eSweep } from '../sweeps'
 
 beforeEach(() => {
@@ -143,6 +154,24 @@ describe('runE2eSweep', () => {
     const refused = await runE2eSweep({ job: 'analytics-refresh', asOf: '2030-01-01T00:00:00Z' })
     expect(refused).toMatchObject({ ok: false, status: 400 })
     expect(calls).toHaveLength(1)
+  })
+
+  it('runs segment evaluation for every scheduled segment and reports failures', async () => {
+    const outcome = await runE2eSweep({ job: 'segment-evaluation' })
+    expect(outcome).toMatchObject({
+      ok: true,
+      job: 'segment-evaluation',
+      result: {
+        evaluated: ['seg_a'],
+        failed: [{ segmentId: 'seg_b', error: 'Segment seg_b not found' }],
+      },
+    })
+    expect(calls.map((c) => c.job)).toEqual([
+      'segment-evaluation:seg_a',
+      'segment-evaluation:seg_b',
+    ])
+    const refused = await runE2eSweep({ job: 'segment-evaluation', asOf: '2030-01-01T00:00:00Z' })
+    expect(refused).toMatchObject({ ok: false, status: 400 })
   })
 
   it('lists the sweeps it accepts and never the one-shot queues', () => {

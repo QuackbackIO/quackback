@@ -625,3 +625,62 @@ no such part beyond the wrong notification).
   with Previous/Next and no results. Fix: return the keys explicitly
   (`kind: undefined`, `page: undefined`), as `routes/admin/analytics.tsx`
   does for `section`. owner: unassigned, review by: 2026-12-03.
+
+### Product suite: people (segments)
+
+- `people/segments.spec.ts` › dynamic evaluation › PPL-G-06 vote and comment
+  count rules match people who voted and commented. Product bug:
+  `activityCountSql` counts rows in tables named `votes` and `comments`
+  (`apps/web/src/lib/server/domains/segments/segment.evaluation.ts:154`,
+  `:156`, `:275`, `:281`), which do not exist (`post_votes`,
+  `post_comments`), so every evaluation of a segment with a `vote_count` or
+  `comment_count` rule fails with a server error ("relation \"comments\" does
+  not exist"). The seeded "Active Users" segment has both rules, so it can
+  never be evaluated. Fix: pass `post_votes` and `post_comments`. owner:
+  unassigned, review by: 2026-12-03.
+- `people/segments.serial.spec.ts` › PPL-G-50 evaluate every dynamic segment
+  at once. Product bug: `evaluateAllDynamicSegments` evaluates one segment
+  after another with no per-segment catch
+  (`apps/web/src/lib/server/domains/segments/segment.evaluation.ts:469`), and
+  the seeded "Active Users" segment always fails (the bug above), so
+  `evaluateAllSegmentsFn` answers a server error in every seeded workspace
+  and later segments are never evaluated. Fix: the table names above; also
+  catch per segment and report failures. owner: unassigned, review by:
+- `people/segments.spec.ts` › REST segment members › PPL-G-28 removing a
+  non-member is not counted as a removal. Product bug: DELETE
+  `/api/v1/segments/:slug/members` counts every settled `removeMember` call
+  (`apps/web/src/routes/api/v1/segments/$slug.members.ts:153`), including
+  people who held no row, so `removed` overstates (and each no-op writes a
+  `segment.member.removed` audit row). Fix: have `removeMember` return
+  whether a row was deleted and count those. owner: unassigned, review by:
+- `people/segments.spec.ts` › REST segment members › PPL-G-30 a body that is
+  not JSON is a 400, not a server error. Product bug: `request.json()`
+  throws a `SyntaxError` that the route does not map
+  (`apps/web/src/routes/api/v1/segments/$slug.members.ts:71`, `:124`), so
+  `handleDomainError` answers 500 `INTERNAL_ERROR`. Fix: catch the parse
+  error and answer `badRequestResponse('Invalid JSON body')`. owner:
+  unassigned, review by: 2026-12-03.
+- `people/segments.spec.ts` › segment rules and lifecycle (nightly) ›
+  PPL-G-11 a matching member held by another source is not counted as added
+  again. Product bug: evaluation diffs only `added_by='dynamic'` rows
+  (`apps/web/src/lib/server/domains/segments/segment.evaluation.ts:431`), so
+  a matching person whose row is `api` or `widget` is reported in `added` on
+  every run though the insert is a no-op. Fix: diff against every row of the
+  segment, or count the rows the insert actually wrote (`returning`). owner:
+  unassigned, review by: 2026-12-03.
+- `people/segments.spec.ts` › segment rules and lifecycle (nightly) ›
+  PPL-G-13 a schedule the scheduler cannot parse is refused on save. Product
+  bug: `CRON_REGEX` (`apps/web/src/lib/server/functions/admin.ts:1186`)
+  accepts patterns such as `99 99 * * *` that `parseCron` rejects; the
+  segment saves, the scheduler only logs, and the segment never
+  auto-evaluates with no error to the caller. Fix: validate with `parseCron`
+  in the zod refinement. owner: unassigned, review by: 2026-12-03.
+- `people/segments.spec.ts` › segment rules and lifecycle (nightly) ›
+  PPL-G-15 clearing a dynamic segment's rules is refused and keeps its
+  members. Product bug: `updateSegment` writes `rules: null` on a dynamic
+  segment (`apps/web/src/lib/server/domains/segments/segment.service.ts:217`)
+  although create refuses a dynamic segment without rules; the next
+  evaluation removes every member (and queues removals for user-sync
+  integrations). Fix: in `updateSegment`, refuse `rules` that are null or have
+  no conditions when `existing.type === 'dynamic'`. owner: unassigned, review
+  by: 2026-12-03.

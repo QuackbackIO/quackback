@@ -127,6 +127,32 @@ const SWEEPS: Record<string, SweepEntry> = {
       return { notified: await reconcileStatusNotifications() }
     },
   },
+  // One pass of the segment-evaluation queue: every dynamic segment the
+  // scheduler would schedule now (enabled, parseable pattern), each run
+  // through the queue's own handler. Segments it leaves out are not run.
+  'segment-evaluation': {
+    asOf: false,
+    run: async () => {
+      const { segmentEvaluationSchedules, runSegmentEvaluation } =
+        await import('@/lib/server/events/segment-scheduler')
+      const evaluated: string[] = []
+      const failed: Array<{ segmentId: string; error: string }> = []
+      for (const schedule of await segmentEvaluationSchedules()) {
+        const segmentId = String((schedule.payload as { segmentId: string }).segmentId)
+        try {
+          // The handler reads only the payload of the job it is given.
+          const job = { payload: { segmentId } } as unknown as Parameters<
+            typeof runSegmentEvaluation
+          >[0]
+          await runSegmentEvaluation(job)
+          evaluated.push(segmentId)
+        } catch (err) {
+          failed.push({ segmentId, error: err instanceof Error ? err.message : String(err) })
+        }
+      }
+      return { evaluated, failed }
+    },
+  },
 }
 
 /** The sweeps the runner accepts, for the refusal message and the tests. */
