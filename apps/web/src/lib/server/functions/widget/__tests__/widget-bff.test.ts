@@ -70,6 +70,7 @@ const hoisted = vi.hoisted(() => {
     countPublicArticleView: vi.fn(),
     listPublicArticles: vi.fn(),
     resolveHelpPublicReader: vi.fn(),
+    resolveHelpPublicViewer: vi.fn(),
     serializeCategory: vi.fn((c: unknown) => c),
     serializeArticle: vi.fn((a: unknown) => a),
   }
@@ -137,6 +138,7 @@ vi.mock('@/lib/server/functions/user', () => ({
 vi.mock('@/lib/server/functions/help-center', () => ({
   assertHelpCenterOpenToRequest: vi.fn(async () => undefined),
   resolveHelpPublicReader: hoisted.run.resolveHelpPublicReader,
+  resolveHelpPublicViewer: hoisted.run.resolveHelpPublicViewer,
   serializeCategory: hoisted.run.serializeCategory,
   serializeArticle: hoisted.run.serializeArticle,
 }))
@@ -234,6 +236,7 @@ beforeEach(() => {
   )
   hoisted.getOptionalAuth.mockResolvedValue(null)
   hoisted.run.resolveHelpPublicReader.mockResolvedValue({ principalId: 'principal_widget' })
+  hoisted.run.resolveHelpPublicViewer.mockResolvedValue({ principalId: 'principal_widget' })
   hoisted.run.serializeCategory.mockImplementation((c: unknown) => c)
   hoisted.run.serializeArticle.mockImplementation((a: unknown) => a)
   for (const fn of Object.values(hoisted.run)) {
