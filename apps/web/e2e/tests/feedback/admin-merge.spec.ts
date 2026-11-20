@@ -12,6 +12,7 @@ import { createRole } from '../../support/access'
 import { bellsFor } from '../../support/bells'
 import { emailLogFor, mailTo, waitForMail } from '../../support/mailpit'
 import { runSweep } from '../../support/sweeps'
+import { waitForHydration } from '../../utils/helpers'
 import { bodyOf, deliveriesOf, hooksApi, subscribe, unsubscribe } from '../../support/webhooks'
 import {
   inboxTitles,
@@ -70,8 +71,8 @@ test(
       expect(dupRow?.merged_by_principal_id).toBe(uuid(people.people.admin.principalId))
       // Distinct people across both posts: the admin (author of both), and the two customers.
       await expect.poll(async () => (await postRow(canonical.id))?.vote_count).toBe(3)
-      expect(await activityTypes(canonical.id)).toContain('post.merged_in')
-      expect(await activityTypes(duplicate.id)).toContain('post.merged_away')
+      await expect.poll(() => activityTypes(canonical.id)).toContain('post.merged_in')
+      await expect.poll(() => activityTypes(duplicate.id)).toContain('post.merged_away')
 
       const [delivery] = await deliveriesOf(marker, 'post.merged', duplicate.id)
       const data = bodyOf<{
@@ -124,10 +125,11 @@ test(
       await expect(admin.getByText('Merged 2 posts')).toBeVisible()
       for (const p of [one, two]) {
         expect((await postRow(p.id))?.canonical_post_id).toBe(uuid(canonical.id))
-        expect(await activityTypes(p.id)).toContain('post.merged_away')
+        await expect.poll(() => activityTypes(p.id)).toContain('post.merged_away')
       }
-      const mergedIn = (await activityTypes(canonical.id)).filter((t) => t === 'post.merged_in')
-      expect(mergedIn).toHaveLength(2)
+      const mergedIn = async () =>
+        (await activityTypes(canonical.id)).filter((t) => t === 'post.merged_in').length
+      await expect.poll(mergedIn).toBe(2)
       await openPost(admin, canonical.id, canonical.title)
       await expect(admin.getByText('Merged Feedback (2)')).toBeVisible()
     } finally {
@@ -174,8 +176,8 @@ test(
       expect(row?.merged_by_principal_id).toBeNull()
       expect(row?.vote_count).toBe(2)
       await expect.poll(async () => (await postRow(canonical.id))?.vote_count).toBe(1)
-      expect(await activityTypes(canonical.id)).toContain('post.unmerged')
-      expect(await activityTypes(duplicate.id)).toContain('post.unmerged')
+      await expect.poll(() => activityTypes(canonical.id)).toContain('post.unmerged')
+      await expect.poll(() => activityTypes(duplicate.id)).toContain('post.unmerged')
       const [delivery] = await deliveriesOf(marker, 'post.unmerged', duplicate.id)
       const data = bodyOf<{ post: { id: string }; formerCanonicalPost: { id: string } }>(
         delivery
@@ -358,10 +360,14 @@ test(
       await expect(dialog.getByText('Similar posts')).toBeVisible()
       await expect(dialog.getByText(`${marker} same ask`)).toBeVisible()
 
-      const thirdRow = dialog
-        .locator('div:visible', { hasText: third.title })
-        .filter({ has: admin.getByRole('button', { name: 'Dismiss' }) })
-        .last()
+      // The AI check may add its own suggestions between these posts: act on rows by title.
+      const cardRow = (title: string) =>
+        dialog
+          .locator('div:visible', { hasText: title })
+          .filter({ has: admin.getByRole('button', { name: 'Dismiss' }) })
+          .last()
+      const thirdRow = cardRow(third.title)
+      await waitForHydration(thirdRow.getByRole('button', { name: 'Dismiss' }))
       await thirdRow.getByRole('button', { name: 'Dismiss' }).click()
       await expect(admin.getByText('Suggestion dismissed')).toBeVisible()
       await expect.poll(async () => (await suggestionRow(dismissed)).status).toBe('dismissed')
@@ -370,7 +376,7 @@ test(
       )
       expect((await suggestionRow(first)).status).toBe('pending')
 
-      await dialog.locator('button[aria-label="Merge"]:visible').click()
+      await cardRow(other.title).locator('button[aria-label="Merge"]').click()
       await admin.getByRole('menuitem', { name: 'Merge into this' }).click()
       await expect(admin.getByText('Posts merged')).toBeVisible()
       await expect
@@ -382,16 +388,18 @@ test(
       // Merge into that: the open post goes into the other one.
       await seedSuggestion(fourth.id, third.id)
       await openPost(admin, third.id, third.title)
-      await dialog.locator('button[aria-label="Merge"]:visible').click()
+      const fourthRow = cardRow(fourth.title)
+      await waitForHydration(fourthRow.locator('button[aria-label="Merge"]'))
+      await fourthRow.locator('button[aria-label="Merge"]').click()
       await admin.getByRole('menuitem', { name: 'Merge into that' }).click()
       await expect(admin.getByText('Posts merged')).toBeVisible()
       await expect
         .poll(async () => (await postRow(third.id))?.canonical_post_id)
         .toBe(uuid(fourth.id))
 
-      // No pending suggestion left: no card.
+      // The resolved pair is gone from the card (other AI suggestions may remain).
       await openPost(admin, fourth.id, fourth.title)
-      await expect(dialog.getByText('Similar posts')).toHaveCount(0)
+      await expect(cardRow(third.title)).toHaveCount(0)
     } finally {
       await api.dispose()
     }
