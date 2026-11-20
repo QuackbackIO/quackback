@@ -23,7 +23,6 @@ import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import {
   dispatchPostDeleted,
   dispatchPostRestored,
-  dispatchPostUpdated,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
@@ -31,10 +30,7 @@ import type { UserEditPostInput } from './post.types'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { authorWindow } from './post.author-window'
-import { extractMentions, extractMentionExcerpts } from './extract-mentions'
-import { syncPostMentions } from './sync-post-mentions'
-import { buildPostUrl } from '@/lib/server/integrations/message-utils'
-import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { announceAuthorEdit } from './post.author-edit-announce'
 import { contentHoldReason } from '@/lib/server/content/content-holds'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
@@ -71,65 +67,6 @@ async function getPortalConfig(): Promise<PortalConfig> {
       ...DEFAULT_PORTAL_CONFIG.moderationDefault,
       ...(config?.moderationDefault ?? {}),
     },
-  }
-}
-
-/**
- * After an edit of a published post: `post.updated` for webhooks and
- * integrations, and the @-mention reconcile (new mentions notified, removed
- * ones dropped). The edit is already saved, so a failure here is logged, not
- * thrown back at the author.
- */
-async function announceAuthorEdit(
-  updated: Post,
-  before: Post,
-  actor: { principalId: PrincipalId }
-): Promise<void> {
-  try {
-    const board = await db.query.boards.findFirst({
-      where: eq(boards.id, updated.boardId),
-      columns: { id: true, slug: true },
-    })
-    if (!board) return
-    // Named from the author's principal, as post.deleted names its deleter,
-    // so webhook and integration consumers see who edited.
-    const editor = await db.query.principal.findFirst({
-      where: eq(principal.id, actor.principalId),
-      columns: { userId: true, displayName: true },
-      with: { user: { columns: { name: true, email: true } } },
-    })
-    const eventActor = buildEventActor({
-      principalId: actor.principalId,
-      userId: editor?.userId ?? undefined,
-      email: editor?.user?.email ?? undefined,
-      displayName: editor?.displayName ?? editor?.user?.name ?? undefined,
-    })
-    const changedFields: string[] = []
-    if (updated.title !== before.title) changedFields.push('title')
-    if (
-      updated.content !== before.content ||
-      JSON.stringify(updated.contentJson) !== JSON.stringify(before.contentJson)
-    )
-      changedFields.push('content')
-    if (changedFields.length > 0) {
-      dispatchPostUpdated(
-        eventActor,
-        { id: updated.id, title: updated.title, boardId: board.id, boardSlug: board.slug },
-        changedFields
-      )
-    }
-    const contentJson = updated.contentJson
-    await syncPostMentions({
-      postId: updated.id,
-      postTitle: updated.title,
-      postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updated.id),
-      boardId: updated.boardId,
-      mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
-      excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
-      actor: eventActor,
-    })
-  } catch (err) {
-    log.error({ err, post_id: updated.id }, 'announce author edit failed')
   }
 }
 
