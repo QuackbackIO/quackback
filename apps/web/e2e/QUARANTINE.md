@@ -709,3 +709,12 @@ no such part beyond the wrong notification).
   the same action (PPL-T-37). Fix: pass the key's creator principal as the
   acting principal for personal keys. owner: unassigned, review by:
   2026-12-03.
+- `people/portal-account.spec.ts` › profile › PPL-ACC-14 saving someone
+  else's uploaded avatar key is refused. Product bug: `saveAvatarKeyFn` only
+  checks that the key starts with `avatars/` and has no `..`
+  (`apps/web/src/lib/server/functions/user.ts:44`), so any signed-in person
+  can point their avatar at another person's object, and a later
+  `removeAvatarFn` (`user.ts:222`, via `deleteExistingAvatar`) deletes that
+  object from storage. Fix: issue avatar keys per user (for example
+  `avatars/<userId>/...` from `getAvatarUploadUrlFn`) and refuse a key outside
+  the caller's prefix. owner: unassigned, review by: 2026-12-03.
