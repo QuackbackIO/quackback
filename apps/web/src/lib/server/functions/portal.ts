@@ -14,7 +14,7 @@ import {
 import type { BoardAccess } from '@/lib/server/db'
 // Pure helper + its type, imported through the client-safe re-export so suites
 // that mock '@/lib/server/db' don't have to stub them.
-import { resolveReplyPolicy, type ReplyPolicy } from '@/lib/shared/db-types'
+import { resolveReplyPolicy, type BoardCustomField, type ReplyPolicy } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy'
 import {
   getOptionalAuth,
@@ -879,11 +879,7 @@ export const runFetchBoardCapabilities = createServerOnlyFn(
       permissions: await buildBoardPermissions(actor, boards, allowAnonymous),
       // Same visitor-visible list as the permissions map, so identify can
       // surface segment/members boards the anonymous SSR seed omitted.
-      boards: boards.map((board): WidgetVisibleBoard => ({
-        id: String(board.id),
-        name: board.name,
-        slug: board.slug,
-      })),
+      boards: boards.map(toWidgetVisibleBoard),
     }
   }
 )
@@ -895,7 +891,29 @@ export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handle
   return runFetchBoardCapabilities(await getOptionalAuth())
 })
 
-export type WidgetVisibleBoard = { id: string; name: string; slug: string }
+export type WidgetVisibleBoard = {
+  id: string
+  name: string
+  slug: string
+  /** The board's intake fields, sent only when it declares some. */
+  customFields?: BoardCustomField[]
+}
+
+/** A board as the widget composer lists it, with the fields its form asks for. */
+export function toWidgetVisibleBoard(board: {
+  id: string
+  name: string
+  slug: string
+  settings?: { customFields?: BoardCustomField[] } | null
+}): WidgetVisibleBoard {
+  const customFields = board.settings?.customFields ?? []
+  return {
+    id: String(board.id),
+    name: board.name,
+    slug: board.slug,
+    ...(customFields.length > 0 ? { customFields } : {}),
+  }
+}
 
 // The first page of several columns of one board, under the same filters.
 const getPublicRoadmapColumnsSchema = getPublicRoadmapPostsSchema

@@ -45,6 +45,8 @@
   "widget.home.form.errorSession": "สร้างเซสชันไม่ได้ กรุณาลองอีกครั้ง",
   "widget.home.form.errorNetwork": "เครือข่ายขัดข้อง กรุณาลองอีกครั้ง",
   "widget.home.form.noAccess": "คุณไม่มีสิทธิโพสต์ในบอร์ดนี้",
+  "widget.home.form.fieldRequired": "จำเป็นต้องกรอก",
+  "widget.home.form.fieldInvalid": "โปรดตรวจสอบคำตอบนี้",
   "widget.home.similar.heading": "โพสต์ที่คล้ายกัน",
   "widget.home.popular.heading": "โพสต์ยอดนิยม",
   "widget.home.popular.search.placeholder": "ค้นหาโพสต์...",

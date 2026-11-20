@@ -44,6 +44,8 @@
   "widget.home.form.errorSession": "Не вдалося створити сеанс. Спробуйте ще раз.",
   "widget.home.form.errorNetwork": "Помилка мережі. Спробуйте ще раз.",
   "widget.home.form.noAccess": "У вас немає доступу до публікації на цій дошці",
+  "widget.home.form.fieldRequired": "Обов'язково",
+  "widget.home.form.fieldInvalid": "Перевірте цю відповідь",
   "widget.home.similar.heading": "Схожі дописи",
   "widget.home.popular.heading": "Популярні дописи",
   "widget.home.popular.search.placeholder": "Пошук дописів...",

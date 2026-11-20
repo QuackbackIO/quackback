@@ -44,6 +44,8 @@
   "widget.home.form.errorSession": "Não foi possível criar a sessão. Tente novamente.",
   "widget.home.form.errorNetwork": "Erro de rede. Tente novamente.",
   "widget.home.form.noAccess": "Você não tem acesso para publicar neste quadro",
+  "widget.home.form.fieldRequired": "Obrigatório",
+  "widget.home.form.fieldInvalid": "Confira esta resposta",
   "widget.home.similar.heading": "Posts semelhantes",
   "widget.home.popular.heading": "Posts populares",
   "widget.home.popular.search.placeholder": "Pesquisar posts...",

@@ -44,6 +44,8 @@
   "widget.home.form.errorSession": "Could not create session. Please try again.",
   "widget.home.form.errorNetwork": "Network error. Please try again.",
   "widget.home.form.noAccess": "You don't have access to post on this board",
+  "widget.home.form.fieldRequired": "Required",
+  "widget.home.form.fieldInvalid": "Check this answer",
   "widget.home.similar.heading": "Similar posts",
   "widget.home.popular.heading": "Popular posts",
   "widget.home.popular.search.placeholder": "Search posts...",

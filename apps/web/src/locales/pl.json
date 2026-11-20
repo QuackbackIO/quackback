@@ -44,6 +44,8 @@
   "widget.home.form.errorSession": "Nie udało się utworzyć sesji. Spróbuj ponownie.",
   "widget.home.form.errorNetwork": "Błąd sieci. Spróbuj ponownie.",
   "widget.home.form.noAccess": "Nie masz uprawnień do publikowania na tej tablicy",
+  "widget.home.form.fieldRequired": "Wymagane",
+  "widget.home.form.fieldInvalid": "Sprawdź tę odpowiedź",
   "widget.home.similar.heading": "Podobne wpisy",
   "widget.home.popular.heading": "Popularne wpisy",
   "widget.home.popular.search.placeholder": "Szukaj wpisów...",

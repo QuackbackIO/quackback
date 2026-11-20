@@ -56,6 +56,8 @@ import {
   type WidgetComposeRequest,
 } from './widget-compose'
 import { shownName } from '@/lib/shared/greeting-name'
+import type { BoardCustomField } from '@/lib/shared/db-types'
+import { useBoardFieldAnswers, WidgetBoardFields } from './widget-board-fields'
 
 interface WidgetPost {
   id: string
@@ -87,6 +89,8 @@ interface BoardInfo {
   id: string
   name: string
   slug: string
+  /** Intake fields the board asks for with each post. */
+  customFields?: BoardCustomField[]
 }
 
 export interface WidgetHomeProps {
@@ -546,6 +550,10 @@ export function WidgetHomeAnimated({
   const [selectedBoardId, setSelectedBoardId] = useState(() =>
     resolveComposeBoardId(boards, undefined, defaultBoard)
   )
+  const fieldAnswers = useBoardFieldAnswers(
+    boards.find((b) => b.id === selectedBoardId)?.customFields,
+    selectedBoardId
+  )
   const composeBoardDirtyRef = useRef(false)
   const handleComposeBoardChange = useCallback((id: string) => {
     composeBoardDirtyRef.current = true
@@ -809,12 +817,15 @@ export function WidgetHomeAnimated({
     detailsRef.current = null
     setEditorContent(null)
     setError(null)
+    fieldAnswers.reset()
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const typedTitle = title.get()
     if (!typedTitle.trim() || !selectedBoardId || isSubmitting) return
+    // The server refuses a post without the board's required answers.
+    if (canPost && !fieldAnswers.check()) return
 
     setIsSubmitting(true)
     setError(null)
@@ -873,6 +884,7 @@ export function WidgetHomeAnimated({
           content: (details?.html() ?? '').trim(),
           contentJson: details?.json() as TiptapContent | undefined,
           metadata: metadata ?? undefined,
+          ...fieldAnswers.payload,
         },
         headers,
       })
@@ -1055,6 +1067,8 @@ export function WidgetHomeAnimated({
                       />
                     </Suspense>
                   </m.div>
+
+                  <WidgetBoardFields answers={fieldAnswers} />
 
                   <SimilarIdeas
                     title={title}
