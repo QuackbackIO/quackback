@@ -91,6 +91,7 @@ vi.mock('@/lib/server/domains/changelog/changelog-category.service', () => ({
 }))
 
 import { changelogEntries } from '@/lib/server/db'
+import { getSettingsBrandingData } from '@/lib/server/settings-utils'
 import { Route } from '../feed'
 
 type Handlers = { GET: (args: { request: Request }) => Promise<Response> }
@@ -191,5 +192,31 @@ describe('changelog RSS feed links', () => {
     expect(xml).toContain('<link>https://news.acme.com/</link>')
     expect(xml).toContain(`https://news.acme.com/changelog/${ENTRY_A}`)
     expect(xml).not.toContain('https://t.example')
+  })
+})
+
+describe('changelog RSS feed escaping', () => {
+  it('CHG-F-04 escapes XML-significant characters in titles, descriptions and the channel', async () => {
+    const title = `Fix <b> & "quotes" 'apos'`
+    const content = `1 < 2 & "q" 'a' > 0`
+    vi.mocked(getSettingsBrandingData).mockResolvedValueOnce({
+      name: `Tom & Jerry's <Co>`,
+    } as Awaited<ReturnType<typeof getSettingsBrandingData>>)
+    mockSelectLimit.mockResolvedValueOnce([{ ...entryRow(ENTRY_A), title, content }])
+
+    const xml = await fetchFeed()
+
+    expect(xml).toContain('<title>Fix &lt;b&gt; &amp; &quot;quotes&quot; &apos;apos&apos;</title>')
+    expect(xml).toContain(
+      '<description>1 &lt; 2 &amp; &quot;q&quot; &apos;a&apos; &gt; 0</description>'
+    )
+    expect(xml).toContain('<title>Tom &amp; Jerry&apos;s &lt;Co&gt; Changelog</title>')
+    expect(xml).not.toContain(title)
+
+    // Well-formed: parses without error and the text round-trips.
+    const doc = new DOMParser().parseFromString(xml, 'application/xml')
+    expect(doc.getElementsByTagName('parsererror')).toHaveLength(0)
+    expect(doc.querySelector('item > title')?.textContent).toBe(title)
+    expect(doc.querySelector('item > description')?.textContent).toBe(content)
   })
 })
