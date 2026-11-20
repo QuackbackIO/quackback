@@ -741,3 +741,12 @@ no such part beyond the wrong notification).
   auth.manage at consume time, and delete them on removal or demotion
   (emitting the declared `sso.recovery_codes.invalidated`). owner:
   unassigned, review by: 2026-12-03.
+- `people/auth-invites.spec.ts` › PPL-AUTH-201 accepting, then revisiting, an
+  invite lands on the portal. Product bug (new): the invite page's loader
+  re-throws redirects only when `'isRedirect' in err`
+  (`apps/web/src/routes/portal-invite.$inviteId.tsx:53`), but the router's
+  `redirect()` is a `Response` carrying `options` and no `isRedirect`
+  property, so the redirect to `/` after a successful accept (and on every
+  revisit) is swallowed and the invitee sees "Something went wrong". The
+  invite is accepted all the same. Fix: use the router's `isRedirect(err)`.
+  owner: unassigned, review by: 2026-12-03.
