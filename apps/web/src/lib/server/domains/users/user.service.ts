@@ -46,6 +46,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { notTestPrincipal } from '@/lib/server/test-data'
+import { withdrawThreadVotes } from '@/lib/server/domains/posts/post.merge-ids'
 import { EXTERNAL_ID_KEY } from '@/lib/server/domains/users/user.attributes'
 
 const log = logger.child({ component: 'users' })
@@ -512,6 +513,9 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
           })
           .where(eq(user.id, userId))
       }
+      // Their votes cascade away with the principal; the stored counts on the
+      // posts they voted on drop with them.
+      await withdrawThreadVotes(tx, principalId)
       // Delete principal record (user record is retained; the FK cascades the
       // other way, from user to principal)
       await tx.delete(principal).where(eq(principal.id, principalId))

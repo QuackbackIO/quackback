@@ -1183,12 +1183,11 @@ const segmentRulesSchema = z.object({
   conditions: z.array(segmentConditionSchema),
 })
 
-const CRON_REGEX =
-  /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)(\s+(\*|[0-9,\-/]+))?$/
-
+// The pattern is checked against the scheduler's own cron parser in the
+// segment service, which keeps that parser out of the client bundle.
 const evaluationScheduleSchema = z.object({
   enabled: z.boolean(),
-  pattern: z.string().min(1).regex(CRON_REGEX, 'Must be a valid cron expression'),
+  pattern: z.string().min(1),
 })
 
 const userAttributeDefinitionSchema = z.object({
@@ -1404,7 +1403,10 @@ export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(
   log.info('evaluate all segments')
   await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
   const results = await evaluateAllDynamicSegments()
-  log.info({ count: results.length }, 'all segments evaluated')
+  log.info(
+    { count: results.length, failed: results.filter((r) => 'error' in r).length },
+    'all segments evaluated'
+  )
   return results
 })
 

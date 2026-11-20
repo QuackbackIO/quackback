@@ -105,7 +105,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
           settled.forEach((r, i) => {
             if (r.status === 'rejected') failed.push(String(valid[i]))
           })
-          const added = settled.filter((r) => r.status === 'fulfilled').length
+          const added = settled.filter((r) => r.status === 'fulfilled' && r.value).length
 
           return successResponse({ added, failed })
         } catch (error) {
@@ -153,7 +153,8 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
           settled.forEach((r, i) => {
             if (r.status === 'rejected') failed.push(String(valid[i]))
           })
-          const removed = settled.filter((r) => r.status === 'fulfilled').length
+          // A person who held no row was not removed.
+          const removed = settled.filter((r) => r.status === 'fulfilled' && r.value).length
 
           return successResponse({ removed, failed })
         } catch (error) {

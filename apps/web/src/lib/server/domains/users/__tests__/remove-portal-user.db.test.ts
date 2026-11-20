@@ -230,6 +230,35 @@ describe.skipIf(!fixture.available)('removePortalUser (real DB, rolled back)', (
     expect(stillThere).toBeDefined()
   })
 
+  it('withdraws their votes from the post counts, on the canonical post of a merged thread', async () => {
+    const boardId = await seedBoard()
+    const author = await seedPortalUser('Author Abe')
+    const voter = await seedPortalUser('Voting Vera')
+    const voted = await seedPost(boardId, author.principalId, 'Voted idea')
+    const untouched = await seedPost(boardId, author.principalId, 'Untouched idea')
+    const canonical = await seedPost(boardId, author.principalId, 'Canonical idea')
+    const source = await seedPost(boardId, author.principalId, 'Merged duplicate')
+    await testDb.update(posts).set({ voteCount: 3 }).where(eq(posts.id, voted))
+    await testDb.update(posts).set({ voteCount: 4 }).where(eq(posts.id, untouched))
+    await testDb.update(posts).set({ voteCount: 2 }).where(eq(posts.id, canonical))
+    await testDb.update(posts).set({ canonicalPostId: canonical }).where(eq(posts.id, source))
+    await testDb.insert(postVotes).values([
+      { postId: voted, principalId: voter.principalId },
+      // A vote cast before the merge stays on the source; the thread's count
+      // lives on the canonical post.
+      { postId: source, principalId: voter.principalId },
+    ])
+
+    await removePortalUser(voter.principalId)
+
+    const count = async (id: PostId) =>
+      (await testDb.select({ n: posts.voteCount }).from(posts).where(eq(posts.id, id)))[0].n
+    expect(await count(voted)).toBe(2)
+    expect(await count(untouched)).toBe(4)
+    expect(await count(canonical)).toBe(1)
+    expect(await count(source)).toBe(0)
+  })
+
   it('releases widget external_id so a later identify cannot resurrect the husk', async () => {
     const author = await seedPortalUser('Widget Wendy')
     await testDb
