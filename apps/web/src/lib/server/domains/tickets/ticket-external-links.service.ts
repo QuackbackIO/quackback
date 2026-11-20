@@ -29,7 +29,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { ValidationError, ForbiddenError, ConflictError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
-import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
+import { assertTicketVisible } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
 import { noteUnlinked } from './ticket-external-links.unlink'
 
