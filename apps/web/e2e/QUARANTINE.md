@@ -894,3 +894,11 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   the same post/board/moderation join (or the list's denial rule) in
   `getUnreadCount`, or exclude rows whose post is deleted or no longer visible.
   owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-ai.spec.ts` › FBA-AI-08 the summary input leaves out private
+  team notes. Product bug: `generateAndSavePostSummary` selects every
+  non-deleted comment, private notes included, into the model input
+  (`apps/web/src/lib/server/domains/summary/summary.service.ts:149`), so
+  quotes from an internal note can surface in `keyQuotes`, which REST and MCP
+  return as `summaryJson`. Fix: add `eq(postComments.isPrivate, false)` (and
+  skip held comments) to that query. owner: unassigned, review by:
+  2026-12-03.
