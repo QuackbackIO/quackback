@@ -341,6 +341,13 @@ export async function createRoadmapColumn(input: CreateRoadmapColumnInput): Prom
   if (roadmap.type !== 'column') {
     throw new ValidationError('VALIDATION_ERROR', 'Date roadmaps cannot have status columns')
   }
+  const status = await db.query.postStatuses.findFirst({
+    where: and(eq(postStatuses.id, input.statusId), isNull(postStatuses.deletedAt)),
+    columns: { id: true },
+  })
+  if (!status) {
+    throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${input.statusId} not found`)
+  }
   const [column] = await db
     .insert(roadmapColumns)
     .values({
@@ -355,9 +362,17 @@ export async function createRoadmapColumn(input: CreateRoadmapColumnInput): Prom
   return column
 }
 
+/** A column by id, narrowed to one roadmap's columns when `roadmapId` is given. */
+function columnWhere(id: RoadmapColumnId, roadmapId?: RoadmapId) {
+  return roadmapId
+    ? and(eq(roadmapColumns.id, id), eq(roadmapColumns.roadmapId, roadmapId))
+    : eq(roadmapColumns.id, id)
+}
+
 export async function updateRoadmapColumn(
   id: RoadmapColumnId,
-  input: UpdateRoadmapColumnInput
+  input: UpdateRoadmapColumnInput,
+  roadmapId?: RoadmapId
 ): Promise<RoadmapColumn> {
   const [column] = await db
     .update(roadmapColumns)
@@ -368,7 +383,7 @@ export async function updateRoadmapColumn(
       ...(input.position !== undefined ? { position: input.position } : {}),
       updatedAt: new Date(),
     })
-    .where(eq(roadmapColumns.id, id))
+    .where(columnWhere(id, roadmapId))
     .returning()
   if (!column) {
     throw new NotFoundError('ROADMAP_COLUMN_NOT_FOUND', `Roadmap column ${id} not found`)
@@ -376,8 +391,11 @@ export async function updateRoadmapColumn(
   return column
 }
 
-export async function deleteRoadmapColumn(id: RoadmapColumnId): Promise<void> {
-  const deleted = await db.delete(roadmapColumns).where(eq(roadmapColumns.id, id)).returning()
+export async function deleteRoadmapColumn(
+  id: RoadmapColumnId,
+  roadmapId?: RoadmapId
+): Promise<void> {
+  const deleted = await db.delete(roadmapColumns).where(columnWhere(id, roadmapId)).returning()
   if (!deleted.length) {
     throw new NotFoundError('ROADMAP_COLUMN_NOT_FOUND', `Roadmap column ${id} not found`)
   }

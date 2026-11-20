@@ -24,7 +24,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/columns/$colum
       PATCH: async ({ request, params }) => {
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.ROADMAP_MANAGE })
-          parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
+          const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
           const columnId = parseTypeId<RoadmapColumnId>(
             params.columnId,
             'roadmap_col',
@@ -38,7 +38,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/columns/$colum
           }
           const { updateRoadmapColumn } =
             await import('@/lib/server/domains/roadmaps/roadmap.service')
-          return successResponse(await updateRoadmapColumn(columnId, parsed.data))
+          return successResponse(await updateRoadmapColumn(columnId, parsed.data, roadmapId))
         } catch (error) {
           return handleDomainError(error)
         }
@@ -46,7 +46,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/columns/$colum
       DELETE: async ({ request, params }) => {
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.ROADMAP_MANAGE })
-          parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
+          const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
           const columnId = parseTypeId<RoadmapColumnId>(
             params.columnId,
             'roadmap_col',
@@ -54,7 +54,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/columns/$colum
           )
           const { deleteRoadmapColumn } =
             await import('@/lib/server/domains/roadmaps/roadmap.service')
-          await deleteRoadmapColumn(columnId)
+          await deleteRoadmapColumn(columnId, roadmapId)
           return noContentResponse()
         } catch (error) {
           return handleDomainError(error)

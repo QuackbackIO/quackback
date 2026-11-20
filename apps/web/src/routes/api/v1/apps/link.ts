@@ -5,7 +5,7 @@ import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostId } from '@quackback/ids'
-import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
 
 const linkSchema = z.object({
   postId: z.string().min(1),
@@ -37,9 +37,11 @@ export const Route = createFileRoute('/api/v1/apps/link')({
           const parsed = linkSchema.safeParse(body)
 
           if (!parsed.success) {
-            return badRequestResponse('Invalid request body', {
-              errors: parsed.error.flatten().fieldErrors,
-            })
+            return withCors(
+              badRequestResponse('Invalid request body', {
+                errors: parsed.error.flatten().fieldErrors,
+              })
+            )
           }
 
           const postId = parseTypeId<PostId>(parsed.data.postId, 'post', 'post ID')
@@ -59,7 +61,7 @@ export const Route = createFileRoute('/api/v1/apps/link')({
 
           return appJsonResponse(result, 201)
         } catch (error) {
-          return handleDomainError(error)
+          return withCors(handleDomainError(error))
         }
       },
     },

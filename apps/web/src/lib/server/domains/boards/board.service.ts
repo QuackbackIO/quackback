@@ -182,7 +182,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
 export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise<Board> {
   // Get existing board
   const existingBoard = await db.query.boards.findFirst({
-    where: eq(boards.id, id),
+    where: and(eq(boards.id, id), isNull(boards.deletedAt)),
   })
   if (!existingBoard) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
@@ -320,7 +320,7 @@ export async function deleteBoard(id: BoardId): Promise<void> {
  */
 export async function getBoardById(id: BoardId): Promise<Board> {
   const board = await db.query.boards.findFirst({
-    where: eq(boards.id, id),
+    where: and(eq(boards.id, id), isNull(boards.deletedAt)),
   })
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)

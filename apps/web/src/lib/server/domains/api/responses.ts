@@ -177,7 +177,7 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   BOARD_NOT_FOUND: 'Board',
   POST_NOT_FOUND: 'Post',
   COMMENT_NOT_FOUND: 'Comment',
-  TAG_NOT_FOUND: 'PostTag',
+  TAG_NOT_FOUND: 'Tag',
   STATUS_NOT_FOUND: 'Status',
   MEMBER_NOT_FOUND: 'Member',
   USER_NOT_FOUND: 'User',

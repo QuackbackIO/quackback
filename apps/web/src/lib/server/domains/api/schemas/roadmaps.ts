@@ -324,13 +324,13 @@ registerPath('/roadmaps/{roadmapId}/posts', {
       {
         name: 'limit',
         in: 'query',
-        schema: { type: 'integer', default: 20, maximum: 100 },
+        schema: { type: 'integer', default: 20, minimum: 1, maximum: 100 },
         description: 'Items per page',
       },
       {
         name: 'offset',
         in: 'query',
-        schema: { type: 'integer', default: 0 },
+        schema: { type: 'integer', default: 0, minimum: 0 },
         description: 'Offset for pagination',
       },
     ],
@@ -342,6 +342,10 @@ registerPath('/roadmaps/{roadmapId}/posts', {
             schema: asSchema(RoadmapPostsResponseSchema),
           },
         },
+      },
+      400: {
+        description: 'Invalid limit or offset',
+        content: { 'application/json': { schema: ValidationErrorSchema } },
       },
       401: {
         description: 'Unauthorized',
