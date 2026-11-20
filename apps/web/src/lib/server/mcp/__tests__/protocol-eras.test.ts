@@ -165,7 +165,7 @@ describe('MCP 2026-07-28 (stateless, per-request envelope)', () => {
       inputSchema: { $schema?: string }
       _meta?: { securitySchemes?: unknown }
     }[]
-    expect(tools).toHaveLength(43)
+    expect(tools).toHaveLength(44)
     const search = tools.find((tool) => tool.name === 'search')
     expect(search?.title).toBe('Search workspace')
     expect(search?._meta?.securitySchemes).toEqual([
@@ -311,7 +311,7 @@ describe('MCP 2025-11-25 (initialize, then stateless JSON)', () => {
     expect(notified.status).toBe(202)
 
     const list = await json(await handleMcpRequest(legacy('tools/list')))
-    expect(list.result?.tools).toHaveLength(43)
+    expect(list.result?.tools).toHaveLength(44)
     // 2026-only fields never reach a 2025 client.
     expect(list.result).not.toHaveProperty('resultType')
     expect(list.result).not.toHaveProperty('ttlMs')

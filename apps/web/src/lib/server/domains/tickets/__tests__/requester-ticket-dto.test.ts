@@ -126,6 +126,8 @@ const REQUESTER_KEYS = [
   'company',
   'createdAt',
   'customAttributes',
+  // The shared due date both sides see (ticket due dates).
+  'dueAt',
   'id',
   'lastMessagePreview',
   'number',

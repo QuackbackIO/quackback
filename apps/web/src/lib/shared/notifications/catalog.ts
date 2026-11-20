@@ -151,6 +151,20 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     channels: EMAIL_ONLY,
   },
   {
+    type: 'ticket_due_soon',
+    label: 'Ticket due soon',
+    description: 'A ticket assigned to you or your team is due within 24 hours',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
+    type: 'ticket_overdue',
+    label: 'Ticket overdue',
+    description: 'A ticket assigned to you or your team is past its due date',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
     type: 'sla_warning',
     label: 'SLA breach warning',
     description: 'An SLA clock you own is approaching breach',

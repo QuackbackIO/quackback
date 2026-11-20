@@ -162,6 +162,8 @@ export interface ConversationTicketSummary {
   reference: string
   title: string
   stage: TicketStageRef
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
 }
 
 /**
@@ -184,6 +186,7 @@ export async function getRequesterTicketSummaries(
       number: tickets.number,
       title: tickets.title,
       statusId: tickets.statusId,
+      dueAt: tickets.dueAt,
     })
     .from(ticketConversations)
     .innerJoin(tickets, eq(ticketConversations.ticketId, tickets.id))
@@ -214,6 +217,7 @@ export async function getRequesterTicketSummaries(
         label: slot ? stageLabels[slot] : null,
         closed: status?.category === 'closed',
       },
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     })
   }
   return map
@@ -235,6 +239,8 @@ export interface MyTicketSummary {
   conversationId: ConversationId | null
   /** The last change the customer can see (see `requesterUpdatedAtSql`). */
   updatedAt: string
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
 }
 
 /**
@@ -259,6 +265,7 @@ export async function listMyTicketSummaries(
       statusId: tickets.statusId,
       conversationId: ticketConversations.conversationId,
       updatedAt,
+      dueAt: tickets.dueAt,
     })
     .from(tickets)
     .leftJoin(
@@ -298,6 +305,7 @@ export async function listMyTicketSummaries(
       },
       conversationId: r.conversationId,
       updatedAt: r.updatedAt.toISOString(),
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     }
   })
 }
@@ -327,6 +335,9 @@ export async function createMyTicket(
     ticketTypeId?: TicketTypeId | null
     /** Validated intake-form answers, stored on the ticket's customAttributes. */
     customAttributes?: Record<string, unknown>
+    /** The requester's proposed "Needed by" date; createTicketCore holds it to
+     *  the customer window (the requester files for themselves). */
+    dueAt?: Date | null
   }
 ): Promise<RequesterTicketDTO> {
   const principalId = requireRequester(actor)
@@ -349,6 +360,7 @@ export async function createMyTicket(
       descriptionJson: input.descriptionJson,
       attachments: input.attachments,
       customAttributes: input.customAttributes,
+      dueAt: input.dueAt ?? null,
       requesterPrincipalId: principalId,
       withBackingConversation: true,
     },

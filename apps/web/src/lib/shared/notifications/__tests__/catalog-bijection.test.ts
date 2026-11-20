@@ -26,6 +26,8 @@ const ALL_TYPES: Record<NotificationType, true> = {
   ticket_note_added: true,
   ticket_external_status_changed: true,
   ticket_created: true,
+  ticket_due_soon: true,
+  ticket_overdue: true,
   sla_warning: true,
   sla_breach: true,
   comment_mentioned: true,

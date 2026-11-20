@@ -59,6 +59,7 @@ export const API_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   'conversations',
   'dismiss',
   'docs',
+  'due',
   'feedback',
   'files',
   'help-center',

@@ -189,6 +189,7 @@ export function toRequesterTicketDTO(
     company: row.companyId
       ? { id: row.companyId, name: ctx.companies.get(row.companyId) ?? 'Unknown' }
       : null,
+    dueAt: row.dueAt?.toISOString() ?? null,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: (ctx.requesterUpdatedAt.get(row.id) ?? row.createdAt).toISOString(),
