@@ -773,3 +773,48 @@ no such part beyond the wrong notification).
   boundary's `reset`, so the failed loader is never re-run and the alert stays
   until a full reload. Fix: `onClick={() => { router.invalidate(); reset() }}`
   (or `useQueryErrorResetBoundary`). owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-04 a post created over REST
+  without a status gets the workspace default status (`@isolated`). Product
+  bug: `createPost` falls back to the status slugged `open`
+  (`apps/web/src/lib/server/domains/posts/post.service.ts:145`), not the one
+  marked default, so REST, MCP and Track as feedback ignore a changed default
+  while the portal and admin dialog follow it. Fix: look up
+  `is_default = true` there (falling back to `open`). owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-08 choosing the status a post
+  already has changes nothing. Product bug: `changeStatus`
+  (`apps/web/src/lib/server/domains/posts/post.status.ts:72`) has no
+  same-status guard, so re-picking the current status writes a
+  `status.changed` activity, fires `post.status_changed` (Open to Open) and
+  emails subscribers. Fix: return early when the post already has `statusId`.
+  owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-11 a post owner must be a
+  teammate. Product bug: `setPostOwnerFn`
+  (`apps/web/src/lib/server/functions/posts.ts:497`) accepts any principal
+  id, so a customer can be made owner (and gets the owner bell). Fix: load the
+  principal and refuse unless its role is admin or member. owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-17 post.deleted from the post
+  modal names who deleted it. Product bug: `softDeletePost` builds the event
+  actor from principal and user ids only
+  (`apps/web/src/lib/server/domains/posts/post.user-actions.ts:332`), so
+  `dispatchPostDeleted` (`apps/web/src/lib/server/events/dispatch.ts:265`)
+  finds no email or name and the webhook carries no `deletedBy`. Fix: pass the
+  actor's email and display name into `buildEventActor`. owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-21 deleting a canonical post
+  does not hide its merged duplicates. Product bug: `softDeletePost`
+  (`apps/web/src/lib/server/domains/posts/post.user-actions.ts:243`) only
+  recounts when the deleted post is itself a duplicate; the duplicates of a
+  deleted canonical keep `canonical_post_id`, and the inbox hides every such
+  post (`apps/web/src/lib/server/domains/posts/post.inbox.ts:100`). Fix:
+  unmerge (or re-point) the duplicates when a canonical is deleted. owner:
+  unassigned, review by: 2026-12-03.
+- `feedback/admin-post-comments.spec.ts` › FBA-P-30 a teammate without
+  post.set_status cannot change status through a comment. Product bug:
+  `createComment` applies `statusId` for any team author
+  (`apps/web/src/lib/server/domains/comments/comment.service.ts:146`) and
+  `createCommentFn` checks no status permission, so a role without
+  post.set_status changes status through the comment box. Fix: require
+  post.set_status for `shouldChangeStatus`. owner: unassigned, review by:
+  2026-12-03.

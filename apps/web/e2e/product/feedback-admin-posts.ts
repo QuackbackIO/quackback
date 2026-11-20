@@ -116,10 +116,10 @@ export function principalUuid(principalId: string): string {
 export function sidebarRow(page: Page, label: string) {
   return page
     .getByRole('dialog')
-    .locator('div.flex.items-center.justify-between', {
-      has: page.getByText(label, { exact: true }),
-    })
-    .last()
+    .getByRole('complementary')
+    .getByText(label, { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "justify-between")][1]')
+    .first()
 }
 
 /** Pick another status in the post modal's sidebar. */
@@ -137,4 +137,32 @@ export function popover(page: Page) {
 export async function openActivity(page: Page, line: string | RegExp): Promise<void> {
   await page.getByRole('dialog').getByRole('button', { name: 'Activity', exact: true }).click()
   await expect(page.getByRole('dialog').getByText(line).first()).toBeVisible()
+}
+
+/**
+ * Press a Manage icon in the post modal's sidebar. The icons carry no label,
+ * only a tooltip; Delete/Restore is always last and Lock just before it.
+ * Callers assert the stored outcome, so pressing the wrong icon fails.
+ */
+export async function pressManage(
+  page: Page,
+  label: 'Delete post' | 'Restore post' | 'Lock comments' | 'Unlock comments'
+): Promise<void> {
+  const buttons = page
+    .getByRole('dialog')
+    .getByText('Manage', { exact: true })
+    .locator('xpath=..')
+    .locator('button')
+    .filter({ visible: true })
+  await expect(buttons.last()).toBeVisible()
+  const count = await buttons.count()
+  await buttons.nth(label.endsWith('post') ? count - 1 : count - 2).click()
+}
+
+/** The post's status slug as stored. */
+export async function statusSlugOf(postId: string): Promise<string | null> {
+  const [r] = await supportDb()`
+    SELECT s.slug FROM posts p LEFT JOIN post_statuses s ON s.id = p.status_id
+    WHERE p.id = ${uuid(postId)}`
+  return (r?.slug as string | null) ?? null
 }
