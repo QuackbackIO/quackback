@@ -433,9 +433,6 @@ test.describe('presence', () => {
       await admin.dispose()
     })
 
-    const hm = (d: Date) =>
-      `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
-
     test(
       'PRS-13 office hours make the widget available with nobody online, and say when the team is back',
       { tag: '@core' },
@@ -448,12 +445,11 @@ test.describe('presence', () => {
           const open: Schedule = {
             enabled: true,
             timezone: 'UTC',
+            // Open all of today (UTC). A window around "now" wraps past midnight
+            // between 23:00 and 01:00 and reads as closed.
             intervals: [
-              {
-                day: now.getUTCDay(),
-                start: hm(new Date(now.getTime() - 60 * 60_000)),
-                end: hm(new Date(now.getTime() + 60 * 60_000)),
-              },
+              { day: now.getUTCDay(), start: '00:00', end: '12:00' },
+              { day: now.getUTCDay(), start: '12:00', end: '00:00' },
             ],
             holidays: [],
           }
