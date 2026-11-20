@@ -275,8 +275,9 @@ export async function loadAuthors(
  * teammate's public name and avatar.
  *
  * Only API key authors are in the map. Every other author keeps the name the
- * caller already read, so a page with no key author costs one indexed lookup
- * and nothing more. Admin views leave this off and keep the key's own name.
+ * caller already read. Callers pass only the authors their own rows mark as
+ * keys, so a page with none makes no read here. Admin views leave this off
+ * and keep the key's own name.
  */
 export async function loadApiKeyFeedbackAuthors(
   ids: ReadonlyArray<PrincipalId | null | undefined>

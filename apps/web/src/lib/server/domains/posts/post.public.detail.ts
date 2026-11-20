@@ -18,8 +18,9 @@ import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } f
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { DEFAULT_COMMENT_PAGE_SIZE, encodeCommentCursor, decodeCommentCursor } from './comment-page'
-import { resolveAvatarUrl, parseJson, publicTagSqlFilter } from './post.public'
+import { parseJson, publicTagSqlFilter } from './post.public'
 import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
+import { authorIsApiKeySql, resolveAvatarUrl } from './feedback-authors'
 import { getExecuteRows } from '@/lib/server/utils'
 import {
   canViewPost,
@@ -166,6 +167,7 @@ export async function getPublicPostDetail(
           SELECT m.display_name FROM ${principalTable} m
           WHERE m.id = ${posts.principalId}
         )`.as('author_name'),
+        authorIsApiKey: authorIsApiKeySql(posts.principalId).as('author_is_api_key'),
         // All four sources — resolveUserAvatarUrl still needs the OAuth
         // URLs when a stored key cannot produce a public URL (storage off).
         authorAvatarData: sql<string | null>`(
@@ -258,6 +260,7 @@ export async function getPublicPostDetail(
     user_image: string | null
     user_image_key: string | null
     reactions_json: string
+    author_is_api_key: boolean | null
     sc_from_name: string | null
     sc_from_color: string | null
     sc_to_name: string | null
@@ -290,6 +293,7 @@ export async function getPublicPostDetail(
           FILTER (WHERE cr.id IS NOT NULL),
           '[]'
         ) as reactions_json,
+        bool_or(m.service_metadata->>'kind' = 'api_key') as author_is_api_key,
         scf.name as sc_from_name, scf.color as sc_from_color,
         sct.name as sc_to_name, sct.color as sc_to_color
       FROM ${postComments} c
@@ -399,11 +403,13 @@ export async function getPublicPostDetail(
   // Feedback an API key wrote shows as the support team (or a personal key's
   // creator), never under the key's own name. Everyone else keeps the name and
   // avatar read above.
+  // The rows already say which authors are keys, so a page without one makes
+  // no further read.
   const keyAuthors = await loadApiKeyFeedbackAuthors([
-    postResult.principalId,
-    ...[...commentsRaw, ...(pinnedRow ? [pinnedRow] : [])].map(
-      (c) => fromUuid('principal', c.principal_id) as PrincipalId
-    ),
+    ...(postResult.authorIsApiKey ? [postResult.principalId] : []),
+    ...[...commentsRaw, ...(pinnedRow ? [pinnedRow] : [])]
+      .filter((c) => c.author_is_api_key)
+      .map((c) => fromUuid('principal', c.principal_id) as PrincipalId),
   ])
   const commentAuthor = (row: CommentRow) => {
     const keyAuthor = keyAuthors.get(fromUuid('principal', row.principal_id) as PrincipalId)
