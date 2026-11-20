@@ -27,6 +27,7 @@ import { guardBetterAuthUserCreation } from './signup-policy'
 import { assignSessionScope } from './session-audience'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { accountDisplayName } from '@/lib/shared/greeting-name'
+import { CONSENT_START_PATH } from '@/lib/shared/oauth-consent-query'
 import { authTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
 import { reconcileMcpOauthClientScopes } from './reconcile-mcp-oauth-client-scopes'
@@ -743,7 +744,7 @@ async function createAuth() {
       // register both). Tokens are audience-bound to `/api/mcp`.
       mcp({
         loginPage: '/auth/login',
-        consentPage: '/oauth/consent',
+        consentPage: CONSENT_START_PATH,
         resource: mcpResourceIdentifier,
         allowDynamicClientRegistration:
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
