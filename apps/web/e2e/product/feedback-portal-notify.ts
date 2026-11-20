@@ -9,6 +9,7 @@ import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { supportDb, pollFor } from '../support/db'
 import { mailsMatching, waitForMailMatching } from '../support/email-journeys'
 import type { SeededPeople } from '../support/people'
+import { callServerFn } from '../support/widget-portal'
 import {
   fbFn,
   clickUntil,
@@ -18,6 +19,47 @@ import {
   uuid,
   type TestPost,
 } from './feedback-portal'
+import { getMailHeaders, type MailpitMessage } from '../support/mailpit'
+import { waitForEventHandled } from '../support/bells'
+
+/** The URL in a mail's List-Unsubscribe header. */
+export async function listUnsubscribeUrl(mail: MailpitMessage): Promise<string> {
+  const headers = await getMailHeaders(mail.ID)
+  const value = Object.entries(headers).find(
+    ([k]) => k.toLowerCase() === 'list-unsubscribe'
+  )?.[1]?.[0]
+  const url = value?.match(/<([^>]+)>/)?.[1]
+  if (!url) throw new Error(`no List-Unsubscribe in mail ${mail.ID}`)
+  return url
+}
+
+/** The token in an unsubscribe URL. */
+export function tokenOf(url: string): string {
+  const token = new URL(url).searchParams.get('token')
+  if (!token) throw new Error(`no token in ${url}`)
+  return token
+}
+
+/**
+ * Wait until every notice a post event set off has been handled (bells and
+ * emails written), so an absent mail or bell is never still coming.
+ */
+export function eventHandled(entityId: string, type: string): Promise<string> {
+  return waitForEventHandled(entityId, { type, timeoutMs: 30_000 })
+}
+
+/** Set a person's notification preferences through the portal's own server function. */
+export function setPreferences(request: APIRequestContext, data: Record<string, unknown>) {
+  return callServerFn(
+    request,
+    'src/lib/server/functions/user.ts',
+    'updateNotificationPreferencesFn',
+    {
+      method: 'POST',
+      data,
+    }
+  )
+}
 
 /**
  * A cookie session for the suite admin (a teammate on the portal), for team
