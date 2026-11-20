@@ -238,6 +238,7 @@
   "portal.feedback.header.errorSignIn": "Zaloguj się, aby dodać zgłoszenie",
   "portal.feedback.header.errorSession": "Nie udało się utworzyć sesji",
   "portal.feedback.header.errorSubmit": "Nie udało się dodać zgłoszenia. Spróbuj ponownie.",
+  "portal.feedback.header.errorRateLimited": "Zbyt wiele wpisów stąd w ciągu ostatniej godziny. Spróbuj ponownie za {minutes, plural, one {# minutę} few {# minuty} many {# minut} other {# minuty}}.",
   "portal.feedback.header.submitTooltipSignIn": "Zaloguj się, aby dodać zgłoszenie",
   "portal.feedback.header.toastSubmitted": "Dodano zgłoszenie",
   "portal.feedback.header.toastPending": "Twój wpis czeka na sprawdzenie",

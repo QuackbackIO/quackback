@@ -77,6 +77,19 @@ const isReadOnlyRefusal = (err: unknown): boolean =>
 const isBlockedRefusal = (err: unknown): boolean =>
   err instanceof Error && (err as { code?: unknown }).code === 'BLOCKED'
 
+/**
+ * Whole minutes to wait when the post was refused for going over the hourly
+ * limit, or null for any other failure. In the browser a typed refusal is a
+ * plain Error carrying `code` and `retryAfter` (typed-error-serialization.ts).
+ */
+function rateLimitWaitMinutes(err: unknown): number | null {
+  if (!err || typeof err !== 'object') return null
+  const { code, retryAfter } = err as { code?: unknown; retryAfter?: unknown }
+  if (code !== 'RATE_LIMITED') return null
+  const seconds = typeof retryAfter === 'number' && retryAfter > 0 ? retryAfter : 60 * 60
+  return Math.max(1, Math.ceil(seconds / 60))
+}
+
 const DETAILS_MAX_LENGTH = 10_000
 
 export function FeedbackHeaderAnimated({
@@ -304,22 +317,33 @@ export function FeedbackHeaderAnimated({
       )
     } catch (err) {
       // The server logs why it refused the post; its message is not written
-      // for the visitor, except the neutral line for a board that takes none.
+      // for the visitor, except the neutral line for a board that takes none
+      // and the wait after posting too many.
+      const waitMinutes = rateLimitWaitMinutes(err)
       setError(
-        isBlockedRefusal(err)
-          ? intl.formatMessage({
-              id: 'portal.blocked',
-              defaultMessage: "You can't post, vote or comment here.",
-            })
-          : isReadOnlyRefusal(err)
+        waitMinutes !== null
+          ? intl.formatMessage(
+              {
+                id: 'portal.feedback.header.errorRateLimited',
+                defaultMessage:
+                  'Too many posts from here in the last hour. Try again in {minutes, plural, one {# minute} other {# minutes}}.',
+              },
+              { minutes: waitMinutes }
+            )
+          : isBlockedRefusal(err)
             ? intl.formatMessage({
-                id: 'portal.feedback.readOnly',
-                defaultMessage: "This board isn't taking new feedback right now.",
+                id: 'portal.blocked',
+                defaultMessage: "You can't post, vote or comment here.",
               })
-            : intl.formatMessage({
-                id: 'portal.feedback.header.errorSubmit',
-                defaultMessage: 'Could not submit your feedback. Please try again.',
-              })
+            : isReadOnlyRefusal(err)
+              ? intl.formatMessage({
+                  id: 'portal.feedback.readOnly',
+                  defaultMessage: "This board isn't taking new feedback right now.",
+                })
+              : intl.formatMessage({
+                  id: 'portal.feedback.header.errorSubmit',
+                  defaultMessage: 'Could not submit your feedback. Please try again.',
+                })
       )
     }
   }

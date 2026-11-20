@@ -238,6 +238,7 @@
   "portal.feedback.header.errorSignIn": "請登入以提交意見回饋",
   "portal.feedback.header.errorSession": "無法建立工作階段",
   "portal.feedback.header.errorSubmit": "無法提交你的意見回饋。請再試一次。",
+  "portal.feedback.header.errorRateLimited": "過去一小時內從這裡發布的貼文太多。請在 {minutes, plural, other {# 分鐘}}後再試一次。",
   "portal.feedback.header.submitTooltipSignIn": "請登入以提交意見回饋",
   "portal.feedback.header.toastSubmitted": "意見回饋已提交",
   "portal.feedback.header.toastPending": "你的貼文正在等待審核",

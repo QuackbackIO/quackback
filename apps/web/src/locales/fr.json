@@ -238,6 +238,7 @@
   "portal.feedback.header.errorSignIn": "Veuillez vous connecter pour soumettre un feedback",
   "portal.feedback.header.errorSession": "Impossible de créer la session",
   "portal.feedback.header.errorSubmit": "Impossible de soumettre votre feedback. Veuillez réessayer.",
+  "portal.feedback.header.errorRateLimited": "Trop de publications depuis cet endroit au cours de la dernière heure. Réessayez dans {minutes, plural, one {# minute} other {# minutes}}.",
   "portal.feedback.header.submitTooltipSignIn": "Veuillez vous connecter pour soumettre un feedback",
   "portal.feedback.header.toastSubmitted": "Feedback envoyé",
   "portal.feedback.header.toastPending": "Votre publication est en attente de vérification",

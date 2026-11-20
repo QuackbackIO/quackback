@@ -68,6 +68,8 @@ vi.mock('@/lib/server/functions/portal-access', () => ({
 const mockVoteOnPost = vi.fn()
 const mockCheckAnonVoteRateLimit = vi.fn().mockResolvedValue(true)
 const mockReserveAnonPostSlot = vi.fn().mockResolvedValue(true)
+const mockAnonPostRetryAfter = vi.fn().mockResolvedValue(1200)
+const mockAnonVoteRetryAfter = vi.fn().mockResolvedValue(900)
 
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: (...args: unknown[]) => mockVoteOnPost(...args),
@@ -85,6 +87,8 @@ vi.mock('@/lib/server/domains/posts/post.access', () => ({
 vi.mock('@/lib/server/utils/anon-rate-limit', () => ({
   checkAnonVoteRateLimit: (...args: unknown[]) => mockCheckAnonVoteRateLimit(...args),
   reserveAnonPostSlot: (...args: unknown[]) => mockReserveAnonPostSlot(...args),
+  anonPostRetryAfter: (...args: unknown[]) => mockAnonPostRetryAfter(...args),
+  anonVoteRetryAfter: (...args: unknown[]) => mockAnonVoteRetryAfter(...args),
 }))
 
 // The forwarding header is client-supplied and must not decide the address the
@@ -395,11 +399,28 @@ describe('createPublicPostFn anonymous feature flag', () => {
     setupPostMocks({ features: { allowAnonymous: true } })
     mockReserveAnonPostSlot.mockImplementation(async (ip: string) => ip !== '203.0.113.5')
 
-    await expect(createPublicPostHandler({ data: POST_DATA })).rejects.toThrow(
-      'Too many posts, please try again later'
-    )
+    // A rate-limit refusal (429) carrying how long to wait, not a 400.
+    await expect(createPublicPostHandler({ data: POST_DATA })).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      statusCode: 429,
+      retryAfter: 1200,
+    })
     expect(mockReserveAnonPostSlot).toHaveBeenCalledWith('203.0.113.5')
+    expect(mockAnonPostRetryAfter).toHaveBeenCalledWith('203.0.113.5')
     expect(mockCreatePost).not.toHaveBeenCalled()
+  })
+
+  it('refuses an anonymous vote over the limit with a rate-limit refusal and the wait', async () => {
+    mockRequireAuth.mockResolvedValue(ANON_AUTH)
+    mockGetSettings.mockResolvedValue({ portalConfig: { features: { allowAnonymous: true } } })
+    mockCheckAnonVoteRateLimit.mockResolvedValueOnce(false)
+
+    await expect(toggleVoteHandler({ data: { postId: 'post_123' } })).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      statusCode: 429,
+      retryAfter: 900,
+    })
+    expect(mockVoteOnPost).not.toHaveBeenCalled()
   })
 
   it('keys the anonymous vote limit on the resolved peer address, not the forwarding header', async () => {
@@ -439,9 +460,11 @@ describe('createCommentFn anonymous feature flag', () => {
     mockRequireAuth.mockResolvedValue(ANON_AUTH)
     mockGetSettings.mockResolvedValue({ portalConfig: { features: { allowAnonymous: false } } })
 
-    await expect(createCommentHandler({ data: COMMENT_DATA })).rejects.toThrow(
-      'Anonymous interaction is not enabled'
-    )
+    // The same refusal code as anonymous votes and posts.
+    await expect(createCommentHandler({ data: COMMENT_DATA })).rejects.toMatchObject({
+      code: 'ANONYMOUS_NOT_ALLOWED',
+      message: 'Anonymous interaction is not enabled',
+    })
     expect(mockCreateComment).not.toHaveBeenCalled()
   })
 

@@ -196,12 +196,7 @@ test.describe('portal comments', () => {
   test(
     'FBP-C-03 with the anonymous switch off, an anonymous comment is refused with the code votes and posts use',
     {
-      tag: ['@core', '@isolated', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B04: comments.ts:84 throws ANONYMOUS_NOT_ENABLED; votes and posts throw ANONYMOUS_NOT_ALLOWED',
-      },
+      tag: ['@core', '@isolated'],
     },
     async ({ browser, marker }) => {
       test.skip(!ISOLATED, ISOLATED_SKIP)

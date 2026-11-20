@@ -255,6 +255,7 @@
   "portal.feedback.header.errorSignIn": "กรุณาเข้าสู่ระบบเพื่อส่งความคิดเห็น",
   "portal.feedback.header.errorSession": "สร้างเซสชันไม่สำเร็จ",
   "portal.feedback.header.errorSubmit": "ส่งความคิดเห็นไม่สำเร็จ กรุณาลองอีกครั้ง",
+  "portal.feedback.header.errorRateLimited": "มีโพสต์จากที่นี่มากเกินไปในชั่วโมงที่ผ่านมา ลองอีกครั้งใน {minutes, plural, other {# นาที}}",
   "portal.feedback.header.submitTooltipSignIn": "กรุณาเข้าสู่ระบบเพื่อส่งความคิดเห็น",
   "portal.feedback.header.toastSubmitted": "ส่งความคิดเห็นแล้ว",
   "portal.feedback.header.toastPending": "โพสต์ของคุณกำลังรอการตรวจสอบ",

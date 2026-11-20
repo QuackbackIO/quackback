@@ -301,12 +301,7 @@ test.describe('portal board access', () => {
   test(
     'FBP-A-02 a comment on a post the caller cannot see answers not found, like a missing post',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'new: createComment checks the view policy after loading the post and throws 403 FORBIDDEN with the policy reason, confirming the hidden post exists',
-      },
+      tag: '@core',
     },
     async ({ browser, marker }) => {
       const team = await createBoard(marker, { access: { view: 'team' } })

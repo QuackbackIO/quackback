@@ -535,12 +535,7 @@ test.describe('portal feed', () => {
   test(
     "FBP-L-24 the author's held post shows its pending panel on the first server-rendered feed page",
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B03: fetchPortalData builds the first feed page without moderationState, so the card has no pending panel until a refetch',
-      },
+      tag: '@core',
     },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
@@ -759,12 +754,7 @@ test.describe('portal feed', () => {
   test(
     'FBP-L-15 a hand-edited bad minVotes or dateFrom is ignored like a bad sort',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B02: routes/_portal/index.tsx gives minVotes and dateFrom no .catch, so a bad value fails route validation',
-      },
+      tag: '@nightly',
     },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
