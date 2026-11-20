@@ -111,4 +111,45 @@ describe('displayDate', () => {
 
     expect(mockUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ displayDate: null }))
   })
+
+  it('CHG-A-19 rejects a display date on a draft or scheduled entry', async () => {
+    const { updateChangelog } = await import('../changelog.service')
+    const past = new Date('2024-01-15T09:00:00Z')
+
+    mockEntryFindFirst.mockResolvedValueOnce(baseEntry({ publishedAt: null }))
+    await expect(updateChangelog(ENTRY_ID, { displayDate: past })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'Display date can only be set on published changelog entries',
+    })
+
+    mockEntryFindFirst.mockResolvedValueOnce(
+      baseEntry({ publishedAt: new Date(Date.now() + 86_400_000) })
+    )
+    await expect(updateChangelog(ENTRY_ID, { displayDate: past })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'Display date can only be set on published changelog entries',
+    })
+    expect(mockUpdateSet).not.toHaveBeenCalled()
+  })
+
+  // Root cause: validateDisplayDate refuses any displayDate, including null,
+  // when the entry is not yet published
+  // (apps/web/src/lib/server/domains/changelog/changelog.service.ts:617), so a
+  // stale override on a draft or scheduled entry cannot be cleared.
+  // See apps/web/e2e/QUARANTINE.md.
+  it.fails(
+    'CHG-A-19 clears a stale display date on a draft entry with null (quarantined: validateDisplayDate throws for displayDate=null on unpublished entries)',
+    async () => {
+      const { updateChangelog } = await import('../changelog.service')
+      const stale = new Date('2024-01-15T09:00:00Z')
+
+      mockEntryFindFirst
+        .mockResolvedValueOnce(baseEntry({ publishedAt: null, displayDate: stale }))
+        .mockResolvedValueOnce(baseEntry({ publishedAt: null, displayDate: null }))
+
+      await updateChangelog(ENTRY_ID, { displayDate: null })
+
+      expect(mockUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ displayDate: null }))
+    }
+  )
 })

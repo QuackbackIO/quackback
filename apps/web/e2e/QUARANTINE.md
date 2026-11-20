@@ -902,3 +902,107 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   return as `summaryJson`. Fix: add `eq(postComments.isPrivate, false)` (and
   skip held comments) to that query. owner: unassigned, review by:
   2026-12-03.
+
+### Product suite: changelog
+
+- `changelog/publish-notifications.spec.ts` › CHG-S-11 the publisher is not
+  notified of their own announcement. Product bug: `createChangelog` and
+  `updateChangelog` build the event actor with
+  `buildEventActor({ principalId })` and no `userId`
+  (`apps/web/src/lib/server/domains/changelog/changelog.service.ts:147`), which
+  makes it a `service` actor (`apps/web/src/lib/server/events/dispatch.ts:70`).
+  `isActorSubscriber` returns false for every service actor
+  (`apps/web/src/lib/server/events/targets.ts:391`), so a publisher who is
+  subscribed gets their own email and bell. Fix: pass the author's `userId`
+  (and email) to `buildEventActor`, or match `principalId` before the
+  service-actor early return. owner: unassigned, review by: 2026-12-03.
+- `changelog/publish-notifications.spec.ts` › CHG-S-14 the email "View Update"
+  button links to the entry itself. Product bug: `getChangelogSubscriberTargets`
+  builds `changelogUrl` as `sectionUrl('changelog', '/changelog')`
+  (`apps/web/src/lib/server/events/targets.ts:2044`), so the button opens the
+  index, not `/changelog/<id>` (the entry id is in the event). Fix: use
+  `/changelog/${event.data.changelog.id}` for the email and Slack link. owner:
+  unassigned, review by: 2026-12-03.
+- `changelog/publish-notifications.spec.ts` › CHG-S-28 an entry with a
+  segment-gated label is not announced to subscribers outside the segment.
+  Product bug: `getChangelogSubscriberTargets`
+  (`apps/web/src/lib/server/events/targets.ts:1916`) ignores the label
+  segment gate, so subscribers outside the segment get the full body of a
+  gated entry by email and bell. Fix: intersect the fan-out with the members
+  of the entry's gated labels' segments, as the public reads do. owner:
+  unassigned, review by: 2026-12-03.
+- `changelog/admin-settings.spec.ts` › CHG-A-49 renaming a label keeps its
+  id, and a rename onto a taken name is refused. Product bug (new): every
+  label rename fails with a database error ("Failed to save label. Something
+  went wrong on our side."). The duplicate-name check in
+  `updateChangelogCategory`
+  (`apps/web/src/lib/server/domains/changelog/changelog-category.service.ts:101`)
+  puts the TypeID straight into a raw `sql` template (`id != ${id}`), so
+  Postgres gets `changelog_category_...` for a uuid column ("invalid input
+  syntax for type uuid"). Fix: `and(sql\`lower(name) = lower(${name})\`,
+  ne(changelogCategories.id, id))` so the column codec converts the id.
+  owner: unassigned, review by: 2026-12-03.
+- `changelog/admin-settings.spec.ts` › CHG-A-52 a signed-out caller cannot read
+  gated labels or their segment ids. Product bug: `listChangelogCategoriesFn`
+  (`apps/web/src/lib/server/functions/changelog-categories.ts:45`) has no
+  auth, portal-access or gate check and returns every label with its
+  `segmentIds`. Fix: filter gated labels by the viewer (team sees all) and drop
+  `segmentIds` for non-team callers. owner: unassigned, review by: 2026-12-03.
+- `changelog/feed.spec.ts` › CHG-F-05 item descriptions are plain text, not
+  markdown syntax. Product bug: `routes/changelog/feed.ts:146` runs `stripHtml`
+  over the markdown projection (`entry.content`), so `**`, `##` and `[x](y)`
+  reach feed readers. Fix: render plain text from `contentJson` (or strip
+  markdown) before truncating. owner: unassigned, review by: 2026-12-03.
+- `changelog/portal-changelog.spec.ts` › CHG-P-14 with the Changelog product off
+  its public server functions answer nothing (`@isolated`). Product bug:
+  `listPublicChangelogsFn` and `getPublicChangelogFn`
+  (`apps/web/src/lib/server/functions/changelog.ts:226`, `:272`) skip the
+  product flag that the routes, feed and widget honour. Fix: return the empty
+  list / not found when `changelog` is off. owner: unassigned, review by:
+  2026-12-03.
+- `changelog/portal-changelog.spec.ts` › CHG-P-17 the sitemap leaves out entries
+  a crawler cannot read. Product bug: `apps/web/src/routes/sitemap[.]xml.ts:73`
+  lists every published entry without the label segment gate (or the
+  audience), so gated entry URLs reach crawlers. Fix: apply
+  `categoryGateCondition` for an anonymous actor and skip entries when the
+  audience is signed-in only. owner: unassigned, review by: 2026-12-03.
+- `changelog/admin-authoring.spec.ts` › CHG-A-16 deleting an entry: confirm
+  copy that matches a soft delete, then gone from admin and portal. Product bug:
+  the confirm dialog says "This action cannot be undone. The changelog entry
+  will be permanently deleted."
+  (`apps/web/src/components/admin/changelog/changelog-list.tsx:335`), but
+  `deleteChangelog` only sets `deletedAt`; the row, its links and its view
+  count stay. Fix: reword the copy (for example "The entry is removed from
+  your changelog and feed.") or make the delete real. owner: unassigned,
+  review by: 2026-12-03.
+- Vitest `it.fails` (fails today, passes once fixed, then flip it to `it`), all
+  under `apps/web/src/lib/server/domains/changelog/__tests__/`:
+  - `changelog-display-date.test.ts` › CHG-A-19 clears a stale display date on
+    a draft entry with null. `validateDisplayDate` also runs for `null`
+    (`changelog.service.ts:617`, called at `:221`), so clearing the override on
+    a draft or scheduled entry throws "Display date can only be set on
+    published changelog entries". Fix: skip the check when `displayDate` is
+    null.
+  - `changelog-linked-posts.test.ts` › CHG-A-23 a duplicate post id on create
+    or update is saved once. `createChangelog`/`updateChangelog` do not
+    de-duplicate `linkedPostIds` and do not wrap entry, links and labels in a
+    transaction (`changelog.service.ts:569`), so a duplicate violates the
+    unique index after the old links were already deleted. Fix: de-duplicate
+    the ids and run the writes in one transaction.
+  - `changelog-update-validation.test.ts` › CHG-A-33 update refuses an empty
+    body like create does. `updateChangelog` validates only the title
+    (`changelog.service.ts:195`), so the editor can blank a published entry.
+    Fix: apply create's content check when `content` or `contentJson` is
+    sent.
+  - `changelog-category-gate.test.ts` › CHG-P-05 a fully gated page is not
+    returned empty with more to load. `listPublicChangelogs` applies the label
+    gate after paging (`changelog.public.ts:301`), so the portal gets empty
+    pages with `hasMore: true`. Fix: put `categoryGateCondition` in the paged
+    query.
+  - `changelog-subscription-import.test.ts` › CHG-S-26 importing someone who
+    unsubscribed leaves them unsubscribed. `importChangelogSubscribersFromEmails`
+    upserts with `unsubscribedAt = null` (`changelog-subscription.service.ts:115`),
+    so a spreadsheet overrides the person's opt-out. Fix: insert with
+    `onConflictDoNothing` for the import path.
+
+  owner: unassigned, review by: 2026-12-03.
