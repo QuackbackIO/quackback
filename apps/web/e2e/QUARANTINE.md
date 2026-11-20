@@ -231,3 +231,12 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   have the portal mint an anonymous session before voting (as the widget
   does), or accept the previous `feedbackId` from the client and flip that
   row; add a rate limit either way.
+- `help-center/public-access.spec.ts` › HC-P-04 the landing card counts only
+  articles the visitor can open (HC-B14). `listPublicCategories`
+  (`domains/help-center/help-center.category.service.ts`) rolls
+  `recursivePublishedArticleCount` up through every descendant without
+  checking that the descendant category is public or that article audiences
+  admit the viewer, so a card shows "5 articles" where one can be opened (and
+  a category with only hidden content is listed at all). Fix: compute the
+  roll-up with the same visibility predicate the collection page uses
+  (`helpCenterVisibilityConditions` for the viewer).
