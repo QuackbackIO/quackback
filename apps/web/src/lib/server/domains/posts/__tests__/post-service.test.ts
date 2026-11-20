@@ -142,6 +142,8 @@ describe('post.service updatePost', () => {
       },
     ])
     mockPrincipalFindFirst
+      // The new owner's role, read to check an owner is a teammate.
+      .mockResolvedValueOnce({ role: 'member' })
       .mockResolvedValueOnce({ displayName: 'Next Owner' })
       .mockResolvedValueOnce({ displayName: 'Previous Owner' })
   })

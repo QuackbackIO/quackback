@@ -41,9 +41,7 @@ const RESTORABLE_DELETED_MS = 30 * 24 * 60 * 60 * 1000
  * A private internal note or a team comment still held for moderation is not
  * one, since the author cannot read it.
  */
-const TEAM_RESPONSE_COMMENT = sql.raw(
-  "post_comments.is_team_member = true AND post_comments.is_private = false AND post_comments.moderation_state <> 'pending' AND post_comments.deleted_at IS NULL"
-)
+const TEAM_RESPONSE_COMMENT = sql`post_comments.is_team_member = true AND post_comments.is_private = false AND post_comments.moderation_state <> 'pending' AND post_comments.deleted_at IS NULL`
 
 /**
  * Team response exists. Raw SQL table/column names — Drizzle's relational

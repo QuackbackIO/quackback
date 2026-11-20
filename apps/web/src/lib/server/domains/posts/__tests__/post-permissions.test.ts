@@ -42,7 +42,18 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
-      transaction: vi.fn(async (work) => work({ update: vi.fn(() => createChainMock()) })),
+      transaction: vi.fn(async (work) => {
+        // The first update is the delete itself; a later one releases merged
+        // duplicates, of which these posts have none.
+        let updates = 0
+        return work({
+          update: vi.fn(() => {
+            const chain = createChainMock()
+            if (updates++ > 0) chain.returning = vi.fn().mockResolvedValue([])
+            return chain
+          }),
+        })
+      }),
       query: {
         posts: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
         postStatuses: {
