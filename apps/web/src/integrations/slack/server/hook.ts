@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildSlackMessage } from '@/integrations/slack/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'slack' })
 
@@ -26,6 +28,7 @@ export interface SlackConfig {
   accessToken: string
   /** Portal base URL for constructing post links */
   rootUrl: string
+  links?: SectionOrigins
 }
 
 // OAuth errors that indicate token is invalid/expired (don't retry these)
@@ -123,11 +126,11 @@ async function postMessage(
 export const slackHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as SlackTarget
-    const { accessToken, rootUrl } = config as SlackConfig
+    const { accessToken, rootUrl, links } = config as SlackConfig
 
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing hook event')
 
-    const message = buildSlackMessage(event, rootUrl)
+    const message = buildSlackMessage(event, hookLinks({ rootUrl, links }))
     if (!message) {
       log.debug({ event_type: event.type }, 'event produces no slack message, skipping')
       return { state: 'succeeded' }

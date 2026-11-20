@@ -26,6 +26,11 @@ const canView = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/domains/posts/post.access', () => ({
   principalsWhoCanViewPost: (...a: unknown[]) => canView(...a),
 }))
+// Links use the workspace's section origins: every section on the primary.
+vi.mock('@/lib/server/domains/settings/section-links', async () => {
+  const { allOnPrimary } = await import('@/lib/shared/section-links')
+  return { getSectionOrigins: async () => allOnPrimary('https://acme.test') }
+})
 vi.mock('@/lib/server/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/config')>()),
   getBaseUrl: () => 'https://acme.test',

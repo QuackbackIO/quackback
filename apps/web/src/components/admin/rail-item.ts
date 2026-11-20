@@ -1,6 +1,6 @@
 import { cn } from '@/lib/shared/utils'
 
-/** A rail row: 32px, 13.5px, on the chrome ground; the active row is pressed in with a yellow icon. */
+/** A rail row: 32px, 13.5px, on the chrome ground; the active row lifts onto the sheet colour with a hairline. */
 export function railControlClass(isActive = false) {
   return cn(
     'relative box-border flex min-h-8 w-full items-center gap-2.5 rounded-field border border-transparent px-2.5',

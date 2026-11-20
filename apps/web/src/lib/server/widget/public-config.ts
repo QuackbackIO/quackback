@@ -128,8 +128,10 @@ export async function getPublicServerConfig(): Promise<{
     if (dark?.primaryForeground) theme.darkPrimaryForeground = oklchToHex(dark.primaryForeground)
     if (light?.radius) theme.radius = light.radius
 
+    // Custom CSS paused after the plan limits grace is kept but not applied.
     const customCss = await getCustomCss()
-    if (customCss) {
+    const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    if (customCss && !(await isFeaturePaused('customCss'))) {
       const overrides = await extractThemeFromCss(customCss)
       if (overrides.lightPrimary) theme.lightPrimary = overrides.lightPrimary
       if (overrides.lightPrimaryForeground)

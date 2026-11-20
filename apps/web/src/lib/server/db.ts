@@ -8,7 +8,7 @@
  * import { db, eq, and, posts } from '@/lib/server/db'
  */
 
-import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
+import { createDb, createDbFromSql, type Database as PostgresDatabase } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import {
@@ -155,6 +155,14 @@ export const db: Database = new Proxy({} as Database, {
   },
 })
 
+/**
+ * A client on a connection of the caller's own, for a suite that must commit
+ * rows other connections see (a schema of its own, for example).
+ */
+export function createDbOnConnection(sql: Parameters<typeof createDbFromSql>[0]): PostgresDatabase {
+  return createDbFromSql(sql)
+}
+
 // Re-export everything from the db package
 // Note: We explicitly import and re-export drizzle-orm operators here
 // because Nitro's bundler has issues with nested barrel exports (export *)
@@ -259,6 +267,10 @@ export {
   channelThreads,
   emailSendingDomains,
   emailSesTenants,
+  emailSenders,
+  // Schema tables - domains added by name (Settings > Domains)
+  domains,
+  EMAIL_SENDER_SURFACES,
   // Schema tables - office hours + SLA (support platform §4.6)
   officeHoursSchedules,
   slaPolicies,
@@ -532,6 +544,13 @@ export {
   notTestTicket,
 } from '@quackback/db'
 
+// Background index list and builder, for the deferred-index-build job.
+export {
+  DEFERRED_INDEX_SPECS,
+  ensureConcurrentIndexes,
+  type ConcurrentIndexSpec,
+} from '@quackback/db/schema-ops'
+
 // Re-export schema types not covered by @quackback/db/types
 export type {
   AssistantInvolvementSource,
@@ -550,6 +569,7 @@ export type {
 } from '@quackback/db'
 export type { ServiceMetadata } from '@quackback/db'
 export type { IntegrationDestinationConfig } from '@quackback/db'
+export type { Domain, DomainStatus } from '@quackback/db'
 export type { FileRecord, NewFileRecord } from '@quackback/db'
 export type { IdentityProviderClaimMapping, ClaimRoleMapping } from '@quackback/db'
 export type { PermissionKey, PermissionCategory, SystemRoleKey } from '@quackback/db'
@@ -557,6 +577,9 @@ export type {
   ChannelAccount,
   EmailSendingDomain,
   EmailSesTenant,
+  EmailSender,
+  EmailSenderSurface,
+  EmailSenderMode,
   ChannelAccountConfig,
   SendingDomainDnsRecord,
   SendingDomainOwnershipRecord,

@@ -31,15 +31,14 @@ import {
   useUpdateSkill,
 } from '@/lib/client/mutations/assistant-skills'
 import { skillInputSchema, type SkillDTO } from '@/lib/shared/assistant/skills'
-import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { errorText } from '@/lib/client/error-text'
 
 export const Route = createFileRoute('/admin/settings/skills')({
   head: adminPageHead('Skills settings'),
   beforeLoad: ({ context }) => {
-    assertRouteAnyPermission(context.permissions, AI_ANY_PERMISSIONS)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/skills')
   },
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(skillQueries.list())

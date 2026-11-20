@@ -6,7 +6,7 @@ import type { ConversationId } from '@quackback/ids'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import type { TeamMember } from '@/lib/server/domains/principals/principal.service'
 import { assignConversationFn } from '@/lib/server/functions/conversation'
-import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { Avatar } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -66,7 +66,7 @@ export const AssigneeControl = memo(function AssigneeControl({
   assignedAgent: ConversationAuthorDTO | null
   onChanged?: () => void
 }) {
-  const { data: members } = useTeamMembers()
+  const { data: members } = useAdminTeamMembers()
 
   const mutation = useMutation({
     // `'me'` is resolved to the caller's principal server-side; null unassigns.

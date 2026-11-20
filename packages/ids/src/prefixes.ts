@@ -104,6 +104,8 @@ export const ID_PREFIXES = {
   channel_account: 'channel_account',
   channel_thread: 'channel_thread',
   sending_domain: 'sending_domain',
+  // A domain added by name on Settings > Domains (`domain` is the SSO table's).
+  workspace_domain: 'workspace_domain',
 
   // Workflows + SLA + office hours (support platform §4.6)
   office_hours: 'office_hours',

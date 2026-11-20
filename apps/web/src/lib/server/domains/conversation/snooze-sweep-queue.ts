@@ -72,7 +72,15 @@ export function isSnoozeSweepDue(): Promise<boolean> {
 }
 
 export async function runSnoozeSweep(): Promise<void> {
-  const result = await sweepDueSnoozedConversations()
+  await runSnoozeSweepAt(new Date())
+}
+
+/**
+ * One pass with an explicit clock (see runSlaBreachSweepAt). All three clocks
+ * on this tick read `now`.
+ */
+export async function runSnoozeSweepAt(now: Date): Promise<{ woken: number }> {
+  const result = await sweepDueSnoozedConversations(now)
   if (result.woken > 0) {
     log.debug({ woken: result.woken }, 'snooze-sweep run complete')
   }
@@ -81,7 +89,11 @@ export async function runSnoozeSweep(): Promise<void> {
   // gone quiet (assumed resolution). Best-effort: an assistant sweep failure
   // must not fail the snooze wake.
   try {
-    const { resolved } = await finalizeStaleAssistantInvolvements()
+    const { resolved } = await finalizeStaleAssistantInvolvements(
+      ASSUMED_RESOLUTION_INACTIVITY_MINUTES,
+      undefined,
+      now
+    )
     if (resolved > 0) {
       log.debug({ resolved }, 'assistant assumed-resolution sweep complete')
     }
@@ -93,11 +105,12 @@ export async function runSnoozeSweep(): Promise<void> {
   // know the request timed out rather than leaving them hanging. Best-effort,
   // same as the involvement sweep above.
   try {
-    const expired = await sweepAndNotifyExpiredPendingActions()
+    const expired = await sweepAndNotifyExpiredPendingActions(undefined, now)
     if (expired.length > 0) {
       log.debug({ expired: expired.length }, 'assistant pending-action expiry sweep complete')
     }
   } catch (err) {
     log.warn({ err }, 'assistant pending-action expiry sweep failed')
   }
+  return result
 }

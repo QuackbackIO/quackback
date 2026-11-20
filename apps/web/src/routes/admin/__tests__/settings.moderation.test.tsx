@@ -32,7 +32,7 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 }))
 
 vi.mock('@/lib/client/queries/settings', () => ({
-  settingsQueries: { portalConfig: () => ({ queryKey: ['portal'] }) },
+  settingsQueries: { portalPageConfig: () => ({ queryKey: ['portal'] }) },
 }))
 
 const { ModerationPage } = await import('@/components/admin/settings/moderation-settings-page')

@@ -62,20 +62,22 @@
 import {
   db,
   eq,
+  gt,
   ne,
   and,
-  asc,
   isNull,
   sql,
   conversations,
-  conversationMessages,
+  ticketActivity,
   ticketConversations,
   tickets,
   type Ticket,
   type ConversationMessageMetadata,
 } from '@/lib/server/db'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
+import { ticketFilter } from '@/lib/server/policy/tickets'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError, ConflictError, NotFoundError } from '@/lib/shared/errors'
@@ -84,9 +86,51 @@ import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
 import { notTestTicket, notTestConversation } from '@/lib/server/test-data'
 import { loadSlaApplied } from '../sla/sla.service'
-import { applySlaToTicket } from '../sla/ticket-sla.service'
+import { applySlaToTicket, type TicketSlaApplied } from '../sla/ticket-sla.service'
+import { syncTicketFirstResponse } from './ticket-first-response'
 
 const log = logger.child({ component: 'ticket-conversation-link' })
+
+/** How long after creating a ticket its creator may still link it unseen. */
+const OWN_CREATE_LINK_WINDOW_MS = 10 * 60 * 1000
+
+/**
+ * Whether the actor may link this ticket although its ticket filter hides it:
+ * only in the link step of the actor's own create. The ticket has no
+ * conversation link yet, and its `ticket.created` activity row names the
+ * actor. A new ticket takes the source conversation's assignee and no team,
+ * so its creator may not see it; any other ticket needs the filter.
+ *
+ * The create must be recent (`OWN_CREATE_LINK_WINDOW_MS`): the link step
+ * follows the create within a request or two, so a ticket the actor filed long
+ * ago and that has since left their scope is not reachable this way.
+ */
+async function isOwnUnlinkedCreate(
+  exec: Pick<typeof db, 'select'>,
+  ticketId: TicketId,
+  actor: Actor
+): Promise<boolean> {
+  if (!actor.principalId) return false
+  const [link] = await exec
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .where(eq(ticketConversations.ticketId, ticketId))
+    .limit(1)
+  if (link) return false
+  const [created] = await exec
+    .select({ id: ticketActivity.id })
+    .from(ticketActivity)
+    .where(
+      and(
+        eq(ticketActivity.ticketId, ticketId),
+        eq(ticketActivity.type, 'ticket.created'),
+        eq(ticketActivity.principalId, actor.principalId),
+        gt(ticketActivity.createdAt, new Date(Date.now() - OWN_CREATE_LINK_WINDOW_MS))
+      )
+    )
+    .limit(1)
+  return !!created
+}
 
 /**
  * Link `ticketId` to `conversationId`. Gated on `ticket.create` — this is only
@@ -95,6 +139,9 @@ const log = logger.child({ component: 'ticket-conversation-link' })
  * customer ticket links as the conversation's PAIR (see the module doc); any
  * other type links as provenance, which is the join row and a team-only note
  * and nothing else.
+ *
+ * Both items must be visible to the actor, else NotFound. The one exception is
+ * the ticket side of the actor's own create (see `isOwnUnlinkedCreate`).
  */
 export async function linkTicketToConversation(
   ticketId: TicketId,
@@ -104,6 +151,7 @@ export async function linkTicketToConversation(
   if (!can(actor, PERMISSIONS.TICKET_CREATE)) {
     throw new ForbiddenError('FORBIDDEN', 'You cannot link a ticket to a conversation')
   }
+  await assertConversationVisible(conversationId, actor)
 
   let ticket: Ticket
   try {
@@ -114,7 +162,17 @@ export async function linkTicketToConversation(
         .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
         .for('update')
       if (!currentTicket) {
-        throw new NotFoundError('TICKET_NOT_FOUND', `Ticket ${ticketId} not found`)
+        throw new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+      }
+      // Under the row lock, so a second link cannot slip in between the
+      // check and the insert.
+      const [visible] = await tx
+        .select({ id: tickets.id })
+        .from(tickets)
+        .where(and(eq(tickets.id, ticketId), ticketFilter(actor)))
+        .limit(1)
+      if (!visible && !(await isOwnUnlinkedCreate(tx, ticketId, actor))) {
+        throw new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
       }
       const [conversation] = await tx
         .select({ id: conversations.id })
@@ -176,37 +234,21 @@ export async function linkTicketToConversation(
   // The pair rule keys off the ticket's own type; provenance links stay separate.
   const isPair = ticket.type === 'customer'
 
-  // CONVERGENCE PHASE 1a firstResponseAt rule (convergence-design.md,
-  // mechanics appendix "Write (Phase 1)"): when the ticket has no
-  // first_response_at yet and the conversation already carries an agent reply,
-  // backfill the ticket's column from the conversation's FIRST agent message —
-  // the response happened before the pair existed, and the ticket's timeline
-  // must not pretend otherwise. After the link, the conversation's
-  // first-response machinery owns the timeline (the Phase 1a write redirect
-  // never stamps the ticket's column). Internal notes don't count as a
-  // response, mirroring insertTicketMessage's stamp rule; senderType 'agent'
-  // includes Quinn's replies, matching the conversation SLA's own FRT settle.
-  // Pair-only: on a provenance link the conversation's replies answered the
-  // CUSTOMER, and an internal task's response clock is its own.
-  if (isPair && !ticket.firstResponseAt) {
-    const [firstAgentMessage] = await db
-      .select({ createdAt: conversationMessages.createdAt })
-      .from(conversationMessages)
-      .where(
-        and(
-          eq(conversationMessages.conversationId, conversationId),
-          eq(conversationMessages.senderType, 'agent'),
-          eq(conversationMessages.isInternal, false),
-          isNull(conversationMessages.deletedAt)
-        )
+  // The pair's first response is worked out from the messages of both
+  // threads, so a reply the conversation already holds counts from the link
+  // on, and a value an older build stamped from a status change is replaced.
+  // A provenance link reads only the ticket's own thread, so this changes
+  // nothing on one.
+  if (isPair) {
+    // Best-effort, like the announcement and the SLA handoff below: the link
+    // landed, and the next message or the follow-up pass corrects the value.
+    try {
+      await syncTicketFirstResponse(ticketId)
+    } catch (err) {
+      log.warn(
+        { err, ticket_id: ticketId, conversation_id: conversationId },
+        'ticket first response recompute after a link failed'
       )
-      .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))
-      .limit(1)
-    if (firstAgentMessage) {
-      await db
-        .update(tickets)
-        .set({ firstResponseAt: firstAgentMessage.createdAt })
-        .where(eq(tickets.id, ticketId))
     }
   }
 
@@ -288,7 +330,9 @@ export async function resolveProvenanceConversationIds(
  * Best-effort per conversation, like the link announcement: the note has
  * already landed on the ticket, so a copy that fails (the conversation was
  * deleted, the author may note tickets but not act as an agent on
- * conversations) is logged, never surfaced to the caller.
+ * conversations, or the conversation is outside the author's scope, which
+ * `addAgentNote` answers NotFound) is logged, never surfaced to the caller.
+ * So a copy goes only to the provenance conversations the author can see.
  */
 export async function crossPostTicketNote(
   ticket: Ticket,
@@ -337,33 +381,35 @@ export async function crossPostTicketNote(
  * ticking from the LINK instant. Shared by `linkTicketToConversation` (the
  * create-from-a-conversation flow) and the Phase 1b intake transaction
  * (`createTicketCore`'s backing-conversation path) so the handoff rule lives
- * in ONE place — a conversation with no SLA skips silently (the intake case:
- * a fresh backing conversation is born SLA-free, so this is a no-op there by
- * construction, and the same-TICKET handoff later fires off the conversation's
- * own SLA application), and a policy without a TTR target no-ops inside
+ * in ONE place — a conversation with no SLA skips silently (at intake the
+ * caller awaits the conversation default SLA first, so the handoff reads it;
+ * an SLA that a workflow applies later reaches the ticket only through that
+ * workflow's own ticket-targeted step), and a policy without a TTR target no-ops inside
  * applySlaToTicket, which keeps the "does this policy even track TTR" check in
  * ONE place rather than duplicated at the call sites. Best-effort: the link
- * already landed, so a failure is logged, never surfaced.
+ * already landed, so a failure is logged, never surfaced. Returns the stamp
+ * written to the ticket, or null when nothing was handed over.
  */
 export async function handoffConversationSlaToTicket(
   ticketId: TicketId,
   conversationId: ConversationId
-): Promise<void> {
+): Promise<TicketSlaApplied | null> {
   try {
     const slaApplied = await loadSlaApplied(conversationId)
-    if (slaApplied) {
-      const applied = await applySlaToTicket(ticketId, slaApplied.policyId)
-      if (applied) {
-        log.info(
-          { ticket_id: ticketId, conversation_id: conversationId, policy_id: applied.policyId },
-          'ticket TTR clock started from conversation SLA handoff'
-        )
-      }
+    if (!slaApplied) return null
+    const applied = await applySlaToTicket(ticketId, slaApplied.policyId)
+    if (applied) {
+      log.info(
+        { ticket_id: ticketId, conversation_id: conversationId, policy_id: applied.policyId },
+        'ticket TTR clock started from conversation SLA handoff'
+      )
     }
+    return applied
   } catch (err) {
     log.warn(
       { err, ticket_id: ticketId, conversation_id: conversationId },
       'ticket SLA handoff failed (link already landed)'
     )
+    return null
   }
 }

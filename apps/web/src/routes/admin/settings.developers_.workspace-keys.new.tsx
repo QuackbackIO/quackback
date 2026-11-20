@@ -1,13 +1,12 @@
 import { lazy, Suspense } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/developers_/workspace-keys/new')({
   head: adminPageHead('New workspace key'),
   beforeLoad: ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.API_KEY_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/developers/workspace-keys/new')
   },
   component: NewWorkspaceKeyPage,
 })

@@ -2,14 +2,15 @@ import type { ComponentType } from 'react'
 import { buildSettingsModuleRows, type SettingsModuleRowPage } from './settings-nav-sections'
 import { SETTINGS_PAGE_ICONS } from './settings-page-icons'
 import type { PermissionKey } from '@/lib/shared/permissions'
+import { holdsPageGate, type PageGate } from '@/lib/shared/settings-page-access'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 
 export interface SettingsModulePage {
   label: string
   to: string
   icon: ComponentType<{ className?: string }>
-  /** The permission the page's route checks; the nav and module landing offer it only to holders. */
-  permission: PermissionKey
+  /** Who the page's route opens to; the nav and module landing offer it only to them. */
+  gate: PageGate
 }
 
 export interface SettingsModule {
@@ -46,7 +47,7 @@ export function settingsModulesFor(
   return modules
     .map((module) => ({
       ...module,
-      pages: module.pages.filter((page) => permissions.has(page.permission)),
+      pages: module.pages.filter((page) => holdsPageGate(permissions, page.gate)),
     }))
     .filter((module) => module.pages.length > 0)
 }

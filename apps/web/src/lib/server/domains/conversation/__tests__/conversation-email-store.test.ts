@@ -58,6 +58,7 @@ vi.mock('@/lib/server/db', () => {
       messageId: 'conversationOutboundEmails.messageId',
       conversationId: 'conversationOutboundEmails.conversationId',
       createdAt: 'conversationOutboundEmails.createdAt',
+      sentMessageId: 'conversationOutboundEmails.sentMessageId',
     },
     conversationMessages: {
       metadata: 'conversationMessages.metadata',
@@ -181,10 +182,11 @@ describe('resolvePrincipalIdByEmail', () => {
 })
 
 describe('recordOutboundEmail', () => {
-  it('stores the Message-ID bare and lower-cased', async () => {
+  it('stores the Message-ID bare, lower-cased for matching and as sent for headers', async () => {
     await recordOutboundEmail('<C.ABC.N1@Domain.Example>', 'conversation_abc' as never)
     expect(insertedValues).toEqual({
       messageId: 'c.abc.n1@domain.example',
+      sentMessageId: 'C.ABC.N1@Domain.Example',
       conversationId: 'conversation_abc',
     })
   })

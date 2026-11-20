@@ -39,7 +39,7 @@ const hoisted = vi.hoisted(() => ({
   policyActorFromAuth: vi.fn(),
   isFeatureEnabled: vi.fn(),
   isAssistantConfigured: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   assertTicketVisible: vi.fn(),
   insertValues: vi.fn(),
   insert: vi.fn(),
@@ -56,8 +56,9 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 vi.mock('@/lib/server/domains/assistant', () => ({
   isAssistantConfigured: hoisted.isAssistantConfigured,
 }))
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: hoisted.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assertTicketVisible: hoisted.assertTicketVisible,
@@ -79,7 +80,7 @@ beforeEach(() => {
   hoisted.policyActorFromAuth.mockResolvedValue({ type: 'user', principalId: PRINCIPAL_ID })
   hoisted.isFeatureEnabled.mockResolvedValue(true)
   hoisted.isAssistantConfigured.mockReturnValue(true)
-  hoisted.assertConversationViewable.mockResolvedValue({ id: CONVERSATION_ID })
+  hoisted.assertConversationVisible.mockResolvedValue({ id: CONVERSATION_ID })
   hoisted.assertTicketVisible.mockResolvedValue({ id: TICKET_ID })
   hoisted.insertValues.mockResolvedValue(undefined)
   hoisted.insert.mockReturnValue({ values: hoisted.insertValues })
@@ -125,7 +126,7 @@ describe('recordCopilotEventFn', () => {
         destination: 'reply',
       },
     })
-    expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith(
       CONVERSATION_ID,
       expect.anything()
     )
@@ -137,11 +138,11 @@ describe('recordCopilotEventFn', () => {
       data: { item: { ticketId: TICKET_ID }, eventType: 'answer_inserted', destination: 'note' },
     })
     expect(hoisted.assertTicketVisible).toHaveBeenCalledWith(TICKET_ID, expect.anything())
-    expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+    expect(hoisted.assertConversationVisible).not.toHaveBeenCalled()
   })
 
   it('rejects (and writes nothing) when the item is not viewable', async () => {
-    hoisted.assertConversationViewable.mockRejectedValue(new Error('Conversation not found'))
+    hoisted.assertConversationVisible.mockRejectedValue(new Error('Conversation not found'))
     await expect(
       recordCopilotEventFn({
         data: {

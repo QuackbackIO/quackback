@@ -10,8 +10,9 @@ export interface ConversationReplyEmailProps {
   /** Plain fallback when there is no rendered body. */
   messagePreview: string
   agentName: string
-  /** Second signature line: team or workspace name. */
-  teamName: string
+  /** Second signature line: team or workspace name. Omitted when the first
+   *  line already names the team. */
+  teamName?: string
   /** Portal or widget deep link; omitted when the visitor has no web surface. */
   viewUrl?: string
   quotedPrevious?: {
@@ -113,7 +114,7 @@ export function ConversationReplyEmail({
         )}
 
         <Text style={sigName}>{agentName}</Text>
-        <Text style={sigTeam}>{teamName}</Text>
+        {teamName ? <Text style={sigTeam}>{teamName}</Text> : null}
 
         <hr style={rule} />
 

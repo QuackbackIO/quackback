@@ -136,7 +136,7 @@ export function PostFormFields({
                 <RichTextEditor
                   value={contentJson || ''}
                   onDocumentChange={onContentChange}
-                  placeholder="Add more details... Type / for commands"
+                  placeholder="Add more details… Type / for commands"
                   minHeight="200px"
                   borderless
                   toolbarPosition="bottom"

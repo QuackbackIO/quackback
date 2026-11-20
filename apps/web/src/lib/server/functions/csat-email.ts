@@ -23,6 +23,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { Actor } from '@/lib/server/policy/types'
 import { logger } from '@/lib/server/logger'
+import { ConflictError } from '@/lib/shared/errors'
 import type { CsatEmailTokenClaims } from '@/lib/server/domains/conversation/csat-email-token'
 
 const log = logger.child({ component: 'csat-email' })
@@ -41,7 +42,10 @@ function visitorActorFromClaims(claims: CsatEmailTokenClaims): Actor {
   }
 }
 
-export type CsatEmailResult = { success: true } | { success: false; error: 'invalid' | 'failed' }
+/** `open`: the conversation was reopened after the email went out (a reply,
+ *  or a teammate), and a rating is only taken once it is resolved again. */
+export type CsatEmailResult =
+  { success: true } | { success: false; error: 'invalid' | 'open' | 'failed' }
 
 /**
  * Read-only token check for the `/csat` route's loader: is this link still
@@ -94,6 +98,12 @@ export const recordCsatViaTokenFn = createServerFn({ method: 'POST' })
       )
       return { success: true }
     } catch (err) {
+      const { CSAT_CONVERSATION_OPEN } =
+        await import('@/lib/server/domains/conversation/conversation.service')
+      if (err instanceof ConflictError && err.code === CSAT_CONVERSATION_OPEN) {
+        log.debug({ conversationId: claims.conversationId }, 'csat email rating refused: open')
+        return { success: false, error: 'open' }
+      }
       log.error({ err }, 'record csat via email token failed')
       return { success: false, error: 'failed' }
     }

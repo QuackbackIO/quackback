@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isAdmin } from '@/lib/shared/roles'
 import { ImportsHubPage } from '@/components/admin/settings/imports/imports-hub-page'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -17,7 +16,7 @@ import { adminPageHead } from '@/lib/client/admin-head'
 export const Route = createFileRoute('/admin/settings/imports')({
   head: adminPageHead('Imports settings'),
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/imports')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const ensure = readBatch(context.queryClient)
     await Promise.all([

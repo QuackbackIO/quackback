@@ -235,7 +235,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
               Cancel
             </Button>
             <Button type="submit" disabled={isSaving || !name.trim()}>
-              {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create tag'}
+              {isSaving ? 'Saving…' : isEdit ? 'Save changes' : 'Create tag'}
             </Button>
           </DialogFooter>
         </form>

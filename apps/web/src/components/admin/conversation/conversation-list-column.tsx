@@ -23,6 +23,7 @@ import { NewConversationDialog } from '@/components/admin/conversation/new-conve
 import { SearchSnippet } from '@/components/admin/conversation/search-snippet'
 import {
   InboxScopeMenu,
+  useSupportConversationsEnabled,
   type InboxNavItem,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
@@ -351,6 +352,8 @@ const ConversationListHeader = memo(function ConversationListHeader({
   onSort,
 }: ConversationListHeaderProps) {
   const [composeOpen, setComposeOpen] = useState(false)
+  // A tickets-only workspace has no conversations to start.
+  const canCompose = useSupportConversationsEnabled()
   const searching = searchInput.trim().length > 0
   return (
     <>
@@ -363,15 +366,21 @@ const ConversationListHeader = memo(function ConversationListHeader({
         <div className="min-w-0 lg:hidden">
           <InboxScopeMenu nav={nav} onSelect={onSelectNav} />
         </div>
-        <NewButton noun="conversation" onClick={() => setComposeOpen(true)} className="shrink-0" />
+        {canCompose && (
+          <NewButton
+            noun="conversation"
+            onClick={() => setComposeOpen(true)}
+            className="shrink-0"
+          />
+        )}
       </div>
       {headerSlot}
-      <NewConversationDialog open={composeOpen} onOpenChange={setComposeOpen} />
+      {canCompose && <NewConversationDialog open={composeOpen} onOpenChange={setComposeOpen} />}
       <div className="px-3 pt-2">
         <SearchInput
           value={searchInput}
           onChange={onSearchInput}
-          placeholder="Search conversations..."
+          placeholder="Search conversations…"
           aria-label="Search the inbox"
           data-search-input
         />

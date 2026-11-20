@@ -73,10 +73,12 @@ import { CalendarDate } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const RESOLVED_META = {
   label: 'Resolved',
-  className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  className: 'bg-success/10 text-success',
 }
 // Both resolution flavours (customer-confirmed + assumed-after-inactivity) read
 // as "Resolved" to the agent.
@@ -84,7 +86,7 @@ const AI_OUTCOME_META: Record<AssistantInvolvementOutcome, { label: string; clas
   active: { label: 'Handling', className: 'bg-primary/10 text-primary' },
   handed_off: {
     label: 'Escalated',
-    className: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
+    className: 'bg-warning/10 text-warning',
   },
   resolved_confirmed: RESOLVED_META,
   resolved_assumed: RESOLVED_META,
@@ -205,6 +207,9 @@ export interface InboxDetailPanelProps {
    *  plain conversation (unified inbox §2.1's one-row rule) — undefined/null
    *  when a conversation has no linked ticket. */
   ticket?: TicketDTO | null
+  /** A plain conversation whose paired ticket the viewer cannot open: the
+   *  Ticket card shows one muted line instead of Create ticket. */
+  pairHidden?: boolean
   onChanged: () => void
   /** Navigate to another item (a previous conversation from the contact card,
    *  or the linked ticket row in Links) — a bare TypeID, either kind. */
@@ -245,6 +250,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   item,
   conversation,
   ticket,
+  pairHidden = false,
   onChanged,
   onSelectItem,
   onTrackAsFeedback,
@@ -313,9 +319,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
 
   // A conversation's thread request loads these with the thread and seeds
   // them, so they only ask on their own for a ticket or once they go stale.
+  // The portal profile needs people.view; without it the card keeps the
+  // public name and the conversation's email.
+  const canViewPeople = usePermission(PERMISSIONS.PEOPLE_VIEW)
   const { data: detail } = useQuery({
     ...conversationPanelQueries.contact(principalId as PrincipalId),
-    enabled: isVisible && !!principalId,
+    enabled: canViewPeople && isVisible && !!principalId,
   })
   const { data: history } = useQuery({
     ...conversationPanelQueries.history(principalId as PrincipalId),
@@ -609,11 +618,19 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 <DetailDate date={ticket.createdAt} />
               </span>
             </Row>
-            <Row icon={CalendarIcon} label="First response">
-              <span className="text-sm font-medium text-foreground">
-                {ticket.firstResponseAt ? <DetailDate date={ticket.firstResponseAt} /> : 'Not yet'}
-              </span>
-            </Row>
+            {/* Back-office and tracker tickets have no customer, so they
+                never get a first response. */}
+            {ticket.type === 'customer' && (
+              <Row icon={CalendarIcon} label="First response">
+                <span className="text-sm font-medium text-foreground">
+                  {ticket.firstResponseAt ? (
+                    <DetailDate date={ticket.firstResponseAt} />
+                  ) : (
+                    'Not yet'
+                  )}
+                </span>
+              </Row>
+            )}
             {ticket.resolvedAt && (
               <Row icon={CalendarIcon} label="Resolved">
                 <span className="text-sm font-medium text-foreground">
@@ -649,6 +666,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               )
             })}
           </div>
+        ) : showCreateTicketSlot && pairHidden ? (
+          <p className="border-t border-border/30 pt-4 text-sm text-muted-foreground">
+            <FormattedMessage
+              id="admin.inbox.linkedTicketHidden"
+              defaultMessage="Linked ticket you can't open"
+            />
+          </p>
         ) : (
           showCreateTicketSlot && (
             <div className="border-t border-border/30 pt-4">
@@ -758,7 +782,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           )}
           {!isTicketItem && conversation?.csatRating != null && (
             <Row icon={FaceSmileIcon} label="CSAT">
-              <span className="text-sm text-amber-500">
+              <span className="text-sm text-warning">
                 {'★'.repeat(conversation.csatRating)}
                 <span className="text-muted-foreground/40">
                   {'★'.repeat(Math.max(0, 5 - conversation.csatRating))}

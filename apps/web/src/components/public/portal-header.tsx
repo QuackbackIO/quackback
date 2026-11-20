@@ -2,14 +2,15 @@ import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
+import { crossHostTabHref, isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
 import { usePortalNavItems } from './use-portal-nav-items'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
-import { signOut } from '@/lib/client/auth-client'
+import { SIGN_OUT_FAILED, signOutChecked } from '@/lib/client/sign-out-checked'
+import { toast } from 'sonner'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
 import { signinErrorLanding } from '@/lib/shared/auth-prompt'
@@ -43,7 +44,11 @@ import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-s
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
-import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useSectionLinks,
+  useSessionContext,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 interface PortalHeaderProps {
   orgName: string
@@ -151,8 +156,19 @@ export function PortalHeader({
   const email = initialUserData?.email ?? user?.email ?? null
   const avatarUrl = initialUserData?.avatarUrl ?? user?.image ?? null
 
+  // On a section host the session is portal scope, so the role reads as a
+  // portal user's, and the admin runs on the primary domain only. The bootstrap
+  // sends a teammate there the admin's address on the primary domain instead,
+  // and Link renders an absolute address as a plain link: a full page load,
+  // with no session carried. On the primary domain it is absent and the link
+  // is the router's /admin, as before.
+  const primaryAdminUrl = useRouteContext({
+    from: '__root__',
+    select: (context) => context.primaryAdminUrl,
+  })
+
   // Team members (admin, member) can access admin dashboard
-  const canAccessAdmin = isLoggedIn && isTeamMember(userRole)
+  const canAccessAdmin = isLoggedIn && (isTeamMember(userRole) || !!primaryAdminUrl)
 
   // Skip the sign-in dialog for a single-IdP workspace: go straight to the
   // OIDC provider (same redirect the dialog's "Continue" path uses), returning
@@ -175,7 +191,11 @@ export function PortalHeader({
   }
 
   const handleSignOut = async () => {
-    await signOut()
+    // A refused sign-out leaves the visitor signed in: say so, and stay put.
+    if (!(await signOutChecked())) {
+      toast.error(intl.formatMessage(SIGN_OUT_FAILED))
+      return
+    }
     // Clear user-scoped caches: vote highlights, and every viewer-scoped
     // payload (a team member's internal tags must not outlive their session).
     queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
@@ -195,7 +215,7 @@ export function PortalHeader({
       {/* Admin Button (visible for team members) */}
       {canAccessAdmin && (
         <Button variant="outline" size="sm" asChild className="ms-1 me-2">
-          <Link to="/admin" search={{}}>
+          <Link to={primaryAdminUrl ?? '/admin'} search={{}}>
             <ShieldCheckIcon className="me-2 h-4 w-4" />
             <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
           </Link>
@@ -235,7 +255,7 @@ export function PortalHeader({
             <DropdownMenuSeparator />
             {canAccessAdmin && (
               <DropdownMenuItem asChild>
-                <Link to="/admin" search={{}}>
+                <Link to={primaryAdminUrl ?? '/admin'} search={{}}>
                   <ShieldCheckIcon className="me-2 h-4 w-4" />
                   <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
                 </Link>
@@ -407,30 +427,45 @@ type BuiltInNavItem = Extract<PortalNavItem, { kind: 'builtin' }>
 const NavTab = memo(
   function NavTab({ item, unread }: { item: BuiltInNavItem; unread: number }) {
     const intl = useIntl()
-    const isActive = useRouterState({ select: (s) => isTabActive(item.to, s.location.pathname) })
-    return (
-      <Link to={item.to} className={navItemClass(isActive)}>
-        {item.label ??
-          intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
-        {unread > 0 && (
-          <span
-            className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
-            aria-label={intl.formatMessage(
-              {
-                id: 'portal.support.unreadBadge',
-                defaultMessage: '{count} unread',
-              },
-              { count: unread }
-            )}
-          >
-            {unread > 99 ? '99+' : unread}
-          </span>
+    // A tab for a section served on another host (help.acme.com) is a plain
+    // link there: a client-side navigation would never reach the server. A
+    // signed-in viewer goes through the sign-in handoff on that host.
+    const signedIn = useSessionContext()?.user != null
+    const crossHostHref = crossHostTabHref(item.type, item.to, useSectionLinks(), { signedIn })
+    const isActive = useRouterState({
+      select: (s) => !crossHostHref && isTabActive(item.to, s.location.pathname),
+    })
+    const label =
+      item.label ?? intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })
+    const badge = unread > 0 && (
+      <span
+        className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
+        aria-label={intl.formatMessage(
+          {
+            id: 'portal.support.unreadBadge',
+            defaultMessage: '{count} unread',
+          },
+          { count: unread }
         )}
+      >
+        {unread > 99 ? '99+' : unread}
+      </span>
+    )
+    return crossHostHref ? (
+      <a href={crossHostHref} className={navItemClass(false)}>
+        {label}
+        {badge}
+      </a>
+    ) : (
+      <Link to={item.to} className={navItemClass(isActive)}>
+        {label}
+        {badge}
       </Link>
     )
   },
   (prev, next) =>
     prev.unread === next.unread &&
+    prev.item.type === next.item.type &&
     prev.item.to === next.item.to &&
     prev.item.label === next.item.label &&
     prev.item.messageId === next.item.messageId &&

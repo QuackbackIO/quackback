@@ -108,4 +108,21 @@ describe('RichTextContent — embed placeholder survives DOMPurify', () => {
     expect(placeholder!.getAttribute('data-kind')).toBe('post')
     expect(placeholder!.getAttribute('data-id')).toBe('post_01ktjwt5tyf6br9mw521h13n6n')
   })
+
+  it('keeps a ticket embed (the card a teammate shares into a thread)', () => {
+    const doc: JSONContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'quackbackEmbed',
+          attrs: { kind: 'ticket', id: 'ticket_01ktjwt5tyf6br9mw521h13n6n' },
+        },
+      ],
+    }
+    const { container } = render(<RichTextContent content={doc} />)
+    const placeholder = container.querySelector('[data-quackback-embed]') as HTMLElement | null
+    expect(placeholder).not.toBeNull()
+    expect(placeholder!.getAttribute('data-kind')).toBe('ticket')
+    expect(placeholder!.getAttribute('data-id')).toBe('ticket_01ktjwt5tyf6br9mw521h13n6n')
+  })
 })

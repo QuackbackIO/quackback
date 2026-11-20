@@ -263,7 +263,7 @@ function AttributeFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!canSubmit || isPending}>
-              {isPending ? 'Saving...' : isEditing ? 'Save changes' : 'Create attribute'}
+              {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create attribute'}
             </Button>
           </DialogFooter>
         </form>

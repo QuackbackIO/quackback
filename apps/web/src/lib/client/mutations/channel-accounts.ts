@@ -8,8 +8,10 @@ import {
   deleteChannelAccountFn,
   updateInboundTrustFn,
   clearInboundForwardingFn,
-  updateSendingAddressSmtpFn,
   sendTestEmailFn,
+  updateSendingAddressNameFn,
+  setEmailSenderFn,
+  type EmailSenderChoiceDTO,
 } from '@/lib/server/functions/channel-accounts'
 import { emailChannelKeys } from '@/lib/client/queries/channel-accounts'
 
@@ -27,8 +29,22 @@ export const useCreateInboundRoute = () =>
   )
 
 export const useCreateSendingAddress = () =>
-  useConfigMutation((data: { address: string; module: 'support' | 'feedback' | 'changelog' }) =>
+  useConfigMutation((data: { address: string; senderName: string | null }) =>
     createSendingAddressFn({ data })
+  )
+
+export const useUpdateSendingAddressName = () =>
+  useConfigMutation((data: { id: string; senderName: string | null }) =>
+    updateSendingAddressNameFn({ data })
+  )
+
+/** Which address a kind of email sends from; null clears the choice. */
+export const useSetEmailSender = () =>
+  useConfigMutation(
+    (data: {
+      surface: 'default' | 'support' | 'feedback' | 'changelog' | 'status'
+      choice: EmailSenderChoiceDTO | null
+    }) => setEmailSenderFn({ data })
   )
 
 export const useRestartSendingDomainChecks = () =>
@@ -52,11 +68,3 @@ export const useUpdateInboundTrust = () =>
   )
 
 export const useClearInboundForwarding = () => useConfigMutation(() => clearInboundForwardingFn())
-
-export const useUpdateSendingAddressSmtp = () =>
-  useConfigMutation(
-    (data: {
-      id: string
-      smtp: { host: string; port: number; secure: boolean; user: string } | null
-    }) => updateSendingAddressSmtpFn({ data })
-  )

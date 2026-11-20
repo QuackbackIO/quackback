@@ -9,10 +9,10 @@ import type { TicketType, TicketStatusCategory } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
 
 const TYPE_META: Record<TicketType, { label: string; className: string }> = {
-  customer: { label: 'Customer', className: 'bg-sky-500/12 text-sky-700 dark:text-sky-300' },
+  customer: { label: 'Customer', className: 'bg-muted text-foreground' },
   back_office: {
     label: 'Back office',
-    className: 'bg-violet-500/12 text-violet-700 dark:text-violet-300',
+    className: 'bg-muted text-foreground',
   },
   tracker: { label: 'Tracker', className: 'bg-muted text-muted-foreground' },
 }
@@ -53,8 +53,8 @@ export function TicketTypeBadge({ type, className }: { type: TicketType; classNa
 // column.tsx, which carries no full TicketStatusRef to reuse TicketStatusChip
 // itself) can tint by the same category without its own copy.
 export const CATEGORY_CHIP: Record<TicketStatusCategory, string> = {
-  open: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
-  pending: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
+  open: 'bg-success/10 text-success',
+  pending: 'bg-warning/10 text-warning',
   closed: 'bg-muted text-muted-foreground',
 }
 

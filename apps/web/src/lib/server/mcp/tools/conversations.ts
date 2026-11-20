@@ -5,11 +5,13 @@
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { PostId, BoardId, ConversationId, PrincipalId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
+import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import {
   registerTool,
   agentFromMcpAuth,
@@ -36,6 +38,7 @@ export function registerConversationTools(server: McpServer, auth: McpAuthContex
     limit?: number
   }>(server, auth, {
     name: 'list_conversations',
+    title: 'List conversations',
     permissions: [PERMISSIONS.CONVERSATION_VIEW],
     description: `List support-inbox conversations, newest activity first. Filter by status, priority, or assigned agent; paginate with cursor.
 
@@ -94,8 +97,9 @@ Examples:
     cursor?: string
   }>(server, auth, {
     name: 'get_conversation',
+    title: 'Get conversation',
     permissions: [PERMISSIONS.CONVERSATION_VIEW],
-    description: `Get a conversation and its most recent messages. Set includeInternal to also return agent-only internal notes.
+    description: `Get a conversation and its most recent messages. Set includeInternal to also return agent-only internal notes and assignment notices, which customers never see.
 
 Example: get_conversation({ conversationId: "conversation_01abc...", includeInternal: true })`,
     schema: {
@@ -104,7 +108,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
         .boolean()
         .optional()
         .default(false)
-        .describe('Include agent-only internal notes'),
+        .describe('Include agent-only internal notes and assignment notices'),
       cursor: z
         .string()
         .optional()
@@ -114,12 +118,10 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
     scope: 'read:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
       const { listMessages, conversationToDTO } =
         await import('@/lib/server/domains/conversation/conversation.query')
       const conversationId = args.conversationId as ConversationId
-      const conversation = await assertConversationViewable(conversationId, mcpAgentActor(auth))
+      const conversation = await assertConversationVisible(conversationId, mcpAgentActor(auth))
       const [dto, page] = await Promise.all([
         conversationToDTO(conversation, 'agent'),
         listMessages(conversationId, {
@@ -163,15 +165,20 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
 
   registerTool<{ conversationId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'reply_to_conversation',
+    title: 'Reply to conversation',
     permissions: [PERMISSIONS.CONVERSATION_REPLY],
-    description: `Send an agent reply in a conversation (visible to the visitor). Auto-assigns the conversation to the calling agent if unassigned.
+    description: `Send an agent reply in a conversation (visible to the visitor). When you are signed in as a teammate, replying to an unassigned conversation assigns it to you. A reply made with an API key leaves the assignment unchanged.
 
 Attach files already uploaded with upload_file by passing their ids in fileIds (max 10).
 
 Example: reply_to_conversation({ conversationId: "conversation_01abc...", content: "Thanks for reaching out — we're on it." })`,
     schema: {
       conversationId: z.string().describe('Conversation TypeID'),
-      content: z.string().min(1).max(4000).describe('Reply text sent to the visitor'),
+      content: z
+        .string()
+        .min(1)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
+        .describe('Reply text sent to the visitor'),
       fileIds: z
         .array(z.string())
         .max(10)
@@ -182,11 +189,11 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { assertConversationViewable, sendAgentMessage } =
+      // sendAgentMessage checks the conversation for the caller.
+      const { sendAgentMessage } =
         await import('@/lib/server/domains/conversation/conversation.service')
       const agent = agentFromMcpAuth(auth)
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const result = await sendAgentMessage(
         args.conversationId as ConversationId,
         args.content,
@@ -212,6 +219,7 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
     content: string
   }>(server, auth, {
     name: 'suggest_post',
+    title: 'Suggest feedback post to team',
     permissions: [PERMISSIONS.CONVERSATION_NOTE],
     description: `Suggest to the SUPPORT TEAM (not the visitor) that a RESOLVED conversation be tracked as a feedback post. Appears only in the agent inbox as an internal note; a team member confirms with one click. Rejected unless the conversation is resolved.
 
@@ -227,11 +235,9 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
     teamOnly: true,
     handler: async (args) => {
       const { suggestPost } = await import('@/lib/server/domains/conversation/conversation.cards')
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
+      // suggestPost reads the conversation through the caller's scope.
       const agent = agentFromMcpAuth(auth)
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const r = await suggestPost(
         {
           conversationId: args.conversationId as ConversationId,
@@ -247,6 +253,7 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
 
   registerTool<{ conversationId: string; postId: string }>(server, auth, {
     name: 'share_post',
+    title: 'Share post in conversation',
     permissions: [PERMISSIONS.CONVERSATION_REPLY],
     description: `Embed an EXISTING feedback post as a card in the conversation so the visitor can view and upvote it. Find
 candidates first with the search tool. Use to surface related ideas / avoid duplicates.
@@ -261,11 +268,9 @@ Example: share_post({ conversationId: "conversation_01...", postId: "post_01..."
     teamOnly: true,
     handler: async (args) => {
       const { sharePost } = await import('@/lib/server/domains/conversation/conversation.cards')
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
+      // sharePost sends through sendAgentMessage, which checks the conversation.
       const agent = agentFromMcpAuth(auth)
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const r = await sharePost(
         { conversationId: args.conversationId as ConversationId, postId: args.postId as PostId },
         { agentActor: actor, agentPrincipalId: auth.principalId, agent }
@@ -279,6 +284,7 @@ Example: share_post({ conversationId: "conversation_01...", postId: "post_01..."
     status: 'open' | 'snoozed' | 'closed'
   }>(server, auth, {
     name: 'set_conversation_status',
+    title: 'Set conversation status',
     permissions: [PERMISSIONS.CONVERSATION_SET_STATUS],
     description: `Change a conversation's status (open, snoozed, or closed). Snoozing defers it until the customer next replies; closing stamps the resolution time; a later reply reopens it.
 
@@ -291,10 +297,10 @@ Example: set_conversation_status({ conversationId: "conversation_01abc...", stat
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { assertConversationViewable, setConversationStatus } =
+      // setConversationStatus checks the conversation for the caller.
+      const { setConversationStatus } =
         await import('@/lib/server/domains/conversation/conversation.service')
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const updated = await setConversationStatus(
         args.conversationId as ConversationId,
         args.status,

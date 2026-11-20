@@ -19,7 +19,7 @@ function registeredToolNames(): string[] {
   const names: string[] = []
   registerTools(
     {
-      tool: (name: string) => {
+      registerTool: (name: string) => {
         names.push(name)
       },
     } as never,
