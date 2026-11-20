@@ -7,15 +7,28 @@ import {
   asc,
   channelAccounts,
   db,
+  domains as domainsTable,
   emailSendingDomains,
   eq,
   isNull,
+  settings,
   ssoVerifiedDomain,
+  type Domain,
 } from '@/lib/server/db'
 import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-proof'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { toAsciiDomain } from '@/lib/server/domains/channel-accounts/outbound-identity'
-import { getProvenZones, provenZoneCovering, sendingRowProvesZone } from './proven-zones'
+import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import {
+  getProvenZones,
+  provenZoneCovering,
+  provenZonesFrom,
+  sendingRowProvesZone,
+  zonesBesidesDomain,
+  type ProvenZone,
+} from './proven-zones'
+import { domainUsesFrom, type DomainUseRows } from './domains.service'
+import { activeSendingDomainIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 export interface SendingDomainSummary {
   id: string
@@ -26,6 +39,10 @@ export interface SendingDomainSummary {
   /** The local parts of the addresses sending from it, as "help@". */
   localParts: string[]
   ownershipProven: boolean
+  /** Held back by the plan: its mail goes from the default sender for now. */
+  paused: boolean
+  /** The plan that holds it back, named in its line; null when unknown or not paused. */
+  pausedPlanName?: string | null
 }
 
 export interface SignInDomainSummary {
@@ -49,7 +66,7 @@ function addressDomain(address: string): string {
 }
 
 export async function listSendingDomainSummaries(): Promise<SendingDomainSummary[]> {
-  const [domains, senders] = await Promise.all([
+  const [domains, senders, active] = await Promise.all([
     db.select().from(emailSendingDomains).orderBy(asc(emailSendingDomains.domain)),
     db
       .select({
@@ -58,7 +75,14 @@ export async function listSendingDomainSummaries(): Promise<SendingDomainSummary
       })
       .from(channelAccounts)
       .where(and(eq(channelAccounts.role, 'sending'), isNull(channelAccounts.deletedAt))),
+    activeSendingDomainIds(),
   ])
+  const pausedPlanName =
+    active === null
+      ? null
+      : await import('@/lib/server/domains/plan-limits/plan-limits.copy').then((m) =>
+          m.currentPlanName()
+        )
   return domains.map((d) => {
     const domain = toAsciiDomain(d.domain)
     const parts = new Set<string>()
@@ -78,6 +102,8 @@ export async function listSendingDomainSummaries(): Promise<SendingDomainSummary
       autoCheckUntil: d.autoCheckUntil?.toISOString() ?? null,
       localParts: [...parts].sort(),
       ownershipProven: sendingRowProvesZone(d),
+      paused: active !== null && !active.includes(d.id),
+      pausedPlanName,
     }
   })
 }
@@ -106,4 +132,99 @@ export async function listSignInDomainSummaries(
       provenBy: covering ? shownProofSource(covering.source, viewer) : null,
     }
   })
+}
+
+/** A domain added by name, as the Domains list shows it. */
+export interface AddedDomainSummary {
+  name: string
+  /** Its own record was found, or a zone this workspace proved covers it. */
+  verified: boolean
+}
+
+/** Everything a domain's own page says about the domain itself. */
+export interface DomainDetail {
+  name: string
+  /** Whether the domain was added by name, so it has a record of its own. */
+  added: boolean
+  status: 'pending' | 'verified'
+  /** The ownership record to publish; null for a name only a use holds. */
+  record: { host: string; value: string } | null
+  verifiedAt: string | null
+  lastCheckedAt: string | null
+  /** The proof that already covers the name, as the viewer may see it. */
+  provenBy: ShownProofSource | null
+  /** Whether any use holds the name, whether or not the viewer may see it. */
+  inUse: boolean
+}
+
+/**
+ * The added domains and the zones this workspace has proven, read once: the
+ * domains, the sending domains and the settings row, plus the sign-in domains
+ * when a domain's uses are wanted too. Everything else is derived from them.
+ */
+async function loadDomainRows(opts: { signIn: boolean }): Promise<{
+  domains: Domain[]
+  zones: ProvenZone[]
+  useRows: DomainUseRows
+}> {
+  const [domainRows, sending, settingsRows, signIn] = await Promise.all([
+    db.select().from(domainsTable).orderBy(asc(domainsTable.name)),
+    db
+      .select({
+        domain: emailSendingDomains.domain,
+        status: emailSendingDomains.status,
+        dkimMode: emailSendingDomains.dkimMode,
+        dnsRecords: emailSendingDomains.dnsRecords,
+      })
+      .from(emailSendingDomains),
+    db
+      .select({
+        helpCenterConfig: settings.helpCenterConfig,
+        cloudIdentity: settings.cloudIdentity,
+      })
+      .from(settings)
+      .limit(1),
+    opts.signIn ? db.select({ name: ssoVerifiedDomain.name }).from(ssoVerifiedDomain) : [],
+  ])
+  const settingsRow = settingsRows[0]
+  return {
+    domains: domainRows,
+    zones: provenZonesFrom({
+      sending,
+      sso: [],
+      cloudIdentity: settingsRow?.cloudIdentity,
+      domains: domainRows,
+    }),
+    useRows: { sending, signIn, settings: settingsRow },
+  }
+}
+
+export async function listAddedDomainSummaries(): Promise<AddedDomainSummary[]> {
+  const { domains, zones } = await loadDomainRows({ signIn: false })
+  return domains.map((r) => ({
+    name: r.name,
+    verified: r.status === 'verified' || provenZoneCovering(r.name, zones) !== null,
+  }))
+}
+
+export async function getDomainDetail(
+  name: string,
+  viewer: readonly PermissionKey[]
+): Promise<DomainDetail> {
+  const key = toAsciiDomain(name)
+  const { domains, zones, useRows } = await loadDomainRows({ signIn: true })
+  const row = (key && domains.find((d) => d.name === key)) || null
+  const record = row ? ownershipRecord(row.ownershipToken) : null
+  // Another proof that covers the name; a verified row is its own proof.
+  const covering = provenZoneCovering(key, row ? zonesBesidesDomain(row, zones) : zones)
+  return {
+    name: row?.name ?? key,
+    added: row !== null,
+    status: row?.status ?? 'pending',
+    record: record ? { host: record.host, value: record.value } : null,
+    verifiedAt: row?.verifiedAt?.toISOString() ?? null,
+    lastCheckedAt: row?.lastCheckedAt?.toISOString() ?? null,
+    provenBy: covering ? shownProofSource(covering.source, viewer) : null,
+    inUse: domainUsesFrom(key, useRows).length > 0,
+  }
 }

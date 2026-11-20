@@ -33,7 +33,7 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
-    select: () => ({ from: () => Promise.resolve([{ count: 0 }]) }),
+    select: () => ({ from: () => ({ where: () => Promise.resolve([{ count: 0 }]) }) }),
     insert: (...args: unknown[]) => hoisted.mockInsert(...args),
   },
 }))

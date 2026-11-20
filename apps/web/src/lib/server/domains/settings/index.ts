@@ -15,6 +15,7 @@ export type {
   AuthConfig,
   PortalFeatures,
   PortalConfig,
+  PortalPageConfig,
   PortalAccessConfig,
   PortalNavConfig,
   PortalNavItemConfig,

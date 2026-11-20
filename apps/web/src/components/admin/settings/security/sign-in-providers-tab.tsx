@@ -12,7 +12,7 @@ import { IdentityProvidersSection } from '@/components/admin/settings/security/i
 import { countEnabledAuthMethods } from '@/components/admin/settings/security/auth-method-count'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
-import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
+import { effectiveSignInMethods, isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { updateAuthConfigFn } from '@/lib/server/functions/settings'
 import type { AuthConfig } from '@/lib/shared/types/settings'
 
@@ -23,6 +23,9 @@ interface SignInProvidersTabProps {
   initialTeamAuthConfig: AuthConfig
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
   customOidcProviderTier: boolean
+  /** Single sign-on works right now: the plan has it, or it keeps working
+   *  through a plan limits grace. Defaults to the tier flag. */
+  ssoLive?: boolean
 }
 
 /**
@@ -43,6 +46,7 @@ export function SignInProvidersTab({
   initialTeamAuthConfig,
   credentialStatus,
   customOidcProviderTier,
+  ssoLive = customOidcProviderTier,
 }: SignInProvidersTabProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -67,6 +71,18 @@ export function SignInProvidersTab({
   const passwordEnabled = isSignInMethodEnabled(oauthState, 'password')
   const magicLinkEnabled = isSignInMethodEnabled(oauthState, 'magicLink')
   const twoFactorRequired = teamAuthConfig.twoFactor?.required === true
+  // Set up but not live: email links stand in for single sign-on whatever the
+  // switch says (see `effectiveSignInMethods`).
+  const magicLinkStandsIn =
+    !magicLinkEnabled &&
+    isSignInMethodEnabled(
+      effectiveSignInMethods({
+        stored: oauthState,
+        ssoLive,
+        providersConfigured: identityProviders.some((p) => p.enabled && p.configured),
+      }),
+      'magicLink'
+    )
 
   /** "Last method standing" guard — refuses to disable the only working
    *  sign-in method so visitors and team admins aren't locked out. The count
@@ -76,8 +92,10 @@ export function SignInProvidersTab({
     oauthState,
     emailConfigured,
     credentialStatus,
-    // IdPs only register (and so only count as a method) when the tier is on.
-    identityProviders: customOidcProviderTier ? identityProviders : [],
+    identityProviders,
+    // IdPs only register (and so only count as a method) while single sign-on
+    // is live; otherwise the email links that stand in for them count instead.
+    ssoLive,
   })
   const isLastMethod = (id: string) => {
     if (!isSignInMethodEnabled(oauthState, id)) return false
@@ -239,9 +257,11 @@ export function SignInProvidersTab({
           <MethodRow
             label="Email magic link"
             description={
-              emailConfigured
-                ? 'One-click link or 6-digit code by email.'
-                : 'Configure SMTP, Amazon SES or Resend to enable email delivery.'
+              !emailConfigured
+                ? 'Configure SMTP, Amazon SES or Resend to enable email delivery.'
+                : magicLinkStandsIn
+                  ? 'One-click link or 6-digit code by email. On while single sign-on is paused.'
+                  : 'One-click link or 6-digit code by email.'
             }
             checked={magicLinkEnabled}
             onCheckedChange={(v) => saveBuiltin('magicLink', v)}
@@ -274,7 +294,8 @@ export function SignInProvidersTab({
           nested inside this card. */}
       <IdentityProvidersSection
         tierEnabled={customOidcProviderTier}
-        enabledMethodCount={enabledMethodCount}
+        ssoLive={ssoLive}
+        methods={{ oauthState, emailConfigured, credentialStatus }}
       />
 
       {configDialog && (

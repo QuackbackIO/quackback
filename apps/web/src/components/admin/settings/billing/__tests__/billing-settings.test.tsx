@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IntlProvider } from 'react-intl'
 import de from '@/locales/de.json'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import { BillingPlansView, EmailsPausedNotice } from '../billing-settings'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import { overLimits } from './plan-limits-fixtures'
 
 const catalogue: BillingCatalogue = {
   version: 1,
@@ -84,6 +86,13 @@ const paidOverview: BillingProjectionOverview = {
   hideBranding: false,
 }
 
+/** The plan card at the top of the page, found by the plan name in its heading. */
+function currentPlanCard(planName: string): HTMLElement {
+  const card = screen.getByRole('heading', { level: 2, name: planName }).closest('section')
+  if (!card) throw new Error(`no plan card for ${planName}`)
+  return card
+}
+
 function renderView(
   overrides: {
     overview?: BillingProjectionOverview
@@ -91,6 +100,7 @@ function renderView(
     usage?: Array<{ key: string; label: string; used: number; limit: number | null }>
     locale?: string
     messages?: Record<string, string>
+    limits?: PlanLimitsPage | null
   } = {}
 ) {
   return render(
@@ -112,6 +122,7 @@ function renderView(
         ]}
         invoicesError={null}
         usage={overrides.usage}
+        limits={overrides.limits}
       />
     </IntlProvider>
   )
@@ -146,6 +157,14 @@ describe('BillingPlansView', () => {
     expect(screen.getByText(/Wird am .*zurückgesetzt/)).toBeInTheDocument()
   })
 
+  it('calls the seat meter Team seats, as every other surface does', () => {
+    renderView({
+      overview: { ...paidOverview, seats: { ...paidOverview.seats!, purchased: 10 } },
+    })
+    expect(screen.getByText('Team seats', { selector: 'div' })).toBeInTheDocument()
+    expect(screen.queryByText('Seats', { selector: 'div' })).toBeNull()
+  })
+
   it('keeps only the monthly reset copy outside a trial', () => {
     renderView()
     expect(screen.queryByText(/Resets /)).not.toBeInTheDocument()
@@ -163,9 +182,9 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: 'Remove seats' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()
-    const switchLinks = screen.getAllByRole('link', { name: 'Switch to this plan' })
+    expect(screen.getByRole('button', { name: 'Downgrade to Free' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Downgrade to Pro' })).toBeInTheDocument()
+    const switchLinks = screen.getAllByRole('link', { name: 'Upgrade to Enterprise' })
     expect(switchLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/admin/settings/billing/checkout?plan=enterprise&period=annual',
     ])
@@ -249,10 +268,10 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByRole('button', { name: 'Start 7-day trial' })).toHaveLength(3)
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Downgrade' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Switch to Free' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Downgrade to Free' })).not.toBeInTheDocument()
   })
 
-  it('shows trial expiry, Continue with the plan, and included seats', () => {
+  it('shows trial expiry, Upgrade to the trialed plan, and included seats', () => {
     renderView({
       overview: {
         ...paidOverview,
@@ -271,7 +290,9 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByText('Trial').length).toBeGreaterThan(0)
     expect(screen.getByText(/Trial ends/)).toBeInTheDocument()
     expect(screen.getByText('3 of 5 seats included with Pro')).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Continue with Pro' }).length).toBeGreaterThan(0)
+    const card = currentPlanCard('Pro')
+    expect(within(card).getByRole('button', { name: 'Upgrade to Pro' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
   })
 
@@ -320,7 +341,7 @@ describe('BillingPlansView', () => {
     expect(screen.getByRole('button', { name: 'Continue to payment' })).toBeInTheDocument()
   })
 
-  it('does not offer Continue when the catalogue did not load', () => {
+  it('does not offer Upgrade on the plan card when the catalogue did not load', () => {
     renderView({
       catalogue: null,
       overview: {
@@ -337,10 +358,10 @@ describe('BillingPlansView', () => {
         seats: { used: 4, pending: 1, members: 3, purchased: null },
       },
     })
-    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+    expect(within(currentPlanCard('Pro')).queryByRole('button', { name: /Upgrade to/ })).toBeNull()
   })
 
-  it('does not offer Continue with a historical trial on a paid plan', () => {
+  it('does not offer Upgrade on the plan card for a historical trial on a paid plan', () => {
     renderView({
       overview: {
         ...paidOverview,
@@ -349,7 +370,9 @@ describe('BillingPlansView', () => {
         trialPlanName: null,
       },
     })
-    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+    expect(
+      within(currentPlanCard(paidOverview.planName)).queryByRole('button', { name: /Upgrade to/ })
+    ).toBeNull()
   })
 
   it('shows annual monthly equivalent from the catalogue', () => {
@@ -410,6 +433,14 @@ describe('BillingPlansView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(document.querySelector('form input[name="billingPeriod"]')).toHaveValue('monthly')
+  })
+
+  it('closes the downgrade dialog with Cancel, never by naming the plan to keep', async () => {
+    renderView()
+    fireEvent.click(screen.getByRole('button', { name: 'Downgrade to Pro' }))
+    const dialog = await screen.findByRole('dialog', {}, { timeout: 5000 })
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: /^Keep/ })).toBeNull()
   })
 
   it('offers no top-up on any usage meter, even when the emails meter is at its limit', () => {
@@ -519,5 +550,92 @@ describe('the emails allowance notice', () => {
         'Changelog and status page emails are paused until your allowance resets. Sign-in and support emails still send.'
       )
     ).toBeInTheDocument()
+  })
+})
+
+describe('BillingPlansView with plan limits', () => {
+  const usage = [
+    { key: 'maxBoards', label: 'boards', used: 3, limit: 1 },
+    { key: 'maxTeamSeats', label: 'team seats', used: 3, limit: 2 },
+    { key: 'maxPosts', label: 'posts', used: 77, limit: 50 },
+    { key: 'maxSendingDomains', label: 'sending domains', used: 0, limit: 0 },
+  ]
+  const meter = (label: string) =>
+    screen.getByText(label, { selector: 'div' }).closest('.px-6') as HTMLElement
+  // The fixture's dates are in this clock's year, so they show no year.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('links each meter over a cap to the Plan limits page, with the date', () => {
+    renderView({ usage, limits: overLimits() })
+    // The whole row links to Plan limits, with a small badge and the date in the caption.
+    const boards = meter('Boards').querySelector('a[data-usage-meter-link]')
+    expect(boards).toHaveAttribute('href', '/admin/settings/billing/limits')
+    expect(within(meter('Boards')).getByText('Over limit')).toHaveAttribute(
+      'data-variant',
+      'destructive'
+    )
+    expect(within(meter('Boards')).getByText('3 of 1 · fix by Nov 24')).toBeInTheDocument()
+    const boardsBar = within(meter('Boards')).getByRole('progressbar')
+    expect(boardsBar).toHaveAttribute('data-tone', 'over')
+    expect(boardsBar.className).toMatch(/bg-destructive\/15/)
+    expect(boardsBar.firstElementChild).toHaveAttribute('data-level', 'over')
+    expect(boardsBar.firstElementChild?.className).toMatch(/\bbg-destructive\b/)
+    // A meter within its cap keeps the normal bar.
+    expect(within(meter('Sending domains')).getByRole('progressbar')).not.toHaveAttribute(
+      'data-tone'
+    )
+    // Seats show on the usage card once they are over.
+    expect(meter('Team seats').querySelector('a[data-usage-meter-link]')).not.toBeNull()
+    expect(within(meter('Sending domains')).queryByRole('link')).toBeNull()
+  })
+
+  it('notes that only new posts stop, with no link', () => {
+    renderView({ usage, limits: overLimits() })
+    expect(meter('Posts')).toHaveTextContent('New posts stop at 50. Existing posts stay.')
+    expect(within(meter('Posts')).getByRole('progressbar')).toHaveAttribute('data-tone', 'muted')
+    expect(within(meter('Posts')).queryByRole('link')).toBeNull()
+  })
+
+  it('flags the plan card and links to the Plan limits page', () => {
+    renderView({ usage, limits: overLimits() })
+    expect(screen.getByText('Over limits')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See plan limits' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing/limits'
+    )
+  })
+
+  it('says nothing new without plan billing', () => {
+    renderView({ usage, limits: overLimits({ enabled: false }) })
+    expect(screen.queryByText('Over limits')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Over limit|See plan limits/ })).toBeNull()
+    expect(screen.queryByText(/New posts stop/)).toBeNull()
+    expect(screen.queryByText('Team seats', { selector: 'div' })).toBeNull()
+    expect(document.querySelector('[data-tone]')).toBeNull()
+  })
+
+  describe('plan card calls to action', () => {
+    it('offers Upgrade to each higher plan from Free, and marks the current card', () => {
+      renderView({
+        overview: {
+          ...paidOverview,
+          plan: 'free',
+          planName: 'Free',
+          status: null,
+          renewalAt: null,
+          canUpgrade: true,
+        },
+        catalogue: { ...catalogue, trialedPlanIds: ['pro', 'business', 'enterprise'] },
+      })
+      for (const name of ['Pro', 'Business', 'Enterprise']) {
+        expect(screen.getByRole('button', { name: `Upgrade to ${name}` })).toBeInTheDocument()
+      }
+      expect(screen.queryByRole('button', { name: /Subscribe to/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
+    })
   })
 })

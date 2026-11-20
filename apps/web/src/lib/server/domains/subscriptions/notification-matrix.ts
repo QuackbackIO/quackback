@@ -55,3 +55,15 @@ export function shouldNotify(
   // 4. Default true.
   return true
 }
+
+/**
+ * Whether a customer wants the email carrying a teammate's reply on a ticket.
+ *
+ * Only the person's own "Ticket replies" email switch decides it. "Pause all
+ * email" (emailMuted) does not: it pauses notifications, and a teammate
+ * answering the customer is the conversation itself, not a notice about it.
+ * No stored preferences means the default, which is on.
+ */
+export function wantsTicketReplyEmail(prefs: NotificationPreferencesData | undefined): boolean {
+  return prefs?.matrix?.ticket_replied?.email !== false
+}

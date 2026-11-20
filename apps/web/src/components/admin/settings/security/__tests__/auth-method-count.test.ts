@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { countEnabledAuthMethods } from '../auth-method-count'
+import { countEnabledAuthMethods, isProviderLastWayIn } from '../auth-method-count'
 
 const base = {
   // password is on by default (absent ⇒ on); disable it in the base so each
@@ -101,5 +101,80 @@ describe('countEnabledAuthMethods', () => {
 
   it('does not count an explicitly disabled password', () => {
     expect(countEnabledAuthMethods({ ...base, oauthState: { password: false } })).toBe(0)
+  })
+})
+
+describe('countEnabledAuthMethods without single sign-on live', () => {
+  const setUp = { id: 'idp_1', enabled: true, configured: true }
+  const ssoOnly = { ...base, oauthState: { password: false, magicLink: false } }
+
+  it('counts the email links that stand in for a set-up provider, not the provider', () => {
+    expect(
+      countEnabledAuthMethods({ ...ssoOnly, identityProviders: [setUp], ssoLive: false })
+    ).toBe(1)
+  })
+
+  it('counts nothing when email delivery is not wired', () => {
+    expect(
+      countEnabledAuthMethods({
+        ...ssoOnly,
+        emailConfigured: false,
+        identityProviders: [setUp],
+        ssoLive: false,
+      })
+    ).toBe(0)
+  })
+
+  it('does not count email links twice when they are already on', () => {
+    expect(
+      countEnabledAuthMethods({
+        ...base,
+        oauthState: { password: false, magicLink: true },
+        identityProviders: [setUp],
+        ssoLive: false,
+      })
+    ).toBe(1)
+  })
+})
+
+describe('isProviderLastWayIn', () => {
+  const a = { id: 'idp_a', enabled: true, configured: true }
+  const b = { id: 'idp_b', enabled: true, configured: true }
+  const ssoOnly = { ...base, oauthState: { password: false, magicLink: false } }
+
+  it('is true for the sole working provider while single sign-on is live', () => {
+    expect(
+      isProviderLastWayIn({ ...ssoOnly, identityProviders: [a], ssoLive: true }, 'idp_a')
+    ).toBe(true)
+  })
+
+  it('is true with single sign-on off when the provider keeps the email links on', () => {
+    expect(
+      isProviderLastWayIn({ ...ssoOnly, identityProviders: [a], ssoLive: false }, 'idp_a')
+    ).toBe(true)
+  })
+
+  it('is false with single sign-on off when another provider keeps them on', () => {
+    expect(
+      isProviderLastWayIn({ ...ssoOnly, identityProviders: [a, b], ssoLive: false }, 'idp_a')
+    ).toBe(false)
+  })
+
+  it('is false with single sign-on off when password stays on', () => {
+    expect(
+      isProviderLastWayIn(
+        { ...base, oauthState: { password: true }, identityProviders: [a], ssoLive: false },
+        'idp_a'
+      )
+    ).toBe(false)
+  })
+
+  it('is false for a provider that is switched off', () => {
+    expect(
+      isProviderLastWayIn(
+        { ...ssoOnly, identityProviders: [{ ...a, enabled: false }], ssoLive: false },
+        'idp_a'
+      )
+    ).toBe(false)
   })
 })

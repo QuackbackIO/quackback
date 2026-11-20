@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useLayoutEffect, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import type { LaunchStatus } from '@/lib/shared/launch-checklist'
@@ -312,6 +312,33 @@ describe('Home changing in place', () => {
     const next = await screen.findByRole('heading', { name: 'A customer creates a post' })
     await waitFor(() => expect(document.activeElement).toBe(next))
     expect(politeText()).toBe('Share your board link done. Next: A customer creates a post')
+  })
+
+  it('moves focus to the next step when focus landed in the plan before Home was listening', async () => {
+    hoisted.status = feedback()
+    // Layout effects run before passive ones, so this focus lands in the plan
+    // before Home's focus tracking starts, as an early focus does in a busy browser.
+    function FocusCopyFirst() {
+      useLayoutEffect(() => {
+        screen.getByRole('button', { name: 'Copy board link' }).focus()
+      }, [])
+      return null
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['admin', 'onboarding'], hoisted.status)
+    render(
+      <IntlProvider locale="en" messages={en}>
+        <QueryClientProvider client={client}>
+          <HomeGettingStarted />
+          <FocusCopyFirst />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+    const copy = screen.getByRole('button', { name: 'Copy board link' })
+    expect(document.activeElement).toBe(copy)
+    fireEvent.click(copy)
+    const next = await screen.findByRole('heading', { name: 'A customer creates a post' })
+    await waitFor(() => expect(document.activeElement).toBe(next))
   })
 
   it('moves focus to the first win when it arrives while focus is in the plan', async () => {

@@ -121,3 +121,47 @@ describe('BoardsList', () => {
     expect(screen.queryByText('Team only')).toBeNull()
   })
 })
+
+describe('BoardsList read-only labels', () => {
+  const boards = [
+    board({ id: 'board_1', slug: 'features', name: 'Features' }),
+    board({ id: 'board_2', slug: 'bugs', name: 'Bugs' }),
+  ]
+
+  it('shows no Open or Read-only label while every board is open', () => {
+    render(<BoardsList boards={boards} />)
+    expect(screen.queryByText('Open')).toBeNull()
+    expect(screen.queryByText('Read-only')).toBeNull()
+  })
+
+  const bugs = (over: Record<string, unknown>) =>
+    board({ id: 'board_2', slug: 'bugs', name: 'Bugs', ...over })
+
+  it('labels a board the admin set read-only, and its open sibling', () => {
+    render(<BoardsList boards={[boards[0], bugs({ readOnly: true })]} />)
+    expect(screen.getAllByText('Open')).toHaveLength(1)
+    expect(screen.getAllByText('Read-only')).toHaveLength(1)
+  })
+
+  it('words a board the plan keeps read-only as such', () => {
+    render(<BoardsList boards={[boards[0], bugs({ planReadOnly: 'Free' })]} />)
+    expect(screen.getAllByText('Open')).toHaveLength(1)
+    expect(screen.getByText('Read-only on the Free plan')).toBeTruthy()
+  })
+
+  it('says plain Read-only when the admin set it, whatever the plan state', () => {
+    render(<BoardsList boards={[bugs({ readOnly: true, planReadOnly: 'Free' })]} />)
+    expect(screen.getByText('Read-only')).toBeTruthy()
+    expect(screen.queryByText('Read-only on the Free plan')).toBeNull()
+  })
+
+  it('names the plan only for a board the plan alone closes', () => {
+    render(
+      <BoardsList
+        boards={[bugs({ planReadOnly: 'Free' }), bugs({ id: 'board_3', readOnly: true })]}
+      />
+    )
+    expect(screen.getAllByText('Read-only on the Free plan')).toHaveLength(1)
+    expect(screen.getAllByText('Read-only')).toHaveLength(1)
+  })
+})

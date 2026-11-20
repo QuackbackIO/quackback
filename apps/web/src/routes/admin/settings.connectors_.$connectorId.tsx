@@ -23,8 +23,7 @@ import {
   useRefreshConnector,
   useUpdateConnector,
 } from '@/lib/client/mutations/assistant-connectors'
-import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import type { ConnectorToolDTO, ConnectorToolPolicy } from '@/lib/shared/assistant/connectors'
 import { useState } from 'react'
 
@@ -32,7 +31,7 @@ import { useState } from 'react'
 // which has no Outlet. URL stays /admin/settings/connectors/:connectorId.
 export const Route = createFileRoute('/admin/settings/connectors_/$connectorId')({
   beforeLoad: ({ context }) => {
-    assertRouteAnyPermission(context.permissions, AI_ANY_PERMISSIONS)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/connectors/$connectorId')
   },
   loader: async ({ context, params }) => {
     await context.queryClient.ensureQueryData(connectorQueries.detail(params.connectorId))

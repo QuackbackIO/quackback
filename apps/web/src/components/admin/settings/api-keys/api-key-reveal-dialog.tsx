@@ -49,7 +49,7 @@ export function ApiKeyRevealDialog({
         <label className="text-sm font-medium">{intl.formatMessage(messages.revealUsage)}</label>
         <div className="rounded-lg bg-muted p-3">
           <code className="ph-mask text-xs text-muted-foreground block">
-            curl -H &quot;Authorization: Bearer {keyValue ? keyValue.slice(0, 20) + '...' : ''}
+            curl -H &quot;Authorization: Bearer {keyValue ? keyValue.slice(0, 20) + '…' : ''}
             &quot; \
             <br />
             &nbsp;&nbsp;https://yoursite.com/api/v1/posts

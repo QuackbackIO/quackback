@@ -14,7 +14,9 @@
  * that already reported the month (its spent row is kept for 45 days) queues
  * nothing and stays parked. One that has not gets the job, and is woken the
  * way a job-wake wakes it: its loop starts, runs the job, and parks again at
- * a later refresh once the queue is empty.
+ * a later refresh once the queue is empty. The report also runs plan limits
+ * detection (`usage-report-queue.ts`), so a workspace parked over its limits
+ * starts its grace here rather than only at its next request.
  *
  * Cost: one workspace scope per parked workspace per month per worker
  * process. A workspace whose scope cannot be opened is retried at most hourly.

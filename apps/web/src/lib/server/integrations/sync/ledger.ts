@@ -107,16 +107,18 @@ export async function queueSyncOperation(
   `)
   )
   let row = rows[0]!
-  // Reuse the permanent identity after a source is restored. Only a source-caused
-  // cancellation with no possible remote success may resume; user cancellation
-  // and uncertain/completed deliveries remain terminal for this create identity.
+  // Reuse the permanent identity after a source is restored or the plan limits
+  // pause ends. Only a cancellation caused by the source or the pause, with no
+  // possible remote success, may resume; user cancellation and
+  // uncertain/completed deliveries remain terminal for this create identity.
   if (available && intent.kind === 'create' && row.state === 'cancelled') {
     const resumed = getExecuteRows<{ id: string; state: string; version: number }>(
       await executor.execute(sql`
         UPDATE integration_sync_operations SET state = 'queued', payload = ${encrypted},
           requested_by = ${intent.requestedBy ?? null}, cancel_requested = false,
           error_code = NULL, finished_at = NULL, updated_at = now(), version = version + 1
-        WHERE id = ${row.id}::uuid AND state = 'cancelled' AND error_code = 'source_unavailable'
+        WHERE id = ${row.id}::uuid AND state = 'cancelled'
+          AND error_code IN ('source_unavailable', 'plan_paused')
           AND dispatched_at IS NULL AND remote_id IS NULL
           AND NOT EXISTS (SELECT 1 FROM integration_sync_attempts
             WHERE operation_id = ${row.id}::uuid AND

@@ -9,6 +9,7 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 
 const hoisted = vi.hoisted(() => ({
   granted: [] as string[],
+  closedFeatures: [] as string[],
   mockListPostsForExport: vi.fn(),
 }))
 
@@ -31,9 +32,17 @@ vi.mock('@/lib/server/functions/workspace', () => ({
     settings: { slug: 'acme' },
   }),
 }))
-vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
-  assertTierFeature: async () => {},
-}))
+// Honours the feature asked for, like the real gate reading the plan's flags.
+vi.mock('@/lib/server/domains/settings/tier-enforce', async () => {
+  const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+  return {
+    assertTierFeature: async (feature: string, friendly: string) => {
+      if (hoisted.closedFeatures.includes(feature)) {
+        throw new TierLimitError({ limit: `features.${feature}`, message: `${friendly} is off` })
+      }
+    },
+  }
+})
 vi.mock('@/lib/server/domains/posts/post.export', () => ({
   listPostsForExport: hoisted.mockListPostsForExport,
 }))
@@ -53,6 +62,7 @@ async function get(): Promise<Response> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  hoisted.closedFeatures = []
   hoisted.mockListPostsForExport.mockResolvedValue([])
 })
 
@@ -69,6 +79,15 @@ describe('GET /api/export', () => {
     hoisted.granted = ['post.view_private', 'post.create']
     const res = await get()
     expect(res.status).toBe(403)
+    expect(hoisted.mockListPostsForExport).not.toHaveBeenCalled()
+  })
+
+  it('refuses the posts CSV on a plan without analytics exports', async () => {
+    hoisted.granted = ['post.export']
+    hoisted.closedFeatures = ['analyticsExports']
+    const res = await get()
+    expect(res.status).toBe(402)
+    expect(await res.json()).toMatchObject({ limit: 'features.analyticsExports' })
     expect(hoisted.mockListPostsForExport).not.toHaveBeenCalled()
   })
 })

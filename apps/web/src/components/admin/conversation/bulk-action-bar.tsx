@@ -14,7 +14,7 @@ import { useState } from 'react'
 import { useIntl } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
-import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useConversationTags } from '@/lib/client/hooks/use-conversation-tags'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { PriorityMenuItems } from '@/components/admin/conversation/priority-control'
@@ -120,7 +120,7 @@ export function BulkActionBar({
   onRestore,
   onDeleteForever,
 }: BulkActionBarProps) {
-  const { data: members } = useTeamMembers()
+  const { data: members } = useAdminTeamMembers()
   const { data: teams } = useInboxTeams()
   // Only fetch the label taxonomy once its menu is actually open.
   const { data: tags } = useConversationTags({ enabled: openMenu === 'tag' })

@@ -41,6 +41,14 @@ interface ClaimPlan {
   passTimes?: number[]
   /** Delays applied to successive workspace scope entries. */
   scopeDelaysMs?: number[]
+  /** Run as a single-workspace install (no registry, no workspace scopes). */
+  single?: boolean
+  /** Called inside every schedule tick, in the context the pass runs in. */
+  onTick?: () => Promise<void>
+  /** Jobs each dispatch pass hands to the loop's runner. */
+  jobsPerPass?: number
+  /** Called inside every job the loop runs, in the context the job runs in. */
+  onJob?: (jobId: string) => Promise<void>
 }
 
 interface DormancyPlan {
@@ -68,7 +76,7 @@ async function bootJobWorker(
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
   vi.doMock('@/lib/server/config', () => ({
     config: {
-      isPooledTenancy: true,
+      isPooledTenancy: !plan.single,
       databaseUrl: 'postgres://direct/single',
       workspaceDormantAfterHours: 168,
     },
@@ -111,7 +119,14 @@ async function bootJobWorker(
     withWorkspaceScopeById: async (id: string, _origin: string, body: () => Promise<unknown>) => {
       const delay = plan.scopeDelaysMs?.shift()
       if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
-      const out = (await body()) as { month?: string } | undefined
+      // As the real scope does: a child of the active context that copies its
+      // fields (a request memo included) forward and carries the workspace.
+      const { getLogContext, runWithLogContext } = await import('@/lib/server/log-context')
+      const parent = getLogContext()
+      const out = (await runWithLogContext(
+        { ...(parent ?? { request_id: 'scope' }), scope_workspace: id },
+        body
+      )) as { month?: string } | undefined
       if (out && typeof out === 'object' && 'month' in out && out.month)
         dormancy?.reportsQueued?.push([id, out.month])
       return out
@@ -139,6 +154,7 @@ async function bootJobWorker(
     },
     runScheduleTick: async () => {
       plan.ticks = (plan.ticks ?? 0) + 1
+      await plan.onTick?.()
       if (plan.tickThrows) throw new Error('schedule tick failed')
       const every = plan.slotEveryMs
       const nextSlotAt = every ? new Date((Math.floor(Date.now() / every) + 1) * every) : null
@@ -148,16 +164,27 @@ async function bootJobWorker(
       plan.maintenance?.push(opts.prune !== false)
       return { requeued: 0, terminated: 0, pruned: 0 }
     },
-    dispatchPass: async () => {
+    dispatchPass: async (opts: { run: (job: { jobId: string }) => Promise<string> }) => {
       plan.dispatchCalls = (plan.dispatchCalls ?? 0) + 1
       plan.passTimes?.push(Date.now())
+      for (let i = 0; i < (plan.jobsPerPass ?? 0); i++) {
+        await opts.run({ jobId: `job_${plan.dispatchCalls}_${i}` })
+      }
       return { claimed: plan.claimed, saturated: true }
     },
-    startJobsById: async () => {
+    startJobsById: async (opts: {
+      jobIds: readonly string[]
+      run: (job: { jobId: string }) => Promise<string>
+    }) => {
       plan.startByIdCalls = (plan.startByIdCalls ?? 0) + 1
-      return 0
+      if (!plan.onJob) return 0
+      for (const jobId of opts.jobIds) await opts.run({ jobId })
+      return opts.jobIds.length
     },
-    runJob: async () => 'succeeded',
+    runJob: async (job: { jobId: string }) => {
+      await plan.onJob?.(job.jobId)
+      return 'succeeded'
+    },
     awaitPool: async () => {
       if (opts?.hangStop) await opts.hangStop
     },
@@ -203,6 +230,92 @@ afterEach(async () => {
     handle = null
   }
   vi.useRealTimers()
+})
+
+/**
+ * A job or a schedule tick reads workspace settings through the request memo.
+ * The worker runs for the life of the process, so a memo bag that outlived one
+ * pass or one job would answer every later read with the value from boot: a
+ * setting switched on afterwards would never reach a job.
+ */
+describe('each pass and each job reads afresh', () => {
+  async function counterRead() {
+    let reads = 0
+    const { memoizePerRequest } = await import('@/lib/server/request-memo')
+    return () => memoizePerRequest('settings', async () => ++reads)
+  }
+
+  it('a single-workspace install reads afresh on every schedule tick', async () => {
+    vi.useFakeTimers()
+    const seen: number[] = []
+    const plan: ClaimPlan = { claimed: 0, single: true, slotEveryMs: POLL_MS }
+    handle = await bootJobWorker(plan)
+    const read = await counterRead()
+    plan.onTick = async () => {
+      seen.push(await read())
+    }
+    await vi.advanceTimersByTimeAsync(POLL_MS * 4)
+    expect(seen.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('a single-workspace install reads afresh in every job, and once within one', async () => {
+    vi.useFakeTimers()
+    const perJob: Array<[number, number]> = []
+    const plan: ClaimPlan = { claimed: 0, single: true }
+    handle = await bootJobWorker(plan)
+    const read = await counterRead()
+    plan.jobsPerPass = 2
+    plan.onJob = async () => {
+      perJob.push([await read(), await read()])
+    }
+    await vi.advanceTimersByTimeAsync(POLL_MS * 3)
+    expect(perJob.length).toBeGreaterThanOrEqual(4)
+    // Within a job the memo still dedupes; across jobs nothing carries over.
+    for (const [first, second] of perJob) expect(second).toBe(first)
+    const firsts = perJob.map(([first]) => first)
+    expect(new Set(firsts).size).toBe(firsts.length)
+  })
+
+  it('a job started from a committing request does not read that request’s memo', async () => {
+    vi.useFakeTimers()
+    const jobReads: unknown[] = []
+    const plan: ClaimPlan = { claimed: 0, single: true }
+    handle = await bootJobWorker(plan)
+    const { runWithLogContext } = await import('@/lib/server/log-context')
+    const { memoizePerRequest } = await import('@/lib/server/request-memo')
+    plan.onJob = async () => {
+      jobReads.push(await memoizePerRequest('settings', async () => 'read by the job'))
+    }
+    await runWithLogContext({ request_id: 'committing-request' }, async () => {
+      await memoizePerRequest('settings', async () => 'read by the request')
+      await handle!.wake('__single__', ['job_01h00000000000000000000000'])
+    })
+    expect(jobReads).toEqual(['read by the job'])
+  })
+
+  it('a pooled job keeps its workspace scope but not the memo of the pass that claimed it', async () => {
+    vi.useFakeTimers()
+    const tickReads: number[] = []
+    const jobReads: number[] = []
+    const jobScopes: unknown[] = []
+    const plan: ClaimPlan = { claimed: 0, slotEveryMs: POLL_MS }
+    handle = await bootJobWorker(plan)
+    const read = await counterRead()
+    const { getLogContext } = await import('@/lib/server/log-context')
+    plan.onTick = async () => {
+      tickReads.push(await read())
+    }
+    plan.jobsPerPass = 1
+    plan.onJob = async () => {
+      jobReads.push(await read())
+      jobScopes.push(getLogContext()?.scope_workspace)
+    }
+    await vi.advanceTimersByTimeAsync(POLL_MS * 3)
+    expect(jobReads.length).toBeGreaterThanOrEqual(2)
+    expect(new Set([...tickReads, ...jobReads]).size).toBe(tickReads.length + jobReads.length)
+    expect(new Set(jobScopes)).toEqual(new Set([WORKSPACE_KEY]))
+  })
 })
 
 describe('pooled job worker', () => {

@@ -126,9 +126,9 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
 
   const row = (
     <span className="group relative flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
-      <Icon className={cn('h-3.5 w-3.5 shrink-0', isInternal && 'text-amber-600')} />
+      <Icon className={cn('h-3.5 w-3.5 shrink-0', isInternal && 'text-warning')} />
       <span className="truncate">{citation.title}</span>
-      {isInternal && <LockClosedIcon className="h-3 w-3 shrink-0 text-amber-600" />}
+      {isInternal && <LockClosedIcon className="h-3 w-3 shrink-0 text-warning" />}
       <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-30 w-60 -translate-y-1 rounded-xl border border-border bg-popover p-3 text-left opacity-0 shadow-xl transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
         <span className="mb-1 block text-[13px] font-semibold leading-snug text-foreground">
           {citation.title}
@@ -150,9 +150,7 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
             </button>
           </span>
         ) : (
-          <span className="text-[11px] text-amber-700 dark:text-amber-300">
-            Internal · not linkable
-          </span>
+          <span className="text-[11px] text-warning">Internal · not linkable</span>
         )}
       </span>
     </span>

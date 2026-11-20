@@ -218,13 +218,39 @@ export interface InboxSearch {
  * Resolve the active left-nav scope from the URL. Scopes are mutually exclusive;
  * precedence custom > team > tag > segment > view if the URL somehow carries
  * more than one.
+ *
+ * With support conversations off (a tickets-only workspace) a scope that only
+ * lists conversations resolves to All tickets instead, so a stale link or the
+ * default never opens a conversation view the nav does not offer.
  */
-export function navFromSearch(search: InboxSearch): InboxNavItem {
+export function navFromSearch(
+  search: InboxSearch,
+  opts: { conversations?: boolean } = {}
+): InboxNavItem {
+  const nav = scopeFromSearch(search)
+  if (opts.conversations === false && listsOnlyConversations(nav)) {
+    return { kind: 'view', view: 'tickets_all' }
+  }
+  return nav
+}
+
+function scopeFromSearch(search: InboxSearch): InboxNavItem {
   if (search.viewId) return { kind: 'custom', viewId: search.viewId as ConversationViewId }
   if (search.team) return { kind: 'team', teamId: search.team as TeamId }
   if (search.tag) return { kind: 'tag', tagId: search.tag as ConversationTagId }
   if (search.segment) return { kind: 'segment', segmentId: search.segment as SegmentId }
   return { kind: 'view', view: search.view ?? 'all' }
+}
+
+/**
+ * Whether a scope lists conversations and nothing else: every built-in view
+ * outside the Tickets section, and the team, tag and segment scopes. A saved
+ * view may carry ticket rules, so it is not one.
+ */
+export function listsOnlyConversations(nav: InboxNavItem): boolean {
+  if (nav.kind === 'custom') return false
+  if (nav.kind === 'view') return !isTicketInboxView(nav.view)
+  return true
 }
 
 /**
@@ -370,12 +396,21 @@ export function facetToStatusFilter(facet: InboxTriageFacet): StatusFilter {
 // ---------------------------------------------------------------------------
 
 /** The subset of `ConversationSort` the unified endpoint's `inboxSortSchema`
- *  accepts. `waiting`/`sla` are conversation-only sorts with no ticket-row
- *  equivalent (§3.1 documents they'd rank ticket rows by activity) — the
- *  endpoint's zod schema simply rejects them today, so the client must clamp
- *  rather than forward and 400. `due` works on both: a ticket row by its own
- *  due date, a conversation row by its linked customer ticket's. */
-const INBOX_UNIFIED_SORTS = new Set(['recent', 'oldest', 'created', 'priority', 'due', 'relevance'])
+ *  accepts. 'sla' ranks both kinds by their nearest unmet deadline (a ticket's
+ *  time-to-resolve clock). 'waiting' lists every waiting conversation longest
+ *  first; tickets have no waiting clock, so they follow every conversation.
+ *  `due` works on both: a ticket row by its own due date, a conversation row
+ *  by its linked customer ticket's. */
+const INBOX_UNIFIED_SORTS = new Set([
+  'recent',
+  'oldest',
+  'created',
+  'priority',
+  'sla',
+  'waiting',
+  'due',
+  'relevance',
+])
 
 export interface InboxListParams {
   facet: InboxTriageFacet
@@ -400,7 +435,7 @@ export interface InboxListParams {
   /** The Due date filter: the ticket branch filters its rows, the
    *  conversation branch filters through the linked customer ticket. */
   due?: TicketDueFilter
-  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'due' | 'relevance'
+  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'due' | 'relevance'
   channel?: Channel
 }
 

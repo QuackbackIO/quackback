@@ -34,8 +34,11 @@ function jsonExamples(text: string): unknown[] {
 function registered() {
   const tools: Array<{ name: string; description: string; schema: z.ZodRawShape }> = []
   const server = {
-    tool: (name: string, description: string, schema: z.ZodRawShape) => {
-      tools.push({ name, description, schema })
+    registerTool: (
+      name: string,
+      config: { description: string; inputSchema: z.ZodObject<z.ZodRawShape> }
+    ) => {
+      tools.push({ name, description: config.description, schema: config.inputSchema.shape })
     },
   }
   const auth = {

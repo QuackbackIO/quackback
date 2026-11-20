@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agentReplyDisplayName,
   assembleOutboundThreading,
   conversationMessageCopy,
   conversationReplySubject,
@@ -44,6 +45,33 @@ describe('conversationMessageCopy', () => {
     })
     expect(copy.subject).toBe('Re: Billing overcharge')
     expect(copy.useHumanTemplate).toBe(true)
+  })
+
+  it('speaks as the team when the sender is the support team, not a person', () => {
+    const reply = conversationMessageCopy({
+      direction: 'agent_reply',
+      senderName: 'Acme',
+      senderIsTeam: true,
+      workspaceName: 'Acme',
+      channel: 'messenger',
+    })
+    expect(reply.intro).toBe('Acme replied to your conversation.')
+    const started = conversationMessageCopy({
+      direction: 'agent_started',
+      senderName: 'Acme Support',
+      senderIsTeam: true,
+      workspaceName: 'Acme',
+      channel: 'messenger',
+    })
+    expect(started.intro).toBe('Acme Support sent you a message.')
+    // A person still reads as one from the workspace.
+    const person = conversationMessageCopy({
+      direction: 'agent_started',
+      senderName: 'Alex',
+      workspaceName: 'Acme',
+      channel: 'messenger',
+    })
+    expect(person.intro).toBe('Alex from Acme sent you a message.')
   })
 
   it('keeps the generic heading on messenger when there is no subject', () => {
@@ -149,5 +177,11 @@ describe('assembleOutboundThreading', () => {
         inboundIds: ['cust-1@x'],
       })
     ).toEqual({})
+  })
+})
+
+describe('agentReplyDisplayName', () => {
+  it('reads as a person from the workspace', () => {
+    expect(agentReplyDisplayName('Alex', 'Acme')).toBe('Alex from Acme')
   })
 })

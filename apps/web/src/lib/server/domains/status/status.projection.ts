@@ -2,8 +2,8 @@
  * The public shape of an incident for one viewer, shared by every public
  * status read (the page, an incident, history, the feed). An incident shows
  * only the affected services the viewer can see (`canViewStatusComponent`,
- * policy/status.ts), and is hidden entirely when they can see none of them
- * (Status Product Spec §4).
+ * policy/status.ts) and the plan shows (`planVisibleComponentIds`), and is
+ * hidden entirely when none of them is left (Status Product Spec §4).
  */
 import type { SQL } from 'drizzle-orm'
 import {
@@ -23,6 +23,7 @@ import type { StatusComponentId, StatusIncidentId } from '@quackback/ids'
 import { canViewStatusComponent, statusComponentViewFilter } from '@/lib/server/policy/status'
 import type { Actor } from '@/lib/server/policy/types'
 import { deriveViewerImpact } from './status.calc'
+import { visibleStatusComponentIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import type { PublicStatusIncident } from './status.types'
 
 type IncidentRow = typeof statusIncidents.$inferSelect
@@ -44,10 +45,15 @@ type ComponentLinkRow = {
 export async function toPublicIncident(
   incident: IncidentRow,
   links: ComponentLinkRow[],
-  actor: Actor
+  actor: Actor,
+  /** The plan's visible components (see {@link planVisibleComponentIds}); read when omitted. */
+  planVisible?: readonly string[] | null
 ): Promise<PublicStatusIncident | null> {
-  const visibleLinks = links.filter((l) =>
-    canViewStatusComponent(actor, { segmentIds: l.segmentIds })
+  const shown = planVisible === undefined ? await planVisibleComponentIds() : planVisible
+  const visibleLinks = links.filter(
+    (l) =>
+      canViewStatusComponent(actor, { segmentIds: l.segmentIds }) &&
+      (shown === null || shown.includes(l.componentId))
   )
   if (visibleLinks.length === 0) return null
 
@@ -92,7 +98,7 @@ export async function toPublicIncident(
  * For core `select` queries only: the relational builder would rewrite these
  * column references onto its own alias.
  */
-export function visibleIncidentFilter(actor: Actor): SQL {
+export function visibleIncidentFilter(actor: Actor, planVisible: readonly string[] | null): SQL {
   return exists(
     db
       .select({ one: sql`1` })
@@ -101,10 +107,25 @@ export function visibleIncidentFilter(actor: Actor): SQL {
       .where(
         and(
           eq(statusIncidentComponents.incidentId, statusIncidents.id),
-          statusComponentViewFilter(actor)
+          statusComponentViewFilter(actor),
+          planVisible === null
+            ? undefined
+            : planVisible.length > 0
+              ? inArray(statusComponents.id, planVisible as StatusComponentId[])
+              : sql`false`
         )
       )
   )
+}
+
+/**
+ * The components the plan lets the public page show, or null for all of them.
+ * Past the plan's status component cap after the grace, the rest are hidden
+ * from every public read, exactly as a component the viewer may not see is,
+ * and stay in the admin. Fails open.
+ */
+export function planVisibleComponentIds(): Promise<string[] | null> {
+  return visibleStatusComponentIds()
 }
 
 /** Fetch the affected-component links (with component name/segmentIds) for a set of incidents. */
@@ -143,8 +164,14 @@ export async function projectIncidents(
   actor: Actor
 ): Promise<PublicStatusIncident[]> {
   const results: PublicStatusIncident[] = []
+  const planVisible = rows.length > 0 ? await planVisibleComponentIds() : null
   for (const row of rows) {
-    const projected = await toPublicIncident(row, linksByIncident.get(row.id) ?? [], actor)
+    const projected = await toPublicIncident(
+      row,
+      linksByIncident.get(row.id) ?? [],
+      actor,
+      planVisible
+    )
     if (projected) results.push(projected)
   }
   return results

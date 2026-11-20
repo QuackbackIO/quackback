@@ -105,7 +105,8 @@ function storedFormsOf(id: string): string[] {
  * so a later reply that dropped the plus-address can still be routed back (and
  * so the next outbound mail can build its References chain). Idempotent; never
  * throws — a threading-map miss only costs the References fallback, never
- * correctness.
+ * correctness. Kept twice: lower-cased, which a reply is matched against, and
+ * exactly as sent, which the next email's headers repeat.
  *
  * The caller decides WHICH id that is: the one we minted on a transport that
  * lets us set the header, the one the provider reported on a transport that
@@ -121,7 +122,11 @@ export async function recordOutboundEmail(
   try {
     await db
       .insert(conversationOutboundEmails)
-      .values({ messageId: normalizeMessageId(messageId), conversationId })
+      .values({
+        messageId: normalizeMessageId(messageId),
+        sentMessageId: stripAngleBrackets(messageId),
+        conversationId,
+      })
       .onConflictDoNothing()
   } catch (err) {
     log.warn({ err }, 'failed to record outbound email message-id')
@@ -173,7 +178,8 @@ export async function threadIdsForOutbound(
 ): Promise<{ inbound: string[]; outbound: string[]; merged: string[] }> {
   const outboundRows = await db
     .select({
-      messageId: conversationOutboundEmails.messageId,
+      // As sent; a row from before that was kept has only the matching form.
+      messageId: sql<string>`coalesce(${conversationOutboundEmails.sentMessageId}, ${conversationOutboundEmails.messageId})`,
       createdAt: conversationOutboundEmails.createdAt,
     })
     .from(conversationOutboundEmails)

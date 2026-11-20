@@ -31,7 +31,7 @@ const OPEN_TO_EVERY_CALLER = [
 function registeredTools() {
   captured.length = 0
   const direct: string[] = []
-  const server = { tool: (name: string) => void direct.push(name) }
+  const server = { registerTool: (name: string) => void direct.push(name) }
   registerTools(
     server as never,
     {

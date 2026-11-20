@@ -41,6 +41,10 @@ import {
 } from '@/lib/server/domains/posts/post.public.utils'
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
+import {
+  isBoardOpenFor,
+  withVisitorPostCapCopy,
+} from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 import { checkAnonVoteRateLimit, reserveAnonPostSlot } from '@/lib/server/utils/anon-rate-limit'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { getPostPermissions } from '@/lib/server/domains/posts/post.permissions'
@@ -463,18 +467,21 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   }
 
   // Create the post (events dispatched by service layer)
-  const post = await createPost(
-    {
-      boardId,
-      title,
-      content,
-      contentJson: contentJson ? sanitizeTiptapContent(contentJson) : undefined,
-      statusId: defaultStatus?.id,
-      widgetMetadata: metadata,
-      customFields,
-    },
-    author,
-    { headers: getRequestHeaders() }
+  // Visitors get the neutral line at the posts cap; the upgrade wording is for admins.
+  const post = await withVisitorPostCapCopy(() =>
+    createPost(
+      {
+        boardId,
+        title,
+        content,
+        contentJson: contentJson ? sanitizeTiptapContent(contentJson) : undefined,
+        statusId: defaultStatus?.id,
+        widgetMetadata: metadata,
+        customFields,
+      },
+      author,
+      { headers: getRequestHeaders() }
+    )
   )
 
   log.info({ post_id: post.id }, 'created public post')
@@ -686,7 +693,13 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     log.debug({ post_id: data.postId }, 'get vote sidebar data')
     const postId = data.postId as PostId
     const noSub = { subscribed: false, level: 'none' as const, reason: null }
-    const denied = { isMember: false, canVote: false, hasVoted: false, subscriptionStatus: noSub }
+    const denied = {
+      isMember: false,
+      canVote: false,
+      boardReadOnly: false,
+      hasVoted: false,
+      subscriptionStatus: noSub,
+    }
 
     // Portal-visibility gate: a caller who can't see the portal must
     // not learn whether they've voted, whether they're a member, or
@@ -724,12 +737,18 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     // The workspace anonymousVoting flag is composed below as a ceiling.
     const { loadBoardAccessForPost } = await import('@/lib/server/domains/posts/post.access')
     const { canVotePost } = await import('@/lib/server/policy')
-    const boardAccess = await loadBoardAccessForPost(postId)
-    if (!boardAccess) {
+    const boardState = await loadBoardAccessForPost(postId)
+    if (!boardState) {
       // Race: post or board deleted between assertPostViewable and now.
       log.debug('post or board vanished mid-call')
       return denied
     }
+
+    // A read-only board shows its votes and takes none; the sidebar says so.
+    const boardReadOnly = !(await isBoardOpenFor(
+      boardState.boardId as BoardId,
+      boardState.readOnly ?? false
+    ))
 
     // canVotePost composes canViewPost internally, but assertPostViewable
     // already proved view-allowed for this actor; pass moderationState=
@@ -738,7 +757,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     const voteDecision = canVotePost(
       probeActor,
       { moderationState: 'published', principalId: null },
-      { access: boardAccess }
+      { access: boardState.access }
     )
 
     // No session cookie — fall back to the workspace anonymous master
@@ -747,7 +766,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     if (!hasAuthCredentials()) {
       const settings = await getSettings()
       const anonEnabled = workspaceAllowsAnonymous(settings?.portalConfig)
-      const canVote = anonEnabled && voteDecision.allowed
+      const canVote = anonEnabled && voteDecision.allowed && !boardReadOnly
       log.debug(
         { can_vote: canVote, anon_enabled: anonEnabled, vote_allowed: voteDecision.allowed },
         'vote sidebar data, no session'
@@ -755,6 +774,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       return {
         isMember: false,
         canVote,
+        boardReadOnly,
         hasVoted: false,
         subscriptionStatus: noSub,
       }
@@ -764,18 +784,24 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     const ctx = await getOptionalAuth()
     if (!ctx?.user || !ctx?.principal) {
       log.debug('invalid session')
-      return { isMember: false, canVote: false, hasVoted: false, subscriptionStatus: noSub }
+      return {
+        isMember: false,
+        canVote: false,
+        boardReadOnly,
+        hasVoted: false,
+        subscriptionStatus: noSub,
+      }
     }
 
     const isAnonymous = ctx.principal.type === 'anonymous'
 
     // Re-check the workspace allowAnonymous master switch for existing
     // anonymous sessions (sign-in cookie present but principal is anon).
-    let canVote = voteDecision.allowed
+    let canVote = voteDecision.allowed && !boardReadOnly
     if (isAnonymous) {
       const settings = await getSettings()
       const anonEnabled = workspaceAllowsAnonymous(settings?.portalConfig)
-      canVote = anonEnabled && voteDecision.allowed
+      canVote = anonEnabled && voteDecision.allowed && !boardReadOnly
     }
 
     const { hasVoted, subscription } = await getVoteAndSubscriptionStatus(postId, ctx.principal.id)
@@ -787,6 +813,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     return {
       isMember: !isAnonymous,
       canVote,
+      boardReadOnly,
       hasVoted,
       subscriptionStatus: isAnonymous
         ? noSub

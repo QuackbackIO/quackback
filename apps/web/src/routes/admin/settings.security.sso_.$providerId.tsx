@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { IdentityProviderId } from '@quackback/ids'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { ProviderDetailPage } from '@/components/admin/settings/security/identity-providers/provider-detail-page'
@@ -19,7 +18,7 @@ export const Route = createFileRoute('/admin/settings/security/sso_/$providerId'
       ? { test: true }
       : {},
   beforeLoad: ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/security/sso/$providerId')
   },
   loader: async ({ context, params }) => {
     const providerId = params.providerId as IdentityProviderId

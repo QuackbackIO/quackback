@@ -9,7 +9,7 @@ test.describe('Admin Users Page', () => {
 
   test('displays users page with header', async ({ page }) => {
     // Should show the users page with search input and user count
-    await expect(page.getByPlaceholder('Search users...')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByPlaceholder('Search users…')).toBeVisible({ timeout: 10000 })
     await expect(page.getByText(/\d+ users?/)).toBeVisible({ timeout: 10000 })
   })
 
@@ -23,7 +23,7 @@ test.describe('Admin Users Page', () => {
 
   test('displays search input', async ({ page }) => {
     // Search input should be visible
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await expect(searchInput).toBeVisible({ timeout: 5000 })
   })
 
@@ -35,7 +35,7 @@ test.describe('Admin Users Page', () => {
 
   test('can search for users', async ({ page }) => {
     // Find and use search input
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await expect(searchInput).toBeVisible({ timeout: 5000 })
 
     // Type a search query
@@ -51,7 +51,7 @@ test.describe('Admin Users Page', () => {
 
   test('can clear search with X button', async ({ page }) => {
     // Fill search input
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await searchInput.fill('test')
     await page.waitForTimeout(500)
 
@@ -167,8 +167,9 @@ test.describe('Admin Users - User Selection', () => {
       // Should show account section
       await expect(page.getByText('Account', { exact: true })).toBeVisible({ timeout: 15000 })
 
-      // Should show join date
-      await expect(page.getByText(/Joined portal/)).toBeVisible()
+      // Should show join date. Since #402 the profile shows it as a "Joined"
+      // fact cell.
+      await expect(page.getByText('Joined', { exact: true })).toBeVisible()
     }
   })
 
@@ -200,6 +201,8 @@ test.describe('Admin Users - User Selection', () => {
     if ((await userCards.count()) > 0) {
       await userCards.first().click()
       await page.waitForLoadState('networkidle')
+      // The profile listens for Escape once it has rendered; wait for it.
+      await expect(page.getByText('Account', { exact: true })).toBeVisible({ timeout: 15000 })
 
       // Press Escape
       await page.keyboard.press('Escape')
@@ -278,7 +281,7 @@ test.describe('Admin Users - Keyboard Navigation', () => {
     await page.keyboard.press('/')
 
     // Search input should be focused
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await expect(searchInput).toBeFocused()
   })
 })
@@ -498,7 +501,7 @@ test.describe('Admin Users - Empty State', () => {
     await page.waitForLoadState('networkidle')
 
     // Search for something that won't exist
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await searchInput.fill('xyznonexistentuserxyz123456789')
 
     // Wait for URL to update with search param (indicates debounce completed)
@@ -597,7 +600,7 @@ test.describe('Admin Users - Search Edge Cases', () => {
   })
 
   test('search with special characters does not crash the page', async ({ page }) => {
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await expect(searchInput).toBeVisible({ timeout: 5000 })
 
     // Attempt with common special chars that could break URL encoding or SQL
@@ -613,7 +616,7 @@ test.describe('Admin Users - Search Edge Cases', () => {
   })
 
   test('search with percent-encoded characters is handled gracefully', async ({ page }) => {
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await searchInput.fill('%40example.com')
     await page.waitForTimeout(600)
     await page.waitForLoadState('networkidle')
@@ -624,7 +627,7 @@ test.describe('Admin Users - Search Edge Cases', () => {
   })
 
   test('clearing search after special chars restores full list', async ({ page }) => {
-    const searchInput = page.getByPlaceholder('Search users...')
+    const searchInput = page.getByPlaceholder('Search users…')
     await searchInput.fill('!@#$%^')
     await page.waitForTimeout(500) // debounce
 

@@ -13,7 +13,10 @@ afterEach(cleanup)
 
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
-    select({ session: {}, settings: { featureFlags: { supportTickets: true } } }),
+    select({
+      session: {},
+      settings: { featureFlags: { supportInbox: true, supportTickets: true } },
+    }),
 }))
 
 const empty = () => Promise.resolve([])

@@ -1,14 +1,16 @@
 // @vitest-environment node
 /**
  * The help center sitemap lists absolute URLs. Behind the TLS proxy the app
- * sees the request as http, so the origin has to come from the configured base
- * URL, or from the verified custom domain the request arrived on, the same
- * rule the canonical links use. Never from the request's own scheme.
+ * sees the request as http, so the origin comes from where the help center is
+ * linked: its own host once it has one, else the configured base URL. Never
+ * from the request's own scheme. Sending the primary domain's sitemap to the
+ * help center's host is the section host middleware's job.
  */
 import { describe, it, expect, vi } from 'vitest'
+import { allOnPrimary, type SectionOrigins } from '@/lib/shared/section-links'
 
 const state = vi.hoisted(() => ({
-  domain: { domain: null as string | null, verifiedAt: null as string | null },
+  origins: null as SectionOrigins | null,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -24,8 +26,12 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getHelpCenterConfig: async () => ({
     locales: { default: 'en', additional: [] },
     seo: { indexable: true },
-    domain: state.domain,
+    domain: { domain: null, verifiedAt: null },
   }),
+}))
+
+vi.mock('@/lib/server/domains/settings/section-links', () => ({
+  getSectionOrigins: async () => state.origins,
 }))
 
 vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
@@ -52,28 +58,21 @@ async function sitemapLocs(requestUrl: string): Promise<string[]> {
 
 describe('help center sitemap origin', () => {
   it('lists https URLs when the request reaches the app over http behind a proxy', async () => {
-    state.domain = { domain: null, verifiedAt: null }
+    state.origins = allOnPrimary('https://feedback.example.com')
     expect(await sitemapLocs('http://feedback.example.com/hc/sitemap.xml')).toEqual([
       'https://feedback.example.com/hc',
       'https://feedback.example.com/hc/en/collections/1-basics',
     ])
   })
 
-  it('uses the verified custom domain when the request arrived on it', async () => {
-    state.domain = { domain: 'help.acme.com', verifiedAt: '2026-10-01T00:00:00.000Z' }
-    const locs = await sitemapLocs('https://help.acme.com/hc/sitemap.xml')
-    expect(locs).toEqual([
-      'https://help.acme.com/hc',
+  it("lists the help center's own host, its home as /, once it has one", async () => {
+    state.origins = {
+      ...allOnPrimary('https://feedback.example.com'),
+      help: 'https://help.acme.com',
+    }
+    expect(await sitemapLocs('https://help.acme.com/hc/sitemap.xml')).toEqual([
+      'https://help.acme.com/',
       'https://help.acme.com/hc/en/collections/1-basics',
     ])
-  })
-
-  it('redirects the default host to the verified custom domain, keeping the query', async () => {
-    state.domain = { domain: 'help.acme.com', verifiedAt: '2026-10-01T00:00:00.000Z' }
-    const response = await GET({
-      request: new Request('https://feedback.example.com/hc/sitemap.xml?page=2'),
-    })
-    expect(response.status).toBe(301)
-    expect(response.headers.get('location')).toBe('https://help.acme.com/hc/sitemap.xml?page=2')
   })
 })

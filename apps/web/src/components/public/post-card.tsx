@@ -67,6 +67,8 @@ interface PostCardProps {
   isAuthenticated?: boolean
   /** Whether the user can vote (true if authenticated or anonymous voting enabled) */
   canVote?: boolean
+  /** The board is read-only: votes are shown and no longer taken. */
+  votingClosed?: boolean
   /** Whether the current user is the author of this post */
   isCurrentUserAuthor?: boolean
   /** Whether the user can edit this post */
@@ -128,6 +130,7 @@ export function PostCard({
   changelogEntry,
   isAuthenticated = true,
   canVote = true,
+  votingClosed = false,
   isCurrentUserAuthor = false,
   canEdit = false,
   canDelete = false,
@@ -175,6 +178,7 @@ export function PostCard({
 
   async function handleVoteClick(e: React.MouseEvent): Promise<void> {
     e.stopPropagation()
+    if (votingClosed) return
     if (!canVote) {
       // Signed in but denied by the board's vote tier (segments/team) — an
       // authorization failure, not authentication. The button's tooltip
@@ -236,28 +240,36 @@ export function PostCard({
       type="button"
       data-testid="vote-button"
       title={voteNoAccessMsg}
-      aria-disabled={voteNoAccess || undefined}
+      aria-disabled={voteNoAccess || votingClosed || undefined}
       aria-label={
-        currentHasVoted
+        votingClosed
           ? intl.formatMessage(
               {
-                id: 'portal.postCard.vote.ariaRemoveVote',
-                defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+                id: 'portal.postCard.vote.ariaClosed',
+                defaultMessage: '{count, plural, one {# vote} other {# votes}}, voting closed',
               },
               { count: currentVoteCount }
             )
-          : intl.formatMessage(
-              {
-                id: 'portal.postCard.vote.ariaVote',
-                defaultMessage:
-                  'Vote for this post ({count, plural, one {# vote} other {# votes}})',
-              },
-              { count: currentVoteCount }
-            )
+          : currentHasVoted
+            ? intl.formatMessage(
+                {
+                  id: 'portal.postCard.vote.ariaRemoveVote',
+                  defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+                },
+                { count: currentVoteCount }
+              )
+            : intl.formatMessage(
+                {
+                  id: 'portal.postCard.vote.ariaVote',
+                  defaultMessage:
+                    'Vote for this post ({count, plural, one {# vote} other {# votes}})',
+                },
+                { count: currentVoteCount }
+              )
       }
       aria-pressed={currentHasVoted}
       onClick={handleVoteClick}
-      disabled={isVotePending || isAnonSigningIn}
+      disabled={isVotePending || isAnonSigningIn || votingClosed}
       className={cn(
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
         'w-12 py-2 gap-0.5',
@@ -267,16 +279,17 @@ export function PostCard({
         // Hover affordances only when the button is actionable (not denied).
         !currentHasVoted &&
           !voteNoAccess &&
+          !votingClosed &&
           'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
         (isVotePending || isAnonSigningIn) && 'opacity-70 cursor-wait',
-        voteNoAccess && 'cursor-not-allowed opacity-60'
+        (voteNoAccess || votingClosed) && 'cursor-not-allowed opacity-60'
       )}
     >
       <ChevronUpIcon
         className={cn(
           'transition-transform duration-200 h-4 w-4',
           currentHasVoted && 'fill-post-card-voted',
-          !isVotePending && !voteNoAccess && 'group-hover/vote:-translate-y-0.5'
+          !isVotePending && !voteNoAccess && !votingClosed && 'group-hover/vote:-translate-y-0.5'
         )}
       />
       <span
