@@ -598,3 +598,16 @@ no such part beyond the wrong notification).
   the hour. Smallest fix: throw the app's rate-limit error (429) and map it to
   a "too many posts, try again later" line in the composer. Runs in
   product-isolated. owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-post-detail.spec.ts` › FBP-L-31 a pinned comment outside
+  the first page still shows on the page (new). The detail query returns
+  `pinnedComment` whatever the paging
+  (`apps/web/src/lib/server/domains/posts/post.public.detail.ts:475-510`), but
+  the portal route (`apps/web/src/routes/_portal.b.$slug.posts.$postId.tsx:396`)
+  passes only `pinnedCommentId` to the thread, which floats the pinned
+  comment only if it is among the loaded 30 roots
+  (`apps/web/src/components/public/comment-thread.tsx:218`);
+  `PinnedCommentSection` is used only by the admin modal. An older pinned
+  answer is invisible until "Show more". Smallest fix: render
+  `PinnedCommentSection` (or prepend `pinnedComment`) on the portal page when
+  the pinned comment is not in the loaded page. owner: unassigned, review by:
+  2026-12-03.
