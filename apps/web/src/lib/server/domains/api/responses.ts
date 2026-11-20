@@ -237,6 +237,10 @@ export function handleDomainError(error: unknown): Response {
         return validationErrorResponse(domainError.message, details)
       }
 
+      // Clients branch on this one: the assignee is not a teammate.
+      case 'INVALID_ASSIGNEE':
+        return errorResponse(domainError.code, domainError.message, 400)
+
       case 'DUPLICATE_SLUG':
       case 'DUPLICATE_KEY':
       case 'DUPLICATE_NAME':

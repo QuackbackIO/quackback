@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ValidationError } from '@/lib/shared/errors'
 
 const mockAuth = vi.fn()
 const mockSendAgentMessage = vi.fn()
@@ -229,6 +230,25 @@ describe('POST /conversations/:id/assign', () => {
       params: { conversationId: CONV_ID },
     })
     expect(mockAssign).toHaveBeenCalledWith(CONV_ID, PRINCIPAL_ID, expect.anything())
+  })
+
+  it('refuses a non-teammate with the INVALID_ASSIGNEE code', async () => {
+    mockAssign.mockRejectedValue(
+      new ValidationError('INVALID_ASSIGNEE', 'Can only assign to a team member')
+    )
+    const res = await handler(
+      AssignRoute,
+      'POST'
+    )({
+      request: jsonReq(`https://x.test/api/v1/conversations/${CONV_ID}/assign`, {
+        assigneePrincipalId: PRINCIPAL_ID,
+      }),
+      params: { conversationId: CONV_ID },
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: { code: 'INVALID_ASSIGNEE', message: 'Can only assign to a team member' },
+    })
   })
 })
 

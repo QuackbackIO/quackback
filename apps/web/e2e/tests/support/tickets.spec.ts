@@ -705,7 +705,9 @@ test.describe('tickets: more status, assignment and priority', () => {
       // A customer is not a teammate.
       const bad = await assign({ assigneePrincipalId: people.people.customer.principalId })
       expect(bad.status()).toBe(400)
-      expect(await bad.text()).toContain('Can only assign to a team member')
+      expect(await bad.json()).toEqual({
+        error: { code: 'INVALID_ASSIGNEE', message: 'Can only assign to a team member' },
+      })
     }
   )
 
