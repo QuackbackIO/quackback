@@ -225,6 +225,44 @@ test.describe('portal support: the list', () => {
   )
 
   test(
+    'CUS-P-37 a ticket moved to Resolved moves its conversation up past a newer message',
+    { tag: '@core' },
+    async ({ browser, request, playwright, customerEmail, marker }) => {
+      const customer = await mintCustomer({ email: customerEmail })
+      const token = await mintSessionToken(customer.userUuid)
+      const paired = await visitorSend(request, token, `${marker} paired one`)
+      const admin = await adminRequest(playwright)
+      const ticket = await createTicket(admin, {
+        title: `${marker} Ticket title`,
+        requesterPrincipalId: customer.principalId,
+        conversationId: paired.conversation.id,
+      })
+      await visitorSend(request, token, `${marker} later one`)
+
+      const context = await portalContext(browser, customer)
+      const page = await context.newPage()
+      const rows = page.locator('main li a, li a[href^="/support/"]')
+      const order = async () => {
+        await page.goto('/support')
+        await expect(page.getByText(`${marker} Ticket title`)).toBeVisible({ timeout: 15_000 })
+        return (await rows.allTextContents())
+          .filter((t) => t.includes(marker))
+          .map((t) => t.match(/(later|Ticket title)/)?.[1])
+      }
+      expect(await order()).toEqual(['later', 'Ticket title'])
+
+      // The resolve is the newest thing the customer can see, as on the Tickets tab.
+      await moveTicket(admin, ticket.id, 'Resolved')
+      expect(await order()).toEqual(['Ticket title', 'later'])
+      await expect(
+        page.getByRole('link', { name: new RegExp(`${marker} Ticket title`) })
+      ).toContainText('Resolved')
+      await admin.dispose()
+      await context.close()
+    }
+  )
+
+  test(
     'CUS-P-06 the paired row chip follows the public stage, hides internal statuses, and reads Closed on a generic close',
     { tag: '@core' },
     async ({ browser, request, playwright, customerEmail, marker }) => {

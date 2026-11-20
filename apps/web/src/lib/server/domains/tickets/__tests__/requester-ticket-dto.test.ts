@@ -102,6 +102,7 @@ import {
   listMyTicketSummaries,
 } from '../requester.service'
 import { searchTickets } from '../ticket-search.service'
+import { listConversationsForVisitor } from '@/lib/server/domains/conversation/conversation.query'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -258,10 +259,11 @@ async function seedWorld(): Promise<PrincipalId> {
   return seedPrincipal()
 }
 
+afterAll(fixture.close)
+
 describe.skipIf(!fixture.available)('requester ticket DTO and customer-visible time', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
-  afterAll(fixture.close)
 
   it('sends only the allow-listed keys and the customer-visible field answers', async () => {
     const me = await seedWorld()
@@ -554,5 +556,145 @@ describe.skipIf(!fixture.available)('requester ticket DTO and customer-visible t
     expect(results.map((r) => r.ticket.id)).toEqual([pair.ticketId])
     expect(Object.keys(results[0].ticket).sort()).toEqual(REQUESTER_KEYS)
     expect(Object.keys(results[0].ticket.assignee).sort()).toEqual(['displayName', 'principalId'])
+  })
+})
+
+/**
+ * The customer's Messages list (`listConversationsForVisitor` with ticket
+ * activity on, as the widget and the portal Support page call it) sorts and
+ * shows a paired conversation by the later of its last message and its
+ * ticket's customer-visible update time: the time the Tickets tab uses.
+ */
+describe.skipIf(!fixture.available)('Messages list time for paired conversations', () => {
+  beforeEach(fixture.begin)
+  afterEach(fixture.rollback)
+
+  async function setLastMessageAt(conversationId: ConversationId, at: Date): Promise<void> {
+    await testDb
+      .update(conversations)
+      .set({ lastMessageAt: at })
+      .where(eq(conversations.id, conversationId))
+  }
+
+  /** A conversation with no ticket, last message at `at`. */
+  async function seedChat(visitor: PrincipalId, at: Date): Promise<ConversationId> {
+    const id = createId('conversation') as ConversationId
+    await testDb
+      .insert(conversations)
+      .values({ id, visitorPrincipalId: visitor, channel: 'messenger', lastMessageAt: at })
+    await postVisitorMessage(id, visitor, at)
+    return id
+  }
+
+  const list = (visitor: PrincipalId, ticketActivity = true) =>
+    listConversationsForVisitor(visitor, 50, 'visitor', { ticketActivity })
+
+  it('a ticket resolved after a newer message elsewhere moves its conversation first, showing the resolve time', async () => {
+    const me = await seedWorld()
+    const agent = await seedAgent()
+    const start = await seedStatus({ category: 'open', publicStage: 'received' })
+    const done = await seedStatus({ category: 'closed', publicStage: 'resolved' })
+    const pair = await seedPair({ requester: me, statusId: start, createdAt: T0 })
+    await postVisitorMessage(pair.conversationId, me, T1)
+    await setLastMessageAt(pair.conversationId, T1)
+    const chat = await seedChat(me, T2)
+    expect((await list(me)).map((c) => c.id)).toEqual([chat, pair.conversationId])
+
+    await setTicketStatus(pair.ticketId, done, agent)
+    const [move] = await testDb
+      .select({ createdAt: ticketActivity.createdAt })
+      .from(ticketActivity)
+      .where(eq(ticketActivity.ticketId, pair.ticketId))
+    expect(move.createdAt.getTime()).toBeGreaterThan(T2.getTime())
+
+    const rows = await list(me)
+    expect(rows.map((c) => c.id)).toEqual([pair.conversationId, chat])
+    expect(rows[0].activityAt).toBe(move.createdAt.toISOString())
+    expect(rows[1].activityAt).toBe(T2.toISOString())
+    // The same time the Tickets tab shows for this ticket.
+    const [ticketRow] = await listMyTicketSummaries(me)
+    expect(rows[0].activityAt).toBe(ticketRow.updatedAt)
+    // Read only: the conversation's own last-message time is untouched.
+    const [stored] = await testDb
+      .select({ lastMessageAt: conversations.lastMessageAt })
+      .from(conversations)
+      .where(eq(conversations.id, pair.conversationId))
+    expect(stored.lastMessageAt.toISOString()).toBe(T1.toISOString())
+  })
+
+  it('a ticket opened on an old conversation sorts by the ticket creation time', async () => {
+    const me = await seedWorld()
+    const start = await seedStatus({ category: 'open', publicStage: 'received' })
+    const pair = await seedPair({ requester: me, statusId: start, createdAt: T3 })
+    await postVisitorMessage(pair.conversationId, me, T1)
+    await setLastMessageAt(pair.conversationId, T1)
+    const chat = await seedChat(me, T2)
+
+    const rows = await list(me)
+    expect(rows.map((c) => c.id)).toEqual([pair.conversationId, chat])
+    expect(rows[0].activityAt).toBe(T3.toISOString())
+    expect(rows[0].lastMessageAt).toBe(T1.toISOString())
+  })
+
+  it('keeps the last-message time when it is the later one, for unpaired rows, and with ticket activity off', async () => {
+    const me = await seedWorld()
+    const start = await seedStatus({ category: 'open', publicStage: 'received' })
+    // Paired, but the last message (T3) is newer than the ticket (T0).
+    const pair = await seedPair({ requester: me, statusId: start, createdAt: T0 })
+    await postVisitorMessage(pair.conversationId, me, T3)
+    await setLastMessageAt(pair.conversationId, T3)
+    // Paired with a newer ticket (T2) than its message (T0).
+    const late = await seedPair({ requester: me, statusId: start, createdAt: T2 })
+    await setLastMessageAt(late.conversationId, T0)
+    const chat = await seedChat(me, T1)
+
+    const rows = await list(me)
+    expect(rows.map((c) => [c.id, c.activityAt])).toEqual([
+      [pair.conversationId, T3.toISOString()],
+      [late.conversationId, T2.toISOString()],
+      [chat, T1.toISOString()],
+    ])
+
+    // Tickets off: every row is its last-message time.
+    const off = await list(me, false)
+    expect(off.map((c) => [c.id, c.activityAt])).toEqual([
+      [pair.conversationId, T3.toISOString()],
+      [chat, T1.toISOString()],
+      [late.conversationId, T0.toISOString()],
+    ])
+  })
+
+  it('finds a paired conversation that sits past a full page by last message', async () => {
+    const me = await seedWorld()
+    const start = await seedStatus({ category: 'open', publicStage: 'received' })
+    const pair = await seedPair({ requester: me, statusId: start, createdAt: T3 })
+    await setLastMessageAt(pair.conversationId, T0)
+    await seedChat(me, T2)
+
+    const rows = await listConversationsForVisitor(me, 1, 'visitor', { ticketActivity: true })
+    expect(rows.map((c) => [c.id, c.activityAt])).toEqual([[pair.conversationId, T3.toISOString()]])
+  })
+
+  it('ignores a paired ticket the row would not show: another requester or deleted', async () => {
+    const me = await seedWorld()
+    const someoneElse = await seedPrincipal()
+    const start = await seedStatus({ category: 'open', publicStage: 'received' })
+    const foreign = await seedPair({ requester: me, statusId: start, createdAt: T3 })
+    await testDb
+      .update(tickets)
+      .set({ requesterPrincipalId: someoneElse })
+      .where(eq(tickets.id, foreign.ticketId))
+    await setLastMessageAt(foreign.conversationId, T0)
+    const deleted = await seedPair({ requester: me, statusId: start, createdAt: T3 })
+    await testDb.update(tickets).set({ deletedAt: T3 }).where(eq(tickets.id, deleted.ticketId))
+    await setLastMessageAt(deleted.conversationId, T1)
+    const chat = await seedChat(me, T2)
+
+    const rows = await list(me)
+    expect(rows.map((c) => [c.id, c.activityAt])).toEqual([
+      [chat, T2.toISOString()],
+      [deleted.conversationId, T1.toISOString()],
+      [foreign.conversationId, T0.toISOString()],
+    ])
   })
 })

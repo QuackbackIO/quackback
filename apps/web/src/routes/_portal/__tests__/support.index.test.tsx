@@ -66,6 +66,7 @@ function conversationRow(overrides: Record<string, unknown>) {
     subject: null,
     lastMessagePreview: 'hello',
     lastMessageAt: NOW,
+    activityAt: NOW,
     unreadCount: 0,
     ...overrides,
   }

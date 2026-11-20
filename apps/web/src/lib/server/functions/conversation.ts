@@ -629,7 +629,19 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
 
   const { listConversationsForVisitor } =
     await import('@/lib/server/domains/conversation/conversation.query')
-  const conversations = await listConversationsForVisitor(ctx.principal.id, 50, 'visitor')
+  const { isSupportTicketsEnabled } = await import('@/lib/server/domains/settings/settings.support')
+  // With tickets on, a paired row sorts and shows by its ticket's latest
+  // customer-visible change when that is later than its last message, the
+  // same time the Tickets tab uses. With tickets off no row shows a ticket,
+  // so every row keeps its last-message time.
+  // Best-effort like the enrichment below: a failed read must not break the list.
+  const ticketsEnabled = await isSupportTicketsEnabled().catch((error: unknown) => {
+    log.warn({ err: error }, 'support tickets setting read failed for the conversation list')
+    return false
+  })
+  const conversations = await listConversationsForVisitor(ctx.principal.id, 50, 'visitor', {
+    ticketActivity: ticketsEnabled,
+  })
 
   // Converged Messages surface: decorate paired rows with their ticket's
   // stage chip + reference. The row's displayed state keys off the TICKET
@@ -637,9 +649,7 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
   // Best-effort like the thread header: enrichment must not break the list.
   let linkedTickets: Record<string, ConversationTicketSummary> = {}
   try {
-    const { isSupportTicketsEnabled } =
-      await import('@/lib/server/domains/settings/settings.support')
-    if (conversations.length > 0 && (await isSupportTicketsEnabled())) {
+    if (conversations.length > 0 && ticketsEnabled) {
       const { getRequesterTicketSummaries } =
         await import('@/lib/server/domains/tickets/requester.service')
       const map = await getRequesterTicketSummaries(
