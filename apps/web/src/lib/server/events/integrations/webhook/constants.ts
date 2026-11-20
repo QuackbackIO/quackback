@@ -5,22 +5,21 @@
  * Server-only code (handler with crypto/dns) is in handler.ts.
  */
 import type { WebhookId } from '@quackback/ids'
-import { EVENT_TYPES, type EventType } from '../../types'
+import {
+  EVENT_TYPES,
+  NOTIFICATION_ONLY_EVENT_TYPES,
+  isNotificationOnlyEvent,
+  type EventType,
+} from '../../types'
 
 // ============================================
 // Event Types
 // ============================================
 
-/**
- * Events that only ever tell people (a bell, an email) and never reach a
- * webhook: a comment mention can carry a private comment's words.
- */
-const NOTIFICATION_ONLY_EVENTS = ['comment.mentioned'] as const satisfies readonly EventType[]
-
-export type WebhookEventType = Exclude<EventType, (typeof NOTIFICATION_ONLY_EVENTS)[number]>
+export type WebhookEventType = Exclude<EventType, (typeof NOTIFICATION_ONLY_EVENT_TYPES)[number]>
 
 function isWebhookEvent(type: EventType): type is WebhookEventType {
-  return !(NOTIFICATION_ONLY_EVENTS as readonly EventType[]).includes(type)
+  return !isNotificationOnlyEvent(type)
 }
 
 /**

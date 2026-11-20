@@ -88,6 +88,20 @@ export const EVENT_TYPES = [
 export type EventType = (typeof EVENT_TYPES)[number]
 
 /**
+ * Events that only ever tell people (a bell, an email) and never leave the
+ * workspace: no webhook, integration or app receives them. A comment mention
+ * can carry a private comment's words.
+ */
+export const NOTIFICATION_ONLY_EVENT_TYPES = [
+  'comment.mentioned',
+] as const satisfies readonly EventType[]
+
+/** Whether an event type only ever notifies people and never leaves the workspace. */
+export function isNotificationOnlyEvent(type: string): boolean {
+  return (NOTIFICATION_ONLY_EVENT_TYPES as readonly string[]).includes(type)
+}
+
+/**
  * Actor information for events - identifies who or what triggered the event.
  */
 export interface EventActor {
