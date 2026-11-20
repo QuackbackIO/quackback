@@ -1145,6 +1145,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/help-center.ts`::listPublicCategoriesFn | server-fn |
 | `lib/server/functions/help-center.ts`::listPublicCategoryEditorsFn | server-fn |
 | `lib/server/functions/help-center.ts`::recordArticleFeedbackFn | server-fn |
+| `lib/server/functions/help-center.ts`::recordPublicArticleViewFn | server-fn |
 | `lib/server/functions/help-center.ts`::resolvePublicArticleRefFn | server-fn |
 | `lib/server/functions/help-center.ts`::searchPublicArticlesFn | server-fn |
 | `lib/server/functions/help-center.ts`::submitArticleFeedbackReasonFn | server-fn |
