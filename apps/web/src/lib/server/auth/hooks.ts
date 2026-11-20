@@ -376,14 +376,36 @@ export async function handleSignInPreCheck(ctx: {
     throw ctx.redirect('/?auth=signin&callbackUrl=/admin&error=verified_domain_requires_sso')
   }
 
+  // The sign-in methods, for every address, account or not. Whether a method
+  // is on is a fact about the workspace, so refusing it here tells a caller
+  // nothing about which addresses hold accounts. It used to run only for an
+  // address with an account, which left "Password" off still creating
+  // password accounts at `/sign-up/email`, and "Email magic link" off still
+  // letting a new address redeem a code. Before `openSignup`, so a method that
+  // is off is the answer whatever the address.
+  const methodResult = await isAuthMethodAllowed(provider, role, registeredOidcIds, workspace)
+  if (!methodResult.allowed) {
+    const isTeamRole = role === 'admin' || role === 'member'
+    const errorCode = methodResult.error ?? 'auth_method_blocked'
+    // Team roles land on the unified login with a `/admin` callback (the
+    // break-glass form); the error rides as a second param via `&` — a
+    // second `?` would silently drop it. Portal roles keep the plain
+    // `/?auth=signin&error=` shape. All paths go directly to `/?auth=signin`
+    // so the auth client's detectAuthBlockRedirect can match on the
+    // error code regardless of the redirect chain.
+    throw ctx.redirect(
+      isTeamRole
+        ? `/?auth=signin&callbackUrl=/admin&error=${errorCode}`
+        : `/?auth=signin&error=${errorCode}`
+    )
+  }
+
   // `openSignup`, enforced. Only for the paths that would CREATE an account and
   // only when no user holds the address — the same exemption the policy itself
   // opens with, checked here so the common case costs no extra query.
   //
-  // Sits after hard-binding, which is the stronger statement about the same
-  // attempt and should be the one reported, and before the `!principalRow`
-  // return below — that early exit exists for exactly the brand-new sign-up
-  // this gate is about, so a gate placed after it would never run.
+  // Sits after hard-binding and the method toggles, which are the stronger
+  // statements about the same attempt and should be the ones reported.
   //
   // This redirect IS distinguishable per address: an address that holds an
   // account, or that a pending invitation names, gets the endpoint's normal
@@ -395,8 +417,7 @@ export async function handleSignInPreCheck(ctx: {
   // identically either way and mails the refusal instead.
   //
   // The PORTAL door, because nothing here names an audience and the creation
-  // does. This gate sits before the `!principalRow` return by design, so there
-  // is no role to read; the four gated paths are each reachable from the portal
+  // does. There is no account here, so there is no role to read; the four gated paths are each reachable from the portal
   // dialog and the team login alike, and the one body field that would hint —
   // `callbackURL` — is sent by none of this app's callers of them and is chosen
   // by whoever is asking, so honouring it would let a caller pick which of the
@@ -411,24 +432,38 @@ export async function handleSignInPreCheck(ctx: {
       throw ctx.redirect(`/?auth=signin&error=${SIGNUP_NOT_ALLOWED}`)
     }
   }
+}
 
-  if (!principalRow) return
-
-  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, workspace)
+/**
+ * The "Email magic link" method at `/magic-link/verify`, for the links it
+ * governs.
+ *
+ * `requestEmailSignin` refuses to send while the method is off, but a link
+ * mailed while it was on would otherwise stay redeemable for its lifetime. Only
+ * links a person asked for by typing their address are refused here
+ * (`isEmailSigninToken`): invitations, portal invites, the workspace claim and
+ * recovery-code break-glass redeem through the same endpoint, are grants the
+ * workspace made, and work whatever the method says. Same predicate as the
+ * send side, so links that stand in while single sign-on is paused still
+ * verify.
+ */
+export async function handleMagicLinkVerifyGate(ctx: {
+  path?: string
+  query?: Record<string, unknown>
+  redirect: (url: string) => Error
+}): Promise<void> {
+  if (ctx.path !== '/magic-link/verify') return
+  const { isEmailSigninToken } = await import('./magic-link-mint')
+  if (!isEmailSigninToken(ctx.query?.token)) return
+  const { isAuthMethodAllowed } = await import('./auth-restrictions')
+  const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+  const result = await isAuthMethodAllowed(
+    'magic-link',
+    'user',
+    await getRegisteredOidcProviderIds()
+  )
   if (!result.allowed) {
-    const isTeamRole = role === 'admin' || role === 'member'
-    const errorCode = result.error ?? 'auth_method_blocked'
-    // Team roles land on the unified login with a `/admin` callback (the
-    // break-glass form); the error rides as a second param via `&` — a
-    // second `?` would silently drop it. Portal roles keep the plain
-    // `/?auth=signin&error=` shape. All paths go directly to `/?auth=signin`
-    // so the auth client's detectAuthBlockRedirect can match on the
-    // error code regardless of the redirect chain.
-    throw ctx.redirect(
-      isTeamRole
-        ? `/?auth=signin&callbackUrl=/admin&error=${errorCode}`
-        : `/?auth=signin&error=${errorCode}`
-    )
+    throw ctx.redirect(`/?auth=signin&error=${result.error ?? 'magic_link_method_not_allowed'}`)
   }
 }
 
@@ -513,6 +548,7 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
   // allowlist covers every Better Auth HTTP path.
   await handleRefreshGraceHeal(ctx)
   await handleSignInPreCheck(ctx as Parameters<typeof handleSignInPreCheck>[0])
+  await handleMagicLinkVerifyGate(ctx as Parameters<typeof handleMagicLinkVerifyGate>[0])
   await handleWidgetAccountMutationGate(ctx)
   // Provider sign-in asked for on a section host runs on the primary domain,
   // where its callback and state cookie live (section-sign-in.ts). Last, so

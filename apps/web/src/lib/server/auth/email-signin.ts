@@ -4,6 +4,7 @@ import { isAccountCreationAllowed } from './signup-policy'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { isSafeCallbackUrl, isTeamCallback } from '@/lib/shared/routing'
+import { normalizeMethodKey } from '@/lib/shared/signin-methods'
 
 const log = logger.child({ component: 'auth-email-signin' })
 
@@ -12,10 +13,12 @@ const log = logger.child({ component: 'auth-email-signin' })
  * address's DOMAIN and on workspace configuration, never on whether an account
  * exists: "Require SSO" on a verified domain is already visible to anyone who
  * types an address there, because the sign-in form routes the domain to its
- * provider. Account-dependent refusals stay silent (see below).
+ * provider, and the "Email magic link" method being off is visible to anyone
+ * who opens the sign-in form. Account-dependent refusals stay silent (see
+ * below).
  */
 export class EmailSigninRefusedError extends Error {
-  constructor(readonly code: 'verified_domain_requires_sso') {
+  constructor(readonly code: 'verified_domain_requires_sso' | 'magic_link_method_not_allowed') {
     super(code)
     this.name = 'EmailSigninRefusedError'
   }
@@ -71,6 +74,35 @@ export async function requestEmailSignin(opts: {
     throw new EmailSigninRefusedError('verified_domain_requires_sso')
   }
 
+  // The link lands on `${origin}${callbackPath}`, so only a same-origin path
+  // may ride in it ("@evil.example" or ".evil.example" would change the host).
+  const callbackPath = isSafeCallbackUrl(opts.callbackURL) ? opts.callbackURL : '/'
+
+  // The "Email magic link" method, in front of the mint for the same reason as
+  // "Require SSO" above: nothing downstream runs the hook layer that enforces
+  // it for every other email path. One predicate with that layer, so email
+  // links that stand in while single sign-on is paused stay in force here too.
+  const { isAuthMethodAllowed } = await import('./auth-restrictions')
+  const methodInForce = (await isAuthMethodAllowed('magic-link', 'user', registered)).allowed
+  if (!methodInForce) {
+    // The one email that survives the method being off: the confirmation that
+    // lets an existing account link a provider sign-in (see
+    // `isLinkConflictConfirmation`). Anything else is refused, the same way for
+    // every address.
+    if (!linkConflictProvider(callbackPath)) {
+      throw new EmailSigninRefusedError('magic_link_method_not_allowed')
+    }
+    if (!(await isLinkConflictConfirmation(opts.email, callbackPath, registered))) {
+      // Answered exactly as a send is, so asking says nothing about the
+      // address; the confirmation is only ever mailed to an account's owner.
+      log.info(
+        { email_domain: opts.email.split('@')[1] ?? null },
+        'link confirmation not sent: no account, or the provider is not in force'
+      )
+      return
+    }
+  }
+
   const auth = await getAuth()
 
   const { db } = await import('@/lib/server/db')
@@ -115,10 +147,6 @@ export async function requestEmailSignin(opts: {
     return
   }
 
-  // The link lands on `${origin}${callbackPath}`, so only a same-origin path
-  // may ride in it ("@evil.example" or ".evil.example" would change the host).
-  const callbackPath = isSafeCallbackUrl(opts.callbackURL) ? opts.callbackURL : '/'
-
   // Failed verifies (token consumed by an email scanner, expired, etc.)
   // need to land on the right login page. Team callbacks (`/admin/...`)
   // bounce to the unified login carrying the same deep link so it renders
@@ -154,6 +182,10 @@ export async function requestEmailSignin(opts: {
       callbackPath,
       errorCallbackPath,
       portalUrl: opts.linkOrigin ?? config.baseUrl,
+      // A link the method governs, so the verify side can refuse it once the
+      // method is off. The link-conflict confirmation, sent while the method
+      // is off, is not one.
+      purpose: methodInForce ? 'email-signin' : undefined,
     }),
     auth.api.createVerificationOTP({
       body: { email: opts.email, type: 'sign-in' },
@@ -179,4 +211,52 @@ export async function requestEmailSignin(opts: {
     logoUrl,
     workspaceName: settings?.name ?? undefined,
   })
+}
+
+/**
+ * The provider a link-conflict confirmation would resume, read from the
+ * callback the dialog sends (`/auth/link-sso?provider=…`), or null when the
+ * callback is not one. Email and password are never providers here: linking
+ * one of them is not what `/auth/link-sso` resumes.
+ */
+function linkConflictProvider(callbackPath: string): string | null {
+  const url = new URL(callbackPath, 'http://callback.invalid')
+  if (url.pathname !== '/auth/link-sso') return null
+  const provider = url.searchParams.get('provider')
+  if (!provider) return null
+  const key = normalizeMethodKey(provider)
+  return key === 'password' || key === 'magicLink' ? null : provider
+}
+
+/**
+ * Whether this request is the link-conflict confirmation, which is sent even
+ * while the "Email magic link" method is off.
+ *
+ * A provider sign-in that lands on an address an account already holds is
+ * refused with `account_not_linked` until the account proves the address; the
+ * dialog then mails the account a sign-in link that resumes the provider link
+ * at `/auth/link-sso`. Refusing it with the method off would leave such an
+ * account no way to connect its provider.
+ *
+ * The callback is chosen by the caller, so it is not trusted on its own: the
+ * address must hold an account, and the provider named must be one this
+ * workspace signs people in with right now. Even so, the holder of an existing
+ * account can get a sign-in link this way while the method is off, by asking
+ * for the confirmation; the link reaches only that account's inbox.
+ */
+async function isLinkConflictConfirmation(
+  email: string,
+  callbackPath: string,
+  registered: Set<string>
+): Promise<boolean> {
+  const provider = linkConflictProvider(callbackPath)
+  if (!provider) return false
+  const { isAuthMethodAllowed } = await import('./auth-restrictions')
+  if (!(await isAuthMethodAllowed(provider, 'user', registered)).allowed) return false
+  const { db, user, eq } = await import('@/lib/server/db')
+  const account = await db.query.user.findFirst({
+    where: eq(user.email, email),
+    columns: { id: true },
+  })
+  return !!account
 }
