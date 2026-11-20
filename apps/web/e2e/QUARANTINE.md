@@ -534,3 +534,26 @@ proved by a separate test that is not quarantined where one exists.
   `list_suggestions`, which the server does not register, against 43 served
   (`apps/web/src/components/admin/settings/mcp/mcp-setup-guide.tsx`
   `MCP_TOOLS`). owner: unassigned, review by: 2026-12-03.
+
+### Product suite: status page
+
+Each test asserts the right behaviour; the working part of each journey is
+proved by a separate test that is not quarantined.
+
+- `status/admin-incidents.spec.ts` › STA-A-30 an incident created already
+  resolved announces nothing. `createIncident` sets
+  `notifySubscribers = !backfilled && (input.notifySubscribers ?? true)`
+  (`apps/web/src/lib/server/domains/status/status.service.ts:242`) without
+  looking at the status, so a non-backfill incident created `resolved` (or a
+  window created `completed`) writes `status.incident_created` and emails
+  subscribers "New incident reported" for something already over. Fix: treat a
+  terminal create status like a backfill for notification (no event, no
+  email). owner: unassigned, review by: 2026-12-03.
+- `status/admin-incidents.spec.ts` › STA-A-33 editor deep link to a malformed
+  id says not found. `getStatusIncidentAdminFn` passes the raw id to
+  `findStatusIncidentById`
+  (`apps/web/src/lib/server/domains/status/status.service.ts:866`), whose
+  TypeID conversion throws, so the fn errors ("Something went wrong on our
+  side") and the editor shows "Couldn't load this incident" with Try again.
+  Fix: return null for an id that fails `isTypeId(id, 'status_incident')`, as
+  the public path does. owner: unassigned, review by: 2026-12-03.

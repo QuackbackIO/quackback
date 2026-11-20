@@ -7,7 +7,8 @@
  *
  * Sweeps with an "as of" clock: sla-breach-sweep, snooze-sweep, workflow-sweep,
  * workflow-wait (promotes delayed workflow jobs due by then). Wall clock only:
- * email-log-retention, workflow-retention, spam-retention, anon-sweep.
+ * email-log-retention, workflow-retention, spam-retention, anon-sweep,
+ * status-maintenance, status-notify.
  */
 import { expect, type APIRequestContext } from '@playwright/test'
 
@@ -20,6 +21,8 @@ export type SweepName =
   | 'workflow-retention'
   | 'spam-retention'
   | 'anon-sweep'
+  | 'status-maintenance'
+  | 'status-notify'
 
 export interface SweepRun {
   ok: true

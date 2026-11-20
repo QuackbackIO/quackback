@@ -91,6 +91,26 @@ const SWEEPS: Record<string, SweepEntry> = {
       return {}
     },
   },
+  // Maintenance windows whose start or end has passed (the scheduler's
+  // safety net). Its handlers read the wall clock, so a test backdates its
+  // own window's scheduled_*_at instead of passing asOf.
+  'status-maintenance': {
+    asOf: false,
+    run: async () => {
+      const { reconcileMaintenanceWindows } =
+        await import('@/lib/server/domains/status/status.maintenance')
+      return reconcileMaintenanceWindows()
+    },
+  },
+  // Live incidents and windows whose publish email was never claimed.
+  'status-notify': {
+    asOf: false,
+    run: async () => {
+      const { reconcileStatusNotifications } =
+        await import('@/lib/server/domains/status/status.service')
+      return { notified: await reconcileStatusNotifications() }
+    },
+  },
 }
 
 /** The sweeps the runner accepts, for the refusal message and the tests. */

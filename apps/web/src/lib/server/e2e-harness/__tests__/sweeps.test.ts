@@ -31,6 +31,19 @@ vi.mock('@/lib/server/email/email-log.retention', () => ({
   }),
 }))
 
+vi.mock('@/lib/server/domains/status/status.maintenance', () => ({
+  reconcileMaintenanceWindows: vi.fn(async () => {
+    calls.push({ job: 'status-maintenance' })
+    return { started: 1, completed: 2 }
+  }),
+}))
+vi.mock('@/lib/server/domains/status/status.service', () => ({
+  reconcileStatusNotifications: vi.fn(async () => {
+    calls.push({ job: 'status-notify' })
+    return 3
+  }),
+}))
+
 import { E2E_SWEEP_NAMES, runE2eSweep } from '../sweeps'
 
 beforeEach(() => {
@@ -82,6 +95,23 @@ describe('runE2eSweep', () => {
     const outcome = await runE2eSweep({ job: 'email-log-retention' })
     expect(outcome).toMatchObject({ ok: true, job: 'email-log-retention' })
     expect(calls).toEqual([{ job: 'email-log-retention' }])
+  })
+
+  it('runs the status maintenance and notify reconcilers at the wall clock only', async () => {
+    expect(await runE2eSweep({ job: 'status-maintenance' })).toMatchObject({
+      ok: true,
+      result: { started: 1, completed: 2 },
+    })
+    expect(await runE2eSweep({ job: 'status-notify' })).toMatchObject({
+      ok: true,
+      result: { notified: 3 },
+    })
+    expect(calls).toEqual([{ job: 'status-maintenance' }, { job: 'status-notify' }])
+    for (const job of ['status-maintenance', 'status-notify']) {
+      const refused = await runE2eSweep({ job, asOf: '2030-01-01T00:00:00Z' })
+      expect(refused, job).toMatchObject({ ok: false, status: 400 })
+    }
+    expect(calls).toHaveLength(2)
   })
 
   it('lists the sweeps it accepts and never the one-shot queues', () => {
