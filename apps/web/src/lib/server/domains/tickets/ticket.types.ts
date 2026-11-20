@@ -23,7 +23,7 @@ import type {
 } from '@/lib/shared/db-types'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import type { JsonValue } from '@/lib/shared/json'
-import type { TICKET_SORTS } from '@/lib/shared/tickets'
+import type { INBOX_ONLY_TICKET_SORTS, TICKET_SORTS } from '@/lib/shared/tickets'
 import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 
 // ---------------------------------------------------------------------------
@@ -88,8 +88,11 @@ export interface AssignTicketInput {
 }
 
 /** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt);
- *  `due` is soonest due date first, tickets without one last. */
-export type TicketSort = (typeof TICKET_SORTS)[number]
+ *  `sla` by the open time-to-resolve deadline, soonest first, none last;
+ *  `waiting` by id alone, since a ticket has no waiting clock (the unified
+ *  inbox lists them after every conversation, in a stable order); `due` is
+ *  soonest due date first, tickets without one last. */
+export type TicketSort = (typeof TICKET_SORTS)[number] | (typeof INBOX_ONLY_TICKET_SORTS)[number]
 
 /** Who a list is scoped to by assignee: the caller, nobody, or a specific teammate. */
 export type TicketAssigneeFilter = 'me' | 'unassigned' | PrincipalId
@@ -265,19 +268,39 @@ export interface TicketDTO {
 }
 
 /**
- * The requester-audience twin of `TicketDTO` (portal/widget requester fns):
- * everything the agent DTO carries EXCEPT the two internal-only fields.
- * `status` (internal name/category — a null-`publicStage` status must never
- * leak, per the ticket_statuses contract) and `sla` (policy name + resolve
- * deadline — internal commitments, stripped from conversation visitor DTOs
- * for the same reason, see conversation.query.ts's `side` split) are nulled.
- * The requester-facing projection remains `stage`. (No unread field: the
- * requester reads their pair through the conversation surface, whose own
- * unread counts are the complete truth by construction.)
+ * What a requester receives about their own ticket (portal and Messenger).
+ * Its own type, built key by key from an allow-list, so a key added to the
+ * agent `TicketDTO` never reaches customers by default. It carries no internal
+ * status or SLA (the customer reads `stage`), no priority, team, due date,
+ * first response or reopen count, and no `lastMessageAt` (an internal note
+ * moves that). `updatedAt` is the last change the customer can see, and
+ * `customAttributes` holds only the answers of fields the ticket's type marks
+ * visible to customers.
  */
-export type RequesterTicketDTO = Omit<TicketDTO, 'status' | 'sla'> & {
-  status: null
-  sla: null
+export interface RequesterTicketDTO {
+  id: TicketId
+  number: number
+  reference: string
+  type: TicketType
+  ticketType: TicketTypeRef | null
+  title: string
+  stage: TicketStageRef
+  requester: TicketPrincipalRef | null
+  /** Who is handling the ticket, by public name. No team. */
+  assignee: { principalId: PrincipalId | null; displayName: string | null }
+  company: TicketCompanyRef | null
+  /** The ticket's shared due date, which the customer may have proposed and
+   *  both sides see. Null = none. */
+  dueAt: string | null
+  resolvedAt: string | null
+  createdAt: string
+  /** The newest public, non-system message on the ticket's thread; else the
+   *  newest move into a status with a customer stage; else `createdAt`. */
+  updatedAt: string
+  /** Answers to the type's customer-visible fields only. */
+  customAttributes: Record<string, JsonValue>
+  /** The latest customer-visible message's preview, else the ticket title. */
+  lastMessagePreview: string | null
 }
 
 /** A page of `listTickets`: the rows plus whether an older page follows. */

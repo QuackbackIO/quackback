@@ -120,14 +120,14 @@ describe('TicketDueChip', () => {
     const { container } = renderChip('2026-10-14T10:00:00.000Z')
     await act(async () => {})
     expect(container.textContent).toBe('2h over')
-    expect(container.firstElementChild!.className).toContain('text-red-700')
+    expect(container.firstElementChild!.className).toContain('text-destructive')
   })
 
   it('reads as due soon within the next 24 hours', async () => {
     const { container } = renderChip('2026-10-14T17:30:00.000Z')
     await act(async () => {})
     expect(container.textContent).toBe('5h 30m')
-    expect(container.firstElementChild!.className).toContain('text-amber-700')
+    expect(container.firstElementChild!.className).toContain('text-warning')
   })
 
   it('stays muted further out', async () => {

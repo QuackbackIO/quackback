@@ -101,6 +101,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Indexes the bundled emoji dataset by emoticon, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/plan-limits/plan-limits.service.ts',
+    name: 'evaluating',
+    category: 'process-lifetime',
+    reason:
+      'The AsyncLocalStorage instance marking one plan limits evaluation in progress. evaluate() opens a new store per call and the store holds only `true`, so concurrent workspaces and requests never see each other’s evaluation; the instance holds no value outside those contexts.',
+  },
+  {
     file: 'apps/web/src/lib/server/integrations/sync/transport.ts',
     name: 'evidence',
     category: 'process-lifetime',
@@ -369,6 +376,38 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "Short-lived copies of cached values, chiefly the workspace settings, which hold one workspace's " +
       'auth config, secrets and flags. Shared, one workspace would be served another workspace settings ' +
       'for up to the copy lifetime.',
+  },
+  {
+    file: 'apps/web/src/lib/server/cache.ts',
+    name: 'refusedFills',
+    category: 'process-lifetime',
+    reason:
+      'A count of cache fills this process refused, logged so a fill that never lands is visible. It holds no workspace data; shared across workspaces it only sums their refusals in one log field.',
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'dropStamps',
+    category: 'workspace-keyed',
+    reason:
+      'Per cache key, when this process last dropped it, so a read that overlapped the drop does not keep its copy. Shared, a drop in one workspace would only make another workspace skip keeping one copy (a cache read, never wrong data); keyed, it does not even do that.',
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'lastStamp',
+    category: 'process-lifetime',
+    reason:
+      'The last stamp handed to dropStamps: a plain counter holding no workspace data. Shared across workspaces it only makes stamps unique; no value read from it says anything about a workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/settings/settings.service.ts',
+    name: 'derivedFromSettings',
+    category: 'workspace-scoped-key',
+    keyedBy: 'WorkspaceSettings',
+    reason:
+      "Keyed by one workspace's cached settings copy, which the workspace-keyed settings cache and " +
+      'the request memo hand out only to that workspace, so a lookup can only find values derived ' +
+      "from its own row. Shared, one workspace would read another's custom hostnames. It is a " +
+      'WeakMap, so an entry goes when its copy does.',
   },
   {
     file: 'apps/web/src/lib/server/mcp/untrusted.ts',
@@ -706,6 +745,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'different From addresses. Null falls through to EMAIL_FROM, which is the self-host path.',
   },
   {
+    file: 'packages/email/src/default-from.ts',
+    name: 'shared',
+    category: 'process-lifetime',
+    reason:
+      'Holds a function pointer installed at boot that answers one question about the process: ' +
+      'whether it serves many workspaces. The answer is the same for every workspace in it, and ' +
+      'nothing about a workspace is kept in here.',
+  },
+  {
     file: 'packages/email/src/index.ts',
     name: 'smtpTransporter',
     category: 'fleet-wide',
@@ -889,6 +937,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "would put every workspace's realtime traffic on one socket and one database. Deliberately NOT a " +
       'WorkspaceKeyedCache: that class evicts, and evicting here closes a socket out from under live ' +
       'SSE streams. Bounded instead by ref-counted release when a workspace loses its last subscriber.',
+  },
+  {
+    file: 'apps/web/src/lib/server/realtime/inbox-publish.ts',
+    name: 'chains',
+    category: 'workspace-scoped-key',
+    keyedBy: 'currentWorkspaceNamespace',
+    reason:
+      "The tail of each inbox item's publish chain, so frames for one item leave in call order. " +
+      'Keyed by the workspace namespace (taken at call time), the item kind and the id, so two ' +
+      'workspaces never share a chain even for equal ids. Deliberately NOT a WorkspaceKeyedCache: ' +
+      'evicting a live tail would let the next frame overtake it. Bounded by in-flight publishes: ' +
+      'an entry is deleted the moment its tail settles.',
   },
   {
     file: 'apps/web/src/lib/server/realtime/pubsub.ts',
@@ -1414,5 +1474,60 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'of untested providers across the fleet. It holds no workspace data and gates nothing but ' +
       'a log line: a wrong hit would drop one informational line, never change which providers ' +
       'are trusted.',
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/index.ts',
+    name: 'pendingClientScopeReconciles',
+    category: 'workspace-keyed',
+    reason:
+      'Whether this workspace has an MCP client scope reconcile to retry, and when it last tried. ' +
+      'A cross-workspace hit would retry the update against the wrong workspace, or skip the ' +
+      'retry a workspace still needs.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/batched.ts',
+    name: 'backfillState',
+    category: 'workspace-keyed',
+    reason:
+      'The registry this process last saw every startup backfill done for, per workspace. A ' +
+      'cross-workspace hit would shut the startup-backfill schedule for a workspace whose ' +
+      'backfills have not finished.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/upgrade-done.ts',
+    name: 'notedBuild',
+    category: 'workspace-keyed',
+    reason:
+      'The build whose upgrade work this process has noted done, per workspace. A cross-workspace ' +
+      'hit would drop the one "upgrade work done" line for a workspace that has not logged it.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/batched.ts',
+    name: 'overrides',
+    category: 'process-lifetime',
+    reason:
+      'Test seam holding a replacement backfill registry, null in production so ' +
+      'registeredBackfills() returns the compile-time BATCHED_BACKFILLS constant. Holds no ' +
+      'workspace value.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
+    name: 'overrides',
+    category: 'process-lifetime',
+    reason:
+      'Test seam holding a replacement background index list, null in production so ' +
+      'deferredIndexSpecs() returns the compile-time DEFERRED_INDEX_SPECS constant. Holds no ' +
+      'workspace value.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
+    name: 'indexPassState',
+    category: 'workspace-keyed',
+    reason:
+      "What this worker process knows about one workspace's background indexes: whether it has " +
+      'made its first pass (which is how a restart retries a stopped build), which stopped builds ' +
+      'it has warned about, and the list it last saw fully built. A cross-workspace hit would skip ' +
+      'a restart retry, drop a warning, or shut the build schedule for a workspace whose indexes ' +
+      'are still missing.',
   },
 ]

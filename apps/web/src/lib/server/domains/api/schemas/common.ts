@@ -86,3 +86,19 @@ export const ValidationErrorSchema = z
   .meta({
     description: 'Request validation failed',
   })
+
+/** 400 for the assign operations, which also refuse an assignee who is not a teammate. */
+export const AssignValidationErrorSchema = z
+  .object({
+    error: z.object({
+      code: z.enum(['VALIDATION_ERROR', 'BAD_REQUEST', 'INVALID_ASSIGNEE']).meta({
+        description:
+          'INVALID_ASSIGNEE means the assignee is not a teammate. The other codes mean the request was rejected as invalid; read message and details for the reason.',
+      }),
+      message: z.string(),
+      details: z.record(z.string(), z.unknown()).optional(),
+    }),
+  })
+  .meta({
+    description: 'Request validation failed, or the assignee is not a teammate',
+  })

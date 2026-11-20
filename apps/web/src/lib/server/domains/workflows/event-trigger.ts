@@ -67,6 +67,7 @@ import { interruptWaitingRuns, resumeWorkflowRun } from './workflow.engine'
 import { logRunEvent } from './workflow-run-events'
 import { findWaitingCustomerFacingRun, readMessageBlockReply } from './dispatcher.guards'
 import { readCursor } from './workflow-wait-queue'
+import { keyActsAsPerson } from '@/lib/server/messages/reply-rule'
 
 /**
  * Placeholder conversationId returned ONLY when eventToWorkflowTrigger is
@@ -534,6 +535,24 @@ function isRunStillActive(resumed: WorkflowRun | null): boolean {
 }
 
 /**
+ * A change made with a personal API key counts as the teammate who owns the
+ * key, so it starts workflows (and ends a parked assistant wait) exactly like
+ * the same change in the app. The key's requests run as its service principal,
+ * so its events arrive service-actored; this reads the shared reply rule for
+ * that principal and, for a personal key made at or after the cutoff, hands on
+ * the event as a person's. A workspace key, an older personal key and every
+ * other service principal stay automated and keep the dispatcher's gate, so a
+ * workflow's own actions (a bounded service actor that is never a key) still
+ * cannot trigger it again.
+ */
+async function asTeammateWhenPersonalKey(event: EventData): Promise<EventData> {
+  const actor = event.actor
+  if (actor?.type !== 'service' || !actor.principalId) return event
+  if (!(await keyActsAsPerson(actor.principalId as PrincipalId))) return event
+  return { ...event, actor: { type: 'user', principalId: actor.principalId } } as EventData
+}
+
+/**
  * Fire workflow triggers for a dispatched event. Called from inside the
  * workflow-dispatch queue's job processor, so errors are NOT swallowed here —
  * they propagate to fail the job and let BullMQ retry.
@@ -566,7 +585,8 @@ function isRunStillActive(resumed: WorkflowRun | null): boolean {
  * message or the two resume triggers above can ever end one. Either way,
  * other triggers for this same event still dispatch afterward.
  */
-export async function dispatchWorkflowsForEvent(event: EventData): Promise<void> {
+export async function dispatchWorkflowsForEvent(received: EventData): Promise<void> {
+  const event = await asTeammateWhenPersonalKey(received)
   // The unresponsive pair routes to a single pre-selected workflow — see
   // dispatchWorkflowTrigger's `targetWorkflowId` doc — instead of the generic
   // fan-out below — never interrupts/resumes anything (silence can't matter

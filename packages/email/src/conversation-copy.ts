@@ -38,13 +38,17 @@ export function teamAlertSubject(
   return `${visitorName}: ${topic}`
 }
 
+/** The From display name on an agent's reply: `Alex from Acme`. */
 export function agentReplyDisplayName(agentName: string, workspaceName: string): string {
-  return `${agentName} (${workspaceName})`
+  return `${agentName} from ${workspaceName}`
 }
 
 export function conversationMessageCopy(opts: {
   direction: ConversationMailDirection
   senderName: string
+  /** `senderName` is the support team's, not a person's: the copy speaks as
+   *  the team rather than "X from the workspace". */
+  senderIsTeam?: boolean
   workspaceName: string
   conversationSubject?: string | null
   /** Team-alert subject fallback when the conversation has no subject. */
@@ -85,9 +89,13 @@ export function conversationMessageCopy(opts: {
   return {
     subject: forwarded ?? generic,
     heading: forwarded ?? generic,
-    intro: isReply
-      ? `${senderName} replied to your conversation with ${workspaceName}.`
-      : `${senderName} from ${workspaceName} sent you a message.`,
+    intro: opts.senderIsTeam
+      ? isReply
+        ? `${senderName} replied to your conversation.`
+        : `${senderName} sent you a message.`
+      : isReply
+        ? `${senderName} replied to your conversation with ${workspaceName}.`
+        : `${senderName} from ${workspaceName} sent you a message.`,
     ctaLabel: 'View conversation',
     reason: isReply
       ? 'You received this email because you have an open conversation with this team.'

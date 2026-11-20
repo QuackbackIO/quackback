@@ -70,6 +70,10 @@ export const conversationOutboundEmails = pgTable(
     messageId: text('message_id').primaryKey(),
     conversationId: typeIdColumn('conversation')('conversation_id').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    /** The id exactly as sent (`message_id` is lower-cased for matching), so
+     *  the next email's In-Reply-To and References repeat it unchanged. Null
+     *  on rows written before it was kept. */
+    sentMessageId: text('sent_message_id'),
   },
   (table) => [
     foreignKey({

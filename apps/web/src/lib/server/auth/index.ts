@@ -13,6 +13,7 @@ import {
 import { mcp } from '@better-auth/mcp'
 import { oauthDeviceAuthorization } from '@better-auth/oauth-provider'
 import { betterAuthMcpResource } from './mcp-plugin-resource'
+import { mcpCimdPlugin } from './cimd'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
@@ -26,9 +27,11 @@ import { guardBetterAuthUserCreation } from './signup-policy'
 import { assignSessionScope } from './session-audience'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { accountDisplayName } from '@/lib/shared/greeting-name'
-import { workspaceAuthTrustedOrigins } from './trusted-origins'
+import { authTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
+import { reconcileMcpOauthClientScopes } from './reconcile-mcp-oauth-client-scopes'
 import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
+import { runWithoutBaseUrlOverride } from '@/lib/server/base-url-override'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -132,6 +135,19 @@ const AUTH_CACHE_KEY = 'instance'
 // loading every provider's credentials and registering the plugins again.
 const authBuilds = new WorkspaceKeyedCache<Promise<AuthInstance>>(256)
 
+/**
+ * A workspace whose MCP client scope reconcile has failed and not yet
+ * succeeded. Kept apart from the cached instance: `resetAuth()` drops the
+ * instance on an auth config change, and the pending retry must outlive that.
+ */
+interface PendingClientScopeReconcile {
+  lastAttemptAt: number
+  inFlight: boolean
+}
+const pendingClientScopeReconciles = new WorkspaceKeyedCache<PendingClientScopeReconcile>(256)
+/** The least time between two attempts at a failed client scope reconcile. */
+const CLIENT_SCOPE_RECONCILE_RETRY_MS = 60_000
+
 type RateLimitCounter = { count: number; lastRequest: number }
 
 const rateLimitCounters = new WorkspaceKeyedCache<RateLimitCounter>(20_000)
@@ -194,11 +210,11 @@ async function createAuth() {
     twoFactor: twoFactorTable,
     eq,
   } = await import('@/lib/server/db')
-  const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
+  const { sendPasswordResetLink } = await import('./password-reset-email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders, socialProviderConfig } = await import('./auth-providers')
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { isSsoLive } = await import('./registered-providers')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { listIdentityProviders, getIdentityProviderCredentials } =
     await import('@/lib/server/domains/settings/identity-providers.service')
@@ -211,14 +227,14 @@ async function createAuth() {
   const trustedProviders: string[] = []
   const genericOAuthConfigs: GenericOAuthConfig[] = []
 
-  // Tier limits + workspace settings are independent reads — fire them
+  // Single sign-on liveness + workspace settings are independent reads — fire them
   // together to avoid stacking Redis round-trips on every auth-instance
   // rebuild. workspaceSettings still drives the social-provider surface
   // filter below; OIDC config now comes from the identity_provider list.
-  const [tierLimits, workspaceSettings] = await Promise.all([
-    getTierLimits(),
-    getWorkspaceSettings(),
-  ])
+  // The instance keeps the plan it was built on until the next version change.
+  // Plan limits read the plan from the same settings copy that carried that
+  // version, so a plan written by another process is the one built on.
+  const [ssoLive, workspaceSettings] = await Promise.all([isSsoLive(), getWorkspaceSettings()])
 
   // OIDC providers (single sign-on + portal custom OIDC) are registered
   // from the identity_provider list — the single source of truth. Each
@@ -286,7 +302,7 @@ async function createAuth() {
   const oidcConfigs = await buildGenericOAuthConfigs({
     providers: providerRows,
     creds: getIdentityProviderCredentials,
-    tierAllowsOidc: tierLimits.features.customOidcProvider,
+    tierAllowsOidc: ssoLive,
     baseUrl: config.baseUrl,
     discovery: (discoveryUrl) => fetchJson(discoveryUrl),
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
@@ -388,6 +404,17 @@ async function createAuth() {
       allowedScopes: API_KEY_SCOPES,
     })
   }
+  // Authorize asks for the whole catalogue, so every client row must allow it.
+  // Never throws. A failure leaves sign-in working and is retried in the
+  // background by `getAuth()` (see retryClientScopeReconcile).
+  if (await reconcileMcpOauthClientScopes({ db, log })) {
+    pendingClientScopeReconciles.delete(AUTH_CACHE_KEY)
+  } else {
+    pendingClientScopeReconciles.set(AUTH_CACHE_KEY, {
+      lastAttemptAt: Date.now(),
+      inFlight: false,
+    })
+  }
 
   // Origin allowlist. Better Auth rejects an auth POST whose Origin is
   // absent. The list is the documented per-request callback
@@ -470,7 +497,7 @@ async function createAuth() {
     baseURL,
 
     // https://better-auth.com/docs/reference/security#dynamic-origin-list
-    trustedOrigins: async (request) => workspaceAuthTrustedOrigins(request),
+    trustedOrigins: async (request) => authTrustedOrigins(request),
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and
@@ -495,29 +522,7 @@ async function createAuth() {
       maxPasswordLength: 128,
       autoSignIn: true,
       async sendResetPassword({ user, url }) {
-        if (!isEmailConfigured()) {
-          log.warn(
-            { user_id: user.id },
-            'password reset requested but email is not configured; link not delivered'
-          )
-          return
-        }
-        // Account class: the reset link is a capability over THIS account, so
-        // the recipient is looked up by id and can never be a contact address
-        // somebody else supplied.
-        const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
-        const to = await resolveAccountRecipient(user.id as UserId)
-        if (!to) {
-          log.warn(
-            { user_id: user.id },
-            'password reset requested but the account has no deliverable address'
-          )
-          return
-        }
-        const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-        const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
-        const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-        await sendPasswordResetEmail({ to, resetLink: url, logoUrl })
+        await sendPasswordResetLink(user, url)
       },
       resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
       // Completing a reset proves inbox ownership (the user received and
@@ -658,6 +663,14 @@ async function createAuth() {
         create: {
           before: assignSessionScope,
         },
+        update: {
+          // A carried session's family rows move with its expiry
+          // (section-session-family.ts).
+          after: async (updated) => {
+            const { followSessionExpiry } = await import('./section-session-family')
+            await followSessionExpiry(updated)
+          },
+        },
       },
     },
 
@@ -741,14 +754,14 @@ async function createAuth() {
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
         scopes: [...MCP_AS_SCOPES],
-        // Fallback when DCR omits `scope`. The register interceptor still
-        // persists the full AS allow-list on the client row so step-up works.
-        clientRegistrationDefaultScopes: [
-          'openid',
-          'profile',
-          'email',
-          ...API_KEY_SCOPES.filter((s) => s.startsWith('read:')),
-        ],
+        // Baseline capability set stored on every dynamically registered (DCR)
+        // and discovered (CIMD) client: Better Auth persists the union of this
+        // and `clientRegistrationAllowedScopes`. The full catalogue, so a later
+        // step-up authorize can ask for writes. What a token may do stays
+        // bounded by the person's consent. CIMD clients never reach the
+        // register interceptor in `routes/api/auth/$.ts`, so this is what
+        // sets theirs.
+        clientRegistrationDefaultScopes: [...MCP_AS_SCOPES],
         clientRegistrationAllowedScopes: [...MCP_AS_SCOPES],
         resources: [
           {
@@ -774,6 +787,13 @@ async function createAuth() {
           }
         },
       }),
+
+      // Client ID Metadata Documents: an MCP client may use an HTTPS URL as
+      // its client_id instead of registering. Advertises
+      // `client_id_metadata_document_supported`. Must follow `mcp()`. DCR
+      // above stays for clients without CIMD; its workspace toggle does not
+      // affect this. See ./cimd.ts for the fetch transport and policy.
+      mcpCimdPlugin(),
 
       // RFC 8628 device authorization grant on the same OAuth server: a
       // headless client asks `/device/code`, the person approves the code at
@@ -910,16 +930,52 @@ export async function getAuth(): Promise<AuthInstance> {
       }
       return authInstances.get(AUTH_CACHE_KEY) ?? buildAuth()
     }
+    retryClientScopeReconcile()
     return instance
   }
-  return instance ?? buildAuth()
+  if (!instance) return buildAuth()
+  retryClientScopeReconcile()
+  return instance
+}
+
+/**
+ * Try a failed MCP client scope reconcile again, in the background.
+ *
+ * Runs from the cached-instance path, so the request that starts it is not held
+ * by it and the instance is not rebuilt. At most one attempt runs at a time per
+ * workspace, and a new one starts only a minute after the last. Once an attempt
+ * succeeds the workspace is no longer pending and nothing runs again.
+ */
+function retryClientScopeReconcile(): void {
+  const pending = pendingClientScopeReconciles.get(AUTH_CACHE_KEY)
+  if (!pending || pending.inFlight) return
+  if (Date.now() - pending.lastAttemptAt < CLIENT_SCOPE_RECONCILE_RETRY_MS) return
+  pending.inFlight = true
+  pending.lastAttemptAt = Date.now()
+  void import('@/lib/server/db')
+    .then(({ db }) => reconcileMcpOauthClientScopes({ db, log }))
+    .catch((err) => {
+      log.warn({ err }, 'could not retry the MCP client scope reconcile')
+      return false
+    })
+    .then((reconciled) => {
+      // A rebuild that reconciled in the meantime replaced or cleared the entry.
+      if (pendingClientScopeReconciles.get(AUTH_CACHE_KEY) !== pending) return
+      if (reconciled) pendingClientScopeReconciles.delete(AUTH_CACHE_KEY)
+      else {
+        pending.inFlight = false
+        pending.lastAttemptAt = Date.now()
+      }
+    })
 }
 
 /** Join the workspace's build in flight, or start one. */
 function buildAuth(): Promise<AuthInstance> {
   const inFlight = authBuilds.get(AUTH_CACHE_KEY)
   if (inFlight) return inFlight
-  const build: Promise<AuthInstance> = createAuth()
+  // Built from the configured origin: the instance outlives this request, so
+  // a per-request base URL override must not leak into it.
+  const build: Promise<AuthInstance> = runWithoutBaseUrlOverride(() => createAuth())
     .then((built) => {
       // A reset while this was building means it was built from a config that
       // has since changed: serve it to the callers already waiting on it, but

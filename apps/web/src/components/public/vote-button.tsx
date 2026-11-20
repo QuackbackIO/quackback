@@ -26,6 +26,8 @@ interface VoteButtonProps {
   pill?: boolean
   /** Static display with no interactivity */
   readonly?: boolean
+  /** The board is read-only: the count shows and voting is closed. */
+  closed?: boolean
 }
 
 export function VoteButton({
@@ -38,15 +40,16 @@ export function VoteButton({
   compact = false,
   pill = false,
   readonly = false,
+  closed = false,
 }: VoteButtonProps): React.ReactElement {
   const intl = useIntl()
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
     voteCount: initialVoteCount,
-    enabled: !readonly,
+    enabled: !readonly && !closed,
   })
 
-  const displayCount = readonly ? initialVoteCount : voteCount
+  const displayCount = readonly || closed ? initialVoteCount : voteCount
   const isHandlingRef = useRef(false)
 
   async function handleClick(): Promise<void> {
@@ -71,7 +74,7 @@ export function VoteButton({
     handleVote()
   }
 
-  const isInteractive = !readonly && !disabled && !noAccessReason
+  const isInteractive = !readonly && !closed && !disabled && !noAccessReason
 
   const sharedClassName = cn(
     'relative flex items-center justify-center',
@@ -116,6 +119,25 @@ export function VoteButton({
       {displayCount}
     </span>
   )
+
+  if (closed) {
+    return (
+      <div
+        data-testid="vote-button"
+        aria-label={intl.formatMessage(
+          {
+            id: 'portal.postCard.vote.ariaClosed',
+            defaultMessage: '{count, plural, one {# vote} other {# votes}}, voting closed',
+          },
+          { count: initialVoteCount }
+        )}
+        className={cn(sharedClassName, 'cursor-not-allowed opacity-60')}
+      >
+        {chevron}
+        {count}
+      </div>
+    )
+  }
 
   if (readonly) {
     return (

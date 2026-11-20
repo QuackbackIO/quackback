@@ -5,13 +5,22 @@
  * both authenticate through the thread's getAuthHeaders prop, so this card
  * never reaches for a surface-specific auth context).
  *
- * Compact by design: Subject (required), Details, and an Email field — the
- * same payload shape createMyTicketFn accepts, minus the type picker and
- * custom intake fields. The email is optional here: an identified visitor's
- * ticket links to their session principal, and an anonymous one can leave it
- * blank. With `askDueDate` (the node's toggle) the card also offers an
- * optional "Needed by" day, sent as the end of that day in the visitor's own
- * time zone; the team may adjust it later.
+ * Compact by design: Subject (required), Details, the customer-visible
+ * fields of the intake default type (no type picker) and, only for an
+ * anonymous visitor with no email on file, an Email field.
+ * The type is the one the server files under when none is named (the intake
+ * default, else the first intake type), and the form sends its id with the
+ * answers, so a required field is filled here and passes the server's check.
+ * With no intake types (an empty list) only the three plain inputs show. While
+ * the type list loads, the fields area shows a spinner; if the read still
+ * fails after its retries, the fields area shows the error and a Try again
+ * button, and the form cannot be sent, since the server would refuse a
+ * submit that skips a required field. An identified visitor, or an anonymous
+ * one whose email is already on file, is never asked for it: the ticket links
+ * to their session principal (`askEmail` false, from the thread load).
+ * With `askDueDate` (the node's toggle) the card also offers an optional
+ * "Needed by" day, sent as the end of that day in the visitor's own time zone;
+ * the team may adjust it later.
  *
  * Filed state is local to the mounted card: a successful submit collapses
  * the form to a confirmation line, and the conversation's own
@@ -20,7 +29,7 @@
  */
 import { useEffect, useId, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import {
   endOfLocalDay,
@@ -28,10 +37,24 @@ import {
   ticketDueProblem,
   toLocalDateInputValue,
 } from '@/lib/shared/ticket-due'
+import { ticketIntakeFormQuery } from '@/lib/client/queries/visitor-ticket-form'
+import { errorText } from '@/lib/client/error-text'
+import type { TicketIntakeType } from '@/lib/shared/tickets'
+import { TicketFormFields } from '@/components/shared/ticket-form-fields'
+import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
 import { toastError } from '@/lib/client/error-notice'
+import { BlockTicketFormLoadingRow } from './block-ticket-form-loading'
+
+const NO_TYPES: TicketIntakeType[] = []
+
+/** The type the server files under when the create names none: the intake
+ *  default, else the first intake type (resolveIntakeCreate). */
+function intakeDefaultType(types: TicketIntakeType[]): TicketIntakeType | null {
+  return types.find((t) => t.isDefault) ?? types[0] ?? null
+}
 
 /**
  * The picker's `min`/`max` (YYYY-MM-DD) for the customer window, in the
@@ -52,9 +75,12 @@ function customerDueInputBounds(now: Date = new Date()): { min: string; max: str
 
 export function BlockTicketForm({
   getAuthHeaders,
+  askEmail = true,
   askDueDate = false,
 }: {
   getAuthHeaders: () => Record<string, string>
+  /** Show the Email field: only an anonymous visitor with no email on file. */
+  askEmail?: boolean
   /** Offer the optional "Needed by" date field (the node's askDueDate toggle). */
   askDueDate?: boolean
 }) {
@@ -74,9 +100,23 @@ export function BlockTicketForm({
     if (askDueDate) setDueBounds(customerDueInputBounds())
   }, [askDueDate])
 
+  const id = useId()
+
+  // Shares the ticket header card's cache entry. Only a successful empty list
+  // means no intake types.
+  const intakeForm = useQuery(ticketIntakeFormQuery(rpc, getAuthHeaders))
+  const types = intakeForm.data?.types ?? NO_TYPES
+  const intake = useTicketIntakeForm(types, { resolveSelectedType: intakeDefaultType })
+
   const create = useMutation({
-    mutationFn: (vars: { title: string; description?: string; email?: string; dueAt?: string }) =>
-      rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
+    mutationFn: (vars: {
+      title: string
+      description?: string
+      email?: string
+      ticketTypeId?: string
+      fieldValues?: Record<string, unknown>
+      dueAt?: string
+    }) => rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
     onSuccess: () => setFiled(true),
     onError: (error) => toastError(error, 'Failed to create ticket'),
   })
@@ -92,7 +132,8 @@ export function BlockTicketForm({
     )
   }
 
-  const canSubmit = title.trim().length > 0 && !create.isPending
+  // Only once the type list is in, so a required field is on screen first.
+  const canSubmit = title.trim().length > 0 && !create.isPending && intakeForm.isSuccess
   const submit = () => {
     if (!canSubmit) return
     // A picked day means the end of that day where the visitor is.
@@ -101,10 +142,18 @@ export function BlockTicketForm({
       setNeededByInvalid(true)
       return
     }
+    const type = intake.selectedType
+    let fieldValues: Record<string, unknown> | undefined
+    if (type) {
+      const checked = intake.validate()
+      if (!checked.ok) return
+      fieldValues = checked.values
+    }
     create.mutate({
       title: title.trim(),
       description: details.trim() || undefined,
-      email: email.trim() || undefined,
+      email: (askEmail && email.trim()) || undefined,
+      ...(type ? { ticketTypeId: type.id, fieldValues } : {}),
       // Only when a day was picked, so the payload is unchanged otherwise.
       ...(dueAt ? { dueAt: dueAt.toISOString() } : {}),
     })
@@ -113,11 +162,15 @@ export function BlockTicketForm({
   return (
     <div className="mt-1.5 w-full max-w-sm space-y-2 rounded-xl border border-border bg-background p-3 shadow-xs">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${id}-subject`} className="text-xs font-medium text-muted-foreground">
           <FormattedMessage id="widget.tickets.new.subject" defaultMessage="Subject" />
-          <span className="ms-0.5 text-destructive">*</span>
+          <span aria-hidden className="ms-0.5 text-destructive">
+            *
+          </span>
         </label>
         <Input
+          id={`${id}-subject`}
+          aria-required
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={300}
@@ -128,10 +181,11 @@ export function BlockTicketForm({
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${id}-details`} className="text-xs font-medium text-muted-foreground">
           <FormattedMessage id="widget.tickets.new.details" defaultMessage="Details" />
         </label>
         <textarea
+          id={`${id}-details`}
           value={details}
           onChange={(e) => setDetails(e.target.value)}
           rows={3}
@@ -142,20 +196,54 @@ export function BlockTicketForm({
           className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
-          <FormattedMessage id="widget.tickets.new.email" defaultMessage="Email" />
-        </label>
-        <Input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={intl.formatMessage({
-            id: 'widget.tickets.new.emailPlaceholder',
-            defaultMessage: 'you@example.com',
-          })}
-        />
-      </div>
+      {intakeForm.isPending && <BlockTicketFormLoadingRow />}
+      {intakeForm.isError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive"
+        >
+          <span>
+            {errorText(
+              intakeForm.error,
+              intl.formatMessage({
+                id: 'widget.tickets.blockCard.formLoadFailed',
+                defaultMessage: "Couldn't load this form.",
+              })
+            )}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void intakeForm.refetch()}
+            disabled={intakeForm.isFetching}
+          >
+            <FormattedMessage id="widget.tickets.blockCard.retry" defaultMessage="Try again" />
+          </Button>
+        </div>
+      )}
+      <TicketFormFields
+        fields={intake.fields}
+        values={intake.fieldValues}
+        onChange={intake.setFieldValue}
+        errors={intake.fieldErrors}
+      />
+      {askEmail && (
+        <div className="space-y-1">
+          <label htmlFor={`${id}-email`} className="text-xs font-medium text-muted-foreground">
+            <FormattedMessage id="widget.tickets.new.email" defaultMessage="Email" />
+          </label>
+          <Input
+            id={`${id}-email`}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={intl.formatMessage({
+              id: 'widget.tickets.new.emailPlaceholder',
+              defaultMessage: 'you@example.com',
+            })}
+          />
+        </div>
+      )}
       {askDueDate && (
         <div className="space-y-1">
           <label htmlFor={dueInputId} className="text-xs font-medium text-muted-foreground">

@@ -80,7 +80,7 @@ export function WebhookConnectionActions({
           {disconnecting ? (
             <>
               <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-              Disconnecting...
+              Disconnecting…
             </>
           ) : (
             'Disconnect'
@@ -104,7 +104,7 @@ export function WebhookConnectionActions({
       {showSuccess && (
         <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           <CheckCircleIcon className="h-4 w-4" />
-          <span>Webhook saved and verified!</span>
+          <span>Webhook saved and verified.</span>
         </div>
       )}
 
@@ -133,7 +133,7 @@ export function WebhookConnectionActions({
             {saving ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                Saving…
               </>
             ) : (
               'Save'

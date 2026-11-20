@@ -119,7 +119,10 @@ export const tickets = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    // Lifecycle timestamps. first_response_at is the first agent reply;
+    // Lifecycle timestamps. first_response_at is the first public human
+    // reply after the customer's first message, worked out from the message
+    // rows (apps/web domains/tickets/ticket-first-response.ts), never stamped
+    // by a status, assignee or priority change;
     // waiting_since is when the requester started waiting (drives waiting sorts);
     // resolved_at is set on close, cleared on reopen.
     firstResponseAt: timestamp('first_response_at', { withTimezone: true }),
@@ -129,7 +132,7 @@ export const tickets = pgTable(
     // SLA targets, which live in `sla_applied`. NULL = no due date.
     dueAt: timestamp('due_at', { withTimezone: true }),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-    // Due-date alert markers (0312): each holds the `due_at` value the
+    // Due-date alert markers (0320): each holds the `due_at` value the
     // ticket-due sweep last alerted for, so moving the due date re-arms both
     // alerts without a reset write. NULL = never alerted.
     dueSoonNotifiedFor: timestamp('due_soon_notified_for', { withTimezone: true }),

@@ -100,8 +100,12 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 
 const mockGetRegisteredOidcProviderIds = vi.fn()
+// Identity providers set up, and whether single sign-on is live right now.
+const oidc = vi.hoisted(() => ({ configured: new Set<string>(), live: true }))
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: (...a: unknown[]) => mockGetRegisteredOidcProviderIds(...a),
+  getConfiguredOidcProviderIds: async () => oidc.configured,
+  isSsoLive: async () => oidc.live,
 }))
 
 // auth-restrictions stays unmocked — we want the real predicates to
@@ -200,6 +204,32 @@ describe('handleSignInPreCheck — early exits', () => {
     await handleSignInPreCheck(ctx)
     expect(mockGetWorkspaceSettings).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('refuses the start of a set-up provider while single sign-on is not live', async () => {
+    oidc.configured = new Set(['acme-sso'])
+    oidc.live = false
+    try {
+      for (const ctx of [
+        ctxFor('/sign-in/social', { provider: 'acme-sso' }),
+        ctxFor('/sign-in/oauth2', { providerId: 'acme-sso' }),
+      ]) {
+        await expect(handleSignInPreCheck(ctx)).rejects.toThrow()
+        expect(ctx.redirect).toHaveBeenCalledWith('/?auth=signin&error=oauth_method_not_allowed')
+      }
+      // A social provider is not an identity provider: left to its own gates.
+      const social = ctxFor('/sign-in/social', { provider: 'google' })
+      await handleSignInPreCheck(social)
+      expect(social.redirect).not.toHaveBeenCalled()
+      // Live again: the start goes ahead.
+      oidc.live = true
+      const live = ctxFor('/sign-in/social', { provider: 'acme-sso' })
+      await handleSignInPreCheck(live)
+      expect(live.redirect).not.toHaveBeenCalled()
+    } finally {
+      oidc.configured = new Set()
+      oidc.live = true
+    }
   })
 
   it('skips when path is /oauth2/callback/:providerId (Layer C handles those)', async () => {

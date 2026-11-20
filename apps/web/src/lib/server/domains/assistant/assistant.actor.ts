@@ -1,11 +1,12 @@
 /**
  * Reader-biased authority for Quinn. Autonomous turns can inspect and reply to
  * conversations, publish team-only pending-action notices, record conversation
- * attributes (metadata facts learned while talking to the customer), and raise
+ * attributes (metadata facts learned while talking to the customer), raise
  * tickets (capturing a reported problem for a teammate to investigate is the
- * support agent's core job), but cannot close conversations or publish on a
- * customer's behalf. Approved actions execute under the approving teammate's
- * actor.
+ * support agent's core job), close a conversation the customer has said is
+ * finished (end_conversation), and capture a customer's feature request as a
+ * feedback post attributed to them (capture_feedback). Approved actions
+ * execute under the approving teammate's actor.
  *
  * The explicit ceiling cannot silently widen as the admin role grows.
  */
@@ -36,6 +37,17 @@ export const ASSISTANT_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
   // close, and the write-tool idempotency key already prevents duplicates for
   // the same customer message.
   PERMISSIONS.TICKET_CREATE,
+  // end_conversation closes the conversation once the customer has confirmed
+  // they are done; it is the only assistant tool that declares this
+  // permission. Without it the autonomous permission check denied every call.
+  // A teammate can reopen a closed conversation.
+  PERMISSIONS.CONVERSATION_SET_STATUS,
+  // capture_feedback turns a feature request the customer made into a feedback
+  // post attributed to them; it is the only assistant tool that declares these
+  // two permissions. Without them the autonomous permission check denied every
+  // call. A teammate can edit, merge or delete a captured post.
+  PERMISSIONS.POST_CREATE,
+  PERMISSIONS.POST_VOTE_ON_BEHALF,
 ])
 
 export function quinnActor(principalId: PrincipalId): Actor {

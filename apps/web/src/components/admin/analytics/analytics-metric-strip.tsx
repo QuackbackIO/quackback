@@ -41,11 +41,6 @@ export function AnalyticsMetricStrip({
               'group relative flex-1 px-5 py-4 text-left transition-colors duration-150',
               !isActive && 'hover:bg-muted/20'
             )}
-            style={
-              isActive
-                ? { backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }
-                : undefined
-            }
           >
             <p
               className={cn(

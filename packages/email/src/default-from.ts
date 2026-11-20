@@ -7,13 +7,33 @@
  * and this falls through to `EMAIL_FROM`.
  */
 let resolver: (() => string | null | undefined) | null = null
+let shared: (() => boolean) | null = null
 
 export function setDefaultFromResolver(fn: () => string | null | undefined): void {
   resolver = fn
 }
 
+/**
+ * Tell the package whether this server's `EMAIL_FROM` is a platform's, shared
+ * by many workspaces, rather than one install's own. A shared address never
+ * speaks for a workspace under the platform's name, even on a send the
+ * resolver has no From for.
+ */
+export function setDefaultFromShared(fn: () => boolean): void {
+  shared = fn
+}
+
 export function resetDefaultFromResolver(): void {
   resolver = null
+  shared = null
+}
+
+/**
+ * Whether the default From belongs to a platform rather than to this install:
+ * the resolver supplied it, or the server said its `EMAIL_FROM` is shared.
+ */
+export function defaultFromIsShared(): boolean {
+  return shared?.() === true || resolvedDefaultFrom() !== null
 }
 
 /** The resolver's answer, or null to fall through to EMAIL_FROM. */

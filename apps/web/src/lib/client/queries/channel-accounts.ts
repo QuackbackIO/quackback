@@ -1,11 +1,18 @@
 import { queryOptions } from '@tanstack/react-query'
+import type { AddedDomainSummary } from '@/lib/server/functions/domains'
 import {
   getEmailChannelConfigFn,
+  getSurfaceSenderFn,
   type EmailChannelConfigDTO,
 } from '@/lib/server/functions/channel-accounts'
 
+import type { ProductSenderSurface } from '@/lib/shared/email-sending-permissions'
+
 export const emailChannelKeys = {
   config: () => ['email-channel-config'] as const,
+  /** Under the config key, so every sender change refreshes it too. */
+  surfaceSender: (surface: ProductSenderSurface) =>
+    ['email-channel-config', 'sender', surface] as const,
 }
 
 /** How often the card re-reads while a domain is being checked automatically. */
@@ -33,4 +40,30 @@ export const emailChannelConfigQuery = () =>
     queryFn: () => getEmailChannelConfigFn(),
     staleTime: 60 * 1000,
     refetchInterval: (query) => (autoChecking(query.state.data) ? AUTO_CHECK_POLL_MS : false),
+  })
+
+/**
+ * The domains added by name on Settings > Domains, which Add sending address
+ * (and Add custom domain) build on and Verify domain links to. Here because
+ * the email pages already load this module; read only when asked for, and
+ * readable with any Domains page permission.
+ */
+export const addedDomainsQuery = () =>
+  queryOptions({
+    queryKey: ['settings', 'added-domains'],
+    staleTime: 30_000,
+    queryFn: async (): Promise<AddedDomainSummary[]> =>
+      (await import('@/lib/server/functions/domains')).listDomainsFn(),
+  })
+
+/** The names of the Verified domains among them. */
+export const verifiedDomainNames = (domains: readonly AddedDomainSummary[]): string[] =>
+  domains.filter((d) => d.verified).map((d) => d.name)
+
+/** The From one kind of email goes out under now, for its product's settings page. */
+export const surfaceSenderQuery = (surface: ProductSenderSurface) =>
+  queryOptions({
+    queryKey: emailChannelKeys.surfaceSender(surface),
+    queryFn: () => getSurfaceSenderFn({ data: { surface } }),
+    staleTime: 60 * 1000,
   })

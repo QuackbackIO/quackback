@@ -190,6 +190,11 @@ export type AuditEventType =
   // repository); the target is the destination.
   | 'integration.destination.added'
   | 'integration.destination.removed'
+  // An MCP client identified by its metadata document URL (CIMD): created on
+  // first use, and refreshed when a re-fetched document changed its name or
+  // redirect URIs.
+  | 'oauth.client.discovered'
+  | 'oauth.client.refreshed'
 
 export type AuditEventOutcome = 'success' | 'failure'
 

@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildTeamsMessage } from '@/integrations/teams/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'teams' })
 
@@ -21,13 +23,14 @@ export interface TeamsTarget {
 export interface TeamsConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
   teamId?: string
 }
 
 export const teamsHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as TeamsTarget
-    const { accessToken, rootUrl, teamId } = config as TeamsConfig
+    const { accessToken, rootUrl, links, teamId } = config as TeamsConfig
 
     if (!teamId) {
       return { state: 'failed', errorCode: 'provider_failed' }
@@ -35,7 +38,7 @@ export const teamsHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing event')
 
-    const message = buildTeamsMessage(event, rootUrl)
+    const message = buildTeamsMessage(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await integrationFetch(

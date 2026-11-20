@@ -14,6 +14,7 @@ import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { ResolvedSurface } from './resolve'
 import { PRINCIPAL_CLASSES, type PrincipalClass } from './principals'
 import type { ScannedMcpTool, EntryPoint } from './scan'
+import { SESSION_REACH } from './classifications'
 
 export type Outcome = 'allow' | 'deny' | 'n/a'
 
@@ -110,6 +111,13 @@ export function renderMatrixDoc(
     out.push(
       `| ${p} | ${categoryOf.get(p) ?? '?'} | ${mark(OWNER.has(p))} | ${mark(MANAGER.has(p))} |`
     )
+  }
+  out.push('')
+  out.push('### Session reach beyond the gated surfaces')
+  out.push('')
+  for (const p of ALL_PERMISSIONS) {
+    const note = SESSION_REACH[p]
+    if (note) out.push(`- **${p}**: ${note}`)
   }
   out.push('')
 
