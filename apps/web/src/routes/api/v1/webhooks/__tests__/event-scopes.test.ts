@@ -266,6 +266,24 @@ describe('updating a webhook', () => {
     expect(service.updateWebhook).not.toHaveBeenCalled()
   })
 
+  it('lets the same key save the stored URL and events unchanged, as the edit dialog does', async () => {
+    useKey(['write:settings', 'read:feedback'], OWNER)
+
+    const res = await patch({ url: SINK, events: ['message.note_created'], status: 'disabled' })
+
+    expect(res.status).toBe(200)
+    expect(service.updateWebhook).toHaveBeenCalledOnce()
+  })
+
+  it('refuses adding a chat event next to the stored ones', async () => {
+    useKey(['write:settings', 'read:feedback'], OWNER)
+
+    const res = await patch({ url: SINK, events: ['message.note_created', 'ticket.created'] })
+
+    expect(res.status).toBe(403)
+    expect((await errorOf(res)).message).toContain('ticket.created')
+  })
+
   it('lets the same key pause a webhook it cannot re-point', async () => {
     useKey(['write:settings', 'read:feedback'], OWNER)
 

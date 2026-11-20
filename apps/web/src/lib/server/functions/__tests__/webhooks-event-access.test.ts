@@ -68,7 +68,11 @@ beforeEach(() => {
     secret: 'whsec_test',
   }))
   hoisted.updateWebhook.mockResolvedValue({ id: WEBHOOK_ID })
-  hoisted.getWebhookById.mockResolvedValue({ id: WEBHOOK_ID, events: ['ticket.note_added'] })
+  hoisted.getWebhookById.mockResolvedValue({
+    id: WEBHOOK_ID,
+    url: 'https://old.example.com/hook',
+    events: ['ticket.note_added'],
+  })
 })
 
 describe('createWebhookFn', () => {
@@ -109,6 +113,21 @@ describe('updateWebhookFn', () => {
       (updateWebhookFn as unknown as Fn)({ data: { webhookId: WEBHOOK_ID, url: SINK } })
     ).rejects.toBeInstanceOf(ForbiddenError)
     expect(hoisted.updateWebhook).not.toHaveBeenCalled()
+  })
+
+  it('lets the same role save the edit dialog unchanged', async () => {
+    signInWith(WEBHOOKS_ONLY)
+
+    await (updateWebhookFn as unknown as Fn)({
+      data: {
+        webhookId: WEBHOOK_ID,
+        url: 'https://old.example.com/hook',
+        events: ['ticket.note_added'],
+        status: 'disabled',
+      },
+    })
+
+    expect(hoisted.updateWebhook).toHaveBeenCalledOnce()
   })
 
   it('lets the same role pause it', async () => {

@@ -1061,11 +1061,12 @@ test.describe('Error envelope, pagination and repeats', () => {
   )
 
   test(
-    'API-K-38 a workspace key on a webhook-managing custom role lists and creates webhooks',
+    'API-K-38 a workspace key on a webhook-managing custom role lists and creates webhooks for events it can view',
     { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const roleName = `Hooks ${marker}`
-      customTeammate(roleName, ['webhook.view', 'webhook.manage'])
+      // post.view_private lets the role read the feedback events it subscribes to.
+      customTeammate(roleName, ['webhook.view', 'webhook.manage', 'post.view_private'])
       const key = await keyApi(playwright, baseURL, {
         creatorEmail: people.people.admin.email,
         kind: 'workspace',
@@ -1079,7 +1080,14 @@ test.describe('Error envelope, pagination and repeats', () => {
         201
       )
       await key.api.delete(`/api/v1/webhooks/${hook.data.id}`)
-      // Without webhook.manage the same kind of key is refused.
+      // The role cannot view conversations, so it cannot subscribe to them.
+      await expectForbidden(
+        await key.api.post('/api/v1/webhooks', {
+          data: { url: sink.url(marker), events: ['message.note_created'] },
+        }),
+        "Subscribing to 'message.note_created' requires the 'conversation.view' or 'conversation.view_all' permission"
+      )
+      // Without board.manage the same kind of key is refused.
       await expectForbidden(
         await key.api.post('/api/v1/boards', { data: { name: marker } }),
         "Requires the 'board.manage' permission"

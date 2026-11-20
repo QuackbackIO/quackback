@@ -11,9 +11,9 @@
  *
  * Without this, a Feedback-only key, or a role with `webhook.manage` but no
  * inbox access, could subscribe to internal notes and ticket replies it can
- * never read. Checked on create, on an event change, and on a URL change (so a
- * webhook cannot be pointed at a new endpoint by someone who could not have
- * created it). Pausing, resuming and deleting are not re-checked.
+ * never read. Checked on create, for events added on update, and for every
+ * event when the URL changes. Pausing, resuming and deleting are not
+ * re-checked.
  */
 import { hasApiScope, viewPermissionsForCategory } from '@/lib/shared/api-key-scopes'
 import type { PermissionKey } from '@/lib/shared/permissions'
@@ -58,21 +58,22 @@ export function assertCanSubscribeToEvents(
 }
 
 /**
- * Check an update: new events are checked as on create, and a new URL
- * re-checks the events the webhook already carries. A change to neither
- * (status, board filter) needs no event access.
+ * Check an update. Events being added are checked as on create. A new URL
+ * re-checks every event the webhook will carry, so it cannot be pointed at a
+ * new endpoint by someone who could not have created it. Resending the stored
+ * URL and events (as the edit dialog does on every save), pausing, or changing
+ * the board filter needs no event access.
  */
 export async function assertCanUpdateWebhookEvents(
   webhookId: WebhookId,
   change: { url?: string; events?: readonly string[] },
   subscriber: WebhookSubscriber
 ): Promise<void> {
-  if (change.events) {
-    assertCanSubscribeToEvents(change.events, subscriber)
-    return
-  }
-  if (change.url === undefined) return
+  if (change.events === undefined && change.url === undefined) return
   const { getWebhookById } = await import('./webhook.service')
   const current = await getWebhookById(webhookId)
-  assertCanSubscribeToEvents(current.events, subscriber)
+  const events = change.events ?? current.events
+  const repointed = change.url !== undefined && change.url !== current.url
+  const toCheck = repointed ? events : events.filter((e) => !current.events.includes(e))
+  assertCanSubscribeToEvents(toCheck, subscriber)
 }
