@@ -664,12 +664,7 @@ test.describe('portal submit', () => {
   test(
     'FBP-S-22 an anonymous session cannot upload while anonymous posting is off',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B13: /api/portal/upload accepts any session with a principal, ignoring the workspace anonymous switch',
-      },
+      tag: '@nightly',
     },
     async ({ browser, marker }) => {
       // The workspace anonymous switch is off on a fresh seed (portal_config NULL).
@@ -694,12 +689,7 @@ test.describe('portal submit', () => {
   test(
     'FBP-S-24 public post metadata is bounded',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B14: createPublicPostSchema.metadata is an unbounded string map stored as widget_metadata',
-      },
+      tag: '@nightly',
     },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
@@ -819,12 +809,7 @@ test.describe('portal submit', () => {
     test(
       'FBP-S-06 an anonymous comment is refused with the same code as an anonymous post or vote',
       {
-        tag: ['@core', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B04: comments throw ANONYMOUS_NOT_ENABLED while posts and votes throw ANONYMOUS_NOT_ALLOWED for the same rule',
-        },
+        tag: ['@core', '@isolated'],
       },
       async ({ browser, marker }) => {
         await withSettings(ANON_OFF, async () => {
@@ -884,12 +869,7 @@ test.describe('portal submit', () => {
     test(
       'FBP-S-07 the anonymous post cap answers as a rate limit, and the composer says so',
       {
-        tag: ['@nightly', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B04: RATE_LIMITED is thrown as a ValidationError (400) and the composer shows the generic retry line',
-        },
+        tag: ['@nightly', '@isolated'],
       },
       async ({ browser, marker }) => {
         await withSettings(ANON_ON, async () => {

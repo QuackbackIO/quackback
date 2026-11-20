@@ -153,53 +153,6 @@ proved by a separate test that is not quarantined where one exists.
   `vote_count` from `post_votes` for every post the dropped votes touched.
   Runs in product-isolated (needs the widget on). owner: unassigned, review
   by: 2026-12-03.
-- `feedback/portal-feed.spec.ts` › FBP-L-24 the author's held post shows its
-  pending panel on the first server-rendered feed page (FBP-B03).
-  `fetchPortalData` maps the first feed page field by field and leaves out
-  `moderationState` (and `pinnedAt`)
-  (`apps/web/src/lib/server/functions/portal.ts:257-270`), while later pages
-  spread the whole row (`public-posts.ts:170-176`). The card reads
-  `post.moderationState` (`feedback-container.tsx:650`), so the author's own
-  held post has no "Pending review" panel until the feed refetches. Smallest
-  fix: add `moderationState: post.moderationState` (and `pinnedAt`) to that
-  map. owner: unassigned, review by: 2026-12-03.
-- `feedback/portal-feed.spec.ts` › FBP-L-15 a hand-edited bad minVotes or
-  dateFrom is ignored like a bad sort (FBP-B02). `?minVotes=abc` answers HTTP
-  500 (red run: expected 200, received 500): the route's search schema gives
-  `minVotes` and `dateFrom` no `.catch`
-  (`apps/web/src/routes/_portal/index.tsx:32-37`) while `sort` and `view` have
-  one. Smallest fix: `.optional().catch(undefined)` on both. owner:
-  unassigned, review by: 2026-12-03.
-- `feedback/portal-submit.spec.ts` › FBP-S-22 an anonymous session cannot
-  upload while anonymous posting is off (FBP-B13). `handlePortalUpload`
-  (`apps/web/src/routes/api/portal/upload.ts:8-37`) accepts any session with
-  a principal; it never reads the workspace anonymous switch (red run:
-  expected 403, received 200). Smallest fix: for an anonymous principal,
-  refuse with 403 unless `workspaceAllowsAnonymous(settings.portalConfig)`.
-  owner: unassigned, review by: 2026-12-03.
-- `feedback/portal-submit.spec.ts` › FBP-S-24 public post metadata is bounded
-  (FBP-B14). `createPublicPostSchema.metadata` is
-  `z.record(z.string(), z.string())` with no bound
-  (`apps/web/src/lib/shared/schemas/posts.ts:140`); 2,000 keys of 200
-  characters are stored as `widget_metadata`. Smallest fix: cap the key count
-  (e.g. 50), key length (100) and value length (1,000) in the schema. owner:
-  unassigned, review by: 2026-12-03.
-- `feedback/portal-submit.spec.ts` › FBP-S-06 an anonymous comment is refused
-  with the same code as an anonymous post or vote (FBP-B04). Comments throw
-  `ANONYMOUS_NOT_ENABLED` (`apps/web/src/lib/server/functions/comments.ts:84`)
-  where posts and votes throw `ANONYMOUS_NOT_ALLOWED`
-  (`public-posts.ts:373`, `:449`) for the same workspace switch. Smallest fix:
-  use `ANONYMOUS_NOT_ALLOWED` in comments.ts. Runs in product-isolated.
-  owner: unassigned, review by: 2026-12-03.
-- `feedback/portal-submit.spec.ts` › FBP-S-07 the anonymous post cap answers
-  as a rate limit, and the composer says so (FBP-B04). `RATE_LIMITED` is
-  thrown as a `ValidationError` (status 400)
-  (`apps/web/src/lib/server/functions/public-posts.ts:379`, `:454`), and the
-  composer replaces every refusal with "Could not submit your feedback. Please
-  try again." (`feedback-header-animated.tsx:300-308`), wrong advice inside
-  the hour. Smallest fix: throw the app's rate-limit error (429) and map it to
-  a "too many posts, try again later" line in the composer. Runs in
-  product-isolated. owner: unassigned, review by: 2026-12-03.
 - `feedback/portal-post-detail.spec.ts` › FBP-L-31 a pinned comment outside
   the first page still shows on the page (new). The detail query returns
   `pinnedComment` whatever the paging
@@ -216,15 +169,6 @@ proved by a separate test that is not quarantined where one exists.
 
 ### Product suite: FBP comments and notifications
 
-- `feedback/portal-comments.spec.ts` › FBP-C-03 with the anonymous switch off,
-  an anonymous comment is refused with the code votes and posts use
-  (FBP-B04). The comment gate throws `ANONYMOUS_NOT_ENABLED`
-  (`apps/web/src/lib/server/functions/comments.ts:84`) where votes and posts
-  throw `ANONYMOUS_NOT_ALLOWED` for the same rule
-  (`apps/web/src/lib/server/functions/public-posts.ts`, toggleVote and
-  createPublicPost). Smallest fix: use `ANONYMOUS_NOT_ALLOWED` in
-  comments.ts. Runs in product-isolated. owner: unassigned, review by:
-  2026-12-03.
 - `feedback/portal-comments.spec.ts` › FBP-C-11 after a teammate replies, the
   author is no longer offered Edit or Delete (FBP-B17). The server refuses both
   (`getCommentPermissionsFn` answers `{canEdit:false, canDelete:false}`), but
@@ -284,17 +228,6 @@ proved by a separate test that is not quarantined where one exists.
 
 ### Product suite: FBP access, widget and profile
 
-- `feedback/portal-access.spec.ts` › FBP-A-02 a comment on a post the caller
-  cannot see answers not found, like a missing post (new). `createComment`
-  loads the post with no view filter, then runs `canCreateComment` and throws
-  `403 FORBIDDEN` with the policy reason
-  (`apps/web/src/lib/server/domains/comments/comment.service.ts:63-90`), while
-  a missing post answers `404 POST_NOT_FOUND`; so a comment attempt confirms
-  that a team-only or held post exists (red run: received `FORBIDDEN`). Votes
-  already do this right (`assertPostVotable`, `post.access.ts:121-170`).
-  Smallest fix: check `canViewPost` first and throw `POST_NOT_FOUND` on a view
-  denial, keeping `FORBIDDEN` only for "viewable but not commentable". owner:
-  unassigned, review by: 2026-12-03.
 - `feedback/portal-profile.spec.ts` › FBP-U-04 a held comment neither lists
   its post nor counts on the public profile (FBP-B30). The "Commented on"
   list and `commentCount` filter `is_private = false` and
