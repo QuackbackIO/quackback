@@ -702,3 +702,17 @@ no such part beyond the wrong notification).
   so the in-app bell for the post stops too (the companion test FBP-N-20 pins
   that both stop). Smallest fix: reword to "You will stop getting updates
   about this post." owner: unassigned, review by: 2026-12-03.
+
+### Product suite: FBP access, widget and profile
+
+- `feedback/portal-access.spec.ts` › FBP-A-02 a comment on a post the caller
+  cannot see answers not found, like a missing post (new). `createComment`
+  loads the post with no view filter, then runs `canCreateComment` and throws
+  `403 FORBIDDEN` with the policy reason
+  (`apps/web/src/lib/server/domains/comments/comment.service.ts:63-90`), while
+  a missing post answers `404 POST_NOT_FOUND`; so a comment attempt confirms
+  that a team-only or held post exists (red run: received `FORBIDDEN`). Votes
+  already do this right (`assertPostVotable`, `post.access.ts:121-170`).
+  Smallest fix: check `canViewPost` first and throw `POST_NOT_FOUND` on a view
+  denial, keeping `FORBIDDEN` only for "viewable but not commentable". owner:
+  unassigned, review by: 2026-12-03.
