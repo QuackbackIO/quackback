@@ -2138,8 +2138,20 @@ async function filterChangelogReaders(
   const candidates = subscribers.filter((s) => admitted.has(s.principalId as PrincipalId))
   if (candidates.length === 0) return []
 
+  // Fast path: a public changelog and an entry with no gated label let in
+  // everyone the portal did.
+  const [categoriesByEntry, { getChangelogSettings }] = await Promise.all([
+    categoryService.getCategoriesForEntries([changelogId]),
+    import('@/lib/server/domains/settings/settings.changelog'),
+  ])
+  const categories = categoriesByEntry.get(changelogId) ?? []
+  const { audience } = await getChangelogSettings()
+  if (audience !== 'authenticated' && categories.every((c) => c.segmentIds.length === 0)) {
+    return candidates
+  }
+
   const principalIds = candidates.map((s) => s.principalId as PrincipalId)
-  const [principals, segmentRows, categoriesByEntry] = await Promise.all([
+  const [principals, segmentRows] = await Promise.all([
     db
       .select({ id: principal.id, role: principal.role, type: principal.type })
       .from(principal)
@@ -2148,9 +2160,7 @@ async function filterChangelogReaders(
       .select({ principalId: userSegments.principalId, segmentId: userSegments.segmentId })
       .from(userSegments)
       .where(inArray(userSegments.principalId, principalIds)),
-    categoryService.getCategoriesForEntries([changelogId]),
   ])
-  const categories = categoriesByEntry.get(changelogId) ?? []
   const segmentsByPrincipal = new Map<string, Set<SegmentId>>()
   for (const row of segmentRows) {
     const set = segmentsByPrincipal.get(String(row.principalId)) ?? new Set<SegmentId>()

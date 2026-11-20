@@ -58,24 +58,21 @@ const { listPublicCategoriesFn, recordArticleFeedbackFn, listPublicCategoryEdito
 const { widgetListPublicCategoriesFn } = await import('../widget/help')
 
 type Fn = (args: { data: Record<string, unknown> }) => Promise<unknown>
-const calls: Array<[string, () => Promise<unknown>]> = [
+const lists: Array<[string, () => Promise<unknown>]> = [
   ['listPublicCategoriesFn', () => (listPublicCategoriesFn as unknown as Fn)({ data: {} })],
   [
     'widgetListPublicCategoriesFn',
     () => (widgetListPublicCategoriesFn as unknown as Fn)({ data: {} }),
   ],
   [
-    'recordArticleFeedbackFn',
-    () =>
-      (recordArticleFeedbackFn as unknown as Fn)({
-        data: { articleId: 'kb_article_01h455vb4pex5vsknk084sn02q', helpful: true },
-      }),
-  ],
-  [
     'listPublicCategoryEditorsFn',
     () => (listPublicCategoryEditorsFn as unknown as Fn)({ data: {} }),
   ],
 ]
+const recordFeedback = () =>
+  (recordArticleFeedbackFn as unknown as Fn)({
+    data: { articleId: 'kb_article_01h455vb4pex5vsknk084sn02q', helpful: true },
+  })
 
 beforeEach(() => {
   gate.granted = true
@@ -83,13 +80,23 @@ beforeEach(() => {
 })
 
 describe('public help center reads on a private portal', () => {
-  it.each(calls)('%s answers a caller the portal lets in', async (_, call) => {
+  it.each(lists)('%s answers a caller the portal lets in', async (_, call) => {
     await expect(call()).resolves.toBeDefined()
   })
 
-  it.each(calls)('%s answers "not found" to a caller the portal turns away', async (_, call) => {
+  it.each(lists)('%s comes back empty to a caller the portal turns away', async (_, call) => {
     gate.granted = false
-    await expect(call()).rejects.toMatchObject({ code: 'HELP_CENTER_NOT_FOUND' })
+    expect(await call()).toEqual([])
     for (const fn of Object.values(reads)) expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('records article feedback from a caller the portal lets in', async () => {
+    await expect(recordFeedback()).resolves.toMatchObject({ success: true })
+  })
+
+  it('refuses article feedback from a caller the portal turns away', async () => {
+    gate.granted = false
+    await expect(recordFeedback()).rejects.toMatchObject({ code: 'HELP_CENTER_NOT_FOUND' })
+    expect(reads.recordArticleFeedback).not.toHaveBeenCalled()
   })
 })

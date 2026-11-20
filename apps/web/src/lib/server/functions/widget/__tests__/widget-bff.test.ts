@@ -69,7 +69,7 @@ const hoisted = vi.hoisted(() => {
     recordArticleFeedback: vi.fn(),
     countPublicArticleView: vi.fn(),
     listPublicArticles: vi.fn(),
-    resolveHelpPublicViewer: vi.fn(),
+    resolveHelpPublicReader: vi.fn(),
     serializeCategory: vi.fn((c: unknown) => c),
     serializeArticle: vi.fn((a: unknown) => a),
   }
@@ -136,7 +136,7 @@ vi.mock('@/lib/server/functions/user', () => ({
 }))
 vi.mock('@/lib/server/functions/help-center', () => ({
   assertHelpCenterOpenToRequest: vi.fn(async () => undefined),
-  resolveHelpPublicViewer: hoisted.run.resolveHelpPublicViewer,
+  resolveHelpPublicReader: hoisted.run.resolveHelpPublicReader,
   serializeCategory: hoisted.run.serializeCategory,
   serializeArticle: hoisted.run.serializeArticle,
 }))
@@ -233,7 +233,7 @@ beforeEach(() => {
     new Error('Access denied: Widget sessions cannot access this resource')
   )
   hoisted.getOptionalAuth.mockResolvedValue(null)
-  hoisted.run.resolveHelpPublicViewer.mockResolvedValue({ principalId: 'principal_widget' })
+  hoisted.run.resolveHelpPublicReader.mockResolvedValue({ principalId: 'principal_widget' })
   hoisted.run.serializeCategory.mockImplementation((c: unknown) => c)
   hoisted.run.serializeArticle.mockImplementation((a: unknown) => a)
   for (const fn of Object.values(hoisted.run)) {
