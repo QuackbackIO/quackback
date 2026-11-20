@@ -59,6 +59,7 @@ test asserts the right behaviour; the working part of each journey is proved
 by a separate test that is not quarantined.
 
 ### Product suite: roadmap
+
 - `roadmap/admin-roadmap.spec.ts` › RMP-A-16 deleting the selected first
   roadmap moves the board to another roadmap. Product bug:
   `handleDelete` in `apps/web/src/components/admin/roadmap-sidebar.tsx:114`
@@ -97,7 +98,9 @@ by a separate test that is not quarantined.
     checks on both single-column paths.
 
   owner: unassigned, review by: 2026-12-03.
+
 ### Product suite: people (users and companies)
+
 - `people/users.spec.ts` › removing a person › PPL-U-43 removing a voter
   withdraws their vote from the post count. Product bug: `removePortalUser`
   deletes the principal and lets `post_votes` cascade
@@ -164,9 +167,12 @@ id IN (SELECT post_id FROM post_votes WHERE principal_id = $1)`. owner:
   just stays open. Same component backs user attributes (PPL-U-51). Fix:
   catch in `handleCreate` (and the edit/delete handlers) and toast the
   error message. owner: unassigned, review by: 2026-12-03.
+
 ### Product suite: help center
+
 Each test asserts the right behaviour and fails on the product bug named.
 owner: unassigned, review by: 2026-12-03 for every entry.
+
 - `help-center/admin-articles.spec.ts` › HC-A-15 emptying the description in
   the editor clears it (HC-B12). `article-modal.tsx` sends
   `description: data.description?.trim() || undefined`, and `updateArticle`
@@ -257,114 +263,6 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   when that article has no published French translation. Fix: load related
   articles for the locale (translated only), or link untranslated ones to the
   default-language URL.
-### Product suite: API REST (posts and votes)
-- `platform/rest-posts.spec.ts` › API-R-026 a PATCH with no recognised field
-  is refused to a key that cannot read posts. Product bug: `PATCH
-/api/v1/posts/:id` authenticates with a bare `withApiKeyAuth(request)` and
-  gates only the fields present (`permissionsForPostPatch`,
-  `apps/web/src/routes/api/v1/posts/$postId.ts:31-38`, `:117`), so `{}` (or a
-  body of unknown fields such as `boardId`, which zod strips) checks no
-  permission and no scope, and `updatePost` returns the whole post. A
-  `read:chat` key that `GET /posts/:id` refuses reads any post this way. Fix:
-  refuse a body with no updatable field (400), or require
-  `post.view_private` (with its scope) on every PATCH. owner: unassigned,
-  review by: 2026-12-03.
-- `platform/rest-posts.spec.ts` › API-R-027 PATCH tags with an unknown tag id
-  is refused and keeps the post's tags. Product bug: `updatePost` deletes every
-  tag assignment, then inserts the new set outside a transaction
-  (`apps/web/src/lib/server/domains/posts/post.service.ts:480-486`); an
-  unknown tag id (foreign key) or a repeated one (primary key) fails the
-  insert, the route answers 500 and the post is left with no tags. Fix: check
-  the tag ids exist (404) and de-duplicate before deleting, and run the
-  delete and insert in one transaction. owner: unassigned, review by:
-- `platform/rest-posts.spec.ts` › API-R-012 an unknown or repeated tag id on
-  create is refused without leaving a post. Product bug: `createPost` inserts
-  the tag assignments without looking the tags up
-  (`apps/web/src/lib/server/domains/posts/post.service.ts:271-276`), so an
-  unknown tag id or the same id twice answers 500 (no post row is left, the
-  insert is in the transaction). Fix: load the tags (non-deleted) and
-  de-duplicate first; answer 404 "Tag not found" for a missing one. owner:
-  unassigned, review by: 2026-12-03.
-- `platform/rest-posts.spec.ts` › API-R-013 a soft-deleted status is not found
-  on create or update. Product bug: the status lookups in `createPost` and
-  `updatePost` have no `deletedAt` filter
-  (`apps/web/src/lib/server/domains/posts/post.service.ts:148`, `:393-394`),
-  so a post can be put in a deleted status no list shows. Fix: add
-  `isNull(postStatuses.deletedAt)` to both lookups. owner: unassigned, review
-  by: 2026-12-03.
-- `platform/rest-posts.spec.ts` › API-R-028 a deleted post cannot be edited.
-  Product bug: `updatePost` never checks `deletedAt`
-  (`apps/web/src/lib/server/domains/posts/post.service.ts:379-383`), so
-  `PATCH /api/v1/posts/:id` edits a soft-deleted post and a status change
-  emails its subscribers. Fix: treat a deleted post as not found, as votes
-  and comments do. owner: unassigned, review by: 2026-12-03.
-- `platform/rest-votes.spec.ts` › API-R-041 a proxy vote for an unknown voter
-  is a not-found refusal, not a server error. Product bug: `POST
-/api/v1/posts/:id/vote/proxy` never looks the voter up
-  (`apps/web/src/routes/api/v1/posts/$postId.vote.proxy.ts:43-63`); the vote
-  insert hits the principal foreign key and the route answers 500. Fix: look
-  the principal up first and answer 404 "User not found". owner: unassigned,
-  review by: 2026-12-03.
-
-### Product suite: API REST (comments, moderation, boards, statuses, tags, roadmaps, suggestions, apps)
-
-- `platform/rest-taxonomy.spec.ts` › API-R-072 a status PATCH holding only
-  ignored fields answers 200 with nothing changed. Product bug: a body with
-  only stripped fields (`slug`, `category`, `position`) leaves `updateData`
-  empty and the UPDATE runs with no SET, answering 500
-  (`apps/web/src/lib/server/domains/statuses/status.service.ts:131-142`).
-  Fix: return the existing row when nothing is set. owner: unassigned, review
-  by: 2026-12-03.
-- `platform/rest-taxonomy.spec.ts` › API-R-076 a missing tag answers "Tag not
-  found". Product bug: `TAG_NOT_FOUND` maps to the public text "PostTag not
-  found" (`apps/web/src/lib/server/domains/api/responses.ts:180`). Fix: map it
-  to `Tag`. owner: unassigned, review by: 2026-12-03.
-- `platform/rest-taxonomy.spec.ts` › API-R-077 deleted boards, statuses and
-  tags answer 404 on GET and PATCH. Product bug: the by-id reads and updates
-  have no `deletedAt` filter, so a deleted row stays readable and editable
-  and the body has no `deletedAt` (`board.service.ts:184-186,321-324`,
-  `status.service.ts:103-105,204-207`, `post-tag.service.ts:93-95,165-169`).
-  Fix: filter `isNull(deletedAt)` as DELETE already does. owner: unassigned,
-  review by: 2026-12-03.
-- `platform/rest-roadmaps.spec.ts` › API-R-080 roadmap posts refuse a
-  negative offset with 400. Product bug: `offset` is `parseInt`ed with no
-  lower-bound guard and `offset=-1` reaches SQL, answering 500
-  (`apps/web/src/routes/api/v1/roadmaps/$roadmapId.posts.ts:27-28`). Also seen,
-  not asserted: `limit=0` answers no items with `hasMore: true`. Fix:
-  validate both as non-negative integers (limit at least 1). owner:
-  unassigned, review by: 2026-12-03.
-- `platform/rest-roadmaps.spec.ts` › API-R-084 a column with an unknown status
-  is refused with a client error. Product bug: the column's `statusId` is not
-  looked up, so the foreign key fails and the API answers 500
-  (`apps/web/src/lib/server/domains/roadmaps/roadmap.service.ts:339-356`).
-  Fix: check the status exists (404 or 400). owner: unassigned, review by:
-  2026-12-03.
-- `platform/rest-roadmaps.spec.ts` › API-R-085 a column of another roadmap
-  cannot be edited or removed through a roadmap's URL. Product bug: column
-  PATCH and DELETE validate the roadmap id's format and then ignore it
-  (`apps/web/src/routes/api/v1/roadmaps/$roadmapId.columns.$columnId.ts:27-41`).
-  Fix: scope the update and delete to `roadmapId`, 404 otherwise. owner:
-  unassigned, review by: 2026-12-03.
-- `platform/rest-apps.spec.ts` › API-R-092 apps search fills in each post
-  status name and colour. Product bug: `statusName` and `statusColor` are
-  hard-coded to null (`apps/web/src/routes/api/v1/apps/search.ts:45-46`),
-  while `/apps/linked` returns real values. Fix: join `post_statuses`.
-  owner: unassigned, review by: 2026-12-03.
-- `platform/rest-apps.spec.ts` › API-R-096 linking a deleted or unknown post
-  answers 404 and leaves no link row. Product bug: the link row is inserted
-  before the post is checked, so a deleted post leaves an orphan link (and a
-  404), and an unknown post id answers 500 from the foreign key
-  (`apps/web/src/lib/server/integrations/apps/service.ts:53-67`). Fix: load
-  the live post first and 404 before inserting. owner: unassigned, review by:
-  2026-12-03.
-- `platform/rest-apps.spec.ts` › API-R-100 apps error responses carry the
-  CORS headers too. Product bug: 401 and 400 answers from `/apps/*` come from
-  `handleDomainError` / `badRequestResponse` without
-  `Access-Control-Allow-Origin`, so the cross-origin helpdesk iframe cannot
-  read them (`apps/web/src/routes/api/v1/apps/boards.ts:34-35`,
-  `apps/web/src/lib/server/domains/api/responses.ts:21-33`). Fix: wrap the
-  apps error responses with `corsHeaders()`. owner: unassigned, review by:
-  2026-12-03.
 
 ### Product suite: API REST (changelog, status page, help center, settings, platform)
 
