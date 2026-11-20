@@ -66,13 +66,14 @@ function SearchResultsView({ query, kind, page = 1 }: SearchResultsPageProps) {
 
   const valid = query.length >= MIN_SEARCH_LENGTH
   const offset = (page - 1) * SEARCH_PAGE_SIZE
+  const inRange = offset < MAX_SEARCH_DEPTH
   const search = useQuery({
     queryKey: ['admin', 'search', principalId, query, kind ?? 'all', offset],
     queryFn: () =>
       searchWorkspaceFn({
         data: { query, kind, offset, limit: SEARCH_PAGE_SIZE, semantic: true },
       }),
-    enabled: valid && offset < MAX_SEARCH_DEPTH,
+    enabled: valid && inRange,
     staleTime: 30_000,
   })
   const kinds = searchableKinds((permission) => permissions.has(permission), featureFlags)
@@ -139,11 +140,11 @@ function SearchResultsView({ query, kind, page = 1 }: SearchResultsPageProps) {
               {f('ask.results.retry', 'Try again')}
             </Button>
           </div>
-        ) : search.isPending ? (
+        ) : inRange && search.isPending ? (
           <p role="status" className="text-sm text-muted-foreground">
             {f('ask.results.searching', 'Searching…')}
           </p>
-        ) : results.length === 0 ? (
+        ) : !inRange || results.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {f('ask.results.empty', 'No results for “{query}”', { query })}
           </p>

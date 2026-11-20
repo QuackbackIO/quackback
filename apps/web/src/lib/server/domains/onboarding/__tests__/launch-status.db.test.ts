@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import type { BoardAccess } from '@/lib/shared/db-types'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, principal, settings, user, type SetupState } from '@/lib/server/db'
+import { boards, integrations, principal, settings, user, type SetupState } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -104,4 +104,30 @@ it('has no team board to name for a public feedback plan', async () => {
     permissions: [],
   })
   expect(status.teamBoardSlug).toBeNull()
+})
+
+async function hasIntegrationWith(status: string | null): Promise<boolean> {
+  await testDb.delete(integrations)
+  if (status) {
+    await testDb.insert(integrations).values({ integrationType: 'linear', status, config: {} })
+  }
+  await testDb.delete(settings)
+  await testDb.insert(settings).values({
+    name: 'Acme',
+    slug: `acme-${createId('workspace')}`,
+    createdAt: new Date(),
+  })
+  const launch = await loadLaunchStatus({
+    principalId: createId('principal') as PrincipalId,
+    role: 'admin',
+    permissions: [],
+  })
+  return launch.hasIntegration
+}
+
+it('counts an active or paused integration toward the connect step, not a pending one', async () => {
+  expect(await hasIntegrationWith(null)).toBe(false)
+  expect(await hasIntegrationWith('pending')).toBe(false)
+  expect(await hasIntegrationWith('active')).toBe(true)
+  expect(await hasIntegrationWith('paused')).toBe(true)
 })
