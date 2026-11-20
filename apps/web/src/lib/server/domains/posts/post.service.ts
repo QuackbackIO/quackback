@@ -30,7 +30,7 @@ import {
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
-import { sql, isNull } from 'drizzle-orm'
+import { sql, isNull, or, desc } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
@@ -43,6 +43,7 @@ import {
 } from '@/lib/server/events/dispatch'
 import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
@@ -171,7 +172,15 @@ export async function createPost(
       ? db
           .select()
           .from(postStatuses)
-          .where(and(eq(postStatuses.slug, 'open'), isNull(postStatuses.deletedAt)))
+          // The status marked default, as the portal and admin dialog use;
+          // the open slug only when no status is marked.
+          .where(
+            and(
+              isNull(postStatuses.deletedAt),
+              or(eq(postStatuses.isDefault, true), eq(postStatuses.slug, 'open'))
+            )
+          )
+          .orderBy(desc(postStatuses.isDefault))
           .limit(1)
           .then((rows) => rows[0])
       : db.query.postStatuses.findFirst({
@@ -219,13 +228,13 @@ export async function createPost(
     : 'published'
   let holdReason: ReturnType<typeof contentHoldReason> = null
 
-  // Determine statusId - either from input or use default "open" status
+  // Determine statusId - either from input or the default status
   let statusId = input.statusId
   if (!statusId) {
     if (!statusResult) {
       throw new ValidationError(
         'VALIDATION_ERROR',
-        'Default "open" status not found. Please ensure post statuses are configured for this organization.'
+        'No default status found. Please ensure post statuses are configured for this organization.'
       )
     }
     statusId = statusResult.id
@@ -449,6 +458,17 @@ export async function updatePost(
   if (input.content !== undefined) {
     if (input.content.length > 10000) {
       throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
+    }
+  }
+
+  // A post's owner is a teammate: refuse a customer (or nobody) before writing.
+  if (input.ownerPrincipalId && input.ownerPrincipalId !== existingPost.ownerPrincipalId) {
+    const owner = await db.query.principal.findFirst({
+      where: eq(principalTable.id, input.ownerPrincipalId),
+      columns: { role: true },
+    })
+    if (!owner || !isTeamMember(owner.role)) {
+      throw new ValidationError('INVALID_OWNER', 'A post owner must be a teammate')
     }
   }
 
