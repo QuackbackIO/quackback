@@ -182,18 +182,18 @@ describe('ticket due marker on inbox rows', () => {
     await act(async () => {})
   }
 
-  it('marks an overdue linked ticket in red', async () => {
+  it('marks an overdue linked ticket in the destructive colour', async () => {
     await renderLinked(linked({ dueAt: OVERDUE }))
     const marker = screen.getByRole('img', { name: 'Overdue by 2h' })
     expect(marker.textContent).toBe('2h over')
-    expect(marker.className).toContain('text-red-600')
+    expect(marker.className).toContain('text-destructive')
   })
 
-  it('marks a linked ticket due within a day in amber', async () => {
+  it('marks a linked ticket due within a day in the warning colour', async () => {
     await renderLinked(linked({ dueAt: DUE_SOON }))
     const marker = screen.getByRole('img', { name: 'Due in 5h 30m' })
     expect(marker.textContent).toBe('5h 30m')
-    expect(marker.className).toContain('text-amber-700')
+    expect(marker.className).toContain('text-warning')
   })
 
   it('shows nothing for a closed linked ticket or one due further out', async () => {

@@ -84,7 +84,7 @@ describe('TicketActivityTimeline due date rows', () => {
   it('shows a newly set due date against "No due date"', () => {
     renderTimeline([row('due.changed', { from: null, to: '2026-10-21T17:00:00.000Z' })])
     expect(screen.getByText('Maya set the due date')).toBeInTheDocument()
-    expect(screen.getByText('No due date → Oct 21, 2026 at 5:00 PM')).toBeInTheDocument()
+    expect(screen.getByText('No due date → Oct 21, 2026, 5:00 PM')).toBeInTheDocument()
   })
 
   it('shows a moved due date from one date to the other', () => {
@@ -92,21 +92,19 @@ describe('TicketActivityTimeline due date rows', () => {
       row('due.changed', { from: '2026-10-21T17:00:00.000Z', to: '2026-10-23T09:30:00.000Z' }),
     ])
     expect(screen.getByText('Maya set the due date')).toBeInTheDocument()
-    expect(
-      screen.getByText('Oct 21, 2026 at 5:00 PM → Oct 23, 2026 at 9:30 AM')
-    ).toBeInTheDocument()
+    expect(screen.getByText('Oct 21, 2026, 5:00 PM → Oct 23, 2026, 9:30 AM')).toBeInTheDocument()
   })
 
   it('reads a cleared due date as cleared', () => {
     renderTimeline([row('due.changed', { from: '2026-10-21T17:00:00.000Z', to: null })])
     expect(screen.getByText('Maya cleared the due date')).toBeInTheDocument()
-    expect(screen.getByText('Oct 21, 2026 at 5:00 PM → No due date')).toBeInTheDocument()
+    expect(screen.getByText('Oct 21, 2026, 5:00 PM → No due date')).toBeInTheDocument()
   })
 
   it('notes the due date a ticket was filed with', () => {
     renderTimeline([row('ticket.created', { dueAt: '2026-10-21T17:00:00.000Z' })])
     expect(screen.getByText('Maya created this ticket')).toBeInTheDocument()
-    expect(screen.getByText('Due Oct 21, 2026 at 5:00 PM')).toBeInTheDocument()
+    expect(screen.getByText('Due Oct 21, 2026, 5:00 PM')).toBeInTheDocument()
   })
 
   it('adds no due line to a ticket filed without one', () => {
