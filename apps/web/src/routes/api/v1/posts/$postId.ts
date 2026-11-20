@@ -18,6 +18,7 @@ import {
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { PostId, PostStatusId, PostTagId, PrincipalId } from '@quackback/ids'
 import type { MergedPostSummary } from '@/lib/server/domains/posts/post.types'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const updatePostSchema = z.object({
@@ -119,7 +120,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updatePostSchema.safeParse(body)
 
           if (!parsed.success) {

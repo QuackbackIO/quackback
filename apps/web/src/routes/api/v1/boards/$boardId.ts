@@ -10,6 +10,7 @@ import {
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema — `audience` and `access` are intentionally
 // excluded. Visibility is a policy-level setting changed only via
@@ -66,7 +67,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateBoardSchema.safeParse(body)
 
           if (!parsed.success) {

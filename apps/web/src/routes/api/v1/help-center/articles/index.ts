@@ -10,12 +10,13 @@ import {
   handleDomainError,
   parsePaginationParams,
 } from '@/lib/server/domains/api/responses'
-import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
+import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { listArticles, createArticle } from '@/lib/server/domains/help-center/help-center.service'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import type { KbCategoryId, PrincipalId } from '@quackback/ids'
+import { parseCursor, readJsonBody } from '@/lib/server/domains/api/request'
 
 const createArticleBody = z.object({
   categoryId: z.string().min(1, 'Category ID is required'),
@@ -72,8 +73,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
           await withApiKeyAuth(request)
 
           const url = new URL(request.url)
-          const { cursor, limit } = parsePaginationParams(url)
-          const categoryId = url.searchParams.get('categoryId') ?? undefined
+          const { limit } = parsePaginationParams(url)
+          const cursor = parseCursor(url)
+          const categoryId = parseOptionalTypeId<KbCategoryId>(
+            url.searchParams.get('categoryId'),
+            'kb_category',
+            'categoryId'
+          )
           const status = (url.searchParams.get('status') as 'draft' | 'published' | 'all') ?? 'all'
           const search = url.searchParams.get('search') ?? undefined
 
@@ -98,7 +104,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
             permission: PERMISSIONS.HELP_CENTER_MANAGE,
           })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createArticleBody.safeParse(body)
 
           if (!parsed.success) {
@@ -108,6 +114,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
           }
 
           const { authorId, ...articleData } = parsed.data
+          const categoryId = parseTypeId<KbCategoryId>(
+            articleData.categoryId,
+            'kb_category',
+            'category ID'
+          )
 
           const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
             authorId,
@@ -116,7 +127,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
           )
 
           const article = await createArticle(
-            articleData,
+            { ...articleData, categoryId },
             principalId as PrincipalId,
             authorPrincipalId
           )

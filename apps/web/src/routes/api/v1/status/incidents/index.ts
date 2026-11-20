@@ -17,6 +17,7 @@ import {
   parseOptionalDate,
 } from '../-validation'
 import type { StatusComponentId } from '@quackback/ids'
+import { parseCursor, parseLimit, readJsonBody } from '@/lib/server/domains/api/request'
 
 const affectedComponentSchema = z.object({
   componentId: z.string(),
@@ -60,8 +61,8 @@ export const Route = createFileRoute('/api/v1/status/incidents/')({
           const url = new URL(request.url)
           const kindParam = url.searchParams.get('kind')
           const stateParam = url.searchParams.get('state')
-          const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100)
+          const cursor = parseCursor(url)
+          const limit = parseLimit(url)
 
           const kind =
             kindParam === 'incident' || kindParam === 'maintenance' ? kindParam : undefined
@@ -93,7 +94,7 @@ export const Route = createFileRoute('/api/v1/status/incidents/')({
             permission: PERMISSIONS.STATUS_PAGE_PUBLISH,
           })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createIncidentSchema.safeParse(body)
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {

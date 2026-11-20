@@ -11,6 +11,7 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { recordArticleFeedback } from '@/lib/server/domains/help-center/help-center.service'
 import type { KbArticleId, PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const feedbackBody = z.object({
   helpful: z.boolean(),
@@ -27,7 +28,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId/fe
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = feedbackBody.safeParse(body)
 
           if (!parsed.success) {

@@ -107,18 +107,11 @@ test.describe('REST posts: list and read', () => {
       expect(page2.data.map((p: { id: string }) => p.id)).toEqual([first.id])
       expect(page2.meta.pagination.hasMore).toBe(false)
 
-      // limit is clamped to at least 1; a non-numeric limit means 20.
-      const one = await expectJson(
-        await admin.api.get(`/api/v1/posts?boardId=${board.id}&limit=-5`),
-        200
-      )
-      expect(one.data).toHaveLength(1)
-      expect(one.meta.pagination.hasMore).toBe(true)
-      const all = await expectJson(
-        await admin.api.get(`/api/v1/posts?boardId=${board.id}&limit=abc`),
-        200
-      )
-      expect(all.data).toHaveLength(3)
+      // A limit below 1 or not a whole number is refused (400), not clamped.
+      for (const bad of ['-5', '0', 'abc']) {
+        const res = await admin.api.get(`/api/v1/posts?boardId=${board.id}&limit=${bad}`)
+        expect(res.status(), `limit=${bad}`).toBe(400)
+      }
       await admin.api.dispose()
     }
   )

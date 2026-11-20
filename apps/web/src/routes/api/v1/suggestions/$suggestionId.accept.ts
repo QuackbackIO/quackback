@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
@@ -8,6 +9,9 @@ import {
 import { isValidTypeId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostMergeSuggestionId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
+
+const acceptSchema = z.object({ swapDirection: z.boolean().optional() })
 
 export const Route = createFileRoute('/api/v1/suggestions/$suggestionId/accept')({
   server: {
@@ -27,18 +31,18 @@ export const Route = createFileRoute('/api/v1/suggestions/$suggestionId/accept')
             return badRequestResponse('Invalid suggestion ID format. Expected post_merge_sug_xxx')
           }
 
-          // Parse optional body
-          let body: { swapDirection?: boolean } = {}
-          try {
-            body = await request.json()
-          } catch {
-            // Empty body is ok
+          // The body is optional
+          const parsed = acceptSchema.safeParse((await readJsonBody(request)) ?? {})
+          if (!parsed.success) {
+            return badRequestResponse('Invalid request body', {
+              errors: parsed.error.flatten().fieldErrors,
+            })
           }
 
           const { acceptMergeSuggestion } =
             await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
           await acceptMergeSuggestion(suggestionId as PostMergeSuggestionId, principalId, {
-            swapDirection: body.swapDirection,
+            swapDirection: parsed.data.swapDirection,
           })
           return successResponse({ accepted: true, id: suggestionId })
         } catch (error) {

@@ -11,6 +11,7 @@ import { db, segments, principal, eq, and, isNull, inArray } from '@/lib/server/
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { addMember, removeMember } from '@/lib/server/domains/segments/segment-membership.service'
 import { isValidTypeId, type PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const MutateBody = z.object({
   principalIds: z.array(z.string()).min(1).max(1000),
@@ -70,7 +71,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
       POST: async ({ request, params }) => {
         try {
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.SEGMENT_MANAGE })
-          const body = MutateBody.parse(await request.json())
+          const body = MutateBody.parse(await readJsonBody(request))
 
           const segment = await db.query.segments.findFirst({
             where: and(eq(segments.slug, params.slug), isNull(segments.deletedAt)),
@@ -123,7 +124,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
       DELETE: async ({ request, params }) => {
         try {
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.SEGMENT_MANAGE })
-          const body = MutateBody.parse(await request.json())
+          const body = MutateBody.parse(await readJsonBody(request))
 
           const segment = await db.query.segments.findFirst({
             where: and(eq(segments.slug, params.slug), isNull(segments.deletedAt)),

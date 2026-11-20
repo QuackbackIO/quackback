@@ -17,6 +17,7 @@ import type { PublishState } from '@/lib/shared/schemas/changelog'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { ChangelogId, PostId } from '@quackback/ids'
 import { formatChangelogResponse } from './-serialize'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const updateChangelogSchema = z.object({
@@ -65,7 +66,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
             'changelog entry ID'
           )
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateChangelogSchema.safeParse(body)
 
           if (!parsed.success) {

@@ -13,6 +13,7 @@ import { isValidTypeId } from '@quackback/ids'
 import type { PrincipalId, RoleId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema for updating member role
 const updateMemberSchema = z.object({
@@ -99,7 +100,7 @@ export const principalHandlers = {
 
       const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
-      const body = await request.json()
+      const body = await readJsonBody(request)
       const parsed = updateMemberSchema.safeParse(body)
 
       if (!parsed.success) {

@@ -9,6 +9,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId, PostId } from '@quackback/ids'
 import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const createPostSchema = z.object({
   boardId: z.string().min(1, 'Board ID is required'),
@@ -41,7 +42,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
           const apiAuth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_CREATE })
           const { principalId } = apiAuth
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createPostSchema.safeParse(body)
 
           if (!parsed.success) {
