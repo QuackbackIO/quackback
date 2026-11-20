@@ -6,7 +6,7 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createId, type BoardId, type PostStatusId, type PrincipalId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, eq, postStatuses, principal, user } from '@/lib/server/db'
+import { boards, eq, postStatuses, principal, sql, user } from '@/lib/server/db'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings/settings.types'
 
@@ -61,8 +61,13 @@ beforeEach(async () => {
   await testDb
     .insert(boards)
     .values({ id: boardId, name: 'Feedback', slug: String(boardId), access: DEFAULT_BOARD_ACCESS })
-  // Start from a known catalogue: only the statuses below are live.
-  await testDb.update(postStatuses).set({ deletedAt: new Date(), isDefault: false })
+  // Start from a known catalogue: only the statuses below are live. The old
+  // rows also give up their slugs, so the open slug is free to insert.
+  await testDb.update(postStatuses).set({
+    deletedAt: new Date(),
+    isDefault: false,
+    slug: sql`${postStatuses.slug} || '-was-' || ${postStatuses.id}`,
+  })
   open = createId('post_status')
   fresh = createId('post_status')
   await testDb.insert(postStatuses).values([
