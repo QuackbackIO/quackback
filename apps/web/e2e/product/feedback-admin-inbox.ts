@@ -155,6 +155,25 @@ export function uniqueWord(): string {
   return `zq${word}`
 }
 
+/**
+ * A unique word and its first `length` letters, chosen so Postgres reads the
+ * prefix as a prefix of the word. The english stemmer rewrites some prefixes
+ * (`zqsvapy:*` becomes `zqsvapi:*`, which no longer starts `zqsvapywzijn`), so
+ * a random prefix sometimes matches nothing and the search falls back to
+ * close-spelling title matches.
+ */
+export async function wordWithPrefix(length = 7): Promise<{ word: string; prefix: string }> {
+  const sql = supportDb()
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const word = uniqueWord()
+    const prefix = word.slice(0, length)
+    const [{ found }] = await sql`SELECT to_tsvector('english', ${word})
+      @@ to_tsquery('english', ${`${prefix}:*`}) AS found`
+    if (found) return { word, prefix }
+  }
+  throw new Error('No unique word whose prefix the english stemmer keeps')
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

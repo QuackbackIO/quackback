@@ -12,7 +12,7 @@
 import type { APIRequestContext } from '@playwright/test'
 import { fromUuid, toUuid } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
-import { supportDb } from '../../support/db'
+import { pollFor, supportDb } from '../../support/db'
 import { waitForMail } from '../../support/mailpit'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { runSweep } from '../../support/sweeps'
@@ -223,11 +223,20 @@ test(
     expect((await callServerFn(admin, 'deleteChangelogFn', { id: entry.id })).ok).toBe(true)
     await timeComes(entry.id)
     await runDue(request, entry.id)
-    // The job ran (it is no longer pending) and claimed nothing.
-    await expect.poll(() => publishJob(entry.id)).toBeNull()
-    const [ran] = await supportDb()`SELECT status FROM job_queue
-      WHERE dedupe_key = ${`changelog-publish--${entry.id}`}`
-    expect(ran?.status).toBe('succeeded')
+    // The job ran and claimed nothing. The sweep only makes it due; the worker
+    // runs it when it gets to it (pending, then running, then finished), so
+    // wait for a finished state rather than for "no longer pending".
+    const ran = await pollFor(
+      `changelog-publish--${entry.id} to finish`,
+      async () => {
+        const [row] = await supportDb()`SELECT status FROM job_queue
+          WHERE dedupe_key = ${`changelog-publish--${entry.id}`}
+            AND status IN ('succeeded', 'failed')`
+        return row ?? null
+      },
+      { timeoutMs: 20_000 }
+    )
+    expect(ran.status).toBe('succeeded')
 
     const control = await createEntry(admin, { title: `${marker} control`, state: 'published' })
     await waitForMail({ to: sub.email, subject: control.title })

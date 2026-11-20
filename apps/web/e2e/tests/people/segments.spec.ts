@@ -262,14 +262,7 @@ test.describe('dynamic evaluation', () => {
 
   test(
     'PPL-G-06 vote and comment count rules match people who voted and commented',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'activityCountSql counts rows in tables named "votes" and "comments", which do not exist (post_votes, post_comments), so any vote_count or comment_count rule fails evaluation with a server error (segment.evaluation.ts); see QUARANTINE.md',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, playwright, marker }) => {
       const admin = await personApi(playwright, 'admin')
       const active = await portalUser(browser, marker)
@@ -663,14 +656,7 @@ test.describe('REST segment members', () => {
 
   test(
     'PPL-G-28 removing a non-member is not counted as a removal',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'DELETE /api/v1/segments/:slug/members counts every settled delete, including people who were not members ($slug.members.ts); see QUARANTINE.md',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, marker }) => {
       const api = await personApi(playwright, 'admin')
       const rest = await restAdmin(playwright)
@@ -727,14 +713,7 @@ test.describe('REST segment members', () => {
 
   test(
     'PPL-G-30 a body that is not JSON is a 400, not a server error',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'request.json() throws a SyntaxError that the route does not map, so handleDomainError answers 500 ($slug.members.ts); see QUARANTINE.md',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, marker }) => {
       const api = await personApi(playwright, 'admin')
       const rest = await restAdmin(playwright)
@@ -898,14 +877,7 @@ test.describe('segment rules and lifecycle (nightly)', () => {
 
   test(
     'PPL-G-11 a matching member held by another source is not counted as added again',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'evaluateDynamicSegment diffs only dynamic rows, so a matching api/widget member is "added" on every run though the insert is a no-op (segment.evaluation.ts); see QUARANTINE.md',
-      },
-    },
+    { tag: '@nightly' },
     async ({ playwright, marker }) => {
       const admin = await personApi(playwright, 'admin')
       const rest = await restAdmin(playwright)
@@ -994,14 +966,7 @@ test.describe('segment rules and lifecycle (nightly)', () => {
 
   test(
     'PPL-G-13 a schedule the scheduler cannot parse is refused on save',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'CRON_REGEX (functions/admin.ts) accepts patterns parseCron rejects, so the segment saves and silently never auto-evaluates; see QUARANTINE.md',
-      },
-    },
+    { tag: '@nightly' },
     async ({ playwright, marker }) => {
       const admin = await personApi(playwright, 'admin')
       await refusedCall(admin, 'createSegmentFn', {
@@ -1021,14 +986,7 @@ test.describe('segment rules and lifecycle (nightly)', () => {
 
   test(
     "PPL-G-15 clearing a dynamic segment's rules is refused and keeps its members",
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'updateSegment accepts rules: null on a dynamic segment (segment.service.ts), and the next evaluation removes every member; see QUARANTINE.md',
-      },
-    },
+    { tag: '@nightly' },
     async ({ playwright, marker }) => {
       const admin = await personApi(playwright, 'admin')
       const person = await portalUserRow(marker)
