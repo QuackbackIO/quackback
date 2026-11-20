@@ -487,6 +487,17 @@ export async function startPost(page: Page, title: string): Promise<void> {
   await expect(box).toHaveValue(title)
 }
 
+/**
+ * Wait until the feed page has hydrated, by opening and closing the composer
+ * (it expands only once React runs). For a control whose click must land
+ * exactly once, such as a vote that a second click would undo.
+ */
+export async function waitForHydration(page: Page): Promise<void> {
+  await startPost(page, '')
+  await titleBox(page).press('Escape')
+  await expect(page.getByLabel(/^Posting to/)).toBeHidden()
+}
+
 /** Type into the composer's details editor. */
 export async function typeDetails(page: Page, text: string): Promise<void> {
   const details = page.locator('.ProseMirror[contenteditable="true"]').first()

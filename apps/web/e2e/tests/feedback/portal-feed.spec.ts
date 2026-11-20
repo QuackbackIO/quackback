@@ -801,9 +801,15 @@ test.describe('portal feed', () => {
 
       await anon.page.goto(`/?board=${board.slug}&sort=top`)
       await expect(anon.page.locator('.post-card[data-post-id]')).toHaveCount(20)
-      await anon.page.locator('.post-card[data-post-id]').last().scrollIntoViewIfNeeded()
-      await anon.page.mouse.wheel(0, 5000)
-      await expect(anon.page.locator('.post-card[data-post-id]')).toHaveCount(25)
+      // Scroll until the sentinel's observer (attached after hydration) loads page two.
+      await expect(async () => {
+        await anon.page.mouse.wheel(0, -400)
+        await anon.page.locator('.post-card[data-post-id]').last().scrollIntoViewIfNeeded()
+        await anon.page.mouse.wheel(0, 5000)
+        await expect(anon.page.locator('.post-card[data-post-id]')).toHaveCount(25, {
+          timeout: 2_000,
+        })
+      }).toPass({ timeout: 20_000 })
     }
   )
 

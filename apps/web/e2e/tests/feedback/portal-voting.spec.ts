@@ -36,6 +36,7 @@ import {
   seedPost,
   seedVotes,
   visitor,
+  waitForHydration,
 } from '../../product/feedback-portal'
 
 const ANON_ON = { portal_config: { 'features.allowAnonymous': true } }
@@ -59,9 +60,9 @@ test.describe('portal voting', () => {
       const card = cardFor(page, post.title)
       const button = card.getByTestId('vote-button')
       await expect(button).toHaveAttribute('aria-pressed', 'false')
-      await clickUntil(button, () =>
-        expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 2_000 })
-      )
+      await waitForHydration(page)
+      await button.click()
+      await expect(button).toHaveAttribute('aria-pressed', 'true')
       await expect(card.getByTestId('vote-count')).toHaveText('1')
       await expect.poll(() => votesOf(post.uuid)).toEqual([cass.principalUuid])
 
@@ -423,9 +424,11 @@ test.describe('portal voting', () => {
           const anon = await visitor(browser, marker)
           await anon.page.goto(`/?board=${board.slug}`)
           const button = cardFor(anon.page, post.title).getByTestId('vote-button')
-          await clickUntil(button, () =>
-            expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 3_000 })
-          )
+          // One click only: a second would take the vote back.
+          await waitForHydration(anon.page)
+          await button.click()
+          // The click mints the anonymous session, then votes.
+          await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 20_000 })
           await expect(anon.page.getByRole('dialog')).toBeHidden()
           await expect.poll(() => votesOf(post.uuid)).toHaveLength(1)
           const voters = await votesOf(post.uuid)

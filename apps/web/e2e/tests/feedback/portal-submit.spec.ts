@@ -779,7 +779,8 @@ test.describe('portal submit', () => {
           await startPost(page, title)
           await expect(page.getByText('Posting anonymously')).toBeVisible()
           await page.getByRole('button', { name: 'Post', exact: true }).click()
-          await expect(toastWith(page, 'Feedback submitted')).toBeVisible()
+          // The first write mints the anonymous session first: allow for both round trips.
+          await expect(toastWith(page, 'Feedback submitted')).toBeVisible({ timeout: 20_000 })
           await expect(cardFor(page, title)).toBeVisible()
           const row = await postByTitle(board, title)
           expect(row).toMatchObject({ moderation_state: 'published', vote_count: 1 })
