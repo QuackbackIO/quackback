@@ -320,12 +320,7 @@ test.describe('portal emails', () => {
   test(
     'FBP-N-17 a link that was never issued is not called expired',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B24: subscription.service.ts:550-575 returns invalid for unknown, used and expired tokens alike; unsubscribe.tsx shows "This link has expired" for all',
-      },
+      tag: '@core',
     },
     async ({ browser, marker }) => {
       const v = await visitor(browser, marker)
@@ -414,12 +409,7 @@ test.describe('portal emails', () => {
   test(
     'FBP-N-19 the mention email does not label an unsubscribe-all link as "Unsubscribe from this post"',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B20: email-layout.tsx:97 labels the link "Unsubscribe from this post" but targets.ts:693 mints an unsubscribe_all token',
-      },
+      tag: '@core',
     },
     async ({ browser, people, marker }) => {
       const board = await createBoard(marker)
@@ -468,12 +458,7 @@ test.describe('portal emails', () => {
   test(
     'FBP-N-20 the post unsubscribe page does not promise that only email stops',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B24: unsubscribe.tsx:243-257 says "email updates" but subscription.service.ts:103-113 deletes the subscription, so bells stop too',
-      },
+      tag: '@nightly',
     },
     async ({ browser, playwright, marker }) => {
       const board = await createBoard(marker)

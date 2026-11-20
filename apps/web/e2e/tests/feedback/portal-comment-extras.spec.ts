@@ -94,12 +94,7 @@ test.describe('portal comment extras', () => {
   test(
     'FBP-C-15 a customer the board refuses comments cannot react either, nor on a read-only board',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B18: comments.ts:128-145 and comment.reactions.ts:54-95 check only view, not the comment tier or read-only',
-      },
+      tag: '@nightly',
     },
     async ({ browser, people, marker }) => {
       const teamOnly = await createBoard(marker, { suffix: 'team', access: { comment: 'team' } })
@@ -127,12 +122,7 @@ test.describe('portal comment extras', () => {
   test(
     'FBP-C-15 with anonymous interaction off, an anonymous session cannot react',
     {
-      tag: ['@nightly', '@isolated', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B18: comments.ts:128-145 adds a reaction without the workspace anonymous ceiling',
-      },
+      tag: ['@nightly', '@isolated'],
     },
     async ({ browser, people, marker }) => {
       test.skip(!ISOLATED, ISOLATED_SKIP)
@@ -222,12 +212,7 @@ test.describe('portal comment extras', () => {
   test(
     'FBP-C-19 a customer cannot make the system notify someone by crafting a mention in a post',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B22: sanitize-tiptap.ts:245-252 keeps mention nodes from customers; sync-post-mentions.ts:34 notifies the target',
-      },
+      tag: '@nightly',
     },
     async ({ browser, people, marker }) => {
       const board = await createBoard(marker)

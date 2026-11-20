@@ -134,12 +134,7 @@ test.describe('widget feedback', () => {
   test(
     'FBP-W-12 the widget counts agree with the public profile: no held posts, no votes on deleted posts',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B29: runGetUserStats counts held posts, votes on soft-deleted posts and every undeleted comment',
-      },
+      tag: '@nightly',
     },
     async ({ request, marker }) => {
       const board = await createBoard(marker)
@@ -233,12 +228,7 @@ test.describe('widget feedback', () => {
     test(
       'FBP-W-07 a board with a required custom field tells the widget visitor what is missing',
       {
-        tag: ['@core', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B28: the widget composer never sends customFields, the server refuses the required field and the widget shows "Network error. Please try again."',
-        },
+        tag: ['@core', '@isolated'],
       },
       async ({ page, marker }) => {
         await withSettings(WIDGET_ON, async () => {

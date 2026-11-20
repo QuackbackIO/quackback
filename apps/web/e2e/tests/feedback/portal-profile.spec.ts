@@ -197,12 +197,7 @@ test.describe('portal profile', () => {
   test(
     'FBP-U-04 a held comment neither lists its post nor counts on the public profile',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B30: user.public-profile.ts filters public, undeleted comments but not moderationState',
-      },
+      tag: '@nightly',
     },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
