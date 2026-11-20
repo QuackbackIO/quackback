@@ -12,6 +12,7 @@ import {
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { portalQueries } from '@/lib/client/queries/portal'
+import { roadmapToSelect } from '@/lib/shared/roadmap-config'
 import { RoadmapColumn } from './roadmap-column'
 import {
   PublicRoadmapFiltersBar,
@@ -47,8 +48,13 @@ export function RoadmapBoard({
   const { data: segments } = useSegments({ enabled: !!isTeamMember })
 
   const availableRoadmaps = initialRoadmaps ?? roadmaps ?? []
-  const effectiveSelectedId = selectedRoadmapId ?? initialSelectedRoadmapId
-  const selectedRoadmap = availableRoadmaps.find((r) => r.id === effectiveSelectedId)
+  // A ?roadmap= id the viewer cannot see (hidden, deleted, mistyped) falls
+  // back to the first roadmap they can, rather than an empty board.
+  const selectedRoadmap = roadmapToSelect(
+    availableRoadmaps,
+    selectedRoadmapId ?? initialSelectedRoadmapId
+  )
+  const effectiveSelectedId = selectedRoadmap?.id ?? null
   const { data: dateBuckets = [] } = useRoadmapDateBuckets(
     (effectiveSelectedId ?? 'roadmap_00000000000000000000000000') as `roadmap_${string}`,
     { public: true, enabled: selectedRoadmap?.type === 'date' }
@@ -73,10 +79,10 @@ export function RoadmapBoard({
         }))
 
   useEffect(() => {
-    if (availableRoadmaps.length > 0 && !selectedRoadmapId) {
-      setSelectedRoadmap(availableRoadmaps[0].id)
+    if (effectiveSelectedId && selectedRoadmapId !== effectiveSelectedId) {
+      setSelectedRoadmap(effectiveSelectedId)
     }
-  }, [availableRoadmaps, selectedRoadmapId, setSelectedRoadmap])
+  }, [effectiveSelectedId, selectedRoadmapId, setSelectedRoadmap])
 
   if (availableRoadmaps.length === 0) {
     return (

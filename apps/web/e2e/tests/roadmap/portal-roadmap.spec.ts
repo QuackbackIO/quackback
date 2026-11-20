@@ -1,7 +1,7 @@
 /**
  * The portal roadmap (/roadmap) as visitors, customers and the team see it.
  *
- * Journeys: RMP-P-01, RMP-P-02, RMP-P-04, RMP-P-05 (quarantined), RMP-P-06,
+ * Journeys: RMP-P-01, RMP-P-02, RMP-P-04, RMP-P-05, RMP-P-06,
  * RMP-P-07, RMP-P-08, RMP-P-09 (@isolated), RMP-P-11, RMP-P-12, RMP-P-14,
  * RMP-P-15, RMP-P-16.
  *
@@ -465,14 +465,7 @@ test(
 
 test(
   'RMP-P-05 a ?roadmap= id the visitor cannot see falls back to a roadmap they can',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'roadmap-board.tsx keeps the hidden id selected: no tab, no columns, no message (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@nightly' },
   async ({ page, playwright, people, marker }) => {
     const rm = await roadmapApi(playwright, people)
     const status = await rm.status(marker)
