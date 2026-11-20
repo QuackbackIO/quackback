@@ -4,8 +4,8 @@
  * the counts.
  *
  * Journeys: FBP-C-01, FBP-C-02, FBP-C-03, FBP-C-04, FBP-C-05, FBP-C-06,
- * FBP-C-07, FBP-C-08, FBP-C-09, FBP-C-11, FBP-C-13, FBP-C-16, FBP-C-21,
- * FBP-C-22, FBP-C-23
+ * FBP-C-07, FBP-C-08, FBP-C-09, FBP-C-11, FBP-C-12, FBP-C-13, FBP-C-16,
+ * FBP-C-21, FBP-C-22, FBP-C-23
  */
 import { generateId } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
@@ -185,7 +185,8 @@ test.describe('portal comments', () => {
         const text = `${marker} anonymous thought`
         await writeComment(v.page, text)
         const row = await waitForComment(post.uuid, text)
-        const [p] = await supportDb()`SELECT type FROM principal WHERE id = ${row.principal_id}`
+        const [p] =
+          await supportDb()`SELECT type FROM principal WHERE id = ${row.principal_id as string}`
         expect(p.type).toBe('anonymous')
         await expect(commentEl(v.page, row.typeId)).toContainText(text)
       })
@@ -817,6 +818,49 @@ test.describe('portal comments', () => {
       await supportDb()`UPDATE posts SET comment_count = 1 WHERE id = ${post.uuid}`
       await v.page.reload()
       await expect(v.page.getByRole('heading', { name: /^1 Comment$/ })).toBeVisible()
+    }
+  )
+
+  test(
+    'FBP-C-12 with link holds on, an edit that adds a link holds a published comment again',
+    { tag: ['@nightly', '@isolated'] },
+    async ({ browser, marker }) => {
+      test.skip(!ISOLATED, ISOLATED_SKIP)
+      await withSettings({ portal_config: { 'moderationDefault.holdLinks': true } }, async () => {
+        const board = await createBoard(marker)
+        const post = await seedPost(board, { title: `${marker} post` })
+        const cass = await portalCustomer(browser, marker)
+        const other = await portalCustomer(browser, marker, { suffix: 'other' })
+        const res = await commentFn(cass.request, post, `${marker} plain words`)
+        const id = res.value?.comment.id as string
+        expect((await postRow(post.uuid)).comment_count).toBe(1)
+        const linked = {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'text',
+                  text: `${marker} see my site`,
+                  marks: [{ type: 'link', attrs: { href: 'https://elsewhere.example/x' } }],
+                },
+              ],
+            },
+          ],
+        }
+        const edit = await fbFn(cass.request, 'comments', 'userEditCommentFn', {
+          commentId: id,
+          content: `${marker} see my site`,
+          contentJson: linked,
+        })
+        expect(edit.error).toBeUndefined()
+        const row = await waitForComment(post.uuid, `${marker} see my site`)
+        expect(row.moderation_state).toBe('pending')
+        expect((await postRow(post.uuid)).comment_count).toBe(0)
+        expect(await detailText(other.request, post.id)).not.toContain('see my site')
+        expect(await detailText(cass.request, post.id)).toContain('see my site')
+      })
     }
   )
 })

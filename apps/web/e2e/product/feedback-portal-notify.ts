@@ -166,9 +166,12 @@ export async function commentByContent(
 }
 
 /** Wait for the comment row with this content; returns it with its TypeID. */
-export async function waitForComment(postUuid: string, content: string) {
+export async function waitForComment(
+  postUuid: string,
+  content: string
+): Promise<Record<string, unknown> & { id: string; typeId: string }> {
   const row = await pollFor(`comment "${content}"`, () => commentByContent(postUuid, content))
-  return { ...row, typeId: fromUuid('post_comment', row.id as string) }
+  return { ...row, id: row.id as string, typeId: fromUuid('post_comment', row.id as string) }
 }
 
 /** post_subscriptions rows of a post as { principal_id, reason, notify_* }. */
