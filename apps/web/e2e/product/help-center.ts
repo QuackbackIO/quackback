@@ -204,12 +204,17 @@ export async function gateToSegments(
   target: { kind: 'category' | 'article'; uuid: string },
   segmentIds: string[]
 ): Promise<void> {
-  const json = JSON.stringify(segmentIds)
+  const sql = supportDb()
+  const json = sql.json(segmentIds)
   if (target.kind === 'category') {
-    await supportDb()`UPDATE kb_categories SET segment_ids = ${json}::jsonb WHERE id = ${target.uuid}`
+    await sql`UPDATE kb_categories SET segment_ids = ${json} WHERE id = ${target.uuid}`
   } else {
-    await supportDb()`UPDATE kb_articles SET segment_ids = ${json}::jsonb WHERE id = ${target.uuid}`
+    await sql`UPDATE kb_articles SET segment_ids = ${json} WHERE id = ${target.uuid}`
   }
+  const table = target.kind === 'category' ? 'kb_categories' : 'kb_articles'
+  const [row] =
+    await sql`SELECT jsonb_typeof(segment_ids) AS t FROM ${sql(table)} WHERE id = ${target.uuid}`
+  if (row?.t !== 'array') throw new Error(`segment_ids stored as ${row?.t}`)
 }
 
 /** Fetch a public page as a signed-out visitor, bypassing the shared cache. */
