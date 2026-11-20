@@ -24,7 +24,11 @@
  */
 
 import { getWorkspaceSettings } from '@/lib/server/domains/settings/settings.service'
-import { isSignInMethodEnabled, normalizeMethodKey } from '@/lib/shared/signin-methods'
+import {
+  effectiveSignInMethods,
+  isSignInMethodEnabled,
+  normalizeMethodKey,
+} from '@/lib/shared/signin-methods'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -41,8 +45,9 @@ interface AuthMethodResult {
 }
 
 /**
- * Per-method enablement check. Answers "is method X enabled in authConfig.oauth?"
- * All roles — team (admin/member) and portal (user) — read the same
+ * Per-method enablement check. Answers "is method X in force?": enabled in
+ * authConfig.oauth, or, for email links, offered by `effectiveSignInMethods`
+ * because single sign-on is set up but not live. All roles — team (admin/member) and portal (user) — read the same
  * `authConfig.oauth` map via {@link isSignInMethodEnabled}. OIDC eligibility
  * per role is a separate concern handled by {@link isSsoBlockedForRole}.
  * Any registered OIDC provider id is allowed at this layer for every role;
@@ -88,7 +93,12 @@ export async function isAuthMethodAllowed(
       : { allowed: false, error: 'password_method_not_allowed' }
   }
   if (key === 'magicLink') {
-    return isSignInMethodEnabled(oauth, 'magicLink')
+    if (isSignInMethodEnabled(oauth, 'magicLink')) return { allowed: true }
+    // Stored off. Email links are still in force while providers are set up
+    // but single sign-on is not live, so the workspace keeps a way in.
+    const { getSsoSignInState } = await import('./registered-providers')
+    const effective = effectiveSignInMethods({ stored: oauth, ...(await getSsoSignInState()) })
+    return isSignInMethodEnabled(effective, 'magicLink')
       ? { allowed: true }
       : { allowed: false, error: 'magic_link_method_not_allowed' }
   }

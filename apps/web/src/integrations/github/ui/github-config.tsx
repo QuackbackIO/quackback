@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MENU_LABEL } from '@/components/ui/menu'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { useCanOpenSettingsPage } from '@/lib/client/hooks/use-permission'
 import {
   fetchGitHubReposFn,
   getGitHubChannelStatusFn,
@@ -67,6 +68,8 @@ export function GitHubConfig({
 }: GitHubConfigProps) {
   const updateMutation = useUpdateIntegration()
   const repositoryMutation = useSetGitHubRepository()
+  // The inbox channel's page has its own gate; the link shows only to whom it opens.
+  const canOpenInboxChannel = useCanOpenSettingsPage('/admin/settings/channels/github')
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [repoError, setRepoError] = useState<string | null>(null)
@@ -268,43 +271,45 @@ export function GitHubConfig({
         </section>
       </div>
 
-      <div className="space-y-2">
-        <span className={MENU_LABEL}>Support</span>
-        <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-          <Link
-            to="/admin/settings/channels/github"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <ChatBubbleLeftRightIcon className="size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Inbox channel</p>
-                <p className="text-xs text-muted-foreground">
-                  Issues and comments as conversations. Managed in Channels.
-                </p>
+      {canOpenInboxChannel && (
+        <div className="space-y-2">
+          <span className={MENU_LABEL}>Support</span>
+          <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
+            <Link
+              to="/admin/settings/channels/github"
+              className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <ChatBubbleLeftRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Inbox channel</p>
+                  <p className="text-xs text-muted-foreground">
+                    Issues and comments as conversations. Managed in Channels.
+                  </p>
+                </div>
               </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge size="sm" variant={inboxBadge.variant}>
+                  {inboxBadge.label}
+                </Badge>
+                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
+              </div>
+            </Link>
+            <div className="border-t border-border px-4 py-4">
+              <p className="mb-3 text-sm font-medium">Sync ticket statuses</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Update linked issues when ticket status changes.
+              </p>
+              <TicketStatusSyncConfig
+                integrationId={integrationId}
+                config={initialConfig}
+                enabled={integrationEnabled}
+                externalStatuses={GITHUB_STATUSES}
+              />
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Badge size="sm" variant={inboxBadge.variant}>
-                {inboxBadge.label}
-              </Badge>
-              <ChevronRightIcon className="size-3.5 text-muted-foreground" />
-            </div>
-          </Link>
-          <div className="border-t border-border px-4 py-4">
-            <p className="mb-3 text-sm font-medium">Sync ticket statuses</p>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Update linked issues when ticket status changes.
-            </p>
-            <TicketStatusSyncConfig
-              integrationId={integrationId}
-              config={initialConfig}
-              enabled={integrationEnabled}
-              externalStatuses={GITHUB_STATUSES}
-            />
-          </div>
-        </section>
-      </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

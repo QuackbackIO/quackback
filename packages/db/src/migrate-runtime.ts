@@ -133,7 +133,7 @@ export interface RunMigrationsOptions {
   /**
    * `lock_timeout` for the migration transaction, so a statement that cannot get
    * the table lock it needs **fails fast instead of waiting**. Unset means no
-   * timeout, which is the historical behaviour and what the boot path keeps.
+   * timeout. Both entrypoints pass {@link DEFAULT_MIGRATE_LOCK_TIMEOUT_MS}.
    *
    * The hazard is specific and was hit against the live fleet. `0250_job_queue`
    * contains `DROP TRIGGER IF EXISTS job_queue_wake_trg ON job_queue`, which
@@ -167,6 +167,40 @@ export interface RunMigrationsOptions {
    * index that already exists and is valid produces no event.
    */
   onIndexBuild?: (event: IndexBuildEvent) => void
+}
+
+/**
+ * How long a migration waits for a table lock before it gives up.
+ *
+ * One value for both entrypoints: the fleet migrator and the self-hosted boot
+ * (`migrate.ts`). Both run against databases that other sessions are using: the
+ * fleet against workspaces whose worker tier is live, the boot against an
+ * install where a long query or an open transaction can still hold a table.
+ * `0250_job_queue` needs ACCESS EXCLUSIVE on `job_queue` to replace its wake
+ * trigger, and the job poller holds ROW EXCLUSIVE on that table more or less
+ * continuously; measured against the live fleet, that pair deadlocks rather
+ * than queues, because the migration transaction is upgrading a lock it already
+ * holds. Bounding the wait turns an unbounded stall into a `55P03` that rolls
+ * the whole lineage back. The fleet's lease retries it; at boot the process
+ * exits and the next start tries again.
+ *
+ * 30 s is comfortably above the incidental waits a healthy database produces
+ * and well below the default lease, so a timeout is a diagnosis rather than a
+ * lost claim.
+ */
+export const DEFAULT_MIGRATE_LOCK_TIMEOUT_MS = 30_000
+
+/**
+ * True when `err`, or the query error it wraps, is Postgres `lock_not_available`
+ * (`55P03`): a statement gave up waiting for a lock.
+ */
+export function isLockTimeoutError(err: unknown): boolean {
+  let current: unknown = err
+  for (let depth = 0; current && depth < 4; depth++) {
+    if ((current as { code?: unknown }).code === '55P03') return true
+    current = (current as { cause?: unknown }).cause
+  }
+  return false
 }
 
 export interface PendingMigrations {

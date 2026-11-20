@@ -3,7 +3,8 @@
  * is composed with `statusComponentViewFilter`/`canViewStatusComponent`
  * (policy/status.ts) so a segment-gated component — and any incident whose
  * only affected components are gated — never leaks to a viewer who hasn't
- * passed Layer 2.
+ * passed Layer 2. Components the plan hides past its cap after the grace
+ * (`planVisibleComponentIds`) are left out the same way.
  */
 import {
   db,
@@ -32,6 +33,7 @@ import { deriveTopLevelStatus, deriveUptimeDays } from './status.calc'
 import {
   getComponentLinksForIncidents,
   groupLinksByIncident,
+  planVisibleComponentIds,
   projectIncidents,
   toPublicIncident,
   visibleIncidentFilter,
@@ -74,11 +76,18 @@ export async function getStatusPageSnapshot(
 
   const now = new Date()
 
-  const visibleComponentRows = await db
-    .select()
-    .from(statusComponents)
-    .where(and(isNull(statusComponents.deletedAt), statusComponentViewFilter(actor)))
-    .orderBy(asc(statusComponents.position))
+  const [viewerComponentRows, planVisible] = await Promise.all([
+    db
+      .select()
+      .from(statusComponents)
+      .where(and(isNull(statusComponents.deletedAt), statusComponentViewFilter(actor)))
+      .orderBy(asc(statusComponents.position)),
+    planVisibleComponentIds(),
+  ])
+  const visibleComponentRows =
+    planVisible === null
+      ? viewerComponentRows
+      : viewerComponentRows.filter((c) => planVisible.includes(c.id))
 
   const groupIds = [
     ...new Set(
@@ -230,17 +239,27 @@ export async function getPublicStatusIncident(
 export async function getUptimeSeries(
   actor: Actor,
   componentIds: StatusComponentId[],
-  windowDays: number = DEFAULT_UPTIME_WINDOW_DAYS
+  windowDays: number = DEFAULT_UPTIME_WINDOW_DAYS,
+  /**
+   * `admin`: the admin's own strips, which list every component, including
+   * those the plan hides from the public page.
+   */
+  options: { admin?: boolean } = {}
 ): Promise<UptimeSeries[]> {
   if (componentIds.length === 0) return []
 
-  const componentRows = await db
-    .select()
-    .from(statusComponents)
-    .where(and(inArray(statusComponents.id, componentIds), isNull(statusComponents.deletedAt)))
+  const [componentRows, planVisible] = await Promise.all([
+    db
+      .select()
+      .from(statusComponents)
+      .where(and(inArray(statusComponents.id, componentIds), isNull(statusComponents.deletedAt))),
+    options.admin ? null : planVisibleComponentIds(),
+  ])
 
-  const visibleComponents = componentRows.filter((c) =>
-    canViewStatusComponent(actor, { segmentIds: c.segmentIds })
+  const visibleComponents = componentRows.filter(
+    (c) =>
+      canViewStatusComponent(actor, { segmentIds: c.segmentIds }) &&
+      (planVisible === null || planVisible.includes(c.id))
   )
   if (visibleComponents.length === 0) return []
 
@@ -363,6 +382,7 @@ export async function listStatusFeedItems(
   actor: Actor,
   limit: number = 50
 ): Promise<StatusFeedIncident[]> {
+  const planVisible = await planVisibleComponentIds()
   const [openRows, resolvedRows] = await Promise.all([
     db.query.statusIncidents.findMany({
       where: and(
@@ -387,7 +407,7 @@ export async function listStatusFeedItems(
         and(
           isNull(statusIncidents.deletedAt),
           isNotNull(statusIncidents.resolvedAt),
-          visibleIncidentFilter(actor)
+          visibleIncidentFilter(actor, planVisible)
         )
       )
       .orderBy(desc(statusIncidents.updatedAt), desc(statusIncidents.id))

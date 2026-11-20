@@ -24,10 +24,10 @@ import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { PriorityDot, PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import { AssigneeMenuItems } from '@/components/admin/conversation/assignee-control'
-import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { inboxTeamsQueryOptions } from '@/lib/client/queries/inbox-teams'
+import { useInboxTeams } from '@/lib/client/queries/inbox-teams'
 import { ticketQueries } from '@/lib/client/queries/inbox'
 import {
   useSetTicketStatus,
@@ -134,10 +134,10 @@ export function TicketAssigneeControl({
   ticket: TicketDTO
   onChanged?: () => void
 }) {
-  const { data: members } = useTeamMembers()
-  // The query itself rather than the inbox sidebar's hook: this control also
+  const { data: members } = useAdminTeamMembers()
+  // From the queries module rather than the inbox sidebar: this control also
   // renders in the Try Messenger sheet, which should not load the sidebar.
-  const { data: teams } = useQuery(inboxTeamsQueryOptions())
+  const { data: teams } = useInboxTeams()
   const mutation = useAssignTicket()
   const { assignee } = ticket
 
@@ -242,11 +242,12 @@ export function TicketPriorityControl({
 
 // ---------------------------------------------------------------------------
 // Watchers (support platform ticket-watchers): the caller's own watch/mute
-// state, plus a lighter version of the post voters stack — an overlapping
-// avatar stack capped at 5 that opens a Popover (not a modal) listing every
-// watcher. With ticket.assign the popover also manages them: a per-row remove
-// and a compact add-watcher select over the teammates, where a teammate the
-// ticket is hidden from is listed but unavailable (they could not open it).
+// state, plus a row of up to 5 watcher avatars (side by side, not overlapped,
+// so 24px initials stay readable; the row wraps under the control) that opens
+// a Popover (not a modal) listing every watcher. With ticket.assign the
+// popover also manages them: a per-row remove and a compact add-watcher select
+// over the teammates, where a teammate the ticket is hidden from is listed but
+// unavailable (they could not open it).
 // ---------------------------------------------------------------------------
 
 function reasonLabel(intl: IntlShape, reason: TicketWatcher['reason']): string {
@@ -310,7 +311,7 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
   const TriggerIcon = muted ? BellSlashIcon : BellIcon
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" disabled={pending} className={triggerClass}>
@@ -439,7 +440,7 @@ function WatcherAvatarStack({
         {displayed.length > 0 ? (
           <button
             type="button"
-            className="flex items-center -space-x-2 transition-opacity hover:opacity-80"
+            className="flex items-center gap-0.5 transition-opacity hover:opacity-80"
             aria-label={
               canManage
                 ? intl.formatMessage({
@@ -452,20 +453,16 @@ function WatcherAvatarStack({
                   })
             }
           >
-            {displayed.map((w, i) => (
+            {displayed.map((w) => (
               <Avatar
                 key={w.principalId}
                 src={w.avatarUrl}
                 name={w.displayName ?? 'Watcher'}
-                className="size-6 text-xs ring-2 ring-background"
-                style={{ zIndex: i + 1 }}
+                className="size-6 text-[11px]"
               />
             ))}
             {remaining > 0 && (
-              <span
-                className="relative flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-1 text-[11px] font-medium text-muted-foreground ring-2 ring-background"
-                style={{ zIndex: displayed.length + 1 }}
-              >
+              <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-1 text-[11px] font-medium text-muted-foreground">
                 +{remaining}
               </span>
             )}

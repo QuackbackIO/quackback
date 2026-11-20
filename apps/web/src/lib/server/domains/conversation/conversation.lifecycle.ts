@@ -35,6 +35,32 @@ export function applyVisitorReopenStatus(
 }
 
 /**
+ * Whether a conversation sits in Spam: closed with the spam end reason. A
+ * customer message on such a thread is kept but changes nothing else: the
+ * conversation stays closed and in Spam, nobody is alerted and no message
+ * event fires (so no workflow trigger, webhook or next-response SLA re-arm).
+ * Only a teammate takes it out of Spam (Restore, a reply, or a reopen).
+ */
+export function isHeldInSpam(conversation: {
+  status: ConversationStatus
+  endReason: string | null
+}): boolean {
+  return conversation.status === 'closed' && conversation.endReason === 'spam'
+}
+
+/**
+ * The fields that take a conversation out of Spam. Restore, a teammate reply
+ * and a teammate reopen all write the same set, so a thread a teammate has
+ * acted on never keeps a stale spam marker (which would hide it from triage
+ * and leave it in the spam retention sweep's reach).
+ */
+export const SPAM_MARKER_CLEARED = {
+  endReason: null,
+  endNote: null,
+  spamReason: null,
+} as const
+
+/**
  * An agent reply reopens a 'closed' thread, but preserves 'snoozed' — ANY
  * teammate replying into a snoozed thread is "send and stay snoozed" (a
  * deliberate reply does not re-queue it), leaving the snooze timer or an

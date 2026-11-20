@@ -36,11 +36,14 @@ describe('navSectionsFor', () => {
 
     expect(labels(only(PERMISSIONS.SETTINGS_MANAGE), 'Workspace')).toEqual([
       'General',
+      'Domains',
+      'Email',
       'Notifications',
       'Widget',
       'Labs',
     ])
     expect(labels(only(PERMISSIONS.SETTINGS_MANAGE), 'Data')).toEqual(['Imports & exports'])
+    // Portal's Design tab reads what it shows with settings.branding alone.
     expect(labels(only(PERMISSIONS.SETTINGS_BRANDING), 'Workspace')).toEqual([
       'Notifications',
       'Portal',
@@ -48,6 +51,7 @@ describe('navSectionsFor', () => {
     expect(labels(only(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN), 'Workspace')).toEqual([
       'Domains',
       'Notifications',
+      'Portal',
     ])
     expect(labels(only(PERMISSIONS.AUTH_MANAGE), 'Workspace')).toEqual([
       'Domains',
@@ -68,7 +72,17 @@ describe('navSectionsFor', () => {
     ])
     expect(labels(only(PERMISSIONS.USER_ATTRIBUTE_VIEW), 'Data')).toEqual(['Users'])
     expect(labels(only(PERMISSIONS.COMPANY_VIEW), 'Data')).toEqual(['Companies'])
-    expect(labels(only(PERMISSIONS.CONVERSATION_MANAGE), 'Data')).toEqual(['Conversations'])
+    // Conversation data lists under conversation.view and changes under conversation.manage.
+    expect(labels(only(PERMISSIONS.CONVERSATION_MANAGE), 'Data')).toBeNull()
+    expect(
+      labels(
+        navSectionsFor(
+          buildNavSections({ supportInbox: true }, true),
+          new Set([PERMISSIONS.CONVERSATION_MANAGE, PERMISSIONS.CONVERSATION_VIEW])
+        ),
+        'Data'
+      )
+    ).toEqual(['Conversations'])
   })
 
   it('offers the AI & Automation pages by the permission each one checks', () => {
@@ -85,7 +99,17 @@ describe('navSectionsFor', () => {
       'Skills',
       'Connectors',
     ])
-    expect(labels(only(PERMISSIONS.WORKFLOW_MANAGE), 'AI & Automation')).toEqual(['Workflows'])
+    // Workflows are read under routing.manage and changed under workflow.manage.
+    expect(labels(only(PERMISSIONS.WORKFLOW_MANAGE), 'AI & Automation')).toBeNull()
+    expect(
+      labels(
+        navSectionsFor(
+          buildNavSections({ supportInbox: true }, true),
+          new Set([PERMISSIONS.WORKFLOW_MANAGE, PERMISSIONS.ROUTING_MANAGE])
+        ),
+        'AI & Automation'
+      )
+    ).toEqual(['Workflows'])
     expect(labels(only(PERMISSIONS.MEMBER_VIEW), 'AI & Automation')).toBeNull()
   })
 
@@ -139,7 +163,7 @@ describe('canOpenSettings', () => {
 
   it('is true for a holder of any page permission, however small', () => {
     expect(can(PERMISSIONS.AI_CUSTOMER_MANAGE)).toBe(true)
-    expect(can(PERMISSIONS.WORKFLOW_MANAGE)).toBe(true)
+    expect(can(PERMISSIONS.WORKFLOW_MANAGE, PERMISSIONS.ROUTING_MANAGE)).toBe(true)
     expect(can(PERMISSIONS.MEMBER_VIEW)).toBe(true)
   })
 
@@ -184,7 +208,9 @@ describe('firstSettingsPath', () => {
   })
 
   it('opens Workflows for a workflow manager while the inbox is on', () => {
-    expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE]))).toBe('/admin/settings/workflows')
+    expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE, PERMISSIONS.ROUTING_MANAGE]))).toBe(
+      '/admin/settings/workflows'
+    )
   })
 
   it('never lands on the Domains overview; a domain owner opens their own page', () => {
@@ -199,8 +225,8 @@ describe('firstSettingsPath', () => {
     expect(first(new Set([PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]), email)).toBe(
       '/admin/settings/channels/email'
     )
-    // Domains holds web address setup, which this permission owns: it lands there.
-    expect(first(new Set([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toBe('/admin/settings/domains')
+    // Custom domains are set on Settings > Portal, so their owner lands there.
+    expect(first(new Set([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toBe('/admin/settings/portal')
     // A viewer who only reaches Domains through another page's permission does not.
     expect(first(new Set([PERMISSIONS.AUTH_MANAGE]))).not.toBe('/admin/settings/domains')
   })

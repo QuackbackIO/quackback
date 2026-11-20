@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { getAuthorName, buildPostUrl, escapeHtml, getErrorMessage } from '../message-utils'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 describe('getAuthorName', () => {
   it('returns authorName when present', () => {
@@ -27,14 +28,21 @@ describe('getAuthorName', () => {
 
 describe('buildPostUrl', () => {
   it('constructs correct URL', () => {
-    expect(buildPostUrl('https://app.example.com', 'feature-requests', 'post_123')).toBe(
-      'https://app.example.com/b/feature-requests/posts/post_123'
-    )
+    expect(
+      buildPostUrl(allOnPrimary('https://app.example.com'), 'feature-requests', 'post_123')
+    ).toBe('https://app.example.com/b/feature-requests/posts/post_123')
   })
 
   it('handles trailing slash in rootUrl', () => {
-    expect(buildPostUrl('https://app.example.com/', 'bugs', 'post_456')).toBe(
-      'https://app.example.com//b/bugs/posts/post_456'
+    expect(buildPostUrl(allOnPrimary('https://app.example.com/'), 'bugs', 'post_456')).toBe(
+      'https://app.example.com/b/bugs/posts/post_456'
+    )
+  })
+
+  it("links the post at feedback's own host when it has one", () => {
+    const links = { ...allOnPrimary('https://app.example.com'), feedback: 'https://ideas.acme.com' }
+    expect(buildPostUrl(links, 'bugs', 'post_456')).toBe(
+      'https://ideas.acme.com/b/bugs/posts/post_456'
     )
   })
 })

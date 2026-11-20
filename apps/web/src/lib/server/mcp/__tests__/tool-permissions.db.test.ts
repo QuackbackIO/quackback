@@ -7,7 +7,7 @@
  * with a scope that covers the tool.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { createId, generateId, type PrincipalId, type RoleId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { eq, permissions, principal, rolePermissions, roles, user } from '@/lib/server/db'
@@ -122,8 +122,7 @@ type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 function postTools(auth: McpAuthContext): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const server = {
-    tool: (name: string, _d: string, _s: unknown, _a: unknown, handler: Handler) =>
-      void handlers.set(name, handler),
+    registerTool: (name: string, _c: unknown, handler: Handler) => void handlers.set(name, handler),
   }
   registerPostTools(server as never, auth)
   return handlers

@@ -53,7 +53,7 @@ export function DeleteWebhookDialog({ webhook, open, onOpenChange }: DeleteWebho
         ),
       }}
       variant="destructive"
-      confirmLabel={isPending ? 'Deleting...' : 'Delete webhook'}
+      confirmLabel={isPending ? 'Deleting…' : 'Delete webhook'}
       isPending={isPending}
       onConfirm={handleDelete}
     >

@@ -262,12 +262,14 @@ const ACTION_COPY: Record<string, ActionCopy> = {
     },
     confirmBody: {
       id: 'unsubscribe.all.confirmBody',
-      defaultMessage: 'You will stop getting every email notification.',
+      defaultMessage:
+        'You will stop getting every email notification. Replies from our team still reach you.',
     },
     button: { id: 'unsubscribe.all.button', defaultMessage: 'Turn off all email' },
     doneBody: {
       id: 'unsubscribe.all.doneBody',
-      defaultMessage: 'All email is off. You can turn it back on in your preferences.',
+      defaultMessage:
+        'All email is off. Replies from our team still reach you. You can turn it back on in your preferences.',
     },
   },
   unsubscribe_changelog: {

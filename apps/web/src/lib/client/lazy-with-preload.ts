@@ -20,3 +20,35 @@ export function lazyWithPreload<K extends string, M extends Record<K, AnyCompone
     preload: () => void loader().catch(() => {}),
   }
 }
+
+function renderNothing(): null {
+  return null
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * A lazily loaded component the page can do without, such as the toast
+ * container. A chunk that fails to load (a network blip, an edge still warming
+ * up after a deploy) is tried once more, and if that fails too the component
+ * renders nothing. The failure never reaches an error boundary, so a missing
+ * extra cannot replace the whole page with an error screen.
+ */
+export function lazyOptional<K extends string, M extends Record<K, AnyComponent>>(
+  loader: () => Promise<M>,
+  exportName: K,
+  { retryDelayMs = 1000 }: { retryDelayMs?: number } = {}
+): LazyExoticComponent<M[K]> {
+  return lazy(async () => {
+    try {
+      return { default: (await loader())[exportName] }
+    } catch {
+      await wait(retryDelayMs)
+      try {
+        return { default: (await loader())[exportName] }
+      } catch {
+        return { default: renderNothing as unknown as M[K] }
+      }
+    }
+  })
+}

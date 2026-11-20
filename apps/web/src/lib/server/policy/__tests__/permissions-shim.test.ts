@@ -10,7 +10,7 @@ import {
 import type { Role } from '@/lib/shared/roles'
 
 const dbMock = vi.hoisted(() => {
-  const rows: Array<{ assignmentId: string; key: string | null }> = []
+  const rows: Array<{ principalId: string; key: string | null }> = []
   const query: Record<string, ReturnType<typeof vi.fn>> = {}
   query.from = vi.fn(() => query)
   query.leftJoin = vi.fn(() => query)
@@ -22,6 +22,7 @@ vi.mock('@/lib/server/db', () => ({
   db: { select: dbMock.select },
   and: vi.fn(() => ({})),
   eq: vi.fn(() => ({})),
+  inArray: vi.fn(() => ({})),
   isNull: vi.fn(() => ({})),
   permissions: { id: 'permissions.id', key: 'permissions.key' },
   principalRoleAssignments: {
@@ -96,8 +97,8 @@ describe('permissionsForPrincipal', () => {
 
   it('returns an assigned custom role permission set', async () => {
     dbMock.rows.push(
-      { assignmentId: 'assignment_1', key: PERMISSIONS.BILLING_MANAGE },
-      { assignmentId: 'assignment_1', key: PERMISSIONS.CONVERSATION_VIEW }
+      { principalId: 'principal_1', key: PERMISSIONS.BILLING_MANAGE },
+      { principalId: 'principal_1', key: PERMISSIONS.CONVERSATION_VIEW }
     )
 
     const resolved = await permissionsForPrincipal('principal_1' as PrincipalId, 'user')
@@ -106,7 +107,7 @@ describe('permissionsForPrincipal', () => {
   })
 
   it('keeps an assigned zero-permission role empty instead of using the legacy fallback', async () => {
-    dbMock.rows.push({ assignmentId: 'assignment_1', key: null })
+    dbMock.rows.push({ principalId: 'principal_1', key: null })
 
     const resolved = await permissionsForPrincipal('principal_1' as PrincipalId, 'admin')
 

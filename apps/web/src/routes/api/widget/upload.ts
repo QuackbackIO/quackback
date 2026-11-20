@@ -22,6 +22,7 @@ export async function handleWidgetUpload({ request }: { request: Request }): Pro
     keyPrefix: 'widget-upload',
     workspaceKey: settings.id,
     limit: 20,
+    workspaceLimit: 200,
     windowSeconds: 60,
     message: 'Too many uploads, slow down',
   })

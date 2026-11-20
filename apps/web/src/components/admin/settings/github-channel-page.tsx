@@ -12,10 +12,14 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { GitHubConnectionActions } from '@/integrations/github/ui/github-connection-actions'
 import { githubChannelStatusQuery } from '@/integrations/github/ui/github-channel-status-query'
 import { useSetGitHubInbox } from '@/integrations/github/ui/use-github-inbox'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export function GitHubChannelPage() {
   const query = useQuery(githubChannelStatusQuery())
   const setInbox = useSetGitHubInbox()
+  // Connecting GitHub and its integration page need integration.manage.
+  const canManageIntegration = usePermission(PERMISSIONS.INTEGRATION_MANAGE)
   const status = query.data
   const connected = !!status?.connected
   const inboxEnabled = setInbox.isPending ? setInbox.variables : (status?.inboxEnabled ?? false)
@@ -42,14 +46,19 @@ export function GitHubChannelPage() {
               Comments may not be reaching the inbox
             </p>
             <p className="mt-0.5 text-xs text-destructive/90">
-              {status.lastError}{' '}
-              <Link
-                to="/admin/settings/integrations/$type"
-                params={{ type: 'github' }}
-                className="font-medium underline"
-              >
-                Manage integration
-              </Link>
+              {status.lastError}
+              {canManageIntegration && (
+                <>
+                  {' '}
+                  <Link
+                    to="/admin/settings/integrations/$type"
+                    params={{ type: 'github' }}
+                    className="font-medium underline"
+                  >
+                    Manage integration
+                  </Link>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -61,10 +70,12 @@ export function GitHubChannelPage() {
             <p className="text-sm">
               Connect a GitHub account to bring issues and comments into the inbox as conversations.
             </p>
-            <GitHubConnectionActions
-              isConnected={false}
-              returnPath="/admin/settings/channels/github"
-            />
+            {canManageIntegration && (
+              <GitHubConnectionActions
+                isConnected={false}
+                returnPath="/admin/settings/channels/github"
+              />
+            )}
             <p className="text-xs text-muted-foreground">
               One connection per workspace, shared with the Feedback tracker integration.
             </p>
@@ -82,12 +93,14 @@ export function GitHubChannelPage() {
                     : 'Shared with the Feedback tracker'
                 }
                 control={
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link to="/admin/settings/integrations/$type" params={{ type: 'github' }}>
-                      Manage integration
-                      <ArrowTopRightOnSquareIcon className="size-3.5" />
-                    </Link>
-                  </Button>
+                  canManageIntegration ? (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link to="/admin/settings/integrations/$type" params={{ type: 'github' }}>
+                        Manage integration
+                        <ArrowTopRightOnSquareIcon className="size-3.5" />
+                      </Link>
+                    </Button>
+                  ) : undefined
                 }
               />
             </SettingRows>

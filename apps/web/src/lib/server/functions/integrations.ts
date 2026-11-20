@@ -193,6 +193,10 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
 
     const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
+    // A disconnected integration may be the fix for an integrations plan limit.
+    const { invalidatePlanLimits } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.cache')
+    await invalidatePlanLimits()
     log.info({ integration_id: data.id }, 'integration deleted')
     return { id: data.id }
   })

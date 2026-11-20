@@ -2,6 +2,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { CsvImportSection } from './csv-import-section'
+import { SurfaceSenderRow } from '@/components/admin/channels/surface-sender-row'
 import type { ChangelogSettings } from '@/lib/shared/changelog-settings'
 
 interface EmailCardProps {
@@ -26,6 +27,7 @@ export function EmailCard({ settings, onChange, disabled }: EmailCardProps) {
             />
           }
         />
+        <SurfaceSenderRow surface="changelog" />
         <SettingRow
           label="Auto-subscribe users"
           description="Subscribe new users automatically"

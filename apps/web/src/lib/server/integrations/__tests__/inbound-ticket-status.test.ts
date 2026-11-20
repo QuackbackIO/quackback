@@ -296,7 +296,8 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
           id: ticketId,
           status: expect.objectContaining({ id: closed }),
         }),
-      })
+      }),
+      expect.objectContaining({ teamId: null })
     )
 
     // Close-the-loop: a team-only system note lands on the thread with the
@@ -350,7 +351,8 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
         expect.objectContaining({
           kind: 'ticket_updated',
           ticket: expect.objectContaining({ id, status: expect.objectContaining({ id: closed }) }),
-        })
+        }),
+        expect.objectContaining({ teamId: null })
       )
     await receiveAndDrain(githubWebhookRequest('closed', 88), 'github')
     expect(publishTicketEvent).toHaveBeenCalledTimes(2)

@@ -9,6 +9,8 @@ import { renderToString } from 'react-dom/server'
 import { IntlProvider } from 'react-intl'
 import { describe, expect, it, vi } from 'vitest'
 
+// A viewer holding every permission, so each permission-gated read runs.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (

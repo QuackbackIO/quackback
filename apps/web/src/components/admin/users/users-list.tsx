@@ -308,7 +308,7 @@ export function UsersList({
       <AdminListHeader
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Search users..."
+        searchPlaceholder="Search users…"
         sortOptions={SORT_OPTIONS}
         activeSort={sort}
         onSortChange={(value) => handleSortChange(value as UsersFilters['sort'])}
