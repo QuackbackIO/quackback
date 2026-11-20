@@ -314,8 +314,13 @@ describe('the schedule tick', () => {
 
     // Only one row per slot survives here because both schedulers write to the
     // same test database; in production each workspace has its own. The rows prove
-    // the enqueue was attempted for every slot by both.
-    expect((await rowsFor(q)).map((r) => r.dedupe_key)).toEqual(expected)
+    // the enqueue was attempted for every slot by both. Compared in slot order
+    // (the keys end in the slot's ISO instant): the row id is insertion order,
+    // which is not what this asserts, and it has come back out of slot order
+    // on a busy shared database.
+    expect(
+      (await rowsFor(q)).map((r) => r.dedupe_key).sort((x, y) => String(x).localeCompare(String(y)))
+    ).toEqual(expected)
   })
 
   it('carries the definition maxAttempts onto the enqueued row', async () => {
