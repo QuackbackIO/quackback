@@ -711,7 +711,7 @@ function CommentItem({
             <span className="text-muted-foreground text-xs">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
             {comment.isEdited && (
-              <span className="text-xs text-muted-foreground/60">
+              <span className="text-xs text-muted-foreground">
                 {intl.formatMessage({
                   id: 'portal.commentThread.edited',
                   defaultMessage: '(edited)',
@@ -802,7 +802,7 @@ function CommentItem({
             <CommentContent
               content={comment.content}
               contentJson={comment.contentJson ?? null}
-              className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
+              className="text-sm mt-1.5 ms-10 text-foreground leading-relaxed"
             />
           )}
           {comment.moderationState === 'pending' && (

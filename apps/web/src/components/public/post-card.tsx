@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import {
@@ -292,7 +292,7 @@ export function PostCard({
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
         'w-12 py-2 gap-0.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
+          ? 'post-card__vote--voted text-readable [--ink:var(--post-card-voted-color)] border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
           : 'bg-muted/40 text-muted-foreground border-border/50',
         // Hover affordances only when the button is actionable (not denied).
         !currentHasVoted &&
@@ -494,7 +494,9 @@ export function PostCard({
           fallbackClassName="bg-muted text-xs"
         />
       )}
-      <span className={showAvatar ? '' : 'text-foreground/80'}>{authorName || authorFallback}</span>
+      <span className={showAvatar ? '' : 'text-muted-foreground'}>
+        {authorName || authorFallback}
+      </span>
     </>
   )
   const authorMeta =
@@ -525,7 +527,8 @@ export function PostCard({
     </Link>
   )
 
-  const tagClassName = 'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium'
+  const tagClassName =
+    'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium text-readable'
 
   const cardContent = (
     <div className="flex items-start p-4 gap-4">
@@ -556,8 +559,8 @@ export function PostCard({
         {/* Title */}
         <h3
           className={cn(
-            'font-semibold text-base line-clamp-1',
-            isDone ? 'text-foreground/75' : 'text-foreground'
+            'font-heading font-semibold text-base line-clamp-1',
+            isDone ? 'text-muted-foreground' : 'text-foreground'
           )}
         >
           {titleText}
@@ -565,7 +568,7 @@ export function PostCard({
 
         {/* Description */}
         {content && (
-          <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">
+          <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
             {contentPreview(content)}
           </p>
         )}
@@ -574,7 +577,11 @@ export function PostCard({
         {tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1.5">
             {tags.slice(0, 3).map((tag) => {
-              const style = { backgroundColor: tag.color + '20', color: tag.color }
+              // The tag's colour as a tint behind it, and as text at a readable lightness.
+              const style = {
+                backgroundColor: tag.color + '20',
+                '--ink': tag.color,
+              } as CSSProperties
               return onTagClick ? (
                 <button
                   key={tag.id}
@@ -595,7 +602,7 @@ export function PostCard({
               )
             })}
             {tags.length > 3 && (
-              <span className="text-xs text-muted-foreground/60">+{tags.length - 3}</span>
+              <span className="text-xs text-muted-foreground">+{tags.length - 3}</span>
             )}
           </div>
         )}
@@ -603,10 +610,10 @@ export function PostCard({
         {/* Meta row */}
         <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5">
           {authorMeta}
-          <span className="text-muted-foreground/40">·</span>
-          <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
+          <span className="text-muted-foreground">·</span>
+          <TimeAgo date={createdAtDate} className="text-muted-foreground" />
           {commentCount > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground/50 ms-auto">
+            <span className="flex items-center gap-1 text-muted-foreground ms-auto">
               <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
               {commentCount}
             </span>
@@ -637,6 +644,7 @@ export function PostCard({
 
   return (
     <div
+      data-qb-edit="type"
       className={rootClassName}
       onClick={onClick}
       onMouseEnter={onMouseEnter}

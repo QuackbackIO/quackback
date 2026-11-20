@@ -977,6 +977,8 @@ const PUBLIC_STORAGE_PREFIXES = new Set([
   'changelog-images',
   'comment-images',
   'favicons',
+  // Uploaded portal fonts, loaded by every visitor.
+  'fonts',
   'header-logos',
   'help-center',
   'link-previews',

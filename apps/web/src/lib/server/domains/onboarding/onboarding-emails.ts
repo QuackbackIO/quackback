@@ -23,6 +23,8 @@ import {
 import { getSetupState } from '@/lib/shared/db-types'
 import { isLaunchWindowOpen, launchWindowFor } from '@/lib/shared/launch-window'
 import {
+  BRAND_STEP_ID,
+  isOpenLaunchStep,
   launchPath,
   type LaunchPath,
   type LaunchStatus,
@@ -103,7 +105,7 @@ interface EmailContext {
   locale: SupportedLocale
   workspaceName: string
   status: LaunchStatus
-  /** The launch plan's one path, the same three steps Home shows. */
+  /** The launch plan's one path, the same steps Home shows. */
   path: LaunchPath
   /** Path steps already done (the goal step once it is), in order. */
   done: LaunchTask[]
@@ -166,6 +168,7 @@ export async function onboardingEmailContext(
   // The plan as this teammate would see it on Home.
   const status: LaunchStatus = await loadLaunchStatus({
     principalId,
+    email: person.email,
     role: person.role as Role,
     permissions: permissionsForLegacyRole(person.role as Role),
   })
@@ -173,6 +176,13 @@ export async function onboardingEmailContext(
   // has done every chore still gets the nudge toward its first customer.
   const path = launchPath(status)
   if (path.complete) return { ok: false, reason: 'first-result-reached' }
+  // The emails are about reaching the first customer, so they lead with the
+  // goal step. The brand step is Home's to offer: it is optional there too.
+  const steps = path.steps.filter((task) => task.id !== BRAND_STEP_ID)
+  const next =
+    path.next?.id === BRAND_STEP_ID
+      ? (steps.find((task) => !task.isReady && isOpenLaunchStep(task)) ?? null)
+      : path.next
   const name = (person.userName || person.displayName || '').trim().split(/\s+/)[0] || null
   // Their own choice first, then their sign-in provider's, then their browser's.
   const locale = recipientLocale(person.preferredLanguage, person.accountLocale, requestLocale)
@@ -185,11 +195,11 @@ export async function onboardingEmailContext(
       workspaceName: org.name,
       status,
       path,
-      done: path.steps.filter((task) => task.isCompleted || task.isReady),
+      done: steps.filter((task) => task.isCompleted || task.isReady),
       // The next step first: the ready email and the nudge lead with it.
       tasks: [
-        ...(path.next ? [path.next] : []),
-        ...path.steps.filter((task) => task !== path.next && !task.isCompleted && !task.isReady),
+        ...(next ? [next] : []),
+        ...steps.filter((task) => task !== next && !task.isCompleted && !task.isReady),
       ],
     },
   }
@@ -310,7 +320,7 @@ async function deliver(
   } else {
     const copy = await nudgeEmailCopy({
       ...common,
-      nextStep: emailStep(next ?? context.path.steps[1], base),
+      nextStep: emailStep(next ?? context.path.steps.at(-1)!, base),
     })
     await sendOnboardingNudgeEmail({
       to: context.to,

@@ -5,6 +5,7 @@ import {
   launchPath,
   launchPlanProgress,
   launchVisibilityHref,
+  openLaterSteps,
   type LaunchStatus,
 } from '../launch-checklist'
 
@@ -27,24 +28,118 @@ const base: LaunchStatus = {
   },
 }
 
+const boardlessStatus = (
+  goals: LaunchStatus['goals'],
+  features: LaunchStatus['features']
+): LaunchStatus => ({ ...base, goals, features, hasBoards: false, hasPublicBoard: false })
 const ids = (tasks: { id: string }[]) => tasks.map((task) => task.id)
 const copied = '2026-10-04T10:00:00.000Z'
 
 describe('the launch path', () => {
-  it('is three steps: the live page, the goal step, then a customer win', () => {
+  it('is four steps for a customer-facing goal: live page, brand, goal step, customer win', () => {
     const path = launchPath(base)
     expect(path.goal).toBe('feedback')
-    expect(path.total).toBe(3)
+    expect(path.total).toBe(4)
     expect(path.step).toBe(2)
-    expect(ids(path.steps)).toEqual(['distribute-feedback', 'first-win'])
-    expect(path.steps[0].title).toBe('Share your board link')
-    expect(path.steps[1].title).toBe('A customer creates a post')
+    expect(ids(path.steps)).toEqual(['customize-branding', 'distribute-feedback', 'first-win'])
+    expect(path.steps[0]!.title).toBe('Make it look like your brand')
+    expect(path.steps[1]!.title).toBe('Share your board link')
+    expect(path.steps[2]!.title).toBe('A customer creates a post')
+    expect(path.next?.id).toBe('customize-branding')
+    expect(ids(path.later)).not.toContain('customize-branding')
+  })
+
+  it('moves on to the goal step once the brand is set', () => {
+    const path = launchPath({ ...base, hasBranding: true })
+    expect(path.step).toBe(3)
     expect(path.next?.id).toBe('distribute-feedback')
   })
 
-  it('moves to step 3 once the goal step is done, and waits there for the win', () => {
+  it('leads with the goal step when the brand step is skipped, and keeps it on the path', () => {
+    const path = launchPath({
+      ...base,
+      taskResolutions: {
+        product_feedback: {
+          'customize-branding': { resolution: 'dismissed', resolvedAt: copied },
+        },
+      },
+    })
+    expect(ids(path.steps)).toContain('customize-branding')
+    expect(path.step).toBe(3)
+    expect(path.next?.id).toBe('distribute-feedback')
+  })
+
+  it('waits for the win once the brand step is skipped and the goal step is done', () => {
+    const path = launchPath({
+      ...base,
+      publicBoardLinkCopiedAt: copied,
+      taskResolutions: {
+        product_feedback: {
+          'customize-branding': { resolution: 'deferred', resolvedAt: copied },
+        },
+      },
+    })
+    expect(path.step).toBe(4)
+    expect(path.total).toBe(4)
+    expect(path.next?.id).toBe('first-win')
+    expect(path.complete).toBe(false)
+  })
+
+  it('counts a goal step skipped before it joined the path, as the Next pointer does', () => {
+    const path = launchPath({
+      ...base,
+      hasBranding: true,
+      taskResolutions: {
+        product_feedback: {
+          'distribute-feedback': { resolution: 'dismissed', resolvedAt: copied },
+        },
+      },
+    })
+    expect(path.step).toBe(4)
+    expect(path.next?.id).toBe('first-win')
+  })
+
+  it('does not count a brand step the viewer may not change', () => {
+    const path = launchPath({
+      ...base,
+      permissions: {
+        settingsManage: true,
+        boardManage: true,
+        memberManage: true,
+        brandingManage: false,
+        integrationManage: true,
+        helpCenterManage: true,
+        assistantManage: true,
+      },
+    })
+    expect(path.step).toBe(2)
+  })
+
+  it('leads with the goal step for someone who may not change the brand', () => {
+    const path = launchPath({
+      ...base,
+      permissions: {
+        settingsManage: true,
+        boardManage: true,
+        memberManage: true,
+        brandingManage: false,
+        integrationManage: true,
+        helpCenterManage: true,
+        assistantManage: true,
+      },
+    })
+    expect(path.next?.id).toBe('distribute-feedback')
+  })
+
+  it('still leads with the brand step when the goal step was done first', () => {
     const path = launchPath({ ...base, publicBoardLinkCopiedAt: copied })
     expect(path.step).toBe(3)
+    expect(path.next?.id).toBe('customize-branding')
+  })
+
+  it('waits at the last step for the win once the brand and the goal step are done', () => {
+    const path = launchPath({ ...base, hasBranding: true, publicBoardLinkCopiedAt: copied })
+    expect(path.step).toBe(4)
     expect(path.next?.id).toBe('first-win')
     expect(path.complete).toBe(false)
   })
@@ -63,7 +158,7 @@ describe('the launch path', () => {
     }
     expect(launchPath(chores).complete).toBe(false)
     expect(isLaunchPlanActive(chores)).toBe(true)
-    expect(launchPlanProgress(chores)).toEqual({ step: 3, total: 3, resolved: false })
+    expect(launchPlanProgress(chores)).toEqual({ step: 4, total: 4, resolved: false })
   })
 
   it('closes on the first win, even before the goal step', () => {
@@ -71,7 +166,7 @@ describe('the launch path', () => {
     expect(launchPath(won).complete).toBe(true)
     expect(launchPath(won).next).toBeNull()
     expect(isLaunchPlanActive(won)).toBe(false)
-    expect(launchPlanProgress(won)).toEqual({ step: 3, total: 3, resolved: true })
+    expect(launchPlanProgress(won)).toEqual({ step: 4, total: 4, resolved: true })
   })
 
   it('follows each goal with its own step and win', () => {
@@ -83,8 +178,8 @@ describe('the launch path', () => {
     for (const [goals, goal, step, win] of cases) {
       const path = launchPath({ ...base, goals })
       expect(path.goal).toBe(goal)
-      expect(path.steps[0].id).toBe(step)
-      expect(path.steps[1].title).toBe(win)
+      expect(ids(path.steps)).toEqual(['customize-branding', step, 'first-win'])
+      expect(path.steps[2]!.title).toBe(win)
     }
   })
 
@@ -101,19 +196,15 @@ describe('the launch path', () => {
       const features = { ...base.features!, [module]: false }
       const shared = launchPath({ ...base, goals, features })
       expect(shared.goal).toBe('feedback')
-      expect(shared.steps[0].id).toBe('distribute-feedback')
-      expect(shared.next?.id).toBe('distribute-feedback')
+      expect(shared.steps[1]!.id).toBe('distribute-feedback')
+      expect(shared.next?.id).toBe('customize-branding')
       expect(shared.step).toBe(2)
 
-      const boardless = launchPath({
-        ...base,
-        goals,
-        features,
-        hasBoards: false,
-        hasPublicBoard: false,
-      })
-      expect(boardless.steps[0].id).toBe('create-board')
-      expect(boardless.next?.id).toBe('create-board')
+      const boardless = launchPath(boardlessStatus(goals, features))
+      expect(boardless.steps[1]!.id).toBe('create-board')
+      expect(launchPath({ ...boardlessStatus(goals, features), hasBranding: true }).next?.id).toBe(
+        'create-board'
+      )
       expect(ids(boardless.later)).not.toContain('create-board')
     }
   })
@@ -121,8 +212,25 @@ describe('the launch path', () => {
   it('keeps an existing private team board on its own path', () => {
     const path = launchPath({ ...base, goals: ['product_feedback'], feedbackPrivate: true })
     expect(path.goal).toBe('private')
-    expect(path.steps[0].id).toBe('invite-team')
-    expect(path.steps[1].title).toBe('A teammate creates a post')
+    expect(path.total).toBe(3)
+    expect(ids(path.steps)).toEqual(['invite-team', 'first-win'])
+    expect(path.steps[1]!.title).toBe('A teammate creates a post')
+  })
+
+  it('keeps the brand step under Later, renamed, for a team-only board', () => {
+    const path = launchPath({ ...base, goals: ['product_feedback'], feedbackPrivate: true })
+    const brand = path.later.find((task) => task.id === 'customize-branding')
+    expect(brand?.title).toBe('Make it look like your brand')
+    expect(path.next?.id).toBe('invite-team')
+  })
+
+  it('counts an unfinished brand step with the optional steps once the plan is done', () => {
+    const open = (status: LaunchStatus) => ids(openLaterSteps(launchPath(status)))
+    expect(open(base)).not.toContain('customize-branding')
+    expect(open({ ...base, hasFirstWin: true })[0]).toBe('customize-branding')
+    expect(open({ ...base, hasFirstWin: true, hasBranding: true })).not.toContain(
+      'customize-branding'
+    )
   })
 
   it('puts every other step under later, never the path or what setup did', () => {
@@ -130,9 +238,8 @@ describe('the launch path', () => {
     expect(later).not.toContain('distribute-feedback')
     expect(later).not.toContain('first-win')
     expect(later).not.toContain('create-board')
-    expect(later).toEqual(
-      expect.arrayContaining(['connect-messenger', 'invite-team', 'customize-branding'])
-    )
+    expect(later).toEqual(expect.arrayContaining(['connect-messenger', 'invite-team']))
+    expect(later).not.toContain('customize-branding')
   })
 
   it('never offers an integration below the plan that includes it', () => {
@@ -142,18 +249,23 @@ describe('the launch path', () => {
     )
   })
 
-  it('deep links the logo to General settings and a service to the components view', () => {
+  it('deep links the brand step to the Customise editor and a service to the components view', () => {
     const tasks = buildLaunchTasks({ ...base, goals: ['status_page', 'product_feedback'] })
-    expect(tasks.find((task) => task.id === 'customize-branding')?.href).toBe(
-      '/admin/settings/general'
-    )
+    const brand = tasks.find((task) => task.id === 'customize-branding')
+    expect(brand?.href).toBe('/admin/settings/portal/customise')
+    expect(brand?.description).toBe('Bring in your logo, colours and font from your website.')
     const service = tasks.find((task) => task.id === 'add-status-service')
     expect(service?.href).toBe('/admin/status')
     expect(service?.search).toEqual({ view: 'components' })
   })
 
   it('treats the service setup seeds as Ready, leaving sharing the page as the step', () => {
-    const status = { ...base, goals: ['status_page' as const], hasStatusComponent: true }
+    const status = {
+      ...base,
+      goals: ['status_page' as const],
+      hasStatusComponent: true,
+      hasBranding: true,
+    }
     const path = launchPath(status)
     expect(path.next?.id).toBe('share-status-page')
     expect(path.later.map((task) => task.id)).not.toContain('add-status-service')

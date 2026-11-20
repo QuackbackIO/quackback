@@ -23,7 +23,6 @@ import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { ApiKeyScope } from '@/lib/shared/api-key-scopes'
 import {
   GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
-  PORTAL_DESIGN_WRITE_PERMISSIONS,
   PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
 } from '@/lib/shared/settings-read-permissions'
 
@@ -223,10 +222,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
     'any one of these reads; the moderation default goes only to settings.manage or settings.moderation, the portal tabs and welcome message only to settings.manage or settings.branding, and nothing else of the portal config'
   ),
-  'lib/server/functions/settings.ts::updatePortalDesignFn': DYNAMIC_PERMISSION(
-    PORTAL_DESIGN_WRITE_PERMISSIONS,
-    "saves only the portal's tabs and welcome message (Settings > Portal > Design); any other portal config field is refused and saves through updatePortalConfigFn under settings.manage"
-  ),
   'integrations/github/server/functions.ts::getGitHubChannelStatusFn': DYNAMIC_PERMISSION(
     GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
     'the GitHub channel page (channel_account.manage) and the Channels hub (settings.manage) read the connection status; never the token'
@@ -314,31 +309,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/assistant-web-sources.ts::setWebSourceEnabledFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'shared AI settings: a holder of either AI permission may use them'
-  ),
-  'lib/server/functions/website-branding.ts::startAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'the lookup only records an offer and requires current settings management, rechecked after the fetch'
-  ),
-  'lib/server/functions/website-branding.ts::lookupWebsiteBrandingFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Find logo looks up a typed website through the safe fetch and records an offer; requires current settings management, rechecked after the fetch'
-  ),
-  'lib/server/functions/website-branding.ts::getAutomaticWebsiteBrandingStatusFn':
-    DYNAMIC_PERMISSION(
-      [PERMISSIONS.SETTINGS_MANAGE],
-      'private lookup status requires current settings management; ineligible callers receive no status'
-    ),
-  'lib/server/functions/website-branding.ts::undoAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Undo requires current settings management and every permission required by the stored receipt'
-  ),
-  'lib/server/functions/website-branding.ts::acceptWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Use it applies the offered logo with current settings management; its color additionally requires branding permission'
-  ),
-  'lib/server/functions/website-branding.ts::declineWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Not now closes the offer and requires current settings management'
   ),
   'routes/api/v1/settings/index.ts::GET': DYNAMIC_PERMISSION(
     SETTINGS_REGISTRY_PERMISSIONS,

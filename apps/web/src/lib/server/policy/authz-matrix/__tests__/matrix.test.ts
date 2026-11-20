@@ -97,26 +97,54 @@ describe('API-route channel reachability', () => {
   })
 })
 
-describe('automatic website branding authorization', () => {
-  it('requires current settings management before lookup, private status, an offer answer or Undo', () => {
-    const brandingOnly = {
+describe('portal customise authorization (decision Q2)', () => {
+  it('lets settings.branding alone publish, import a brand, and read the tabs and welcome message', () => {
+    const withOnly = (permission: PermissionKey) => ({
       ...byId('admin'),
-      permissions: new Set<PermissionKey>(['settings.branding']),
-    }
-    for (const name of [
-      'startAutomaticWebsiteBrandingFn',
-      'getAutomaticWebsiteBrandingStatusFn',
-      'undoAutomaticWebsiteBrandingFn',
-      'acceptWebsiteBrandingOfferFn',
-      'declineWebsiteBrandingOfferFn',
+      permissions: new Set<PermissionKey>([permission]),
+    })
+    for (const [file, name] of [
+      ['lib/server/functions/portal-customise.ts', 'publishPortalCustomisationFn'],
+      ['lib/server/functions/portal-customise.ts', 'importBrandFn'],
+      ['lib/server/functions/portal-customise.ts', 'askPortalCustomiseFn'],
+      ['lib/server/functions/settings.ts', 'fetchPortalPageConfigFn'],
     ]) {
+      const surface = surfaces.find((item) => item.file === file && item.surface === name)
+      expect(surface, name).toBeDefined()
+      expect(evaluate(withOnly('settings.branding'), surface!), name).toBe('allow')
+      expect(evaluate(withOnly('help_center.manage'), surface!), name).toBe('deny')
+      expect(evaluate(byId('portal_user'), surface!), name).toBe('deny')
+    }
+  })
+
+  it('keeps the whole portal config, read and write, with settings.manage', () => {
+    for (const name of ['fetchPortalConfig', 'updatePortalConfigFn']) {
       const surface = surfaces.find(
-        (item) => item.file === 'lib/server/functions/website-branding.ts' && item.surface === name
+        (item) => item.file === 'lib/server/functions/settings.ts' && item.surface === name
       )
       expect(surface, name).toBeDefined()
-      expect(evaluate(byId('admin'), surface!), name).toBe('allow')
-      expect(evaluate(brandingOnly, surface!), name).toBe('deny')
-      expect(evaluate(byId('portal_user'), surface!), name).toBe('deny')
+      const withOnly = (permission: PermissionKey) => ({
+        ...byId('admin'),
+        permissions: new Set<PermissionKey>([permission]),
+      })
+      expect(evaluate(withOnly('settings.manage'), surface!), name).toBe('allow')
+      expect(evaluate(withOnly('settings.branding'), surface!), name).toBe('deny')
+    }
+  })
+})
+
+describe('wide logo writes', () => {
+  // The publish is the one way to set or clear the wide logo: it checks the
+  // key was staged and keeps the old object for the sweep. No server
+  // function saves or deletes it directly.
+  it('has no direct save or delete of the header logo key', () => {
+    for (const name of ['saveHeaderLogoKeyFn', 'deleteHeaderLogoFn']) {
+      expect(
+        surfaces.find(
+          (item) => item.file === 'lib/server/functions/settings.ts' && item.surface === name
+        ),
+        name
+      ).toBeUndefined()
     }
   })
 })

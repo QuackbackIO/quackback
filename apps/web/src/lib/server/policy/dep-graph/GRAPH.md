@@ -60,8 +60,8 @@ Edges (30):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (56): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, plan-limits, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (180):
+Nodes (57): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, brand-import, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, plan-limits, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (181):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -102,6 +102,7 @@ Edges (180):
 - boards -> plan-limits
 - boards -> posts
 - boards -> settings
+- brand-import -> settings
 - changelog -> ai
 - changelog -> embeddings
 - changelog -> settings

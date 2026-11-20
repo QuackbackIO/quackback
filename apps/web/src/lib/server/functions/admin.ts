@@ -333,6 +333,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const { loadLaunchStatus } = await import('@/lib/server/domains/onboarding/launch-status')
   return loadLaunchStatus({
     principalId: auth.principal.id,
+    email: auth.user.email,
     role: auth.principal.role,
     permissions: auth.permissions,
   })

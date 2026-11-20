@@ -84,7 +84,7 @@ export function RichTextEditorEmptyState({
         )}
         style={{ '--editor-min-height': minHeight } as CSSProperties}
       >
-        <p className="text-muted-foreground/50">{placeholder}</p>
+        <p className="text-muted-foreground">{placeholder}</p>
       </div>
       {toolbarPosition === 'bottom' && (
         <div aria-hidden className={cn('pt-1', borderless ? 'pb-0' : 'px-3 pb-2')}>

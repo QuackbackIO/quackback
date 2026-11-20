@@ -24,7 +24,10 @@ import { sql, type Logger } from 'drizzle-orm'
 // @quackback/db/client for the canonical db.ts entry; this fixture is a
 // sanctioned caller of `createDb`, like board-view-filter-parity.test.ts.
 // oxlint-disable-next-line no-restricted-imports
-import { createDb, type Database } from '@quackback/db/client'
+import { createDb, createDbFromSql, type Database } from '@quackback/db/client'
+
+/** For race tests that need a second, independent connection pool. */
+export { createDbFromSql }
 
 /** The transaction handle type the fixture parks each test inside. */
 export type TestTransaction = Parameters<Parameters<Database['transaction']>[0]>[0]

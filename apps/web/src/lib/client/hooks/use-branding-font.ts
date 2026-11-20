@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { loadBrandingFont, resolveBrandingFontId } from '@/lib/shared/theme'
+import { resolveBrandingFontId } from '@/lib/shared/theme'
+import { loadBrandingFont as loadFontFamily } from '@/lib/shared/theme/font-loader'
 
 /**
  * Loads the workspace's chosen branding font on demand, client-side only.
@@ -26,10 +27,21 @@ export function useBrandingFont(
 
   useEffect(() => {
     if (!fontId) return
-    loadBrandingFont(fontId).catch(() => {
+    loadFontFamily(fontId).catch(() => {
       // Best-effort: a failed font fetch (offline, blocked asset host) just
       // leaves the --font-sans generic fallback stack rendering — never
       // throw out of a layout effect over a stylesheet.
     })
   }, [fontId])
+}
+
+/**
+ * Loads a family by its id, for a caller that chooses the font itself (the
+ * Customise font list shows each family in its own face). A function of this
+ * module, not an import of the loader beside it: the loader then stays in the
+ * one chunk the branded surfaces already fetch for the hook, where a second
+ * importer would split it off as a request of its own on every portal page.
+ */
+export function loadBrandingFont(id: string | null | undefined): Promise<unknown> {
+  return loadFontFamily(id)
 }

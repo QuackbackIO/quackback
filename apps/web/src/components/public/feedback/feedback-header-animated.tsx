@@ -1,5 +1,6 @@
 import type { BoardId } from '@quackback/ids'
 import type { BoardPermission } from '@/lib/shared/types/boards'
+import { cn } from '@/lib/shared/utils'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -340,13 +341,15 @@ export function FeedbackHeaderAnimated({
 
   return (
     <motion.div
-      className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
+      data-qb-edit="colours"
+      // At rest the card style sets the shadow (globals.css `.portal-card`);
+      // open, the composer lifts whatever the style.
+      className={cn(
+        'portal-card border rounded-lg mb-5 overflow-hidden transition-shadow duration-200',
+        '[--portal-card-rest-shadow:0_1px_2px_0_rgb(0_0_0/0.05)]',
+        expanded && 'portal-card--lifted'
+      )}
       initial={false}
-      animate={{
-        boxShadow: expanded
-          ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-          : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-      }}
       transition={{ duration: 0.2 }}
       onKeyDown={handleKeyDown}
       // The editor renders once the header expands; hovering warms its chunk.
@@ -648,7 +651,7 @@ function TitleInput({
         if (!expanded) onExpand()
       }}
       onFocus={() => !expanded && onExpand()}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary"
+      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground placeholder:font-normal caret-primary"
       initial={false}
       animate={{
         fontSize: expanded ? '1.25rem' : '1rem',

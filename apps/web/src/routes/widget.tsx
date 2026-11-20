@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { generateWorkspaceThemeCSS, readConfigFontSans } from '@/lib/shared/theme'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
@@ -119,7 +119,7 @@ export const Route = createFileRoute('/widget')({
       themeMode,
       themeStyles,
       customCss,
-      configFontSans: readFontSans(brandingConfig.light),
+      configFontSans: readConfigFontSans(brandingConfig),
       portalUser,
       portalSessionToken,
       hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,
