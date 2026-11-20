@@ -931,3 +931,38 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   gated entry by email and bell. Fix: intersect the fan-out with the members
   of the entry's gated labels' segments, as the public reads do. owner:
   unassigned, review by: 2026-12-03.
+- `changelog/admin-settings.spec.ts` › CHG-A-49 renaming a label keeps its
+  id, and a rename onto a taken name is refused. Product bug (new): every
+  label rename fails with a database error ("Failed to save label. Something
+  went wrong on our side."). The duplicate-name check in
+  `updateChangelogCategory`
+  (`apps/web/src/lib/server/domains/changelog/changelog-category.service.ts:101`)
+  puts the TypeID straight into a raw `sql` template (`id != ${id}`), so
+  Postgres gets `changelog_category_...` for a uuid column ("invalid input
+  syntax for type uuid"). Fix: `and(sql\`lower(name) = lower(${name})\`,
+  ne(changelogCategories.id, id))` so the column codec converts the id.
+  owner: unassigned, review by: 2026-12-03.
+- `changelog/admin-settings.spec.ts` › CHG-A-52 a signed-out caller cannot read
+  gated labels or their segment ids. Product bug: `listChangelogCategoriesFn`
+  (`apps/web/src/lib/server/functions/changelog-categories.ts:45`) has no
+  auth, portal-access or gate check and returns every label with its
+  `segmentIds`. Fix: filter gated labels by the viewer (team sees all) and drop
+  `segmentIds` for non-team callers. owner: unassigned, review by: 2026-12-03.
+- `changelog/feed.spec.ts` › CHG-F-05 item descriptions are plain text, not
+  markdown syntax. Product bug: `routes/changelog/feed.ts:146` runs `stripHtml`
+  over the markdown projection (`entry.content`), so `**`, `##` and `[x](y)`
+  reach feed readers. Fix: render plain text from `contentJson` (or strip
+  markdown) before truncating. owner: unassigned, review by: 2026-12-03.
+- `changelog/portal-changelog.spec.ts` › CHG-P-14 with the Changelog product off
+  its public server functions answer nothing (`@isolated`). Product bug:
+  `listPublicChangelogsFn` and `getPublicChangelogFn`
+  (`apps/web/src/lib/server/functions/changelog.ts:226`, `:272`) skip the
+  product flag that the routes, feed and widget honour. Fix: return the empty
+  list / not found when `changelog` is off. owner: unassigned, review by:
+  2026-12-03.
+- `changelog/portal-changelog.spec.ts` › CHG-P-17 the sitemap leaves out entries
+  a crawler cannot read. Product bug: `apps/web/src/routes/sitemap[.]xml.ts:73`
+  lists every published entry without the label segment gate (or the
+  audience), so gated entry URLs reach crawlers. Fix: apply
+  `categoryGateCondition` for an anonymous actor and skip entries when the
+  audience is signed-in only. owner: unassigned, review by: 2026-12-03.
