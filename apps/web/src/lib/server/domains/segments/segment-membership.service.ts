@@ -108,8 +108,9 @@ export interface RemoveMemberInput {
   headers?: Headers
 }
 
-export async function removeMember(input: RemoveMemberInput): Promise<void> {
-  await db
+/** Remove a membership whatever its source. Resolves true when a row was there to remove. */
+export async function removeMember(input: RemoveMemberInput): Promise<boolean> {
+  const deleted = await db
     .delete(userSegments)
     .where(
       and(
@@ -117,6 +118,7 @@ export async function removeMember(input: RemoveMemberInput): Promise<void> {
         eq(userSegments.segmentId, input.segmentId)
       )
     )
+    .returning({ principalId: userSegments.principalId })
   forgetRequestSegmentIds()
   if (input.actor) {
     await recordAuditEvent({
@@ -127,6 +129,7 @@ export async function removeMember(input: RemoveMemberInput): Promise<void> {
       metadata: { principalId: input.principalId },
     })
   }
+  return deleted.length > 0
 }
 
 /**

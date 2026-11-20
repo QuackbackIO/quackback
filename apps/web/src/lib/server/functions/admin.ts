@@ -56,6 +56,7 @@ import {
   removeInviteMagicLinkToken,
 } from './invitation-magic-link'
 import { logger } from '@/lib/server/logger'
+import { parseCron } from '@/lib/server/jobs/cron'
 
 /**
  * Server functions for admin data fetching.
@@ -1183,12 +1184,19 @@ const segmentRulesSchema = z.object({
   conditions: z.array(segmentConditionSchema),
 })
 
-const CRON_REGEX =
-  /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)(\s+(\*|[0-9,\-/]+))?$/
+/** A schedule the segment scheduler can run: it parses with the scheduler's own parser. */
+function isRunnableCron(pattern: string): boolean {
+  try {
+    parseCron(pattern)
+    return true
+  } catch {
+    return false
+  }
+}
 
 const evaluationScheduleSchema = z.object({
   enabled: z.boolean(),
-  pattern: z.string().min(1).regex(CRON_REGEX, 'Must be a valid cron expression'),
+  pattern: z.string().min(1).refine(isRunnableCron, 'Must be a valid cron expression'),
 })
 
 const userAttributeDefinitionSchema = z.object({
@@ -1404,7 +1412,10 @@ export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(
   log.info('evaluate all segments')
   await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
   const results = await evaluateAllDynamicSegments()
-  log.info({ count: results.length }, 'all segments evaluated')
+  log.info(
+    { count: results.length, failed: results.filter((r) => 'error' in r).length },
+    'all segments evaluated'
+  )
   return results
 })
 

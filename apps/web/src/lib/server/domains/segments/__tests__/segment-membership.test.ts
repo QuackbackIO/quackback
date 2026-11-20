@@ -161,8 +161,16 @@ vi.mock('@/lib/server/db', () => {
         })),
       })),
       delete: vi.fn(() => ({
-        where: vi.fn(async (pred: Condition) => {
+        // Awaitable as is, or with `.returning()` for the deleted rows.
+        where: vi.fn((pred: Condition) => {
+          const deleted = state.rows.filter((r) => matchCondition(r, pred))
           state.rows = state.rows.filter((r) => !matchCondition(r, pred))
+          return {
+            returning: async () => deleted,
+            then(onFulfilled: (v: void) => void) {
+              return Promise.resolve().then(onFulfilled)
+            },
+          }
         }),
       })),
     },
@@ -304,6 +312,12 @@ describe('removeMember — removes regardless of source', () => {
     await removeMember({ principalId: P1, segmentId: S1, actor: ACTOR_ADMIN })
     expect(state.rows).toEqual([])
     expect(state.auditEvents.find((e) => e.event === 'segment.member.removed')).toBeTruthy()
+  })
+
+  it('says whether a row was removed', async () => {
+    state.rows.push({ principalId: P1, segmentId: S1, addedBy: 'api' })
+    await expect(removeMember({ principalId: P1, segmentId: S1, actor: null })).resolves.toBe(true)
+    await expect(removeMember({ principalId: P1, segmentId: S1, actor: null })).resolves.toBe(false)
   })
 
   it('is a no-op when the row does not exist (no error, still audits)', async () => {

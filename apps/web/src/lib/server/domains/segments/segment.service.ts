@@ -196,6 +196,18 @@ export async function updateSegment(
   if (!existing) {
     throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
   }
+  // A dynamic segment without rules matches no one, so its next evaluation
+  // would remove every member: the same refusal as create.
+  if (
+    existing.type === 'dynamic' &&
+    input.rules !== undefined &&
+    !input.rules?.conditions?.length
+  ) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'Dynamic segments require at least one rule condition'
+    )
+  }
 
   const updates: Partial<typeof segments.$inferInsert> = {}
   if (input.name !== undefined) {

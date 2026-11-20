@@ -9,7 +9,7 @@
  * client holding the source still mutates the surviving thread.
  */
 import { db, posts, postVotes, postComments, boards, eq, sql } from '@/lib/server/db'
-import { isValidTypeId, toUuid, type PostId } from '@quackback/ids'
+import { isValidTypeId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { notTestPrincipal } from '@/lib/server/test-data'
 
@@ -75,6 +75,46 @@ export async function adjustCanonicalCommentCount(
         AND p.deleted_at IS NULL
         AND b.deleted_at IS NULL
     )
+  `)
+}
+
+/** The merge threads (canonical post ids) a principal holds a vote row in. */
+function votedThreadIdsSql(principalId: PrincipalId) {
+  return sql`
+    SELECT COALESCE(p.canonical_post_id, p.id)
+    FROM ${postVotes} v
+    INNER JOIN ${posts} p ON p.id = v.post_id
+    WHERE v.principal_id = ${toUuid(principalId)}::uuid
+  `
+}
+
+/**
+ * Take a principal's vote off the stored count of every merge thread it voted
+ * in, ahead of its vote rows going away. `vote_count` lives on the thread's
+ * canonical post and counts each voter once, and a test customer's votes were
+ * never counted. With `keptBy`, only the threads that principal also voted in
+ * lose a vote: the vote that survives a merge stays counted.
+ *
+ * A delta rather than a recount: an imported post can carry a count with no
+ * vote rows behind it.
+ */
+export async function withdrawThreadVotes(
+  conn: TransactionalDb,
+  principalId: PrincipalId,
+  options: { keptBy?: PrincipalId } = {}
+): Promise<void> {
+  const { keptBy } = options
+  const threads = keptBy
+    ? sql`${votedThreadIdsSql(principalId)} INTERSECT ${votedThreadIdsSql(keptBy)}`
+    : votedThreadIdsSql(principalId)
+  const counted = keptBy
+    ? sql`${notTestPrincipal(sql`${toUuid(principalId)}::uuid`)} AND ${notTestPrincipal(sql`${toUuid(keptBy)}::uuid`)}`
+    : notTestPrincipal(sql`${toUuid(principalId)}::uuid`)
+  await conn.execute(sql`
+    UPDATE ${posts}
+    SET vote_count = GREATEST(0, vote_count - 1)
+    WHERE id IN (${threads})
+      AND ${counted}
   `)
 }
 

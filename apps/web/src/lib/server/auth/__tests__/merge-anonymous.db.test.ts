@@ -295,6 +295,35 @@ describe.skipIf(!fixture.available)('principal merge (real DB, rolled back)', ()
       ).resolves.toHaveLength(0)
     })
 
+    it('takes a dropped colliding vote off the post count', async () => {
+      const anon = await seedIdentity({ type: 'anonymous', name: 'Curious Penguin' })
+      const target = await seedIdentity({
+        type: 'user',
+        name: 'Jane Doe',
+        email: `jane-${runSuffix()}@example.com`,
+      })
+      const { postId } = await seedBoardWithPost(target.principalId)
+      await testDb.update(posts).set({ voteCount: 2 }).where(eq(posts.id, postId))
+      await testDb.insert(postVotes).values([
+        { postId, principalId: anon.principalId },
+        { postId, principalId: target.principalId },
+      ])
+
+      await mergeAnonymousToIdentified({
+        anonPrincipalId: anon.principalId,
+        targetPrincipalId: target.principalId,
+        anonUserId: anon.userId,
+        anonDisplayName: 'Curious Penguin',
+        targetDisplayName: 'Jane Doe',
+      })
+
+      const [row] = await testDb
+        .select({ voteCount: posts.voteCount })
+        .from(posts)
+        .where(eq(posts.id, postId))
+      expect(row.voteCount).toBe(1)
+    })
+
     it('never overwrites a populated target contact_email and merges a no-activity anon cleanly', async () => {
       const anonCompany = await seedCompany('Lead Co')
       const targetCompany = await seedCompany('Existing Co')
