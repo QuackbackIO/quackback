@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { handleDomainError } from '@/lib/server/domains/api/responses'
-import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/boards')({
   server: {
@@ -32,7 +32,7 @@ export const Route = createFileRoute('/api/v1/apps/boards')({
             })),
           })
         } catch (error) {
-          return handleDomainError(error)
+          return withCors(handleDomainError(error))
         }
       },
     },

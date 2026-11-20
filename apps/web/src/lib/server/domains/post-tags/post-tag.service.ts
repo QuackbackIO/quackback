@@ -91,7 +91,7 @@ export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promi
   log.debug({ tag_id: id }, 'update tag')
   // Get existing tag
   const existingTag = await db.query.postTags.findFirst({
-    where: eq(postTags.id, id),
+    where: and(eq(postTags.id, id), isNull(postTags.deletedAt)),
   })
   if (!existingTag) {
     throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)
@@ -165,7 +165,7 @@ export async function deletePostTag(id: PostTagId): Promise<void> {
 export async function getTagById(id: PostTagId): Promise<PostTag> {
   log.debug({ tag_id: id }, 'get tag by id')
   const tag = await db.query.postTags.findFirst({
-    where: eq(postTags.id, id),
+    where: and(eq(postTags.id, id), isNull(postTags.deletedAt)),
   })
   if (!tag) {
     throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)

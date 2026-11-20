@@ -133,7 +133,7 @@ registerPath('/tags/{tagId}', {
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
       },
       404: {
-        description: 'PostTag not found',
+        description: 'Tag not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },
@@ -179,7 +179,7 @@ registerPath('/tags/{tagId}', {
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
       },
       404: {
-        description: 'PostTag not found',
+        description: 'Tag not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },
@@ -208,7 +208,7 @@ registerPath('/tags/{tagId}', {
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
       },
       404: {
-        description: 'PostTag not found',
+        description: 'Tag not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },

@@ -262,6 +262,13 @@ describe('API Responses', () => {
       expect(response.status).toBe(404)
     })
 
+    it('names a missing tag "Tag", not the internal model name', async () => {
+      const response = handleDomainError({ code: 'TAG_NOT_FOUND', message: 'x' })
+
+      expect(response.status).toBe(404)
+      expect(((await response.json()) as ErrorBody).error.message).toBe('Tag not found')
+    })
+
     it('should handle VALIDATION_ERROR', async () => {
       const error = { code: 'VALIDATION_ERROR', message: 'Name is required' }
       const response = handleDomainError(error)

@@ -7,7 +7,7 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId, PostId } from '@quackback/ids'
-import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 const createPostSchema = z.object({
@@ -45,9 +45,11 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
           const parsed = createPostSchema.safeParse(body)
 
           if (!parsed.success) {
-            return badRequestResponse('Invalid request body', {
-              errors: parsed.error.flatten().fieldErrors,
-            })
+            return withCors(
+              badRequestResponse('Invalid request body', {
+                errors: parsed.error.flatten().fieldErrors,
+              })
+            )
           }
 
           const boardId = parseTypeId<BoardId>(parsed.data.boardId, 'board', 'board ID')
@@ -128,7 +130,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
             201
           )
         } catch (error) {
-          return handleDomainError(error)
+          return withCors(handleDomainError(error))
         }
       },
     },

@@ -101,7 +101,7 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
   log.debug({ status_id: id }, 'update status')
   // Get existing status (moved outside transaction for HTTP-driver compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.id, id),
+    where: and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)),
   })
   if (!existingStatus) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
@@ -134,6 +134,10 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
   if (input.color !== undefined) updateData.color = input.color
   if (input.showOnRoadmap !== undefined) updateData.showOnRoadmap = input.showOnRoadmap
   if (input.isDefault === false) updateData.isDefault = false
+
+  // Nothing left to write (only ignored fields, or only isDefault: true, which
+  // the atomic swap above already applied): answer the row as it now stands.
+  if (Object.keys(updateData).length === 0) return getStatusById(id)
 
   // Update the status
   const [updatedStatus] = await db
@@ -203,7 +207,7 @@ export async function deleteStatus(id: PostStatusId): Promise<void> {
  */
 export async function getStatusById(id: PostStatusId): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.id, id),
+    where: and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)),
   })
   if (!status) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
