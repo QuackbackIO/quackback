@@ -12,9 +12,9 @@ import { test, expect } from '../../support/fixtures'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { supportDb } from '../../support/db'
 import { createRole } from '../../support/access'
-import { bellsFor } from '../../support/bells'
+import { bellsFor, waitForEventHandled } from '../../support/bells'
 import { fakeAi } from '../../support/fake-ai-client'
-import { emailLogFor, mailTo, waitForMail } from '../../support/mailpit'
+import { emailLogFor, mailTo, waitForEmailLog, waitForMail } from '../../support/mailpit'
 import { deliveriesOf, hooksApi, subscribe, unsubscribe } from '../../support/webhooks'
 import {
   inboxTitles,
@@ -72,8 +72,16 @@ test(
       await expect.poll(() => auditActions(postId)).toContain('post.moderation.approved')
       await deliveriesOf(marker, 'post.created', postId)
       await fakeAi.waitForRequests({ contains: title, endpoint: 'embeddings' })
-      // The author is told nothing about the decision.
-      expect(await emailLogFor(customer.email)).toEqual([])
+      // The author is told the decision once: one email and one bell, nothing more.
+      await waitForEmailLog(customer.email, { email_type: 'ModerationDecisionEmail' })
+      await waitForEventHandled(postId, { type: 'post.approved' })
+      await waitForEventHandled(postId, { type: 'post.created' })
+      expect(
+        (await emailLogFor(customer.email)).map((r) => [r.email_type, r.subject, r.status])
+      ).toEqual([['ModerationDecisionEmail', 'Your post is now public', 'sent']])
+      expect(
+        (await bellsFor(customer.principalId, postId)).map((b) => [b.type, b.title, b.body])
+      ).toEqual([['post_moderated', 'Your post is now public', title]])
     } finally {
       await unsubscribe(hooks, hook)
       await customer.close()
@@ -125,7 +133,7 @@ test(
 
       await openPost(admin, kept, `${marker} keep me`)
       const dialog = admin.getByRole('dialog')
-      await expect(dialog.getByText('Pending review')).toBeVisible()
+      await expect(dialog.getByText('Pending approval')).toBeVisible()
       await decide(dialog, 'Approve')
       await expect(admin.getByText('Post approved')).toBeVisible()
       await expect.poll(async () => (await postRow(kept))?.moderation_state).toBe('published')
@@ -137,7 +145,23 @@ test(
       // Still pending underneath (reject is a soft delete), but no banner any more.
       await openPost(admin, dropped)
       expect((await postRow(dropped))?.moderation_state).toBe('pending')
-      await expect(dialog.getByText('Pending review')).toHaveCount(0)
+      await expect(dialog.getByText('Pending approval')).toHaveCount(0)
+
+      // The author hears each decision once: one email and one bell apiece.
+      // A rejected post is gone, so its bell carries no link to it.
+      await waitForEventHandled(kept, { type: 'post.approved' })
+      await waitForEventHandled(dropped, { type: 'post.rejected' })
+      await expect
+        .poll(async () => (await mailTo(customer.email)).map((m) => m.Subject).sort())
+        .toEqual(['Your post is now public', 'Your post was not published'])
+      const bells = await bellsFor(customer.principalId)
+      expect(bells.map((b) => [b.type, b.title, b.body]).sort()).toEqual([
+        ['post_moderated', 'Your post is now public', `${marker} keep me`],
+        ['post_moderated', 'Your post was not published', `${marker} drop me`],
+      ])
+      expect(JSON.stringify(bells.find((b) => b.body === `${marker} drop me`))).not.toContain(
+        dropped
+      )
     } finally {
       await customer.close()
       await api.dispose()
@@ -356,8 +380,20 @@ test(
       await expect.poll(() => auditActions(commentId)).toContain('comment.moderation.approved')
       await waitForMail({ to: follower.email, subject: post.title })
       await expect.poll(async () => (await bellsFor(follower.principalId, post.id)).length).toBe(1)
-      // The commenter is the actor and hears nothing about their own comment.
-      expect(await mailTo(commenter.email)).toEqual([])
+      // The commenter is the actor of the announce and hears nothing of it; the
+      // team's decision reaches them once, as one email and one bell.
+      await waitForMail({ to: commenter.email, subject: 'Your comment is now public' })
+      await waitForEventHandled(commentId, { type: 'comment.approved' })
+      await waitForEventHandled(commentId, { type: 'comment.created' })
+      expect((await mailTo(commenter.email)).map((m) => m.Subject)).toEqual([
+        'Your comment is now public',
+      ])
+      expect(
+        (await bellsFor(commenter.principalId, post.id)).map((b) => [b.type, b.title, b.body])
+      ).toEqual([['post_moderated', 'Your comment is now public', post.title]])
+      expect((await mailTo(follower.email)).map((m) => m.Subject)).toEqual([
+        expect.stringContaining(post.title),
+      ])
     } finally {
       await commenter.close()
       await follower.close()
