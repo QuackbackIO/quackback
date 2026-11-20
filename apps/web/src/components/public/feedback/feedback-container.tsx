@@ -181,6 +181,9 @@ export function FeedbackContainer({
   // Holders of post.approve get the inline moderation section (banner + pending
   // cards).
   const canApprove = can(PERMISSIONS.POST_APPROVE)
+  // A held post is listed only for its author and for those who may see
+  // unpublished posts, so a viewer without that permission wrote it.
+  const pendingForAuthor = !can(PERMISSIONS.POST_VIEW_PRIVATE)
   const approvePost = useApprovePost()
   const rejectPost = useRejectPost()
 
@@ -649,6 +652,7 @@ export function FeedbackContainer({
                         showAvatar={false}
                         moderationState={post.moderationState}
                         canModerate={canApprove}
+                        pendingForAuthor={pendingForAuthor}
                         moderationBusy={approvePost.isPending || rejectPost.isPending}
                         onApprove={() => approvePost.mutate(post.id)}
                         onReject={() => rejectPost.mutate({ postId: post.id })}

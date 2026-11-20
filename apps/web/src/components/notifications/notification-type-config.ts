@@ -39,6 +39,11 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     iconClass: 'text-amber-500',
     bgClass: 'bg-amber-500/10',
   },
+  post_moderated: {
+    icon: CheckCircleIcon,
+    iconClass: 'text-emerald-500',
+    bgClass: 'bg-emerald-500/10',
+  },
   post_owner_assigned: {
     icon: InboxArrowDownIcon,
     iconClass: 'text-lime-500',

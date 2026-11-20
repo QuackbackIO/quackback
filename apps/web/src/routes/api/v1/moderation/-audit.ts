@@ -18,6 +18,7 @@ export function moderationAuditFromApiAuth(
       type: 'service',
       authMethod: 'api_key',
     },
+    principalId: auth.principalId,
     headers,
     metadata: { apiKeyId: auth.apiKey.id },
   }

@@ -151,6 +151,23 @@ export interface EmailConfig {
 }
 
 /**
+ * Email config for the team's decision on a held post or comment, built by
+ * `getModerationDecisionTargets`. A rejection carries no `postUrl`: the item
+ * is gone.
+ */
+export interface ModerationDecisionEmailConfig {
+  item: 'post' | 'comment'
+  decision: 'approved' | 'rejected'
+  postTitle: string
+  postUrl?: string
+  workspaceName: string
+  logoUrl?: string
+  preferencesUrl?: string
+  from?: string
+  fromDisplayName?: string
+}
+
+/**
  * Ticket lifecycle email config (support platform): its own shape instead of
  * widening the post-specific EmailConfig — the email hook casts per branch,
  * the same way the changelog/status branches do.

@@ -376,6 +376,20 @@ describe('createPublicPostFn anonymous feature flag', () => {
     expect(mockReserveAnonPostSlot).not.toHaveBeenCalled()
   })
 
+  it('tells the author when their new post is held for review', async () => {
+    mockRequireAuth.mockResolvedValue(USER_AUTH)
+    setupPostMocks({ features: { allowAnonymous: false } })
+    mockGetMemberByUser.mockResolvedValue({ id: USER_PRINCIPAL.id })
+
+    mockCreatePost.mockResolvedValue({ ...MOCK_POST, moderationState: 'pending' })
+    const held = (await createPublicPostHandler({ data: POST_DATA })) as Record<string, unknown>
+    expect(held).toHaveProperty('pendingReview', true)
+
+    mockCreatePost.mockResolvedValue({ ...MOCK_POST, moderationState: 'published' })
+    const live = (await createPublicPostHandler({ data: POST_DATA })) as Record<string, unknown>
+    expect(live).toHaveProperty('pendingReview', false)
+  })
+
   it('refuses an anonymous idea once the address has posted too many this hour', async () => {
     mockRequireAuth.mockResolvedValue(ANON_AUTH)
     setupPostMocks({ features: { allowAnonymous: true } })

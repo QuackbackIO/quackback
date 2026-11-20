@@ -120,6 +120,8 @@ export interface WidgetHomeProps {
     voteCount: number
     statusId: string | null
     board: { id: string; name: string; slug: string }
+    /** Held for review: only its author sees it until the team approves it. */
+    pendingReview?: boolean
   }) => void
 }
 
@@ -902,6 +904,7 @@ export function WidgetHomeAnimated({
         voteCount: Math.max(result.voteCount ?? 0, 1),
         statusId: result.statusId ?? null,
         board: result.board,
+        pendingReview: result.pendingReview,
       })
 
       collapseForm()

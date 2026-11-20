@@ -347,7 +347,9 @@ export async function createPost(
 
   if (!options?.skipDispatch) {
     // Auto-subscribe the author to their own post. Runs even when held for
-    // moderation so the author receives notifications on approval/rejection.
+    // moderation, so once approved the author follows the thread. The
+    // approval or rejection notice itself reaches the author directly from
+    // the post.approved / post.rejected events (moderation.service.ts).
     await subscribeToPost(author.principalId, post.id, 'author')
 
     createActivity({

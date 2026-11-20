@@ -100,6 +100,18 @@ const CASES: {
     } as EventData,
     config: {},
   },
+  ...(
+    [
+      ['post.approved', 'post', 'approved'],
+      ['post.rejected', 'post', 'rejected'],
+      ['comment.approved', 'comment', 'approved'],
+      ['comment.rejected', 'comment', 'rejected'],
+    ] as const
+  ).map(([type, item, decision]) => ({
+    name: `${item} ${decision}`,
+    event: { ...base, type, data: {} } as unknown as EventData,
+    config: { ...post, item, decision },
+  })),
   {
     name: 'comment mention',
     event: {

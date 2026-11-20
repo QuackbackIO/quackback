@@ -71,4 +71,12 @@ describe('appMatches (WO-13 scope gate)', () => {
     } as never)
     expect(targets).toEqual([])
   })
+
+  it.each(['post.approved', 'post.rejected', 'comment.approved', 'comment.rejected'])(
+    'never hands a moderation decision (%s), which only tells the author, to an app',
+    async (type) => {
+      expect(appWebhookResolver.interestedIn(type)).toBe(false)
+      expect(await appWebhookResolver.resolve({ type, payload: {} } as never)).toEqual([])
+    }
+  )
 })

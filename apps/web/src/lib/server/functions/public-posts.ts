@@ -497,6 +497,8 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     statusId: post.statusId,
     voteCount: post.voteCount,
     createdAt: post.createdAt.toISOString(),
+    // Held for review: only the author sees it until the team approves it.
+    pendingReview: post.moderationState === 'pending',
     board: {
       id: board.id,
       name: board.name,
