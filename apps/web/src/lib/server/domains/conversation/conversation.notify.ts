@@ -472,6 +472,9 @@ export async function sendVisitorConversationEmail(opts: {
   recipient: string
   direction: 'agent_reply' | 'agent_started'
   senderName: string
+  /** `senderName` is the support team's, not a person's: the From and the
+   *  copy speak as the team, with no "X from" in front. */
+  senderIsTeam?: boolean
   content: string
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
@@ -511,7 +514,8 @@ export async function sendVisitorConversationEmail(opts: {
   // every channel: a widget or messenger reply that reaches the customer's inbox
   // is still a person answering them, and an unnamed address reads as a robot.
   const resolved = await resolveConversationSender(opts.conversationId)
-  const asAgent = (sendsAs: string) => agentReplyDisplayName(opts.senderName, sendsAs)
+  const asAgent = (sendsAs: string) =>
+    opts.senderIsTeam ? sendsAs : agentReplyDisplayName(opts.senderName, sendsAs)
   const from = senderFrom(resolved, opts.ctx.workspaceName, asAgent)
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const resolvedBody = await resolvedMessageBody(opts.content, opts.contentJson, opts.attachments)
@@ -525,6 +529,7 @@ export async function sendVisitorConversationEmail(opts: {
         to: opts.recipient,
         direction: opts.direction,
         senderName: opts.senderName,
+        senderIsTeam: opts.senderIsTeam,
         // The truncated preview backs the subject/preheader; the full body is
         // carried by bodyHtml so the recipient reads the whole reply inline.
         messagePreview: previewOf(opts.content),
@@ -584,6 +589,8 @@ export async function notifyAgentReply(opts: {
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
   agentName: string
+  /** `agentName` is the support team's (an API key's message): see AgentMessageDeliveryCtx. */
+  agentIsTeam?: boolean
   /** Pre-chat email captured on the conversation, if any. */
   capturedEmail?: string | null
   /** The channel this conversation is currently conducted on. REQUIRED, not
@@ -676,6 +683,7 @@ export async function notifyAgentReply(opts: {
         content: opts.content,
         contentJson: opts.contentJson,
         agentName: opts.agentName,
+        senderIsTeam: opts.agentIsTeam,
         recipient: recipient ?? '',
         ctaUrl,
         workspaceName: ctx.workspaceName,
@@ -708,6 +716,7 @@ export async function notifyAgentReply(opts: {
             content: opts.content,
             contentJson: opts.contentJson,
             agentName: opts.agentName,
+            senderIsTeam: opts.agentIsTeam,
             recipient: participant.email,
             ctaUrl,
             workspaceName: ctx.workspaceName,
@@ -744,6 +753,8 @@ export async function notifyConversationStarted(opts: {
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
   agentName: string
+  /** `agentName` is the support team's (an API key's message): see AgentMessageDeliveryCtx. */
+  agentIsTeam?: boolean
   messageId?: ConversationMessageId
   attachments?: ConversationAttachment[]
 }): Promise<void> {
@@ -781,6 +792,7 @@ export async function notifyConversationStarted(opts: {
       content: opts.content,
       contentJson: opts.contentJson,
       agentName: opts.agentName,
+      senderIsTeam: opts.agentIsTeam,
       recipient: recipient ?? '',
       ctaUrl,
       workspaceName: ctx.workspaceName,

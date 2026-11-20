@@ -55,6 +55,8 @@ export interface NotificationConfig {
   // conversation.note_mentioned (WO-3 slice 3)
   conversationMessageId?: string
   authorName?: string
+  /** ticket.replied: the author as the requester's thread names them, for their row. */
+  requesterAuthorName?: string
   // post.mentioned: who mentioned the recipient, resolved by getMentionTargets
   mentionerName?: string | null
   preview?: string
@@ -397,19 +399,24 @@ function buildNotifications(
 
   if (event.type === 'ticket.replied') {
     const { ticketId, conversationId, title, authorName, preview, requesterPrincipalId } = config
-    return principalIds.map((principalId) => ({
-      principalId,
-      type: 'ticket_replied' as NotificationType,
-      title: `${authorName} replied on ${title}`,
-      body: preview,
-      metadata: {
-        ticketId,
-        conversationId,
-        ticketTitle: title,
-        actorName: authorName,
-        audience: requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
-      },
-    }))
+    return principalIds.map((principalId) => {
+      const toRequester = Boolean(requesterPrincipalId) && principalId === requesterPrincipalId
+      // The requester's row names the author as their thread does.
+      const name = (toRequester && config.requesterAuthorName) || authorName
+      return {
+        principalId,
+        type: 'ticket_replied' as NotificationType,
+        title: `${name} replied on ${title}`,
+        body: preview,
+        metadata: {
+          ticketId,
+          conversationId,
+          ticketTitle: title,
+          actorName: name,
+          audience: toRequester ? 'portal' : 'admin',
+        },
+      }
+    })
   }
 
   if (event.type === 'ticket.note_added') {

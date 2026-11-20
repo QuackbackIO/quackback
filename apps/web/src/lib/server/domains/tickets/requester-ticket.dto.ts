@@ -162,7 +162,7 @@ export function toRequesterTicketDTO(
   const status = ctx.statuses.get(row.statusId)
   const publicName = (id: PrincipalId | null) => {
     if (!id) return null
-    return ctx.principals.get(id)?.publicAuthor ?? fallbackAuthor(id)
+    return ctx.principals.get(id)?.customerAuthor ?? fallbackAuthor(id)
   }
   const requester = publicName(row.requesterPrincipalId)
   const assignee = publicName(row.assigneePrincipalId)

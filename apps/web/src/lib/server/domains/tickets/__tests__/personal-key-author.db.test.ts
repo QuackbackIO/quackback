@@ -7,12 +7,15 @@
  * customer (portal and widget), their account name to the team (inbox). The
  * stored message keeps the key's own service principal, so the reply-timing
  * rules that read it and the audit trail are unchanged. A workspace key belongs
- * to nobody and keeps showing its own name.
+ * to nobody: the team sees its own name (marked "via API"), and the customer
+ * sees the support team's name, the one their thread shows when no teammate
+ * is shown. Webhooks keep the key's name.
  *
  * Only a personal key made at or after the cutoff that the migration
  * `0316_personal_key_reply_cutoff` records shows its creator, the same rule the
  * reply-timing code uses. An older personal key, or any key while no cutoff is
- * recorded, keeps its own name.
+ * recorded, keeps its own name for the team and shows as the support team to
+ * the customer.
  *
  * Keys come from createApiKey and authenticate through withApiKeyAuth; the
  * ticket is opened through createTicket exactly as POST /api/v1/tickets does.
@@ -123,9 +126,14 @@ import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import {
+  getSupportTeamName,
   loadAuthors,
   PERSONAL_KEY_CUTOFF_KV_KEY,
 } from '@/lib/server/domains/principals/principal-display'
+import { listMessages } from '@/lib/server/domains/conversation/conversation.query'
+import { notifyAgentReply } from '@/lib/server/domains/conversation/conversation.notify'
+import { publishConversationMessage } from '@/lib/server/realtime/conversation-channels'
+import { replyAuthorNameForRequester } from '../ticket-reply-email'
 import { createTicket } from '../ticket.service'
 import { getPostWithDetails } from '@/lib/server/domains/posts/post.query'
 import { dispatchMessageCreated, dispatchMessageNoteCreated } from '@/lib/server/events/dispatch'
@@ -254,8 +262,8 @@ const post = (route: unknown): Handler =>
   (route as { options: { server: { handlers: Record<string, Handler> } } }).options.server.handlers
     .POST
 
-/** Reply, then add a note, on a ticket's conversation through the REST routes. */
-async function replyAndNoteThroughRoutes(token: string, ticketId: TicketId) {
+/** The conversation a customer ticket's thread lives on. */
+async function backingConversationId(ticketId: TicketId) {
   const [link] = await testDb
     .select({ conversationId: ticketConversations.conversationId })
     .from(ticketConversations)
@@ -265,6 +273,70 @@ async function replyAndNoteThroughRoutes(token: string, ticketId: TicketId) {
         eq(ticketConversations.ticketType, 'customer')
       )
     )
+  return link.conversationId
+}
+
+/** The support team's name, as the customer's thread shows it with no teammate. */
+async function teamName(): Promise<string> {
+  const name = await getSupportTeamName()
+  expect(name).toBeTruthy()
+  return name!
+}
+
+/**
+ * The customer's view of a message an API key wrote under its own name, on
+ * every customer surface: the portal ticket thread, the widget conversation,
+ * the live copy, and the email. The team's view and webhooks are checked by
+ * each test.
+ */
+async function expectCustomerSeesTeam(
+  ticketId: TicketId,
+  plainTextKey: string,
+  keyPrincipalId: PrincipalId
+) {
+  const team = await teamName()
+  const portal = openingMessage((await listTicketMessages(ticketId)).messages)
+  expect(portal.author).toEqual({ principalId: keyPrincipalId, displayName: team, avatarUrl: null })
+
+  const conversationId = await backingConversationId(ticketId)
+  const widget = openingMessage((await listMessages(conversationId as never)).messages)
+  expect(widget.author?.displayName).toBe(team)
+
+  // A reply sent with the key: the customer's live copy, their reload, and
+  // their email all name the team. The team's copy keeps the key's name.
+  vi.mocked(publishConversationMessage).mockClear()
+  vi.mocked(notifyAgentReply).mockClear()
+  const actor = await keyActor(plainTextKey)
+  const content = `A reply via the key ${suffix()}`
+  const reply = await sendTicketMessage(actor, { ticketId, content })
+  expect(reply.message.author?.displayName).not.toBe(team)
+  const live = vi
+    .mocked(publishConversationMessage)
+    .mock.calls.map(([, audiences]) => audiences)
+    .find((audiences) => 'visitor' in audiences && audiences.visitor.content === content)
+  expect(live).toBeDefined()
+  expect((live as { visitor: { author: unknown } }).visitor.author).toEqual({
+    principalId: keyPrincipalId,
+    displayName: team,
+    avatarUrl: null,
+  })
+  const reloaded = (await listTicketMessages(ticketId)).messages.find((m) => m.content === content)
+  expect(reloaded?.author?.displayName).toBe(team)
+  const widgetReload = (await listMessages(conversationId as never)).messages.find(
+    (m) => m.content === content
+  )
+  expect(widgetReload?.author?.displayName).toBe(team)
+  expect(vi.mocked(notifyAgentReply)).toHaveBeenCalledWith(
+    expect.objectContaining({ content, agentName: team, agentIsTeam: true })
+  )
+  // The ticket reply email to the requester, when it is the one that goes.
+  expect(await replyAuthorNameForRequester(reply.message.id, 'key name from the event')).toBe(team)
+  return team
+}
+
+/** Reply, then add a note, on a ticket's conversation through the REST routes. */
+async function replyAndNoteThroughRoutes(token: string, ticketId: TicketId) {
+  const link = { conversationId: await backingConversationId(ticketId) }
   const call = (route: unknown, content: string) =>
     post(route)({
       request: new Request('https://example.com/api/v1/conversations/x', {
@@ -362,6 +434,15 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     // The returned copy is the team's (the ticket channel is team-only).
     expect(reply.message.author?.displayName).toBe(ACCOUNT_NAME)
     expect(reply.message.author?.viaApi).toBeUndefined()
+    expect(await replyAuthorNameForRequester(reply.message.id, null)).toBe(PUBLIC_NAME)
+    // The customer's email names the creator, as a person, not the team.
+    expect(vi.mocked(notifyAgentReply)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'A reply via the key',
+        agentName: PUBLIC_NAME,
+        agentIsTeam: false,
+      })
+    )
     const note = await addTicketNote(actor, { ticketId, content: 'A note via the key' })
     expect(note.message.author?.displayName).toBe(ACCOUNT_NAME)
 
@@ -379,7 +460,7 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     )
   })
 
-  it('a workspace key keeps showing its own name', async () => {
+  it('a workspace key shows its own name to the team and the support team to the customer', async () => {
     await setCutoff(anHourAgo())
     await seedDefaultStatus()
     const creator = await seedCreator()
@@ -390,11 +471,9 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     )
     const { ticketId } = await openTicketThroughKey(plainTextKey)
 
-    const portal = openingMessage((await listTicketMessages(ticketId)).messages)
-    expect(portal.author?.principalId).toBe(apiKey.principalId)
-    expect(portal.author?.displayName).toBe('ops-bot')
-    // The "via API" mark is for the team only; the customer's view never has it.
-    expect(portal.author?.viaApi).toBeUndefined()
+    // The customer never sees the key's own name, nor the "via API" mark.
+    const team = await expectCustomerSeesTeam(ticketId, plainTextKey, apiKey.principalId)
+    expect(team).not.toBe('ops-bot')
 
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.displayName).toBe('ops-bot')
@@ -412,37 +491,34 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     const reloaded = (await listTicketMessagesForAgent(ticketId, creator)).messages
     expect(reloaded.find((m) => m.content === 'A reply via ops-bot')?.author?.viaApi).toBe(true)
     const customerView = (await listTicketMessages(ticketId)).messages
-    expect(
-      customerView.find((m) => m.content === 'A reply via ops-bot')?.author?.viaApi
-    ).toBeUndefined()
+    const customerCopy = customerView.find((m) => m.content === 'A reply via ops-bot')
+    expect(customerCopy?.author?.viaApi).toBeUndefined()
+    expect(customerCopy?.author?.displayName).toBe(team)
   })
 
-  it('a personal key made before the cutoff keeps its own name', async () => {
+  it('a personal key made before the cutoff keeps its own name for the team', async () => {
     await setCutoff(inAnHour())
     await seedDefaultStatus()
     const creator = await seedCreator()
     const { apiKey, plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
     const { ticketId } = await openTicketThroughKey(plainTextKey)
 
-    const portal = openingMessage((await listTicketMessages(ticketId)).messages)
-    expect(portal.author?.principalId).toBe(apiKey.principalId)
-    expect(portal.author?.displayName).toBe(KEY_NAME)
-    expect(portal.author?.viaApi).toBeUndefined()
+    // The customer sees the support team, as for a workspace key.
+    await expectCustomerSeesTeam(ticketId, plainTextKey, apiKey.principalId)
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.displayName).toBe(KEY_NAME)
     // It shows as the key, so the team sees the "via API" mark.
     expect(inbox.author?.viaApi).toBe(true)
   })
 
-  it('with no cutoff recorded, a personal key keeps its own name', async () => {
+  it('with no cutoff recorded, a personal key keeps its own name for the team', async () => {
     await setCutoff(null)
     await seedDefaultStatus()
     const creator = await seedCreator()
-    const { plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
+    const { apiKey, plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
     const { ticketId } = await openTicketThroughKey(plainTextKey)
 
-    const portal = openingMessage((await listTicketMessages(ticketId)).messages)
-    expect(portal.author?.displayName).toBe(KEY_NAME)
+    await expectCustomerSeesTeam(ticketId, plainTextKey, apiKey.principalId)
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.displayName).toBe(KEY_NAME)
     expect(inbox.author?.viaApi).toBe(true)

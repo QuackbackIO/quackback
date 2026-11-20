@@ -77,7 +77,12 @@ import {
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { conversationRelevanceSql } from './conversation-relevance'
 import type { SQL } from 'drizzle-orm'
-import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
+import {
+  loadAuthors,
+  loadAuthorAudiences,
+  fallbackAuthor,
+  type AuthorAudiences,
+} from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
 import { supportContactName } from '@/lib/shared/support-contact-name'
@@ -156,13 +161,15 @@ export async function resolveAuthorAudiences(input: {
   principalId: PrincipalId
   displayName?: string | null
   avatarUrl?: string | null
-}): Promise<{ publicAuthor: ConversationAuthorDTO; supportAuthor: ConversationAuthorDTO }> {
+}): Promise<AuthorAudiences> {
   const views = await loadAuthorAudiences([input.principalId])
   const view = views.get(input.principalId)
   if (!view) {
     return {
       publicAuthor: fallbackAuthor(input.principalId),
       supportAuthor: authorFromInput(input),
+      customerAuthor: fallbackAuthor(input.principalId),
+      shownAsTeam: false,
     }
   }
   return view
@@ -623,8 +630,9 @@ export async function conversationToDTO(
   const [authors, unread, tagMap] = await Promise.all([
     loadAuthors(
       [conversation.visitorPrincipalId, conversation.assignedAgentPrincipalId],
-      // Visitors keep the public name. Agents see the account name.
-      side === 'agent' ? { preferAccountName: true } : undefined
+      // Visitors keep the public name (an API key shows as the support team).
+      // Agents see the account name.
+      side === 'agent' ? { preferAccountName: true } : { forCustomer: true }
     ),
     unreadCountFor(conversation, side),
     side === 'agent'
@@ -927,7 +935,7 @@ export async function listMissedMessagesForBackfill(
     .orderBy(conversationMessages.createdAt, conversationMessages.id)
   const authors = await loadAuthors(
     missed.map((m) => m.principalId),
-    { preferAccountName: opts.includeInternal }
+    { preferAccountName: opts.includeInternal, forCustomer: true }
   )
   return missed.map((m) =>
     toMessageDTO(
@@ -1117,8 +1125,10 @@ export async function listMessages(
       page.map((m) => m.principalId),
       {
         // Agent threads (internal notes, or an explicit ask) show the account
-        // name. The visitor widget leaves this off and keeps the public name.
+        // name. The visitor widget leaves this off and keeps the public name,
+        // with an API key shown as the support team.
         preferAccountName: opts?.preferAccountName ?? !!opts?.includeInternal,
+        forCustomer: true,
       }
     ),
     assistantPrincipalIdOnce(),

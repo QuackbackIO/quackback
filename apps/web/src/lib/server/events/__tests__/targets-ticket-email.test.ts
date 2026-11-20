@@ -62,9 +62,16 @@ vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
 // and a requester who wants the email.
 const conversationEmailCarriesReplies = vi.fn<(...args: unknown[]) => Promise<boolean>>()
 const requesterWantsReplyEmail = vi.fn<(...args: unknown[]) => Promise<boolean>>()
+// The author as the requester's thread names it, which runs over real rows in
+// domains/tickets/__tests__/personal-key-author.db.test.ts. Default: the
+// event's name.
+const replyAuthorNameForRequester =
+  vi.fn<(messageId: unknown, fallback: string | null) => Promise<string | undefined>>()
 vi.mock('@/lib/server/domains/tickets/ticket-reply-email', () => ({
   conversationEmailCarriesReplies: (...args: unknown[]) => conversationEmailCarriesReplies(...args),
   requesterWantsReplyEmail: (...args: unknown[]) => requesterWantsReplyEmail(...args),
+  replyAuthorNameForRequester: (messageId: unknown, fallback: string | null) =>
+    replyAuthorNameForRequester(messageId, fallback),
 }))
 
 // --- team roster ---
@@ -129,6 +136,9 @@ beforeEach(() => {
   getTicketNotifiableWatchers.mockReset().mockResolvedValue([])
   conversationEmailCarriesReplies.mockReset().mockResolvedValue(false)
   requesterWantsReplyEmail.mockReset().mockResolvedValue(true)
+  replyAuthorNameForRequester
+    .mockReset()
+    .mockImplementation(async (_id, fallback) => fallback ?? undefined)
   listTeamMemberPrincipalIds.mockReset().mockResolvedValue([])
   resolveTicketSender.mockReset().mockResolvedValue(null)
   inboundTicketReplyToAddress.mockReset().mockReturnValue(null)
@@ -375,6 +385,24 @@ describe('getTicketRepliedEmailTargets', () => {
     })
     // Agent-facing target has no reply-by-email address.
     expect(byEmail['agent1@example.com']).not.toHaveProperty('replyTo', expect.anything())
+  })
+
+  it("names the author on the requester's copy as their thread does, and keeps the event's name for the team", async () => {
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    queueSelect([{ id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null }])
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    queueSelect([{ conversationId: 'conversation_1' }])
+    replyAuthorNameForRequester.mockResolvedValue('Acme Support')
+    const targets = await getTicketRepliedEmailTargets(
+      repliedEvent({ authorName: 'ops-bot' }),
+      context
+    )
+    const byEmail = Object.fromEntries(
+      targets.map((t) => [(t.target as { email: string }).email, t.config])
+    )
+    expect(replyAuthorNameForRequester).toHaveBeenCalledWith('conversation_message_1', 'ops-bot')
+    expect(byEmail['req@example.com']).toMatchObject({ authorName: 'Acme Support' })
+    expect(byEmail['agent1@example.com']).toMatchObject({ authorName: 'ops-bot' })
   })
 
   it('drops a synthetic-anon requester', async () => {

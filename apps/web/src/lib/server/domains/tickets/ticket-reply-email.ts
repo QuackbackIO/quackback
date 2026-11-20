@@ -12,8 +12,17 @@
  * replies" email switch and "Stop watching" on the ticket. "Pause all email"
  * does not stop it (see wantsTicketReplyEmail).
  */
-import { db, and, eq, conversations, ticketConversations, tickets } from '@/lib/server/db'
-import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
+import {
+  db,
+  and,
+  eq,
+  conversationMessages,
+  conversations,
+  ticketConversations,
+  tickets,
+} from '@/lib/server/db'
+import type { ConversationId, ConversationMessageId, PrincipalId, TicketId } from '@quackback/ids'
+import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { batchGetNotificationPreferences } from '@/lib/server/domains/subscriptions/subscription.service'
 import { wantsTicketReplyEmail } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { getTicketNotifiableWatchers } from './ticket-subscription.service'
@@ -79,4 +88,24 @@ export async function conversationEmailCarriesReplies(
     )
     .limit(1)
   return row != null
+}
+
+/**
+ * The reply's author as the requester's thread names it: a teammate by their
+ * public name, an API key that shows as itself by the support team's name.
+ * The ticket event carries the name integrators see, which can be the key's.
+ * Falls back to `fallback` when the message or its author is gone.
+ */
+export async function replyAuthorNameForRequester(
+  messageId: ConversationMessageId,
+  fallback: string | null
+): Promise<string | undefined> {
+  const [row] = await db
+    .select({ principalId: conversationMessages.principalId })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, messageId))
+    .limit(1)
+  if (!row?.principalId) return fallback ?? undefined
+  const author = (await loadAuthors([row.principalId], { forCustomer: true })).get(row.principalId)
+  return author?.displayName ?? fallback ?? undefined
 }

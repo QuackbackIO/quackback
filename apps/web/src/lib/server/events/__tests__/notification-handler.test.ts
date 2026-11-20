@@ -549,6 +549,29 @@ describe('notificationHook — ticket.replied (watchers)', () => {
     ])
   })
 
+  it("names the author on the requester's row as their thread does, and the event's name for the team", async () => {
+    const target: NotificationTarget = {
+      principalIds: ['principal_requester' as never, 'principal_agent_1' as never],
+    }
+    await notificationHook.run(makeEvent(), target, {
+      ...config,
+      authorName: 'ops-bot',
+      requesterAuthorName: 'Acme Support',
+    })
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_requester',
+        title: 'Acme Support replied on Cannot log in',
+        metadata: expect.objectContaining({ actorName: 'Acme Support', audience: 'portal' }),
+      }),
+      expect.objectContaining({
+        principalId: 'principal_agent_1',
+        title: 'ops-bot replied on Cannot log in',
+        metadata: expect.objectContaining({ actorName: 'ops-bot', audience: 'admin' }),
+      }),
+    ])
+  })
+
   it('drops a principal whose matrix turns ticket_replied inApp off (per-type preference)', async () => {
     prefsSpy.mockResolvedValueOnce(
       new Map([

@@ -277,7 +277,9 @@ async function toPairDtos(
   const [authors, assistantPrincipalId] = await Promise.all([
     loadAuthors(
       sourced.map((s) => s.row.principalId),
-      { preferAccountName }
+      // Without the account name this is the requester's thread: an API key
+      // shows as the support team there.
+      { preferAccountName, forCustomer: true }
     ),
     assistantPrincipalIdOnce(),
   ])

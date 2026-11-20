@@ -17,6 +17,10 @@ import type {
   TeamId,
   TicketId,
 } from '@quackback/ids'
+import { createId } from '@quackback/ids'
+
+/** A well-formed id for the reply an event names; no row is stored under it. */
+const MESSAGE_ID = createId('conversation_message')
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   inAppNotifications,
@@ -259,7 +263,7 @@ describe('ticket watchers hear only about tickets in their scope', () => {
       actor: { type: 'user', principalId: w.actor.id },
       data: {
         ticket: ticketRef(id),
-        messageId: 'conversation_message_1',
+        messageId: MESSAGE_ID,
         content: 'Fix is queued.',
         attachments: null,
         senderType: 'agent',
@@ -282,7 +286,7 @@ describe('ticket watchers hear only about tickets in their scope', () => {
         actor: { type: 'user', principalId: w.actor.id },
         data: {
           ticket: ticketRef(id),
-          messageId: 'conversation_message_1',
+          messageId: MESSAGE_ID,
           content: 'Fix is queued.',
           attachments: null,
           senderType: 'agent',
@@ -821,7 +825,7 @@ describe('the requester of a ticket', () => {
       actor: { type: 'user', principalId: w.actor.id },
       data: {
         ticket: { ...ticketRef(id), type: ticketType },
-        messageId: 'conversation_message_1',
+        messageId: MESSAGE_ID,
         content: 'Fix is queued.',
         attachments: null,
         senderType: 'agent',

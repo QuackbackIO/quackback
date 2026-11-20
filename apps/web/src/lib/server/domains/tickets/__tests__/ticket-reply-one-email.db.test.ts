@@ -24,6 +24,9 @@ import {
   type UserId,
 } from '@quackback/ids'
 
+/** A well-formed id for the reply an event names; no row is stored under it. */
+const MESSAGE_ID = createId('conversation_message')
+
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -234,7 +237,7 @@ function agentReplied(scene: Scene): EventData {
     actor: { type: 'user', principalId: scene.agent.id },
     data: {
       ticket: { id: scene.ticketId, number: 7, type: 'customer', assignedTeamId: null },
-      messageId: 'message_1',
+      messageId: MESSAGE_ID,
       content: 'Here is the fix.',
       attachments: [],
       senderType: 'agent',

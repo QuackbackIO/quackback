@@ -46,10 +46,10 @@ import type { TicketDTO, TicketPrincipalRef, TicketSlaRef, TicketTypeRef } from 
 export interface TicketDTOContext {
   statuses: Map<TicketStatusId, TicketStatusEntity>
   ticketTypes: Map<TicketTypeId, TicketTypeEntity>
-  /** Public name for requesters, account name for agents. */
+  /** The customer's view for requesters, account name for agents. */
   principals: Map<
     PrincipalId,
-    { publicAuthor: TicketPrincipalRef; supportAuthor: TicketPrincipalRef }
+    { customerAuthor: TicketPrincipalRef; supportAuthor: TicketPrincipalRef }
   >
   teams: Map<TeamId, string>
   companies: Map<CompanyId, string>

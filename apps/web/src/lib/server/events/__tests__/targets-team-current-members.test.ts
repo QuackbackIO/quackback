@@ -13,6 +13,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type TicketId, type UserId } from '@quackback/ids'
 
+/** A well-formed id for the reply an event names; no row is stored under it. */
+const MESSAGE_ID = createId('conversation_message')
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   tickets,
@@ -131,7 +134,7 @@ function repliedEvent(w: World, type: string): EventData {
     actor: { type: 'user', principalId: w.actor.id },
     data: {
       ticket: ticketRef(w, type),
-      messageId: 'conversation_message_1',
+      messageId: MESSAGE_ID,
       content: 'Fix is queued.',
       attachments: null,
       senderType: 'agent',

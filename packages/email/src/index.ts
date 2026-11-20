@@ -1256,6 +1256,9 @@ interface SendConversationMessageEmailParams {
    *  message to the team, or an agent-started outreach message to the visitor. */
   direction: 'agent_reply' | 'visitor_message' | 'agent_started'
   senderName: string
+  /** `senderName` is the support team's, not a person's (a message an API key
+   *  wrote under its own name): the copy speaks as the team. */
+  senderIsTeam?: boolean
   messagePreview: string
   /** The full message body as pre-rendered, sanitized HTML. When present it is
    *  shown inline in place of the truncated `messagePreview` quote. */
@@ -1309,6 +1312,7 @@ export async function sendConversationMessageEmail(
     to,
     direction,
     senderName,
+    senderIsTeam,
     messagePreview,
     bodyHtml,
     ctaUrl,
@@ -1332,6 +1336,7 @@ export async function sendConversationMessageEmail(
   const copy = conversationMessageCopy({
     direction,
     senderName,
+    senderIsTeam,
     workspaceName,
     conversationSubject,
     preview: messagePreview,
@@ -1345,7 +1350,8 @@ export async function sendConversationMessageEmail(
         bodyHtml,
         messagePreview,
         agentName: senderName,
-        teamName: workspaceName,
+        // A team-voiced signature that already is the workspace name says it once.
+        teamName: senderIsTeam && senderName === workspaceName ? undefined : workspaceName,
         viewUrl: ctaUrl,
         quotedPrevious,
       })

@@ -287,13 +287,13 @@ export async function publishGitHubInboxMessage(
   const views = message.principalId
     ? (await loadAuthorAudiences([message.principalId])).get(message.principalId)
     : null
-  const publicAuthor =
-    views?.publicAuthor ?? (message.principalId ? fallbackAuthor(message.principalId) : null)
+  const customerAuthor =
+    views?.customerAuthor ?? (message.principalId ? fallbackAuthor(message.principalId) : null)
   const supportAuthor =
     views?.supportAuthor ?? (message.principalId ? fallbackAuthor(message.principalId) : null)
   if (mode === 'created') {
     publishConversationMessage(message.conversationId, {
-      visitor: toMessageDTO(message, publicAuthor),
+      visitor: toMessageDTO(message, customerAuthor),
       agent: asAgentMessage(toMessageDTO(message, supportAuthor)),
     })
   } else {

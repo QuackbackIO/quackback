@@ -22,7 +22,7 @@ import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import { rememberTestOwner } from '@/lib/server/test-data'
-import { supportContactName } from '@/lib/shared/support-contact-name'
+import { supportContactName, supportTeamName } from '@/lib/shared/support-contact-name'
 import { displayAssistantName } from '@/lib/shared/assistant/config'
 
 /**
@@ -199,37 +199,93 @@ async function showPersonalKeysAsCreator<T extends AuthorRow>(rows: T[]): Promis
 }
 
 /**
+ * What a customer sees for an author that shows as an API key (a workspace
+ * key, or a personal key that keeps its own name): the support team's name,
+ * the one the thread shows when no teammate is shown, never the key's own
+ * name. Every other author reads as the public view.
+ */
+function customerAuthorFromRow(
+  row: AuthorRow,
+  teamName: string | null
+): { author: ConversationAuthorDTO; shownAsTeam: boolean } {
+  if (!showsAsApiKey(row)) return { author: authorFromRow(row, false), shownAsTeam: false }
+  return {
+    author: { principalId: row.id, displayName: teamName, avatarUrl: null },
+    shownAsTeam: true,
+  }
+}
+
+/** The support team's name, from the cached settings row. */
+export async function getSupportTeamName(): Promise<string | null> {
+  // Dynamic, like the other settings readers here: the settings helpers reach
+  // back into much of the server.
+  const { findSettingsCached, parseWidgetConfig } =
+    await import('@/lib/server/domains/settings/settings.helpers')
+  const row = await findSettingsCached()
+  if (!row) return null
+  return supportTeamName(parseWidgetConfig(row.widgetConfig).messenger?.teamName, row.name)
+}
+
+/** The support team's name, read only when a batch has an author that needs it. */
+async function teamNameFor(rows: AuthorRow[]): Promise<string | null> {
+  return rows.some(showsAsApiKey) ? getSupportTeamName() : null
+}
+
+/**
  * Batch-load principal display info, returning a lookup map.
  *
  * `preferAccountName` is for agent support surfaces (the inbox list, the
  * thread, ticket requesters). It shows the account name. Posts, comments,
  * and requester reads leave it off, so they keep the public display name.
+ *
+ * `forCustomer` is for what a customer reads in a support thread (the portal,
+ * the widget, their emails): an author that shows as an API key takes the
+ * support team's name instead of the key's. Webhooks and feedback leave it
+ * off. It has no effect with `preferAccountName`.
  */
 export async function loadAuthors(
   ids: ReadonlyArray<PrincipalId | null | undefined>,
-  opts?: { preferAccountName?: boolean }
+  opts?: { preferAccountName?: boolean; forCustomer?: boolean }
 ): Promise<Map<PrincipalId, ConversationAuthorDTO>> {
   const map = new Map<PrincipalId, ConversationAuthorDTO>()
-  for (const row of await selectAuthorRows(ids)) {
+  const rows = await selectAuthorRows(ids)
+  if (opts?.preferAccountName !== true && opts?.forCustomer === true) {
+    const teamName = await teamNameFor(rows)
+    for (const row of rows) map.set(row.id, customerAuthorFromRow(row, teamName).author)
+    return map
+  }
+  for (const row of rows) {
     map.set(row.id, authorFromRow(row, opts?.preferAccountName === true))
   }
   return map
 }
 
-/** Both labels from one read, so a send can fan each audience its own name. */
+/**
+ * Every label from one read, so a send can fan each audience its own name:
+ * `customerAuthor` for the customer's copy and email, `publicAuthor` for
+ * events and webhooks, `supportAuthor` for the team. `shownAsTeam` says the
+ * customer sees the support team's name rather than a person's.
+ */
+export interface AuthorAudiences {
+  publicAuthor: ConversationAuthorDTO
+  supportAuthor: ConversationAuthorDTO
+  customerAuthor: ConversationAuthorDTO
+  shownAsTeam: boolean
+}
+
 export async function loadAuthorAudiences(
   ids: ReadonlyArray<PrincipalId | null | undefined>
-): Promise<
-  Map<PrincipalId, { publicAuthor: ConversationAuthorDTO; supportAuthor: ConversationAuthorDTO }>
-> {
-  const map = new Map<
-    PrincipalId,
-    { publicAuthor: ConversationAuthorDTO; supportAuthor: ConversationAuthorDTO }
-  >()
-  for (const row of await selectAuthorRows(ids)) {
+): Promise<Map<PrincipalId, AuthorAudiences>> {
+  const map = new Map<PrincipalId, AuthorAudiences>()
+  const rows = await selectAuthorRows(ids)
+  const teamName = await teamNameFor(rows)
+  for (const row of rows) {
+    const customer = customerAuthorFromRow(row, teamName)
     map.set(row.id, {
       publicAuthor: authorFromRow(row, false),
       supportAuthor: authorFromRow(row, true),
+      customerAuthor: customer.author,
+      shownAsTeam: customer.shownAsTeam,
     })
   }
   return map

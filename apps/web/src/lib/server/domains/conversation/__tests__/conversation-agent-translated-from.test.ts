@@ -71,7 +71,12 @@ vi.mock('../conversation.query', () => ({
       displayName: a.displayName ?? null,
       avatarUrl: null,
     }
-    return { publicAuthor: author, supportAuthor: author }
+    return {
+      publicAuthor: author,
+      supportAuthor: author,
+      customerAuthor: author,
+      shownAsTeam: false,
+    }
   }),
 }))
 

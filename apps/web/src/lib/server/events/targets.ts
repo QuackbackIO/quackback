@@ -5,6 +5,7 @@
 
 import type {
   ConversationId,
+  ConversationMessageId,
   PostId,
   PrincipalId,
   SegmentId,
@@ -1106,7 +1107,8 @@ export async function getTicketStatusChangedTargets(event: EventData): Promise<H
  */
 export async function getTicketRepliedTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'ticket.replied') return null
-  const { ticket, content, senderType, title, authorName, requesterPrincipalId } = event.data
+  const { ticket, content, senderType, title, authorName, requesterPrincipalId, messageId } =
+    event.data
 
   const recipients = await actorExcludedTicketWatchers(
     ticket.id as TicketId,
@@ -1114,6 +1116,16 @@ export async function getTicketRepliedTargets(event: EventData): Promise<HookTar
     { requesterPrincipalId }
   )
   if (recipients.length === 0) return null
+  // The event carries the name integrators see. The requester's bell names an
+  // agent reply's author as their thread does (an API key shows as the team).
+  const requesterAuthorName =
+    senderType === 'agent' &&
+    requesterPrincipalId &&
+    recipients.includes(requesterPrincipalId as PrincipalId)
+      ? await (
+          await import('@/lib/server/domains/tickets/ticket-reply-email')
+        ).replyAuthorNameForRequester(messageId as ConversationMessageId, authorName)
+      : undefined
 
   return {
     type: 'notification',
@@ -1125,6 +1137,7 @@ export async function getTicketRepliedTargets(event: EventData): Promise<HookTar
       conversationId: await pairConversationId(ticket.id as TicketId),
       title,
       authorName: authorName ?? (senderType === 'visitor' ? 'The requester' : 'A teammate'),
+      ...(requesterAuthorName && requesterAuthorName !== authorName ? { requesterAuthorName } : {}),
       preview: truncate(content, 140),
       requesterPrincipalId: requesterPrincipalId ?? null,
     },
@@ -1524,6 +1537,8 @@ async function buildRequesterOrAgentTargets(params: {
   context: HookContext
   messageBody?: string
   authorName?: string
+  /** The author's name on the requester's copy, when it differs from `authorName`. */
+  requesterAuthorName?: string
   statusChange?: { previousLabel: string | null; newLabel: string }
   /** B22: forwarded onto the email config (see BaseTicketConfigParams). */
   closedGeneric?: boolean
@@ -1546,6 +1561,7 @@ async function buildRequesterOrAgentTargets(params: {
       requesterPrincipalId != null && id === requesterPrincipalId
         ? await requesterFacingConfig({
             ...facts,
+            authorName: params.requesterAuthorName ?? facts.authorName,
             ctaUrl: await requesterTicketUrl(hookOrigins(context), params.ticketId),
             assignedTeamId: params.assignedTeamId,
             context,
@@ -1627,7 +1643,8 @@ export async function getTicketRepliedEmailTargets(
   context: HookContext
 ): Promise<HookTarget[]> {
   if (event.type !== 'ticket.replied') return []
-  const { ticket, content, senderType, title, authorName, requesterPrincipalId } = event.data
+  const { ticket, content, senderType, title, authorName, requesterPrincipalId, messageId } =
+    event.data
   if (senderType !== 'agent') return []
   if (!(await isSupportTicketsEnabled())) return []
   // Internal (back-office/tracker) tickets never email their nominal requester
@@ -1654,6 +1671,7 @@ export async function getTicketRepliedEmailTargets(
   )
   const recipients = [...team.recipients]
   const emailMap = team.emailMap
+  let requesterAuthorName: string | undefined
   // The requester gets this email only when no conversation of theirs carries
   // the reply: on a ticket's conversation the conversation email is their one
   // copy (see domains/tickets/ticket-reply-email.ts). A reply is not a
@@ -1667,6 +1685,12 @@ export async function getTicketRepliedEmailTargets(
     if (address) {
       recipients.push(requester)
       emailMap.set(requester, address)
+      // The event carries the name integrators see. The requester's copy names
+      // the author as their thread does (an API key shows as the support team).
+      requesterAuthorName = await ticketEmail.replyAuthorNameForRequester(
+        messageId as ConversationMessageId,
+        authorName
+      )
     }
   }
   if (recipients.length === 0) return []
@@ -1686,6 +1710,7 @@ export async function getTicketRepliedEmailTargets(
     context,
     messageBody: content,
     authorName: authorName ?? undefined,
+    requesterAuthorName,
   })
 }
 
