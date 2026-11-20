@@ -3,7 +3,8 @@
  * e2e/tests/feedback/admin-merge.spec.ts and admin-moderation.spec.ts.
  * The shared seeding helpers are in feedback-admin.ts.
  */
-import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { waitForHydration } from '../utils/helpers'
 import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { supportDb } from '../support/db'
 import { callServerFn } from '../support/server-fns'
@@ -63,6 +64,7 @@ export async function pickMergeAction(
   page: Page,
   item: 'into this' | 'into another'
 ): Promise<void> {
+  await waitForHydration(mergeMenuButton(page))
   await mergeMenuButton(page).click()
   await page.getByRole('menuitem', { name: new RegExp(`^Merge ${item}`) }).click()
 }
@@ -107,6 +109,16 @@ export function queueRow(page: Page, text: string) {
   return page.locator('li', { hasText: text })
 }
 
+/**
+ * Press Approve or Reject inside `scope` (a queue row or the post modal) once
+ * React has hydrated it: a click on server-rendered markup is otherwise lost.
+ */
+export async function decide(scope: Locator, action: 'Approve' | 'Reject'): Promise<void> {
+  const button = scope.getByRole('button', { name: action })
+  await waitForHydration(button)
+  await button.click()
+}
+
 /** A held post: a customer submits it on a board that holds signed-in posts. */
 export async function heldPost(
   api: APIRequestContext,
@@ -123,4 +135,28 @@ export async function heldPost(
   })
   if (!res.ok) throw new Error(`createPublicPostFn failed: ${res.raw.slice(0, 300)}`)
   return res.data.id
+}
+
+/** A comment by whoever `api` is signed in as; returns its TypeID. */
+export async function comment(
+  api: APIRequestContext,
+  postId: string,
+  content: string,
+  extra: Record<string, unknown> = {}
+): Promise<string> {
+  const res = await callServerFn<{ comment?: { id: string }; id?: string }>(
+    api,
+    'createCommentFn',
+    { postId, content, ...extra }
+  )
+  if (!res.ok) throw new Error(`createCommentFn failed: ${res.raw.slice(0, 300)}`)
+  const id = res.data.comment?.id ?? res.data.id
+  if (!id) throw new Error(`createCommentFn returned no id: ${res.raw.slice(0, 300)}`)
+  return id
+}
+
+/** A comment's row (snake_case columns). */
+export async function commentRow(commentId: string): Promise<Record<string, unknown>> {
+  const [row] = await supportDb()`SELECT * FROM post_comments WHERE id = ${uuid(commentId)}`
+  return row
 }
