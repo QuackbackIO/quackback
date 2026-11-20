@@ -6,7 +6,8 @@
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { settings } from '@/lib/server/db'
+import { domains, settings } from '@/lib/server/db'
+import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -24,6 +25,8 @@ const side = vi.hoisted(() => ({
   status: { dnsResolved: true, instanceReachable: true, verified: true },
   dnsAnswered: true,
   primaryHosts: [] as (string | null | undefined)[],
+  /** What answered when this server did not: nothing, or another server. */
+  instance: 'unreachable' as 'unreachable' | 'other',
 }))
 vi.mock('@/lib/server/domains/domain-proof/ensure-domain', () => ({
   ensureDomainForCustomDomain: async (hostname: string) => {
@@ -41,9 +44,35 @@ vi.mock('@/lib/server/config', async (importOriginal) => ({
 vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
   probeCustomDomain: async (_hostname: string, opts?: { primaryOrigin?: string | null }) => {
     side.primaryHosts.push(opts?.primaryOrigin)
-    return { status: side.status, dnsAnswered: side.dnsAnswered }
+    return {
+      status: side.status,
+      dnsAnswered: side.dnsAnswered,
+      dns: side.status.dnsResolved ? 'resolved' : side.dnsAnswered ? 'absent' : 'unknown',
+      instance: side.status.instanceReachable ? 'ok' : side.instance,
+    }
   },
 }))
+/** The zone's TXT records by name, each as the strings it was published in. */
+const zone = vi.hoisted(() => ({ txt: new Map<string, string[][]>() }))
+vi.mock('@/lib/server/dns/resolver', () => {
+  const fail = (code: string) => Object.assign(new Error(code), { code })
+  const none = async (): Promise<never> => {
+    throw fail('ENODATA')
+  }
+  const resolver = {
+    resolveTxt: async (name: string) => {
+      const records = zone.txt.get(name)
+      if (!records) throw fail('ENOTFOUND')
+      return records
+    },
+    resolveCname: none,
+    resolveMx: none,
+    resolve4: none,
+    resolve6: none,
+    resolveNs: none,
+  }
+  return { interactiveResolver: resolver, systemResolver: resolver }
+})
 
 const { getSectionDomains, getSectionDomainsView, setSectionDomain, verifySectionDomain } =
   await import('../section-domains.service')
@@ -102,6 +131,8 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
     side.status = { dnsResolved: true, instanceReachable: true, verified: true }
     side.dnsAnswered = true
     side.primaryHosts = []
+    side.instance = 'unreachable'
+    zone.txt = new Map()
     await fixture.begin()
   })
   afterEach(fixture.rollback)
@@ -222,54 +253,160 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       })
     })
 
-    it('takes the verification away when the hostname stops answering', async () => {
+    it('marks, never drops, a verified hostname another server now answers on', async () => {
+      await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
+      side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      side.instance = 'other'
+      await verifySectionDomain('help')
+
+      // Sign-in stops there (marked); routing keeps the grace; the daily run ends it.
+      expect((await getSectionDomains()).help).toEqual({
+        hostname: 'help.acme.com',
+        verifiedAt: NOW,
+        unconfirmedSince: expect.any(String),
+        unconfirmedReason: 'dns',
+      })
+    })
+
+    it('keeps a verified hostname no record covers with a warning to verify its domain', async () => {
       await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
       side.status = { dnsResolved: true, instanceReachable: false, verified: false }
       await verifySectionDomain('help')
 
       expect((await getSectionDomains()).help).toEqual({
         hostname: 'help.acme.com',
-        verifiedAt: null,
+        verifiedAt: NOW,
+        reachWarning: { reason: 'unverified', since: expect.any(String) },
       })
-      expect((await stored()).helpDomain).toEqual({ domain: 'help.acme.com', verifiedAt: null })
     })
 
-    it('keeps a verification when the lookup goes unanswered', async () => {
+    it('keeps the first mark when Verify fails again, so the grace has an end', async () => {
+      const since = '2026-10-30T00:00:00.000Z'
+      await seedSettings({
+        portalConfig: JSON.stringify({
+          sectionDomains: {
+            help: { hostname: 'help.acme.com', verifiedAt: NOW, unconfirmedSince: since },
+          },
+        }),
+      })
+      side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      side.instance = 'other'
+      await verifySectionDomain('help')
+      expect((await getSectionDomains()).help?.unconfirmedSince).toBe(since)
+    })
+
+    it('leaves a hostname never verified unverified when the check fails', async () => {
+      await setSectionDomain('status', 'status.acme.com')
+      side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+      await verifySectionDomain('status')
+      expect((await getSectionDomains()).status).toEqual({
+        hostname: 'status.acme.com',
+        verifiedAt: null,
+      })
+    })
+
+    it('keeps a verification with a warning, and no grace, when the lookup goes unanswered', async () => {
       await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
       side.status = { dnsResolved: false, instanceReachable: false, verified: false }
       side.dnsAnswered = false
       await verifySectionDomain('help')
 
-      // Kept, but marked as unconfirmed: sign-in is not carried to it.
+      // Sign-in and routing keep it: nothing said it is no longer ours.
       expect((await getSectionDomains()).help).toEqual({
         hostname: 'help.acme.com',
         verifiedAt: NOW,
-        unconfirmedSince: expect.any(String),
+        reachWarning: { reason: 'dns', since: expect.any(String) },
       })
     })
 
-    it('keeps the first unconfirmed time across checks, so the grace has an end', async () => {
-      await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
+    it('leaves a mark and its grace as they were when the lookup goes unanswered', async () => {
+      const since = '2026-10-30T00:00:00.000Z'
+      await seedSettings({
+        portalConfig: JSON.stringify({
+          sectionDomains: {
+            help: { hostname: 'help.acme.com', verifiedAt: NOW, unconfirmedSince: since },
+          },
+        }),
+      })
       side.status = { dnsResolved: false, instanceReachable: false, verified: false }
       side.dnsAnswered = false
       await verifySectionDomain('help')
-      const first = (await getSectionDomains()).help?.unconfirmedSince
-      expect(first).toEqual(expect.any(String))
-      await verifySectionDomain('help')
-      expect((await getSectionDomains()).help?.unconfirmedSince).toBe(first)
+      expect((await getSectionDomains()).help).toEqual({
+        hostname: 'help.acme.com',
+        verifiedAt: NOW,
+        unconfirmedSince: since,
+      })
     })
 
-    it('clears the unconfirmed mark once the hostname answers again', async () => {
-      await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
-      side.status = { dnsResolved: false, instanceReachable: false, verified: false }
-      side.dnsAnswered = false
+    it('clears the unconfirmed mark and any warning once the hostname answers again', async () => {
+      await seedSettings({
+        portalConfig: JSON.stringify({
+          sectionDomains: {
+            help: {
+              hostname: 'help.acme.com',
+              verifiedAt: NOW,
+              unconfirmedSince: NOW,
+              reachWarning: { reason: 'dns', since: NOW },
+            },
+          },
+        }),
+      })
       await verifySectionDomain('help')
-      side.status = { dnsResolved: true, instanceReachable: true, verified: true }
-      side.dnsAnswered = true
-      await verifySectionDomain('help')
-      const entry = (await getSectionDomains()).help
-      expect(entry?.verifiedAt).toEqual(expect.any(String))
-      expect(entry && 'unconfirmedSince' in entry).toBe(false)
+      expect((await getSectionDomains()).help).toEqual({
+        hostname: 'help.acme.com',
+        verifiedAt: expect.any(String),
+      })
+    })
+
+    describe('when this server cannot reach itself through the hostname', () => {
+      beforeEach(async () => {
+        side.status = { dnsResolved: true, instanceReachable: false, verified: false }
+        await testDb.insert(domains).values({
+          name: 'acme.com',
+          ownershipToken: 'tok-acme',
+          status: 'verified',
+          verifiedAt: new Date(NOW),
+        })
+      })
+
+      it('keeps a verification with a warning while the verification record holds', async () => {
+        zone.txt.set('_quackback.acme.com', [[ownershipRecord('tok-acme').value]])
+        await seedSettings({
+          portalConfig: JSON.stringify({
+            sectionDomains: {
+              help: { hostname: 'help.acme.com', verifiedAt: NOW, unconfirmedSince: NOW },
+            },
+          }),
+        })
+        await verifySectionDomain('help')
+
+        expect((await getSectionDomains()).help).toEqual({
+          hostname: 'help.acme.com',
+          verifiedAt: NOW,
+          reachWarning: { reason: 'unreachable', since: expect.any(String) },
+        })
+      })
+
+      it('marks it, starting the grace, when the record is gone', async () => {
+        await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
+        await verifySectionDomain('help')
+        expect((await getSectionDomains()).help).toEqual({
+          hostname: 'help.acme.com',
+          verifiedAt: NOW,
+          unconfirmedSince: expect.any(String),
+          unconfirmedReason: 'record',
+        })
+      })
+
+      it('never verifies a hostname not yet verified on the record alone', async () => {
+        zone.txt.set('_quackback.acme.com', [[ownershipRecord('tok-acme').value]])
+        await setSectionDomain('status', 'status.acme.com')
+        await verifySectionDomain('status')
+        expect((await getSectionDomains()).status).toEqual({
+          hostname: 'status.acme.com',
+          verifiedAt: null,
+        })
+      })
     })
 
     it('does not verify a never-verified hostname whose lookup goes unanswered', async () => {

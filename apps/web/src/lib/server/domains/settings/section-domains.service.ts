@@ -6,6 +6,8 @@
  * and it is verified while that domain is ready. On a self-hosted server any
  * public name may be given, and it is verified once DNS resolves and this
  * server answers on it, then checked again daily (`section-domains-watch.ts`).
+ * A later check that cannot reach it while the workspace's verification
+ * record still covers it only warns (`section-domain-check.ts`).
  * Either way the section choice is kept here; the
  * control plane only knows the hostname routes to the workspace.
  *
@@ -37,7 +39,9 @@ import {
   sectionOfHost,
   storedSectionDomains,
   withoutPrimaryHost,
+  type SectionDomain,
   type SectionDomainMap,
+  type SectionDomainReachWarning,
 } from '@/lib/shared/section-domains'
 import type { PortalSection } from '@/lib/shared/custom-domains'
 import type { HelpCenterDomainStatus } from '@/lib/server/domains/domain-proof/reachability-probe'
@@ -226,9 +230,18 @@ export async function setSectionDomain(
 }
 
 /**
- * Check one section's hostname again and keep the result. On a self-hosted
- * server a lookup that went unanswered says nothing about the domain, so it
- * keeps a verification it already has; only an answer can take one away.
+ * Check one section's hostname again and keep the result.
+ *
+ * On a self-hosted server a hostname already verified keeps its verification
+ * when the check could not tell that it stopped being this workspace's
+ * (`section-domain-check.ts`): a lookup that went unanswered, or a server that
+ * cannot reach itself through a hostname the workspace's verification record
+ * still covers. Either leaves a warning on the Custom domains card, never a
+ * grace. A check that says the hostname has no address, that something else
+ * answers there, or that the record is gone marks it (`unconfirmedSince`):
+ * sign-in stops there at once, routing keeps the grace, and the daily run
+ * takes the verification away if it still fails once the grace is over.
+ * A hostname never verified is verified only by a check that reaches it.
  */
 export async function verifySectionDomain(
   section: PortalSection
@@ -239,37 +252,72 @@ export async function verifySectionDomain(
   const entry = withoutPrimaryHost(current, currentPrimaryHost())[section]
   if (!entry) return refuse('SECTION_DOMAIN_NOT_SET', 'Set a domain before verifying it.')
 
-  let verifiedAt: string | null
-  let unconfirmedSince: string | null = null
+  // A person's check stands in for the daily run's: its first miss is forgotten.
+  const {
+    unconfirmedSince: _previous,
+    unconfirmedReason: previousReason,
+    missedAt: _missed,
+    reachWarning: previousWarning,
+    ...rest
+  } = entry
+  let checked: SectionDomain
   let status: HelpCenterDomainStatus | null = null
   if (hosting.cloud) {
     const ready = readyOnCloud(hosting.projection, entry.hostname)
-    verifiedAt = ready ? (entry.verifiedAt ?? new Date().toISOString()) : null
+    checked = { ...rest, verifiedAt: ready ? (entry.verifiedAt ?? new Date().toISOString()) : null }
   } else {
     const { probeCustomDomain } =
       await import('@/lib/server/domains/domain-proof/reachability-probe')
+    const { judgeSectionDomainProbe } = await import('./section-domain-check')
     // A hairpin install, which cannot reach itself through the hostname, is
     // verified by the hostname resolving to the primary domain's address.
     const probe = await probeCustomDomain(entry.hostname, { primaryOrigin: getBaseUrl() })
     status = probe.status
-    const kept = !status.verified && !probe.dnsAnswered ? entry.verifiedAt : null
-    verifiedAt = status.verified ? new Date().toISOString() : kept
-    // A kept verification is marked from the first unanswered check: routing
-    // keeps its grace for a bounded time, and sign-in is never carried to it
-    // (section-domains.ts, `confirmedSectionDomains`).
-    if (kept) unconfirmedSince = entry.unconfirmedSince ?? new Date().toISOString()
+    const judged = await judgeSectionDomainProbe(entry.hostname, probe)
+    const warning = (reason: SectionDomainReachWarning['reason']): SectionDomainReachWarning => ({
+      reason,
+      since: previousWarning?.reason === reason ? previousWarning.since : new Date().toISOString(),
+    })
+    if (judged === 'reaches') {
+      checked = { ...rest, verifiedAt: new Date().toISOString() }
+    } else if (!entry.verifiedAt) {
+      checked = { ...rest, verifiedAt: null }
+    } else if (judged === 'failed-dns' || judged === 'failed-record') {
+      // One check never takes a verified hostname down: it is marked, so sign-in
+      // stops there at once (it may be someone else's now) while routing keeps
+      // the grace, and the daily run ends it if it still fails then.
+      checked = {
+        ...rest,
+        unconfirmedSince: entry.unconfirmedSince ?? new Date().toISOString(),
+        unconfirmedReason: entry.unconfirmedSince
+          ? (previousReason ?? 'dns')
+          : judged === 'failed-record'
+            ? 'record'
+            : 'dns',
+      }
+    } else if (judged === 'unreachable') {
+      // The verification record says the hostname is still ours: a mark ends too.
+      checked = { ...rest, reachWarning: warning('unreachable') }
+    } else {
+      // Unanswered, or no record to say either way: a mark and its grace stay
+      // as they were; otherwise a warning, and no grace.
+      const reason = judged === 'unverified' ? 'unverified' : 'dns'
+      checked = entry.unconfirmedSince ? entry : { ...rest, reachWarning: warning(reason) }
+    }
     log.info(
-      { section, hostname: entry.hostname, status, dns_answered: probe.dnsAnswered },
+      {
+        section,
+        hostname: entry.hostname,
+        status,
+        dns: probe.dns,
+        instance: probe.instance,
+        judged,
+      },
       'section domain verify check'
     )
   }
 
-  // A person's check stands in for the daily run's: its first miss is forgotten.
-  const { unconfirmedSince: _previous, missedAt: _missed, ...rest } = entry
-  const next: SectionDomainMap = {
-    ...current,
-    [section]: { ...rest, verifiedAt, ...(unconfirmedSince ? { unconfirmedSince } : {}) },
-  }
+  const next: SectionDomainMap = { ...current, [section]: checked }
   await writeSectionDomains(next, hosting)
   return { ok: true, sectionDomains: withoutPrimaryHost(next, currentPrimaryHost()), status }
 }

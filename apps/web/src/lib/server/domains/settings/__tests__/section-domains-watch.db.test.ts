@@ -2,20 +2,32 @@
  * The daily re-check of self-hosted section hostnames, against a real database
  * rolled back after each test.
  *
- * A verified hostname that misses on two daily runs in a row is marked
+ * A verified hostname that fails on two daily runs in a row (no address,
+ * something else answering, or its verification record gone) is marked
  * unconfirmed (sign-in stops at once, routing keeps its grace) and the people
  * who manage domains are told; the first run only notes the miss. One that
  * answers again is confirmed again; one still failing when the grace is over
  * stops being verified. A miss is checked once more within a run, so a blink
  * on this server's own network notes nothing.
  *
- * The probe is a fake that answers per hostname from a script; the notices are
- * recorded rather than sent.
+ * A check that only could not reach this server through the hostname, while
+ * the workspace's verification record still covers it, or whose lookups went
+ * unanswered, leaves a warning and nothing else: no miss, no mark, no grace.
+ *
+ * The probe is a fake that answers per hostname from a script, the zone's TXT
+ * records are a fake behind the shared resolver, and the notices are recorded
+ * rather than sent. The verification records are real rows.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { settings } from '@/lib/server/db'
-import { UNCONFIRMED_GRACE_MS, type SectionDomainMap } from '@/lib/shared/section-domains'
+import { domains, settings } from '@/lib/server/db'
+import {
+  UNCONFIRMED_GRACE_MS,
+  confirmedSectionDomains,
+  type SectionDomainMap,
+} from '@/lib/shared/section-domains'
+import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { routableSectionDomains } from '../section-domains.hosting'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -32,7 +44,14 @@ vi.mock('@/lib/server/config', async (importOriginal) => ({
   getBaseUrl: () => 'https://feedback.acme.com',
 }))
 
-type Outcome = 'ok' | 'unanswered' | 'refused'
+/**
+ * - ok: this server answers.
+ * - unanswered: the address lookups went unanswered.
+ * - absent: the zone says the hostname has no address.
+ * - refused: it resolves, and nothing answers there.
+ * - other: it resolves, and a server that is not this one answers.
+ */
+type Outcome = 'ok' | 'unanswered' | 'absent' | 'refused' | 'other'
 const probe = vi.hoisted(() => ({
   /** Per hostname, the outcome of each probe in turn; the last one repeats. */
   script: new Map<string, Outcome[]>(),
@@ -55,26 +74,65 @@ vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
       return {
         status: { dnsResolved: true, instanceReachable: true, verified: true },
         dnsAnswered: true,
+        dns: 'resolved',
+        instance: 'ok',
       }
     }
+    const dns = outcome === 'unanswered' ? 'unknown' : outcome === 'absent' ? 'absent' : 'resolved'
     return {
-      status: {
-        dnsResolved: outcome === 'refused',
-        instanceReachable: false,
-        verified: false,
-      },
-      dnsAnswered: outcome === 'refused',
+      status: { dnsResolved: dns === 'resolved', instanceReachable: false, verified: false },
+      dnsAnswered: dns !== 'unknown',
+      dns,
+      instance: outcome === 'other' ? 'other' : 'unreachable',
     }
   },
 }))
 
+/** The zone's TXT records by name: each record as the strings it was published in. */
+const zone = vi.hoisted(() => ({
+  txt: new Map<string, string[][] | 'timeout'>(),
+  asked: [] as string[],
+}))
+vi.mock('@/lib/server/dns/resolver', () => {
+  const fail = (code: string) => Object.assign(new Error(code), { code })
+  const resolveTxt = async (name: string) => {
+    zone.asked.push(name)
+    const records = zone.txt.get(name)
+    if (records === 'timeout') throw fail('ETIMEOUT')
+    if (!records) throw fail('ENOTFOUND')
+    return records
+  }
+  const none = async () => {
+    throw fail('ENODATA')
+  }
+  const resolver = {
+    resolveTxt,
+    resolveCname: none,
+    resolveMx: none,
+    resolve4: none,
+    resolve6: none,
+    resolveNs: none,
+  }
+  return {
+    interactiveResolver: resolver,
+    systemResolver: { ...resolver, resolveTxt: none },
+  }
+})
+
 const notices = vi.hoisted(() => ({
   notAnswering: [] as { hostname: string; deadline: Date }[],
+  reasons: [] as string[],
   lapsed: [] as string[],
 }))
 vi.mock('../section-domains-notify', () => ({
-  notifySectionDomainNotAnswering: async (_section: string, hostname: string, deadline: Date) => {
+  notifySectionDomainNotAnswering: async (
+    _section: string,
+    hostname: string,
+    deadline: Date,
+    reason: string
+  ) => {
     notices.notAnswering.push({ hostname, deadline })
+    notices.reasons.push(reason)
   },
   notifySectionDomainLapsed: async (_section: string, hostname: string) => {
     notices.lapsed.push(hostname)
@@ -123,7 +181,10 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     probe.asked = []
     probe.primaryHosts = []
     probe.during = null
+    zone.txt = new Map()
+    zone.asked = []
     notices.notAnswering = []
+    notices.reasons = []
     notices.lapsed = []
     await fixture.begin()
   })
@@ -139,7 +200,14 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     const result = await run()
 
     expect(probe.asked).toEqual(['help.acme.com'])
-    expect(result).toEqual({ checked: 1, missed: 0, unconfirmed: 0, confirmed: 0, lapsed: 0 })
+    expect(result).toEqual({
+      checked: 1,
+      missed: 0,
+      unconfirmed: 0,
+      confirmed: 0,
+      lapsed: 0,
+      warned: 0,
+    })
     expect(await stored()).toEqual({
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED },
       status: { hostname: 'status.acme.com', verifiedAt: null },
@@ -149,7 +217,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
 
   it('only notes a first miss: no mark, no notice, sign-in untouched', async () => {
     await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
-    probe.script.set('help.acme.com', ['unanswered'])
+    probe.script.set('help.acme.com', ['absent'])
 
     const result = await run()
 
@@ -160,11 +228,11 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     expect(notices.notAnswering).toEqual([])
   })
 
-  it('marks a hostname whose lookups go unanswered on a second daily run, and tells the managers', async () => {
+  it('marks a hostname with no address on a second daily run, and tells the managers', async () => {
     await seed({
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, missedAt: MISSED_YESTERDAY },
     })
-    probe.script.set('help.acme.com', ['unanswered'])
+    probe.script.set('help.acme.com', ['absent'])
 
     const result = await run()
 
@@ -174,6 +242,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
         hostname: 'help.acme.com',
         verifiedAt: VERIFIED,
         unconfirmedSince: NOW.toISOString(),
+        unconfirmedReason: 'dns',
       },
     })
     // The grace counts from the mark, not the first miss.
@@ -182,11 +251,11 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     ])
   })
 
-  it('marks a hostname that resolves but no longer reaches this server the same way', async () => {
+  it('marks a hostname another server now answers on, with no verification record, the same way', async () => {
     await seed({
       status: { hostname: 'status.acme.com', verifiedAt: VERIFIED, missedAt: MISSED_YESTERDAY },
     })
-    probe.script.set('status.acme.com', ['refused'])
+    probe.script.set('status.acme.com', ['other'])
 
     await run()
 
@@ -194,7 +263,9 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       hostname: 'status.acme.com',
       verifiedAt: VERIFIED,
       unconfirmedSince: NOW.toISOString(),
+      unconfirmedReason: 'dns',
     })
+    expect(notices.reasons).toEqual(['dns'])
   })
 
   it('never takes a retry of the same run for the second miss', async () => {
@@ -202,7 +273,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     await seed({
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, missedAt: earlierToday },
     })
-    probe.script.set('help.acme.com', ['unanswered'])
+    probe.script.set('help.acme.com', ['absent'])
 
     expect((await run()).unconfirmed).toBe(0)
     expect(await stored()).toEqual({
@@ -215,7 +286,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     await seed({
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, missedAt: MISSED_YESTERDAY },
     })
-    probe.script.set('help.acme.com', ['unanswered'])
+    probe.script.set('help.acme.com', ['absent'])
     // Another run, which reached the hostname, cleared the first miss meanwhile.
     probe.during = async () => {
       await testDb.update(settings).set({
@@ -275,7 +346,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     await seed({
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
     })
-    probe.script.set('help.acme.com', ['unanswered'])
+    probe.script.set('help.acme.com', ['absent'])
 
     await run()
 
@@ -290,7 +361,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
       status: { hostname: 'status.acme.com', verifiedAt: VERIFIED },
     })
-    probe.script.set('help.acme.com', ['refused'])
+    probe.script.set('help.acme.com', ['other'])
 
     const result = await run()
 
@@ -307,7 +378,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     await seed({
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
     })
-    probe.script.set('help.acme.com', ['refused'])
+    probe.script.set('help.acme.com', ['other'])
 
     expect((await run()).lapsed).toBe(0)
     expect((await stored()).help?.verifiedAt).toBe(VERIFIED)
@@ -318,8 +389,8 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED },
       status: { hostname: 'status.acme.com', verifiedAt: VERIFIED },
     })
-    probe.script.set('help.acme.com', ['unanswered'])
-    probe.script.set('status.acme.com', ['unanswered'])
+    probe.script.set('help.acme.com', ['absent'])
+    probe.script.set('status.acme.com', ['absent'])
     // Both missed yesterday too, so this run would mark both.
     const map = await stored()
     map.help = { ...map.help!, missedAt: MISSED_YESTERDAY }
@@ -339,6 +410,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
         hostname: 'status.acme.com',
         verifiedAt: VERIFIED,
         unconfirmedSince: NOW.toISOString(),
+        unconfirmedReason: 'dns',
       },
     })
     expect(notices.notAnswering.map((n) => n.hostname)).toEqual(['status.acme.com'])
@@ -355,7 +427,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
         }),
       }
     )
-    probe.script.set('help.acme.com', ['unanswered'])
+    probe.script.set('help.acme.com', ['absent'])
 
     await run()
 
@@ -363,6 +435,287 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       hostname: 'help.acme.com',
       verifiedAt: VERIFIED,
       missedAt: NOW.toISOString(),
+    })
+  })
+
+  describe('a check that cannot say the hostname stopped being ours', () => {
+    const RECORD = ownershipRecord('tok-acme')
+    const RECORD_NAME = '_quackback.acme.com'
+
+    /** acme.com verified on Settings > Domains, its record published (or not) in the zone. */
+    async function verifiedZone(published: string[][] | 'timeout' | null = [[RECORD.value]]) {
+      await testDb.insert(domains).values({
+        name: 'acme.com',
+        ownershipToken: 'tok-acme',
+        status: 'verified',
+        verifiedAt: new Date(VERIFIED),
+      })
+      if (published) zone.txt.set(RECORD_NAME, published)
+    }
+
+    /** What sign-in and routing make of the stored map now. */
+    async function inUse(at: Date = NOW) {
+      const map = await stored()
+      return {
+        signIn: confirmedSectionDomains(map).help?.verifiedAt ?? null,
+        routing:
+          routableSectionDomains(map, { cloud: false, projection: null }, at.getTime()).help
+            ?.verifiedAt ?? null,
+      }
+    }
+
+    it('only warns when this server cannot reach itself but the verification record holds', async () => {
+      await verifiedZone()
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      const result = await run()
+
+      expect(result).toMatchObject({ warned: 1, missed: 0, unconfirmed: 0 })
+      expect(zone.asked).toEqual([RECORD_NAME])
+      expect(await stored()).toEqual({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'unreachable', since: NOW.toISOString() },
+        },
+      })
+      expect(await inUse()).toEqual({ signIn: VERIFIED, routing: VERIFIED })
+      expect(notices.notAnswering).toEqual([])
+    })
+
+    it('never starts the clock however many days it goes on', async () => {
+      await verifiedZone()
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      for (let day = 0; day < 10; day++) {
+        await watchSectionDomains(new Date(NOW.getTime() + day * DAY), { wait: noWait })
+      }
+
+      const later = new Date(NOW.getTime() + 10 * DAY)
+      expect(await stored()).toEqual({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'unreachable', since: NOW.toISOString() },
+        },
+      })
+      expect(await inUse(later)).toEqual({ signIn: VERIFIED, routing: VERIFIED })
+      expect(notices.notAnswering).toEqual([])
+      expect(notices.lapsed).toEqual([])
+    })
+
+    it('only warns, asking for its domain to be verified, when no verification record ever covered it', async () => {
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      for (let day = 0; day < 10; day++) {
+        await watchSectionDomains(new Date(NOW.getTime() + day * DAY), { wait: noWait })
+      }
+
+      expect(await stored()).toEqual({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'unverified', since: NOW.toISOString() },
+        },
+      })
+      expect(await inUse(new Date(NOW.getTime() + 10 * DAY))).toEqual({
+        signIn: VERIFIED,
+        routing: VERIFIED,
+      })
+      expect(notices.notAnswering).toEqual([])
+      expect(notices.lapsed).toEqual([])
+    })
+
+    it('counts a domain added by name that was pending all along as no record', async () => {
+      await testDb.insert(domains).values({
+        name: 'acme.com',
+        ownershipToken: 'tok-acme',
+        status: 'pending',
+      })
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ warned: 1, missed: 0 })
+      expect((await stored()).help?.reachWarning?.reason).toBe('unverified')
+    })
+
+    it('keeps the grace once a domain that covered it lost its verification', async () => {
+      // Demoted by the ownership watch: pending again, but it was verified.
+      await testDb.insert(domains).values({
+        name: 'acme.com',
+        ownershipToken: 'tok-acme',
+        status: 'pending',
+        verifiedAt: new Date(VERIFIED),
+      })
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ missed: 1, warned: 0 })
+    })
+
+    it('still lapses with no record when another server answers', async () => {
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['other'])
+
+      for (let day = 0; day < 10; day++) {
+        await watchSectionDomains(new Date(NOW.getTime() + day * DAY), { wait: noWait })
+      }
+
+      expect(await stored()).toEqual({ help: { hostname: 'help.acme.com', verifiedAt: null } })
+      expect(notices.reasons).toEqual(['dns'])
+      expect(notices.lapsed).toEqual(['help.acme.com'])
+    })
+
+    it('reads a long verification record published as several strings whole', async () => {
+      const longToken = 'k'.repeat(400)
+      await testDb.insert(domains).values({
+        name: 'acme.com',
+        ownershipToken: longToken,
+        status: 'verified',
+        verifiedAt: new Date(VERIFIED),
+      })
+      const value = ownershipRecord(longToken).value
+      zone.txt.set(RECORD_NAME, [[value.slice(0, 255), value.slice(255)]])
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ warned: 1, missed: 0 })
+    })
+
+    it('keeps the grace when the verification record is gone', async () => {
+      await verifiedZone(null)
+      await seed({
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, missedAt: MISSED_YESTERDAY },
+      })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ unconfirmed: 1, warned: 0 })
+      expect((await stored()).help?.unconfirmedSince).toBe(NOW.toISOString())
+      expect((await stored()).help?.unconfirmedReason).toBe('record')
+      expect(notices.reasons).toEqual(['record'])
+      expect((await inUse()).signIn).toBeNull()
+      expect(notices.notAnswering.map((n) => n.hostname)).toEqual(['help.acme.com'])
+    })
+
+    it('keeps the grace when the record no longer matches', async () => {
+      await verifiedZone([[ownershipRecord('tok-someone-else').value]])
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ missed: 1, warned: 0 })
+    })
+
+    it('keeps the grace when another server answers, even with the record published', async () => {
+      await verifiedZone()
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['other'])
+
+      expect(await run()).toMatchObject({ missed: 1, warned: 0 })
+      expect(zone.asked).toEqual([])
+    })
+
+    it('keeps the grace when the hostname has no address, even with the record published', async () => {
+      await verifiedZone()
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['absent'])
+
+      expect(await run()).toMatchObject({ missed: 1, warned: 0 })
+    })
+
+    it('only warns when the address lookups go unanswered, day after day', async () => {
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['unanswered'])
+
+      for (let day = 0; day < 10; day++) {
+        await watchSectionDomains(new Date(NOW.getTime() + day * DAY), { wait: noWait })
+      }
+
+      expect(await stored()).toEqual({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'dns', since: NOW.toISOString() },
+        },
+      })
+      expect(await inUse(new Date(NOW.getTime() + 10 * DAY))).toEqual({
+        signIn: VERIFIED,
+        routing: VERIFIED,
+      })
+      expect(notices.notAnswering).toEqual([])
+    })
+
+    it('only warns when the verification record lookup goes unanswered', async () => {
+      await verifiedZone('timeout')
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ warned: 1, missed: 0 })
+      expect((await stored()).help?.reachWarning?.reason).toBe('dns')
+    })
+
+    it('leaves a mark and its grace as they were when the lookups go unanswered', async () => {
+      const since = new Date(NOW.getTime() - UNCONFIRMED_GRACE_MS - 1).toISOString()
+      await seed({
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
+      })
+      probe.script.set('help.acme.com', ['unanswered'])
+
+      expect(await run()).toMatchObject({ lapsed: 0, warned: 0 })
+      expect(await stored()).toEqual({
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
+      })
+    })
+
+    it('ends a mark once the verification record is found again', async () => {
+      await verifiedZone()
+      const since = new Date(NOW.getTime() - 2 * DAY).toISOString()
+      await seed({
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, unconfirmedSince: since },
+      })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ confirmed: 1 })
+      expect(await stored()).toEqual({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'unreachable', since: NOW.toISOString() },
+        },
+      })
+      expect((await inUse()).signIn).toBe(VERIFIED)
+    })
+
+    it('clears the warning once a check reaches the hostname', async () => {
+      await seed({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'unreachable', since: MISSED_YESTERDAY },
+        },
+      })
+
+      expect(await run()).toMatchObject({ warned: 0, confirmed: 0 })
+      expect(await stored()).toEqual({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+    })
+
+    it('drops the warning for a first miss when the hostname then fails', async () => {
+      await verifiedZone(null)
+      await seed({
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          reachWarning: { reason: 'unreachable', since: MISSED_YESTERDAY },
+        },
+      })
+      probe.script.set('help.acme.com', ['refused'])
+
+      expect(await run()).toMatchObject({ missed: 1 })
+      expect(await stored()).toEqual({
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED, missedAt: NOW.toISOString() },
+      })
     })
   })
 
@@ -407,7 +760,14 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
   it('does nothing on a server not yet set up, which has no settings row', async () => {
     await testDb.delete(settings)
 
-    expect(await run()).toEqual({ checked: 0, missed: 0, unconfirmed: 0, confirmed: 0, lapsed: 0 })
+    expect(await run()).toEqual({
+      checked: 0,
+      missed: 0,
+      unconfirmed: 0,
+      confirmed: 0,
+      lapsed: 0,
+      warned: 0,
+    })
     expect(probe.asked).toEqual([])
   })
 
@@ -418,7 +778,14 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     )
     probe.script.set('help.acme.com', ['unanswered'])
 
-    expect(await run()).toEqual({ checked: 0, missed: 0, unconfirmed: 0, confirmed: 0, lapsed: 0 })
+    expect(await run()).toEqual({
+      checked: 0,
+      missed: 0,
+      unconfirmed: 0,
+      confirmed: 0,
+      lapsed: 0,
+      warned: 0,
+    })
     expect(probe.asked).toEqual([])
     expect(await stored()).toEqual({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
   })

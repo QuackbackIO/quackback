@@ -21,13 +21,21 @@ export interface SectionDomain {
   hostname: string
   verifiedAt: string | null
   /**
-   * Self-hosted only: since when the verification has been kept without an
-   * answer (a Verify whose DNS lookup went unanswered, or a daily re-check
-   * that found the hostname not reaching this server, `section-domains-watch`).
+   * Self-hosted only: since when the verification has been kept after daily
+   * re-checks found the hostname may no longer be this workspace's (no
+   * address, something else answering, or its verification record gone,
+   * `section-domains-watch`).
    * Absent while the hostname is confirmed. Routing keeps a bounded grace;
    * sign-in is never carried there.
    */
   unconfirmedSince?: string | null
+  /**
+   * Self-hosted only: why the hostname was marked. `dns`: it has no address,
+   * or something else answers there. `record`: the verification record that
+   * covered it is gone or no longer matches. Absent on a mark from before
+   * the reason was kept, which reads as `dns`.
+   */
+  unconfirmedReason?: 'dns' | 'record' | null
   /**
    * Self-hosted only: when a daily re-check first found the hostname not
    * reaching this server. Only a second run that misses marks it
@@ -35,6 +43,24 @@ export interface SectionDomain {
    * sign-in reads it.
    */
   missedAt?: string | null
+  /**
+   * Self-hosted only: a check that failed without saying the hostname is no
+   * longer this workspace's. `unreachable`: DNS still points it somewhere and
+   * the workspace's verification record still covers it, but this server
+   * could not reach itself through it (no hairpin routing, split DNS, egress
+   * rules). `unverified`: the same, but no verification record covers it, so
+   * its domain should be verified on Settings > Domains. `dns`: the lookups
+   * went unanswered. A warning only: routing and
+   * sign-in keep the hostname and no grace starts. Cleared by a check that
+   * reaches it.
+   */
+  reachWarning?: SectionDomainReachWarning | null
+}
+
+export interface SectionDomainReachWarning {
+  reason: 'unreachable' | 'unverified' | 'dns'
+  /** When this run of warnings began. */
+  since: string
 }
 
 /**
@@ -56,7 +82,10 @@ export function sectionDomainState(entry: SectionDomain): SectionDomainState {
   return entry.verifiedAt ? 'verified' : 'pending'
 }
 
-/** How long routing keeps a verification whose lookups go unanswered: the domain ownership grace. */
+/** Where a domain is verified: Settings > Domains. */
+export const VERIFIED_DOMAINS_PATH = '/admin/settings/domains'
+
+/** How long routing keeps a marked verification (`unconfirmedSince`): the domain ownership grace. */
 export const UNCONFIRMED_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
@@ -67,16 +96,41 @@ export const UNCONFIRMED_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 export function notAnsweringNote(entry: SectionDomain): string | null {
   if (!entry.unconfirmedSince) return null
   const since = Date.parse(entry.unconfirmedSince)
-  if (Number.isNaN(since)) return 'Not answering.'
+  const record = entry.unconfirmedReason === 'record'
+  if (Number.isNaN(since)) return record ? 'Domain verification failed.' : 'Not answering.'
   const by = new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(
     since + UNCONFIRMED_GRACE_MS
   )
-  return `Not answering. Fix DNS by ${by}.`
+  // The fix named is the real one: DNS only when DNS is what is wrong.
+  return record
+    ? `Domain verification failed. Verify its domain in Settings > Domains by ${by}.`
+    : `Not answering. Fix DNS by ${by}.`
+}
+
+/** The step a hostname with no verification record needs. */
+export const VERIFY_ITS_DOMAIN = 'Verify its domain in Settings > Domains to keep it working.'
+
+/**
+ * What the admin pages say about a verified hostname whose last check could
+ * not reach it while nothing said it is no longer ours. Null otherwise.
+ */
+export function reachWarningNote(entry: SectionDomain): string | null {
+  if (entry.unconfirmedSince || !entry.verifiedAt) return null
+  switch (entry.reachWarning?.reason) {
+    case 'unreachable':
+      return "This server can't reach itself through this domain. If visitors can open it, no action is needed."
+    case 'unverified':
+      return `This server can't reach itself through this domain. ${VERIFY_ITS_DOMAIN}`
+    case 'dns':
+      return 'DNS lookups for this domain failed on the last check. It will be checked again.'
+    default:
+      return null
+  }
 }
 
 /**
  * The map as sign-in may use it: a hostname whose verification is only kept
- * (its lookups go unanswered) counts as unverified. A lapsed or dangling
+ * (`unconfirmedSince`) counts as unverified. A lapsed or dangling
  * domain may be someone else's now, and a session must never be carried to
  * it, nor a sign-in posted from it trusted.
  */

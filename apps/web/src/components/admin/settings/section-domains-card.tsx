@@ -9,7 +9,7 @@
  * On Cloud the records belong to the custom domain itself, on the Domain
  * verification card below.
  */
-import { Fragment, lazy, Suspense, useState } from 'react'
+import { Fragment, lazy, Suspense, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import {
@@ -21,7 +21,7 @@ import type { CheckResult } from '@/components/admin/settings/section-domain-rec
 import type { DnsRecordRow } from '@/components/shared/dns-record-table'
 import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
 import { errorText } from '@/lib/client/error-text'
-import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/section-domains'
+import { CUSTOM_DOMAINS_ANCHOR, VERIFIED_DOMAINS_PATH } from '@/lib/shared/section-domains'
 import {
   usedForLabel,
   type CustomDomainUsedFor,
@@ -30,6 +30,7 @@ import {
 import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
 import {
   notAnsweringNote,
+  reachWarningNote,
   sectionDomainState,
   type SectionDomainState,
 } from '@/lib/shared/section-domains'
@@ -76,6 +77,23 @@ export function listedSections({
 
 /** Holds a row's place where it has no menu, so every domain lines up. */
 const MENU_SPACE = <span aria-hidden="true" className="size-7 shrink-0" />
+
+const DOMAINS_PAGE = 'Settings > Domains'
+
+/** A note that sends the admin to Settings > Domains, with that name as the link. */
+function withDomainsLink(note: string): ReactNode {
+  const at = note.indexOf(DOMAINS_PAGE)
+  if (at < 0) return note
+  return (
+    <>
+      {note.slice(0, at)}
+      <a href={VERIFIED_DOMAINS_PATH} className="underline underline-offset-2">
+        {DOMAINS_PAGE}
+      </a>
+      {note.slice(at + DOMAINS_PAGE.length)}
+    </>
+  )
+}
 
 const STATE_BADGE = {
   verified: null,
@@ -214,19 +232,23 @@ export function SectionDomainsCard({
           const needsVerify = state === 'pending' || state === 'not-answering'
           // The second line: only a state that needs action speaks, and it says the next step.
           // Modules are turned on in Settings > General; named, not linked, as the page's JS budget is tight.
+          // A verified domain this server could not check speaks too, with no badge: nothing is off.
+          const warning = reachWarningNote(entry)
           const note =
             state === 'not-answering'
               ? notAnsweringNote(entry)
-              : state === 'pending' && checks[section]?.verified === false
-                ? 'Not verified yet. DNS changes can take a while to show.'
-                : off
-                  ? `Turn ${label} on in Settings > General to use this domain.`
-                  : undefined
+              : warning
+                ? warning
+                : state === 'pending' && checks[section]?.verified === false
+                  ? 'Not verified yet. DNS changes can take a while to show.'
+                  : off
+                    ? `Turn ${label} on in Settings > General to use this domain.`
+                    : undefined
           return (
             <Fragment key={section}>
               <SettingsListRow
                 title={label}
-                meta={note ?? undefined}
+                meta={note ? withDomainsLink(note) : undefined}
                 wrapMeta
                 badges={
                   badge || off ? (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { notAnsweringNote, sectionDomainState } from '../section-domains'
+import { notAnsweringNote, reachWarningNote, sectionDomainState } from '../section-domains'
 
 const AT = '2026-11-01T00:00:00.000Z'
 
@@ -37,5 +37,24 @@ describe('notAnsweringNote', () => {
 
   it('is null for a domain that answers', () => {
     expect(notAnsweringNote({ hostname: 'help.acme.com', verifiedAt: AT })).toBeNull()
+  })
+})
+
+describe('reachWarningNote', () => {
+  const warned = (reason: 'unreachable' | 'dns') => ({
+    hostname: 'help.acme.com',
+    verifiedAt: AT,
+    reachWarning: { reason, since: AT },
+  })
+
+  it('keeps a domain verified while saying this server could not reach or look it up', () => {
+    expect(sectionDomainState(warned('unreachable'))).toBe('verified')
+    expect(reachWarningNote(warned('unreachable'))).toMatch(/can't reach itself/)
+    expect(reachWarningNote(warned('dns'))).toMatch(/DNS lookups for this domain failed/)
+  })
+
+  it('gives way to a mark, and says nothing without a warning', () => {
+    expect(reachWarningNote({ ...warned('dns'), unconfirmedSince: AT })).toBeNull()
+    expect(reachWarningNote({ hostname: 'help.acme.com', verifiedAt: AT })).toBeNull()
   })
 })

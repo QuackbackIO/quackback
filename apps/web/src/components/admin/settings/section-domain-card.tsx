@@ -16,6 +16,7 @@ import {
   effectiveSectionDomains,
   hostOfOrigin,
   notAnsweringNote,
+  reachWarningNote,
   sectionDomainState,
   type SectionDomainMap,
 } from '@/lib/shared/section-domains'
@@ -39,7 +40,7 @@ export function SectionDomainCard({
 }) {
   const entry = map[section]
   const state = entry ? sectionDomainState(entry) : null
-  const note = entry ? notAnsweringNote(entry) : null
+  const note = entry ? (notAnsweringNote(entry) ?? reachWarningNote(entry)) : null
   // Label left, value right, as a detail row reads; kept plain, it sits on many pages.
   return (
     <SettingsCard>
