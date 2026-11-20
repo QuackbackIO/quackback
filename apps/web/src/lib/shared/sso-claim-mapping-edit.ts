@@ -476,7 +476,9 @@ export function roleRuleRoleIds(mapping: unknown, opts: { newSince?: unknown } =
  */
 export type RoleRuleGrantCheck = (
   before: unknown,
-  after: unknown
+  after: unknown,
+  /** The server transaction the save runs in, when there is one. */
+  executor?: unknown
 ) => Promise<{ adminTierRoleIds: ReadonlySet<string> }>
 
 export function sourcesAreDefault(sources: IdentitySource[] | undefined): boolean {

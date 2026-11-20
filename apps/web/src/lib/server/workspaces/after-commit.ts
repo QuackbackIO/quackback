@@ -137,6 +137,10 @@ export async function runInAfterCommitFrame<T>(fn: () => Promise<T>): Promise<T>
       frame.pending.clear()
       frame.callbacks.length = 0
       throw err
+    } finally {
+      // Work started inside the transaction can outlive it and still sees this
+      // frame. Once the transaction is over it must read as closed.
+      frame.depth = 0
     }
   })
   // Outside the frame, so whatever a callback writes is its own commit.
@@ -150,6 +154,12 @@ async function runCallback(callback: () => unknown): Promise<void> {
   } catch (err) {
     log.error({ err }, 'after-commit callback threw')
   }
+}
+
+/** True while the caller is inside a `db.transaction` callback. */
+export function isInsideDbTransaction(): boolean {
+  const frame = frames.getStore()
+  return frame !== undefined && frame.depth > 0
 }
 
 /**

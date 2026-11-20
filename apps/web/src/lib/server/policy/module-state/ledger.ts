@@ -73,6 +73,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Maps an AI endpoint (the process-wide OPENAI_BASE_URL plus the model name) to how far structured requests had to fall back from json_schema. The base URL is process config and the model is a per-feature setting, neither is workspace data, and every workspace in the process talks to the same endpoints. A cross-workspace hit returns only "this endpoint and model reject json_schema (or response_format)", which is exactly what the requesting workspace would learn from its own first request; the worst case is one extra fallback request.',
   },
   {
+    file: 'apps/web/src/lib/server/db.ts',
+    name: 'reportedPoolUseSites',
+    category: 'fleet-wide',
+    reason:
+      'Remembers which source locations (two stack frames) have already logged the "shared db used inside a transaction" warning, so each one logs once per process. It holds code positions, not data: every workspace running that code produces the same frames. A cross-workspace hit only suppresses a repeat of a warning this process already wrote for the same line of code.',
+  },
+  {
     file: 'apps/web/src/lib/server/functions/read-batch.ts',
     name: 'registeredReads',
     category: 'fleet-wide',

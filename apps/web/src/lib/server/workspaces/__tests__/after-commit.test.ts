@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   __resetAfterCommitForTests,
   afterCommit,
+  isInsideDbTransaction,
   noteDurableWork,
   onDurableWorkCommitted,
   runInAfterCommitFrame,
@@ -11,6 +12,18 @@ import {
 describe('after-commit signaling', () => {
   afterEach(() => {
     __resetAfterCommitForTests()
+  })
+
+  it('reports a transaction as open only while its callback runs', async () => {
+    expect(isInsideDbTransaction()).toBe(false)
+    let later!: Promise<boolean>
+    await runInAfterCommitFrame(async () => {
+      expect(isInsideDbTransaction()).toBe(true)
+      // Work started inside the transaction that finishes after it.
+      later = new Promise((resolve) => setTimeout(() => resolve(isInsideDbTransaction()), 10))
+    })
+    expect(isInsideDbTransaction()).toBe(false)
+    expect(await later).toBe(false)
   })
 
   it('delivers immediately when no transaction is open', () => {

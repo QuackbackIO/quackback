@@ -44,7 +44,7 @@ export async function updateBrandingConfig(
     const isCustomisingColors = config.light !== undefined || config.dark !== undefined
     if (isCustomisingColors) {
       const { assertTierFeature } = await import('./tier-enforce')
-      await assertTierFeature('customColors', 'Custom colours')
+      await assertTierFeature('customColors', 'Custom colours', options.executor)
     }
 
     const org = await requireSettings(options.executor)
@@ -366,7 +366,7 @@ export async function updateWorkspaceName(
 ): Promise<string> {
   log.info('update workspace name')
   try {
-    await assertNotManaged('workspace.name')
+    await assertNotManaged('workspace.name', options.executor)
     const org = await requireSettings(options.executor)
     const sanitizedName = name.trim()
     if (!sanitizedName) throw new ValidationError('INVALID_NAME', 'Workspace name cannot be empty')

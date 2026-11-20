@@ -28,10 +28,10 @@ export async function enforceSeatLimit(opts?: {
   convertingInvite?: boolean
   executor?: SeatExecutor
 }): Promise<void> {
-  const limits = await getTierLimits()
+  const executor = opts?.executor
+  const limits = await getTierLimits(undefined, executor)
   if (limits.maxTeamSeats === null) return
 
-  const executor = opts?.executor
   if (executor) await lockSeatLedger(executor)
 
   const usage = await countSeatUsage(executor ?? db)
@@ -88,10 +88,10 @@ export async function assertSeatsAvailable(
   opts?: { executor?: SeatExecutor }
 ): Promise<void> {
   if (needed <= 0) return
-  const limits = await getTierLimits()
+  const executor = opts?.executor
+  const limits = await getTierLimits(undefined, executor)
   if (limits.maxTeamSeats === null) return
 
-  const executor = opts?.executor
   if (executor) await lockSeatLedger(executor)
 
   const usage = await countSeatUsage(executor ?? db)
