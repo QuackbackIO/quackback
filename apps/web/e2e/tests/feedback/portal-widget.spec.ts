@@ -264,7 +264,13 @@ test.describe('widget feedback', () => {
           const { widget } = await identifiedWidget(page, marker)
           await submitInWidget(widget, board, `${marker} held in widget`)
           await expect(widget.getByText('Thanks for your feedback!')).toBeVisible()
-          await expect(widget.getByText(/review/i).first()).toBeVisible()
+          // The kept-mounted views hold other text; ask for the success line itself.
+          await expect(
+            widget.getByText(
+              'Your post is waiting for review. Others will see it once the team approves it.'
+            )
+          ).toBeVisible()
+          await expect(widget.getByText('Your post has been submitted.')).toHaveCount(0)
         })
       }
     )
