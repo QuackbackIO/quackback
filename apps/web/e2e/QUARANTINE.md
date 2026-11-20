@@ -214,3 +214,46 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   published translation's live text changes at once. Fix: either set
   `status: 'draft'` on that save, or label the button "Save" when the
   translation is published.
+- `help-center/public-pages.spec.ts` › HC-P-33 reading the canonical article
+  page counts a view (HC-B1). `view_count` is incremented only in
+  `getPublicArticleBySlug` (`domains/help-center/help-center.article.service.ts`),
+  which serves the legacy URLs, the widget's slug opens, embed cards and the
+  admin View button. The canonical `/hc/<locale>/articles/<urlId>-<slug>` page
+  uses `getPublicArticleByUrlId`, which never counts, so the list "N views",
+  the performance table and Popular articles miss real reads. Fix: count in
+  the canonical page's loader (and decide whether previews/embeds count).
+- `help-center/feedback.spec.ts` › HC-F-05 a signed-out visitor who flips Yes
+  to No is counted once (HC-B2). `recordArticleFeedback`
+  (`domains/help-center/help-center.article-feedback.service.ts`) looks up an
+  existing vote only when there is a principal; with none it always inserts
+  (null principals never collide on the unique index), so Yes then No adds
+  one helpful and one not-helpful vote, and every request adds another. Fix:
+  have the portal mint an anonymous session before voting (as the widget
+  does), or accept the previous `feedbackId` from the client and flip that
+  row; add a rate limit either way.
+- `help-center/public-access.spec.ts` › HC-P-04 the landing card counts only
+  articles the visitor can open (HC-B14). `listPublicCategories`
+  (`domains/help-center/help-center.category.service.ts`) rolls
+  `recursivePublishedArticleCount` up through every descendant without
+  checking that the descendant category is public or that article audiences
+  admit the viewer, so a card shows "5 articles" where one can be opened (and
+  a category with only hidden content is listed at all). Fix: compute the
+  roll-up with the same visibility predicate the collection page uses
+  (`helpCenterVisibilityConditions` for the viewer).
+- `help-center/widget.spec.ts` › HC-W-10 the first widget vote of a fresh
+  visitor confirms it (new bug, `@isolated`). The vote is stored against the
+  freshly minted session, but the footer
+  (`components/widget/widget-article-footer.tsx`) still says "Was this
+  helpful?" and no button is pressed. `cast` calls `ensureSession()` before
+  the write; minting the session changes the widget identity, which appears
+  to remount the article view (session-keyed queries) and drop the local
+  `vote` state. Root cause unconfirmed. Fix: keep the vote state above the
+  remount (or key it by article), or mint the session without remounting.
+- `help-center/public-locales.spec.ts` › HC-P-27 an untranslated article has
+  no French page, and related links on a French page work (HC-B26;
+  `@isolated`). `getPublicArticlePageFn` (`lib/server/functions/help-center.ts`)
+  loads related articles without the page language, so a French article page
+  lists English titles linking to `/hc/fr/articles/<id>-<slug>`, which 404
+  when that article has no published French translation. Fix: load related
+  articles for the locale (translated only), or link untranslated ones to the
+  default-language URL.
