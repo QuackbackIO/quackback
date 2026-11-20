@@ -10,7 +10,8 @@
  * So Better Auth sends people to {@link CONSENT_START_PATH}, a server route
  * that moves the whole query, byte for byte, into the one `oauth_query` param
  * of `/oauth/consent`. A single param whose value starts with a key name is
- * never JSON, so the router leaves it as it is.
+ * never JSON, so the router leaves it as it is. The client, scope and redirect
+ * also stay readable in the address bar; the page never reads them from there.
  */
 import { CLIENT_REQUESTED_SCOPE_PARAM } from '@/lib/shared/mcp-consent-scopes'
 
@@ -21,9 +22,19 @@ export const CONSENT_START_PATH = '/oauth/consent/start'
 
 export const CONSENT_QUERY_PARAM = 'oauth_query'
 
+/** Shown in the address bar beside the carried query, for whoever reads the URL. */
+const READABLE_PARAMS = ['client_id', 'scope', CLIENT_REQUESTED_SCOPE_PARAM, 'redirect_uri']
+
 /** The consent page URL that carries `rawSearch` (with or without `?`) unchanged. */
 export function consentPageLocation(rawSearch: string): string {
-  const query = new URLSearchParams({ [CONSENT_QUERY_PARAM]: rawSearch.replace(/^\?/, '') })
+  const raw = rawSearch.replace(/^\?/, '')
+  const signed = new URLSearchParams(raw)
+  const query = new URLSearchParams()
+  for (const name of READABLE_PARAMS) {
+    const value = signed.get(name)
+    if (value !== null) query.set(name, value)
+  }
+  query.set(CONSENT_QUERY_PARAM, raw)
   return `${CONSENT_PAGE_PATH}?${query}`
 }
 

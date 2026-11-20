@@ -68,8 +68,9 @@ describe('consent signed query', () => {
     expect(await verifyOAuthQueryParams(raw, SECRET)).toBe(true)
 
     const location = consentPageLocation(`?${raw}`)
-    expect(location.startsWith(`${CONSENT_PAGE_PATH}?${CONSENT_QUERY_PARAM}=`)).toBe(true)
     const search = location.slice(CONSENT_PAGE_PATH.length)
+    expect(location.startsWith(`${CONSENT_PAGE_PATH}?client_id=client-1&`)).toBe(true)
+    expect(new URLSearchParams(search).get(CONSENT_QUERY_PARAM)).toBe(raw)
     const { parsed, written } = throughRouter(search)
 
     // The router writes the URL back as it came, so it never redirects it.
