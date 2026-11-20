@@ -7,7 +7,8 @@
  * to state intent so the matrix (and its reviewers) can tell an END_USER action
  * apart from an accidental hole:
  *   - bare `requireAuth()`      — an end-user action, or a team-any read
- *   - bare `withApiKeyAuth(req)` — a public-tier REST read (any valid key)
+ *   - bare `withApiKeyAuth(req)` — a REST read that asserts its read scope
+ *     (and, for some, one of a few permissions) right after the gate
  *   - `requireTeamAuth()`        — a local wrapper that resolves to a permission
  *   - inline `isAdmin` / `isTeamMember` — either the real access decision
  *     (SECONDARY_GATE) or a behavior refinement behind an existing gate
@@ -19,6 +20,7 @@
  * expectation" gate from the feature request.
  */
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import type { ApiKeyScope } from '@/lib/shared/api-key-scopes'
 import {
   GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
   PORTAL_DESIGN_WRITE_PERMISSIONS,
@@ -32,6 +34,8 @@ export type SurfaceIntent =
   | 'PUBLIC_DATA'
   /** The MCP handler's bare `withApiKeyAuth(req)`: a valid key enters; per-tool scopes authorize. */
   | 'MCP_ENTRY'
+  /** Bare `withApiKeyAuth(req)` followed by `assertApiScope` / `assertApiReadAccess`: the key must hold a read scope and, when listed, its creator one of `resolvesToAny`. Used where the matching permission's verb is not a read, so a permission gate would demand the write scope. */
+  | 'SCOPED_READ'
   /** Bare gate whose required permission is computed from the request (a field-scoped PATCH): a valid key authenticates, then `assertApiPermissions` enforces the permission for each field touched. No single static permission covers it. */
   | 'DYNAMIC_PERMISSION'
   /** An inline role check that IS the access decision for a surface without a requireAuth/key gate. */
@@ -45,8 +49,10 @@ export interface Classification {
   roleBar?: 'admin' | 'team'
   /** For SECONDARY_GATE: the catalogue permission the check mirrors, when it maps to one. */
   resolvesTo?: PermissionKey
-  /** For DYNAMIC_PERMISSION: the closed set of permissions the runtime check may require (one per patchable field). */
+  /** For DYNAMIC_PERMISSION: the closed set of permissions the runtime check may require (one per patchable field). For SCOPED_READ: the permissions of which the key's creator must hold one (empty = any teammate). */
   resolvesToAny?: readonly PermissionKey[]
+  /** For SCOPED_READ: the read scope the key must hold. */
+  scope?: ApiKeyScope
   why: string
 }
 
@@ -80,11 +86,18 @@ export const ALIAS_RESOLUTIONS: Record<string, PermissionKey> = {
 // ---------------------------------------------------------------------------
 
 const END_USER = (why: string): Classification => ({ intent: 'END_USER', why })
-const PUBLIC_DATA = (why: string): Classification => ({ intent: 'PUBLIC_DATA', why })
 const DYNAMIC_PERMISSION = (
   resolvesToAny: readonly PermissionKey[],
   why: string
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
+const SCOPED_READ = (
+  scope: ApiKeyScope,
+  resolvesToAny: readonly PermissionKey[],
+  why: string
+): Classification => ({ intent: 'SCOPED_READ', scope, resolvesToAny, why })
+
+/** Who reads the admin status shapes over REST (`status/-serialize.ts`). */
+const STATUS_PAGE_READ = [PERMISSIONS.STATUS_PAGE_PUBLISH, PERMISSIONS.STATUS_PAGE_MANAGE]
 
 /** The permission each settings registry area needs, to read and to write. */
 const SETTINGS_REGISTRY_PERMISSIONS = [
@@ -700,24 +713,38 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'either-or — conversation.view(_all) or ticket.view(_all), checked by canViewInboxAtAll'
   ),
 
-  // Public-tier REST reads: a valid key is required, but the data is portal-public
-  // so no permission is checked. Anonymous (no key) is still rejected.
-  'routes/api/v1/apps/boards.ts::GET': PUBLIC_DATA('public board list'),
-  'routes/api/v1/boards/$boardId.ts::GET': PUBLIC_DATA('public board'),
-  'routes/api/v1/boards/index.ts::GET': PUBLIC_DATA('public board list'),
-  // Status page read API: a valid key reads the public status surface (the
-  // page snapshot, component list, and incident/maintenance history). Writes
-  // to these resources require STATUS_PAGE_MANAGE / STATUS_PAGE_PUBLISH.
-  'routes/api/v1/status/summary.ts::GET': PUBLIC_DATA('public status page summary'),
+  // Status page read API. The public snapshot needs only the read scope; the
+  // admin shapes (services with segment ids, incidents with audit fields)
+  // also need a status page permission. Both status page permissions are
+  // write-verbed, so they are checked by hand after the read scope rather
+  // than through a permission gate, which would demand write:feedback.
+  'routes/api/v1/status/summary.ts::GET': SCOPED_READ(
+    'read:feedback',
+    [],
+    'public status page snapshot: any teammate key holding read:feedback'
+  ),
   // Shared handlers behind both /status/components (deprecated) and the
   // /status/services aliases — one gate each, two route surfaces.
-  'routes/api/v1/status/-service-handlers.ts::listStatusComponentsHandler': PUBLIC_DATA(
-    'public status service list'
+  'routes/api/v1/status/-service-handlers.ts::listStatusComponentsHandler': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'status services with their segment ids'
   ),
-  'routes/api/v1/status/-service-handlers.ts::getStatusComponentHandler':
-    PUBLIC_DATA('public status service'),
-  'routes/api/v1/status/incidents/index.ts::GET': PUBLIC_DATA('public status incident list'),
-  'routes/api/v1/status/incidents/$incidentId.ts::GET': PUBLIC_DATA('public status incident'),
+  'routes/api/v1/status/-service-handlers.ts::getStatusComponentHandler': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'a status service with its segment ids'
+  ),
+  'routes/api/v1/status/incidents/index.ts::GET': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'incidents with their audit fields'
+  ),
+  'routes/api/v1/status/incidents/$incidentId.ts::GET': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'an incident with its audit fields'
+  ),
   // Help center reads and the article vote by key (helpCenterApiAccess): any
   // key with read:article gets what is published to everyone; drafts, private
   // and gated content need help_center.manage.
@@ -741,14 +768,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     [PERMISSIONS.HELP_CENTER_MANAGE],
     'help category list: read:article lists public categories, help_center.manage lists all'
   ),
-  'routes/api/v1/roadmaps/$roadmapId.columns.ts::GET': PUBLIC_DATA('public roadmap columns'),
-  'routes/api/v1/roadmaps/$roadmapId.posts.ts::GET': PUBLIC_DATA('public roadmap posts'),
-  'routes/api/v1/roadmaps/$roadmapId.ts::GET': PUBLIC_DATA('public roadmap'),
-  'routes/api/v1/roadmaps/index.ts::GET': PUBLIC_DATA('public roadmap list'),
-  'routes/api/v1/statuses/$statusId.ts::GET': PUBLIC_DATA('public status'),
-  'routes/api/v1/statuses/index.ts::GET': PUBLIC_DATA('public status list'),
-  'routes/api/v1/tags/$tagId.ts::GET': PUBLIC_DATA('public tag'),
-  'routes/api/v1/tags/index.ts::GET': PUBLIC_DATA('public tag list'),
 
   // Advertised plan stickers, the same payload Plan & billing renders. Any
   // signed-in principal may read them so upgrade offers stay consistent;

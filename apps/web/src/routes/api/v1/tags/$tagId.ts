@@ -30,7 +30,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.TAG_VIEW })
 
           const tagId = parseTypeId<PostTagId>(params.tagId, 'post_tag', 'tag ID')
 

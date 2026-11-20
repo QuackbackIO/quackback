@@ -183,8 +183,9 @@ export async function withApiKeyAuth(
   // with the creator's current permissions) INTERSECTED with the key's stored
   // scopes: the personal-access-token model. Keys with a NULL scopes column
   // predate scope selection and keep full owner authority. No options means a
-  // valid key is required but no authorization gate, for reads whose data is
-  // public.
+  // valid key is required but no authorization gate yet: the caller then
+  // asserts what it needs (assertApiScope, assertApiReadAccess,
+  // assertApiPermissions), because no workspace data is open to any key.
   if (options) {
     if (!auth.permissions.has(options.permission)) {
       throw new ForbiddenError('FORBIDDEN', `Requires the '${options.permission}' permission`)
@@ -253,6 +254,27 @@ export function apiKeyHolds(auth: ApiAuthContext, permission: PermissionKey): bo
 export function assertApiScope(auth: ApiAuthContext, scope: ApiKeyScope): void {
   if (!hasApiScope(auth.apiKey.scopes, scope)) {
     throw new ForbiddenError('FORBIDDEN', `This API key is missing the '${scope}' scope`)
+  }
+}
+
+/**
+ * Assert a key may make a read that its creator needs any one of several
+ * permissions for. The key must hold the read `scope`, and its creator one of
+ * `anyOf`. Use it where the matching permission's verb is not a read (such as
+ * `status_page.publish`), so gating on that permission would wrongly demand
+ * the write scope from a read-only key.
+ */
+export function assertApiReadAccess(
+  auth: ApiAuthContext,
+  scope: ApiKeyScope,
+  anyOf: readonly PermissionKey[]
+): void {
+  assertApiScope(auth, scope)
+  if (!anyOf.some((permission) => auth.permissions.has(permission))) {
+    throw new ForbiddenError(
+      'FORBIDDEN',
+      `Requires the ${anyOf.map((p) => `'${p}'`).join(' or ')} permission`
+    )
   }
 }
 

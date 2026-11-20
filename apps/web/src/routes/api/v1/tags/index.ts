@@ -28,7 +28,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.TAG_VIEW })
 
           // Import service function
           const { listPostTags } = await import('@/lib/server/domains/post-tags/post-tag.service')
