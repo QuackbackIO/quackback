@@ -21,6 +21,8 @@ function conversationItem(over: {
   priority?: ConversationDTO['priority']
   createdAt?: string
   lastMessageAt?: string | null
+  /** A linked customer ticket's due date; omitted = no linked ticket. */
+  linkedDueAt?: string | null
 }): InboxItemDTO {
   const conversation = {
     id: over.id as ConversationId,
@@ -48,7 +50,18 @@ function conversationItem(over: {
     customAttributes: {},
     translation: null,
   } as unknown as ConversationDTO
-  return { kind: 'conversation', conversation, linkedTicket: null, searchSnippet: null }
+  const linkedTicket =
+    over.linkedDueAt !== undefined
+      ? {
+          id: `ticket_linked_${over.id}` as TicketId,
+          number: 1,
+          title: 'Linked',
+          statusName: 'Open',
+          statusCategory: 'open' as const,
+          dueAt: over.linkedDueAt,
+        }
+      : null
+  return { kind: 'conversation', conversation, linkedTicket, searchSnippet: null }
 }
 
 function ticketItem(over: {
@@ -56,6 +69,7 @@ function ticketItem(over: {
   priority?: TicketDTO['priority']
   createdAt?: string
   updatedAt?: string
+  dueAt?: string | null
 }): InboxItemDTO {
   const ticket = {
     id: over.id as TicketId,
@@ -70,7 +84,7 @@ function ticketItem(over: {
     assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
     company: null,
     firstResponseAt: null,
-    dueAt: null,
+    dueAt: over.dueAt ?? null,
     resolvedAt: null,
     createdAt: over.createdAt ?? '2026-01-01T00:00:00.000Z',
     updatedAt: over.updatedAt ?? over.createdAt ?? '2026-01-01T00:00:00.000Z',
@@ -178,6 +192,64 @@ describe('mergeInboxBranches', () => {
       limit: 10,
     })
     expect(ids(result.items)).toEqual(['ticket_urgent', 'conversation_high', 'conversation_low'])
+  })
+
+  it("the due sort ascends across kinds, a conversation keyed by its linked ticket's date", () => {
+    const later = ticketItem({ id: 'ticket_later', dueAt: '2026-01-05T00:00:00.000Z' })
+    const soonest = conversationItem({
+      id: 'conversation_soonest',
+      linkedDueAt: '2026-01-02T00:00:00.000Z',
+    })
+    const middle = ticketItem({ id: 'ticket_middle', dueAt: '2026-01-03T00:00:00.000Z' })
+
+    const result = mergeInboxBranches({
+      conversation: branch([soonest]),
+      ticket: branch([middle, later]),
+      sort: 'due',
+      limit: 10,
+    })
+    expect(ids(result.items)).toEqual(['conversation_soonest', 'ticket_middle', 'ticket_later'])
+  })
+
+  it('the due sort puts undated rows last, tie-broken by kind then id', () => {
+    const undatedTicket = ticketItem({ id: 'ticket_none', dueAt: null })
+    const unlinked = conversationItem({ id: 'conversation_unlinked' })
+    const linkedUndated = conversationItem({ id: 'conversation_undated', linkedDueAt: null })
+    const dated = ticketItem({ id: 'ticket_dated', dueAt: '2026-01-02T00:00:00.000Z' })
+    const datedConversation = conversationItem({
+      id: 'conversation_dated',
+      linkedDueAt: '2026-01-04T00:00:00.000Z',
+    })
+
+    const result = mergeInboxBranches({
+      conversation: branch([datedConversation, linkedUndated, unlinked]),
+      ticket: branch([dated, undatedTicket]),
+      sort: 'due',
+      limit: 10,
+    })
+    expect(ids(result.items)).toEqual([
+      'ticket_dated',
+      'conversation_dated',
+      'conversation_undated',
+      'conversation_unlinked',
+      'ticket_none',
+    ])
+  })
+
+  it('the due sort derives each branch cursor from its last emitted item', () => {
+    const t1 = ticketItem({ id: 'ticket_1', dueAt: '2026-01-01T00:00:00.000Z' })
+    const c1 = conversationItem({ id: 'conversation_1', linkedDueAt: '2026-01-02T00:00:00.000Z' })
+    const t2 = ticketItem({ id: 'ticket_2', dueAt: '2026-01-03T00:00:00.000Z' })
+
+    const result = mergeInboxBranches({
+      conversation: branch([c1], { hasMore: true }),
+      ticket: branch([t1, t2]),
+      sort: 'due',
+      limit: 2,
+    })
+    expect(ids(result.items)).toEqual(['ticket_1', 'conversation_1'])
+    const decoded = JSON.parse(Buffer.from(result.cursor as string, 'base64url').toString('utf8'))
+    expect(decoded).toEqual({ c: 'conversation_1', t: 'ticket_1' })
   })
 
   it('breaks an exact-tie on activity by kind then id (deterministic, not insertion order)', () => {

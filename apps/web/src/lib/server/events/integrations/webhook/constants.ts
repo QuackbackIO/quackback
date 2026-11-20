@@ -244,6 +244,31 @@ export const WEBHOOK_EVENT_CONFIG = [
     label: 'Linked Issue Status Changed',
     description: 'When a tracker issue linked to a ticket changes status on the external platform',
   },
+  {
+    id: 'ticket.due_changed',
+    label: 'Ticket Due Date Changed',
+    description: 'When a ticket due date is set, moved, or cleared',
+  },
+  {
+    id: 'ticket.due_soon',
+    label: 'Ticket Due Soon',
+    description: 'When an open ticket is due within the next 24 hours',
+  },
+  {
+    id: 'ticket.overdue',
+    label: 'Ticket Overdue',
+    description: 'When an open ticket passes its due date',
+  },
+  {
+    id: 'ticket.subscriber_added',
+    label: 'Ticket Watcher Added',
+    description: 'When someone starts watching a ticket, or a teammate adds them as a watcher',
+  },
+  {
+    id: 'ticket.subscriber_removed',
+    label: 'Ticket Watcher Removed',
+    description: 'When someone stops watching a ticket, or a teammate removes them as a watcher',
+  },
 ] as const satisfies ReadonlyArray<{ id: WebhookEventType; label: string; description: string }>
 
 // ============================================

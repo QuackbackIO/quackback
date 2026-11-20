@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useIntl, type IntlShape } from 'react-intl'
 import {
   BuildingOffice2Icon,
   ChatBubbleOvalLeftIcon,
+  ClockIcon,
   FlagIcon,
   TicketIcon,
 } from '@heroicons/react/24/solid'
@@ -16,6 +18,7 @@ import {
   type ConversationSort,
 } from '@/lib/shared/conversation/views'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
+import { TICKET_DUE_FILTERS, type TicketDueFilter } from '@/lib/shared/ticket-due'
 import { PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import { FilterChip } from '@/components/shared/filter-chip'
 import { SortMenu } from '@/components/shared/sort-menu'
@@ -31,6 +34,24 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 const TRIAGE_FACETS: readonly InboxTriageFacet[] = ['open', 'waiting', 'closed']
+
+/** The Due date filter's option labels, shared by the submenu and the chip. */
+function dueFilterLabel(intl: IntlShape, value: TicketDueFilter): string {
+  switch (value) {
+    case 'overdue':
+      return intl.formatMessage({ id: 'admin.inbox.filter.due.overdue', defaultMessage: 'Overdue' })
+    case 'due_soon':
+      return intl.formatMessage({
+        id: 'admin.inbox.filter.due.dueSoon',
+        defaultMessage: 'Due in the next 24 hours',
+      })
+    case 'none':
+      return intl.formatMessage({
+        id: 'admin.inbox.filter.due.none',
+        defaultMessage: 'No due date',
+      })
+  }
+}
 
 export interface CompanyFilter {
   companies: { id: string; name: string }[]
@@ -53,6 +74,11 @@ export interface ConversationListToolbarProps {
   channelFilter?: Channel
   onChannelFilter?: (value: Channel | undefined) => void
   companyFilter?: CompanyFilter
+  /** The ticket Due date filter. The submenu, and the Due date sort, are
+   *  offered only when `onDueFilter` is set: where tickets can appear in the
+   *  list. */
+  dueFilter?: TicketDueFilter
+  onDueFilter?: (value: TicketDueFilter | undefined) => void
   sort: ConversationSort
   onSort: (value: ConversationSort) => void
 }
@@ -75,11 +101,18 @@ export function ConversationListToolbar({
   channelFilter,
   onChannelFilter,
   companyFilter,
+  dueFilter,
+  onDueFilter,
   sort,
   onSort,
 }: ConversationListToolbarProps) {
+  const intl = useIntl()
   const [filterOpen, setFilterOpen] = useState(false)
-  const sorts = searching ? CONVERSATION_SORTS : TERMLESS_CONVERSATION_SORTS
+  // The Due date sort orders by a ticket's due date, so it is only offered
+  // where tickets apply (or kept visible when a saved view already pins it).
+  const sorts = (searching ? CONVERSATION_SORTS : TERMLESS_CONVERSATION_SORTS).filter(
+    (s) => s !== 'due' || !!onDueFilter || sort === 'due'
+  )
   const channels = listChannelDescriptors()
   const activeType = ticketTypeOptions?.find((t) => t.id === ticketTypeFilter)
   const activeCompany = companyFilter?.companies.find((c) => c.id === companyFilter.value)
@@ -89,7 +122,12 @@ export function ConversationListToolbar({
     (priorityFilter !== 'all' ? 1 : 0) +
     (channelFilter ? 1 : 0) +
     (activeType ? 1 : 0) +
-    (activeCompany ? 1 : 0)
+    (activeCompany ? 1 : 0) +
+    (dueFilter && onDueFilter ? 1 : 0)
+  const dueLabel = intl.formatMessage({
+    id: 'admin.inbox.filter.due.label',
+    defaultMessage: 'Due date',
+  })
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
@@ -185,6 +223,28 @@ export function ConversationListToolbar({
                 </DropdownMenuSub>
               )}
 
+              {onDueFilter && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <ClockIcon className="size-4" />
+                    {dueLabel}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => onDueFilter(undefined)}>
+                      {intl.formatMessage({
+                        id: 'admin.inbox.filter.due.any',
+                        defaultMessage: 'Any due date',
+                      })}
+                    </DropdownMenuItem>
+                    {TICKET_DUE_FILTERS.map((value) => (
+                      <DropdownMenuItem key={value} onClick={() => onDueFilter(value)}>
+                        {dueFilterLabel(intl, value)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+
               {companyFilter && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
@@ -231,6 +291,15 @@ export function ConversationListToolbar({
               value={activeType.name}
               valueId={activeType.id}
               onRemove={() => onTicketTypeFilter(undefined)}
+            />
+          )}
+          {dueFilter && onDueFilter && (
+            <FilterChip
+              icon={ClockIcon}
+              label={dueLabel}
+              value={dueFilterLabel(intl, dueFilter)}
+              valueId={dueFilter}
+              onRemove={() => onDueFilter(undefined)}
             />
           )}
         </>

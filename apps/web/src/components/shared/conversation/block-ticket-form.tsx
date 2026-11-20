@@ -18,16 +18,25 @@
  * submit that skips a required field. An identified visitor, or an anonymous
  * one whose email is already on file, is never asked for it: the ticket links
  * to their session principal (`askEmail` false, from the thread load).
+ * With `askDueDate` (the node's toggle) the card also offers an optional
+ * "Needed by" day, sent as the end of that day in the visitor's own time zone;
+ * the team may adjust it later.
  *
  * Filed state is local to the mounted card: a successful submit collapses
  * the form to a confirmation line, and the conversation's own
  * `ticket_created` system event (delivered over the ordinary SSE flow) is
  * the durable record in the thread.
  */
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import {
+  endOfLocalDay,
+  ticketDueBounds,
+  ticketDueProblem,
+  toLocalDateInputValue,
+} from '@/lib/shared/ticket-due'
 import { ticketIntakeFormQuery } from '@/lib/client/queries/visitor-ticket-form'
 import { errorText } from '@/lib/client/error-text'
 import type { TicketIntakeType } from '@/lib/shared/tickets'
@@ -47,20 +56,50 @@ function intakeDefaultType(types: TicketIntakeType[]): TicketIntakeType | null {
   return types.find((t) => t.isDefault) ?? types[0] ?? null
 }
 
+/**
+ * The picker's `min`/`max` (YYYY-MM-DD) for the customer window, in the
+ * viewer's zone. The last day is dropped when its end would pass the window,
+ * so the picker never offers a day the check below rejects.
+ */
+function customerDueInputBounds(now: Date = new Date()): { min: string; max: string } {
+  const { min, max } = ticketDueBounds('customer', now)
+  let maxDay = toLocalDateInputValue(max)
+  const maxDayEnd = endOfLocalDay(maxDay)
+  if (maxDayEnd && maxDayEnd.getTime() > max.getTime()) {
+    const previous = new Date(max)
+    previous.setDate(previous.getDate() - 1)
+    maxDay = toLocalDateInputValue(previous)
+  }
+  return { min: toLocalDateInputValue(min), max: maxDay }
+}
+
 export function BlockTicketForm({
   getAuthHeaders,
   askEmail = true,
+  askDueDate = false,
 }: {
   getAuthHeaders: () => Record<string, string>
   /** Show the Email field: only an anonymous visitor with no email on file. */
   askEmail?: boolean
+  /** Offer the optional "Needed by" date field (the node's askDueDate toggle). */
+  askDueDate?: boolean
 }) {
   const intl = useIntl()
   const rpc = useVisitorSurfaceRpc()
+  const dueInputId = useId()
   const [email, setEmail] = useState('')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
+  const [neededBy, setNeededBy] = useState('')
+  const [neededByInvalid, setNeededByInvalid] = useState(false)
   const [filed, setFiled] = useState(false)
+  // The window depends on the viewer's clock and zone, so it is set after
+  // mount: bounds in the server's markup would not match the hydrating render.
+  const [dueBounds, setDueBounds] = useState<{ min: string; max: string } | null>(null)
+  useEffect(() => {
+    if (askDueDate) setDueBounds(customerDueInputBounds())
+  }, [askDueDate])
+
   const id = useId()
 
   // Shares the ticket header card's cache entry. Only a successful empty list
@@ -76,6 +115,7 @@ export function BlockTicketForm({
       email?: string
       ticketTypeId?: string
       fieldValues?: Record<string, unknown>
+      dueAt?: string
     }) => rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
     onSuccess: () => setFiled(true),
     onError: (error) => toastError(error, 'Failed to create ticket'),
@@ -96,6 +136,12 @@ export function BlockTicketForm({
   const canSubmit = title.trim().length > 0 && !create.isPending && intakeForm.isSuccess
   const submit = () => {
     if (!canSubmit) return
+    // A picked day means the end of that day where the visitor is.
+    const dueAt = askDueDate && neededBy ? endOfLocalDay(neededBy) : null
+    if (askDueDate && neededBy && ticketDueProblem(dueAt, 'customer')) {
+      setNeededByInvalid(true)
+      return
+    }
     const type = intake.selectedType
     let fieldValues: Record<string, unknown> | undefined
     if (type) {
@@ -108,6 +154,8 @@ export function BlockTicketForm({
       description: details.trim() || undefined,
       email: (askEmail && email.trim()) || undefined,
       ...(type ? { ticketTypeId: type.id, fieldValues } : {}),
+      // Only when a day was picked, so the payload is unchanged otherwise.
+      ...(dueAt ? { dueAt: dueAt.toISOString() } : {}),
     })
   }
 
@@ -194,6 +242,45 @@ export function BlockTicketForm({
               defaultMessage: 'you@example.com',
             })}
           />
+        </div>
+      )}
+      {askDueDate && (
+        <div className="space-y-1">
+          <label htmlFor={dueInputId} className="text-xs font-medium text-muted-foreground">
+            <FormattedMessage id="widget.tickets.new.neededBy" defaultMessage="Needed by" />
+            <span className="ms-1 font-normal text-muted-foreground/70">
+              <FormattedMessage id="widget.tickets.new.optional" defaultMessage="(optional)" />
+            </span>
+          </label>
+          <Input
+            id={dueInputId}
+            type="date"
+            value={neededBy}
+            min={dueBounds?.min}
+            max={dueBounds?.max}
+            onChange={(e) => {
+              setNeededBy(e.target.value)
+              setNeededByInvalid(false)
+            }}
+            aria-invalid={neededByInvalid}
+            aria-describedby={
+              neededByInvalid ? `${dueInputId}-hint ${dueInputId}-error` : `${dueInputId}-hint`
+            }
+          />
+          <p id={`${dueInputId}-hint`} className="text-[11px] text-muted-foreground/70">
+            <FormattedMessage
+              id="widget.tickets.new.neededByHint"
+              defaultMessage="Our team may adjust this date."
+            />
+          </p>
+          {neededByInvalid && (
+            <p id={`${dueInputId}-error`} className="text-[11px] text-destructive">
+              <FormattedMessage
+                id="widget.tickets.new.neededByInvalid"
+                defaultMessage="Pick a date between today and two years from now."
+              />
+            </p>
+          )}
         </div>
       )}
       <Button className="w-full" size="sm" onClick={submit} disabled={!canSubmit}>

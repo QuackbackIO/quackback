@@ -46,6 +46,10 @@ vi.mock('@/lib/server/functions/tickets', () => ({
   getMyTicketWatchStatusFn: vi.fn(),
   watchMyTicketFn: vi.fn(),
   unwatchMyTicketFn: vi.fn(),
+  getMyTicketSharingFn: vi.fn(),
+  listMyTicketColleaguesFn: vi.fn(),
+  shareMyTicketFn: vi.fn(),
+  removeMyTicketShareFn: vi.fn(),
 }))
 
 import { VisitorSurfaceRpcProvider, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'

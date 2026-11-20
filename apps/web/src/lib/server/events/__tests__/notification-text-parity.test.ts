@@ -152,6 +152,16 @@ const CASES: {
       requesterPrincipalId: 'principal_target',
     },
   },
+  {
+    name: 'ticket due soon',
+    event: { ...base, type: 'ticket.due_soon', data: {} } as EventData,
+    config: { ticketId: 'ticket_1', title: 'Cannot log in', dueAt: '2026-07-17T02:00:00.000Z' },
+  },
+  {
+    name: 'ticket overdue',
+    event: { ...base, type: 'ticket.overdue', data: {} } as EventData,
+    config: { ticketId: 'ticket_1', title: 'Cannot log in', dueAt: '2026-07-17T02:00:00.000Z' },
+  },
 ]
 
 /** The row the server stores for `c`, as the bell receives it. */

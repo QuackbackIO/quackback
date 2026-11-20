@@ -18,6 +18,8 @@ const h = vi.hoisted(() => ({
   getTicketRepliedTargets: vi.fn(),
   getTicketNoteAddedTargets: vi.fn(),
   getTicketExternalStatusChangedTargets: vi.fn(),
+  getTicketSubscriberAddedTargets: vi.fn(),
+  getTicketSharedEmailTargets: vi.fn(),
   getMessageCreatedTargets: vi.fn(),
   getTicketCreatedEmailTargets: vi.fn(),
   getTicketRepliedEmailTargets: vi.fn(),
@@ -25,6 +27,8 @@ const h = vi.hoisted(() => ({
   getTicketAssignedEmailTargets: vi.fn(),
   getSlaEmailTargets: vi.fn(),
   getConversationNoteMentionedEmailTargets: vi.fn(),
+  getTicketDueTargets: vi.fn(),
+  getTicketDueEmailTargets: vi.fn(),
 }))
 vi.mock('../hook-context', () => ({ buildHookContext: h.buildHookContext }))
 vi.mock('../targets', () => ({
@@ -43,6 +47,8 @@ vi.mock('../targets', () => ({
   getTicketRepliedTargets: h.getTicketRepliedTargets,
   getTicketNoteAddedTargets: h.getTicketNoteAddedTargets,
   getTicketExternalStatusChangedTargets: h.getTicketExternalStatusChangedTargets,
+  getTicketSubscriberAddedTargets: h.getTicketSubscriberAddedTargets,
+  getTicketSharedEmailTargets: h.getTicketSharedEmailTargets,
   getMessageCreatedTargets: h.getMessageCreatedTargets,
   getTicketCreatedEmailTargets: h.getTicketCreatedEmailTargets,
   getTicketRepliedEmailTargets: h.getTicketRepliedEmailTargets,
@@ -50,6 +56,8 @@ vi.mock('../targets', () => ({
   getTicketAssignedEmailTargets: h.getTicketAssignedEmailTargets,
   getSlaEmailTargets: h.getSlaEmailTargets,
   getConversationNoteMentionedEmailTargets: h.getConversationNoteMentionedEmailTargets,
+  getTicketDueTargets: h.getTicketDueTargets,
+  getTicketDueEmailTargets: h.getTicketDueEmailTargets,
 }))
 
 import { createId } from '@quackback/ids'
@@ -87,10 +95,12 @@ describe('notification resolver routing (WO-8c)', () => {
     // Email builders return arrays; default empty so only the routed ones matter.
     h.getTicketCreatedEmailTargets.mockResolvedValue([])
     h.getTicketRepliedEmailTargets.mockResolvedValue([])
+    h.getTicketSharedEmailTargets.mockResolvedValue([])
     h.getTicketResolvedEmailTargets.mockResolvedValue([])
     h.getTicketAssignedEmailTargets.mockResolvedValue([])
     h.getSlaEmailTargets.mockResolvedValue([])
     h.getConversationNoteMentionedEmailTargets.mockResolvedValue([])
+    h.getTicketDueEmailTargets.mockResolvedValue([])
   })
 
   it('interestedIn covers subscriber, mention, status-publish, and bell types', () => {
@@ -148,6 +158,16 @@ describe('notification resolver routing (WO-8c)', () => {
 
     expect(notificationResolver.interestedIn('ticket.replied')).toBe(true)
     expect(notificationResolver.interestedIn('ticket.note_added')).toBe(true)
+  })
+
+  it('routes ticket.subscriber_added to the added-as-watcher bell and the shared-ticket email', async () => {
+    h.getTicketSubscriberAddedTargets.mockResolvedValue(T('ticket_subscriber_bell')[0])
+    h.getTicketSharedEmailTargets.mockResolvedValue(T('ticket_shared_email'))
+    const out = await notificationResolver.resolve(evt('ticket.subscriber_added'))
+    expect(out.map((t) => t.type).sort()).toEqual(['ticket_shared_email', 'ticket_subscriber_bell'])
+    expect(h.getTicketSharedEmailTargets).toHaveBeenCalledTimes(1)
+    expect(h.getTicketSubscriberAddedTargets).toHaveBeenCalledTimes(1)
+    expect(notificationResolver.interestedIn('ticket.subscriber_added')).toBe(true)
   })
 
   it('routes message.created to the new-message team bell', async () => {
@@ -209,6 +229,23 @@ describe('notification resolver routing (WO-8c)', () => {
     const breach = await notificationResolver.resolve(evt('sla.breached'))
     expect(breach.map((t) => t.type)).toEqual(['sla_email'])
     expect(h.getSlaEmailTargets).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['ticket.due_soon', 'ticket.overdue'])(
+    'concats bell + email targets for %s',
+    async (type) => {
+      h.getTicketDueTargets.mockResolvedValue(T('due_bell')[0])
+      h.getTicketDueEmailTargets.mockResolvedValue(T('due_email'))
+      expect(notificationResolver.interestedIn(type)).toBe(true)
+      const out = await notificationResolver.resolve(evt(type))
+      expect(out.map((t) => t.type)).toEqual(['due_email', 'due_bell'])
+      expect(h.getTicketDueTargets).toHaveBeenCalledTimes(1)
+      expect(h.getTicketDueEmailTargets).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('is not interested in ticket.due_changed (webhooks and workflows only)', () => {
+    expect(notificationResolver.interestedIn('ticket.due_changed')).toBe(false)
   })
 
   it('builds the hook context exactly once per email-only resolve', async () => {
