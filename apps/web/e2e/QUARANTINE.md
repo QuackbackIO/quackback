@@ -365,3 +365,19 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   `apps/web/src/lib/server/domains/api/responses.ts:21-33`). Fix: wrap the
   apps error responses with `corsHeaders()`. owner: unassigned, review by:
   2026-12-03.
+
+### Product suite: API REST (changelog, status page, help center, settings, platform)
+
+- `platform/rest-changelog.spec.ts` › API-R-106 a malformed cursor is refused
+  as bad input, not a server error. `GET /api/v1/changelog?cursor=not-an-id`
+  answers 500 INTERNAL_ERROR: the cursor goes unvalidated into a typeid column
+  whose driver throws (`apps/web/src/routes/api/v1/changelog/index.ts:41`,
+  `domains/changelog/changelog.query.ts:72`). Fix: validate it with
+  `parseTypeId(cursor, 'changelog', 'cursor')` (400). owner: unassigned, review by:
+  2026-12-03.
+- `platform/rest-changelog.spec.ts` › API-R-111 a body that is not JSON is
+  refused as bad input, not a server error. POST and PATCH answer 500:
+  `request.json()` throws a plain SyntaxError that `handleDomainError` maps to
+  500 (`apps/web/src/routes/api/v1/changelog/index.ts:78`, `$entryId.ts:68`).
+  Fix: catch the parse error and answer 400 BAD_REQUEST. owner: unassigned,
+  review by: 2026-12-03.
