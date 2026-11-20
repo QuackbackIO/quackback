@@ -163,49 +163,29 @@ describe('requestEmailSignin: the Email magic link method', () => {
 })
 
 describe('requestEmailSignin: the link-conflict confirmation while the method is off', () => {
-  it('mails the confirmation to an existing account for a provider in force', async () => {
+  // Nothing on the server records that a provider sign-in hit
+  // `account_not_linked` for an address, so a callback naming `/auth/link-sso`
+  // is only the caller's word. It is refused like any other email, the same
+  // way for an address with an account and one without.
+  it.each([
+    ['an existing account', { id: 'user_1' }],
+    ['no account', null],
+  ])('refuses it for %s, and mints and mails nothing', async (_label, account) => {
+    hoisted.userFindFirst.mockResolvedValue(account)
+
+    await expect(requestEmailSignin({ email: EMAIL, callbackURL: LINK_SSO })).rejects.toMatchObject(
+      { code: 'magic_link_method_not_allowed' }
+    )
+    nothingSent()
+  })
+
+  it('sends it while the method is on (the control)', async () => {
+    methodOn(true)
+
     await requestEmailSignin({ email: EMAIL, callbackURL: LINK_SSO })
 
     expect(linksMinted()).toHaveLength(1)
-    expect(hoisted.sendMagicLinkEmail).toHaveBeenCalledTimes(1)
     const url = new URL(hoisted.sendMagicLinkEmail.mock.calls[0]![0].signInUrl)
     expect(url.searchParams.get('callbackURL')).toBe(`https://acme.quackback.io${LINK_SSO}`)
-    // Not an email sign-in link: turning the method off must not break it.
-    expect(mintedTokens().map(isEmailSigninToken)).toEqual([false])
-  })
-
-  // Anybody may ask for `/auth/link-sso`, so the callback alone is no reason to
-  // mail a sign-in link. Asked without an account, or for a provider that is
-  // not in force, the answer is the same quiet success and nothing is sent, so
-  // the reply says nothing about the address.
-  it('sends nothing, and answers the same, for an address with no account', async () => {
-    hoisted.userFindFirst.mockResolvedValue(null)
-
-    await expect(
-      requestEmailSignin({ email: EMAIL, callbackURL: LINK_SSO })
-    ).resolves.toBeUndefined()
-    nothingSent()
-  })
-
-  it('sends nothing for a provider that is not in force', async () => {
-    hoisted.registered = new Set()
-
-    await expect(
-      requestEmailSignin({ email: EMAIL, callbackURL: LINK_SSO })
-    ).resolves.toBeUndefined()
-    nothingSent()
-  })
-
-  // Not a confirmation the dialog could have asked for, so the method's own
-  // refusal: the same for every address.
-  it.each([
-    ['no provider', '/auth/link-sso?next=%2F'],
-    ['the email method as the provider', '/auth/link-sso?provider=magic-link&type=social'],
-    ['the password method as the provider', '/auth/link-sso?provider=credential&type=social'],
-  ])('refuses %s', async (_label, callbackURL) => {
-    await expect(requestEmailSignin({ email: EMAIL, callbackURL })).rejects.toMatchObject({
-      code: 'magic_link_method_not_allowed',
-    })
-    nothingSent()
   })
 })
