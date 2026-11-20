@@ -486,3 +486,51 @@ unassigned, review by: 2026-12-03.
   (`apps/web/src/lib/server/events/dispatch.ts:265`), so it is always missing.
   Fix: pass the deleter's email and display name into `buildEventActor` there.
   owner: unassigned, review by: 2026-12-03.
+
+### Product suite: API MCP
+
+Each test asserts the right behaviour; the working part of each journey is
+proved by a separate test that is not quarantined where one exists.
+
+- `platform/mcp-auth.spec.ts` › MCP OAuth consent › API-M-22 authorizing Full
+  access yields a token that writes; API-M-23 authorizing a step-up grants
+  exactly the selection; API-M-24 the Read only choice yields a token that
+  reads but is stepped up on a write; API-M-26 Deny returns to the client with
+  access_denied. Product bug: every consent submit (Authorize and Deny)
+  answers 400 `invalid_signature`. Better Auth 1.7.26 (bumped in #1099) signs
+  the consent query with repeated `ba_param` entries; the TanStack router
+  rewrites the URL on hydration and turns them into one JSON array
+  (`ba_param=["ba_iat",...]`), and `handleConsent` posts
+  `window.location.search` as `oauth_query`
+  (`apps/web/src/routes/oauth/consent.tsx` handleConsent), so the signature no
+  longer matches. Expanding the JSON array back into repeated `ba_param`
+  values before posting made the full flow pass locally. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/mcp-feedback.spec.ts` › MCP resources › API-M-34 a portal user's
+  OAuth token does not read team-only boards, internal tags, team roadmaps or
+  the team roster. Product bug: the boards, tags, roadmaps and members
+  resources have no team-role check (`apps/web/src/lib/server/mcp/server.ts`
+  registerResources); only help-center categories checks it. Reachable with
+  portal MCP access on. owner: unassigned, review by: 2026-12-03.
+- `platform/mcp-feedback.spec.ts` › API-M-55 a portal user's create_post takes
+  the board default status and no tags. Product bug: `create_post` passes
+  `statusId` and `tagIds` through for portal users
+  (`apps/web/src/lib/server/mcp/tools/posts.ts` create_post handler) and
+  `createPost` applies them; the portal never lets a customer choose either.
+  owner: unassigned, review by: 2026-12-03.
+- `platform/mcp-content.spec.ts` › API-M-73 publishing an already published
+  entry keeps its date. Product bug: `update_changelog({ publish: true })`
+  resets `publishedAt` to now (`apps/web/src/lib/server/mcp/tools/changelog.ts`
+  update_changelog maps `publish: true` to `{ type: 'published' }`). Fixed by
+  open PR #812. owner: unassigned, review by: 2026-12-03.
+- `platform/mcp-settings.spec.ts` › API-M-88 update_settings does not change the
+  changelog area without write:changelog. Product bug: MCP `update_settings`
+  calls `changeSettingsArea({ actor })` without `assertAreaScope`
+  (`apps/web/src/lib/server/mcp/tools/settings.ts`), so `write:settings` alone
+  changes the changelog area that REST refuses without `write:changelog`.
+  owner: unassigned, review by: 2026-12-03.
+- `platform/mcp-settings.spec.ts` › API-M-93 the admin setup guide's tool list
+  matches the server's. Product bug: the page hard-codes 22 tools including
+  `list_suggestions`, which the server does not register, against 43 served
+  (`apps/web/src/components/admin/settings/mcp/mcp-setup-guide.tsx`
+  `MCP_TOOLS`). owner: unassigned, review by: 2026-12-03.
