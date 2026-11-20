@@ -13,14 +13,14 @@ test(
   async ({ asPerson }) => {
     const admin = await asPerson('admin')
     await admin.goto('/admin/help-center')
-    await expect(admin.getByRole('tree', { name: 'Help center categories' })).toBeVisible()
+    await expect(admin.getByRole('button', { name: 'New category' })).toBeVisible()
     await expect(admin.getByRole('button', { name: 'New article' }).first()).toBeVisible()
     await expect(admin.getByRole('option', { name: 'Draft', exact: true })).toBeVisible()
 
     const contributor = await asPerson('contributor')
     await contributor.goto('/admin/help-center')
     await expect(contributor.getByText(/You don.t have access/)).toBeVisible()
-    await expect(contributor.getByRole('tree', { name: 'Help center categories' })).toBeHidden()
+    await expect(contributor.getByRole('button', { name: 'New category' })).toBeHidden()
     await expect(contributor.getByRole('link', { name: 'Help center', exact: true })).toBeHidden()
   }
 )
