@@ -23,6 +23,7 @@ const moderationDecision = z.looseObject({
   boardId: id,
   boardSlug: z.string(),
   authorPrincipalId: id.nullable(),
+  moderatorPrincipalId: id.nullable().optional(),
 })
 export const postRef = z.object({ id, title: z.string(), boardId: id, boardSlug: z.string() })
 export const postData = z.object({

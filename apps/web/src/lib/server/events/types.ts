@@ -244,6 +244,9 @@ export interface ModerationDecisionPayload {
   authorPrincipalId: string | null
   /** comment.approved / comment.rejected only. */
   commentId?: string
+  /** The person who decided: the teammate, or the creator of the API key that
+   *  made the call. The author is not told about their own decision. */
+  moderatorPrincipalId?: string | null
 }
 
 export function isModerationDecisionEventType(type: string): type is ModerationDecisionEventType {

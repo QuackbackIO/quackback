@@ -66,6 +66,11 @@ import { notificationResolver } from '@/lib/server/events/resolvers/notification
 import type { DomainEvent } from '@/lib/server/events/envelope'
 import type { HookTarget } from '@/lib/server/events/hook-types'
 import { approveComment, approvePost, rejectComment, rejectPost } from '../moderation.service'
+import { moderationAuditFromApiAuth } from '@/routes/api/v1/moderation/-audit'
+import {
+  DELETED_USER_PRINCIPAL_ID,
+  ensureDeletedUserPrincipal,
+} from '@/lib/server/domains/principals/principal-reattribute'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -77,26 +82,29 @@ const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).sl
 
 async function seedPerson(
   role: 'admin' | 'user',
-  type: 'user' | 'anonymous' = 'user'
+  type: 'user' | 'anonymous' = 'user',
+  testOwnerPrincipalId: PrincipalId | null = null
 ): Promise<{ id: PrincipalId; email: string }> {
   const userId = createId('user') as UserId
   const id = createId('principal') as PrincipalId
   const email = `${role}-${suffix()}@example.com`
   await testDb.insert(user).values({ id: userId, name: `U-${suffix()}`, email })
-  await testDb.insert(principal).values({ id, userId, role, type, createdAt: new Date() })
+  await testDb
+    .insert(principal)
+    .values({ id, userId, role, type, testOwnerPrincipalId, createdAt: new Date() })
   return { id, email }
 }
 
-async function seedBoard() {
+async function seedBoard(access = DEFAULT_BOARD_ACCESS) {
   const [board] = await testDb
     .insert(boards)
-    .values({ slug: `ideas-${suffix()}`, name: 'Ideas', access: DEFAULT_BOARD_ACCESS })
+    .values({ slug: `ideas-${suffix()}`, name: 'Ideas', access })
     .returning()
   return board
 }
 
-async function seedHeldPost(author: PrincipalId) {
-  const board = await seedBoard()
+async function seedHeldPost(author: PrincipalId, access = DEFAULT_BOARD_ACCESS) {
+  const board = await seedBoard(access)
   const [row] = await testDb
     .insert(posts)
     .values({
@@ -213,6 +221,7 @@ describe.skipIf(!fixture.available)('moderation decision reaches the author', ()
     const [bell] = bellsOf(targets)
     expect((bell.target as { principalIds: string[] }).principalIds).toEqual([author.id])
     expect((bell.config as { postId?: string }).postId).toBeUndefined()
+    expect(JSON.stringify(bell.config)).not.toContain('spam')
   })
 
   it('approving a held comment tells its author, linking to the comment', async () => {
@@ -273,6 +282,56 @@ describe.skipIf(!fixture.available)('moderation decision reaches the author', ()
     const author = await seedPerson('user', 'anonymous')
     const moderator = await seedPerson('admin')
     const { postId } = await seedHeldPost(author.id)
+
+    await rejectPost(postId, undefined, auditFor(moderator.id))
+
+    expect(await targetsFor('post.rejected')).toEqual([])
+  })
+
+  it('says nothing to an author who moderates their own post through their API key', async () => {
+    const author = await seedPerson('admin')
+    const { postId } = await seedHeldPost(author.id)
+    const keyPrincipal = await seedPerson('admin')
+    const audit = moderationAuditFromApiAuth(
+      {
+        apiKey: { id: 'api_key_1', createdById: author.id },
+        principalId: keyPrincipal.id,
+        role: 'admin',
+        principal: null,
+      } as unknown as Parameters<typeof moderationAuditFromApiAuth>[0],
+      new Headers()
+    )
+
+    await approvePost(postId, audit)
+
+    expect(await targetsFor('post.approved')).toEqual([])
+  })
+
+  it('says nothing about test feedback', async () => {
+    const moderator = await seedPerson('admin')
+    const author = await seedPerson('user', 'user', moderator.id)
+    const { postId } = await seedHeldPost(author.id)
+
+    await approvePost(postId, auditFor(moderator.id))
+
+    expect(await lastEvent('post.approved')).toBeDefined()
+    expect(await targetsFor('post.approved')).toEqual([])
+  })
+
+  it('says nothing for a post whose author account was deleted', async () => {
+    const moderator = await seedPerson('admin')
+    await testDb.transaction((tx) => ensureDeletedUserPrincipal(tx))
+    const { postId } = await seedHeldPost(DELETED_USER_PRINCIPAL_ID)
+
+    await rejectPost(postId, undefined, auditFor(moderator.id))
+
+    expect(await targetsFor('post.rejected')).toEqual([])
+  })
+
+  it('does not name a rejected post to an author who can no longer see its board', async () => {
+    const author = await seedPerson('user')
+    const moderator = await seedPerson('admin')
+    const { postId } = await seedHeldPost(author.id, { ...DEFAULT_BOARD_ACCESS, view: 'team' })
 
     await rejectPost(postId, undefined, auditFor(moderator.id))
 
