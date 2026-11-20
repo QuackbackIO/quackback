@@ -504,7 +504,7 @@ export async function upsertIdentityProvider(
       const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
       for (const [label, value] of guardedUrls) {
         if (!value) continue
-        const safety = await checkUrlSafety(value)
+        const safety = await checkUrlSafety(value, { allowE2eOidcFake: true })
         if (!safety.safe) {
           throw new ValidationError(
             'INVALID_IDP_CONFIG',

@@ -194,3 +194,96 @@ export async function withEveryTeammateAway<T>(body: () => Promise<T>): Promise<
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Plan limits (settings.tier_limits)
+// ---------------------------------------------------------------------------
+
+/**
+ * Stored tier limits, as the app reads them (`tier-limits.types.ts`): caps
+ * such as `maxBoards` and the `features` switches. A `null` cap is unlimited.
+ */
+export type TierLimitsPatch = Record<string, unknown> & {
+  features?: Record<string, boolean>
+}
+
+/**
+ * What a plan limits test changes: the stored limits, and the plan limits
+ * state the app keeps beside them (grace clocks, chosen boards), which a cap
+ * below usage can start.
+ */
+export interface TierLimitsSnapshot {
+  tierLimits: string | null
+  planLimitsState: string | null
+}
+
+/** The raw `settings.tier_limits` (null: unlimited) and `plan_limits_state`. */
+export async function snapshotTierLimits(): Promise<TierLimitsSnapshot> {
+  const [row] = await supportDb()<
+    { tier_limits: string | null; plan_limits_state: string | null }[]
+  >`SELECT tier_limits, plan_limits_state::text AS plan_limits_state FROM settings LIMIT 1`
+  if (!row) throw new Error('no settings row')
+  return { tierLimits: row.tier_limits ?? null, planLimitsState: row.plan_limits_state ?? null }
+}
+
+/**
+ * Drop the shared cached rows the limits feed, as the app's settings writes
+ * do: the settings row (the plan limits rules read the limits from it) and the
+ * plan limits inputs (usage counts).
+ */
+async function bustTierLimitsCaches(): Promise<void> {
+  await supportDb()`DELETE FROM kv_store WHERE key LIKE '%settings%' OR key LIKE '%plan-limits:%'`
+}
+
+/**
+ * Write `settings.tier_limits` whole (replacement, as the app's own writer
+ * does: the stored value is layered over the unlimited defaults at read time).
+ * Moves `auth_config_version` too, as `writeTierLimits` in the app does, since
+ * the limits decide whether identity providers register; then drops the
+ * shared cached rows. The app's in-process copy of the limits lives for
+ * QUACKBACK_SETTINGS_CACHE_MS, which the suite sets to 0, so the next request
+ * reads the new limits and no app-side cache bust is needed.
+ */
+export async function writeTierLimits(text: string | null): Promise<void> {
+  assertIsolated('writeTierLimits')
+  await supportDb()`
+    UPDATE settings
+    SET tier_limits = ${text}, auth_config_version = auth_config_version + 1`
+  await bustTierLimitsCaches()
+}
+
+/** Put a snapshot back exactly: the limits and the plan limits state. */
+export async function restoreTierLimits(snapshot: TierLimitsSnapshot): Promise<void> {
+  assertIsolated('restoreTierLimits')
+  await supportDb()`
+    UPDATE settings
+    SET tier_limits = ${snapshot.tierLimits},
+        plan_limits_state = ${snapshot.planLimitsState}::jsonb,
+        auth_config_version = auth_config_version + 1`
+  await bustTierLimitsCaches()
+}
+
+/**
+ * Run `body` with these stored tier limits, then put the previous limits and
+ * plan limits state back exactly, even when `body` throws:
+ *
+ *   await withTierLimits({ maxBoards: boardCount }, async () => {
+ *     ... creating one more board is refused ...
+ *   })
+ *
+ * Set a cap relative to what exists (count first): the isolated database holds
+ * every earlier test's rows.
+ */
+export async function withTierLimits<T>(
+  limits: TierLimitsPatch,
+  body: () => Promise<T>
+): Promise<T> {
+  assertIsolated('withTierLimits')
+  const snapshot = await snapshotTierLimits()
+  try {
+    await writeTierLimits(JSON.stringify(limits))
+    return await body()
+  } finally {
+    await restoreTierLimits(snapshot)
+  }
+}
