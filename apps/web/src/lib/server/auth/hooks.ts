@@ -489,33 +489,51 @@ type HeaderBag = { get(name: string): string | null }
 /** The session cookie, under either name the library gives it. */
 const SESSION_COOKIE_NAME = /^(?:__Secure-)?better-auth\.session_token$/
 
-function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
-  if (!headers) return null
+/** The stored session token in a credential value: the part before the signature. */
+function rawToken(value: string): string {
+  return value.includes('.') ? value.split('.')[0]! : value
+}
+
+/**
+ * Every session token the request carries: the Bearer, and every cookie under
+ * either session cookie name.
+ *
+ * All of them, not the one the library is expected to pick. Which it reads
+ * depends on things this gate cannot see (a Bearer whose signature fails is
+ * dropped for the cookie, and of two same-named cookies either may win), so a
+ * gate that checks one credential can be shown a decoy while the library acts
+ * on another.
+ */
+function sessionTokensFromAuthHeaders(headers: HeaderBag | undefined): string[] {
+  if (!headers) return []
+  const tokens = new Set<string>()
   const authHeader = headers.get('authorization') ?? headers.get('Authorization')
   if (authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ') {
     const token = authHeader.slice(7).trim()
-    if (token) return token.includes('.') ? token.split('.')[0]! : token
+    if (token) tokens.add(rawToken(token))
   }
+  // Separate Cookie headers arrive joined with ", ".
   const cookie = headers.get('cookie') ?? ''
-  for (const part of cookie.split(';')) {
+  for (const part of cookie.split(/[;,]/)) {
     const [name, ...rest] = part.trim().split('=')
     // `__Secure-` on https: missing it let a cookie session past every gate here.
     if (!SESSION_COOKIE_NAME.test(name?.trim() ?? '')) continue
     const raw = rest.join('=')
-    if (!raw) return null
+    if (!raw) continue
     let value = raw
     try {
       value = decodeURIComponent(raw)
     } catch {
       /* keep raw */
     }
-    return value.includes('.') ? value.split('.')[0]! : value
+    tokens.add(rawToken(value))
   }
-  return null
+  return [...tokens]
 }
 
 /**
- * Sessions that may only reach some Better Auth endpoints, from one lookup:
+ * Sessions that may only reach some Better Auth endpoints, checked for every
+ * credential the request carries:
  *
  *  - widget-scoped sessions may only hit {@link WIDGET_AUTH_ALLOWLIST};
  *  - a session still pending two-factor enrolment may only finish it or sign
@@ -540,8 +558,8 @@ export async function handleWidgetAccountMutationGate(ctx: {
   }
 }): Promise<void> {
   const headers = ctx.headers ?? ctx.request?.headers
-  const token = sessionTokenFromAuthHeaders(headers)
-  if (token?.startsWith(TEST_CUSTOMER_SESSION_PREFIX)) {
+  const tokens = sessionTokensFromAuthHeaders(headers)
+  if (tokens.some((token) => token.startsWith(TEST_CUSTOMER_SESSION_PREFIX))) {
     throw new APIError('FORBIDDEN', { message: 'A test session only works in the test widget' })
   }
   const widgetAllowed = WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')
@@ -551,26 +569,29 @@ export async function handleWidgetAccountMutationGate(ctx: {
     TWO_FACTOR_PENDING_ALLOWLIST.has(ctx.path ?? '') ||
     inferProvider(ctx as Parameters<typeof inferProvider>[0]) !== null
   if (widgetAllowed && !SESSION_TRADING_PATHS.has(ctx.path ?? '')) return
-  if (!token) return
-  const found = await ctx.context?.internalAdapter?.findSession?.(token)
-  const session =
-    typeof found === 'object' &&
-    found !== null &&
-    Object.prototype.hasOwnProperty.call(found, 'session')
-      ? (found as { session?: { scope?: unknown } }).session
-      : undefined
-  if (!session) return
-  if (!pendingAllowed && isTwoFactorPendingSession(session)) {
+  // Every credential must pass: refused if any of them is a session this path
+  // is closed to, whichever one the library ends up reading.
+  for (const token of tokens) {
+    const found = await ctx.context?.internalAdapter?.findSession?.(token)
+    const session =
+      typeof found === 'object' &&
+      found !== null &&
+      Object.prototype.hasOwnProperty.call(found, 'session')
+        ? (found as { session?: { scope?: unknown } }).session
+        : undefined
+    if (!session) continue
+    if (!pendingAllowed && isTwoFactorPendingSession(session)) {
+      throw new APIError('FORBIDDEN', {
+        code: 'two_factor_enrollment_required',
+        message: 'Set up two-factor authentication to finish signing in.',
+      })
+    }
+    if (widgetAllowed) continue
+    if (toSessionScope(session.scope) !== 'widget') continue
     throw new APIError('FORBIDDEN', {
-      code: 'two_factor_enrollment_required',
-      message: 'Set up two-factor authentication to finish signing in.',
+      message: 'Widget sessions cannot access this endpoint',
     })
   }
-  if (widgetAllowed) return
-  if (toSessionScope(session.scope) !== 'widget') return
-  throw new APIError('FORBIDDEN', {
-    message: 'Widget sessions cannot access this endpoint',
-  })
 }
 
 export const hooksBefore = createAuthMiddleware(async (ctx) => {

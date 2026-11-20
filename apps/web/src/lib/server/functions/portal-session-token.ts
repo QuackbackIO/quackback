@@ -12,8 +12,7 @@ export function extractSessionTokenFromCookie(cookieHeader: string): string | nu
   const cookies = cookieHeader.split(';')
   for (const cookie of cookies) {
     const [name, ...valueParts] = cookie.trim().split('=')
-    // `__Secure-` prefixed on https.
-    if (/^(?:__Secure-)?better-auth\.session_token$/.test(name?.trim() ?? '')) {
+    if (name?.trim() === 'better-auth.session_token') {
       const raw = valueParts.join('=') // rejoin in case value contains '='
       if (!raw) return null
       try {

@@ -242,6 +242,69 @@ describe('handleWidgetAccountMutationGate', () => {
     ).rejects.toThrow(/Widget sessions/)
   })
 
+  // The gate cannot know which credential the library will use, so every
+  // one sent must pass: a decoy in front of the real session is no way past.
+  describe('with more than one credential on the request', () => {
+    const sessions: Record<string, { session: { scope: string; twoFactorPending?: boolean } }> = {
+      'pend-tok': { session: { scope: 'portal', twoFactorPending: true } },
+      'widget-tok': { session: { scope: 'widget' } },
+      'dash-tok': { session: { scope: 'dashboard' } },
+    }
+    function many(headers: Record<string, string>) {
+      return {
+        path: '/update-user',
+        headers: new Headers(headers),
+        context: {
+          internalAdapter: {
+            findSession: vi.fn(async (token: string) => sessions[token] ?? null),
+          },
+        },
+      }
+    }
+
+    it.each([
+      [
+        'a junk Bearer in front of a secure pending cookie',
+        {
+          authorization: 'Bearer junk.x',
+          cookie: '__Secure-better-auth.session_token=pend-tok.sig',
+        },
+      ],
+      [
+        'a plain decoy cookie in front of a secure pending cookie',
+        {
+          cookie:
+            'better-auth.session_token=x.sig; __Secure-better-auth.session_token=pend-tok.sig',
+        },
+      ],
+      [
+        'an ordinary Bearer in front of a pending cookie',
+        { authorization: 'Bearer dash-tok.sig', cookie: 'better-auth.session_token=pend-tok.sig' },
+      ],
+    ])('refuses %s', async (_label, headers) => {
+      await expect(handleWidgetAccountMutationGate(many(headers))).rejects.toThrow(/two-factor/)
+    })
+
+    it('refuses a widget session behind a decoy cookie', async () => {
+      await expect(
+        handleWidgetAccountMutationGate(
+          many({
+            cookie:
+              'better-auth.session_token=x.sig; __Secure-better-auth.session_token=widget-tok.sig',
+          })
+        )
+      ).rejects.toThrow(/Widget sessions/)
+    })
+
+    it('lets an ordinary session through with a decoy beside it (the control)', async () => {
+      await expect(
+        handleWidgetAccountMutationGate(
+          many({ authorization: 'Bearer junk.x', cookie: 'better-auth.session_token=dash-tok.sig' })
+        )
+      ).resolves.toBeUndefined()
+    })
+  })
+
   it('no-ops when there is no session token', async () => {
     await expect(
       handleWidgetAccountMutationGate(ctx({ path: '/change-email' }))

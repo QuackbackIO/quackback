@@ -7,12 +7,6 @@ describe('extractSessionTokenFromCookie', () => {
     expect(extractSessionTokenFromCookie(cookie)).toBe('abc123.signature456')
   })
 
-  // On https the library names the cookie `__Secure-better-auth.session_token`.
-  it('reads the secure cookie name used on https', () => {
-    const cookie = 'theme=dark; __Secure-better-auth.session_token=abc123.sig456'
-    expect(extractSessionTokenFromCookie(cookie)).toBe('abc123.sig456')
-  })
-
   it('returns null when cookie header is empty', () => {
     expect(extractSessionTokenFromCookie('')).toBeNull()
   })

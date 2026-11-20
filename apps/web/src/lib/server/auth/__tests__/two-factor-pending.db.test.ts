@@ -96,11 +96,12 @@ async function getAuth() {
 async function call(
   method: 'GET' | 'POST',
   path: string,
-  opts: { token?: string; cookie?: string; body?: unknown } = {}
+  opts: { token?: string; cookie?: string; authorization?: string; body?: unknown } = {}
 ): Promise<Response> {
   const auth = await getAuth()
   const headers: Record<string, string> = { host: HOST, origin: ORIGIN }
   if (opts.token) headers.authorization = `Bearer ${opts.token}`
+  if (opts.authorization) headers.authorization = opts.authorization
   if (opts.cookie) headers.cookie = opts.cookie
   if (opts.body !== undefined) headers['content-type'] = 'application/json'
   return auth.handler(
@@ -236,6 +237,39 @@ describe.skipIf(!fixture.available)('required two-factor, on the server', () => 
     expect((await call('GET', '/list-sessions', { cookie })).status).toBe(403)
     expect(
       (await call('POST', '/update-user', { cookie, body: { name: 'Someone else' } })).status
+    ).toBe(403)
+  })
+
+  // Which credential the library reads is not the gate's to guess: a decoy
+  // the library ignores must not be the one the gate checks.
+  it('refuses the pending cookie behind a decoy credential', async () => {
+    await setRequired(true)
+    const res = await call('POST', '/sign-in/email', { body: { email, password: PASSWORD } })
+    const set = res.headers
+      .getSetCookie()
+      .find((c) => /^__Secure-better-auth\.session_token=/.test(c))
+    const pending = set!.split(';')[0]!
+
+    // A Bearer the library cannot verify, so it falls back to the cookie.
+    const junkBearer = await call('POST', '/update-user', {
+      authorization: 'Bearer junk.x',
+      cookie: pending,
+      body: { name: 'Someone else' },
+    })
+    expect(junkBearer.status).toBe(403)
+
+    // A plain-named decoy cookie beside the secure one.
+    const decoyCookie = await call('POST', '/update-user', {
+      cookie: `better-auth.session_token=x.y; ${pending}`,
+      body: { name: 'Someone else' },
+    })
+    expect(decoyCookie.status).toBe(403)
+    expect(
+      (
+        await call('GET', '/one-time-token/generate', {
+          cookie: `better-auth.session_token=x.y; ${pending}`,
+        })
+      ).status
     ).toBe(403)
   })
 
