@@ -104,7 +104,7 @@ test('STA-X-02 list and get services', { tag: '@core' }, async ({ playwright, pe
   const one = await expectJson<Wire>(await api.get(`/api/v1/status/services/${svc.id}`), 200)
   expect(one.data.id).toBe(svc.id)
   const missing = await expectJson<Wire>(await api.get(`/api/v1/status/services/${gone.id}`), 404)
-  expect(missing.error.message).toMatch(/Status component not found/)
+  expect(missing.error.message).toMatch(/Status service not found/)
   const bad = await expectJson<Wire>(await api.get('/api/v1/status/services/not-an-id'), 400)
   expect(bad.error.code).toBe('VALIDATION_ERROR')
 })
