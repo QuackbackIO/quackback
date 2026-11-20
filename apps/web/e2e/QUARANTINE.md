@@ -89,24 +89,6 @@ by a separate test that is not quarantined.
 Each test asserts the right behaviour and fails on the product bug named.
 owner: unassigned, review by: 2026-12-03 for every entry.
 
-- `help-center/admin-articles.spec.ts` › HC-A-15 emptying the description in
-  the editor clears it (HC-B12). `article-modal.tsx` sends
-  `description: data.description?.trim() || undefined`, and `updateArticle`
-  (`help-center.article.service.ts`) treats `undefined` as "leave unchanged",
-  so the old description stays. Fix: send `''` (or `null`) for an emptied
-  field; the service already stores `'' || null` as null.
-- `help-center/admin-articles.spec.ts` › HC-A-20 an unknown article id in the
-  URL says the article was not found (HC-B18). `use-url-modal.ts` opens the
-  dialog whenever `?article=` is set and `article-modal.tsx` renders a spinner
-  until the article loads, so a missing or deleted id spins forever. Fix: when
-  the detail query errors (ARTICLE_NOT_FOUND), show a not-found state or close
-  the modal and drop the param.
-- `help-center/api-rest.spec.ts` › HC-A-16 a whitespace-only title or
-  category name is refused on update (HC-B13). `updateArticleSchema` and
-  `updateCategorySchema` (`lib/shared/schemas/help-center.ts`, and the REST
-  bodies) check `min(1)` before trimming; `updateArticle` / `updateCategory`
-  then store the trimmed empty string. Fix: `.trim().min(1)` in the update
-  schemas, or refuse an empty trimmed value in the services as create does.
 - `help-center/api-rest.spec.ts` › HC-A-76 a key without help_center.manage
   cannot read drafts or private categories (HC-B3). The GET handlers in
   `routes/api/v1/help-center/articles/index.ts`, `articles/$articleId.ts`,
@@ -115,35 +97,6 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   Contributor's key gets drafts and private categories. Fix: pass
   `{ permission: PERMISSIONS.HELP_CENTER_MANAGE }` (as MCP does), or read with
   the public visibility rules for keys without it.
-- `help-center/admin-trash.spec.ts` › HC-A-26 the delete dialogs say a
-  deleted article or category can be restored (HC-B5). The article confirm
-  (`components/admin/help-center/help-center-list.tsx`, ConfirmDialog
-  description) says "This action cannot be undone. The article will be
-  permanently deleted." and the category confirm says "the UI provides no
-  restore flow", but both are soft deletes that Other › Deleted items restores
-  for 30 days. Fix: reword both to point at Deleted items.
-- `help-center/admin-settings.spec.ts` › HC-A-67 a protocol-relative header
-  link is refused (HC-B20; `@isolated`). `helpCenterHeaderLinkUrl`
-  (`lib/shared/schemas/help-center.ts`) accepts any value starting with `/`,
-  so `//example.com` is stored, and `components/public/portal-header.tsx`
-  decides "external" by `!startsWith('/')`, rendering it as an in-tab internal
-  link to another host. Fix: require `startsWith('/') && !startsWith('//')`
-  in the schema (and treat `//` as external in the header).
-- `help-center/translations.spec.ts` › HC-A-53 Save draft on a published
-  translation does not change the live page (HC-B9; `@isolated`). The
-  dialog's Save draft (`components/admin/help-center/article-translations-dialog.tsx`)
-  calls `upsertArticleTranslationFn`, which never touches `status`, so a
-  published translation's live text changes at once. Fix: either set
-  `status: 'draft'` on that save, or label the button "Save" when the
-  translation is published.
-- `help-center/public-pages.spec.ts` › HC-P-33 reading the canonical article
-  page counts a view (HC-B1). `view_count` is incremented only in
-  `getPublicArticleBySlug` (`domains/help-center/help-center.article.service.ts`),
-  which serves the legacy URLs, the widget's slug opens, embed cards and the
-  admin View button. The canonical `/hc/<locale>/articles/<urlId>-<slug>` page
-  uses `getPublicArticleByUrlId`, which never counts, so the list "N views",
-  the performance table and Popular articles miss real reads. Fix: count in
-  the canonical page's loader (and decide whether previews/embeds count).
 - `help-center/feedback.spec.ts` › HC-F-05 a signed-out visitor who flips Yes
   to No is counted once (HC-B2). `recordArticleFeedback`
   (`domains/help-center/help-center.article-feedback.service.ts`) looks up an
@@ -162,23 +115,6 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   a category with only hidden content is listed at all). Fix: compute the
   roll-up with the same visibility predicate the collection page uses
   (`helpCenterVisibilityConditions` for the viewer).
-- `help-center/widget.spec.ts` › HC-W-10 the first widget vote of a fresh
-  visitor confirms it (new bug, `@isolated`). The vote is stored against the
-  freshly minted session, but the footer
-  (`components/widget/widget-article-footer.tsx`) still says "Was this
-  helpful?" and no button is pressed. `cast` calls `ensureSession()` before
-  the write; minting the session changes the widget identity, which appears
-  to remount the article view (session-keyed queries) and drop the local
-  `vote` state. Root cause unconfirmed. Fix: keep the vote state above the
-  remount (or key it by article), or mint the session without remounting.
-- `help-center/public-locales.spec.ts` › HC-P-27 an untranslated article has
-  no French page, and related links on a French page work (HC-B26;
-  `@isolated`). `getPublicArticlePageFn` (`lib/server/functions/help-center.ts`)
-  loads related articles without the page language, so a French article page
-  lists English titles linking to `/hc/fr/articles/<id>-<slug>`, which 404
-  when that article has no published French translation. Fix: load related
-  articles for the locale (translated only), or link untranslated ones to the
-  default-language URL.
 
 ### Product suite: API REST (people and keys)
 

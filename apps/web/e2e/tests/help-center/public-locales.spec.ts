@@ -68,12 +68,7 @@ test.describe('the help center in French', { tag: '@isolated' }, () => {
   test(
     'HC-P-27 an untranslated article has no French page, and related links on a French page work',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B26: related articles on a localised article page are loaded without the language, so they show English titles and link to /hc/<locale>/articles/... that 404 when untranslated',
-      },
+      tag: '@core',
     },
     async ({ page, request, marker, playwright }) => {
       const hc = await hcApi(playwright)
