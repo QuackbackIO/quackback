@@ -2,7 +2,7 @@
  * Feedback AI, team side: duplicate suggestions, summaries, embeddings,
  * auto-tagging, similar posts and Track as feedback.
  *
- * Journeys: FBA-M-13, FBA-AI-01, FBA-AI-04, FBA-AI-05, FBA-AI-06, FBA-AI-08,
+ * Journeys: FBA-M-13, FBA-AI-01, FBA-AI-02, FBA-AI-04, FBA-AI-05, FBA-AI-06, FBA-AI-08,
  * FBA-AI-11, FBA-AI-12, FBA-AI-15, FBA-AI-16
  * (FBA-AI-09 is in admin-ai.serial.spec.ts; FBA-AI-14 is proved with
  * FBA-X-15 in admin-import-export.spec.ts.)
@@ -439,6 +439,43 @@ test.describe('tag AI rules', () => {
       } finally {
         await callServerFn(api, 'deletePostTagFn', { id: tag.id })
         await callServerFn(api, 'deletePostTagFn', { id: other.id })
+        await api.dispose()
+      }
+    }
+  )
+
+  test(
+    'FBA-AI-02 a model answer of the wrong shape or a failing model tags nothing and the post still publishes',
+    { tag: ['@nightly', '@isolated'] },
+    async ({ playwright, marker }) => {
+      test.setTimeout(60_000)
+      const api = await personApi(playwright, 'admin')
+      const board = await makeBoard(api, marker)
+      const tag = await makeTag(api, `Rule ${marker}`.slice(0, 50), { aiPrompt: 'Anything at all' })
+      try {
+        await fakeAi.script({ marker: `${marker} shape`, json: { matches: tag.name } })
+        const wrongShape = await makePost(api, { boardId: board.id, title: `${marker} shape` })
+        const failing = await makePost(api, {
+          boardId: board.id,
+          title: `${marker} fails [[fake-ai:fail]]`,
+        })
+        // Both posts were offered to the model, and neither got a tag.
+        await fakeAi.waitForRequests({ contains: 'Anything at all', count: 2 })
+        for (const post of [wrongShape, failing]) {
+          const reqs = await fakeAi.requests({ contains: post.title, endpoint: 'chat' })
+          expect(
+            reqs.some((r) => r.text.includes('Anything at all')),
+            post.title
+          ).toBe(true)
+        }
+        await new Promise((r) => setTimeout(r, 1_000))
+        for (const post of [wrongShape, failing]) {
+          expect(await tagNamesOf(uuid(post.id)), post.title).toEqual([])
+          const [row] = await sql()`SELECT moderation_state FROM posts WHERE id = ${uuid(post.id)}`
+          expect(row.moderation_state).toBe('published')
+        }
+      } finally {
+        await callServerFn(api, 'deletePostTagFn', { id: tag.id })
         await api.dispose()
       }
     }

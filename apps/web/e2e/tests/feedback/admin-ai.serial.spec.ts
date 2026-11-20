@@ -2,7 +2,7 @@
  * The summary sweep, alone: it walks every stale post in the workspace, so it
  * runs with no other test creating posts meanwhile.
  *
- * Journeys: FBA-AI-09
+ * Journeys: FBA-AI-09, FBA-AI-07 (a wrong-shape answer stores nothing)
  */
 import { test, expect } from '../../support/fixtures'
 import { personApi } from '../../support/server-fns'
@@ -43,6 +43,9 @@ test(
     await waitForSummaryRequest(`${marker}-m`)
     await waitForSummaryRequest(`${marker}-s`)
     const sql = supportDb()
+    // FBA-AI-07: an answer of the wrong shape ({}) is ignored, nothing stored.
+    const [unsummarised] = await sql`SELECT summary_json FROM posts WHERE id = ${uuid(missing.id)}`
+    expect(unsummarised.summary_json).toBeNull()
     // A summary that covered 5 comments, while the post has none: stale.
     await sql`UPDATE posts SET summary_json = ${sql.json({ summary: 'old', keyQuotes: [], nextSteps: [] })},
       summary_comment_count = 5 WHERE id = ${uuid(stale.id)}`
