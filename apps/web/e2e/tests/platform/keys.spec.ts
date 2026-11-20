@@ -611,7 +611,7 @@ test.describe('Scopes on the non-support resources', () => {
   )
 
   test(
-    'API-K-24 a chat-only key: refused on gated feedback reads, allowed on bare ones',
+    'API-K-24 a chat-only key: refused on every feedback and status page read',
     { tag: '@core' },
     async ({ playwright, baseURL, people }) => {
       const chat = await keyApi(playwright, baseURL, {
@@ -622,6 +622,10 @@ test.describe('Scopes on the non-support resources', () => {
         ['/api/v1/posts', 'post.view_private'],
         ['/api/v1/users', 'people.view'],
         ['/api/v1/changelog', 'changelog.view_draft'],
+        ['/api/v1/boards', 'post.view_private'],
+        ['/api/v1/roadmaps', 'post.view_private'],
+        ['/api/v1/tags', 'tag.view'],
+        ['/api/v1/statuses', 'status.view'],
       ]) {
         await expectForbidden(
           await chat.api.get(path),
@@ -629,14 +633,14 @@ test.describe('Scopes on the non-support resources', () => {
         )
       }
       for (const path of [
-        '/api/v1/boards',
-        '/api/v1/tags',
-        '/api/v1/statuses',
-        '/api/v1/roadmaps',
+        '/api/v1/status/services',
+        '/api/v1/status/incidents',
         '/api/v1/status/summary',
       ]) {
-        const res = await chat.api.get(path)
-        expect(res.status(), `${path}: ${await res.text()}`).toBe(200)
+        await expectForbidden(
+          await chat.api.get(path),
+          "This API key is missing the 'read:feedback' scope"
+        )
       }
       // Help center reads need read:article, even for what is public.
       await expectForbidden(
