@@ -76,6 +76,17 @@ beforeEach(() => {
   calls.length = 0
 })
 
+vi.mock('@/lib/server/domains/summary/summary.service', () => ({
+  refreshStaleSummaries: vi.fn(async () => {
+    calls.push({ job: 'summary-sweep' })
+  }),
+}))
+vi.mock('@/lib/server/domains/merge-suggestions/merge-check.service', () => ({
+  sweepMergeSuggestions: vi.fn(async () => {
+    calls.push({ job: 'merge-sweep' })
+  }),
+}))
+
 describe('runE2eSweep', () => {
   it('passes asOf through to the sweep as its clock', async () => {
     const outcome = await runE2eSweep({ job: 'snooze-sweep', asOf: '2030-05-01T10:00:00.000Z' })
@@ -191,7 +202,10 @@ describe('runE2eSweep', () => {
         ok: false,
         status: 400,
       })
+    }
     expect(calls).toEqual([{ job: 'summary-sweep' }, { job: 'merge-sweep' }])
+  })
+
   it('lists the sweeps it accepts and never the one-shot queues', () => {
     expect(E2E_SWEEP_NAMES).toContain('sla-breach-sweep')
     expect(E2E_SWEEP_NAMES).toContain('snooze-sweep')
