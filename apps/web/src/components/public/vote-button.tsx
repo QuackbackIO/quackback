@@ -2,9 +2,14 @@ import { useRef } from 'react'
 import { useIntl } from 'react-intl'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
-import { useBlockedRefusalToast } from './use-blocked-refusal-toast'
+import { toast } from 'sonner'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
 
 interface VoteButtonProps {
   postId: PostId
@@ -44,7 +49,16 @@ export function VoteButton({
   closed = false,
 }: VoteButtonProps): React.ReactElement {
   const intl = useIntl()
-  const sayIfBlocked = useBlockedRefusalToast()
+  // A blocked person's vote is refused; say why, in their language.
+  const sayIfBlocked = (err: unknown) => {
+    if (!isBlockedRefusal(err)) return
+    toast.error(
+      intl.formatMessage({
+        id: 'portal.blocked',
+        defaultMessage: "You can't post, vote or comment here.",
+      })
+    )
+  }
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
     voteCount: initialVoteCount,

@@ -6,7 +6,6 @@ import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-feat
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { shownName } from '@/lib/shared/greeting-name'
 import { errorText } from '@/lib/client/error-text'
-import { isPersonBlockedRefusal } from '@/lib/shared/person-blocked'
 
 interface WidgetUser {
   id: string
@@ -14,6 +13,11 @@ interface WidgetUser {
   email: string
   avatarUrl: string | null
 }
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
 
 interface WidgetCommentFormProps {
   isIdentified: boolean
@@ -59,7 +63,7 @@ export function WidgetCommentForm({
       })
     } catch (err) {
       setError(
-        isPersonBlockedRefusal(err)
+        isBlockedRefusal(err)
           ? intl.formatMessage({
               id: 'widget.blocked',
               defaultMessage: "You can't post, vote or comment here.",

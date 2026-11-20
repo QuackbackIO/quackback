@@ -30,7 +30,11 @@ import type { PostId, PostCommentId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
 import { errorText } from '@/lib/client/error-text'
-import { isPersonBlockedRefusal } from '@/lib/shared/person-blocked'
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -200,7 +204,7 @@ export function CommentForm({
         },
         onError: (err) => {
           setError(
-            isPersonBlockedRefusal(err)
+            isBlockedRefusal(err)
               ? intl.formatMessage({
                   id: 'portal.blocked',
                   defaultMessage: "You can't post, vote or comment here.",
