@@ -103,7 +103,8 @@ test(
       title: `${marker} at its time`,
       state: { type: 'scheduled', publishAt: hoursFromNow(1) },
     })
-    expect(await publishJob(entry.id)).not.toBeNull()
+    // The delayed job is queued just after the save returns.
+    await expect.poll(() => publishJob(entry.id)).not.toBeNull()
     expect(await publicIds(request)).not.toContain(entry.id)
 
     await timeComes(entry.id)
@@ -156,7 +157,8 @@ test(
       title: `${marker} back to draft`,
       state: { type: 'scheduled', publishAt: hoursFromNow(1) },
     })
-    expect(await publishJob(entry.id)).not.toBeNull()
+    // The delayed job is queued just after the save returns.
+    await expect.poll(() => publishJob(entry.id)).not.toBeNull()
     expect((await updateEntry(admin, entry.id, { publishState: { type: 'draft' } })).ok).toBe(true)
     await expect.poll(() => publishJob(entry.id)).toBeNull()
     await runDue(request, entry.id)

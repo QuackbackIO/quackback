@@ -17,7 +17,13 @@ import { ISOLATED, ISOLATED_SKIP } from '../../support/automation'
 import { bellsFor, waitForBells } from '../../support/bells'
 import { supportDb } from '../../support/db'
 import { withSettings } from '../../support/isolated-settings'
-import { getMailHeaders, linksIn, waitForEmailLog, waitForMail } from '../../support/mailpit'
+import {
+  emailLogFor,
+  getMailHeaders,
+  linksIn,
+  waitForEmailLog,
+  waitForMail,
+} from '../../support/mailpit'
 import { personApi } from '../../support/server-fns'
 import { runSweep } from '../../support/sweeps'
 import { mintCustomer, portalPage } from '../../support/widget-portal'
@@ -260,8 +266,14 @@ test(
     // The e2e origin is http, so no one-click header.
     expect(headers['List-Unsubscribe-Post']).toBeUndefined()
     expect(linksIn(mail).some((l) => /\/unsubscribe\?token=/.test(l))).toBe(true)
-    const log = await waitForEmailLog(sub.email, { status: 'sent' })
-    expect(log.subject).toBe(`New update: ${entry.title}`)
+    // The subscriber also gets other tests' announcements: find this one's row.
+    await expect
+      .poll(async () =>
+        (await emailLogFor(sub.email)).some(
+          (r) => r.subject === `New update: ${entry.title}` && r.status === 'sent'
+        )
+      )
+      .toBe(true)
     await admin.dispose()
   }
 )
