@@ -26,6 +26,7 @@ import {
   listPublicArticles,
   listPopularPublicArticles,
   getArticleById,
+  countPublicArticleView,
   createArticle,
   updateArticle,
   publishArticle,
@@ -345,6 +346,7 @@ export const getPublicArticlePageFn = createServerFn({ method: 'GET' })
       getPublicArticleByUrlIdForLocale,
       listPublicCategoriesForLocale,
       listPublicArticlesForCategoryLocale,
+      localizeRelatedArticles,
     } = await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const { getRelatedArticles, RELATED_ARTICLES_LIMIT } =
@@ -360,9 +362,12 @@ export const getPublicArticlePageFn = createServerFn({ method: 'GET' })
       listPublicArticlesForCategoryLocale(article.category.id, locale, viewer),
     ])
 
-    let related: Awaited<ReturnType<typeof getRelatedArticles>> = []
+    let related: Awaited<ReturnType<typeof localizeRelatedArticles>> = []
     try {
-      related = await getRelatedArticles(article.id, RELATED_ARTICLES_LIMIT, viewer)
+      related = await localizeRelatedArticles(
+        await getRelatedArticles(article.id, RELATED_ARTICLES_LIMIT, viewer),
+        locale
+      )
     } catch (err) {
       log.warn({ err, article_id: article.id }, 'related articles failed; rendering without them')
     }
@@ -477,6 +482,25 @@ export const getRelatedPublicArticlesFn = createServerFn({ method: 'GET' })
       data.limit ?? RELATED_ARTICLES_LIMIT,
       await publicViewer()
     )
+  })
+
+/**
+ * Count a view of a public article, called once by the canonical article page
+ * when it shows the article. Not from the page's loader: the loader also runs
+ * when a link is hovered (preload), which is not a visit. Rate limited and
+ * counted once per article per address an hour (countPublicArticleView).
+ */
+export const recordPublicArticleViewFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ articleId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
+    const counted = await countPublicArticleView(
+      data.articleId,
+      getClientIp(getRequestHeaders()),
+      await publicViewer()
+    )
+    return { success: true, counted }
   })
 
 export const createArticleFn = createServerFn({ method: 'POST' })

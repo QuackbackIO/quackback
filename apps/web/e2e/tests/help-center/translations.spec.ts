@@ -199,12 +199,7 @@ test.describe('help center languages', { tag: '@isolated' }, () => {
   test(
     'HC-A-53 Save draft on a published translation does not change the live page',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B9: upsertArticleTranslation never touches status, so "Save draft" on a published translation publishes the edit at once',
-      },
+      tag: '@core',
     },
     async ({ asPerson, marker, page, playwright }) => {
       const hc = await hcApi(playwright)

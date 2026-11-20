@@ -115,7 +115,8 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
           allUrls = buildHelpCenterSitemapUrlsMultiLocale(helpUrl, defaultLocale, perLocale)
         }
 
-        const xml = renderSitemap(allUrls, baseUrl, isNaN(page as number) ? null : page)
+        // A sitemap index points at this sitemap's own pages, under /hc.
+        const xml = renderSitemap(allUrls, `${baseUrl}/hc`, isNaN(page as number) ? null : page)
 
         if (!xml) {
           return new Response('Not Found', { status: 404 })

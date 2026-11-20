@@ -193,12 +193,7 @@ test.describe('workspace-wide help center texts', { tag: '@isolated' }, () => {
   test(
     'HC-A-67 a protocol-relative header link is refused',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B20: helpCenterHeaderLinkUrl accepts anything starting with "/", so //example.com is stored and portal-header.tsx renders it as an internal link',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, marker }) => {
       await withSettings({ help_center_config: {} }, async () => {

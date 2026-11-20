@@ -6,11 +6,13 @@
  * from the request's own scheme. Sending the primary domain's sitemap to the
  * help center's host is the section host middleware's job.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { MAX_URLS_PER_SITEMAP } from '@/lib/server/sitemap'
 import { allOnPrimary, type SectionOrigins } from '@/lib/shared/section-links'
 
 const state = vi.hoisted(() => ({
   origins: null as SectionOrigins | null,
+  articles: [] as unknown[],
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -36,7 +38,7 @@ vi.mock('@/lib/server/domains/settings/section-links', () => ({
 
 vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
   listPublicCategories: async () => [{ id: 'cat_1', urlId: 1, slug: 'basics' }],
-  listPublicArticles: async () => ({ items: [] }),
+  listPublicArticles: async () => ({ items: state.articles }),
 }))
 
 vi.mock('@/lib/server/domains/help-center/help-center-locale.query', () => ({
@@ -57,6 +59,10 @@ async function sitemapLocs(requestUrl: string): Promise<string[]> {
 }
 
 describe('help center sitemap origin', () => {
+  beforeEach(() => {
+    state.articles = []
+  })
+
   it('lists https URLs when the request reaches the app over http behind a proxy', async () => {
     state.origins = allOnPrimary('https://feedback.example.com')
     expect(await sitemapLocs('http://feedback.example.com/hc/sitemap.xml')).toEqual([
@@ -73,6 +79,21 @@ describe('help center sitemap origin', () => {
     expect(await sitemapLocs('https://help.acme.com/hc/sitemap.xml')).toEqual([
       'https://help.acme.com/',
       'https://help.acme.com/hc/en/collections/1-basics',
+    ])
+  })
+
+  it('points a sitemap index at the help center sitemap, not the main one', async () => {
+    state.origins = allOnPrimary('https://feedback.example.com')
+    state.articles = Array.from({ length: MAX_URLS_PER_SITEMAP }, (_, i) => ({
+      id: `a${i}`,
+      urlId: i + 1,
+      slug: `a-${i}`,
+      updatedAt: new Date('2026-01-01'),
+      category: { slug: 'basics' },
+    }))
+    expect(await sitemapLocs('http://feedback.example.com/hc/sitemap.xml')).toEqual([
+      'https://feedback.example.com/hc/sitemap.xml?page=1',
+      'https://feedback.example.com/hc/sitemap.xml?page=2',
     ])
   })
 })

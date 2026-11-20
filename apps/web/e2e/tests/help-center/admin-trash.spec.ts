@@ -69,12 +69,7 @@ test(
 test(
   'HC-A-26 the delete dialogs say a deleted article or category can be restored',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'HC-B5: help-center-list.tsx says "permanently deleted" / "the UI provides no restore flow", but both are soft deletes restorable from Deleted items for 30 days',
-    },
+    tag: '@core',
   },
   async ({ asPerson, marker, playwright }) => {
     const hc = await hcApi(playwright)

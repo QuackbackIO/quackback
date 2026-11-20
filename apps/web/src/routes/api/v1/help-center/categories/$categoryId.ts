@@ -25,7 +25,7 @@ import type { KbCategoryId } from '@quackback/ids'
 import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const updateCategoryBody = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
   slug: z.string().max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   isPublic: z.boolean().optional(),
