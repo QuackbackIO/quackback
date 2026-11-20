@@ -324,7 +324,8 @@ describe('AdminSidebar: settings entry', () => {
   })
 
   it('shows Settings to a workflow manager only while the Support inbox is on', () => {
-    const permissions = [PERMISSIONS.WORKFLOW_MANAGE]
+    // Workflows are read under routing.manage and changed under workflow.manage.
+    const permissions = [PERMISSIONS.WORKFLOW_MANAGE, PERMISSIONS.ROUTING_MANAGE]
     const on = renderSidebar('member', { permissions, flags: { supportInbox: true } })
     expect(on.container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
     cleanup()

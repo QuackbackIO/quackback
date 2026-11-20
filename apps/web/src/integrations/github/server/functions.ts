@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { GITHUB_CHANNEL_STATUS_READ_PERMISSIONS } from '@/lib/shared/settings-read-permissions'
 import { ValidationError } from '@/lib/shared/errors'
 
 export interface GitHubOAuthState {
@@ -74,12 +75,14 @@ export interface GitHubChannelStatus {
 
 export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<GitHubChannelStatus> => {
-    const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
+    const { requireAuth, assertAnyPermission } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { getLiveGitHubConnectionAccount, githubAccessTokenPresent } =
       await import('@/lib/server/domains/channel-accounts/github-connection')
 
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    // The GitHub channel page (channel_account.manage) and the Channels hub
+    // (settings.manage) both show it. No token leaves the server.
+    assertAnyPermission(await requireAuth(), GITHUB_CHANNEL_STATUS_READ_PERMISSIONS)
     const integration = await db.query.integrations.findFirst({
       where: eq(integrations.integrationType, 'github'),
     })

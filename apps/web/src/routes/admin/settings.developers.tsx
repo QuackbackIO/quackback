@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { ClientOnly, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { z } from 'zod'
@@ -51,7 +51,7 @@ export const Route = createFileRoute('/admin/settings/developers')({
   head: adminPageHead('Developers settings'),
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.API_KEY_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/developers')
 
     const { queryClient } = context
     // Every tab the viewer may open is preloaded so switching tabs never

@@ -16,7 +16,7 @@ import { BoardImportSection } from '@/components/admin/settings/boards/board-imp
 import { BoardExportSection } from '@/components/admin/settings/boards/board-export-section'
 import { DeleteBoardForm } from '@/components/admin/settings/boards/delete-board-form'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 
@@ -32,7 +32,7 @@ export const Route = createFileRoute('/admin/settings/boards/$slug')({
     }
   },
   loader: async ({ context, params }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.BOARD_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/boards/$slug')
     const { queryClient } = context
     // Warm both queries the board forms read so they render with real data
     // on first paint (no flash). portalConfig backs the Moderation tab's

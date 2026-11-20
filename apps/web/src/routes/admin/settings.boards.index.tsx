@@ -12,8 +12,7 @@ import { NewButton } from '@/components/shared/new-button'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { FeedbackEmailCard } from '@/components/admin/settings/boards/feedback-email-card'
 import { warmQuery } from '@/lib/client/queries/warm-query'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
 
@@ -38,7 +37,7 @@ export const Route = createFileRoute('/admin/settings/boards/')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.BOARD_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/boards')
     // Loaded here, not imported above, so it stays out of every page's script.
     const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
     await Promise.all([

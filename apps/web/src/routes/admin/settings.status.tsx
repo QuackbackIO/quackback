@@ -1,7 +1,6 @@
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { useState } from 'react'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -26,7 +25,7 @@ export const Route = createFileRoute('/admin/settings/status')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.STATUS_PAGE_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/status')
     // Loaded here, not imported above, so it stays out of every page's script.
     const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
     await Promise.all([

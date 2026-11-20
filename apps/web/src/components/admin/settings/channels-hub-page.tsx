@@ -15,6 +15,7 @@ import {
   isWidgetMessengerEnabled,
 } from '@/lib/shared/support-surfaces'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useCanOpenSettingsPage } from '@/lib/client/hooks/use-permission'
 import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
 
 // The hub's GitHub row may be up to a minute old, like its email row.
@@ -33,6 +34,9 @@ export function ChannelsHubPage() {
   const messenger = getChannelDescriptor('messenger')
   const email = getChannelDescriptor('email')
   const github = getChannelDescriptor('github')
+  // Each channel's page has its own gate; a row shows only to whom it opens.
+  const canOpenEmail = useCanOpenSettingsPage('/admin/settings/channels/email')
+  const canOpenGitHub = useCanOpenSettingsPage('/admin/settings/channels/github')
   const portalSupportOn = isPortalSupportSurfaceEnabled(flags, portal.data)
   const messengerOn = isWidgetMessengerEnabled(flags, widget.data) || portalSupportOn
   const emailSubtitle = emailStatusQuery.data?.inboundDomain ?? 'Add an inbound route'
@@ -58,19 +62,23 @@ export function ChannelsHubPage() {
             meta="Widget and portal"
             badges={messengerOn ? undefined : <StateBadge state="off" />}
           />
-          <SettingsListRow
-            to="/admin/settings/channels/email"
-            leading={<RowIcon icon={EnvelopeIcon} />}
-            title={email?.label ?? 'Email'}
-            meta={emailSubtitle}
-          />
-          <SettingsListRow
-            to="/admin/settings/channels/github"
-            leading={<RowIcon icon={GitHubIcon} />}
-            title={github?.label ?? 'GitHub'}
-            meta={githubSubtitle}
-            badges={githubAttention ? <StateBadge state="attention" /> : undefined}
-          />
+          {canOpenEmail && (
+            <SettingsListRow
+              to="/admin/settings/channels/email"
+              leading={<RowIcon icon={EnvelopeIcon} />}
+              title={email?.label ?? 'Email'}
+              meta={emailSubtitle}
+            />
+          )}
+          {canOpenGitHub && (
+            <SettingsListRow
+              to="/admin/settings/channels/github"
+              leading={<RowIcon icon={GitHubIcon} />}
+              title={github?.label ?? 'GitHub'}
+              meta={githubSubtitle}
+              badges={githubAttention ? <StateBadge state="attention" /> : undefined}
+            />
+          )}
         </SettingsList>
       </SettingsCard>
 

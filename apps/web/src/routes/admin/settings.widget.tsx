@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { WidgetSettingsGate } from '@/components/admin/settings/widget/widget-settings-page'
@@ -10,7 +10,7 @@ import { adminPageHead } from '@/lib/client/admin-head'
 export const Route = createFileRoute('/admin/settings/widget')({
   head: adminPageHead('Widget settings'),
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/widget')
 
     const { queryClient } = context
     const ensure = readBatch(queryClient)

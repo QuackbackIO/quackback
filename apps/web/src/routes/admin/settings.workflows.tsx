@@ -10,14 +10,14 @@ import { WorkflowsManager } from '@/components/admin/automation/workflows-manage
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { useCloudEnabled, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
 import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 
 export const Route = createFileRoute('/admin/settings/workflows')({
   head: adminPageHead('Workflows settings'),
   beforeLoad: ({ context }) =>
-    assertRoutePermission(context.permissions, PERMISSIONS.WORKFLOW_MANAGE),
+    assertSettingsPageAccess(context.permissions, '/admin/settings/workflows'),
   loader: async ({ context }) => {
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')

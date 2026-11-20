@@ -11,6 +11,10 @@ vi.mock('@tanstack/react-router', () => ({
     </a>
   ),
 }))
+const held = vi.hoisted(() => ({ manage: true }))
+vi.mock('@/lib/client/hooks/use-permission', () => ({
+  usePermission: () => held.manage,
+}))
 vi.mock('../platform-credentials-dialog', () => ({
   PlatformCredentialsDialog: ({ integrationName }: { integrationName: string }) => (
     <p>Credentials for {integrationName}</p>
@@ -19,7 +23,10 @@ vi.mock('../platform-credentials-dialog', () => ({
 
 const { IntegrationList } = await import('../integration-list')
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  held.manage = true
+})
 
 function entry(over: Partial<IntegrationCatalogEntry>): IntegrationCatalogEntry {
   return {
@@ -86,6 +93,18 @@ describe('IntegrationList', () => {
     )
     expect(screen.getByText('Off')).toBeInTheDocument()
     expect(screen.getByText('Error')).toBeInTheDocument()
+  })
+
+  it('shows integration.view alone each tile and its status, with nothing to open', () => {
+    // An integration's page and its credentials need integration.manage.
+    held.manage = false
+    render(
+      <IntegrationList catalog={catalog} integrations={[{ id: 'linear', status: 'active' }]} />
+    )
+    expect(screen.getByText('Slack')).toBeInTheDocument()
+    expect(screen.getByText('Connected')).toBeInTheDocument()
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: /Jira/ })).toBeNull()
   })
 
   it('uses one tile style: no dashed borders', () => {

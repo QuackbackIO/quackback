@@ -14,7 +14,7 @@ const { toast, rootContext, saveFails, saveError } = vi.hoisted(() => ({
   rootContext: {
     settings: { name: 'Acme', featureFlags: { feedback: true, changelog: true } },
     session: null,
-    permissions: ['settings.branding'],
+    permissions: ['settings.branding', 'settings.manage'],
   },
   saveFails: { value: true },
   saveError: { value: new Error('nope') as Error },
@@ -97,7 +97,7 @@ function renderPage() {
   queryClient.setQueryData(['settings', 'branding'], { themeMode: 'user' })
   queryClient.setQueryData(['settings', 'logo'], { url: null })
   queryClient.setQueryData(['settings', 'customCss'], '')
-  queryClient.setQueryData(['settings', 'portalConfig'], {})
+  queryClient.setQueryData(['settings', 'portalConfig', 'page'], {})
   return render(
     <IntlProvider locale="en" defaultLocale="en">
       <QueryClientProvider client={queryClient}>

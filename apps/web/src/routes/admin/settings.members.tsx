@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -25,7 +25,7 @@ export const Route = createFileRoute('/admin/settings/members')({
   head: adminPageHead('Members settings'),
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/members')
     const { settings, queryClient, principal } = context
     // The Teams tab lists teams, a read gated on team.manage rather than the
     // page's member.view, so only a viewer who may read them is shown the tab.

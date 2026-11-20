@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { ChannelsHubPage } from '@/components/admin/settings/channels-hub-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
@@ -15,7 +14,7 @@ export const Route = createFileRoute('/admin/settings/channels')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/channels')
     const { queryClient } = context
     const [{ channelSettingsQueries: channels }, { githubChannelStatusQuery: githubStatus }] =
       await Promise.all([

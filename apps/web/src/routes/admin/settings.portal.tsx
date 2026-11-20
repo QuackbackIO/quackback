@@ -10,7 +10,7 @@ import {
   useTransition,
 } from 'react'
 import { z } from 'zod'
-import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { ClientOnly, createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -61,6 +61,8 @@ import {
 import type { ThemeConfig } from '@/lib/shared/theme'
 import { primaryPresetIds, themePresets } from '@/lib/shared/theme/presets'
 import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 import { UpgradeModal } from '@/components/admin/upgrade'
@@ -75,7 +77,7 @@ import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { effectiveSectionDomains, hostOfOrigin } from '@/lib/shared/section-domains'
 import type {
-  PortalConfig,
+  PortalPageConfig,
   PortalNavItemConfig,
   PortalWelcomeCard,
 } from '@/lib/shared/types/settings'
@@ -91,7 +93,6 @@ import {
 import { adminPageHead } from '@/lib/client/admin-head'
 import { SETTINGS_PAGES } from '@/lib/shared/settings-pages'
 import {
-  PORTAL_PAGE_PERMISSIONS,
   PORTAL_SETTINGS_PATH,
   PORTAL_TAB_LABELS,
   PORTAL_TABS,
@@ -144,7 +145,7 @@ export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context, location }) => {
     // Each tab opens to its own permission, which non-admin team roles lack.
     // Gate the page instead of letting managers land on a shell full of 403s.
-    assertRouteAnyPermission(context.permissions, PORTAL_PAGE_PERMISSIONS)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/portal')
     const tabs = portalTabsFor(context.permissions)
     const tab = resolvePortalTab((location.search as { tab?: PortalTab }).tab, tabs)
 
@@ -157,7 +158,7 @@ export const Route = createFileRoute('/admin/settings/portal')({
             ensure(settingsQueries.branding()),
             ensure(settingsQueries.logo()),
             ensure(settingsQueries.customCss()),
-            ensure(settingsQueries.portalConfig()),
+            ensure(settingsQueries.portalPageConfig()),
           ]
         : []),
       tab === 'custom-domains'
@@ -254,8 +255,11 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
   const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
   const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
   const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
-  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
-  const config = portalConfigQuery.data as PortalConfig
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalPageConfig())
+  const config: PortalPageConfig = portalConfigQuery.data
+  // The portal's tabs and welcome message save under settings.manage; without
+  // it the Design tab is the look alone.
+  const canEditContent = usePermission(PERMISSIONS.SETTINGS_MANAGE)
 
   const updatePortalConfig = useUpdatePortalConfig({
     showServerMessage: true,
@@ -448,29 +452,33 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
           />
         </SettingsCard>
 
-        <SettingsCard
-          title="Navigation"
-          description="The portal's top tabs. They apply to the help center and status pages too."
-        >
-          <PortalNavEditor
-            items={navItems}
-            onChange={setNavItems}
-            gatedTypes={gatedTypes}
-            onReset={resetNavItems}
-            sectionHosts={sectionHosts}
-            linkSectionHosts={tabs.includes('custom-domains')}
-          />
-          <p className="mt-3 text-xs text-muted-foreground">
-            Renamed tabs show your text in every language; untouched labels stay translated.
-          </p>
-        </SettingsCard>
+        {canEditContent && (
+          <>
+            <SettingsCard
+              title="Navigation"
+              description="The portal's top tabs. They apply to the help center and status pages too."
+            >
+              <PortalNavEditor
+                items={navItems}
+                onChange={setNavItems}
+                gatedTypes={gatedTypes}
+                onReset={resetNavItems}
+                sectionHosts={sectionHosts}
+                linkSectionHosts={tabs.includes('custom-domains')}
+              />
+              <p className="mt-3 text-xs text-muted-foreground">
+                Renamed tabs show your text in every language; untouched labels stay translated.
+              </p>
+            </SettingsCard>
 
-        <SettingsCard
-          title="Welcome message"
-          description="Shown above the post list on your portal home. Leave empty to show nothing."
-        >
-          <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
-        </SettingsCard>
+            <SettingsCard
+              title="Welcome message"
+              description="Shown above the post list on your portal home. Leave empty to show nothing."
+            >
+              <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
+            </SettingsCard>
+          </>
+        )}
       </div>
 
       {/* ── Live portal preview ── */}

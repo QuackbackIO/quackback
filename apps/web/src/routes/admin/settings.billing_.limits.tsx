@@ -1,7 +1,6 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { PlanLimitsView } from '@/components/admin/settings/billing/plan-limits-view'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +17,7 @@ import { adminPageHead } from '@/lib/client/admin-head'
 export const Route = createFileRoute('/admin/settings/billing_/limits')({
   head: adminPageHead('Plan limits'),
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/billing/limits')
     // Loaded on demand so the queries and their server functions stay out of
     // the entry chunk every admin page downloads.
     const { planLimitsQueries: queries } = await import('@/lib/client/queries/plan-limits')

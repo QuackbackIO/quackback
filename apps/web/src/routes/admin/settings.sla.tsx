@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useIntl } from 'react-intl'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import {
   queryOptions,
@@ -78,7 +77,7 @@ export const Route = createFileRoute('/admin/settings/sla')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SLA_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/sla')
     await Promise.all([
       context.queryClient.ensureQueryData(slaPoliciesQuery),
       context.queryClient.ensureQueryData(settingsQueries.defaultSlaPolicy()),

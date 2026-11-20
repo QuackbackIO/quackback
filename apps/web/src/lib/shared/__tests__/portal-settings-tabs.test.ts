@@ -10,22 +10,26 @@ import {
 
 const BRANDING = PERMISSIONS.SETTINGS_BRANDING
 const CUSTOM_DOMAIN = PERMISSIONS.SETTINGS_CUSTOM_DOMAIN
+const MANAGE = PERMISSIONS.SETTINGS_MANAGE
 
 describe('portal settings tabs', () => {
-  it('offers Design to settings.branding and Custom domains to settings.custom_domain', () => {
-    expect(portalTabsFor([BRANDING, CUSTOM_DOMAIN])).toEqual(['design', 'custom-domains'])
+  it('offers Design to settings.branding, Custom domains to settings.custom_domain', () => {
+    expect(portalTabsFor([BRANDING, MANAGE, CUSTOM_DOMAIN])).toEqual(['design', 'custom-domains'])
+    expect(portalTabsFor([BRANDING, MANAGE])).toEqual(['design'])
+    // Design reads what it shows of the portal config with settings.branding alone.
     expect(portalTabsFor([BRANDING])).toEqual(['design'])
+    expect(portalTabsFor([MANAGE])).toEqual([])
     expect(portalTabsFor([CUSTOM_DOMAIN])).toEqual(['custom-domains'])
     expect(portalTabsFor([])).toEqual([])
     expect(portalTabsFor(undefined)).toEqual([])
   })
 
   it('opens the tab asked for when the viewer has it, otherwise their first tab', () => {
-    const both = portalTabsFor([BRANDING, CUSTOM_DOMAIN])
+    const both = portalTabsFor([BRANDING, MANAGE, CUSTOM_DOMAIN])
     expect(resolvePortalTab(undefined, both)).toBe('design')
     expect(resolvePortalTab('custom-domains', both)).toBe('custom-domains')
     // Without settings.custom_domain the tab is not there to open.
-    expect(resolvePortalTab('custom-domains', portalTabsFor([BRANDING]))).toBe('design')
+    expect(resolvePortalTab('custom-domains', portalTabsFor([BRANDING, MANAGE]))).toBe('design')
     expect(resolvePortalTab(undefined, portalTabsFor([CUSTOM_DOMAIN]))).toBe('custom-domains')
     expect(resolvePortalTab('design', portalTabsFor([CUSTOM_DOMAIN]))).toBe('custom-domains')
   })

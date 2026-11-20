@@ -384,6 +384,15 @@ export interface PortalConfig {
 }
 
 /**
+ * What `fetchPortalPageConfigFn` returns: the parts of {@link PortalConfig} the
+ * viewer's permissions read. `moderationDefault` for settings.moderation,
+ * `welcomeCard` and `nav` for settings.branding; settings.manage reads both.
+ */
+export type PortalPageConfig = Partial<
+  Pick<PortalConfig, 'moderationDefault' | 'welcomeCard' | 'nav'>
+>
+
+/**
  * Portal Support tab configuration. Gated by `isPortalSupportSurfaceEnabled`
  * (`supportTickets` OR `supportInbox` plus this toggle); independent of the
  * widget Messages tab.

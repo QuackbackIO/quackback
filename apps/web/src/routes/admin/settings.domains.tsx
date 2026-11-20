@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import {
-  DOMAINS_PAGE_PERMISSIONS,
-  domainUseLinks,
-  domainsPageSearch,
-} from '@/lib/shared/domains-permissions'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
+import { domainUseLinks, domainsPageSearch } from '@/lib/shared/domains-permissions'
 import { legacyCustomDomainsTarget } from '@/lib/shared/portal-settings-tabs'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -22,7 +18,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
   // `?add=1` (addDomainLink) opens Add domain on arrival, as Custom domains links here to add one.
   validateSearch: domainsPageSearch,
   loader: async ({ context }) => {
-    assertRouteAnyPermission(context.permissions, DOMAINS_PAGE_PERMISSIONS)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/domains')
     // The list rows only the domains the workspace owns, so it reads no section map.
     const summaries = await loadDomainSummaries({ ...context, sectionDomains: false })
     return {

@@ -6,6 +6,7 @@ import { updateThemeSchema } from '@/lib/shared/schemas/settings'
 import {
   DEFAULT_PORTAL_CONFIG,
   type BrandingConfig,
+  type PortalPageConfig,
   type UpdatePortalConfigInput,
 } from '@/lib/server/domains/settings'
 import { userIdSchema, type UserId } from '@quackback/ids'
@@ -34,12 +35,17 @@ import {
 } from '@/lib/server/domains/settings/settings.media'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
-import { requireAuth } from './auth-helpers'
+import { assertAnyPermission, requireAuth } from './auth-helpers'
 import { teamMemberWhere } from '@/lib/server/domains/principals/principal.service'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, and } from '@/lib/server/db'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import {
+  PORTAL_DESIGN_READ_PERMISSIONS,
+  PORTAL_MODERATION_READ_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+} from '@/lib/shared/settings-read-permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
 import { workflowAbandonedAutoCloseSchema } from '@/lib/shared/workflows/abandoned-auto-close'
@@ -66,6 +72,34 @@ export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async
   const config = await getPortalConfig()
   return config ?? DEFAULT_PORTAL_CONFIG
 })
+
+/**
+ * The parts of the portal config Settings > Moderation and the Design tab of
+ * Settings > Portal show, for the narrower permissions that own those pages:
+ * the moderation default to settings.moderation, the portal's tabs and welcome
+ * message to settings.branding (settings.manage reads both). Everything else in
+ * the portal config (who may open the portal, signup, section domains) stays
+ * behind settings.manage in `fetchPortalConfig`.
+ */
+export const fetchPortalPageConfigFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<PortalPageConfig> => {
+    log.debug('fetch portal page config')
+    const auth = await requireAuth()
+    assertAnyPermission(auth, PORTAL_PAGE_CONFIG_READ_PERMISSIONS)
+    const config = (await getPortalConfig()) ?? DEFAULT_PORTAL_CONFIG
+    const reads = (permissions: readonly PermissionKey[]) =>
+      permissions.some((permission) => auth.permissions.includes(permission))
+    return {
+      ...(reads(PORTAL_MODERATION_READ_PERMISSIONS) && {
+        moderationDefault: config.moderationDefault,
+      }),
+      ...(reads(PORTAL_DESIGN_READ_PERMISSIONS) && {
+        welcomeCard: config.welcomeCard,
+        nav: config.nav,
+      }),
+    }
+  }
+)
 
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public portal config')
