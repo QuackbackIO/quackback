@@ -34,6 +34,9 @@ const createIncidentSchema = z.object({
     .array(affectedComponentSchema)
     .min(1, 'At least one affected component is required'),
   body: z.string().min(1, 'Update body is required'),
+  // A maintenance window created "scheduled", or "completed" without a
+  // backfill, needs both bounds; one already under way may leave its end
+  // open. The domain refuses the rest (VALIDATION_ERROR, a 400).
   scheduledStartAt: z.string().datetime().nullable().optional(),
   scheduledEndAt: z.string().datetime().nullable().optional(),
   autoStart: z.boolean().optional(),

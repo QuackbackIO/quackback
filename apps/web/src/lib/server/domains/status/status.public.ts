@@ -264,12 +264,12 @@ export async function assertSubscribableComponents(
   componentIds: readonly string[]
 ): Promise<StatusComponentId[]> {
   if (componentIds.length === 0) {
-    throw new ValidationError('VALIDATION_ERROR', 'Choose at least one service to follow')
+    throw new ValidationError('INVALID_STATUS_COMPONENTS', 'Choose at least one service to follow')
   }
   const viewable = await viewableStatusComponentIds(actor, componentIds)
   if (componentIds.some((id) => !viewable.has(id as StatusComponentId))) {
     throw new ValidationError(
-      'VALIDATION_ERROR',
+      'INVALID_STATUS_COMPONENTS',
       'A chosen service is no longer on the status page. Choose the services again.'
     )
   }

@@ -1050,10 +1050,7 @@ describe('status lifecycle (Postgres)', () => {
       })
     })
 
-    // Created already over, it is history, announced like a logged past
-    // window: no scheduled or completed event, so no "maintenance scheduled"
-    // email for work that is done.
-    it('a window created already completed writes no events, and the scheduler adds none', async () => {
+    it('a window created already completed writes scheduled and completed, and the scheduler adds nothing', async () => {
       const db = await service('Database')
       const window = await createIncident(
         {
@@ -1070,8 +1067,8 @@ describe('status lifecycle (Postgres)', () => {
       )
       await handleMaintenanceStart(window.id)
       await handleMaintenanceComplete(window.id)
-      expect(await sent('status.maintenance_scheduled', window.id)).toBe(0)
-      expect(await sent('status.maintenance_completed', window.id)).toBe(0)
+      expect(await sent('status.maintenance_scheduled', window.id)).toBe(1)
+      expect(await sent('status.maintenance_completed', window.id)).toBe(1)
       expect(await sent('status.maintenance_started', window.id)).toBe(0)
     })
 

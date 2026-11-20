@@ -141,6 +141,28 @@ function assertIncidentImpact(impact: string | undefined): void {
   )
 }
 
+/**
+ * A window still scheduled needs both bounds: with no start nothing ever
+ * starts it, and with no end nothing completes it, so it would sit in Upcoming
+ * forever. A window created already completed needs them too, unless it is
+ * logged as past history (a backfill dates it). A window already under way may
+ * leave its end open (emergency work, end not known yet).
+ */
+function assertWindowDated(
+  status: string,
+  start: Date | null | undefined,
+  end: Date | null | undefined
+): void {
+  if (status !== 'scheduled' && status !== 'completed') return
+  if (start && end) return
+  throw new ValidationError(
+    'VALIDATION_ERROR',
+    status === 'scheduled'
+      ? 'A scheduled maintenance window needs a scheduled start and end'
+      : 'A completed maintenance window needs a scheduled start and end, or log it as a past window'
+  )
+}
+
 /** A window must end after it starts. Checked server-side so the API and a
  *  stale editor can't store a window that auto-completes before it begins. */
 function assertWindowOrder(start: Date | null | undefined, end: Date | null | undefined): void {
@@ -235,18 +257,8 @@ export async function createIncident(
         : deriveImpact(componentStatuses)
 
   if (input.kind === 'incident' && input.impactOverride) assertIncidentImpact(input.impact)
-  // A window with no start never starts (nothing is scheduled for it) and one
-  // with no end never completes, so a live window needs both. A logged past
-  // window is dated by its backfill instead.
-  if (
-    input.kind === 'maintenance' &&
-    !input.backfill &&
-    (!input.scheduledStartAt || !input.scheduledEndAt)
-  ) {
-    throw new ValidationError(
-      'VALIDATION_ERROR',
-      'A maintenance window needs a scheduled start and end'
-    )
+  if (input.kind === 'maintenance' && !input.backfill) {
+    assertWindowDated(input.status, input.scheduledStartAt, input.scheduledEndAt)
   }
   assertWindowOrder(input.scheduledStartAt, input.scheduledEndAt)
   if (input.backfill) assertBackfillStaysResolved(input.kind, input.status, false)
@@ -288,13 +300,11 @@ export async function createIncident(
   // keeps notified_at null. The sweep still announces rows an older version
   // left unclaimed.
   //
-  // A row created already resolved or completed is announced like a backfill:
-  // not at all. "New incident reported" for something already over is noise,
-  // and the window's transition already happened. It is still claimed
-  // (notified_at stamped, notify_subscribers off), so no sweep of any version
-  // announces it later.
-  const announced = !backfilled && !terminal
-  const notifySubscribers = announced && (input.notifySubscribers ?? true)
+  // A row created already resolved or completed emails nobody: "New incident
+  // reported" for something already over is noise. Its events still go out
+  // (webhooks and workflows hear of it), flagged notify_subscribers false,
+  // which is what keeps the subscriber fan-out and every sweep quiet.
+  const notifySubscribers = !backfilled && !terminal && (input.notifySubscribers ?? true)
   const notifiedAt = !backfilled ? now : null
 
   // One transaction: the row, its links, the first update and the component
@@ -371,7 +381,7 @@ export async function createIncident(
 
     // The publish event commits with the row, or not at all; the row is
     // already stamped notified, so no sweep sends it a second time.
-    if (announced) {
+    if (!backfilled) {
       const { writeEventToOutbox } = await import('@/lib/server/events/outbox-dispatch')
       await writeEventToOutbox(
         statusPublishEvent(
@@ -386,11 +396,12 @@ export async function createIncident(
     // A window created already under way, or already finished, has made its
     // transition at create: announce it here, in the same transaction, so the
     // scheduler (which only moves a window still scheduled or still running)
-    // has nothing left to add for it. A backfill, or a window created already
-    // completed, is history and says nothing.
-    if (announced && created.kind === 'maintenance' && created.status !== 'scheduled') {
+    // has nothing left to add for it. A backfill is history and says nothing.
+    if (!backfilled && created.kind === 'maintenance' && created.status !== 'scheduled') {
       await writeStatusEvent(
-        'status.maintenance_started',
+        created.status === 'completed'
+          ? 'status.maintenance_completed'
+          : 'status.maintenance_started',
         buildEventActor({ principalId: author.principalId }),
         {
           incidentId: created.id,
@@ -452,10 +463,15 @@ export async function updateIncident(
         !sameInstant(input.scheduledEndAt, existing.scheduledEndAt))
 
     if (input.scheduledStartAt !== undefined || input.scheduledEndAt !== undefined) {
-      assertWindowOrder(
-        input.scheduledStartAt !== undefined ? input.scheduledStartAt : existing.scheduledStartAt,
+      const nextStart =
+        input.scheduledStartAt !== undefined ? input.scheduledStartAt : existing.scheduledStartAt
+      const nextEnd =
         input.scheduledEndAt !== undefined ? input.scheduledEndAt : existing.scheduledEndAt
-      )
+      // Clearing a bound of a window still scheduled would strand it, as at create.
+      if (existing.kind === 'maintenance' && existing.status === 'scheduled') {
+        assertWindowDated('scheduled', nextStart, nextEnd)
+      }
+      assertWindowOrder(nextStart, nextEnd)
     }
     // A window that hasn't started keeps its planned start in started_at, so a
     // reschedule moves it along.

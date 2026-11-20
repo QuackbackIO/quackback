@@ -50,7 +50,14 @@ import {
 } from '../status.service'
 import { listStatusSubscriptions } from '../status.subscription'
 import { getComponentLinksForIncidents } from '../status.projection'
-import { getVisitorTopLevelStatus, viewableStatusComponentIds } from '../status.public'
+import {
+  assertSubscribableComponents,
+  getVisitorTopLevelStatus,
+  viewableStatusComponentIds,
+} from '../status.public'
+import { getStatusSubscriberTargets } from '@/lib/server/events/targets'
+import type { EventData } from '@/lib/server/events/types'
+import type { HookContext } from '@/lib/server/events/hook-context'
 import { HOUR, author, beginTest, fixture, service, statusOf } from './status-lifecycle-harness'
 
 async function eventsFor(entityId: string) {
@@ -76,8 +83,21 @@ describe('status integrity (Postgres)', () => {
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  describe('a create that is already over announces nothing', () => {
-    it('an incident created resolved writes no publish event and is never swept', async () => {
+  /** The subscriber fan-out for each event written for `entityId`. */
+  async function subscriberTargetsFor(entityId: string) {
+    const rows = await eventsFor(entityId)
+    return Promise.all(
+      rows.map((r) =>
+        getStatusSubscriberTargets(
+          { type: r.type, data: r.payload } as unknown as EventData,
+          {} as HookContext
+        )
+      )
+    )
+  }
+
+  describe('a create that is already over emails nobody', () => {
+    it('an incident created resolved keeps its event, flagged quiet, and is never swept', async () => {
       const api = await service('API')
       const incident = await createIncident(
         {
@@ -90,18 +110,21 @@ describe('status integrity (Postgres)', () => {
         },
         { principalId: author }
       )
-      expect(await eventsFor(incident.id)).toEqual([])
+      const evts = await eventsFor(incident.id)
+      expect(evts.map((e) => e.type)).toEqual(['status.incident_created'])
+      expect(evts[0].payload).toMatchObject({ incident: { notifySubscribers: false } })
+      expect(await subscriberTargetsFor(incident.id)).toEqual([[]])
       expect(incident.notifySubscribers).toBe(false)
       await testDb
         .update(statusIncidents)
         .set({ createdAt: new Date(Date.now() - HOUR), notifiedAt: null })
         .where(eq(statusIncidents.id, incident.id))
       expect(await reconcileStatusNotifications()).toBe(0)
-      expect(await eventsFor(incident.id)).toEqual([])
+      expect(await eventsFor(incident.id)).toHaveLength(1)
       expect(await statusOf(api)).toBe('operational')
     })
 
-    it('a window created completed writes no events', async () => {
+    it('a window created completed keeps its events, flagged quiet', async () => {
       const db = await service('Database')
       const window = await createIncident(
         {
@@ -115,7 +138,11 @@ describe('status integrity (Postgres)', () => {
         },
         { principalId: author }
       )
-      expect(await eventsFor(window.id)).toEqual([])
+      expect((await eventsFor(window.id)).map((e) => e.type).sort()).toEqual([
+        'status.maintenance_completed',
+        'status.maintenance_scheduled',
+      ])
+      expect(await subscriberTargetsFor(window.id)).toEqual([[], []])
       expect(window.notifySubscribers).toBe(false)
     })
 
@@ -139,23 +166,29 @@ describe('status integrity (Postgres)', () => {
     expect(await findStatusIncidentById('not-an-id' as never)).toBeNull()
   })
 
-  describe('a maintenance window needs both dates', () => {
-    const window = (start: Date | null, end: Date | null) => async () => {
-      const db = await service('Database')
-      return createIncident(
-        {
-          kind: 'maintenance',
-          title: 'Upgrade',
-          status: 'scheduled',
-          body: 'Planned.',
-          affectedComponents: [{ componentId: db, componentStatus: 'under_maintenance' }],
-          scheduledStartAt: start,
-          scheduledEndAt: end,
-          notifySubscribers: false,
-        },
-        { principalId: author }
-      )
-    }
+  describe('a scheduled maintenance window needs both dates', () => {
+    const window =
+      (
+        start: Date | null,
+        end: Date | null,
+        status: 'scheduled' | 'in_progress' | 'completed' = 'scheduled'
+      ) =>
+      async () => {
+        const db = await service('Database')
+        return createIncident(
+          {
+            kind: 'maintenance',
+            title: 'Upgrade',
+            status,
+            body: 'Planned.',
+            affectedComponents: [{ componentId: db, componentStatus: 'under_maintenance' }],
+            scheduledStartAt: start,
+            scheduledEndAt: end,
+            notifySubscribers: false,
+          },
+          { principalId: author }
+        )
+      }
     it('refuses no dates', async () => {
       await expect(window(null, null)()).rejects.toThrow(/start and end/)
     })
@@ -165,6 +198,20 @@ describe('status integrity (Postgres)', () => {
     it('accepts both', async () => {
       const w = await window(new Date(Date.now() + HOUR), new Date(Date.now() + 2 * HOUR))()
       expect(w.status).toBe('scheduled')
+    })
+    it('lets a window already under way leave its end open', async () => {
+      const w = await window(null, null, 'in_progress')()
+      expect(w.status).toBe('in_progress')
+    })
+    it('refuses a window created completed with no dates, unless it is a backfill', async () => {
+      await expect(window(null, null, 'completed')()).rejects.toThrow(/start and end/)
+    })
+    it('refuses clearing the end of a scheduled window', async () => {
+      const w = await window(new Date(Date.now() + HOUR), new Date(Date.now() + 2 * HOUR))()
+      await expect(updateIncident(w.id, { scheduledEndAt: null })).rejects.toThrow(/start and end/)
+      await expect(updateIncident(w.id, { scheduledStartAt: null })).rejects.toThrow(
+        /start and end/
+      )
     })
   })
 
@@ -409,6 +456,25 @@ describe('status integrity (Postgres)', () => {
         'not-an-id',
       ])
       expect([...viewable]).toEqual([open])
+    })
+
+    it('a component subscription must name services the subscriber can see', async () => {
+      const open = await service('Open')
+      const gated = (
+        await createStatusComponent({ name: 'Gated', segmentIds: [createId('segment')] })
+      ).id
+      for (const ids of [
+        [],
+        [createId('status_component')],
+        ['not-an-id'],
+        [gated],
+        [open, gated],
+      ]) {
+        await expect(assertSubscribableComponents(ANONYMOUS_ACTOR, ids)).rejects.toMatchObject({
+          code: 'INVALID_STATUS_COMPONENTS',
+        })
+      }
+      expect(await assertSubscribableComponents(ANONYMOUS_ACTOR, [open])).toEqual([open])
     })
   })
 })
