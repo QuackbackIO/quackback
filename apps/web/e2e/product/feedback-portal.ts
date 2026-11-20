@@ -498,6 +498,30 @@ export async function waitForHydration(page: Page): Promise<void> {
   await expect(page.getByLabel(/^Posting to/)).toBeHidden()
 }
 
+/**
+ * Wait until the app advertises anonymous voting on `board` to a signed-out
+ * caller: after an isolated test flips the workspace switch, so the first
+ * anonymous action never races a settings read from before the flip.
+ */
+export async function untilAnonymousAllowed(
+  request: APIRequestContext,
+  board: Pick<TestBoard, 'id'>
+): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        (
+          await fbFn<{ permissions: Record<string, { canVote: boolean }> }>(
+            request,
+            'portal',
+            'fetchBoardCapabilitiesFn'
+          )
+        ).value?.permissions[board.id]?.canVote,
+      { message: 'the app to allow anonymous votes', timeout: 15_000 }
+    )
+    .toBe(true)
+}
+
 /** Type into the composer's details editor. */
 export async function typeDetails(page: Page, text: string): Promise<void> {
   const details = page.locator('.ProseMirror[contenteditable="true"]').first()

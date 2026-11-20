@@ -35,6 +35,7 @@ import {
   restPost,
   seedPost,
   seedVotes,
+  untilAnonymousAllowed,
   visitor,
   waitForHydration,
 } from '../../product/feedback-portal'
@@ -422,6 +423,7 @@ test.describe('portal voting', () => {
           const board = await createBoard(marker)
           const post = await seedPost(board, { title: `${marker} anon vote`, voteCount: 0 })
           const anon = await visitor(browser, marker)
+          await untilAnonymousAllowed(anon.request, board)
           await anon.page.goto(`/?board=${board.slug}`)
           const button = cardFor(anon.page, post.title).getByTestId('vote-button')
           // One click only: a second would take the vote back.

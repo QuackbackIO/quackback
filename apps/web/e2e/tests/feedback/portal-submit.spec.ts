@@ -41,6 +41,7 @@ import {
   titleBox,
   toastWith,
   typeDetails,
+  untilAnonymousAllowed,
   uuid,
   visitor,
   wordFor,
@@ -773,6 +774,7 @@ test.describe('portal submit', () => {
         await withSettings(ANON_ON, async () => {
           const board = await createBoard(marker)
           const anon = await visitor(browser, marker)
+          await untilAnonymousAllowed(anon.request, board)
           const page = anon.page
           await page.goto(`/?board=${board.slug}`)
           const title = `${marker} anon idea`
