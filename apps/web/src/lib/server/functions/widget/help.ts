@@ -77,6 +77,8 @@ export const widgetRecordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .validator(z.object({ articleId: z.string(), helpful: z.boolean() }))
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { assertHelpCenterOpenToRequest } = await import('../help-center')
+    await assertHelpCenterOpenToRequest()
     const auth = await getOptionalWidgetAuth()
     const { recordArticleFeedback } =
       await import('@/lib/server/domains/help-center/help-center.service')

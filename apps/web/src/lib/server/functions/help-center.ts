@@ -69,7 +69,24 @@ import { formatHcIdSlug, parseHcIdSlug } from '@/lib/shared/help-center-url'
 const log = logger.child({ component: 'help-center' })
 
 /**
- * Resolve the public help-center viewer for the category segment gate.
+ * A private portal keeps its help center from whoever it turns away, on every
+ * public read (portal and widget) and not just the page: "not found", as the
+ * page's sign-in wall would have it.
+ */
+export const assertHelpCenterOpenToRequest = createServerOnlyFn(
+  async function assertHelpCenterOpenToRequest(): Promise<void> {
+    const { resolvePortalAccessForRequest } = await import('./portal-access')
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      const { NotFoundError } = await import('@/lib/shared/errors')
+      throw new NotFoundError('HELP_CENTER_NOT_FOUND', 'Help center not found')
+    }
+  }
+)
+
+/**
+ * Resolve the public help-center viewer for the category segment gate, once
+ * the portal has let the caller in (`assertHelpCenterOpenToRequest`).
  * Anonymous requests skip the DB entirely (fail closed: gated content is
  * invisible); signed-in requests resolve segment memberships via the
  * standard policy-actor path.
@@ -77,6 +94,7 @@ const log = logger.child({ component: 'help-center' })
 export const resolveHelpPublicViewer = createServerOnlyFn(async function resolveHelpPublicViewer(
   auth?: Awaited<ReturnType<typeof getOptionalAuth>> | undefined
 ): Promise<Actor> {
+  await assertHelpCenterOpenToRequest()
   if (auth !== undefined) return policyActorFromAuth(auth)
   if (!hasAuthCredentials()) return ANONYMOUS_ACTOR
   return policyActorFromAuth(await getOptionalAuth())
@@ -435,6 +453,7 @@ export const getPublicCollectionPageFn = createServerFn({ method: 'GET' })
 export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {
+    await assertHelpCenterOpenToRequest()
     return listPublicCategoryEditors()
   })
 
@@ -556,6 +575,7 @@ export const deleteArticleFn = createServerFn({ method: 'POST' })
 export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .validator(articleFeedbackSchema)
   .handler(async ({ data }) => {
+    await assertHelpCenterOpenToRequest()
     const auth = await getOptionalAuth()
     const feedbackId = await recordArticleFeedback(
       data.articleId as KbArticleId,
@@ -571,6 +591,7 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
 export const submitArticleFeedbackReasonFn = createServerFn({ method: 'POST' })
   .validator(articleFeedbackReasonSchema)
   .handler(async ({ data }) => {
+    await assertHelpCenterOpenToRequest()
     await attachArticleFeedbackReason(data.feedbackId as KbArticleFeedbackId, data.reason)
     return { success: true }
   })

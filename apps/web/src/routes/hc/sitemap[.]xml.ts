@@ -27,6 +27,12 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
           return new Response('Not Found', { status: 404 })
         }
 
+        // A private portal advertises nothing to crawlers, as /sitemap.xml.
+        const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+        if ((await getPortalConfig()).access?.visibility === 'private') {
+          return new Response('Not Found', { status: 404 })
+        }
+
         const helpCenterConfig = await getHelpCenterConfig()
 
         // Indexing toggle (domains/languages §1): an operator that turned off
