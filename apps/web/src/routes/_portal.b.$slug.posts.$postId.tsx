@@ -3,7 +3,11 @@ import { useIntl } from 'react-intl'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
-import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
+import {
+  portalDetailQueries,
+  withPinnedComment,
+  type PublicPostDetailView,
+} from '@/lib/client/queries/portal-detail'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
@@ -31,7 +35,6 @@ import {
 } from '@/lib/client/mutations/portal-comments'
 import { useLoadMorePortalComments } from '@/lib/client/mutations/load-more-comments'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
-import { ThreadPinnedComment } from '@/components/public/post-detail/thread-pinned-comment'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
 import { isValidTypeId, type PostCommentId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
@@ -144,8 +147,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 })
 
 function PostDetailPage() {
-  const { postId, slug, settings } = Route.useLoaderData()
-  const workspaceName = settings.name
+  const { postId, slug } = Route.useLoaderData()
   const session = useSessionContext()
 
   const intl = useIntl()
@@ -394,15 +396,10 @@ function PostDetailPage() {
 
       {/* Comments card */}
       <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
-        <ThreadPinnedComment
-          pinnedComment={post.pinnedComment}
-          comments={post.comments}
-          workspaceName={workspaceName}
-        />
         <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
           <CommentsSection
             postId={postId}
-            comments={post.comments}
+            comments={withPinnedComment(post.comments, post.pinnedComment)}
             pinnedCommentId={post.pinnedCommentId}
             disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
             lockedMessage={

@@ -1,16 +1,12 @@
 import { Suspense, lazy } from 'react'
 import type { PinnedCommentView, PublicCommentView } from '@/lib/client/queries/portal-detail'
 
-// The card loads only when a pinned comment is shown. The portal post page
-// loads it the same way (thread-pinned-comment.tsx), so neither page carries
-// it on first load.
+// The card loads only when a pinned comment is shown, so the admin roadmap
+// modal does not carry it on first load.
 const PinnedComment = lazy(() =>
   import('@/components/public/pinned-comment').then((m) => ({ default: m.PinnedComment }))
 )
 
-// A copy of thread-pinned-comment.tsx's check: importing that module here
-// would make it a chunk shared by the portal and the admin, one more request
-// on both pages' first load.
 function threadHas(comments: readonly PublicCommentView[], id: string): boolean {
   return comments.some((c) => c.id === id || threadHas(c.replies ?? [], id))
 }

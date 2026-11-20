@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
- * The pinned comment shows on the post page even when it is not among the
- * root comments loaded so far (the first page holds 30). Once it is loaded,
- * the thread floats it to the top itself, so it is not shown twice.
+ * The pinned comment shows even when it is not among the root comments loaded
+ * so far (the first page holds 30), and never twice: on the portal it joins
+ * the thread, which floats it to the top; in the admin roadmap modal the card
+ * is skipped when the thread below holds it.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -17,7 +18,7 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
-import { ThreadPinnedComment } from '../thread-pinned-comment'
+import { withPinnedComment } from '@/lib/client/queries/portal-detail'
 import { PinnedCommentSection } from '../official-response-section'
 
 const pinned: PinnedCommentView = {
@@ -45,29 +46,29 @@ function comment(id: string, replies: PublicCommentView[] = []): PublicCommentVi
   } as unknown as PublicCommentView
 }
 
-function renderPinned(comments: PublicCommentView[]) {
-  return render(
-    <IntlProvider locale="en">
-      <ThreadPinnedComment pinnedComment={pinned} comments={comments} workspaceName="Acme" />
-    </IntlProvider>
-  )
-}
-
-describe('ThreadPinnedComment', () => {
-  it('shows the pinned comment when it is not among the loaded comments', async () => {
-    renderPinned([comment('comment_a'), comment('comment_b')])
-    expect(await screen.findByText('Pinned', {}, { timeout: 8000 })).toBeTruthy()
-    expect(await screen.findByText(/The answer is in settings/, {}, { timeout: 8000 })).toBeTruthy()
+describe('withPinnedComment (portal post page)', () => {
+  it('adds the pinned comment as a root when the thread has not loaded it', () => {
+    const list = withPinnedComment([comment('comment_a'), comment('comment_b')], pinned)
+    expect(list.map((c) => c.id)).toEqual(['comment_pinned', 'comment_a', 'comment_b'])
+    expect(list[0]).toMatchObject({
+      content: 'The answer is in settings',
+      parentId: null,
+      replies: [],
+      reactions: [],
+      deletedAt: null,
+    })
   })
 
-  it('shows nothing once the thread has loaded it as a root comment', () => {
-    const { container } = renderPinned([comment('comment_a'), comment('comment_pinned')])
-    expect(container.textContent).toBe('')
+  it('leaves the thread as it is once it holds the pinned comment, as a root or a reply', () => {
+    const roots = [comment('comment_a'), comment('comment_pinned')]
+    expect(withPinnedComment(roots, pinned)).toBe(roots)
+    const nested = [comment('comment_a', [comment('comment_pinned')])]
+    expect(withPinnedComment(nested, pinned)).toBe(nested)
   })
 
-  it('shows nothing when the thread has loaded it as a reply', () => {
-    const { container } = renderPinned([comment('comment_a', [comment('comment_pinned')])])
-    expect(container.textContent).toBe('')
+  it('leaves the thread as it is when nothing is pinned', () => {
+    const roots = [comment('comment_a')]
+    expect(withPinnedComment(roots, null)).toBe(roots)
   })
 })
 

@@ -1,7 +1,7 @@
 import type { BoardId } from '@quackback/ids'
 import type { BoardPermission } from '@/lib/shared/types/boards'
 import { cn } from '@/lib/shared/utils'
-import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
+import { Suspense, lazy, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
@@ -23,7 +23,6 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
-import { BoardCustomFields } from '@/components/public/feedback/board-custom-fields'
 import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { BoardSettings } from '@/lib/shared/db-types'
@@ -89,6 +88,15 @@ function rateLimitWaitMinutes(err: unknown): number | null {
   const seconds = typeof retryAfter === 'number' && retryAfter > 0 ? retryAfter : 60 * 60
   return Math.max(1, Math.ceil(seconds / 60))
 }
+
+// A board's custom fields load only for a board that has some. The widget
+// composer loads the same module lazily, so a static import here would split
+// it into a chunk of its own that every page with this composer requests.
+const BoardCustomFields = lazy(() =>
+  import('@/components/public/feedback/board-custom-fields').then((m) => ({
+    default: m.BoardCustomFields,
+  }))
+)
 
 const DETAILS_MAX_LENGTH = 10_000
 
@@ -493,13 +501,15 @@ export function FeedbackHeaderAnimated({
                 transition={{ duration: 0.2, delay: 0.15 }}
                 className="px-4 sm:px-5 pb-4"
               >
-                <BoardCustomFields
-                  fields={boardCustomFields}
-                  values={customFieldValues}
-                  onChange={(key, value) =>
-                    setCustomFieldValues((prev) => ({ ...prev, [key]: value }))
-                  }
-                />
+                <Suspense fallback={null}>
+                  <BoardCustomFields
+                    fields={boardCustomFields}
+                    values={customFieldValues}
+                    onChange={(key, value) =>
+                      setCustomFieldValues((prev) => ({ ...prev, [key]: value }))
+                    }
+                  />
+                </Suspense>
               </motion.div>
             )}
 
