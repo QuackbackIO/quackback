@@ -818,3 +818,11 @@ no such part beyond the wrong notification).
   post.set_status changes status through the comment box. Fix: require
   post.set_status for `shouldChangeStatus`. owner: unassigned, review by:
   2026-12-03.
+- `feedback/admin-inbox.spec.ts` › FBA-I-27 a teammate cannot delete a colleague’s
+  private saved view. Product bug: `deletePostViewFn` checks only post.edit and
+  `deleteView` (`apps/web/src/lib/server/domains/post-views/post-views.service.ts:76`)
+  updates by id with no owner or shared check, so any post.edit holder deletes
+  a private view they cannot even list (or anyone's shared view). Fix: pass the
+  caller and add `created_by_principal_id = caller OR (is_shared AND caller is
+admin)` to the update; refuse when no row matched. owner: unassigned, review
+  by: 2026-12-03.

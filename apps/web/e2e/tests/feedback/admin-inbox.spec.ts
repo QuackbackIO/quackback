@@ -1,7 +1,9 @@
 /**
  * The team's feedback inbox: list, filters, search, saved views, keyboard.
  *
- * Journeys: FBA-I-01
+ * Journeys: FBA-I-01 I-02 I-03 I-04 I-05 I-06 I-07 I-08 I-09 I-10 I-11 I-12 I-13 I-14
+ * I-15 I-16 I-17 I-18 I-20 I-21 I-24 I-25 I-26 I-27 I-28 I-30 I-32. Lower rows I-22,
+ * I-29 and I-31 are in post.inbox.db.test.ts; I-19 in post.search.test.ts.
  */
 import type { Page } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
@@ -850,5 +852,49 @@ test(
     await admin.unroute(listUrl)
     await admin.getByRole('button', { name: 'Try again' }).click()
     await expect(admin.getByPlaceholder('Search posts…')).toBeVisible({ timeout: 15_000 })
+  }
+)
+
+test(
+  'FBA-I-27 a teammate cannot delete a colleague’s private saved view',
+  {
+    tag: ['@nightly', '@quarantine'],
+    annotation: {
+      type: 'quarantine',
+      description:
+        'post-views.service.ts:76 deletes by id only: any post.edit holder deletes any view (QUARANTINE.md)',
+    },
+  },
+  async ({ playwright, newTeammate, marker }) => {
+    const admin = await personApi(playwright, 'admin')
+    const name = `Private ${marker}`.slice(0, 80)
+    const created = await callServerFn<{ id: string }>(admin, 'createPostViewFn', {
+      name,
+      filters: { owner: 'unassigned' },
+      isShared: false,
+    })
+    expect(created.ok, created.raw).toBe(true)
+    const viewId = created.data.id
+    await admin.dispose()
+
+    const roleKey = await createRole(marker, ['post.view_private', 'post.edit'])
+    const colleague = await (await newTeammate({ roleKey })).api(playwright)
+    // The view is not even listed to them...
+    const listed = await callServerFn<Array<{ id: string }>>(
+      colleague,
+      'listPostViewsFn',
+      undefined,
+      {
+        method: 'GET',
+      }
+    )
+    expect(listed.ok).toBe(true)
+    expect(listed.data.map((v) => v.id)).not.toContain(viewId)
+    // ...so deleting it by id must be refused, and the view must survive.
+    const res = await callServerFn(colleague, 'deletePostViewFn', { viewId })
+    await colleague.dispose()
+    const [row] = await supportDb()`SELECT deleted_at FROM post_views WHERE id = ${uuid(viewId)}`
+    expect(row.deleted_at).toBeNull()
+    expect(res.ok).toBe(false)
   }
 )
