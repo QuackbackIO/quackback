@@ -257,7 +257,7 @@ test(
     const mail = await waitForMail({ to: sub.email, subject: entry.title })
     expect(mail.Subject).toBe(`New update: ${entry.title}`)
     expect(mail.HTML).toContain('New update published')
-    const html = mail.HTML.replace(/<!--.*?-->/g, '')
+    const html = mail.HTML.replaceAll('<!-- -->', '')
     expect(html).toContain(`${String(ws.name)} just published a product update.`)
     expect(mail.HTML).toContain(`${marker} the detailed body of this update.`)
     const headers = await getMailHeaders(mail.ID)
