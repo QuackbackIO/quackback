@@ -34,8 +34,9 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 }))
 
 const mockAssertConversationViewable = vi.fn()
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: (...args: unknown[]) => mockAssertConversationViewable(...args),
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: (...args: unknown[]) => mockAssertConversationViewable(...args),
 }))
 
 const mockEnforceAiTokenBudget = vi.fn()
@@ -314,7 +315,7 @@ describe('POST /api/admin/assistant/transform', () => {
     expect(mockRunCopilotTransform.mock.calls[0][0]).not.toHaveProperty('conversationId')
   })
 
-  it('uses the conversation only to authorize the caller (assertConversationViewable runs, but the id never reaches the transform)', async () => {
+  it('uses the conversation only to authorize the caller (assertConversationVisible runs, but the id never reaches the transform)', async () => {
     await handleTransform({ request: makeRequest(validBody()) })
     expect(mockAssertConversationViewable).toHaveBeenCalledWith(
       CONVERSATION_ID,

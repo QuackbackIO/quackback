@@ -5,8 +5,7 @@ import { workflowDetailQuery } from '@/lib/client/queries/workflows'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 
 const WorkflowBuilder = lazy(() =>
   import('@/components/admin/automation/workflow-builder/workflow-builder').then((m) => ({
@@ -19,7 +18,7 @@ const WorkflowBuilder = lazy(() =>
 // admin shell instead, like the help center article editor.
 export const Route = createFileRoute('/admin/settings_/workflows/$workflowId')({
   beforeLoad: ({ context }) =>
-    assertRoutePermission(context.permissions, PERMISSIONS.WORKFLOW_MANAGE),
+    assertSettingsPageAccess(context.permissions, '/admin/settings/workflows/$workflowId'),
   loader: async ({ context, params }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(workflowDetailQuery(params.workflowId)),

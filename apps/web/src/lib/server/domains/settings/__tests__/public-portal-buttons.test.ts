@@ -66,6 +66,9 @@ vi.mock('../identity-providers.service', async (importActual) => {
 
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: (...args: unknown[]) => mockGetRegisteredOidcProviderIds(...args),
+  // The settings load lists every set-up provider; registration decides here.
+  getConfiguredOidcProviderIds: async (providers: { registrationId: string }[] = []) =>
+    new Set(providers.map((p) => p.registrationId)),
 }))
 
 const { getPublicPortalConfig } = await import('../settings.service')

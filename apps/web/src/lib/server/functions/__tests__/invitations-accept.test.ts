@@ -154,6 +154,15 @@ vi.mock('@/lib/server/domains/principals/seat-limit', () => ({
   enforceSeatLimit: hoisted.mockEnforceSeatLimit,
 }))
 
+/** What happened, in order: the transaction's commit and the scope signal. */
+const sequence = vi.hoisted(() => [] as string[])
+vi.mock('@/lib/server/realtime/inbox-scope-invalidate', () => ({
+  publishInboxScopeChanged: (ids: Iterable<string>) => {
+    const list = [...ids]
+    if (list.length > 0) sequence.push(`publish ${list.join(',')}`)
+  },
+}))
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -439,6 +448,28 @@ describe('acceptInvitationFn — atomic claim + side effects', () => {
     await acceptHandler({ data: { invitationId: 'invite_1' } })
 
     expect(hoisted.mockCacheDel).toHaveBeenCalledWith('principal:user:user_1')
+  })
+
+  it("signals the role change to the teammate's inbox only after the transaction commits", async () => {
+    hoisted.mockClaimReturning.mockResolvedValue([{ ...CLAIMED_ROW, roleId: 'role_custom1' }])
+    hoisted.mockTxQuery.principal.findFirst.mockResolvedValue({ id: 'principal_1', role: 'member' })
+    hoisted.mockSetPrincipalRole.mockResolvedValue({
+      cacheKeysToBust: [],
+      scopeChangedFor: 'principal_1',
+    })
+    sequence.length = 0
+    hoisted.mockTransaction.mockImplementation(
+      async (fn: (t: typeof hoisted.tx) => Promise<unknown>) => {
+        const out = await fn(hoisted.tx)
+        sequence.push('commit')
+        return out
+      }
+    )
+
+    await acceptHandler({ data: { invitationId: 'invite_1' } })
+
+    // A reload that ran before the commit would read the old role.
+    expect(sequence).toEqual(['commit', 'publish principal_1'])
   })
 
   it('writes the display name to the user row inside the transaction', async () => {

@@ -81,10 +81,13 @@ test('(1a) unauth /admin → /?auth=signin with callbackUrl=/admin and dialog vi
   const url = new URL(page.url())
   expect(url.searchParams.get('callbackUrl')).toMatch(/^\/admin/)
 
-  // useAutoOpenAuthDialog fires on mount when auth=signin; the dialog heading is
-  // "Welcome back" for mode='login'.
+  // useAutoOpenAuthDialog fires on mount when auth=signin. On the way to an
+  // admin page the dialog speaks to the team (da9920e4a1, #706):
+  // "Sign in to <workspace> admin".
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 })
-  await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible({ timeout: 10000 })
+  await expect(page.getByRole('heading', { name: /sign in to .+ admin/i })).toBeVisible({
+    timeout: 10000,
+  })
 })
 
 test('(1b) signed-in admin navigating to /admin lands there (not on the dialog)', async ({
@@ -215,11 +218,11 @@ test('(3) private portal gate: sign-in in the gate lands on /admin', async ({ pa
 // /?auth=signin escape hatch: the dialog opens with the seeded OIDC button and
 // the break-glass recovery-code link (callbackUrl=/admin satisfies isTeamCallback).
 //
-// DEFERRED — anonymous `/` → IdP redirect: requires a live OIDC discovery
-// document. The instant-SSO resolver calls auth.api.signInSocial which
-// fetches the provider's discovery URL; with a synthetic URL this returns null
-// and no redirect fires. Tracking: run this sub-case against the CI environment
-// where a mock-OIDC container is available.
+// The seeded provider's discovery URL is unreachable, so the auth runtime skips
+// it. It is still the sole sign-in method, so the instant-SSO shortcut tries
+// it; that attempt fails and the page falls back to the dialog, which is what
+// this journey checks. The redirect itself (anonymous `/` → IdP) needs a live
+// discovery document and stays untested here.
 
 test('(4) /?auth=signin shows the dialog with OIDC button and recovery-code link', async ({
   page,

@@ -26,3 +26,14 @@ export function supportContactName(input: {
   if (accountName) return accountName
   return input.fallback
 }
+
+/**
+ * The name customers see on a support message when no teammate is shown: the
+ * messenger's team name, else the workspace name. Null when neither is set.
+ */
+export function supportTeamName(
+  messengerTeamName: string | null | undefined,
+  workspaceName: string | null | undefined
+): string | null {
+  return trimmed(messengerTeamName) ?? trimmed(workspaceName)
+}

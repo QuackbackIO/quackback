@@ -1,5 +1,4 @@
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -14,10 +13,10 @@ export const Route = createFileRoute('/admin/settings/moderation')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MODERATION)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/moderation')
 
     const { queryClient } = context
-    await queryClient.ensureQueryData(settingsQueries.portalConfig())
+    await queryClient.ensureQueryData(settingsQueries.portalPageConfig())
     return {}
   },
   component: ModerationPage,

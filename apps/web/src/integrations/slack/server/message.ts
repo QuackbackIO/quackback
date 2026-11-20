@@ -7,6 +7,7 @@ import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate, formatStatus, getStatusEmoji } from '@/lib/server/events/hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { getAuthorName, buildPostUrl } from '@/lib/server/integrations/message-utils'
+import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
 
 interface SlackMessage {
   text: string
@@ -41,13 +42,13 @@ function quoteText(text: string): string {
  * Returns null when the event should not produce a Slack message
  * (e.g. agent-sent support messages — notifying on your own replies is noise).
  * @param event - The event data
- * @param rootUrl - Portal base URL for constructing post links
+ * @param links - Where each portal section is linked
  */
-export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessage | null {
+export function buildSlackMessage(event: EventData, links: SectionOrigins): SlackMessage | null {
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const content = truncate(stripHtml(post.content), 300)
       const author = getAuthorName(post)
 
@@ -72,7 +73,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
             elements: [
               {
                 type: 'mrkdwn',
-                text: `in <${rootUrl}/?board=${post.boardSlug}|${escapeSlackMrkdwn(post.boardSlug)}>`,
+                text: `in <${sectionUrl('feedback', '/', links)}?board=${post.boardSlug}|${escapeSlackMrkdwn(post.boardSlug)}>`,
               },
             ],
           },
@@ -82,7 +83,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'post.status_changed': {
       const { post, previousStatus, newStatus } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const emoji = getStatusEmoji(newStatus)
       const actor = event.actor.email || 'System'
 
@@ -108,7 +109,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'post.updated': {
       const { post, changedFields } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const actor = event.actor.email || 'System'
       const fields = changedFields.join(', ')
 
@@ -158,7 +159,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'post.merged': {
       const { duplicatePost, canonicalPost } = event.data
-      const canonicalUrl = buildPostUrl(rootUrl, canonicalPost.boardSlug, canonicalPost.id)
+      const canonicalUrl = buildPostUrl(links, canonicalPost.boardSlug, canonicalPost.id)
       const actor = event.actor.email || 'System'
 
       return {
@@ -181,7 +182,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'comment.created': {
       const { comment, post } = event.data
-      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+      const postUrl = buildPostUrl(links, post.boardSlug, post.id)
       const content = truncate(commentPlainText(comment), 300)
       const author = getAuthorName(comment)
 
@@ -207,7 +208,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'changelog.published': {
       const { changelog } = event.data
-      const changelogUrl = `${rootUrl}/changelog`
+      const changelogUrl = sectionUrl('changelog', '/changelog', links)
       const content = truncate(stripHtml(changelog.contentPreview || ''), 300)
       const actor = event.actor.displayName || event.actor.email || 'System'
 
@@ -236,7 +237,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'conversation.created': {
       const { conversation } = event.data
-      const inboxUrl = `${rootUrl}/admin/inbox?c=${conversation.id}`
+      const inboxUrl = `${links.primary}/admin/inbox?c=${conversation.id}`
       const visitor = conversation.visitorEmail || 'Anonymous visitor'
       const subject = conversation.subject?.trim() || 'New conversation'
 
@@ -268,7 +269,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
       // Agent replies would notify the team about its own messages — skip them.
       if (message.senderType !== 'visitor') return null
 
-      const inboxUrl = `${rootUrl}/admin/inbox?c=${conversation.id}`
+      const inboxUrl = `${links.primary}/admin/inbox?c=${conversation.id}`
       const author = message.authorName || message.authorEmail || 'Visitor'
       const content = truncate(stripHtml(message.content), 300)
 

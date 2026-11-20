@@ -33,6 +33,16 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 vi.mock('@/lib/server/events/dispatch', () => dispatch)
 
+// The external status sync (applySyncedTicketStatus) writes through the outbox.
+const emit = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('@/lib/server/events/emit', () => ({ emit }))
+const emitTicketSystemMessage = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('../ticket-message.service', () => ({ emitTicketSystemMessage }))
+vi.mock('@/lib/server/integrations', () => ({
+  getIntegration: (type: string) =>
+    type === 'github' ? { catalog: { name: 'GitHub' } } : undefined,
+}))
+
 import {
   emitTicketCreated,
   emitTicketStatusChanged,
@@ -47,6 +57,8 @@ import {
   emitTicketReplyDeleted,
   emitTicketAttachmentChanged,
 } from '../ticket.webhooks'
+import { applySyncedTicketStatus } from '../ticket-status-sync'
+import { ticketExternalStatusChanged } from '@/lib/server/events/catalogue/ticket'
 
 const now = new Date('2026-07-04T00:00:00.000Z')
 const baseTicket = {
@@ -495,5 +507,92 @@ describe('ticket.webhooks attachment emit helper', () => {
       contentType: 'application/pdf',
       size: 120,
     })
+  })
+})
+
+describe('ticket.external_status_changed (API-91)', () => {
+  /** A transaction that returns `ticket` for the row lock and nothing else. */
+  function txFor(ticket: Ticket) {
+    return {
+      select: () => ({ from: () => ({ where: () => ({ for: async () => [ticket] }) }) }),
+    } as never
+  }
+
+  beforeEach(() => {
+    emit.mockClear()
+    emitTicketSystemMessage.mockClear()
+  })
+
+  it.each([
+    ['closed' as const, 'Done'],
+    ['reopened' as const, 'Todo'],
+  ])(
+    'the external status sync emits it with integration, display id, URL, status and the %s transition',
+    async (transition, externalStatus) => {
+      await applySyncedTicketStatus(
+        txFor(baseTicket),
+        baseTicket.id as never,
+        null,
+        'principal_sync' as PrincipalId,
+        {
+          integrationType: 'github',
+          externalDisplayId: '#77',
+          externalUrl: 'https://github.com/acme/app/issues/77',
+          externalStatus,
+          transition,
+          deliveryKey: `delivery-${transition}`,
+        }
+      )
+      expect(emit).toHaveBeenCalledTimes(1)
+      const [, definition, input] = emit.mock.calls[0]
+      expect(definition).toBe(ticketExternalStatusChanged)
+      expect(input).toMatchObject({
+        entityId: 'ticket_1',
+        actor: { type: 'service', id: 'principal_sync' },
+        payload: {
+          ticket: { id: 'ticket_1', number: 42, type: 'customer' },
+          title: 'Cannot log in',
+          integrationType: 'github',
+          externalDisplayId: '#77',
+          externalUrl: 'https://github.com/acme/app/issues/77',
+          externalStatus,
+          transition,
+        },
+      })
+      // The thread notice names the integration and the transition.
+      expect(emitTicketSystemMessage.mock.calls[0][2]).toBe(`GitHub issue #77 was ${transition}`)
+    }
+  )
+
+  it('a status move with no closed or reopened transition emits a null transition', async () => {
+    await applySyncedTicketStatus(
+      txFor(baseTicket),
+      baseTicket.id as never,
+      null,
+      'principal_sync' as PrincipalId,
+      {
+        integrationType: 'github',
+        externalDisplayId: '#78',
+        externalUrl: null,
+        externalStatus: 'In review',
+        transition: null,
+        deliveryKey: 'delivery-move',
+      }
+    )
+    expect(emit.mock.calls[0][2].payload).toMatchObject({
+      externalStatus: 'In review',
+      transition: null,
+    })
+    expect(emitTicketSystemMessage.mock.calls[0][2]).toBe('GitHub issue #78 moved to "In review"')
+  })
+
+  it('a sync with no external change emits nothing', async () => {
+    await applySyncedTicketStatus(
+      txFor(baseTicket),
+      baseTicket.id as never,
+      null,
+      'principal_sync' as PrincipalId
+    )
+    expect(emit).not.toHaveBeenCalled()
   })
 })

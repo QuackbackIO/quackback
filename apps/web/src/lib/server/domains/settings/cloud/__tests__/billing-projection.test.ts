@@ -13,6 +13,7 @@ import {
 } from '../billing-projection.write'
 import type { BillingProjection } from '../billing-projection'
 import { resolveCloudConfig } from '../cloud.service'
+import { resolveEffectiveTierLimits } from '../../tier-limits.service'
 
 const LIMITS = {
   maxBoards: 25,
@@ -163,9 +164,26 @@ describe('projected commercial state', () => {
     expect(before.plan).toBe('business')
     expect(before.entitlements.customDomain).toBe(true)
     expect(atExpiry.plan).toBe('free')
-    expect(atExpiry.entitlements).toEqual({})
+    expect(atExpiry.entitlements).toEqual({ aiDrafts: true, apiAccess: true })
     expect(atExpiry.trialActive).toBe(false)
     expect(atExpiry.trialExpiresAt).toBe(PROJECTION.trialExpiresAt)
+  })
+
+  it('keeps the Free plan grants and drops paid ones once access has expired', () => {
+    const projection = {
+      ...PROJECTION,
+      entitlements: { aiDrafts: true, apiAccess: true, customDomain: true, webhooks: true },
+    }
+    const after = new Date('2026-08-15T00:00:00.000Z')
+    const cloud = resolveCloudConfig({ enabled: true, projection }, after)
+    expect(cloud.entitlements.aiDrafts).toBe(true)
+    expect(cloud.entitlements.apiAccess).toBe(true)
+    expect(cloud.entitlements.customDomain).toBeUndefined()
+    expect(cloud.entitlements.webhooks).toBeUndefined()
+    expect(resolveEffectiveTierLimits(null, projection, after).features).toMatchObject({
+      customDomain: false,
+      webhooks: false,
+    })
   })
 
   it('does not keep a Trial badge after a mid-trial purchase', () => {

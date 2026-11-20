@@ -3,6 +3,7 @@ import {
   eq,
   and,
   desc,
+  inArray,
   sql,
   integrations,
   integrationSyncOperations as operations,
@@ -20,6 +21,7 @@ import {
   type SyncTransaction,
   markSyncDispatched,
   recordRemoteEvidence,
+  enqueueSyncJob,
 } from './ledger'
 import { currentSyncIntegration, validateSyncSource } from './eligibility'
 import { executeHookSync, persistSyncLink } from './hooks'
@@ -39,8 +41,97 @@ import { installationIdentity } from './identity'
 import { getIntegration } from '../index'
 import { publishTicketUpdated } from '@/lib/server/domains/tickets/ticket-intake.service'
 import { logger } from '@/lib/server/logger'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 const log = logger.child({ component: 'integration-sync' })
+
+/** A provider app event its handler marked as connection lifecycle (see `appHooks.handle`). */
+function isLifecycleEvent(operation: Parameters<typeof readSyncPayload>[0]): boolean {
+  if (operation.kind !== 'app-hook' || !operation.payload) return false
+  try {
+    const payload = readSyncPayload(operation)
+    return payload.executor === 'app-hook' && payload.data?.lifecycle === true
+  } catch {
+    return false
+  }
+}
+
+/** How long an inbound change is held while integrations are paused, before it is given up. */
+const HELD_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
+
+/** An inbound change from a tracker (not an app's own events): held while paused, not dropped. */
+function heldWhilePaused(operation: { direction: string; kind: string }): boolean {
+  return operation.direction === 'inbound' && operation.kind !== 'app-hook'
+}
+
+function heldTooLong(operation: { createdAt: Date }): boolean {
+  return Date.now() - operation.createdAt.getTime() > HELD_MAX_AGE_MS
+}
+
+/**
+ * Queue again the inbound changes held while integrations were paused, once
+ * the plan includes integrations; give up any held past the maximum age. The
+ * plan state is read only when something is held.
+ */
+export async function resumeHeldSyncs(): Promise<void> {
+  const held = await db
+    .select({ id: operations.id, createdAt: operations.createdAt })
+    .from(operations)
+    .where(and(eq(operations.state, 'retry_wait'), eq(operations.errorCode, 'plan_paused')))
+    .limit(200)
+  if (held.length === 0) return
+  const expired = held.filter(heldTooLong).map((op) => op.id)
+  if (expired.length > 0) {
+    log.warn(
+      { count: expired.length },
+      'inbound changes held past the maximum age while integrations were paused; given up'
+    )
+    await db
+      .update(operations)
+      .set({
+        state: 'cancelled',
+        finishedAt: new Date(),
+        version: sql`${operations.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(operations.id, expired),
+          eq(operations.state, 'retry_wait'),
+          eq(operations.errorCode, 'plan_paused')
+        )
+      )
+  }
+  if (held.length === expired.length || (await isFeaturePaused('integrations'))) return
+  await db.transaction(async (tx) => {
+    const resumed = await tx
+      .update(operations)
+      .set({
+        state: 'queued',
+        errorCode: null,
+        version: sql`${operations.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(
+            operations.id,
+            held.filter((op) => !expired.includes(op.id)).map((op) => op.id)
+          ),
+          eq(operations.state, 'retry_wait'),
+          eq(operations.errorCode, 'plan_paused')
+        )
+      )
+      .returning({
+        id: operations.id,
+        version: operations.version,
+        provider: operations.provider,
+        kind: operations.kind,
+      })
+    for (const op of resumed) await enqueueSyncJob(op, tx)
+    if (resumed.length > 0) log.info({ count: resumed.length }, 'held inbound changes resumed')
+  })
+}
 
 export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   const id = job.payload.operationId
@@ -50,6 +141,25 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
     typeof job.payload.version === 'number' ? job.payload.version : undefined
   )
   if (!claim) return
+  // Paused after the plan limits grace. Outbound feature traffic and app
+  // events are settled as cancelled, so nothing is sent now or replayed after
+  // an upgrade. An inbound change from a tracker is held and applied after an
+  // upgrade. A provider lifecycle event (an uninstall, a token revocation)
+  // always runs: it changes the connection itself. Connections and tokens are
+  // kept.
+  if (!isLifecycleEvent(claim.operation) && (await isFeaturePaused('integrations'))) {
+    const fields = { operationId: id, provider: claim.operation.provider }
+    if (heldWhilePaused(claim.operation) && !heldTooLong(claim.operation)) {
+      // An inbound change waits instead: the sync sweep queues it again
+      // once the plan includes integrations (resumeHeldSyncs).
+      log.info(fields, 'integrations paused on this plan; inbound change held')
+      await finishSyncOperation(claim, { state: 'retry_wait', errorCode: 'plan_paused' })
+      return
+    }
+    log.info(fields, 'integrations paused on this plan; sync cancelled')
+    await finishSyncOperation(claim, { state: 'cancelled', errorCode: 'plan_paused' })
+    return
+  }
   const heartbeat = setInterval(() => {
     void heartbeatSync(claim).catch(() => undefined)
   }, 20_000)
@@ -222,6 +332,7 @@ export async function onIntegrationSyncFailure(
 /** Hands a sync whose worker died mid-flight back to the queue, or to review. */
 export async function sweepIntegrationSync(): Promise<void> {
   await recoverExpiredSyncs()
+  await resumeHeldSyncs()
 }
 
 /**

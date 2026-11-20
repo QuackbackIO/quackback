@@ -49,10 +49,11 @@ export interface ConditionContext {
   message?: { body: string; senderType?: 'visitor' | 'agent' } | null
   person?: {
     segmentIds: string[]
-    /** realEmail()-sanitized — the synthetic anonymous placeholder
-     *  (temp-<id>@anon.quackback.io) never surfaces here, so `person.email`
-     *  reads as unresolved (MISSING) for an anonymous visitor, same as one
-     *  with no email captured at all. */
+    /** The account email, else the principal's contact email (an email
+     *  sender with no account has only that). realEmail()-sanitized — the
+     *  synthetic anonymous placeholder (temp-<id>@anon.quackback.io) never
+     *  surfaces here, so `person.email` reads as unresolved (MISSING) for an
+     *  anonymous visitor with no address, same as one with no email at all. */
     email?: string | null
     /** The user row's first-class columns (ISO-3166-1 alpha-2 country,
      *  captured from geo-aware proxy headers; BCP-47 locale) — NOT part of
@@ -253,8 +254,8 @@ function resolveField(field: string, ctx: ConditionContext): unknown {
       return ctx.message?.senderType ?? null
     case 'person.segments':
       return ctx.person?.segmentIds ?? []
-    // null (an anonymous visitor, or an identified one with no captured
-    // email) and undefined (no person at all) are both unresolved per
+    // null (an anonymous visitor with no address, or an identified one with
+    // no captured email) and undefined (no person at all) are both unresolved per
     // isUnresolved — either way `person.email` is a non-match except is_empty.
     case 'person.email':
       return ctx.person?.email

@@ -71,7 +71,7 @@ import { cn } from '@/lib/shared/utils'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { assistantWaitMinutes } from '@/lib/shared/workflows/abandoned-auto-close'
 import { useWorkflowEntities } from './entities'
-import { BLOCK_ICONS, ConfirmDeleteDialog, RULE_BOX, START_TAG, TONE_TILE } from './step-visuals'
+import { BLOCK_ICONS, ConfirmDeleteDialog, RULE_BOX, START_TAG, STEP_TILE } from './step-visuals'
 import type { BuilderSelection } from './types'
 import type {
   FrequencyCap,
@@ -121,8 +121,6 @@ const ICONS: Record<IconKey, ComponentType<{ className?: string }>> = {
   ...BLOCK_ICONS,
 }
 
-const TONE_CHIP = TONE_TILE
-
 const HIDDEN_HANDLE = {
   opacity: 0,
   width: 6,
@@ -142,7 +140,7 @@ function Chip({ chip }: { chip: ChipData }) {
         chip.wrap
           ? 'h-auto min-h-[22px] max-w-full whitespace-normal py-0.5 text-left'
           : 'h-[22px] whitespace-nowrap',
-        chip.tone ? TONE_CHIP[chip.tone] : 'bg-muted text-muted-foreground'
+        chip.tone ? STEP_TILE : 'bg-muted text-muted-foreground'
       )}
     >
       {chip.label}
@@ -197,7 +195,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
         {data.startTag && (
           <span
             className={cn(
-              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[10.5px] font-bold tracking-wide uppercase',
+              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[10.5px] font-bold',
               START_TAG
             )}
           >
@@ -211,15 +209,13 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
           <span
             className={cn(
               'flex size-[30px] shrink-0 items-center justify-center rounded-lg',
-              TONE_TILE[data.tone]
+              STEP_TILE
             )}
           >
             <Icon className="size-4" />
           </span>
           <div className="min-w-0">
-            <div className="text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">
-              {data.eyebrow}
-            </div>
+            <div className="text-[10.5px] font-bold text-muted-foreground">{data.eyebrow}</div>
             <div className="mt-0.5 truncate text-sm font-semibold">{data.title}</div>
           </div>
         </div>
@@ -228,7 +224,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
             {data.sections ? (
               data.sections.map((section) => (
                 <div key={section.label} className="flex flex-col gap-1">
-                  <span className="text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">
+                  <span className="text-[10.5px] font-bold text-muted-foreground">
                     {section.label}
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -287,7 +283,7 @@ const RuleNode = memo(function RuleNode({ data }: NodeProps<Node<RuleNodeData, '
         <span
           className={cn(
             'flex size-5 items-center justify-center rounded-md text-[11px] font-bold',
-            TONE_TILE.violet
+            STEP_TILE
           )}
         >
           {data.badge}
@@ -341,7 +337,7 @@ const AddNode = memo(function AddNode({ data }: NodeProps<Node<AddNodeData, 'add
 const EndNode = memo(function EndNode(_props: NodeProps<Node<EndNodeData, 'end'>>) {
   return (
     <div className="relative flex w-[300px] items-center justify-center">
-      <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
         <span className="size-2 rounded-full bg-border" /> End
       </span>
       <Handle type="target" position={Position.Top} style={HIDDEN_HANDLE} isConnectable={false} />

@@ -42,16 +42,3 @@ export function statusTransition(
   if (leavingClosed) return { resolvedAt: null, reopenedIncrement: 1 }
   return { resolvedAt: undefined, reopenedIncrement: 0 }
 }
-
-/**
- * The `first_response_at` value for an agent action: the current time the first
- * time an agent touches a ticket, `undefined` (leave as-is) afterwards or when
- * the actor is not an agent. Stamped once and never overwritten.
- */
-export function firstResponseStamp(
-  existing: Date | null,
-  isAgentAction: boolean,
-  now: Date = new Date()
-): Date | undefined {
-  return existing === null && isAgentAction ? now : undefined
-}

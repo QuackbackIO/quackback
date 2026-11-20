@@ -17,7 +17,14 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
-import { applyDisplayName, sendViaSes, SesTenantPausedError } from './ses'
+import { namedAddress } from './named-address'
+import {
+  applyDisplayName,
+  parseAddress,
+  plainAddress,
+  sendViaSes,
+  SesTenantPausedError,
+} from './ses'
 import { reportSesTenantPaused, resolveSesTenant } from './tenant-hooks'
 import { sendViaResend } from './resend'
 import { listUnsubscribeHeaders } from './list-unsubscribe'
@@ -49,7 +56,6 @@ import { MagicLinkEmail } from './templates/magic-link'
 import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 import { InvitationEmail, type InvitationEmailCopy } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
-import { WelcomeEmail } from './templates/welcome'
 import { MessengerInstallEmail } from './templates/messenger-install'
 import { OnboardingEmail, type OnboardingEmailContent } from './templates/onboarding-email'
 import { StatusChangeEmail } from './templates/status-change'
@@ -63,13 +69,18 @@ import { PostMentionEmail } from './templates/post-mention'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
-import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+import {
+  PlanLimitsEmail,
+  planLimitsSubject,
+  type PlanLimitsEmailProps,
+} from './templates/plan-limits'
 import {
   SendingDomainAttentionEmail,
   type SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
+import { DomainAttentionEmail, domainAttentionTitle } from './templates/domain-attention'
 import { NewSignInEmail } from './templates/new-sign-in'
 import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 import type { IncidentImpact } from './templates/status-incident-published'
@@ -80,10 +91,16 @@ export { setEmailPoweredByResolver } from './powered-by'
 export { setSesTenantHooks } from './tenant-hooks'
 export type { SesTenantHooks, SesTenantSendContext } from './tenant-hooks'
 export { SesTenantPausedError } from './ses'
-export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from'
+export {
+  setDefaultFromResolver,
+  setDefaultFromShared,
+  resetDefaultFromResolver,
+} from './default-from'
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
-import { resolvedDefaultFrom } from './default-from'
+import { defaultFromIsShared, resolvedDefaultFrom } from './default-from'
+import { platformDisplayName, QUACKBACK_DISPLAY_NAME } from './platform-name'
+export { platformDisplayName, QUACKBACK_DISPLAY_NAME } from './platform-name'
 
 /**
  * Get environment variable at runtime.
@@ -99,6 +116,36 @@ export function getEmailFrom(): string {
     throw new EmailConfigError('EMAIL_FROM environment variable is required for sending emails')
   }
   return from
+}
+
+/**
+ * Whether a default From is this install's own `EMAIL_FROM` with a display name
+ * the operator gave it. Never true of a platform's shared address, whose name
+ * names the platform rather than anyone the mail is about.
+ */
+function isOperatorNamed(defaultFrom: string): boolean {
+  return !defaultFromIsShared() && typeof parseAddress(defaultFrom) !== 'string'
+}
+
+/**
+ * The From a workspace's own mail carries when it leaves from the platform
+ * address, as an inbox shows it, or null when no address is configured. The
+ * decision the send point makes, for a settings page that says where email
+ * comes from.
+ */
+export function platformFromPreview(workspaceName: string | null | undefined): string | null {
+  let from: string
+  try {
+    from = getEmailFrom()
+  } catch {
+    return null
+  }
+  const written = plainAddress(from)
+  const address = typeof written === 'string' ? written : written.address
+  const name =
+    platformDisplayName('RawEmail', workspaceName, { operatorNamed: isOperatorNamed(from) }) ??
+    (typeof written === 'string' ? '' : written.name)
+  return namedAddress(name, address)
 }
 
 /**
@@ -333,6 +380,9 @@ async function dispatch(
     preview?: Record<string, unknown>
     /** Display name wrapped around `from` (or EMAIL_FROM) as RFC 5322. */
     fromDisplayName?: string
+    /** The workspace the mail is about. Names a platform-address send that has
+     *  no `fromDisplayName` of its own; see ./platform-name. */
+    workspaceName?: string
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
@@ -406,9 +456,17 @@ async function dispatch(
   }
 
   const resolvedFrom = options.from ?? getEmailFrom()
-  const from = options.fromDisplayName
-    ? applyDisplayName(resolvedFrom, options.fromDisplayName)
-    : resolvedFrom
+  // On the platform address the registry's display name names the platform, so
+  // the name is decided here for every sender rather than trusted to each one.
+  // An install's own EMAIL_FROM (no registry From) keeps a name it already has.
+  const operatorNamed = !options.from && isOperatorNamed(resolvedFrom)
+  const displayName = options.from
+    ? options.fromDisplayName
+    : platformDisplayName(emailType, options.workspaceName, {
+        operatorNamed,
+        callerName: options.fromDisplayName,
+      })
+  const from = displayName ? applyDisplayName(resolvedFrom, displayName) : resolvedFrom
   const html = options.html ?? (options.react ? await render(options.react) : undefined)
   const text =
     options.text ?? (options.react ? await render(options.react, { plainText: true }) : undefined)
@@ -519,7 +577,9 @@ async function dispatch(
   // SMTP is the last rung: console, SES and Resend all returned above.
   try {
     const result = await getSmtpTransporter().sendMail({
-      from,
+      // The name unencoded: the mail library encodes it itself, and an encoded
+      // word handed to it inside a string ends up quoted and shown raw.
+      from: plainAddress(from),
       to: options.to,
       subject: options.subject,
       html,
@@ -585,13 +645,15 @@ async function sendEmail(
     react: React.ReactElement
     /** Conversation-specific reply address (e.g. plus-addressed inbound). */
     replyTo?: string
-    /** Override the workspace EMAIL_FROM (e.g. a per-team sending address). */
+    /** Override the workspace EMAIL_FROM (a sending address the guard permitted). */
     from?: SendingIdentity
     /** Template name, for the dev preview line. */
     emailType?: string
     /** Extra identifying fields for the dev preview line (links, codes). */
     preview?: Record<string, unknown>
     fromDisplayName?: string
+    /** Names a platform-address send; see ./platform-name. */
+    workspaceName?: string
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
@@ -662,6 +724,7 @@ export async function sendInvitationEmail(params: SendInvitationParams): Promise
       copy,
     }),
     emailType: 'InvitationEmail',
+    workspaceName,
     preview: { inviteLink },
   })
 }
@@ -686,31 +749,8 @@ export async function sendPortalInviteEmail(params: SendPortalInviteParams): Pro
     subject: `You've been invited to ${workspaceName}`,
     react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage }),
     emailType: 'PortalInviteEmail',
+    workspaceName,
     preview: { inviteLink },
-  })
-}
-
-// ============================================================================
-// Welcome Email
-// ============================================================================
-
-interface SendWelcomeParams {
-  to: string
-  name: string
-  workspaceName: string
-  dashboardUrl: string
-  logoUrl?: string
-}
-
-export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<EmailResult> {
-  const { to, name, workspaceName, dashboardUrl, logoUrl } = params
-
-  return sendEmail({
-    to,
-    subject: `Welcome to ${workspaceName} on Quackback!`,
-    react: WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl }),
-    emailType: 'WelcomeEmail',
-    preview: { dashboardUrl },
   })
 }
 
@@ -731,6 +771,7 @@ export async function sendMessengerInstallEmail(params: {
     subject: `Add ${workspaceName} Messenger to the website`,
     react: MessengerInstallEmail({ senderName, workspaceName, snippet, logoUrl }),
     emailType: 'MessengerInstallEmail',
+    workspaceName,
     preview: { workspaceName },
   })
 }
@@ -802,6 +843,7 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
     subject: magicLinkSubject(code, workspaceName),
     react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }),
     emailType: 'MagicLinkEmail',
+    workspaceName,
     preview: { signInUrl, code },
   })
 }
@@ -835,9 +877,10 @@ export async function sendSignupNotAllowedEmail(
   log.debug('sending sign-in refusal email')
   return sendEmail({
     to,
-    subject: 'About your Quackback sign-in request',
+    subject: `About your ${workspaceName?.trim() || QUACKBACK_DISPLAY_NAME} sign-in request`,
     react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
     emailType: 'SignupNotAllowedEmail',
+    workspaceName,
   })
 }
 
@@ -849,19 +892,22 @@ interface SendPasswordResetParams {
   to: SecureRecipient
   resetLink: string
   logoUrl?: string
+  /** The workspace the account belongs to; names the platform From. */
+  workspaceName?: string
 }
 
 export async function sendPasswordResetEmail(
   params: SendPasswordResetParams
 ): Promise<EmailResult> {
-  const { to, resetLink, logoUrl } = params
+  const { to, resetLink, logoUrl, workspaceName } = params
 
   log.debug('sending password reset email')
   return sendEmail({
     to,
-    subject: 'Reset your Quackback password',
-    react: PasswordResetEmail({ resetLink, logoUrl }),
+    subject: `Reset your ${workspaceName?.trim() || QUACKBACK_DISPLAY_NAME} password`,
+    react: PasswordResetEmail({ resetLink, logoUrl, workspaceName }),
     emailType: 'PasswordResetEmail',
+    workspaceName,
     preview: { resetLink },
   })
 }
@@ -895,6 +941,7 @@ export async function sendRecoveryCodeUsedEmail(
     subject: 'A recovery code on your account was just used',
     react: RecoveryCodeUsedEmail({ workspaceName, ipAddress, userAgent, occurredAt, logoUrl }),
     emailType: 'RecoveryCodeUsedEmail',
+    workspaceName,
     preview: { occurredAt },
   })
 }
@@ -947,6 +994,7 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
       logoUrl,
     }),
     emailType: 'NewSignInEmail',
+    workspaceName,
     preview: { occurredAt },
   })
 }
@@ -993,6 +1041,91 @@ export async function sendSendingDomainAttentionEmail(
 }
 
 // ============================================================================
+// Plan limits
+// ============================================================================
+
+interface SendPlanLimitsParams extends Omit<PlanLimitsEmailProps, 'logoUrl'> {
+  to: SecureRecipient
+  logoUrl?: string
+}
+
+/**
+ * To a person who manages billing, when the workspace is over its plan's
+ * limits: at the start of the grace, two days before it ends, and once the
+ * extras are paused. It is account mail, so it is not counted on the monthly
+ * email meter.
+ */
+export async function sendPlanLimitsEmail(params: SendPlanLimitsParams): Promise<EmailResult> {
+  const { to, ...props } = params
+  log.debug({ kind: props.kind }, 'sending plan limits email')
+  return sendEmail({
+    to,
+    subject: planLimitsSubject(
+      props.kind,
+      props.workspaceName,
+      props.planName,
+      props.rows.length === 0 ? props.deadline : undefined
+    ),
+    react: PlanLimitsEmail(props),
+    emailType: 'PlanLimitsEmail',
+    preview: { kind: props.kind },
+  })
+}
+
+export { PlanLimitsEmail, planLimitsSubject, featureList } from './templates/plan-limits'
+export type {
+  PlanLimitsEmailKind,
+  PlanLimitsEmailProps,
+  PlanLimitsEmailRow,
+} from './templates/plan-limits'
+
+// ============================================================================
+// Domain needs attention
+// ============================================================================
+
+interface SendDomainAttentionParams {
+  to: SecureRecipient
+  domain: string
+  /** The ownership record to publish: its full name and exact value. */
+  record: { name: string; value: string }
+  /** Set for a warning: the formatted date the domain stops being verified. */
+  deadline?: string | null
+  /** Set once it stopped: the sign-in domains that stopped with it. */
+  signInDomains?: readonly string[] | null
+  settingsUrl?: string | null
+  workspaceName?: string
+  logoUrl?: string
+}
+
+/**
+ * To a person who manages the workspace's domains, when a domain added by name
+ * loses its ownership record: a warning with a deadline, or, once it stopped
+ * being verified, the sign-in domains that stopped with it.
+ */
+export async function sendDomainAttentionEmail(
+  params: SendDomainAttentionParams
+): Promise<EmailResult> {
+  const { to, domain, record, deadline, signInDomains, settingsUrl, workspaceName, logoUrl } =
+    params
+  log.debug('sending domain attention alert')
+  return sendEmail({
+    to,
+    subject: domainAttentionTitle(domain, !!signInDomains),
+    react: DomainAttentionEmail({
+      domain,
+      record,
+      deadline,
+      signInDomains,
+      settingsUrl,
+      workspaceName,
+      logoUrl,
+    }),
+    emailType: 'DomainAttentionEmail',
+    preview: { domain },
+  })
+}
+
+// ============================================================================
 // Status Change Email
 // ============================================================================
 
@@ -1006,6 +1139,11 @@ interface SendStatusChangeParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendStatusChangeEmail(params: SendStatusChangeParams): Promise<EmailResult> {
@@ -1019,6 +1157,8 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   const formattedNewStatus = newStatus.replace(/_/g, ' ')
@@ -1037,7 +1177,10 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'StatusChangeEmail',
+    workspaceName,
     preview: { postUrl },
   })
 }
@@ -1057,6 +1200,11 @@ interface SendNewCommentParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendNewCommentEmail(params: SendNewCommentParams): Promise<EmailResult> {
@@ -1071,6 +1219,8 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1088,7 +1238,10 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'NewCommentEmail',
+    workspaceName,
     preview: { postUrl },
   })
 }
@@ -1103,6 +1256,9 @@ interface SendConversationMessageEmailParams {
    *  message to the team, or an agent-started outreach message to the visitor. */
   direction: 'agent_reply' | 'visitor_message' | 'agent_started'
   senderName: string
+  /** `senderName` is the support team's, not a person's (a message an API key
+   *  wrote under its own name): the copy speaks as the team. */
+  senderIsTeam?: boolean
   messagePreview: string
   /** The full message body as pre-rendered, sanitized HTML. When present it is
    *  shown inline in place of the truncated `messagePreview` quote. */
@@ -1138,7 +1294,7 @@ interface SendConversationMessageEmailParams {
   correspondence?: boolean
   /** Immediately previous message, quoted one level on the human template. */
   quotedPrevious?: { date: Date | string; name: string; text: string }
-  /** Display name for the From header (`Alex (Acme)`). */
+  /** Display name for the From header (`Alex from Acme`). */
   fromDisplayName?: string
   conversationId?: string | null
   /** Real files to carry as MIME attachments. */
@@ -1156,6 +1312,7 @@ export async function sendConversationMessageEmail(
     to,
     direction,
     senderName,
+    senderIsTeam,
     messagePreview,
     bodyHtml,
     ctaUrl,
@@ -1179,6 +1336,7 @@ export async function sendConversationMessageEmail(
   const copy = conversationMessageCopy({
     direction,
     senderName,
+    senderIsTeam,
     workspaceName,
     conversationSubject,
     preview: messagePreview,
@@ -1192,7 +1350,8 @@ export async function sendConversationMessageEmail(
         bodyHtml,
         messagePreview,
         agentName: senderName,
-        teamName: workspaceName,
+        // A team-voiced signature that already is the workspace name says it once.
+        teamName: senderIsTeam && senderName === workspaceName ? undefined : workspaceName,
         viewUrl: ctaUrl,
         quotedPrevious,
       })
@@ -1222,6 +1381,7 @@ export async function sendConversationMessageEmail(
     conversationId,
     attachments,
     emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
+    workspaceName,
     preview: { ctaUrl },
   })
 }
@@ -1263,6 +1423,7 @@ export async function sendConversationClosedEmail(params: {
     references: params.references,
     conversationId: params.conversationId,
     emailType: 'ConversationClosedEmail',
+    workspaceName: params.workspaceName,
   })
 }
 
@@ -1274,7 +1435,10 @@ export async function sendConversationAutoAckEmail(params: {
   messageId?: string
   inReplyTo?: string
   references?: string[]
+  /** The thread's sending address; absent = the workspace default. */
   from?: SendingIdentity
+  /** Display name for the From header (the workspace's name). */
+  fromDisplayName?: string
   conversationId?: string | null
 }): Promise<EmailResult> {
   const subject =
@@ -1291,6 +1455,7 @@ export async function sendConversationAutoAckEmail(params: {
     }),
     replyTo: params.replyTo,
     from: params.from,
+    fromDisplayName: params.fromDisplayName,
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
@@ -1300,6 +1465,7 @@ export async function sendConversationAutoAckEmail(params: {
       Precedence: 'auto_reply',
     },
     emailType: 'ConversationAutoAckEmail',
+    workspaceName: params.workspaceName,
   })
 }
 
@@ -1350,6 +1516,8 @@ export interface SendTicketEventEmailParams {
   logoUrl?: string
   /** Per-team sending address override; absent = branded EMAIL_FROM. */
   from?: SendingIdentity
+  /** Display name for the From header, applied to `from` or to EMAIL_FROM. */
+  fromDisplayName?: string
   /** Per-ticket inbound reply address (reply-by-email); absent = no Reply-To. */
   replyTo?: string
   messageId?: string
@@ -1511,11 +1679,13 @@ export async function sendTicketEventEmail(
       logoUrl: params.logoUrl,
     }),
     from: params.from,
+    fromDisplayName: params.fromDisplayName,
     replyTo: params.replyTo,
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
     emailType: 'TicketEventEmail',
+    workspaceName: params.workspaceName,
     preview: {
       kind: params.kind,
       ctaUrl: params.ctaUrl,
@@ -1538,6 +1708,11 @@ export interface SendPostMentionEmailArgs {
   unsubscribeUrl?: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
@@ -1551,6 +1726,8 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = args
 
   const displayName = mentionerName || 'Anonymous user'
@@ -1570,7 +1747,10 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'PostMentionEmail',
+    workspaceName,
     preview: { postUrl },
   })
 }
@@ -1630,6 +1810,7 @@ export async function sendNoteMentionEmail(args: SendNoteMentionEmailArgs): Prom
     inReplyTo,
     references,
     emailType: 'NoteMentionEmail',
+    workspaceName,
     preview: { conversationUrl },
   })
 }
@@ -1651,9 +1832,11 @@ interface SendChangelogPublishedParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
-  /** Send from the changelog module's sending address (§4.8) instead of the
-   *  branded EMAIL_FROM. Absent = the workspace default. */
+  /** Send from the changelog's sending address instead of the branded
+   *  EMAIL_FROM. Absent = the platform default. */
   from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendChangelogPublishedEmail(
@@ -1670,6 +1853,7 @@ export async function sendChangelogPublishedEmail(
     preferencesUrl,
     logoUrl,
     from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1686,59 +1870,11 @@ export async function sendChangelogPublishedEmail(
       logoUrl,
     }),
     from,
+    fromDisplayName,
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'ChangelogPublishedEmail',
-    preview: { changelogUrl },
-  })
-}
-
-// ============================================================================
-// Feedback Linked Email
-// ============================================================================
-
-interface SendFeedbackLinkedParams {
-  to: string
-  recipientName?: string
-  postTitle: string
-  postUrl: string
-  workspaceName: string
-  unsubscribeUrl: string
-  preferencesUrl?: string
-  attributedByName?: string
-  logoUrl?: string
-}
-
-export async function sendFeedbackLinkedEmail(
-  params: SendFeedbackLinkedParams
-): Promise<EmailResult> {
-  const {
-    to,
-    recipientName,
-    postTitle,
-    postUrl,
     workspaceName,
-    unsubscribeUrl,
-    preferencesUrl,
-    attributedByName,
-    logoUrl,
-  } = params
-
-  return sendEmail({
-    to,
-    subject: `Your feedback has been linked to "${postTitle}"`,
-    react: FeedbackLinkedEmail({
-      recipientName,
-      postTitle,
-      postUrl,
-      workspaceName,
-      unsubscribeUrl,
-      preferencesUrl,
-      attributedByName,
-      logoUrl,
-    }),
-    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
-    emailType: 'FeedbackLinkedEmail',
-    preview: { postUrl },
+    preview: { changelogUrl },
   })
 }
 
@@ -1758,6 +1894,11 @@ interface SendStatusIncidentPublishedParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 /** Sent once when a new incident is published on the workspace's status page. */
@@ -1776,6 +1917,8 @@ export async function sendStatusIncidentPublishedEmail(
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1794,7 +1937,10 @@ export async function sendStatusIncidentPublishedEmail(
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'StatusIncidentPublishedEmail',
+    workspaceName,
     preview: { incidentUrl },
   })
 }
@@ -1817,6 +1963,11 @@ interface SendStatusMaintenanceScheduledParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 /** Sent once when maintenance is scheduled on the workspace's status page. */
@@ -1835,6 +1986,8 @@ export async function sendStatusMaintenanceScheduledEmail(
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1853,7 +2006,10 @@ export async function sendStatusMaintenanceScheduledEmail(
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'StatusMaintenanceScheduledEmail',
+    workspaceName,
     preview: { incidentUrl },
   })
 }
@@ -1883,6 +2039,15 @@ interface SendCsatRequestEmailParams {
    * being asked and to their mail client's threading.
    */
   from?: SendingIdentity
+  /** Display name for the From header (the workspace's name). */
+  fromDisplayName?: string
+  /** The conversation's own reply address, so a reply lands back on the thread. */
+  replyTo?: string
+  /** Stored `conversations.subject`; the subject is the thread's `Re:` line. */
+  conversationSubject?: string | null
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
   conversationId?: string | null
 }
 
@@ -1893,15 +2058,26 @@ interface SendCsatRequestEmailParams {
 export async function sendCsatRequestEmail(
   params: SendCsatRequestEmailParams
 ): Promise<EmailResult> {
-  const { to, promptText, ratingUrls, workspaceName, logoUrl, from, conversationId } = params
+  const { to, promptText, ratingUrls, workspaceName, logoUrl } = params
+  // A reply on the thread rather than a fresh subject, so the request lands in
+  // the conversation the customer is rating instead of starting a new one.
+  const subject =
+    conversationReplySubject(params.conversationSubject) ??
+    `Re: your conversation with ${workspaceName}`
 
   return sendEmail({
     to,
-    subject: 'How did we do?',
+    subject,
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
-    from,
-    conversationId,
+    from: params.from,
+    fromDisplayName: params.fromDisplayName,
+    replyTo: params.replyTo,
+    messageId: params.messageId,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
+    conversationId: params.conversationId,
     emailType: 'CsatRequestEmail',
+    workspaceName,
   })
 }
 
@@ -1911,7 +2087,6 @@ export async function sendCsatRequestEmail(
 
 export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
-export { WelcomeEmail } from './templates/welcome'
 export { MessengerInstallEmail } from './templates/messenger-install'
 export { OnboardingEmail } from './templates/onboarding-email'
 export { MagicLinkEmail } from './templates/magic-link'
@@ -1920,7 +2095,6 @@ export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
 export { PostMentionEmail } from './templates/post-mention'
 export { ChangelogPublishedEmail } from './templates/changelog-published'
-export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export {
@@ -1932,6 +2106,11 @@ export type {
   SendingDomainAttentionRecord,
   SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
+export {
+  DomainAttentionEmail,
+  domainAttentionMessage,
+  domainAttentionTitle,
+} from './templates/domain-attention'
 export { NewSignInEmail } from './templates/new-sign-in'
 export { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 export type { IncidentImpact } from './templates/status-incident-published'
@@ -1976,5 +2155,6 @@ export async function sendVerifyAddressEmail(
     subject: 'Confirm your email address',
     react: VerifyAddressEmail({ code, workspaceName, logoUrl }),
     emailType: 'VerifyAddressEmail',
+    workspaceName,
   })
 }

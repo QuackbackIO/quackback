@@ -105,6 +105,8 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: hoisted.mockGetRegisteredOidcProviderIds,
+  // The real one reads the same tier knob.
+  isSsoLive: async () => (await hoisted.mockGetTierLimits()).features.customOidcProvider,
 }))
 
 vi.mock('@quackback/email', () => ({

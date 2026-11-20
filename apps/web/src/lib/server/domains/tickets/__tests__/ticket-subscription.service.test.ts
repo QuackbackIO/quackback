@@ -174,7 +174,7 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     expect([...teamOnly].sort()).toEqual([admin, member].sort())
   })
 
-  it('getTicketNotifiableWatchers keeps the customers a ticket is shared with', async () => {
+  it('getTicketNotifiableWatchers adds the customers a ticket is shared with only on request', async () => {
     const ticketId = await seedTicket()
     const requester = await seedPrincipal('user')
     const colleague = await seedPrincipal('user')
@@ -184,10 +184,17 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     await subscribeToTicket(colleague, ticketId, 'participant')
     await subscribeToTicket(stranger, ticketId, 'manual')
 
-    expect([...(await getTicketNotifiableWatchers(ticketId, requester))].sort()).toEqual(
-      [requester, colleague].sort()
-    )
-    expect(await getTicketNotifiableWatchers(ticketId, null)).toEqual([colleague])
+    // The reply email's set: the conversation emails a shared customer itself.
+    expect(await getTicketNotifiableWatchers(ticketId, requester)).toEqual([requester])
+    // The bells' and the status email's set.
+    expect(
+      [
+        ...(await getTicketNotifiableWatchers(ticketId, requester, { withParticipants: true })),
+      ].sort()
+    ).toEqual([requester, colleague].sort())
+    expect(await getTicketNotifiableWatchers(ticketId, null, { withParticipants: true })).toEqual([
+      colleague,
+    ])
   })
 
   it('getTicketAgentWatchersForEvent keeps team members only, mute-filtered', async () => {

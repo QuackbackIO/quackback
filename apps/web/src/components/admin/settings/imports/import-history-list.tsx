@@ -66,7 +66,7 @@ export function ImportHistoryList() {
   })
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading import history...</p>
+    return <p className="text-sm text-muted-foreground">Loading import history…</p>
   }
 
   if (!runs || runs.length === 0) {

@@ -7,7 +7,8 @@
  * leaves an INTERNAL note nudging the team to track a resolved conversation as a
  * post — never broadcast to the visitor.
  */
-import { db, conversations, conversationMessages, eq } from '@/lib/server/db'
+import { and, db, conversations, conversationMessages, eq } from '@/lib/server/db'
+import { conversationFilter } from '@/lib/server/policy/conversations'
 import type {
   ConversationId,
   PostId,
@@ -64,7 +65,9 @@ export async function sharePost(
     ctx.agent,
     ctx.agentActor,
     undefined,
-    postEmbedDoc(input.postId)
+    postEmbedDoc(input.postId),
+    undefined,
+    { card: true }
   )
 }
 
@@ -86,7 +89,9 @@ export async function shareTicket(
     ctx.agent,
     ctx.agentActor,
     undefined,
-    ticketEmbedDoc(input.ticketId)
+    ticketEmbedDoc(input.ticketId),
+    undefined,
+    { card: true }
   )
 }
 
@@ -109,10 +114,11 @@ export async function suggestPost(
   const postSuggestion = { boardId: input.boardId, title, content: input.content }
 
   const message = await db.transaction(async (tx) => {
+    // A conversation outside the agent's scope is NotFound, like a missing one.
     const [existing] = await tx
       .select()
       .from(conversations)
-      .where(eq(conversations.id, input.conversationId))
+      .where(and(eq(conversations.id, input.conversationId), conversationFilter(ctx.agentActor)))
       .limit(1)
     if (!existing) {
       throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')

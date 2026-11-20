@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  canViewConversation,
+  mayExplainVisitorRefusal,
   canSendVisitorMessage,
   canStartConversation,
   canActAsAgent,
@@ -64,34 +64,41 @@ const serviceActor: Actor = {
 const openConv: ConversationShape = { visitorPrincipalId: VISITOR, status: 'open' }
 const closedConv: ConversationShape = { visitorPrincipalId: VISITOR, status: 'closed' }
 
-describe('canViewConversation', () => {
+describe('mayExplainVisitorRefusal', () => {
   it('allows the owning visitor', () => {
-    expect(canViewConversation(visitorActor, openConv).allowed).toBe(true)
-    expect(canViewConversation(anonVisitorActor, openConv).allowed).toBe(true)
+    expect(mayExplainVisitorRefusal(visitorActor, openConv).allowed).toBe(true)
+    expect(mayExplainVisitorRefusal(anonVisitorActor, openConv).allowed).toBe(true)
   })
 
-  it('allows team members (admin + member) to view any conversation', () => {
-    expect(canViewConversation(adminActor, openConv).allowed).toBe(true)
-    expect(canViewConversation(memberActor, openConv).allowed).toBe(true)
+  it('allows a workspace-wide service principal', () => {
+    expect(mayExplainVisitorRefusal(serviceActor, openConv).allowed).toBe(true)
+  })
+
+  it('denies a teammate: their access is the SQL scope check, not this helper', () => {
+    expect(mayExplainVisitorRefusal(adminActor, openConv).allowed).toBe(false)
+    expect(mayExplainVisitorRefusal(memberActor, openConv).allowed).toBe(false)
+  })
+
+  it('denies a personal key, which follows its creator through the SQL scope check', () => {
+    const personalKey: Actor = { ...serviceActor, scopePrincipalId: OTHER }
+    expect(mayExplainVisitorRefusal(personalKey, openConv).allowed).toBe(false)
   })
 
   it('denies a different visitor', () => {
-    expect(canViewConversation(otherVisitorActor, openConv).allowed).toBe(false)
+    expect(mayExplainVisitorRefusal(otherVisitorActor, openConv).allowed).toBe(false)
   })
 
   it('denies a fully anonymous actor with no principal', () => {
-    expect(canViewConversation(ANONYMOUS_ACTOR, openConv).allowed).toBe(false)
+    expect(mayExplainVisitorRefusal(ANONYMOUS_ACTOR, openConv).allowed).toBe(false)
   })
 
-  it('allows a customer the paired ticket was shared with, never a service principal', () => {
+  it('tells a customer the paired ticket was shared with why, as it tells the owner', () => {
     const shared = { participant: true }
-    expect(canViewConversation(otherVisitorActor, openConv, shared).allowed).toBe(true)
-    expect(canViewConversation(otherVisitorActor, openConv, { participant: false }).allowed).toBe(
-      false
-    )
-    const serviceCustomer: Actor = { ...otherVisitorActor, principalType: 'service' }
-    expect(canViewConversation(serviceCustomer, openConv, shared).allowed).toBe(false)
-    expect(canViewConversation(ANONYMOUS_ACTOR, openConv, shared).allowed).toBe(false)
+    expect(mayExplainVisitorRefusal(otherVisitorActor, openConv, shared).allowed).toBe(true)
+    expect(
+      mayExplainVisitorRefusal(otherVisitorActor, openConv, { participant: false }).allowed
+    ).toBe(false)
+    expect(mayExplainVisitorRefusal(ANONYMOUS_ACTOR, openConv, shared).allowed).toBe(false)
   })
 })
 

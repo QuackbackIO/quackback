@@ -1,6 +1,8 @@
 import { cn } from '@/lib/shared/utils'
 
 interface SettingsCardProps {
+  /** An anchor for a link that lands on this card. */
+  id?: string
   title?: string
   description?: string
   action?: React.ReactNode
@@ -12,6 +14,7 @@ interface SettingsCardProps {
 }
 
 export function SettingsCard({
+  id,
   title,
   description,
   action,
@@ -22,10 +25,12 @@ export function SettingsCard({
 }: SettingsCardProps): React.ReactElement {
   return (
     <section
+      id={id}
       data-settings-card=""
       data-variant={variant}
       className={cn(
         'overflow-hidden rounded-panel border bg-card',
+        id && 'scroll-mt-6',
         variant === 'danger' ? 'border-destructive/40' : 'border-border'
       )}
     >

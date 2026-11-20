@@ -12,7 +12,8 @@
  * first-class person.country / person.locale / person.plan) are
  * resolved by one extra query alongside the rest (resolvePersonCompanyContext
  * below): the visitor principal's own user row (email, country, locale
- * columns; metadata for attributes and plan), plus their linked
+ * columns; metadata for attributes and plan), the principal's contact email
+ * (an email sender with no account has only that), plus their linked
  * company's attributes via principal.company_id. An anonymous visitor or one
  * with no company simply misses the corresponding join — the evaluator's
  * unresolved-subject contract (condition.evaluator.ts) already handles an
@@ -44,6 +45,7 @@ import { getOfficeHoursSchedule } from '@/lib/server/domains/settings/settings.o
 import { isWithinOfficeHours } from '@/lib/shared/office-hours'
 import { parseUserAttributes } from '@/lib/server/domains/users/user.attributes'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { SENDER_AUTH_FAILED_ATTRIBUTE } from '@/lib/server/domains/conversation/conversation.spam-signals'
 import type { ConditionContext } from './condition.evaluator'
 
 /**
@@ -64,7 +66,10 @@ const UNRESOLVED_PERSON_COMPANY = {
   company: null,
 } as const
 
-async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
+async function resolvePersonCompanyContext(
+  principalId: PrincipalId,
+  opts: { trustContactEmail: boolean }
+): Promise<{
   person: {
     email: string | null
     country: string | null
@@ -77,6 +82,7 @@ async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
   const [row] = await db
     .select({
       userEmail: user.email,
+      contactEmail: principal.contactEmail,
       userMetadata: user.metadata,
       userCountry: user.country,
       userLocale: user.locale,
@@ -90,10 +96,17 @@ async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
 
   const attributes = parseUserAttributes(row?.userMetadata ?? null)
   return {
-    // realEmail() strips the synthetic anonymous placeholder — an anonymous
-    // visitor (no user row at all) already reads null via the left join.
+    // The account email first, then the contact email: a sender who wrote in
+    // by email and has no account is a lead with no user row, whose address
+    // lives only on the principal (conversation.email-cold-inbound.ts). The
+    // same precedence every reply email uses (contactRecipientFrom). The
+    // contact email is skipped when this conversation's mail failed sender
+    // authentication: its From may be forged, and an email condition (VIP
+    // routing, an auto-reply) must not fire on a forgery. realEmail() strips
+    // the synthetic anonymous placeholder from either.
     person: {
-      email: realEmail(row?.userEmail ?? null),
+      email:
+        realEmail(row?.userEmail) ?? (opts.trustContactEmail ? realEmail(row?.contactEmail) : null),
       country: row?.userCountry ?? null,
       locale: row?.userLocale ?? null,
       // The plan label lives in user.metadata under the `plan` key — the
@@ -106,6 +119,22 @@ async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
     },
     company: row?.companyAttributes ? { attributes: row.companyAttributes } : null,
   }
+}
+
+/**
+ * Whether this conversation's email failed sender authentication: the marker
+ * the cold-inbound create stamps (it outlives a release from Spam), or, for a
+ * thread filed before that marker existed and still in Spam, its sender-auth
+ * filing cause. Pass and unknown (no Authentication-Results) are not failures.
+ */
+function failedSenderAuth(conv: {
+  customAttributes: Record<string, unknown> | null
+  spamReason: string | null
+}): boolean {
+  return (
+    conv.customAttributes?.[SENDER_AUTH_FAILED_ATTRIBUTE] === true ||
+    (conv.spamReason?.startsWith('sender_auth_') ?? false)
+  )
 }
 
 /**
@@ -192,6 +221,7 @@ export async function resolveConditionContext(
       visitorPrincipalId: conversations.visitorPrincipalId,
       customAttributes: conversations.customAttributes,
       assignedTeamId: conversations.assignedTeamId,
+      spamReason: conversations.spamReason,
     })
     .from(conversations)
     .where(eq(conversations.id, conversationId))
@@ -206,7 +236,9 @@ export async function resolveConditionContext(
     segmentIdsForPrincipal(conv.visitorPrincipalId),
     getOfficeHoursSchedule(),
     resolvePersonCompany
-      ? resolvePersonCompanyContext(conv.visitorPrincipalId)
+      ? resolvePersonCompanyContext(conv.visitorPrincipalId, {
+          trustContactEmail: !failedSenderAuth(conv),
+        })
       : Promise.resolve(UNRESOLVED_PERSON_COMPANY),
     resolveTicket ? resolveTicketContext(conversationId) : Promise.resolve(null),
   ])

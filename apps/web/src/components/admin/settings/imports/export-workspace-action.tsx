@@ -4,8 +4,6 @@ import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { toast } from 'sonner'
-import { UpgradeModal } from '@/components/admin/upgrade'
-import { describePlanUpgrade } from '@/lib/shared/describe-upgrade'
 import { settingsQueries } from '@/lib/client/queries/settings'
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'running'])
@@ -18,7 +16,6 @@ const IN_FLIGHT_STATUSES = new Set(['pending', 'running'])
 export function ExportWorkspaceAction() {
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   const { data: runs } = useQuery({
     ...settingsQueries.exportRuns(),
@@ -35,8 +32,6 @@ export function ExportWorkspaceAction() {
         toast.success('Export started. It will appear below in a moment.')
       } else if (res.status === 409) {
         toast.info('An export is already running.')
-      } else if (res.status === 402) {
-        setUpgradeOpen(true)
       } else if (res.status === 403) {
         toast.error('Only admins can export workspace data.')
       } else {
@@ -61,11 +56,6 @@ export function ExportWorkspaceAction() {
           started <TimeAgo date={activeRun.createdAt} locale="en" />
         </span>
       )}
-      <UpgradeModal
-        open={upgradeOpen}
-        onOpenChange={setUpgradeOpen}
-        description={describePlanUpgrade('Data export', 'business')}
-      />
     </div>
   )
 }

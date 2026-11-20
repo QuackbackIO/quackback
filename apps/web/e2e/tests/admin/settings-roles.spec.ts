@@ -61,7 +61,9 @@ test.describe('Admin Roles Settings', () => {
     // Back on the tab, the custom card exists and links to its editor.
     const customCard = page.getByRole('link', { name: new RegExp(roleName) }).first()
     await expect(customCard).toBeVisible({ timeout: 15000 })
-    await expect(customCard.getByText('Custom')).toBeVisible()
+    // Since #614 a custom row has no "Custom" badge; only custom rows list
+    // their member count, and a new role has none.
+    await expect(customCard.getByText(/\b0 members\b/)).toBeVisible()
 
     // Open it and delete from the detail page (no holders -> no reassignment).
     await customCard.click()

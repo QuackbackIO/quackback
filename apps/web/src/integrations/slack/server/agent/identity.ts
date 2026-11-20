@@ -3,6 +3,7 @@ import { db, principal, user, slackUserLinks, eq, and, sql } from '@/lib/server/
 import type { PrincipalId } from '@quackback/ids'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
+import { isPausedTeamSeat } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 export type SlackMember = { id: PrincipalId; role: 'admin' | 'member'; displayName: string | null }
 const member = (row: typeof principal.$inferSelect | undefined): SlackMember | null =>
   row && row.type === 'user' && row.userId && (row.role === 'admin' || row.role === 'member')
@@ -61,6 +62,17 @@ export async function resolveSlackPrincipal(
   return (await deps.linked(team, slackUser)) ?? null
 }
 export async function slackMemberActor(person: SlackMember): Promise<Actor> {
+  // A paused seat (the plan has fewer team seats than members) acts as the
+  // portal user it still is, with no team authority, as over MCP.
+  if (await isPausedTeamSeat({ id: person.id, role: person.role, type: 'user' })) {
+    return {
+      principalId: person.id,
+      role: 'user',
+      principalType: 'user',
+      segmentIds: new Set(),
+      permissions: new Set(),
+    }
+  }
   return {
     principalId: person.id,
     role: person.role,
