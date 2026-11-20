@@ -854,3 +854,33 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   removed from all posts. Fix: delete the tag's assignments in the same
   transaction (or filter deleted tags wherever post tags are read). owner:
   unassigned, review by: 2026-12-03.
+
+### Product suite: feedback admin (AI, notifications, import and export)
+
+- `feedback/admin-import-export.spec.ts` › import route › FBA-X-12 a re-import
+  with blank status and vote_count cells keeps the stored status and votes.
+  Product bug: a `source_id` update writes whatever the row says, so a blank
+  `status` resets the post to the default status and a blank `vote_count`
+  sets it to 0 although votes may exist (`processBatch` update loop,
+  `apps/web/src/lib/server/domains/import/import-service.ts:369`; the row
+  schema turns a blank `vote_count` into 0 at `import-row-resolver.ts:58`).
+  Fix: on the update path keep the stored `statusId`/`voteCount` when the
+  cell is blank. owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-import-export.spec.ts` › import route › FBA-X-19 rows naming
+  a deleted board, status or tag get fresh live ones. Product bug:
+  `loadRowContext` reads `postStatuses`, `postTags` and `boards` with no
+  `deleted_at` filter
+  (`apps/web/src/lib/server/domains/import/import-row-resolver.ts:139`,
+  `:148`, `:153`), so the post lands on a hidden board with a deleted status
+  and tag. Fix: filter `isNull(deletedAt)` in the three lookups (and in
+  `ensureBatchTag`). owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-import-export.spec.ts` › board export › FBA-X-02 a deleted
+  board cannot be exported by id. Product bug: `/api/export` checks the board
+  with `getBoardById`, which has no `deleted_at` filter
+  (`apps/web/src/routes/api/export.ts:49`,
+  `apps/web/src/lib/server/domains/boards/board.service.ts:321`), and the
+  no-board branch of `listPostsForExport` lists every board
+  (`apps/web/src/lib/server/domains/posts/post.export.ts:23`), so a deleted
+  board's posts download. Fix: refuse a deleted board with `Board not found`
+  and filter `deleted_at` in the all-boards list. owner: unassigned, review
+  by: 2026-12-03.
