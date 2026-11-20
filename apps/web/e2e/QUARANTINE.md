@@ -257,3 +257,51 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   when that article has no published French translation. Fix: load related
   articles for the locale (translated only), or link untranslated ones to the
   default-language URL.
+### Product suite: API REST (posts and votes)
+- `platform/rest-posts.spec.ts` › API-R-026 a PATCH with no recognised field
+  is refused to a key that cannot read posts. Product bug: `PATCH
+/api/v1/posts/:id` authenticates with a bare `withApiKeyAuth(request)` and
+  gates only the fields present (`permissionsForPostPatch`,
+  `apps/web/src/routes/api/v1/posts/$postId.ts:31-38`, `:117`), so `{}` (or a
+  body of unknown fields such as `boardId`, which zod strips) checks no
+  permission and no scope, and `updatePost` returns the whole post. A
+  `read:chat` key that `GET /posts/:id` refuses reads any post this way. Fix:
+  refuse a body with no updatable field (400), or require
+  `post.view_private` (with its scope) on every PATCH. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/rest-posts.spec.ts` › API-R-027 PATCH tags with an unknown tag id
+  is refused and keeps the post's tags. Product bug: `updatePost` deletes every
+  tag assignment, then inserts the new set outside a transaction
+  (`apps/web/src/lib/server/domains/posts/post.service.ts:480-486`); an
+  unknown tag id (foreign key) or a repeated one (primary key) fails the
+  insert, the route answers 500 and the post is left with no tags. Fix: check
+  the tag ids exist (404) and de-duplicate before deleting, and run the
+  delete and insert in one transaction. owner: unassigned, review by:
+- `platform/rest-posts.spec.ts` › API-R-012 an unknown or repeated tag id on
+  create is refused without leaving a post. Product bug: `createPost` inserts
+  the tag assignments without looking the tags up
+  (`apps/web/src/lib/server/domains/posts/post.service.ts:271-276`), so an
+  unknown tag id or the same id twice answers 500 (no post row is left, the
+  insert is in the transaction). Fix: load the tags (non-deleted) and
+  de-duplicate first; answer 404 "Tag not found" for a missing one. owner:
+  unassigned, review by: 2026-12-03.
+- `platform/rest-posts.spec.ts` › API-R-013 a soft-deleted status is not found
+  on create or update. Product bug: the status lookups in `createPost` and
+  `updatePost` have no `deletedAt` filter
+  (`apps/web/src/lib/server/domains/posts/post.service.ts:148`, `:393-394`),
+  so a post can be put in a deleted status no list shows. Fix: add
+  `isNull(postStatuses.deletedAt)` to both lookups. owner: unassigned, review
+  by: 2026-12-03.
+- `platform/rest-posts.spec.ts` › API-R-028 a deleted post cannot be edited.
+  Product bug: `updatePost` never checks `deletedAt`
+  (`apps/web/src/lib/server/domains/posts/post.service.ts:379-383`), so
+  `PATCH /api/v1/posts/:id` edits a soft-deleted post and a status change
+  emails its subscribers. Fix: treat a deleted post as not found, as votes
+  and comments do. owner: unassigned, review by: 2026-12-03.
+- `platform/rest-votes.spec.ts` › API-R-041 a proxy vote for an unknown voter
+  is a not-found refusal, not a server error. Product bug: `POST
+/api/v1/posts/:id/vote/proxy` never looks the voter up
+  (`apps/web/src/routes/api/v1/posts/$postId.vote.proxy.ts:43-63`); the vote
+  insert hits the principal foreign key and the route answers 500. Fix: look
+  the principal up first and answer 404 "User not found". owner: unassigned,
+  review by: 2026-12-03.
