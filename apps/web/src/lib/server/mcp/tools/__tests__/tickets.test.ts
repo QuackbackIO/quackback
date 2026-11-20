@@ -141,7 +141,8 @@ describe('ticket MCP tools', () => {
   })
 
   it('update_ticket renames and re-prioritizes through the gated services, then reads back', async () => {
-    mockGetTicket.mockResolvedValue({ ...ticketDTO, title: 'SSO login fails', priority: 'urgent' })
+    mockAssertTicketVisible.mockResolvedValue(TICKET_ROW)
+    mockRowToDTO.mockResolvedValue({ ...ticketDTO, title: 'SSO login fails', priority: 'urgent' })
     const out = await collect(teamAuth).get('update_ticket')!({
       ticketId: 'ticket_1',
       title: 'SSO login fails',
@@ -157,7 +158,8 @@ describe('ticket MCP tools', () => {
   })
 
   it('update_ticket changes only the fields it is given', async () => {
-    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockAssertTicketVisible.mockResolvedValue(TICKET_ROW)
+    mockRowToDTO.mockResolvedValue(ticketDTO)
     await collect(teamAuth).get('update_ticket')!({ ticketId: 'ticket_1', priority: 'low' })
     expect(mockSetTitle).not.toHaveBeenCalled()
     expect(mockSetPriority).toHaveBeenCalledTimes(1)
