@@ -381,3 +381,20 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   500 (`apps/web/src/routes/api/v1/changelog/index.ts:78`, `$entryId.ts:68`).
   Fix: catch the parse error and answer 400 BAD_REQUEST. owner: unassigned,
   review by: 2026-12-03.
+- `platform/rest-status-page.spec.ts` › API-R-127 the services path names a
+  service, not a component, in its errors. `GET /api/v1/status/services/nope`
+  answers "Invalid component ID format" and a missing one "Status component not
+  found" (`apps/web/src/routes/api/v1/status/-service-handlers.ts:148`, `:153`).
+  Fix: name the resource "service" on the services path. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/rest-status-page.spec.ts` › API-R-132 a service id that never
+  existed is reported as unknown, not as deleted. A well-formed id that names
+  no service gets "An affected service has been deleted. Choose the services
+  again." (`apps/web/src/lib/server/domains/status/status.service.ts:137`).
+  Fix: tell an unknown id apart from a deleted one. owner: unassigned, review
+  by: 2026-12-03.
+- `platform/rest-status-page.spec.ts` › API-R-126 a status body that is not
+  JSON is refused as bad input, not a server error. POST services and incidents
+  answer 500 on an unparsable body (`-service-handlers.ts:94`,
+  `status/incidents/index.ts:104`): `request.json()` throws outside
+  `handleDomainError`. owner: unassigned, review by: 2026-12-03.

@@ -213,6 +213,20 @@ export async function serviceHistory(
     WHERE component_id = ${uuid(serviceId)} ORDER BY created_at, id`
 }
 
+/** job_queue rows whose dedupe key starts with `prefix`. */
+export async function jobRowsLike(
+  prefix: string
+): Promise<Array<{ dedupe_key: string; status: string }>> {
+  return supportDb()<Array<{ dedupe_key: string; status: string }>>`
+    SELECT dedupe_key, status FROM job_queue WHERE dedupe_key LIKE ${`${prefix}%`}`
+}
+
+/** The role key `newTeammate(name, ...)` gives the teammate's own role. */
+export function roleKeyOf(teammateName: string): string {
+  const slug = teammateName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  return `e2e_${slug.replace(/-/g, '_')}`
+}
+
 /** The principal TypeID of a raw principal UUID. */
 export function principalTypeId(raw: string): string {
   return fromUuid('principal', raw)
