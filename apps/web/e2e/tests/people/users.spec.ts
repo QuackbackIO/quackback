@@ -305,15 +305,15 @@ test.describe('directory and profile in the admin', () => {
   test(
     'PPL-U-01 the Users tab lists identified portal users only, with a matching count',
     { tag: '@core' },
-    async ({ asPerson, people, marker, newTeammate }) => {
+    async ({ asPerson, marker, newTeammate }) => {
       const a = await portalUserRow(marker, { name: `Alpha ${marker}` })
       const b = await portalUserRow(marker, { name: `Bravo ${marker}`, verified: false })
-      await newTeammate({ roleKey: 'contributor', name: `Mate ${marker}` })
+      const mate = await newTeammate({ roleKey: 'contributor', name: `Mate ${marker}` })
       const lead = await seedLead(marker, { name: `Lead ${marker}` })
       await supportDb()`UPDATE principal SET contact_email = ${`${marker}-l@customers.example`}
                         WHERE id = ${lead.principalUuid}`
       const testCustomer = await portalUserRow(marker, { name: `Tester ${marker}` })
-      await supportDb()`UPDATE principal SET test_owner_principal_id = ${uuid(people.people.admin.principalId)}
+      await supportDb()`UPDATE principal SET test_owner_principal_id = ${uuid(mate.principalId)}
                         WHERE id = ${testCustomer.principalUuid}`
 
       const admin = await asPerson('admin')
