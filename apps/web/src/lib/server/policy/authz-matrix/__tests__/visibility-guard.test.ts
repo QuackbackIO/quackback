@@ -72,8 +72,8 @@ const CALL_RULES: { rule: Rule; pattern: RegExp }[] = [
 const BY_ID_CONVERSATION_READS: Record<string, string> = {
   'lib/server/domains/assistant/assistant.runtime.ts::runAssistantTurn::unscopedConversationRead':
     'the copilot gate checked the conversation for the actor before the turn runs',
-  'lib/server/domains/conversation/conversation.edit.ts::applyEdit::unscopedConversationRead':
-    'reloads the row after editConversationMessage checked it, for the published DTO',
+  'lib/server/domains/conversation/conversation.edit.ts::publishMessageChange::unscopedConversationRead':
+    'reloads the row after loadEditableMessage checked it, for the published DTO',
   'lib/server/domains/conversation/conversation.service.ts::sendVisitorMessage::unscopedConversationRead':
     'the visitor send: the owner check runs on the row it reads',
   'lib/server/domains/conversation/conversation.service.ts::sendAgentMessage::unscopedConversationRead':
@@ -278,6 +278,10 @@ const ENTRY_POINT_ALLOWLIST: Record<string, string> = {
     'checks the ticket; the anchor must hang off that ticket or its pair (ticket-visibility tests)',
   'lib/server/functions/tickets.ts::linkTicketToConversationFn':
     'checks both sides; covered by ticket-visibility-links.db.test.ts',
+  'lib/server/functions/conversation.ts::addMessageAttachmentsFn':
+    "loadEditableMessage checks the message's parent first, as editConversationMessageFn's row shows",
+  'lib/server/functions/conversation.ts::removeMessageAttachmentFn':
+    "loadEditableMessage checks the message's parent first, as editConversationMessageFn's row shows",
   'lib/server/functions/copilot-events.ts::recordCopilotEventFn':
     'copilot-gated: gateCopilotFn checks the item for the caller',
 }
