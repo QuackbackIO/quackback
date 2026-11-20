@@ -7,7 +7,7 @@ import { widgetResolvePublicArticleRefFn } from '@/lib/server/functions/widget/h
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { appendWidgetOtt } from './build-portal-url'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
-import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, widgetQueryKeyPrefixEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
@@ -40,9 +40,13 @@ export function WidgetHelpDetail({
         data: { ref: articleRef, locale },
         headers: getWidgetAuthHeaders(),
       }),
+    // A new session (a fresh visitor's first vote mints one) refetches the
+    // same article: keep it on screen meanwhile, or the footer is unmounted
+    // mid-vote and the visitor never sees their vote land.
     placeholderData: (prev, prevQuery) =>
-      widgetQueryKeyEquals(
-        widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
+      widgetQueryKeyPrefixEquals(
+        // The key without its trailing session version.
+        widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale).slice(0, -1),
         prevQuery?.queryKey
       )
         ? prev

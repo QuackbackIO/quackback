@@ -9,6 +9,7 @@ import { isValidTypeId } from '@quackback/ids'
 import { PageLimitSchema } from './taxonomy'
 import { tiptapContentSchema } from './posts'
 import { SUPPORTED_LOCALES } from '../i18n'
+import { isSafeCallbackUrl } from '../routing'
 
 // ============================================================================
 // Category Schemas
@@ -31,7 +32,7 @@ export const createCategorySchema = z.object({
 
 export const updateCategorySchema = z.object({
   id: z.string().min(1),
-  name: z.string().min(1).max(200).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
   slug: z.string().max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   isPublic: z.boolean().optional(),
@@ -68,7 +69,7 @@ export const createArticleSchema = z.object({
 export const updateArticleSchema = z.object({
   id: z.string().min(1),
   categoryId: z.string().optional(),
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   contentJson: tiptapContentSchema.nullable().optional(),
   slug: z.string().max(200).optional(),
@@ -173,12 +174,16 @@ export const restoreArticleSchema = z.object({
 // Help Center Config Schemas
 // ============================================================================
 
-/** A header link URL: an absolute http(s) URL or a root-relative path. */
+/**
+ * A header link URL: an absolute http(s) URL or a root-relative path. A
+ * protocol-relative URL (`//host`, `/\host`) starts with / but leaves the
+ * site, so it is refused.
+ */
 export const helpCenterHeaderLinkUrl = z
   .string()
   .min(1)
   .max(500)
-  .refine((v) => v.startsWith('/') || /^https?:\/\//i.test(v), {
+  .refine((v) => isSafeCallbackUrl(v) || /^https?:\/\//i.test(v), {
     message: 'URL must be an absolute http(s) URL or start with /',
   })
 

@@ -49,6 +49,7 @@ import {
   useSessionContext,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
 
 interface PortalHeaderProps {
   orgName: string
@@ -399,7 +400,8 @@ function Navigation({
         )
       })}
       {helpLinks.map((link) => {
-        const external = !link.url.startsWith('/')
+        // `//host` starts with / but is another site.
+        const external = !isSafeCallbackUrl(link.url)
         return (
           <a
             key={link.url}

@@ -7,6 +7,7 @@ import {
   and,
   isNull,
   sql,
+  inArray,
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
@@ -183,13 +184,28 @@ export async function getPublicArticleBySlug(
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }
 
-  // Increment view count (fire and forget)
-  db.update(helpCenterArticles)
-    .set({ viewCount: sql`${helpCenterArticles.viewCount} + 1` })
-    .where(eq(helpCenterArticles.id, article.id))
-    .catch(() => {})
-
   return resolveArticleWithCategory(article, 'public')
+}
+
+/**
+ * Count one view of an article the viewer can open. Only the canonical
+ * article page records views (see recordPublicArticleViewFn): lookups by
+ * slug serve legacy URLs that redirect there, and embeds, so counting them
+ * too would count one visit twice.
+ */
+export async function recordArticleView(
+  id: KbArticleId,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<void> {
+  const visible = db
+    .select({ id: helpCenterArticles.id })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(and(eq(helpCenterArticles.id, id), ...helpCenterVisibilityConditions('public', viewer)))
+  await db
+    .update(helpCenterArticles)
+    .set({ viewCount: sql`${helpCenterArticles.viewCount} + 1` })
+    .where(inArray(helpCenterArticles.id, visible))
 }
 
 // Fallback slug base for article titles that romanize to nothing (see
