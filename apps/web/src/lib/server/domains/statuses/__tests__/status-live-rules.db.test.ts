@@ -9,6 +9,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { and, eq, isNull, postStatuses } from '@/lib/server/db'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { ConflictError } from '@/lib/shared/errors'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -53,9 +54,9 @@ describe.skipIf(!fixture.available)('status rules (real DB)', () => {
     })
     await testDb.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, status.id))
 
-    await expect(updateStatus(status.id, { isDefault: false })).rejects.toMatchObject({
-      code: 'CANNOT_UNSET_DEFAULT',
-    })
+    const refused = updateStatus(status.id, { isDefault: false })
+    await expect(refused).rejects.toBeInstanceOf(ConflictError)
+    await expect(refused).rejects.toMatchObject({ code: 'CANNOT_UNSET_DEFAULT' })
     const defaults = await testDb
       .select({ id: postStatuses.id })
       .from(postStatuses)

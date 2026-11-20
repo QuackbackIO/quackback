@@ -137,7 +137,7 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
   // The workspace always keeps one default: it moves by marking another
   // status default, never by unsetting the current one.
   if (input.isDefault === false && existingStatus.isDefault) {
-    throw new ForbiddenError(
+    throw new ConflictError(
       'CANNOT_UNSET_DEFAULT',
       'Cannot unset the default status. Mark another status as default instead.'
     )
