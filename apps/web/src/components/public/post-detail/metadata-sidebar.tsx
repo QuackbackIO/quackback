@@ -119,6 +119,28 @@ export function ManagePostActions({
   className,
 }: ManagePostActionsProps) {
   const intl = useIntl()
+  // The icon buttons are named by the same words their tooltips show.
+  const mergeLabel = intl.formatMessage({
+    id: 'portal.postDetail.metadata.merge',
+    defaultMessage: 'Merge',
+  })
+  const lockLabel = actions.isCommentsLocked
+    ? intl.formatMessage({
+        id: 'portal.postDetail.metadata.unlockComments',
+        defaultMessage: 'Unlock comments',
+      })
+    : intl.formatMessage({
+        id: 'portal.postDetail.metadata.lockComments',
+        defaultMessage: 'Lock comments',
+      })
+  const restoreLabel = intl.formatMessage({
+    id: 'portal.postDetail.metadata.restorePost',
+    defaultMessage: 'Restore post',
+  })
+  const deleteLabel = intl.formatMessage({
+    id: 'portal.postDetail.metadata.deletePost',
+    defaultMessage: 'Delete post',
+  })
 
   return (
     <div className={cn('flex items-center justify-between', className)}>
@@ -170,6 +192,7 @@ export function ManagePostActions({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
+                      aria-label={mergeLabel}
                       className="relative flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
                     >
                       <IconGitMerge className="h-5 w-5" strokeWidth={1.5} />
@@ -179,12 +202,7 @@ export function ManagePostActions({
                     </button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {intl.formatMessage({
-                    id: 'portal.postDetail.metadata.merge',
-                    defaultMessage: 'Merge',
-                  })}
-                </TooltipContent>
+                <TooltipContent side="bottom">{mergeLabel}</TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={actions.onMergeOthers}>
@@ -208,6 +226,7 @@ export function ManagePostActions({
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label={lockLabel}
                   onClick={actions.onToggleLock}
                   disabled={actions.isLockPending}
                   className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
@@ -219,17 +238,7 @@ export function ManagePostActions({
                   )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {actions.isCommentsLocked
-                  ? intl.formatMessage({
-                      id: 'portal.postDetail.metadata.unlockComments',
-                      defaultMessage: 'Unlock comments',
-                    })
-                  : intl.formatMessage({
-                      id: 'portal.postDetail.metadata.lockComments',
-                      defaultMessage: 'Lock comments',
-                    })}
-              </TooltipContent>
+              <TooltipContent side="bottom">{lockLabel}</TooltipContent>
             </Tooltip>
           )}
 
@@ -238,6 +247,7 @@ export function ManagePostActions({
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label={restoreLabel}
                   onClick={actions.onRestore}
                   disabled={actions.isRestorePending}
                   className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
@@ -245,30 +255,21 @@ export function ManagePostActions({
                   <IconRestore className="h-5 w-5" strokeWidth={1.5} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {intl.formatMessage({
-                  id: 'portal.postDetail.metadata.restorePost',
-                  defaultMessage: 'Restore post',
-                })}
-              </TooltipContent>
+              <TooltipContent side="bottom">{restoreLabel}</TooltipContent>
             </Tooltip>
           ) : !actions.isDeleted && actions.onDelete ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label={deleteLabel}
                   onClick={actions.onDelete}
                   className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors"
                 >
                   <IconTrash className="h-5 w-5" strokeWidth={1.5} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {intl.formatMessage({
-                  id: 'portal.postDetail.metadata.deletePost',
-                  defaultMessage: 'Delete post',
-                })}
-              </TooltipContent>
+              <TooltipContent side="bottom">{deleteLabel}</TooltipContent>
             </Tooltip>
           ) : null}
         </div>
