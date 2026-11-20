@@ -1400,6 +1400,49 @@ describe('threading headers (P4.6 regression guard)', () => {
       expect(call.from).toBe('Alex from Acme Support <help@home.example>')
     })
 
+    it('names a reply that speaks as the team after the workspace alone', async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Acme',
+        agentIsTeam: true,
+        channel: 'messenger',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.from).toBeUndefined()
+      expect(call.fromDisplayName).toBe('Acme')
+      expect(call.senderName).toBe('Acme')
+      expect(call.senderIsTeam).toBe(true)
+    })
+
+    it("names a reply that speaks as the team after the address's sender name alone", async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      resolveConversationFrom.mockResolvedValueOnce('help@home.example')
+      senderName.current = 'Acme Support'
+
+      try {
+        await notifyAgentReply({
+          conversationId,
+          visitorPrincipalId,
+          content: 'answer',
+          agentName: 'Acme Help',
+          agentIsTeam: true,
+          channel: 'messenger',
+        })
+      } finally {
+        senderName.current = null
+      }
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.from).toBe('Acme Support <help@home.example>')
+    })
+
     it('forwards the stored conversation subject to the sender', async () => {
       isPrincipalOnline.mockResolvedValue(false)
       visitorRows = [{ type: 'user', email: 'account@x.com' }]

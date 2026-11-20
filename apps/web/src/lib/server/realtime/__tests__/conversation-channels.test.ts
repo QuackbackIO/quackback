@@ -200,10 +200,11 @@ describe('publishConversationUpdate', () => {
     await publishConversationUpdate(conversationId, dto)
     await inboxPublishesSettled()
 
-    expect(loadAuthors).toHaveBeenCalledExactlyOnceWith([
-      visitor.principalId,
-      assignedAgent.principalId,
-    ])
+    // The customer's view: an API key would show as the support team.
+    expect(loadAuthors).toHaveBeenCalledExactlyOnceWith(
+      [visitor.principalId, assignedAgent.principalId],
+      { forCustomer: true }
+    )
     expect(publish).toHaveBeenCalledWith(conversationChannel(conversationId), {
       kind: 'conversation',
       conversation: expect.objectContaining({ visitor, assignedAgent }),

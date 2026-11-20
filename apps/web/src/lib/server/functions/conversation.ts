@@ -451,6 +451,7 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
 ) {
   const { getMessengerConfig, getWidgetConfig } =
     await import('@/lib/server/domains/settings/settings.widget')
+  const { supportTeamName } = await import('@/lib/shared/support-contact-name')
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
   const { getSettings } = await import('./workspace')
@@ -481,8 +482,9 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     welcomeMessage: t.welcomeMessage || messengerConfig.welcomeMessage || null,
     offlineMessage: t.offlineMessage || messengerConfig.offlineMessage || null,
     // Falls back to the workspace name (as the settings help text promises)
-    // when no team name is set.
-    teamName: messengerConfig.teamName?.trim() || appSettings?.name || null,
+    // when no team name is set. The same name stands in for an API key's
+    // messages (principal-display.ts).
+    teamName: supportTeamName(messengerConfig.teamName, appSettings?.name),
     // AI-assistant display identity: fronts new conversations (greeting
     // author + thread header) when enabled. Identity only — replies still
     // come from the team until the integrated agent lands.

@@ -179,10 +179,11 @@ export async function publishConversationUpdate(
   prev?: ScopedRow
 ): Promise<void> {
   // Reuse the public profile loader: agent DTOs may contain account names.
-  const authors = await loadAuthors([
-    agentDto.visitor.principalId,
-    agentDto.assignedAgent?.principalId,
-  ])
+  // The visitor's copy names an API key as the support team.
+  const authors = await loadAuthors(
+    [agentDto.visitor.principalId, agentDto.assignedAgent?.principalId],
+    { forCustomer: true }
+  )
   // The DTO is the row just written, so it is its own envelope. A writer that
   // can move the item out of someone's scope passes what it was before.
   publishInboxFrame(

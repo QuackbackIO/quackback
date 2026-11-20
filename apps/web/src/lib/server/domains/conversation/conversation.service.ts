@@ -570,7 +570,7 @@ export async function sendVisitorMessage(
   })
 
   const authored = await resolveAuthorAudiences(author)
-  const visitorMessage = toMessageDTO(txResult.message, authored.publicAuthor)
+  const visitorMessage = toMessageDTO(txResult.message, authored.customerAuthor)
   const agentMessage = toMessageDTO(txResult.message, authored.supportAuthor)
 
   // Filed to Spam by a fixed rule in the insert: the thread is kept and
@@ -844,7 +844,7 @@ export async function startAgentConversation(
   await publishConversationUpdate(agentDTO.id, agentDTO)
   publishConversationMessage(
     txResult.conversation.id,
-    { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
+    { visitor: toMessageDTO(txResult.message, authored.customerAuthor), agent: messageDTO },
     { conversationUpdated: true },
     conversationScopeOf(txResult.conversation)
   )
@@ -859,7 +859,9 @@ export async function startAgentConversation(
     // contentJson image node, so richMessageFallbackLabel is empty.
     content: content || preview(fallbackLabel, attachments),
     contentJson: safeContentJson,
-    agentName: authored.publicAuthor.displayName ?? 'Support',
+    // The name the customer's thread shows: an API key shows as the team.
+    agentName: authored.customerAuthor.displayName ?? 'Support',
+    agentIsTeam: authored.shownAsTeam,
     messageId: txResult.message.id,
     attachments,
   })
@@ -1026,7 +1028,7 @@ export async function sendAgentMessage(
   )
   publishConversationMessage(
     txResult.conversation.id,
-    { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
+    { visitor: toMessageDTO(txResult.message, authored.customerAuthor), agent: messageDTO },
     { conversationUpdated: true },
     conversationScopeOf(txResult.conversation)
   )
@@ -1062,7 +1064,9 @@ export async function sendAgentMessage(
       // Full text, not the truncated preview — notify derives its own excerpt.
       content: content || preview(fallbackLabel, attachments),
       contentJson: safeContentJson,
-      agentName: authored.publicAuthor.displayName ?? 'Support',
+      // The name the customer's thread shows: an API key shows as the team.
+      agentName: authored.customerAuthor.displayName ?? 'Support',
+      agentIsTeam: authored.shownAsTeam,
       capturedEmail: txResult.conversation.visitorEmail,
       channel: txResult.conversation.channel,
       messageId: txResult.message.id,
@@ -1748,7 +1752,7 @@ export async function publishConversationStarted(
   publishConversationMessage(
     conversation.id,
     {
-      visitor: toMessageDTO(message, authored.publicAuthor),
+      visitor: toMessageDTO(message, authored.customerAuthor),
       agent: toMessageDTO(message, authored.supportAuthor),
     },
     { conversationUpdated: true },
@@ -2605,7 +2609,7 @@ export async function appendAssistantReply(
   publishConversationMessage(
     txResult.conversation.id,
     {
-      visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
+      visitor: toMessageDTO(txResult.message, authored.customerAuthor, author.principalId),
       agent: messageDTO,
     },
     { conversationUpdated: true },

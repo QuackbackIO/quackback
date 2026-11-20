@@ -29,13 +29,14 @@ import {
 import { resolvePairTicketIdForConversation } from '@/lib/server/domains/tickets/pair-thread.service'
 
 async function publishAttachmentPreview(message: ConversationMessage): Promise<void> {
-  // The conversation channel reaches the customer and takes the public name.
+  // The conversation channel reaches the customer and takes the name their
+  // thread shows (an API key shows as the support team).
   // The ticket channel is team-only and takes the author as the team sees it.
   const views = message.principalId
     ? (await loadAuthorAudiences([message.principalId])).get(message.principalId)
     : undefined
   const fallback = message.principalId ? fallbackAuthor(message.principalId) : null
-  const author = views?.publicAuthor ?? fallback
+  const author = views?.customerAuthor ?? fallback
   const teamAuthor = views?.supportAuthor ?? fallback
   let ticketId = message.ticketId
   if (message.conversationId) {

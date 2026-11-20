@@ -14,6 +14,9 @@ export interface AgentMessageDeliveryCtx {
   content: string
   contentJson?: JSONContent | null
   agentName: string
+  /** The name is the support team's, not a person's (a message an API key
+   *  wrote under its own name), so the email speaks as the team. */
+  senderIsTeam?: boolean
   recipient: string
   ctaUrl: string
   workspaceName: string

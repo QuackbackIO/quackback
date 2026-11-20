@@ -47,6 +47,33 @@ describe('conversationMessageCopy', () => {
     expect(copy.useHumanTemplate).toBe(true)
   })
 
+  it('speaks as the team when the sender is the support team, not a person', () => {
+    const reply = conversationMessageCopy({
+      direction: 'agent_reply',
+      senderName: 'Acme',
+      senderIsTeam: true,
+      workspaceName: 'Acme',
+      channel: 'messenger',
+    })
+    expect(reply.intro).toBe('Acme replied to your conversation.')
+    const started = conversationMessageCopy({
+      direction: 'agent_started',
+      senderName: 'Acme Support',
+      senderIsTeam: true,
+      workspaceName: 'Acme',
+      channel: 'messenger',
+    })
+    expect(started.intro).toBe('Acme Support sent you a message.')
+    // A person still reads as one from the workspace.
+    const person = conversationMessageCopy({
+      direction: 'agent_started',
+      senderName: 'Alex',
+      workspaceName: 'Acme',
+      channel: 'messenger',
+    })
+    expect(person.intro).toBe('Alex from Acme sent you a message.')
+  })
+
   it('keeps the generic heading on messenger when there is no subject', () => {
     const copy = conversationMessageCopy({
       direction: 'agent_reply',

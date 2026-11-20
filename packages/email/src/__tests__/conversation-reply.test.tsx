@@ -30,4 +30,11 @@ describe('ConversationReplyEmail', () => {
     expect(html).not.toContain('Unsubscribe')
     expect(html).not.toContain('New reply from')
   })
+
+  it('signs once when the signature is already the team', async () => {
+    const html = await render(
+      <ConversationReplyEmail messagePreview="Your export is ready." agentName="Acme" />
+    )
+    expect(html.match(/>Acme</g)).toHaveLength(1)
+  })
 })

@@ -284,9 +284,11 @@ async function applyEdit(
       message: dto,
     })
     if (!updated.isInternal) {
+      // The visitor's channel: the name the customer's thread shows.
       const author = updated.principalId
-        ? ((await loadAuthors([updated.principalId])).get(updated.principalId) ??
-          fallbackAuthor(updated.principalId))
+        ? ((await loadAuthors([updated.principalId], { forCustomer: true })).get(
+            updated.principalId
+          ) ?? fallbackAuthor(updated.principalId))
         : null
       publishConversationOnlyEvent(updated.conversationId, {
         kind: 'message_edited',
