@@ -1079,9 +1079,11 @@ export async function sendAgentMessage(
     false
   )
   // A reply on a conversation paired with a customer ticket is a reply on that
-  // ticket, whichever view it was typed in: signal ticket.replied so the
-  // ticket's watchers get their bell and integrations their webhook. The
-  // ticket side signals for its own writes, and a shared card is not a reply.
+  // ticket, whichever view it was typed in: the replier watches the ticket,
+  // the ticket counts as updated, and ticket.replied gives its watchers their
+  // bell and integrations their webhook. Off the send's own path, best-effort:
+  // the reply itself already landed. The ticket side does this for its own
+  // writes, and a shared card is not a reply.
   if (!opts?.fromTicketThread && !opts?.card) {
     void import('@/lib/server/domains/tickets/ticket-message.service')
       .then((m) => m.emitPairTicketReplied(txResult.conversation.id, actor, messageDTO))
