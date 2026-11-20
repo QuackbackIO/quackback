@@ -549,3 +549,52 @@ no such part beyond the wrong notification).
   (`apps/web/src/routes/_portal/index.tsx:32-37`) while `sort` and `view` have
   one. Smallest fix: `.optional().catch(undefined)` on both. owner:
   unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-14 the confirmation of a held post
+  tells the author it awaits review (FBP-B07). The composer shows the same
+  "Feedback submitted" toast for a held post as for a published one
+  (`apps/web/src/components/public/feedback/feedback-header-animated.tsx:281-297`);
+  `createPublicPostFn` does not return the moderation state, so the client
+  cannot tell. Smallest fix: return `moderationState` from
+  `runCreatePublicPost` and show a "waiting for review" toast when it is
+  `pending`. The right copy does not exist yet: the test only asks for the
+  word "review". owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-14 the held post's panel does not
+  tell its author that customers cannot see it (FBP-B06). The card renders
+  `InlineModerationActions` for any viewer of a pending post
+  (`apps/web/src/components/public/post-card.tsx:597-603`), and its hardcoded,
+  unlocalised moderator copy "Customers cannot see this post yet."
+  (`apps/web/src/components/shared/inline-moderation-actions.tsx:39-42`) is
+  shown to the customer who wrote it. Smallest fix: an author variant
+  ("Waiting for review: only you can see this") passed when the viewer is the
+  author, through the message catalogue. owner: unassigned, review by:
+  2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-22 an anonymous session cannot
+  upload while anonymous posting is off (FBP-B13). `handlePortalUpload`
+  (`apps/web/src/routes/api/portal/upload.ts:8-37`) accepts any session with
+  a principal; it never reads the workspace anonymous switch (red run:
+  expected 403, received 200). Smallest fix: for an anonymous principal,
+  refuse with 403 unless `workspaceAllowsAnonymous(settings.portalConfig)`.
+  owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-24 public post metadata is bounded
+  (FBP-B14). `createPublicPostSchema.metadata` is
+  `z.record(z.string(), z.string())` with no bound
+  (`apps/web/src/lib/shared/schemas/posts.ts:140`); 2,000 keys of 200
+  characters are stored as `widget_metadata`. Smallest fix: cap the key count
+  (e.g. 50), key length (100) and value length (1,000) in the schema. owner:
+  unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-06 an anonymous comment is refused
+  with the same code as an anonymous post or vote (FBP-B04). Comments throw
+  `ANONYMOUS_NOT_ENABLED` (`apps/web/src/lib/server/functions/comments.ts:84`)
+  where posts and votes throw `ANONYMOUS_NOT_ALLOWED`
+  (`public-posts.ts:373`, `:449`) for the same workspace switch. Smallest fix:
+  use `ANONYMOUS_NOT_ALLOWED` in comments.ts. Runs in product-isolated.
+  owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-07 the anonymous post cap answers
+  as a rate limit, and the composer says so (FBP-B04). `RATE_LIMITED` is
+  thrown as a `ValidationError` (status 400)
+  (`apps/web/src/lib/server/functions/public-posts.ts:379`, `:454`), and the
+  composer replaces every refusal with "Could not submit your feedback. Please
+  try again." (`feedback-header-animated.tsx:300-308`), wrong advice inside
+  the hour. Smallest fix: throw the app's rate-limit error (429) and map it to
+  a "too many posts, try again later" line in the composer. Runs in
+  product-isolated. owner: unassigned, review by: 2026-12-03.

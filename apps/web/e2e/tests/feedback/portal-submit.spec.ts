@@ -3,12 +3,18 @@
  * held posts, the author's edit and delete, uploads and the post.created
  * webhook.
  *
- * Journeys: FBP-S-01
+ * Journeys: FBP-S-01 FBP-S-02 FBP-S-03 FBP-S-04 FBP-S-05 FBP-S-06 FBP-S-07
+ * FBP-S-08 FBP-S-09 FBP-S-10 FBP-S-11 FBP-S-12 FBP-S-13 FBP-S-14 FBP-S-16
+ * FBP-S-21 FBP-S-22 FBP-S-24 FBP-S-25
  */
+import type { Browser } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { fromUuid, generateId } from '@quackback/ids'
 import { supportDb } from '../../support/db'
 import { sink } from '../../support/webhook-sink-client'
+import { ISOLATED, ISOLATED_SKIP } from '../../support/automation'
+import { withSettings } from '../../support/isolated-settings'
+import { mintCustomer } from '../../support/widget-portal'
 import {
   bodyOf,
   deliveriesOf,
@@ -22,6 +28,8 @@ import {
   cardFor,
   createBoard,
   fbFn,
+  ipFor,
+  personContext,
   portalCustomer,
   postByTitle,
   postPath,
@@ -37,6 +45,9 @@ import {
   visitor,
   wordFor,
 } from '../../product/feedback-portal'
+
+const ANON_ON = { portal_config: { 'features.allowAnonymous': true } }
+const ANON_OFF = { portal_config: { 'features.allowAnonymous': false } }
 
 test.describe('portal submit', () => {
   test(
@@ -529,4 +540,399 @@ test.describe('portal submit', () => {
       }
     }
   )
+
+  test(
+    'FBP-S-09 on the whole feed the composer picks a board and leaves read-only boards out',
+    { tag: '@nightly' },
+    async ({ browser, marker }) => {
+      const board = await createBoard(marker, { name: `${marker} Picked` })
+      const closed = await createBoard(marker, {
+        suffix: 'ro',
+        name: `${marker} Closed`,
+        readOnly: true,
+      })
+      const cass = await portalCustomer(browser, marker)
+      const page = cass.page
+      await page.goto('/')
+      const title = `${marker} picked board`
+      await startPost(page, title)
+      const picker = page.getByLabel(/^Posting to/).getByRole('combobox')
+      await picker.click()
+      await expect(page.getByRole('option', { name: closed.name })).toHaveCount(0)
+      await page.getByRole('option', { name: board.name }).click()
+      await expect(page.getByLabel(`Posting to ${board.name}`)).toBeVisible()
+      await page.getByRole('button', { name: 'Post', exact: true }).click()
+      await expect(toastWith(page, 'Feedback submitted')).toBeVisible()
+      expect(await postByTitle(board, title)).not.toBeNull()
+    }
+  )
+
+  test(
+    'FBP-S-12 similar posts: title length bounds, and only posts the caller may see',
+    { tag: '@nightly' },
+    async ({ browser, marker, playwright }) => {
+      const word = wordFor(marker)
+      const board = await createBoard(marker)
+      const teamBoard = await createBoard(marker, { suffix: 'team', access: { view: 'team' } })
+      const cass = await portalCustomer(browser, marker)
+      const title = (s: string) => `${word} calendar sync ${s}`
+      const visible = await seedPost(board, { title: title('visible') })
+      const ownHeld = await seedPost(board, {
+        title: title('own held'),
+        moderationState: 'pending',
+        authorPrincipalUuid: cass.principalUuid,
+      })
+      await seedPost(board, { title: title('other held'), moderationState: 'pending' })
+      await seedPost(board, { title: title('deleted'), deletedAt: new Date() })
+      await seedPost(teamBoard, { title: title('team only') })
+      const canonical = await seedPost(board, { title: `${marker} canonical elsewhere` })
+      const merged = await seedPost(board, { title: title('merged') })
+      await restPost(await adminRest(playwright, marker), `/posts/${merged.id}/merge`, {
+        canonicalPostId: canonical.id,
+      })
+
+      const similar = (t: string) =>
+        fbFn<Array<{ id: string; title: string }>>(
+          cass.request,
+          'publicPosts',
+          'findSimilarPostsFn',
+          {
+            title: t,
+            limit: 10,
+          }
+        )
+      expect((await similar('ab')).error).toBeDefined()
+      expect((await similar('x'.repeat(201))).error).toBeDefined()
+      const found = await similar(`${word} calendar sync`)
+      expect(found.error).toBeUndefined()
+      const mine = (found.value ?? []).filter((p) => p.title.startsWith(word)).map((p) => p.id)
+      expect(mine.sort()).toEqual([visible.id, ownHeld.id].sort())
+    }
+  )
+
+  test(
+    'FBP-S-13 a search with no result hands its words to the composer as the title',
+    { tag: '@nightly' },
+    async ({ browser, marker }) => {
+      const word = wordFor(marker)
+      const board = await createBoard(marker)
+      const cass = await portalCustomer(browser, marker)
+      await cass.page.goto(`/?board=${board.slug}&search=${word}%20export`)
+      const create = cass.page.getByRole('button', { name: 'Create a post from it' })
+      await expect(async () => {
+        await create.click()
+        await expect(titleBox(cass.page)).toHaveValue(`${word} export`, { timeout: 2_000 })
+      }).toPass({ timeout: 20_000 })
+      await expect(titleBox(cass.page)).toBeInViewport()
+      await cass.page.getByRole('button', { name: 'Post', exact: true }).click()
+      await expect(toastWith(cass.page, 'Feedback submitted')).toBeVisible()
+      expect(await postByTitle(board, `${word} export`)).not.toBeNull()
+    }
+  )
+
+  test(
+    'FBP-S-22 uploads: no session is refused, a signed-in customer gets a public URL',
+    { tag: '@nightly' },
+    async ({ browser, marker }) => {
+      const png = {
+        name: 'dot.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          'base64'
+        ),
+      }
+      const anon = await visitor(browser, marker)
+      const none = await anon.request.post('/api/portal/upload', { multipart: { file: png } })
+      expect(none.status()).toBe(401)
+      const cass = await portalCustomer(browser, marker)
+      const ok = await cass.request.post('/api/portal/upload', { multipart: { file: png } })
+      expect(ok.status(), await ok.text()).toBe(200)
+      expect(await ok.json()).toMatchObject({
+        publicUrl: expect.stringMatching(/portal-media\/.+dot\.png$/),
+      })
+      const bad = await cass.request.post('/api/portal/upload', {
+        multipart: {
+          file: { name: 'x.exe', mimeType: 'application/x-msdownload', buffer: Buffer.from('MZ') },
+        },
+      })
+      expect(bad.status()).toBe(400)
+    }
+  )
+
+  test(
+    'FBP-S-22 an anonymous session cannot upload while anonymous posting is off',
+    {
+      tag: ['@nightly', '@quarantine'],
+      annotation: {
+        type: 'quarantine',
+        description:
+          'FBP-B13: /api/portal/upload accepts any session with a principal, ignoring the workspace anonymous switch',
+      },
+    },
+    async ({ browser, marker }) => {
+      // The workspace anonymous switch is off on a fresh seed (portal_config NULL).
+      const ghost = await mintCustomer({ anonymous: true })
+      const ctx = await personContext(browser, ghost.userUuid, marker)
+      const res = await ctx.request.post('/api/portal/upload', {
+        multipart: {
+          file: {
+            name: 'dot.png',
+            mimeType: 'image/png',
+            buffer: Buffer.from(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+              'base64'
+            ),
+          },
+        },
+      })
+      expect(res.status()).toBe(403)
+    }
+  )
+
+  test(
+    'FBP-S-24 public post metadata is bounded',
+    {
+      tag: ['@nightly', '@quarantine'],
+      annotation: {
+        type: 'quarantine',
+        description:
+          'FBP-B14: createPublicPostSchema.metadata is an unbounded string map stored as widget_metadata',
+      },
+    },
+    async ({ browser, marker }) => {
+      const board = await createBoard(marker)
+      const cass = await portalCustomer(browser, marker)
+      const metadata: Record<string, string> = {}
+      for (let i = 0; i < 2000; i++) metadata[`k${i}`] = 'v'.repeat(200)
+      const res = await fbFn(cass.request, 'publicPosts', 'createPublicPostFn', {
+        boardId: board.id,
+        title: `${marker} heavy metadata`,
+        metadata,
+      })
+      // 2,000 keys of 200 characters (400 KB) must be refused.
+      expect(res.error).toBeDefined()
+      expect(await postByTitle(board, `${marker} heavy metadata`)).toBeNull()
+    }
+  )
+
+  /** Post to a holding board through the composer as a fresh customer. */
+  async function postHeld(browser: Browser, marker: string) {
+    const board = await createBoard(marker, { access: { moderation: { signedPosts: 'on' } } })
+    const cass = await portalCustomer(browser, marker)
+    await cass.page.goto(`/?board=${board.slug}`)
+    const title = `${marker} awaiting review`
+    await startPost(cass.page, title)
+    await cass.page.getByRole('button', { name: 'Post', exact: true }).click()
+    return { page: cass.page, title }
+  }
+
+  test(
+    'FBP-S-14 the confirmation of a held post tells the author it awaits review',
+    {
+      tag: ['@core', '@quarantine'],
+      annotation: {
+        type: 'quarantine',
+        description:
+          'FBP-B07: a held post gets the same "Feedback submitted" toast as a published one, with no hint it waits for review',
+      },
+    },
+    async ({ browser, marker }) => {
+      const { page } = await postHeld(browser, marker)
+      await expect(page.locator('[data-sonner-toast]').first()).toContainText(/review/i)
+    }
+  )
+
+  test(
+    "FBP-S-14 the held post's panel does not tell its author that customers cannot see it",
+    {
+      tag: ['@core', '@quarantine'],
+      annotation: {
+        type: 'quarantine',
+        description:
+          'FBP-B06: inline-moderation-actions renders the moderator copy "Customers cannot see this post yet." to the author',
+      },
+    },
+    async ({ browser, marker }) => {
+      const { page, title } = await postHeld(browser, marker)
+      const card = cardFor(page, title)
+      await expect(card.getByText('Pending review')).toBeVisible()
+      await expect(card.getByText('Customers cannot see this post yet.')).toHaveCount(0)
+    }
+  )
+
+  test.describe('anonymous posting (workspace switch)', () => {
+    test.beforeEach(() => {
+      test.skip(!ISOLATED, ISOLATED_SKIP)
+    })
+
+    test(
+      'FBP-S-05 a signed-out visitor posts anonymously: a session is minted and no email is kept',
+      { tag: ['@core', '@isolated'] },
+      async ({ browser, marker }) => {
+        await withSettings(ANON_ON, async () => {
+          const board = await createBoard(marker)
+          const anon = await visitor(browser, marker)
+          const page = anon.page
+          await page.goto(`/?board=${board.slug}`)
+          const title = `${marker} anon idea`
+          await startPost(page, title)
+          await expect(page.getByText('Posting anonymously')).toBeVisible()
+          await page.getByRole('button', { name: 'Post', exact: true }).click()
+          await expect(toastWith(page, 'Feedback submitted')).toBeVisible()
+          await expect(cardFor(page, title)).toBeVisible()
+          const row = await postByTitle(board, title)
+          expect(row).toMatchObject({ moderation_state: 'published', vote_count: 1 })
+          const [author] = await supportDb()`SELECT p.type, u.email FROM principal p
+            JOIN "user" u ON u.id = p.user_id WHERE p.id = ${row?.principal_id as string}`
+          expect(author.type).toBe('anonymous')
+          expect(author.email).toMatch(/^temp-[^@]+@anon(\.|$)/)
+          const cookies = await anon.context.cookies()
+          expect(cookies.some((c) => c.name.includes('session_token'))).toBe(true)
+        })
+      }
+    )
+
+    test(
+      'FBP-S-06 with the anonymous switch off the composer asks to sign in and the server refuses',
+      { tag: ['@core', '@isolated'] },
+      async ({ browser, marker }) => {
+        await withSettings(ANON_OFF, async () => {
+          const board = await createBoard(marker)
+          const post = await seedPost(board, { title: `${marker} still visible` })
+          const anon = await visitor(browser, marker)
+          await anon.page.goto(`/?board=${board.slug}`)
+          // Viewing is never ceilinged.
+          await expect(cardFor(anon.page, post.title)).toBeVisible()
+          await startPost(anon.page, `${marker} try`)
+          await expect(anon.page.getByRole('button', { name: 'Sign in to post' })).toBeVisible()
+          await titleBox(anon.page).press('ControlOrMeta+Enter')
+          await expect(anon.page.getByText('Please sign in to submit feedback')).toBeVisible()
+
+          const ghost = await mintCustomer({ anonymous: true })
+          const ctx = await personContext(browser, ghost.userUuid, marker)
+          const res = await fbFn(ctx.request, 'publicPosts', 'createPublicPostFn', {
+            boardId: board.id,
+            title: `${marker} crafted`,
+          })
+          expect(res.error).toMatchObject({
+            code: 'ANONYMOUS_NOT_ALLOWED',
+            message: 'Anonymous interaction is not enabled',
+          })
+          expect(await postByTitle(board, `${marker} crafted`)).toBeNull()
+        })
+      }
+    )
+
+    test(
+      'FBP-S-06 an anonymous comment is refused with the same code as an anonymous post or vote',
+      {
+        tag: ['@core', '@isolated', '@quarantine'],
+        annotation: {
+          type: 'quarantine',
+          description:
+            'FBP-B04: comments throw ANONYMOUS_NOT_ENABLED while posts and votes throw ANONYMOUS_NOT_ALLOWED for the same rule',
+        },
+      },
+      async ({ browser, marker }) => {
+        await withSettings(ANON_OFF, async () => {
+          const board = await createBoard(marker)
+          const post = await seedPost(board, { title: `${marker} comment target` })
+          const ghost = await mintCustomer({ anonymous: true })
+          const ctx = await personContext(browser, ghost.userUuid, marker)
+          const res = await fbFn(ctx.request, 'comments', 'createCommentFn', {
+            postId: post.id,
+            content: 'anonymous words',
+          })
+          expect(res.error?.code).toBe('ANONYMOUS_NOT_ALLOWED')
+        })
+      }
+    )
+
+    test(
+      'FBP-S-07 the sixth anonymous post from one address in an hour is refused, whatever the identity',
+      { tag: ['@nightly', '@isolated'] },
+      async ({ browser, marker }) => {
+        await withSettings(ANON_ON, async () => {
+          const board = await createBoard(marker)
+          const ip = ipFor(marker, 'cap')
+          for (let i = 0; i < 6; i++) {
+            // A fresh anonymous identity every time: the cap is per address.
+            const ghost = await mintCustomer({ anonymous: true })
+            const ctx = await personContext(browser, ghost.userUuid, `${marker}-${i}`)
+            const res = await fbFn(
+              ctx.request,
+              'publicPosts',
+              'createPublicPostFn',
+              { boardId: board.id, title: `${marker} anon ${i}` },
+              { ip }
+            )
+            if (i < 5) expect(res.error, `post ${i}`).toBeUndefined()
+            else
+              expect(res.error).toMatchObject({
+                code: 'RATE_LIMITED',
+                message: 'Too many posts, please try again later',
+              })
+          }
+          expect(await postByTitle(board, `${marker} anon 5`)).toBeNull()
+          // A signed-in customer from the same address is not limited.
+          const cass = await portalCustomer(browser, marker)
+          const ok = await fbFn(
+            cass.request,
+            'publicPosts',
+            'createPublicPostFn',
+            { boardId: board.id, title: `${marker} signed in` },
+            { ip }
+          )
+          expect(ok.error).toBeUndefined()
+        })
+      }
+    )
+
+    test(
+      'FBP-S-07 the anonymous post cap answers as a rate limit, and the composer says so',
+      {
+        tag: ['@nightly', '@isolated', '@quarantine'],
+        annotation: {
+          type: 'quarantine',
+          description:
+            'FBP-B04: RATE_LIMITED is thrown as a ValidationError (400) and the composer shows the generic retry line',
+        },
+      },
+      async ({ browser, marker }) => {
+        await withSettings(ANON_ON, async () => {
+          const board = await createBoard(marker)
+          const anon = await visitor(browser, marker)
+          for (let i = 0; i < 5; i++) {
+            const ghost = await mintCustomer({ anonymous: true })
+            const ctx = await personContext(browser, ghost.userUuid, `${marker}-${i}`)
+            await fbFn(
+              ctx.request,
+              'publicPosts',
+              'createPublicPostFn',
+              { boardId: board.id, title: `${marker} anon ${i}` },
+              { ip: anon.ip }
+            )
+          }
+          const ghost = await mintCustomer({ anonymous: true })
+          const ctx = await personContext(browser, ghost.userUuid, `${marker}-6`)
+          const res = await fbFn(
+            ctx.request,
+            'publicPosts',
+            'createPublicPostFn',
+            { boardId: board.id, title: `${marker} anon 6` },
+            { ip: anon.ip }
+          )
+          expect(res.error).toMatchObject({ code: 'RATE_LIMITED', statusCode: 429 })
+          await anon.page.goto(`/?board=${board.slug}`)
+          await startPost(anon.page, `${marker} from the page`)
+          await anon.page.getByRole('button', { name: 'Post', exact: true }).click()
+          await expect(anon.page.getByText(/too many|try again later/i).first()).toBeVisible()
+          await expect(
+            anon.page.getByText('Could not submit your feedback. Please try again.')
+          ).toHaveCount(0)
+        })
+      }
+    )
+  })
 })
