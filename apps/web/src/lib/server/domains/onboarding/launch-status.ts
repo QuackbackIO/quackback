@@ -72,9 +72,11 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
       .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member']))),
     db.query.settings.findFirst(),
     getWidgetConfig(),
+    // Writers store 'active' or 'paused' (a pending row never finished
+    // connecting). A paused one is still installed, so it counts.
     db.query.integrations.findFirst({
       columns: { id: true },
-      where: eq(integrations.status, 'connected'),
+      where: inArray(integrations.status, ['active', 'paused']),
     }),
     // The help center step is to publish: a draft does not complete it.
     db.query.helpCenterArticles.findFirst({
