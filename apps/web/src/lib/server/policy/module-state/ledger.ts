@@ -378,6 +378,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'for up to the copy lifetime.',
   },
   {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'forgets',
+    category: 'process-lifetime',
+    reason:
+      'A counter of cache drops in this process, holding no workspace data. A read compares it before and after to decide whether to keep its local copy; shared across workspaces, a drop in one workspace only makes another skip keeping one copy, which costs a cache read and never serves wrong data.',
+  },
+  {
     file: 'apps/web/src/lib/server/domains/settings/settings.service.ts',
     name: 'derivedFromSettings',
     category: 'workspace-scoped-key',
