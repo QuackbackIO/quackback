@@ -927,7 +927,8 @@ test.describe('REST segment members', () => {
         }),
         200
       )
-      expect(again.data).toEqual({ added: 1, failed: [] })
+      // Already a member: nothing is added, and the manual row is kept.
+      expect(again.data).toEqual({ added: 0, failed: [] })
       expect((await segmentRows(seg.uuid)).get(toUuid(u3.principalId))).toBe('manual')
       await admin.api.dispose()
     }
