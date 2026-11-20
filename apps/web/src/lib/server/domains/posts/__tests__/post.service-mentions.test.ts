@@ -67,7 +67,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     return c
   }
 
-  // Used by updatePost. Echoes back a fake "updated post" using the contentJson
+  // Used by updatePost inside its transaction. Echoes back a fake "updated post" using the contentJson
   // captured from the call site via updateReturningContentJson.
   const update = vi.fn(() => ({
     set: vi.fn(() => ({
@@ -160,7 +160,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         return fn(tx)
       }),
       select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
-      update,
       delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
       insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
     },

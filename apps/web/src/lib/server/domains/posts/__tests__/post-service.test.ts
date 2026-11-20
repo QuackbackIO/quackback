@@ -26,6 +26,11 @@ const dbDelete = vi.fn(() => ({ where: deleteWhere }))
 const insertValues = vi.fn()
 const dbInsert = vi.fn(() => ({ values: insertValues }))
 
+// The transaction handle has its own write spies, so a test can tell a write
+// made inside the transaction from one made on the bare db.
+const txDelete = vi.fn(() => ({ where: deleteWhere }))
+const txInsert = vi.fn(() => ({ values: insertValues }))
+
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 
@@ -44,7 +49,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       delete: dbDelete,
       insert: dbInsert,
       transaction: (fn: (tx: unknown) => unknown) =>
-        fn({ update: dbUpdate, delete: dbDelete, insert: dbInsert }),
+        fn({ update: dbUpdate, delete: txDelete, insert: txInsert }),
     },
     eq: vi.fn(),
     inArray: vi.fn(),
@@ -86,6 +91,10 @@ describe('post.service updatePost', () => {
     updateReturning.mockReset()
     deleteWhere.mockReset()
     insertValues.mockReset()
+    dbDelete.mockClear()
+    dbInsert.mockClear()
+    txDelete.mockClear()
+    txInsert.mockClear()
 
     mockPostsFindFirst.mockResolvedValue({
       id: 'post_123' as PostId,
@@ -226,6 +235,22 @@ describe('post.service updatePost', () => {
         metadata: { tagNames: ['Old tag'] },
       })
     )
+  })
+
+  it('replaces the tags inside the transaction, never on the bare db', async () => {
+    const { updatePost } = await import('../post.service')
+
+    await updatePost(
+      'post_123' as PostId,
+      { tagIds: ['tag_new' as PostTagId] },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+
+    expect(txDelete).toHaveBeenCalledOnce()
+    expect(txInsert).toHaveBeenCalledOnce()
+    expect(insertValues).toHaveBeenCalledWith([{ postId: 'post_123', tagId: 'tag_new' }])
+    expect(dbDelete).not.toHaveBeenCalled()
+    expect(dbInsert).not.toHaveBeenCalled()
   })
 
   it('emits the owner event when a teammate assigns a post to themselves', async () => {
