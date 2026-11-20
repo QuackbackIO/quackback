@@ -532,3 +532,20 @@ no such part beyond the wrong notification).
   `vote_count` from `post_votes` for every post the dropped votes touched.
   Runs in product-isolated (needs the widget on). owner: unassigned, review
   by: 2026-12-03.
+- `feedback/portal-feed.spec.ts` › FBP-L-24 the author's held post shows its
+  pending panel on the first server-rendered feed page (FBP-B03).
+  `fetchPortalData` maps the first feed page field by field and leaves out
+  `moderationState` (and `pinnedAt`)
+  (`apps/web/src/lib/server/functions/portal.ts:257-270`), while later pages
+  spread the whole row (`public-posts.ts:170-176`). The card reads
+  `post.moderationState` (`feedback-container.tsx:650`), so the author's own
+  held post has no "Pending review" panel until the feed refetches. Smallest
+  fix: add `moderationState: post.moderationState` (and `pinnedAt`) to that
+  map. owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-feed.spec.ts` › FBP-L-15 a hand-edited bad minVotes or
+  dateFrom is ignored like a bad sort (FBP-B02). `?minVotes=abc` answers HTTP
+  500 (red run: expected 200, received 500): the route's search schema gives
+  `minVotes` and `dateFrom` no `.catch`
+  (`apps/web/src/routes/_portal/index.tsx:32-37`) while `sort` and `view` have
+  one. Smallest fix: `.optional().catch(undefined)` on both. owner:
+  unassigned, review by: 2026-12-03.
