@@ -534,3 +534,59 @@ proved by a separate test that is not quarantined where one exists.
   `list_suggestions`, which the server does not register, against 43 served
   (`apps/web/src/components/admin/settings/mcp/mcp-setup-guide.tsx`
   `MCP_TOOLS`). owner: unassigned, review by: 2026-12-03.
+
+### Product suite: status page
+
+Each test asserts the right behaviour. Where the rest of a journey works, a
+separate test that is not quarantined proves it (STA-A-30 and STA-S-23 have
+no such part beyond the wrong notification).
+
+- `status/admin-incidents.spec.ts` › STA-A-30 an incident created already
+  resolved announces nothing. `createIncident` sets
+  `notifySubscribers = !backfilled && (input.notifySubscribers ?? true)`
+  (`apps/web/src/lib/server/domains/status/status.service.ts:242`) without
+  looking at the status, so a non-backfill incident created `resolved` (or a
+  window created `completed`) writes `status.incident_created` and emails
+  subscribers "New incident reported" for something already over. Fix: treat a
+  terminal create status like a backfill for notification (no event, no
+  email). owner: unassigned, review by: 2026-12-03.
+- `status/admin-incidents.spec.ts` › STA-A-33 editor deep link to a malformed
+  id says not found. `getStatusIncidentAdminFn` passes the raw id to
+  `findStatusIncidentById`
+  (`apps/web/src/lib/server/domains/status/status.service.ts:866`), whose
+  TypeID conversion throws, so the fn errors ("Something went wrong on our
+  side") and the editor shows "Couldn't load this incident" with Try again.
+  Fix: return null for an id that fails `isTypeId(id, 'status_incident')`, as
+  the public path does. owner: unassigned, review by: 2026-12-03.
+- `status/admin-maintenance.spec.ts` › STA-A-46 a maintenance window with no
+  dates is refused. `createIncident`
+  (`apps/web/src/lib/server/domains/status/status.service.ts:183`) and the
+  REST create accept `kind: 'maintenance'` with no `scheduledStartAt` or
+  `scheduledEndAt`: no job is ever enqueued, so the window stays "scheduled"
+  (and in Upcoming maintenance) forever, and its email reads "<blank> to
+  <blank>". The schedule dialog requires both bounds for exactly this reason.
+  Fix: refuse a maintenance create without both bounds (VALIDATION_ERROR).
+  owner: unassigned, review by: 2026-12-03.
+- `status/admin-templates.spec.ts` › STA-A-49 a blank template name is
+  refused with the Name field named. The template name goes through
+  `validateTitle` (`apps/web/src/lib/server/domains/status/status.service.ts:1161`
+  and `:1191`), so a blank name is refused with "Title is required" (and a long
+  one with "Title must not exceed 200 characters") while the field is "Template
+  name". Fix: a `validateName`-style check with "Name is required". owner:
+  unassigned, review by: 2026-12-03.
+- `status/admin-subscribers.spec.ts` › STA-A-53 every row of a large import is
+  listed across pages. A CSV import inserts every row in one transaction, so
+  they share one `created_at`; `listStatusSubscriptions` orders by `created_at`
+  only and pages with `created_at < cursor`
+  (`apps/web/src/lib/server/domains/status/status.subscription.ts:210`, `:236`),
+  so page 2 skips the rest of the import (35 imported, 30 listed; the export
+  has all 35). Fix: order by `(created_at, id)` and page on the pair. owner:
+  unassigned, review by: 2026-12-03.
+- `status/admin-overview.serial.spec.ts` › STA-A-57 the overview banner shows
+  what visitors see. `getStatusOverviewAdminFn` derives `topLevelStatus` from
+  every service (`apps/web/src/lib/server/functions/status.ts:624`), segment
+  gated and plan hidden ones included, so with only a gated service down the
+  "Visitors currently see" banner says "Major system outage" while anonymous
+  visitors see "All systems operational". Fix: derive it from the anonymous
+  projection (`getStatusPageSnapshot(ANONYMOUS_ACTOR, …).topLevel`), or relabel
+  the banner. owner: unassigned, review by: 2026-12-03.

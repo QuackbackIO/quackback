@@ -56,5 +56,17 @@ setup('prepare the product suite', async ({ request }) => {
   // The app is up and is the production build the suite expects.
   const ready = await request.get('/api/health/ready')
   expect(ready.status()).toBe(200)
+  // A request that read the settings row before the writes above can put the
+  // old row back in the shared cache after the bust. Bust until the app serves
+  // the published status page to a signed-out visitor.
+  await expect
+    .poll(
+      async () => {
+        await bustSettingsCache()
+        return (await request.get('/status')).status()
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(200)
   await closeSupportDb()
 })
