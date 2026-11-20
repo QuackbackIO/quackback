@@ -45,7 +45,13 @@ export async function shippedPost(
   rest: APIRequestContext,
   marker: string,
   title = `${marker} shipped post`
-): Promise<{ id: string; title: string; boardSlug: string; statusName: string }> {
+): Promise<{
+  id: string
+  title: string
+  boardSlug: string
+  statusName: string
+  statusSlug: string
+}> {
   const slug = `${marker}-${generateId('board').slice(-6)}`
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
@@ -55,7 +61,7 @@ export async function shippedPost(
       201
     )
   ).data
-  const [status] = await supportDb()`SELECT id, name FROM post_statuses
+  const [status] = await supportDb()`SELECT id, name, slug FROM post_statuses
     WHERE category = 'complete' AND deleted_at IS NULL ORDER BY position LIMIT 1`
   const post = (
     await expectJson(
@@ -65,7 +71,13 @@ export async function shippedPost(
       201
     )
   ).data
-  return { id: post.id, title, boardSlug: board.slug, statusName: String(status.name) }
+  return {
+    id: post.id,
+    title,
+    boardSlug: board.slug,
+    statusName: String(status.name),
+    statusSlug: String(status.slug),
+  }
 }
 
 /** A manual segment with these principals (uuid) in it. Returns its TypeID. */
