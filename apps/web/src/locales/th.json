@@ -218,6 +218,7 @@
   "admin.auditLog.via.workflow": "ผ่านเวิร์กโฟลว์",
   "admin.auditLog.via.system": "ผ่านระบบ",
   "admin.auditLog.via.onBehalfOf": "ในนามของ {name}",
+  "admin.inbox.message.viaApi": "ผ่าน API",
   "portal.header.nav.feedback": "ความคิดเห็น",
   "portal.header.nav.roadmap": "แผนพัฒนา",
   "portal.header.nav.changelog": "บันทึกการเปลี่ยนแปลง",

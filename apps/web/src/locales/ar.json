@@ -202,6 +202,7 @@
   "admin.auditLog.via.workflow": "عبر سير العمل",
   "admin.auditLog.via.system": "عبر النظام",
   "admin.auditLog.via.onBehalfOf": "نيابةً عن {name}",
+  "admin.inbox.message.viaApi": "عبر API",
   "portal.header.nav.feedback": "الملاحظات",
   "portal.header.nav.roadmap": "خارطة الطريق",
   "portal.header.nav.changelog": "آخر المستجدات",

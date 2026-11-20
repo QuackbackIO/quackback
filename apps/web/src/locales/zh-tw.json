@@ -202,6 +202,7 @@
   "admin.auditLog.via.workflow": "透過自動化流程",
   "admin.auditLog.via.system": "透過系統",
   "admin.auditLog.via.onBehalfOf": "代表 {name}",
+  "admin.inbox.message.viaApi": "透過 API",
   "portal.header.nav.feedback": "意見回饋",
   "portal.header.nav.roadmap": "產品藍圖",
   "portal.header.nav.changelog": "更新日誌",
