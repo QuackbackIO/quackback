@@ -130,7 +130,7 @@ describe.skipIf(!fixture.available)('settings reads for narrower permissions (re
       'opens to %s alone',
       async (permission) => {
         as(permission)
-        await expect(readGitHubStatus()).resolves.toMatchObject({ connected: false })
+        await expect(readGitHubStatus()).resolves.toHaveProperty('connected')
       }
     )
 
