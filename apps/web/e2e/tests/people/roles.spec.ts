@@ -67,10 +67,17 @@ test.describe('presets and authoring', () => {
       const name = `Role ${marker}`.slice(0, 60)
       const page = await asPerson('admin')
       await page.goto('/admin/settings/members/roles/new')
+      // Retried until the editor has hydrated (an early fill is reset by it).
+      await expect(async () => {
+        const box = page.getByRole('checkbox', { name: 'member.view', exact: true })
+        if (!(await box.isVisible()))
+          await page.getByRole('button', { name: /^Members \d+ of/ }).click()
+        await box.check({ timeout: 2_000 })
+        await expect(box).toBeChecked()
+      }).toPass({ timeout: 20_000 })
       await page.getByLabel('Name').fill(name)
       await page.getByLabel('Description').fill('people e2e')
-      await page.getByPlaceholder(/^Filter \d+ permissions/).fill('member.view')
-      await page.getByRole('checkbox', { name: 'member.view' }).check()
+      await expect(page.getByLabel('Name')).toHaveValue(name)
       await page.getByRole('button', { name: 'Create role' }).click()
       await expect(page.getByText('Role created')).toBeVisible({ timeout: 15_000 })
 

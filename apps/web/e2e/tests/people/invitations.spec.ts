@@ -23,7 +23,10 @@ import {
   roleIdOf,
   roleOf,
   suffix,
+  closePortalUsers,
 } from '../../product/people-team'
+
+test.afterEach(() => closePortalUsers())
 
 function inviteeEmail(marker: string): string {
   return `${marker}-${suffix()}@invitees.example`

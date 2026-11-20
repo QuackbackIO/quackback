@@ -22,7 +22,7 @@ import {
 import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { supportDb } from '../support/db'
 import { supportEnv } from '../support/env'
-import { apiFor, createKey } from '../support/api-client'
+import { apiFor, clientIp, createKey } from '../support/api-client'
 import { callServerFn, type ServerFnResult } from '../support/server-fns'
 import { mintCustomer, portalContext, type MintedCustomer } from '../support/widget-portal'
 
@@ -69,7 +69,16 @@ export interface PortalUser extends MintedCustomer {
   api: APIRequestContext
 }
 
-/** A fresh identified portal user with a live session (portal cookie). */
+const openContexts = new Set<BrowserContext>()
+
+/** Close every portal user's browser context this worker opened (afterEach). */
+export async function closePortalUsers(): Promise<void> {
+  const open = [...openContexts]
+  openContexts.clear()
+  await Promise.all(open.map((c) => c.close().catch(() => {})))
+}
+
+/** A fresh identified portal user with a live session (portal cookie). Close with closePortalUsers. */
 export async function portalUser(
   browser: Browser,
   marker: string,
@@ -81,6 +90,9 @@ export async function portalUser(
     name: opts.name ?? `Person ${marker} ${s}`,
   })
   const context = await portalContext(browser, customer)
+  // Its own client address, so per-address rate limits never couple tests.
+  await context.setExtraHTTPHeaders({ 'x-e2e-client-ip': clientIp() })
+  openContexts.add(context)
   return { ...customer, context, api: context.request }
 }
 

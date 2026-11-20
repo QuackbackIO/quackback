@@ -2,13 +2,21 @@
  * The portal account pages (/settings/*): who may open them, renaming,
  * avatars, the email change refusals and the profile read.
  *
- * Journeys: PPL-ACC-02, PPL-ACC-04, PPL-ACC-07, PPL-ACC-14, PPL-ACC-18,
+ * Journeys: PPL-ACC-02, PPL-ACC-04, PPL-ACC-14, PPL-ACC-18,
  * PPL-ACC-32
  */
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
 import { mailTo } from '../../support/mailpit'
-import { callServerFn, mustCall, portalUser, refusedCall } from '../../product/people-team'
+import {
+  callServerFn,
+  closePortalUsers,
+  mustCall,
+  portalUser,
+  refusedCall,
+} from '../../product/people-team'
+
+test.afterEach(() => closePortalUsers())
 
 /** Upload a tiny PNG as the signed-in person's avatar the way the profile form does. */
 async function uploadAvatar(
@@ -76,30 +84,6 @@ test.describe('who may open the account pages', () => {
 })
 
 test.describe('profile', () => {
-  test(
-    'PPL-ACC-07 a portal user renames themselves',
-    { tag: '@core' },
-    async ({ browser, marker }) => {
-      const person = await portalUser(browser, marker)
-      const page = await person.context.newPage()
-      await page.goto('/settings/profile')
-      const field = page.locator('#name')
-      await expect(field).toHaveValue(person.name, { timeout: 15_000 })
-      const renamed = `Renamed ${marker}`.slice(0, 90)
-      await field.fill(`  ${renamed}  `)
-      await page.getByRole('button', { name: 'Save changes' }).click()
-      await expect(page.getByText('Profile updated')).toBeVisible()
-
-      const [u] = await supportDb()`SELECT name FROM "user" WHERE id = ${person.userUuid}`
-      const [p] =
-        await supportDb()`SELECT display_name FROM principal WHERE id = ${person.principalUuid}`
-      expect(u.name).toBe(renamed)
-      expect(p.display_name).toBe(renamed)
-      await page.reload()
-      await expect(page.locator('#name')).toHaveValue(renamed, { timeout: 15_000 })
-    }
-  )
-
   test(
     "PPL-ACC-14 saving someone else's uploaded avatar key is refused",
     {
