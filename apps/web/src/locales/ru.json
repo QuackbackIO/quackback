@@ -1477,7 +1477,7 @@
   "ask.results.filter.person": "Люди",
   "ask.results.filter.teammate": "Коллеги",
   "ask.results.filter.company": "Компании",
-  "apiKeys.scopes.settingsDescription": "Брендинг, Messenger, модули и рабочие часы",
+  "apiKeys.scopes.settingsDescription": "Брендинг, Messenger, модули, рабочие часы и вебхуки",
   "apiKeys.scopes.settingsRead": "Настройки: чтение",
   "apiKeys.scopes.settingsReadWrite": "Настройки: чтение и запись",
   "apiKeys.scopes.readWrite": "Чтение и запись",

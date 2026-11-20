@@ -1851,7 +1851,7 @@
   "ask.results.filter.teammate": "เพื่อนร่วมทีม",
   "ask.results.filter.company": "บริษัท",
   "apiKeys.scopes.settings": "การตั้งค่า",
-  "apiKeys.scopes.settingsDescription": "แบรนด์ แชต โมดูล และเวลาทำการ",
+  "apiKeys.scopes.settingsDescription": "แบรนด์ แชต โมดูล เวลาทำการ และเว็บฮุก",
   "apiKeys.scopes.settingsRead": "การตั้งค่า: อ่าน",
   "apiKeys.scopes.read": "อ่าน",
   "apiKeys.scopes.settingsReadWrite": "การตั้งค่า: อ่านและเขียน",

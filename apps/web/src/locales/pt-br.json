@@ -1476,7 +1476,7 @@
   "ask.results.filter.teammate": "Colegas de equipe",
   "ask.results.filter.company": "Empresas",
   "apiKeys.scopes.settings": "Configurações",
-  "apiKeys.scopes.settingsDescription": "Marca, Messenger, módulos e horário de atendimento",
+  "apiKeys.scopes.settingsDescription": "Marca, Messenger, módulos, horário de atendimento e webhooks",
   "apiKeys.scopes.settingsRead": "Configurações: leitura",
   "apiKeys.scopes.read": "Consultada",
   "apiKeys.scopes.settingsReadWrite": "Configurações: leitura e escrita",

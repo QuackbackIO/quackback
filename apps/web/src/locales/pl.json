@@ -1477,7 +1477,7 @@
   "ask.results.filter.person": "Osoby",
   "ask.results.filter.teammate": "Członkowie zespołu",
   "ask.results.filter.company": "Firmy",
-  "apiKeys.scopes.settingsDescription": "Wygląd marki, Messenger, moduły i godziny pracy",
+  "apiKeys.scopes.settingsDescription": "Wygląd marki, Messenger, moduły, godziny pracy i webhooki",
   "apiKeys.scopes.settingsRead": "Ustawienia: Odczyt",
   "apiKeys.scopes.settingsReadWrite": "Ustawienia: Odczyt i zapis",
   "apiKeys.scopes.readWrite": "Odczyt i zapis",

@@ -50,7 +50,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { permission: PERMISSIONS.WEBHOOK_MANAGE })
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.WEBHOOK_MANAGE })
 
           const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 
@@ -67,6 +67,14 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
             parsed.data.boardIds != null
               ? parseTypeIdArray<BoardId>(parsed.data.boardIds, 'board', 'board IDs')
               : parsed.data.boardIds
+
+          const { assertCanUpdateWebhookEvents } =
+            await import('@/lib/server/domains/webhooks/webhook-event-access')
+          await assertCanUpdateWebhookEvents(
+            webhookId,
+            { url: parsed.data.url, events: parsed.data.events },
+            { scopes: auth.apiKey.scopes, permissions: auth.permissions }
+          )
 
           const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
           const webhook = await updateWebhook(webhookId, {
