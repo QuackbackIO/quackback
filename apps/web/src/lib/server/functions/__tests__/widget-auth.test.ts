@@ -108,6 +108,19 @@ describe('getWidgetSession', () => {
     expect(result).toBeNull()
   })
 
+  // A password sign-in under required two-factor hands its caller this token
+  // before enrolment; it must not work as a widget identity either.
+  it('should return null for a session pending two-factor enrolment', async () => {
+    mockGet.mockReturnValue('Bearer valid-token-123')
+    mockSessionFindFirst.mockResolvedValue(
+      widgetSession({ scope: 'portal', twoFactorPending: true })
+    )
+    mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'user', type: 'user' })
+
+    const result = await getWidgetSession()
+    expect(result).toBeNull()
+  })
+
   it('normalizes the signed bearer form to the raw token for the lookup', async () => {
     // The auth library's set-auth-token header carries `<token>.<signature>`;
     // the DB stores the raw token, so the lookup must use the prefix.
