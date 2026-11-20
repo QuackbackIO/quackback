@@ -701,3 +701,43 @@ no such part beyond the wrong notification).
   `/api/auth/portal-signin` on the default settings passes only because of this
   bug; once fixed, the suite baseline must turn the method on. owner:
   unassigned, review by: 2026-12-03.
+- `people/auth-methods.spec.ts` › PPL-AUTH-24 a code refused by the sign-in
+  limit says to wait, not that the code is wrong. Product bug A-B6:
+  `/sign-in/email-otp` spends the same `signin:magiclink:<ip>:<email>` bucket
+  as the email send (`apps/web/src/lib/server/auth/hooks.ts:110`, `:230`), so
+  send + resend + one more send leaves the right code refused with 429
+  `rate_limited`, and `useEmailSignin`
+  (`apps/web/src/components/auth/use-email-signin.ts:113`) maps that to
+  "That code isn't right". Fix: map `rate_limited` to the wait copy (whether
+  code entry should share the send budget is an owner question). Runs in
+  product-isolated. owner: unassigned, review by: 2026-12-03.
+- `people/auth-methods.spec.ts` › PPL-AUTH-32 password method off refuses a
+  password sign-up. Product bug A-B3: the Layer B method gate returns early
+  when no principal exists (`apps/web/src/lib/server/auth/hooks.ts:415`), so
+  `/sign-up/email` creates a password account and a session while "Password"
+  is off. Fix: apply the password toggle to `/sign-up/email` before the
+  principal lookup. Runs in product-isolated. owner: unassigned, review by:
+  2026-12-03.
+- `people/auth-methods.spec.ts` › PPL-AUTH-151 required two-factor gives an
+  un-enrolled password sign-in no usable session. Product bug: "Require
+  two-factor authentication" ("Users must enter a code from their
+  authenticator app after their password.",
+  `apps/web/src/components/admin/settings/security/sign-in-providers-tab.tsx:249`)
+  is enforced only by the dialog
+  (`apps/web/src/components/auth/portal-auth-form-inline.tsx:501`); nothing on
+  the server reads `authConfig.twoFactor.required`, so a direct
+  `/api/auth/sign-in/email` returns a working session. Fix: in the sign-in
+  after-hook, when required and the user is not enrolled, issue only an
+  enrolment-scoped session (or refuse). Runs in product-isolated. owner:
+  unassigned, review by: 2026-12-03.
+- `people/auth-security.spec.ts` › PPL-AUTH-145 a removed admin cannot use
+  their recovery codes. Product bug: recovery codes (the admins' break-glass
+  for single sign-on) are only deleted with the user row; removing or demoting
+  a teammate sets `principal.role = 'user'` and leaves them working
+  (`apps/web/src/lib/server/auth/recovery-codes-status.ts:8`,
+  `apps/web/src/lib/server/functions/recovery-codes-consume.ts:126`), so the
+  code still signs the person in past "Require SSO" and still satisfies the
+  workspace break-glass check. Fix: refuse codes whose holder no longer has
+  auth.manage at consume time, and delete them on removal or demotion
+  (emitting the declared `sso.recovery_codes.invalidated`). owner:
+  unassigned, review by: 2026-12-03.
