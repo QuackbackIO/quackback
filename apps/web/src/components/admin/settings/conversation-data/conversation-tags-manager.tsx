@@ -87,7 +87,7 @@ function EditTagDialog({
             disabled={!name.trim() || isPending}
             onClick={() => void onSave({ name: name.trim(), color })}
           >
-            {isPending ? 'Saving...' : 'Save'}
+            {isPending ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

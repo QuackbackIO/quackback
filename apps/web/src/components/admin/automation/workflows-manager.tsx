@@ -428,11 +428,11 @@ export function WorkflowsManager({
               onChange={(e) => setSearch(e.target.value)}
               placeholder={intl.formatMessage({
                 id: 'automation.workflows.search',
-                defaultMessage: 'Search workflows...',
+                defaultMessage: 'Search workflows…',
               })}
               aria-label={intl.formatMessage({
                 id: 'automation.workflows.search',
-                defaultMessage: 'Search workflows...',
+                defaultMessage: 'Search workflows…',
               })}
               className="pl-8"
             />

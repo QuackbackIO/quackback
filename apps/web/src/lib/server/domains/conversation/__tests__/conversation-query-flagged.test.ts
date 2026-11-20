@@ -6,6 +6,9 @@
  * chain mock below routes rows by which second table (`conversations` vs
  * `tickets`) a query's `innerJoin` names, since both branches otherwise start
  * from the same `conversationMessageFlags`/`conversationMessages` join.
+ *
+ * Names come from the shared author loader (stubbed here by id; the real one
+ * runs in tickets/__tests__/personal-key-author.db.test.ts).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PrincipalId } from '@quackback/ids'
@@ -22,13 +25,14 @@ vi.mock('@/lib/server/policy/tickets', () => ({
   },
 }))
 
+const authors: Record<string, { displayName: string | null; viaApi?: boolean }> = {
+  principal_visitor: { displayName: 'Vic Visitor' },
+  principal_agent_smith: { displayName: 'Agent Smith' },
+  principal_ops_bot: { displayName: 'ops-bot', viaApi: true },
+}
+const loadAuthors = vi.hoisted(() => vi.fn())
 vi.mock('../../principals/principal-display', () => ({
-  loadAuthors: vi.fn(async (ids: string[]) => {
-    const map = new Map()
-    for (const id of ids)
-      map.set(id, { principalId: id, displayName: 'Vic Visitor', avatarUrl: null })
-    return map
-  }),
+  loadAuthors,
   fallbackAuthor: (principalId: string) => ({ principalId, displayName: null, avatarUrl: null }),
 }))
 
@@ -68,6 +72,12 @@ beforeEach(() => {
   conversationRows = []
   ticketRows = []
   ticketFilterCalls.length = 0
+  loadAuthors.mockReset().mockImplementation(async (ids: Array<string | null>) => {
+    const map = new Map()
+    for (const id of ids)
+      if (id && authors[id]) map.set(id, { principalId: id, avatarUrl: null, ...authors[id] })
+    return map
+  })
 })
 
 describe('listFlaggedMessages', () => {
@@ -88,8 +98,7 @@ describe('listFlaggedMessages', () => {
         conversationId: 'conversation_1',
         content: 'Help please',
         senderType: 'visitor',
-        authorAccountName: null,
-        authorPublicName: null,
+        authorPrincipalId: null,
         visitorPrincipalId: 'principal_visitor',
         flaggedAt: new Date('2026-07-01T00:00:00.000Z'),
       },
@@ -112,8 +121,7 @@ describe('listFlaggedMessages', () => {
         ticketId: 'ticket_1',
         content: 'Cannot log in',
         senderType: 'agent',
-        authorAccountName: 'Agent Smith',
-        authorPublicName: 'Quiet Otter',
+        authorPrincipalId: 'principal_agent_smith',
         ticketTitle: 'Cannot log in',
         ticketNumber: 1,
         flaggedAt: new Date('2026-07-02T00:00:00.000Z'),
@@ -139,8 +147,7 @@ describe('listFlaggedMessages', () => {
         conversationId: 'conversation_1',
         content: 'older',
         senderType: 'visitor',
-        authorAccountName: null,
-        authorPublicName: null,
+        authorPrincipalId: null,
         visitorPrincipalId: 'principal_visitor',
         flaggedAt: new Date('2026-07-01T00:00:00.000Z'),
       },
@@ -151,8 +158,7 @@ describe('listFlaggedMessages', () => {
         ticketId: 'ticket_1',
         content: 'newer',
         senderType: 'agent',
-        authorAccountName: 'Agent Smith',
-        authorPublicName: 'Quiet Otter',
+        authorPrincipalId: 'principal_agent_smith',
         ticketTitle: 'Ticket',
         ticketNumber: 1,
         flaggedAt: new Date('2026-07-03T00:00:00.000Z'),
@@ -166,29 +172,54 @@ describe('listFlaggedMessages', () => {
   })
 })
 
-describe('listFlaggedMessages — assistant display name', () => {
+describe('listFlaggedMessages — authors', () => {
   const flaggedRow = (over: Record<string, unknown>) => ({
     messageId: 'conversation_msg_2',
     conversationId: 'conversation_1',
     content: 'Here is how',
     senderType: 'agent',
-    authorAccountName: null,
-    authorPublicName: 'Quinn',
-    authorIsAssistant: false,
+    authorPrincipalId: 'principal_agent_smith',
     visitorPrincipalId: 'principal_visitor',
     flaggedAt: new Date('2026-07-01T00:00:00.000Z'),
     ...over,
   })
 
-  it('shows the product name for an assistant-authored flag stored under the former default name', async () => {
-    conversationRows = [flaggedRow({ authorIsAssistant: true })]
-    const [flag] = await listFlaggedMessages(agent)
-    expect(flag.authorName).toBe('Quackback AI')
+  it('names every author and visitor with one batched read, as the inbox does', async () => {
+    conversationRows = [flaggedRow({})]
+    ticketRows = [
+      {
+        messageId: 'conversation_msg_3',
+        ticketId: 'ticket_1',
+        content: 'Synced',
+        senderType: 'agent',
+        authorPrincipalId: 'principal_ops_bot',
+        ticketTitle: 'Ticket',
+        ticketNumber: 1,
+        flaggedAt: new Date('2026-07-02T00:00:00.000Z'),
+      },
+    ]
+    await listFlaggedMessages(agent)
+    expect(loadAuthors).toHaveBeenCalledExactlyOnceWith(
+      ['principal_visitor', 'principal_agent_smith', 'principal_ops_bot'],
+      { preferAccountName: true }
+    )
   })
 
-  it('keeps the public name of a teammate who has the same name', async () => {
-    conversationRows = [flaggedRow({ authorIsAssistant: false })]
+  it('marks an author that shows as an API key, and only that one', async () => {
+    conversationRows = [
+      flaggedRow({ messageId: 'conversation_msg_bot', authorPrincipalId: 'principal_ops_bot' }),
+      flaggedRow({ messageId: 'conversation_msg_person' }),
+    ]
+    const flags = await listFlaggedMessages(agent)
+    const byId = Object.fromEntries(flags.map((f) => [f.messageId, f]))
+    expect(byId.conversation_msg_bot).toMatchObject({ authorName: 'ops-bot', authorViaApi: true })
+    expect(byId.conversation_msg_person.authorName).toBe('Agent Smith')
+    expect(byId.conversation_msg_person).not.toHaveProperty('authorViaApi')
+  })
+
+  it('falls back to the sender type for a message with no author', async () => {
+    conversationRows = [flaggedRow({ authorPrincipalId: null })]
     const [flag] = await listFlaggedMessages(agent)
-    expect(flag.authorName).toBe('Quinn')
+    expect(flag.authorName).toBe('Agent')
   })
 })

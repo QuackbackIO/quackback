@@ -41,6 +41,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toastError } from '@/lib/client/error-notice'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 // Dialogs the post's author or the team open from its menu; they load on first use.
 const DeletePostDialog = lazy(() =>
@@ -117,15 +118,14 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
       slug,
       postTitle: post.title,
       boardName: post.board.name,
-      baseUrl: context.baseUrl ?? '',
+      canonicalUrl: pageCanonical('feedback', `/b/${slug}/posts/${postId}`, context),
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { postTitle, boardName, slug, postId, baseUrl } = loaderData
+    const { postTitle, boardName, canonicalUrl } = loaderData
     const title = `${postTitle} - ${boardName}`
     const description = `${postTitle}. Vote and comment on this ${boardName} post.`
-    const canonicalUrl = baseUrl ? `${baseUrl}/b/${slug}/posts/${postId}` : ''
     return {
       meta: [
         { title },

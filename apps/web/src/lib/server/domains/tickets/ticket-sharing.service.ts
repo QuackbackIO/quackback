@@ -42,7 +42,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import {
   addConversationParticipantByEmail,
-  listConversationParticipants,
+  listConversationParticipantRows,
   removeConversationParticipant,
 } from '@/lib/server/domains/conversation/conversation-participant.service'
 import { assertTicketVisible } from './ticket.service'
@@ -76,7 +76,7 @@ async function shareableConversation(ticket: Ticket): Promise<ConversationId> {
 
 /** The customers a ticket's thread is shared with (thread access, not plain group-thread participants). */
 export async function sharedParticipants(conversationId: ConversationId) {
-  return (await listConversationParticipants(conversationId)).filter((p) => p.threadAccess)
+  return (await listConversationParticipantRows(conversationId)).filter((p) => p.threadAccess)
 }
 
 /** Refuse a share past the per-ticket cap. */
@@ -154,9 +154,12 @@ export async function addTicketParticipantByEmail(
   const ticket = await assertTeamCanShare(ticketId, actor)
   const conversationId = await shareableConversation(ticket)
   await assertRoomFor(conversationId)
+  // The ticket is checked above; its paired conversation may sit outside the
+  // teammate's conversation scope.
   const result = await addConversationParticipantByEmail(conversationId, email, actor, {
     actorDisplayName: opts?.actorDisplayName,
     threadAccess: true,
+    systemCascade: true,
   })
   if (result.added) await afterShare(ticket, result.principalId, actor, opts?.actorDisplayName)
   return result
@@ -171,7 +174,11 @@ export async function removeTicketParticipant(
 ): Promise<{ removed: boolean }> {
   const ticket = await assertTeamCanShare(ticketId, actor)
   const conversationId = await shareableConversation(ticket)
-  const { removed } = await removeConversationParticipant(conversationId, principalId, actor, opts)
+  // The ticket is checked above, as on the add.
+  const { removed } = await removeConversationParticipant(conversationId, principalId, actor, {
+    ...opts,
+    systemCascade: true,
+  })
   if (removed) await afterUnshare(ticket, principalId, actor)
   return { removed }
 }

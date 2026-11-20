@@ -28,6 +28,10 @@ vi.mock('@/integrations/github/server/functions', () => ({
   setGitHubRepositoryInboxFn: (...a: unknown[]) => setRepositoryInbox(...a),
   getGitHubConnectUrl: vi.fn(),
 }))
+const held = vi.hoisted(() => ({ integrationManage: true }))
+vi.mock('@/lib/client/hooks/use-permission', () => ({
+  usePermission: () => held.integrationManage,
+}))
 vi.mock('@/integrations/github/ui/github-connection-actions', () => ({
   GitHubConnectionActions: () => <button type="button">Connect GitHub</button>,
 }))
@@ -81,9 +85,21 @@ beforeEach(() => {
   setRepositoryInbox.mockResolvedValue({ ok: true })
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  held.integrationManage = true
+})
 
 describe('GitHubChannelPage', () => {
+  it('offers the integration page and Connect only to integration.manage', () => {
+    held.integrationManage = false
+    renderPage(CONNECTED)
+    expect(screen.queryByText('Manage integration')).toBeNull()
+    cleanup()
+    renderPage({ ...CONNECTED, connected: false })
+    expect(screen.queryByRole('button', { name: 'Connect GitHub' })).toBeNull()
+  })
+
   it('shows the Support / Channels / GitHub breadcrumb', () => {
     renderPage(CONNECTED)
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })

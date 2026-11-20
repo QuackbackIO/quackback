@@ -169,7 +169,7 @@ export function CreateWebhookDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || !url || selectedEvents.length === 0}>
-              {isPending ? 'Creating...' : 'Create webhook'}
+              {isPending ? 'Creating…' : 'Create webhook'}
             </Button>
           </DialogFooter>
         </form>

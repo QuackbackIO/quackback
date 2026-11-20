@@ -521,9 +521,7 @@ function StatusIncidentEditorContent({
           </div>
 
           <div className="mt-8">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-4">
-              Timeline
-            </h3>
+            <h3 className="text-[11px] font-semibold text-muted-foreground mb-4">Timeline</h3>
             <IncidentTimeline incident={incident} />
           </div>
         </div>
@@ -600,9 +598,7 @@ function EditorUnavailable({
 function SideSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
+      <p className="text-[11px] font-semibold text-muted-foreground">{label}</p>
       {children}
     </div>
   )

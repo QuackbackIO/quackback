@@ -23,10 +23,14 @@
  * where it shows up.
  */
 import { logger } from '@/lib/server/logger'
-import { kvGet, kvSet, kvDel } from '@/lib/server/kv/pg-kv'
+import type { SQL } from 'drizzle-orm'
+import { kvGet, kvSet, kvSetIf, kvDel } from '@/lib/server/kv/pg-kv'
 import { forgetCachedKeys } from '@/lib/server/local-cache'
 
 const log = logger.child({ component: 'cache' })
+
+/** Fills `cacheSet` refused because their source changed (see `onlyIf`). */
+let refusedFills = 0
 
 /**
  * Logical cache key names.
@@ -63,6 +67,11 @@ export const CACHE_KEYS = {
   // read once per request (`auth/request-session.ts`) under this same key, and
   // every role/type mutation deletes the key, which drops that memo.
   PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}` as const,
+  // What the plan limits state is computed from: usage counts, paid features
+  // that are set up, and the choosers' candidates. Dropped by every mutation
+  // of a counted resource and by invalidateSettingsCache(); 5min TTL backstops
+  // anything missed (posts, webhooks, workflows, integrations).
+  PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
 } as const
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
@@ -74,9 +83,28 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   }
 }
 
-export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+/**
+ * Store `value` under `key` for `ttlSeconds`. With `onlyIf`, only while that
+ * condition holds as the write runs (see `kvSetIf`): for a fill built from rows
+ * a concurrent write may have replaced. A failure is a skipped write.
+ */
+export async function cacheSet(
+  key: string,
+  value: unknown,
+  ttlSeconds: number,
+  options: { onlyIf?: SQL } = {}
+): Promise<void> {
   try {
-    await kvSet(key, value, ttlSeconds)
+    if (!options.onlyIf) {
+      await kvSet(key, value, ttlSeconds)
+      return
+    }
+    if (!(await kvSetIf(key, value, ttlSeconds, options.onlyIf))) {
+      refusedFills++
+      // Normal when a write overlapped the read. Seen on every fill, it means
+      // the shared cache has stopped filling for this key.
+      log.debug({ key, refusedFills }, 'cache fill refused: its source changed during the read')
+    }
   } catch (err) {
     log.warn({ err, key }, 'cache set failed')
   }
@@ -93,4 +121,7 @@ export async function cacheDel(...keys: string[]): Promise<void> {
   } catch (err) {
     log.warn({ err, keys }, 'cache del failed')
   }
+  // Again once the shared copy is gone: a read that began after the first
+  // forget may have taken the shared copy this delete removed.
+  forgetCachedKeys(...keys)
 }

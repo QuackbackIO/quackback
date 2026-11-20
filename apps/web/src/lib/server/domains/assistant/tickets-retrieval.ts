@@ -18,12 +18,18 @@
  * default off.
  *
  * UNLIKE `conversation-summary-retrieval.ts`, this source is NOT customer-
- * scoped: a ticket's resolution is reusable across every requester, so
- * retrieval spans all tickets within the recency window rather than filtering
- * to the current conversation's customer.
+ * scoped: a ticket's resolution is reusable across every requester. It IS
+ * viewer-scoped: every query joins the parent ticket through
+ * `ticketFilter(viewer)`, so a teammate only ever retrieves summaries of
+ * tickets they could open themselves. The viewer is the asking teammate, never
+ * Quinn's own service actor (which `ticketFilter` treats as workspace-wide), so
+ * a missing or unscoped-service viewer returns nothing.
  */
-import { db, ticketSummaries, and, desc, ilike, sql } from '@/lib/server/db'
+import { db, ticketSummaries, tickets, and, desc, eq, ilike, sql } from '@/lib/server/db'
+import { escapeLike } from '@/lib/server/db/like'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
+import { ticketFilter } from '@/lib/server/policy/tickets'
+import { isUnscopedService, type Actor } from '@/lib/server/policy/types'
 import type { ContentAudience } from './audience'
 import {
   KNOWLEDGE_SNIPPET_CHARS,
@@ -64,6 +70,9 @@ export interface RetrievedTicketSummary {
 export interface RetrieveTicketSummariesOptions {
   topK?: number
   minScore?: number
+  /** The teammate the copilot answers. Bounds retrieval to the tickets they
+   *  can see; absent means nothing is returned. */
+  viewer?: Actor
 }
 
 interface TicketSummaryRow {
@@ -74,32 +83,40 @@ interface TicketSummaryRow {
 }
 
 /** Semantic path: cosine similarity over the stored embedding, within the
- *  recency window. */
+ *  recency window and the viewer's ticket scope. */
 async function hybridQuery(
   embedding: number[],
   topK: number,
-  minScore: number
+  minScore: number,
+  viewer: Actor
 ): Promise<TicketSummaryRow[]> {
   const vectorStr = `[${embedding.join(',')}]`
   const score = sql<number>`1 - (${ticketSummaries.embedding} <=> ${vectorStr}::vector)`
 
-  return db
-    .select({
-      ticketId: ticketSummaries.ticketId,
-      summary: ticketSummaries.summary,
-      score: score.as('score'),
-      createdAt: ticketSummaries.createdAt,
-    })
-    .from(ticketSummaries)
-    .where(
-      and(
-        sql`${ticketSummaries.createdAt} >= ${TICKETS_RECENCY_WINDOW_SQL}`,
-        sql`${ticketSummaries.embedding} IS NOT NULL`,
-        sql`1 - (${ticketSummaries.embedding} <=> ${vectorStr}::vector) > ${minScore}`
+  return (
+    db
+      .select({
+        ticketId: ticketSummaries.ticketId,
+        summary: ticketSummaries.summary,
+        score: score.as('score'),
+        createdAt: ticketSummaries.createdAt,
+      })
+      .from(ticketSummaries)
+      .innerJoin(tickets, eq(tickets.id, ticketSummaries.ticketId))
+      .where(
+        and(
+          ticketFilter(viewer),
+          sql`${ticketSummaries.createdAt} >= ${TICKETS_RECENCY_WINDOW_SQL}`,
+          sql`${ticketSummaries.embedding} IS NOT NULL`,
+          sql`1 - (${ticketSummaries.embedding} <=> ${vectorStr}::vector) > ${minScore}`
+        )
       )
-    )
-    .orderBy(sql`score DESC`)
-    .limit(topK)
+      // Ordered by the score alias, not an index-ordered `<=>`, so the scope
+      // filter applies before LIMIT. An HNSW-ordered scan would filter after the
+      // index candidate cut and starve teammates scoped to a few tickets.
+      .orderBy(sql`score DESC`)
+      .limit(topK)
+  )
 }
 
 /** Keyword-only fallback when embedding generation is unavailable: a plain
@@ -107,8 +124,12 @@ async function hybridQuery(
  *  first. An ILIKE hit carries no relevance signal, so its score is 0, never a
  *  fabricated top-of-scale value — see the conversation-summaries source for
  *  why a no-signal row must sort behind genuinely scored items in the merge. */
-async function keywordQuery(query: string, topK: number): Promise<TicketSummaryRow[]> {
-  const pattern = `%${query}%`
+async function keywordQuery(
+  query: string,
+  topK: number,
+  viewer: Actor
+): Promise<TicketSummaryRow[]> {
+  const pattern = `%${escapeLike(query)}%`
 
   return db
     .select({
@@ -118,8 +139,10 @@ async function keywordQuery(query: string, topK: number): Promise<TicketSummaryR
       createdAt: ticketSummaries.createdAt,
     })
     .from(ticketSummaries)
+    .innerJoin(tickets, eq(tickets.id, ticketSummaries.ticketId))
     .where(
       and(
+        ticketFilter(viewer),
         sql`${ticketSummaries.createdAt} >= ${TICKETS_RECENCY_WINDOW_SQL}`,
         ilike(ticketSummaries.summary, pattern)
       )
@@ -129,8 +152,11 @@ async function keywordQuery(query: string, topK: number): Promise<TicketSummaryR
 }
 
 /**
- * Retrieve the top-k most relevant closed-ticket resolution summaries. Team
- * knowledge only: a `public` turn returns nothing, unconditionally.
+ * Retrieve the top-k most relevant closed-ticket resolution summaries the
+ * viewer can see. Team knowledge only: a `public` turn returns nothing,
+ * unconditionally, and so does a turn with no viewer or a viewer that is an
+ * unscoped service principal (Quinn's own actor must never stand in for the
+ * teammate).
  */
 export async function retrieveTicketSummaries(
   query: string,
@@ -138,6 +164,8 @@ export async function retrieveTicketSummaries(
   options: RetrieveTicketSummariesOptions = {}
 ): Promise<RetrievedTicketSummary[]> {
   if (ceiling === 'public') return []
+  const viewer = options.viewer
+  if (!viewer || isUnscopedService(viewer)) return []
 
   const topK = options.topK ?? TICKETS_TOP_K
   const minScore = options.minScore ?? TICKETS_SEMANTIC_SIMILARITY_FLOOR
@@ -147,8 +175,8 @@ export async function retrieveTicketSummaries(
   })
 
   const rows = embedding
-    ? await hybridQuery(embedding, topK, minScore)
-    : await keywordQuery(query, topK)
+    ? await hybridQuery(embedding, topK, minScore, viewer)
+    : await keywordQuery(query, topK, viewer)
 
   return rows.map((r) => ({
     ticketId: r.ticketId,
@@ -168,25 +196,26 @@ export async function retrieveTicketSummaries(
 export const ticketsKnowledgeSource: KnowledgeSource = {
   sourceType: 'ticket',
   async retrieve(query, ceiling, opts) {
-    const rows = await retrieveTicketSummaries(query, ceiling, { topK: opts.topK })
-    return rows.map(
-      (r): RetrievedItem => ({
+    const rows = await retrieveTicketSummaries(query, ceiling, {
+      topK: opts.topK,
+      viewer: opts.viewer,
+    })
+    return rows.map((r): RetrievedItem => ({
+      id: r.ticketId,
+      sourceType: 'ticket' as const,
+      title: TICKET_TITLE,
+      excerpt: r.summary.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+      score: r.score,
+      updatedAt: r.createdAt.toISOString(),
+      citation: {
+        type: 'ticket' as const,
         id: r.ticketId,
-        sourceType: 'ticket' as const,
         title: TICKET_TITLE,
-        excerpt: r.summary.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-        score: r.score,
-        updatedAt: r.createdAt.toISOString(),
-        citation: {
-          type: 'ticket' as const,
-          id: r.ticketId,
-          title: TICKET_TITLE,
-          url: ticketUrl(r.ticketId),
-          // A support ticket is never customer-facing knowledge: always
-          // flagged for the copilot leak gate, on every (team) surface.
-          internal: true,
-        },
-      })
-    )
+        url: ticketUrl(r.ticketId),
+        // A support ticket is never customer-facing knowledge: always
+        // flagged for the copilot leak gate, on every (team) surface.
+        internal: true,
+      },
+    }))
   },
 }

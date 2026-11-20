@@ -17,13 +17,32 @@ import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
+/** The emailed face, 1 to 5, or nothing to preselect. */
+function faceFrom(value: unknown): number | undefined {
+  const n =
+    typeof value === 'number' ? value : typeof value === 'string' && value ? Number(value) : NaN
+  return Number.isInteger(n) && n >= 1 && n <= 5 ? n : undefined
+}
+
+// The router parses every search value as JSON before this runs, so the
+// emailed `rating=4` arrives as the number 4 and a token of digits as a
+// number. Neither param may fail validation: a refused search renders the
+// error page, and every face link in the close and rating-request emails
+// carries a rating. A rating that is not a face (out of range, malformed)
+// opens the page with nothing preselected; a token that is not text reads as
+// missing, which the loader shows as its own friendly state.
 const searchSchema = z.object({
-  token: z.string().optional(),
-  // Kept as a raw string (not z.coerce.number()) so a malformed value fails
-  // gracefully into the same friendly error state below, instead of throwing
-  // out of search validation itself — mirrors unsubscribe.tsx's own
-  // validate-then-degrade-to-an-error-view pattern for its token param.
-  rating: z.string().optional(),
+  token: z
+    .unknown()
+    .transform((v) =>
+      typeof v === 'string'
+        ? v
+        : typeof v === 'number' && Number.isFinite(v)
+          ? String(v)
+          : undefined
+    )
+    .optional(),
+  rating: z.unknown().transform(faceFrom).optional(),
 })
 
 type CsatLoaderResult = { ok: true } | { ok: false; error: 'missing' | 'invalid' }
@@ -44,7 +63,7 @@ function CsatPage() {
   const { token, rating } = Route.useSearch()
 
   if (!result.ok) return <ErrorView error={result.error} />
-  return <RateView token={token!} linkedRating={rating ? Number(rating) : undefined} />
+  return <RateView token={token!} linkedRating={rating} />
 }
 
 /** The rate-then-thank flow: faces first (linked rating preselected but NOT
@@ -53,13 +72,12 @@ function CsatPage() {
  *  covers the rating-then-comment follow-up, same as the widget's own
  *  two-POST CSAT flow). */
 function RateView({ token, linkedRating }: { token: string; linkedRating?: number }) {
-  const preselected =
-    linkedRating && Number.isInteger(linkedRating) && linkedRating >= 1 && linkedRating <= 5
-      ? linkedRating
-      : undefined
   const [recorded, setRecorded] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [rateError, setRateError] = useState(false)
+  // The conversation was reopened after the email went out: a rating is only
+  // taken once it is resolved again, so the faces give way to a plain note.
+  const [reopened, setReopened] = useState(false)
   const [comment, setComment] = useState('')
   const [commentSaved, setCommentSaved] = useState(false)
   const [commentError, setCommentError] = useState(false)
@@ -71,6 +89,7 @@ function RateView({ token, linkedRating }: { token: string; linkedRating?: numbe
     try {
       const result = await recordCsatViaTokenFn({ data: { token, rating } })
       if (result.success) setRecorded(rating)
+      else if (result.error === 'open') setReopened(true)
       else setRateError(true)
     } catch {
       setRateError(true)
@@ -88,12 +107,26 @@ function RateView({ token, linkedRating }: { token: string; linkedRating?: numbe
         data: { token, rating: recorded, comment: comment.trim() },
       })
       if (result.success) setCommentSaved(true)
+      else if (result.error === 'open') setReopened(true)
       else setCommentError(true)
     } catch {
       setCommentError(true)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (reopened) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
+        <div className="w-full max-w-md space-y-2 text-center">
+          <h1 className="text-xl font-semibold text-foreground">This conversation is open again</h1>
+          <p className="text-sm text-muted-foreground">
+            You can rate it once it has been resolved.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -130,7 +163,7 @@ function RateView({ token, linkedRating }: { token: string; linkedRating?: numbe
                     aria-label={`Rate ${rating} of 5`}
                     className={cn(
                       'flex h-12 w-12 items-center justify-center rounded-full text-2xl transition-transform hover:scale-110 disabled:opacity-40',
-                      preselected === rating ? 'bg-primary/10 ring-2 ring-ring' : 'hover:bg-muted'
+                      linkedRating === rating ? 'bg-primary/10 ring-2 ring-ring' : 'hover:bg-muted'
                     )}
                   >
                     {face}

@@ -34,9 +34,9 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(boards))
-      // 9 columns after T24 (migration 0080) dropped the legacy `audience`
+      // 10 columns (read_only added in 0318) after T24 (migration 0080) dropped the legacy `audience`
       // column; `access` is now the sole source of truth.
-      expect(columns.length).toBe(9)
+      expect(columns.length).toBe(10)
     })
 
     it('no longer has the legacy isPublic column', () => {

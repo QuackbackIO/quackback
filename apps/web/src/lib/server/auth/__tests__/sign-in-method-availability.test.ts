@@ -119,8 +119,32 @@ describe('isOnlyWorkingSignInMethod', () => {
     ).toBe(false)
   })
 
-  it('false when the customOidcProvider tier is off (IdP registers nothing at runtime)', () => {
-    expect(isOnlyWorkingSignInMethod({ ...base, tierEnabled: false })).toBe(false)
+  it('false when the tier is off and another way in remains (the IdP registers nothing)', () => {
+    expect(
+      isOnlyWorkingSignInMethod({ ...base, tierEnabled: false, oauth: { magicLink: false } })
+    ).toBe(false)
+  })
+
+  it('true when the tier is off and the IdP is what keeps email links on', () => {
+    // Email links stand in for single sign-on only while a provider is set up.
+    // Taking out the last one would take the stand-in with it.
+    expect(isOnlyWorkingSignInMethod({ ...base, tierEnabled: false })).toBe(true)
+  })
+
+  it('false when the tier is off and another provider keeps email links on', () => {
+    expect(
+      isOnlyWorkingSignInMethod({
+        ...base,
+        tierEnabled: false,
+        providers: [...base.providers, { id: 'idp_2', enabled: true, configured: true }],
+      })
+    ).toBe(false)
+  })
+
+  it('false when the tier is off and email delivery is not wired (nothing to keep)', () => {
+    expect(isOnlyWorkingSignInMethod({ ...base, tierEnabled: false, emailConfigured: false })).toBe(
+      false
+    )
   })
 
   it('false when another enabled + configured IdP exists', () => {
@@ -190,6 +214,10 @@ describe('hasAnyWorkingSignInMethod', () => {
 
   it('false when nothing works', () => {
     expect(hasAnyWorkingSignInMethod(none)).toBe(false)
+  })
+
+  it('true for the email links that stand in for an IdP the tier does not register', () => {
+    expect(hasAnyWorkingSignInMethod({ ...none, emailConfigured: true })).toBe(true)
   })
 
   it('true for a registered IdP (tier on)', () => {

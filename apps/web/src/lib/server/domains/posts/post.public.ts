@@ -36,7 +36,7 @@ import {
 } from '@/lib/shared/types/filters'
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
-import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { authorIsApiKeySql, resolveAvatarUrl, withFeedbackAuthors } from './feedback-authors'
 import { feedViewCondition, feedViewFor } from './post.public.views'
 import {
   changelogLinkColumn,
@@ -61,21 +61,6 @@ export function publicTagCondition(actor: Actor) {
  */
 export function publicTagSqlFilter(actor: Actor) {
   return isTeamActor(actor) ? sql`` : sql`AND t.is_public = true`
-}
-
-/** Resolve avatar URL — uploaded key first, then OAuth/external URL. */
-export function resolveAvatarUrl(source: {
-  avatarKey?: string | null
-  avatarUrl?: string | null
-  userImageKey?: string | null
-  userImage?: string | null
-}): string | null {
-  return resolveUserAvatarUrl({
-    userImage: source.userImage,
-    userImageKey: source.userImageKey,
-    principalAvatarUrl: source.avatarUrl,
-    principalAvatarKey: source.avatarKey,
-  })
 }
 
 export function parseJson<T>(value: string | T): T {
@@ -362,8 +347,9 @@ export async function listPublicPostsWithVotesAndAvatars(
     pageAuthorIds.length > 0
       ? db
           .select({
-            id: principalTable.id,
+            principalId: principalTable.id,
             displayName: principalTable.displayName,
+            authorIsApiKey: authorIsApiKeySql(principalTable.id),
             avatarKey: principalTable.avatarKey,
             avatarUrl: principalTable.avatarUrl,
             userImage: userTable.image,
@@ -381,7 +367,7 @@ export async function listPublicPostsWithVotesAndAvatars(
     list.push({ id: row.id, name: row.name, color: row.color })
     tagsByPost.set(row.postId, list)
   }
-  const authorById = new Map(authorRows.map((a) => [a.id, a]))
+  const authorById = new Map(authorRows.map((a) => [a.principalId, a]))
 
   const items = trimmedResults.map((post): PostWithVotesAndAvatars => {
     const author = authorById.get(post.principalId)
@@ -411,7 +397,7 @@ export async function listPublicPostsWithVotesAndAvatars(
     }
   })
 
-  return { items, hasMore }
+  return { items: await withFeedbackAuthors(items, authorRows), hasMore }
 }
 
 export async function listPublicPosts(
@@ -448,6 +434,7 @@ export async function listPublicPosts(
         SELECT m.display_name FROM ${principalTable} m
         WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
+      authorIsApiKey: authorIsApiKeySql(posts.principalId).as('author_is_api_key'),
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -475,7 +462,7 @@ export async function listPublicPosts(
     changelogEntry: toChangelogLink(post.changelogEntry),
   }))
 
-  return { items, total: undefined, hasMore }
+  return { items: await withFeedbackAuthors(items, trimmedResults), total: undefined, hasMore }
 }
 
 export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<Set<PostId>> {

@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { IntegrationDetail } from '@/components/admin/settings/integrations/integration-detail'
 import { getIntegrationSettingsEntry } from '@/components/admin/settings/integrations/integration-settings-registry'
 
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/admin/settings/integrations/$type')({
     tab: search.tab === 'history' ? 'history' : undefined,
   }),
   loader: async ({ context, params }) => {
+    assertSettingsPageAccess(context.permissions, '/admin/settings/integrations/$type')
     const type = toIntegrationType(params.type)
     // Loaded on demand: a static import would put every provider's settings
     // UI in the route module, which every page loads eagerly.

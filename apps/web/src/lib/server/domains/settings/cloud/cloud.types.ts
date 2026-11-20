@@ -90,7 +90,7 @@ export const ENTITLEMENTS = {
     plural: true,
     tierFeature: 'customDomain',
     chokepoint:
-      'lib/server/functions/cloud-identity.ts (mutateCloudCustomDomainFn); lib/server/domains/help-center/help-center-domain.service.ts (setHelpCenterDomain)',
+      'lib/server/functions/cloud-identity.ts (mutateCloudCustomDomainFn); a section domain write refuses without it, as a value (setSectionDomain)',
   },
   sso: {
     friendly: 'Single sign-on',
@@ -239,6 +239,10 @@ export function isEntitlementKey(value: string): value is EntitlementKey {
  * This is a *default*, not the authority. The stored `entitlements` map wins
  * per key, so a grandfathered or negotiated workspace is expressed as an
  * override on a catalogue plan rather than as a bespoke plan id.
+ *
+ * Free's grants mirror the plan grants where billing projections are issued:
+ * once a projection's access window ends they are the entitlements in force
+ * (`entitlementsAt`), so the two lists change together.
  */
 export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   free: {

@@ -1,5 +1,5 @@
 /**
- * Telling the people who manage email channels when a sending domain changes
+ * Telling the people who manage email settings when a sending domain changes
  * what customers receive: it went live, or it stopped verifying and replies
  * fell back to the default address.
  *
@@ -12,6 +12,7 @@
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
 import type { SendingDomainAttentionProblem } from '@quackback/email'
+import type { AccountEmail } from '@quackback/email/recipient'
 import {
   db,
   and,
@@ -24,8 +25,9 @@ import {
   type SendingDomainDnsRecord,
 } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
+import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
+import type { PermissionKey } from '@/lib/shared/permissions'
+import { permissionsForPrincipals } from '@/lib/server/policy/permissions'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { NotificationType } from '@/lib/server/domains/notifications/notification.types'
 import { batchGetNotificationPreferences } from '@/lib/server/domains/subscriptions/subscription.service'
@@ -35,25 +37,31 @@ import { isKeyRecord } from './dkim-key'
 
 const log = logger.child({ component: 'sending-domain-notify' })
 
-interface Manager {
+export interface Manager {
   principalId: PrincipalId
   userId: UserId | null
 }
 
-/** Every teammate who may manage email channels, and so is told about their domains. */
-export async function sendingDomainManagers(): Promise<Manager[]> {
+/**
+ * Every teammate holding `permission`, their permissions resolved in one read
+ * rather than one per teammate.
+ */
+export async function managersHolding(permission: PermissionKey): Promise<Manager[]> {
   const people = await db
     .select({ id: principal.id, role: principal.role, userId: principal.userId })
     .from(principal)
     .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
-  const managers: Manager[] = []
-  for (const person of people) {
-    const held = await permissionsForPrincipal(person.id, person.role as 'admin' | 'member')
-    if (held.has(PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)) {
-      managers.push({ principalId: person.id, userId: person.userId as UserId | null })
-    }
-  }
-  return managers
+  const held = await permissionsForPrincipals(
+    people.map((p) => ({ id: p.id, role: p.role as 'admin' | 'member' }))
+  )
+  return people
+    .filter((p) => held.get(p.id)?.has(permission))
+    .map((p) => ({ principalId: p.id, userId: p.userId as UserId | null }))
+}
+
+/** Every teammate who may manage how the workspace sends email, and so is told about its domains. */
+export function sendingDomainManagers(): Promise<Manager[]> {
+  return managersHolding(EMAIL_SENDING_PERMISSION)
 }
 
 /** The first record whose own check says it is wrong, in the order they are published. */
@@ -115,7 +123,7 @@ export async function notifySendingDomainLive(domain: EmailSendingDomain): Promi
     const managers = await sendingDomainManagers()
     if (managers.length === 0) return
     await ringManagers(managers, 'sending_domain_live', {
-      title: `${await addressOn(domain)} is live`,
+      title: `${await addressOn(domain)} is ready to send`,
       metadata: { sendingDomainId: domain.id, domain: domain.domain, audience: 'admin' },
     })
   } catch (err) {
@@ -204,49 +212,77 @@ export async function notifySendingDomainOwnershipMissing(
   }
 }
 
+/** What every manager's email is built from, besides its recipient. */
+export interface ManagerEmailContext {
+  /** The app's base URL without a trailing slash; empty when none is set. */
+  base: string
+  workspaceName: string | undefined
+}
+
 /**
- * Email every manager whose preference allows it. False only when emails were
- * due and every one failed; a recipient whose send failed is logged at warn.
+ * Email every manager whose preference allows `type`, through `send`. False
+ * only when emails were due and every one failed; a recipient whose send
+ * failed is logged at warn with `logContext`.
  */
-async function emailManagers(
+export async function emailEachManager(
   managers: Manager[],
-  domain: EmailSendingDomain,
-  record: SendingDomainAttentionProblem,
-  deadline?: string
+  type: NotificationType,
+  send: (to: AccountEmail, context: ManagerEmailContext) => Promise<unknown>,
+  failure: { logContext: Record<string, unknown>; message: string }
 ): Promise<boolean> {
-  const { sendSendingDomainAttentionEmail, isEmailConfigured } = await import('@quackback/email')
+  const { isEmailConfigured } = await import('@quackback/email')
   if (!isEmailConfigured()) return true
   const prefs = await batchGetNotificationPreferences(managers.map((m) => m.principalId))
   const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { getBaseUrl } = await import('@/lib/server/config')
   const workspace = await getWorkspaceSettings()
-  const base = getBaseUrl().replace(/\/$/, '')
+  const context: ManagerEmailContext = {
+    base: getBaseUrl().replace(/\/$/, ''),
+    workspaceName: workspace?.settings?.name,
+  }
   let due = 0
   let sent = 0
   for (const manager of managers) {
     const p = prefs.get(manager.principalId)
-    if (p && !shouldNotify(p, 'sending_domain_needs_attention', 'email')) continue
+    if (p && !shouldNotify(p, type, 'email')) continue
     if (!manager.userId) continue
     const to = await resolveAccountRecipient(manager.userId)
     if (!to) continue
     due += 1
     try {
-      await sendSendingDomainAttentionEmail({
+      await send(to, context)
+      sent += 1
+    } catch (err) {
+      log.warn({ err, ...failure.logContext, principal_id: manager.principalId }, failure.message)
+    }
+  }
+  return due === 0 || sent > 0
+}
+
+/** Email every manager about a sending domain whose preference allows it. */
+async function emailManagers(
+  managers: Manager[],
+  domain: EmailSendingDomain,
+  record: SendingDomainAttentionProblem,
+  deadline?: string
+): Promise<boolean> {
+  const { sendSendingDomainAttentionEmail } = await import('@quackback/email')
+  return emailEachManager(
+    managers,
+    'sending_domain_needs_attention',
+    (to, { base, workspaceName }) =>
+      sendSendingDomainAttentionEmail({
         to,
         domain: domain.domain,
         record,
         deadline,
-        settingsUrl: base ? `${base}/admin/settings/channels/email` : null,
-        workspaceName: workspace?.settings?.name,
-      })
-      sent += 1
-    } catch (err) {
-      log.warn(
-        { err, sending_domain_id: domain.id, principal_id: manager.principalId },
-        'sending domain attention email failed'
-      )
+        settingsUrl: base ? `${base}/admin/settings/email` : null,
+        workspaceName,
+      }),
+    {
+      logContext: { sending_domain_id: domain.id },
+      message: 'sending domain attention email failed',
     }
-  }
-  return due === 0 || sent > 0
+  )
 }

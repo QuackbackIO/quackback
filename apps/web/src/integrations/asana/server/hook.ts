@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildAsanaTaskBody } from '@/integrations/asana/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'asana' })
 
@@ -21,13 +23,14 @@ export interface AsanaTarget {
 export interface AsanaConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
   workspaceGid: string
 }
 
 export const asanaHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: projectId } = target as AsanaTarget
-    const { accessToken, rootUrl, workspaceGid } = config as AsanaConfig
+    const { accessToken, rootUrl, links, workspaceGid } = config as AsanaConfig
 
     // Only create tasks for new feedback
     if (event.type !== 'post.created') {
@@ -36,7 +39,7 @@ export const asanaHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, project_id: projectId }, 'creating task')
 
-    const { name, htmlNotes } = buildAsanaTaskBody(event, rootUrl)
+    const { name, htmlNotes } = buildAsanaTaskBody(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await integrationFetch(`${ASANA_API}/tasks`, {

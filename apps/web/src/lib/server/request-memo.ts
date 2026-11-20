@@ -16,9 +16,12 @@
  * live, per-request, mutable scratch space reachable from here via
  * `getLogContext()`. We hang a small memo bag off it keyed by a private symbol.
  *
- * When there is no active request scope (unit tests, background jobs), the memo
- * transparently degrades to "compute every time" — correctness is unaffected,
- * only the dedup is skipped.
+ * When there is no active request scope (unit tests, a boot-time sweep), the
+ * memo transparently degrades to "compute every time" — correctness is
+ * unaffected, only the dedup is skipped. Anything that holds a scope open for
+ * longer than one unit of work must open a fresh one per unit, or every later
+ * read answers with the first: the job worker opens one per pass and one per
+ * job (`jobs/worker.ts`).
  *
  * Cache lifetime is exactly one request: the store object is created fresh per
  * request by `runWithLogContext`, so nothing leaks across requests and there is

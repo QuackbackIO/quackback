@@ -15,6 +15,10 @@ const mockKvGet = vi.fn(async (key: string) => structuredClone(kvRows.get(key) ?
 vi.mock('@/lib/server/kv/pg-kv', () => ({
   kvGet: (key: string) => mockKvGet(key),
   kvSet: vi.fn(async (key: string, value: unknown) => void kvRows.set(key, value)),
+  kvSetIf: vi.fn(async (key: string, value: unknown) => {
+    kvRows.set(key, value)
+    return true
+  }),
   kvDel: vi.fn(async (...keys: string[]) => keys.forEach((k) => kvRows.delete(k))),
 }))
 
@@ -52,6 +56,7 @@ vi.mock('@/lib/server/auth/auth-providers', () => ({
 const { getWorkspaceSettings } = await import('../settings.service')
 const { invalidateSettingsCache } = await import('../settings.helpers')
 const { runWithLogContext } = await import('@/lib/server/log-context')
+const { cacheDel } = await import('@/lib/server/cache')
 const { forgetCachedKeys, SETTINGS_LOCAL_TTL_MS } = await import('@/lib/server/local-cache')
 
 const COMPLETE_SETUP = JSON.stringify({
@@ -177,6 +182,29 @@ describe('getWorkspaceSettings across requests, in production', () => {
     })
     await inRequest(() => invalidateSettingsCache())
     expect((await inRequest(() => getWorkspaceSettings()))?.name).toBe('Renamed')
+  })
+
+  it('keeps its copy when an unrelated cache is dropped during the read', async () => {
+    // A new principal (or an auth hook) drops its own cache entry while the
+    // settings read is waiting on the shared cache.
+    mockKvGet.mockImplementationOnce(async (key: string) => {
+      await cacheDel('principal:user:someone-else')
+      return structuredClone(kvRows.get(key) ?? null)
+    })
+    await inRequest(() => getWorkspaceSettings())
+    await inRequest(() => getWorkspaceSettings())
+    expect(mockKvGet).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not keep a copy read while the settings themselves were dropped', async () => {
+    mockKvGet.mockImplementationOnce(async (key: string) => {
+      const stale = structuredClone(kvRows.get(key) ?? null)
+      await invalidateSettingsCache()
+      return stale
+    })
+    await inRequest(() => getWorkspaceSettings())
+    await inRequest(() => getWorkspaceSettings())
+    expect(mockKvGet).toHaveBeenCalledTimes(2)
   })
 
   it('hands every request a copy of its own', async () => {

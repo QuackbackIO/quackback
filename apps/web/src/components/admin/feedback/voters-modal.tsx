@@ -207,11 +207,11 @@ function SubscriptionBadge({
   const config = {
     all: {
       icon: BellIcon,
-      className: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950',
+      className: 'text-success bg-success/10 dark:bg-success/15',
     },
     status_only: {
       icon: BellIcon,
-      className: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950',
+      className: 'text-foreground bg-muted',
     },
     none: {
       icon: BellSlashIcon,

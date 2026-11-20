@@ -58,31 +58,63 @@ export async function enforcePerIpLimit(
   })
 }
 
+export interface WidgetQuotaSpec extends PerIpLimitSpec {
+  /** The resolved workspace's id, never a caller-supplied header. */
+  workspaceKey: string
+  /**
+   * Requests allowed per window across the whole workspace. Every visitor
+   * shares this count, so it sits well above `limit`: at `limit`, one
+   * visitor's burst would refuse every other visitor for the window.
+   */
+  workspaceLimit: number
+}
+
 /**
- * Bound widget abuse across IP, bearer session, and workspace. The workspace
- * bucket is shared by every visitor, so an endpoint one visitor calls many
- * times in a burst (attaching several files) sets a larger `workspaceLimit`.
+ * Bound widget abuse across IP, bearer session, and workspace. The address and
+ * the session are one visitor's own counts, each held to `limit`; the
+ * workspace count is shared by every visitor and held to `workspaceLimit`. A
+ * caller with no bearer token has no session to count (its address already
+ * is its own count), so signed-out visitors never share one bucket.
+ *
+ * The visitor's own counts are checked first, and a request they refuse never
+ * reaches the workspace count: a visitor who keeps sending after being refused
+ * spends only their own budget, never everyone else's.
  */
 export async function enforceWidgetQuota(
   request: Request,
-  spec: PerIpLimitSpec & { workspaceKey: string; workspaceLimit?: number }
+  spec: WidgetQuotaSpec
 ): Promise<Response | null> {
   const auth = request.headers.get('authorization') ?? ''
-  const sessionKey = auth
-    ? createHash('sha256').update(auth).digest('hex').slice(0, 24)
-    : 'anonymous'
-  const buckets = [
+  const visitorBuckets = [
     { key: `${spec.keyPrefix}:ip:${getClientIp(request)}`, windowSeconds: spec.windowSeconds },
-    { key: `${spec.keyPrefix}:session:${sessionKey}`, windowSeconds: spec.windowSeconds },
-    { key: `${spec.keyPrefix}:workspace:${spec.workspaceKey}`, windowSeconds: spec.windowSeconds },
   ]
-  const limits = [spec.limit, spec.limit, spec.workspaceLimit ?? spec.limit]
-  const results = await Promise.all(buckets.map((bucket) => incrementBucket(bucket)))
-  const blockedIndex = results.findIndex(
-    (result, i) => result.count !== null && result.count > limits[i]!
+  if (auth) {
+    const sessionKey = createHash('sha256').update(auth).digest('hex').slice(0, 24)
+    visitorBuckets.push({
+      key: `${spec.keyPrefix}:session:${sessionKey}`,
+      windowSeconds: spec.windowSeconds,
+    })
+  }
+  const visitorCounts = await Promise.all(visitorBuckets.map((bucket) => incrementBucket(bucket)))
+  const visitorBlocked = visitorCounts.findIndex(
+    (result) => result.count !== null && result.count > spec.limit
   )
-  if (blockedIndex < 0) return null
-  const retryAfter = await bucketRetryAfter(buckets[blockedIndex])
+  if (visitorBlocked >= 0) return quotaRefusal(visitorBuckets[visitorBlocked]!, spec)
+
+  const workspaceBucket = {
+    key: `${spec.keyPrefix}:workspace:${spec.workspaceKey}`,
+    windowSeconds: spec.windowSeconds,
+  }
+  const { count } = await incrementBucket(workspaceBucket)
+  if (count !== null && count > spec.workspaceLimit) return quotaRefusal(workspaceBucket, spec)
+  return null
+}
+
+async function quotaRefusal(
+  bucket: { key: string; windowSeconds: number },
+  spec: WidgetQuotaSpec
+): Promise<Response> {
+  const retryAfter = await bucketRetryAfter(bucket)
   return widgetJsonError(429, 'RATE_LIMITED', spec.message ?? 'Too many requests, slow down', {
     'Retry-After': String(retryAfter),
   })

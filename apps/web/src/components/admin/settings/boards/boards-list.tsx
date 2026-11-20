@@ -11,6 +11,10 @@ interface BoardRow {
   description: string | null
   access: BoardAccess
   postCount: number
+  /** Set by an admin. */
+  readOnly?: boolean
+  /** Kept read-only by the plan's board limit. */
+  planReadOnly?: string
 }
 
 function usesSegments(access: BoardAccess): boolean {
@@ -41,7 +45,39 @@ function postCountLabel(count: number): string {
   return count === 1 ? '1 post' : `${count} posts`
 }
 
+/**
+ * Open or Read-only. "Read-only" is an admin's own setting and wins whatever
+ * the plan state, since upgrading does not reopen such a board; "Read-only on
+ * the {Plan} plan" is only for a board the plan's board limit alone closes.
+ */
+function BoardOpenBadge({
+  readOnly,
+  planReadOnly,
+}: {
+  readOnly: boolean
+  planReadOnly: string | undefined
+}) {
+  if (!readOnly && planReadOnly === undefined) {
+    return (
+      <Badge size="sm" variant="success">
+        Open
+      </Badge>
+    )
+  }
+  return (
+    <Badge size="sm" variant="secondary">
+      {readOnly || planReadOnly === undefined
+        ? 'Read-only'
+        : planReadOnly
+          ? `Read-only on the ${planReadOnly} plan`
+          : 'Read-only by plan limit'}
+    </Badge>
+  )
+}
+
+/** Open and read-only labels show only while some board is read-only. */
 export function BoardsList({ boards }: { boards: BoardRow[] }) {
+  const anyReadOnly = boards.some((board) => board.readOnly || board.planReadOnly !== undefined)
   return (
     <SettingsList>
       {boards.map((board) => (
@@ -51,7 +87,14 @@ export function BoardsList({ boards }: { boards: BoardRow[] }) {
           params={{ slug: board.slug }}
           leading={<RowIcon icon={ChatBubbleLeftIcon} />}
           title={board.name}
-          badges={<BoardAccessBadge access={board.access} />}
+          badges={
+            <>
+              <BoardAccessBadge access={board.access} />
+              {anyReadOnly && (
+                <BoardOpenBadge readOnly={!!board.readOnly} planReadOnly={board.planReadOnly} />
+              )}
+            </>
+          }
           meta={
             board.description
               ? `${board.description} · ${postCountLabel(board.postCount)}`

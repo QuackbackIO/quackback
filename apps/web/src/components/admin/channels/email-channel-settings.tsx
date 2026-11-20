@@ -1,32 +1,57 @@
 /**
- * Email channel settings: inbound route (edit/remove + sender trust) and one
- * card of sending addresses. An address on a domain that is not live yet
- * carries that domain's setup panel under it; the default address is always
- * the first row, so the card says what replies go out as today.
+ * Email settings, in two parts. The workspace part (Settings → Email) holds the
+ * sending addresses and which of them each kind of email is sent from, because
+ * feedback, changelog and status email send whether or not Support is on. The
+ * support part (Support → Channels → Email) holds the support inbox and where
+ * support replies come from. An address on a domain that is not live yet
+ * carries that domain's setup panel under it.
  */
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Link, useRouter } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
 import { PhaseBadge } from './phase-badge'
-import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import {
   useCreateInboundRoute,
-  useCreateSendingAddress,
-  useDeleteSendingDomain,
-  useDeleteChannelAccount,
   useRestartSendingDomainChecks,
   useSendTestEmail,
   useUpdateInboundTrust,
   useClearInboundForwarding,
-  useUpdateSendingAddressSmtp,
 } from '@/lib/client/mutations/channel-accounts'
-import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
+import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
+import {
+  domainOf,
+  removalNote,
+  RemoveAddressDialog,
+  RemoveDomainDialog,
+  type AddressRemoval,
+  type DomainRemoval,
+  type SendingAddress,
+} from './sending-removal'
 import { SendingPausedNotice } from './sending-paused-notice'
+import { SendFromCard, type SenderSurfaceKey } from './send-from-card'
+import {
+  useVerifyDomainLinks,
+  VerifyDomainLink,
+  type VerifyDomainTarget,
+} from './verify-domain-link'
+import { addDomainLink } from '@/lib/shared/domains-permissions'
+import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/channel-accounts'
+import {
+  inboundTarget,
+  oldestFirst,
+  senderLabel,
+  useEmailConfigView,
+  type AddressMode,
+} from './email-config-view'
+import { errorText } from '@/lib/client/error-text'
+import { SendingAddressDialog, type SendingAddressDialogTarget } from './sending-address-dialog'
 import {
   domainPhase,
   failingRecordName,
@@ -38,33 +63,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
 import { toastError } from '@/lib/client/error-notice'
-
-const MODULES = ['support', 'feedback', 'changelog'] as const
-const MODULE_LABEL: Record<(typeof MODULES)[number], string> = {
-  support: 'Support',
-  feedback: 'Feedback',
-  changelog: 'Changelog',
-}
-
-const fail = (msg: string) => () => toast.error(msg)
 
 /**
  * Show what the server actually refused, falling back to the generic line.
@@ -75,33 +75,96 @@ const fail = (msg: string) => () => toast.error(msg)
  */
 const reason = (fallback: string) => (error: unknown) => toastError(error, fallback)
 
-export function EmailChannelSettings() {
-  const { data } = useQuery(emailChannelConfigQuery())
+/**
+ * Settings → Email: the addresses this workspace sends from, and which of them
+ * the default and each product that is on uses.
+ */
+export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly SenderSurfaceKey[] }) {
+  const view = useEmailConfigView()
+  const { data } = view
+  // This page is settings.manage's, which adds and verifies domains too.
+  const verifyLinkFor = useVerifyDomainLinks(view.addresses, true)
   return (
     <div className="space-y-6">
-      <SendingPausedNotice paused={data?.sendingPaused ?? null} />
+      <SendingPausedNotice
+        paused={data?.sendingPaused ?? null}
+        ownServer={data?.addressMode === 'any'}
+      />
+      <SendingAddressesSection
+        addresses={view.addresses}
+        domains={view.domains}
+        senders={view.senders}
+        workspaceName={view.workspaceName}
+        platformFrom={view.platformFrom}
+        platformName={view.platformName}
+        addressMode={view.addressMode}
+        ownDomains={view.ownDomains}
+        loaded={data !== undefined}
+        verifyLinkFor={verifyLinkFor}
+      />
+      {/* With no address there is nothing to choose between, so the card
+          waits for one rather than showing a row of single-option selects. */}
+      {view.addresses.length > 0 && (
+        <SendFromCard
+          {...view.sendFrom}
+          rows={['default', ...surfaces]}
+          // Where "Change" on a product's page lands: `SEND_FROM_ANCHOR` in
+          // surface-sender-row.tsx, repeated here because importing that row
+          // would load it with this page. A test holds the two together.
+          id="send-from"
+          onError={reason("Couldn't change where email is sent from.")}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Support → Channels → Email: the support inbox, and the one sender a support
+ * lead may choose, where support replies come from. The addresses themselves
+ * are managed on Settings → Email.
+ */
+export function SupportInboxSettings({ canManageSending }: { canManageSending: boolean }) {
+  const view = useEmailConfigView()
+  const { data } = view
+  return (
+    <div className="space-y-6">
+      <SendingPausedNotice
+        paused={data?.sendingPaused ?? null}
+        ownServer={data?.addressMode === 'any'}
+      />
       <InboundRouteSection
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         platformAddress={data?.platformAddress ?? null}
         inboundTrust={data?.inboundRoute?.inboundTrust ?? 'strict'}
       />
-      <SendingAddressesSection
-        addresses={data?.sendingAddresses ?? []}
-        domains={data?.domains ?? []}
-        defaultFrom={data?.defaultFrom ?? null}
-        available={data?.addressMode !== 'unavailable'}
-        guardPermitsAny={data?.addressMode === 'any'}
+      <SendFromCard
+        {...view.sendFrom}
+        rows={['support']}
+        title="Replies"
+        description={
+          canManageSending
+            ? 'The address support replies come from.'
+            : 'The address support replies come from. An admin adds sending addresses in Settings > Email.'
+        }
+        action={
+          canManageSending ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/settings/email">Manage sending addresses</Link>
+            </Button>
+          ) : undefined
+        }
+        onError={reason("Couldn't change where support replies come from.")}
       />
     </div>
   )
 }
 
-function inboundTarget(
-  route: { config: Record<string, unknown> } | null | undefined
-): string | null {
-  const t = route?.config?.forwardingTarget
-  return typeof t === 'string' ? t : null
-}
+/** How the two inbound trust settings are offered. */
+const TRUST_OPTIONS = [
+  { value: 'strict', label: 'Quarantine' },
+  { value: 'lenient', label: 'Accept' },
+] as const
 
 function InboundRouteSection({
   forwardingTarget,
@@ -115,16 +178,20 @@ function InboundRouteSection({
   const [value, setValue] = useState('')
   const [editing, setEditing] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  // One inline line for the last failed action, as on the Sending addresses card.
+  const [actionError, setActionError] = useState<string | null>(null)
   const create = useCreateInboundRoute()
   const clear = useClearInboundForwarding()
   const trust = useUpdateInboundTrust()
+  const showError = (fallback: string) => (error: unknown) =>
+    setActionError(errorText(error, fallback))
 
   const showEditor = !forwardingTarget || editing
 
   return (
     <SettingsCard
-      title="Inbound route"
-      description="Forward your support inbox here so replies become conversations."
+      title="Support inbox"
+      description="Forward your support address here so its email becomes conversations."
     >
       {platformAddress && (
         <p className="mb-4 text-[13px] text-muted-foreground">
@@ -178,17 +245,18 @@ function InboundRouteSection({
           <Button
             variant="outline"
             disabled={!value.trim() || create.isPending}
-            onClick={() =>
+            onClick={() => {
+              setActionError(null)
               create.mutate(value.trim(), {
                 onSuccess: () => {
                   setValue('')
                   setEditing(false)
                 },
-                onError: fail('Could not set the route'),
+                onError: showError("Couldn't save the forwarding address."),
               })
-            }
+            }}
           >
-            {forwardingTarget ? 'Save' : 'Set route'}
+            Save
           </Button>
           {editing && (
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
@@ -200,43 +268,60 @@ function InboundRouteSection({
 
       <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
         <div className="pr-4">
-          <p className="text-sm font-medium">Sender trust</p>
+          <p className="text-sm font-medium">Unverified senders</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Strict quarantines mail that fails authentication. Lenient accepts it with an unverified
-            badge.
+            Quarantine moves email that fails authentication to Spam. Accept lets it in, marked
+            unverified.
           </p>
         </div>
-        <div className="inline-flex shrink-0 rounded-lg border border-border p-0.5">
-          {(['strict', 'lenient'] as const).map((option) => (
+        <div
+          role="radiogroup"
+          aria-label="Unverified senders"
+          className="inline-flex shrink-0 rounded-lg border border-border p-0.5"
+        >
+          {TRUST_OPTIONS.map((option) => (
             <button
-              key={option}
+              key={option.value}
               type="button"
+              role="radio"
+              aria-checked={inboundTrust === option.value}
               disabled={trust.isPending}
-              onClick={() =>
-                trust.mutate(option, { onError: reason('Could not update sender trust') })
-              }
+              onClick={() => {
+                setActionError(null)
+                trust.mutate(option.value, {
+                  onError: showError("Couldn't change unverified senders."),
+                })
+              }}
               className={cn(
-                'rounded-md px-2.5 py-1 text-[13px] font-medium capitalize transition-colors',
-                inboundTrust === option
-                  ? 'bg-primary/10 text-foreground'
+                'rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors',
+                inboundTrust === option.value
+                  ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {option}
+              {option.label}
             </button>
           ))}
         </div>
       </div>
+      {actionError && (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {actionError}
+        </p>
+      )}
       <ConfirmDialog
         open={confirmClear}
         onOpenChange={setConfirmClear}
-        title="Delete inbound route?"
-        description="Forwarded email stops becoming conversations until you set a route again."
-        confirmLabel="Delete route"
+        title="Remove the forwarding address?"
+        description="Forwarded email stops becoming conversations until you set an address again."
+        confirmLabel="Remove"
         variant="destructive"
         isPending={clear.isPending}
         onConfirm={() => {
-          clear.mutate(undefined, { onError: reason('Could not remove the route') })
+          setActionError(null)
+          clear.mutate(undefined, {
+            onError: showError("Couldn't remove the forwarding address."),
+          })
           setConfirmClear(false)
         }}
       />
@@ -244,49 +329,16 @@ function InboundRouteSection({
   )
 }
 
-type SendingAddress = {
-  id: string
-  address: string | null
-  module: string | null
-  config: Record<string, unknown>
-  sendingDomainId?: string | null
-  sendingDomain: { domain: string; status: string } | null
-  createdAt?: string
-}
-
-type SmtpConfig = { host?: string; port?: number; secure?: boolean; user?: string }
-
-/** The bare address inside a `Name <address>` From, or the string as given. */
-const bareAddress = (from: string): string => /<([^>]+)>/.exec(from)?.[1] ?? from
-
-const moduleLabel = (module: string | null): string =>
-  MODULE_LABEL[(module ?? 'support') as (typeof MODULES)[number]] ?? module ?? ''
-
-/** "Feedback and Changelog", "Support, Feedback and Changelog". */
-const listOf = (items: string[]): string =>
-  items.length <= 1
-    ? (items[0] ?? '')
-    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
-
 /**
- * The domain row an address sends through: the one it is linked to, else the
- * one whose zone it is in (addresses added before linking carry no id).
+ * A row's icon from sm up. On a phone the tile is left out: every row carries
+ * the same one, and its width is what lets an address sit on one line.
  */
-function domainOf(a: SendingAddress, domains: SendingDomainDTO[]): SendingDomainDTO | null {
-  if (a.sendingDomainId) {
-    const linked = domains.find((d) => d.id === a.sendingDomainId)
-    if (linked) return linked
-  }
-  const at = a.address?.split('@')[1]?.toLowerCase()
-  if (!at) return null
-  return domains.find((d) => at === d.domain || at.endsWith(`.${d.domain}`)) ?? null
-}
-
-/** The meta line of the default address: which areas it still answers for. */
-function defaultMeta(uncovered: string[]): string {
-  return uncovered.length === MODULES.length || uncovered.length === 0
-    ? 'Default'
-    : `Default for ${listOf(uncovered)}`
+function PhoneHiddenIcon({ icon }: { icon: typeof EnvelopeIcon }) {
+  return (
+    <div className="hidden sm:block">
+      <RowIcon icon={icon} />
+    </div>
+  )
 }
 
 /** The meta line of a row whose domain is not live yet, or is live with its ownership record missing. */
@@ -294,14 +346,13 @@ function pendingMeta(
   domain: SendingDomainDTO,
   phase: DomainPhase,
   first: boolean,
-  area: string,
   fallback: string
 ): string | null {
   if (phase === 'live') {
     const warning = first ? ownershipWarning(domain) : null
-    return warning ? `The ownership record is missing. ${warning}` : null
+    return warning ? `The verification record is missing. ${warning}` : null
   }
-  if (!first) return `${area} · Waiting for ${domain.domain}`
+  if (!first) return `Waiting for ${domain.domain} to be verified`
   if (signingKeyFailing(domain, phase)) return `${signingKeyProblem(domain.domain)}${fallback}`
   if (phase === 'not-found') return `Records not found after 72 hours.${fallback}`
   if (phase === 'attention') {
@@ -324,62 +375,81 @@ function pendingMeta(
 function SendingAddressesSection({
   addresses,
   domains,
-  defaultFrom,
-  available,
-  guardPermitsAny,
+  senders,
+  workspaceName,
+  platformFrom,
+  platformName,
+  addressMode,
+  ownDomains: platformDomains,
+  loaded,
+  verifyLinkFor,
 }: {
   addresses: SendingAddress[]
   domains: SendingDomainDTO[]
-  defaultFrom: string | null
-  available: boolean
-  /** One workspace: replies still leave as the address, so nothing falls back. */
-  guardPermitsAny: boolean
+  senders: EmailSendersDTO
+  workspaceName: string
+  platformFrom: string | null
+  platformName: string
+  /**
+   * `unavailable`: no custom addresses here. `any`: one workspace, so email
+   * still leaves as the address and nothing falls back. `verified-domains`:
+   * shared, and a new domain brings records to add.
+   */
+  addressMode: AddressMode | undefined
+  /** The platform's own domains, which an address needs no setup to send from. */
+  ownDomains: readonly string[]
+  /** Whether the config has arrived, so an empty list really is empty. */
+  loaded: boolean
+  /** Where Verify domain goes for an address whose domain is not Verified. */
+  verifyLinkFor: (address: string | null | undefined) => VerifyDomainTarget | null
 }) {
-  const [address, setAddress] = useState('')
-  const [module, setModule] = useState<(typeof MODULES)[number]>('support')
-  const [smtpFor, setSmtpFor] = useState<{ id: string; address: string; smtp?: SmtpConfig } | null>(
-    null
+  const available = addressMode !== 'unavailable'
+  const guardPermitsAny = addressMode === 'any'
+  const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
+  const queryClient = useQueryClient()
+  const router = useRouter()
+  // Add address reads the Verified domains when it opens, not with the page.
+  const loadVerifiedDomains = useCallback(
+    async () => verifiedDomainNames(await queryClient.fetchQuery(addedDomainsQuery())),
+    [queryClient]
   )
-  const [domainRemoveTarget, setDomainRemoveTarget] = useState<{
-    id: string
-    domain: string
-  } | null>(null)
-  const [removeTarget, setRemoveTarget] = useState<{
-    id: string
-    alsoDomain: string | null
-  } | null>(null)
+  // The Add address button on show (the card's, or the empty card's), and
+  // whether it opened the dialog: focus goes back to it when the dialog
+  // closes. A rename opens from a row's menu, which takes focus back itself.
+  const addButton = useRef<HTMLButtonElement>(null)
+  const openedByAdd = useRef(false)
+  const openAdd = () => {
+    openedByAdd.current = true
+    setDialog({ kind: 'add' })
+  }
+  const [domainRemoveTarget, setDomainRemoveTarget] = useState<DomainRemoval | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<AddressRemoval | null>(null)
   // Records of live domains the person opened from the row menu, by domain.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   // One inline line for the last failed action, cleared when the next starts:
   // these failures name a fix, and a toast is gone before it is read.
   const [actionError, setActionError] = useState<string | null>(null)
-  const create = useCreateSendingAddress()
-  const del = useDeleteChannelAccount()
-  const removeDomain = useDeleteSendingDomain()
   const restart = useRestartSendingDomainChecks()
   const sendTest = useSendTestEmail()
   const showError = (fallback: string) => (error: unknown) =>
     setActionError(errorText(error, fallback))
   const now = new Date()
-  // What replies do meanwhile: one workspace still sends as the address; a
+  // What email does meanwhile: one workspace still sends as the address; a
   // shared server falls back to the default.
   const fallbackNote = guardPermitsAny
-    ? ' Replies still send from this address but may land in spam until this is fixed.'
-    : ' Replies send from the default address.'
+    ? ' Email is still sent from this address, but it may land in spam until this is fixed.'
+    : " Email comes from your default address until it's fixed."
 
-  const rows = addresses.map((a) => {
+  // Listed oldest first: the panel and the domain's status line sit under the
+  // address that has been on the domain longest, so adding another one does
+  // not move them.
+  const rows = oldestFirst(addresses).map((a) => {
     const domain = domainOf(a, domains)
     return { a, domain, phase: domain ? domainPhase(domain, now) : ('live' as const) }
   })
-  // Listed oldest first: the panel and the domain's status line sit under the
-  // address that has been on the domain longest, so adding another one does
-  // not move them, and the newest address sits next to the Add form.
   const firstOnDomain = new Set<string>()
   const seen = new Set<string>()
-  const oldestFirst = [...rows].sort((x, y) =>
-    (x.a.createdAt ?? '').localeCompare(y.a.createdAt ?? '')
-  )
-  for (const { a, domain } of oldestFirst) {
+  for (const { a, domain } of rows) {
     if (domain && !seen.has(domain.id)) {
       seen.add(domain.id)
       firstOnDomain.add(a.id)
@@ -401,50 +471,51 @@ function SendingAddressesSection({
       }}
     />
   )
-  const uncovered = MODULES.filter(
-    (m) => !rows.some((r) => r.a.module === m && r.phase === 'live')
-  ).map((m) => MODULE_LABEL[m])
+
+  // Nothing added and nothing left over: the card says what email comes from
+  // today and offers the one next step, in place of an empty list.
+  const empty = loaded && rows.length === 0 && unused.length === 0
 
   return (
     <SettingsCard
       title="Sending addresses"
-      description="The From address outbound replies use, per area."
       flush
+      // The empty state carries its own, as the one thing to do there.
+      action={
+        empty ? undefined : (
+          <Button
+            ref={addButton}
+            variant="outline"
+            size="sm"
+            disabled={!available}
+            onClick={openAdd}
+          >
+            Add address
+          </Button>
+        )
+      }
     >
       <SettingsList>
-        <SettingsListRow
-          leading={<RowIcon icon={EnvelopeIcon} />}
-          title={defaultFrom ? bareAddress(defaultFrom) : 'Default address'}
-          meta={defaultMeta(uncovered)}
-        />
-        {oldestFirst.map(({ a, domain, phase }) => {
-          const smtp = a.config.smtp as SmtpConfig | undefined
+        {rows.map(({ a, domain, phase }) => {
           const first = firstOnDomain.has(a.id)
           // A live domain whose ownership record went missing still needs a record.
           const warned = !!domain && first && ownershipWarning(domain) !== null
           // Always open while the domain needs its records; opened from the menu once live.
           const open = domain ? phase !== 'live' || (expanded[domain.id] ?? warned) : false
-          const label = a.address ?? ''
+          const address = a.address ?? ''
+          const title = senderLabel(a, workspaceName)
+          // Testable wherever real sends would use the address: a live domain,
+          // or any address on a server whose guard permits every From.
+          const testable = guardPermitsAny || (!!domain && phase === 'live')
+          const verifyDomain = testable ? null : verifyLinkFor(a.address)
           const items = [
-            ...(domain && phase === 'live'
-              ? [
-                  {
-                    label: 'Send test email',
-                    onSelect: () => {
-                      setActionError(null)
-                      sendTest.mutate(a.id, {
-                        onSuccess: (r) =>
-                          toast.success(
-                            bareAddress(r.from) === label
-                              ? `Test sent to ${r.to}`
-                              : `Test sent to ${r.to} from ${bareAddress(r.from)}`
-                          ),
-                        onError: showError("Couldn't send the test email."),
-                      })
-                    },
-                  },
-                ]
-              : []),
+            {
+              label: 'Edit name',
+              onSelect: () => {
+                openedByAdd.current = false
+                setDialog({ kind: 'rename', id: a.id, address, senderName: a.senderName ?? null })
+              },
+            },
             ...(domain && first && phase === 'live'
               ? [
                   {
@@ -454,35 +525,49 @@ function SendingAddressesSection({
                 ]
               : []),
             {
-              label: 'SMTP override',
-              onSelect: () => setSmtpFor({ id: a.id, address: label, smtp }),
-            },
-            {
               label: 'Remove',
               destructive: true,
               onSelect: () =>
                 setRemoveTarget({
                   id: a.id,
+                  address: a.address ?? '',
                   // Removing the last address on a domain removes the domain too.
                   alsoDomain:
                     domain && rows.filter((r) => r.domain?.id === domain.id).length === 1
                       ? domain.domain
                       : null,
+                  note: removalNote(a.id, senders, platformFrom, platformName),
                 }),
             },
           ]
           return (
             <div key={a.id}>
               <SettingsListRow
-                leading={<RowIcon icon={EnvelopeIcon} />}
-                title={label}
-                meta={
-                  (domain &&
-                    pendingMeta(domain, phase, first, moduleLabel(a.module), fallbackNote)) ||
-                  moduleLabel(a.module)
-                }
+                leading={<PhoneHiddenIcon icon={EnvelopeIcon} />}
+                title={title}
+                meta={(domain && pendingMeta(domain, phase, first, fallbackNote)) || undefined}
                 wrapMeta={phase !== 'live' || warned}
                 badges={<PhaseBadge phase={phase} />}
+                trailing={
+                  testable ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sendTest.isPending}
+                      onClick={() => {
+                        setActionError(null)
+                        sendTest.mutate(a.id, {
+                          onSuccess: (r) => toast.success(`Test email sent to ${r.to}`),
+                          onError: showError("Couldn't send the test email."),
+                        })
+                      }}
+                    >
+                      Send test
+                    </Button>
+                  ) : verifyDomain ? (
+                    <VerifyDomainLink target={verifyDomain} />
+                  ) : undefined
+                }
                 actions={items}
               />
               {domain && first && open && setupPanel(domain, phase)}
@@ -494,7 +579,7 @@ function SendingAddressesSection({
           return (
             <div key={domain.id}>
               <SettingsListRow
-                leading={<RowIcon icon={GlobeAltIcon} />}
+                leading={<PhoneHiddenIcon icon={GlobeAltIcon} />}
                 title={domain.domain}
                 meta="No address uses this domain"
                 badges={<PhaseBadge phase={phase} />}
@@ -519,235 +604,64 @@ function SendingAddressesSection({
           )
         })}
       </SettingsList>
-      <div className="space-y-2 border-t border-border/50 px-4 py-3 sm:px-6">
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="sending">Address</Label>
-            <Input
-              id="sending"
-              type="email"
-              value={address}
-              disabled={!available}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="help@yourcompany.com"
-            />
-          </div>
-          <Select
-            value={module}
-            disabled={!available}
-            onValueChange={(v) => setModule(v as (typeof MODULES)[number])}
-          >
-            <SelectTrigger className="w-32" aria-label="Area">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODULES.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {MODULE_LABEL[m]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            disabled={!available || !address.trim() || create.isPending}
-            onClick={() => {
-              setActionError(null)
-              create.mutate(
-                { address: address.trim(), module },
-                {
-                  onSuccess: () => setAddress(''),
-                  onError: showError("Couldn't add the address."),
-                }
-              )
-            }}
-          >
-            Add
-          </Button>
+      {empty ? (
+        <EmptyState
+          size="compact"
+          icon={EnvelopeIcon}
+          title="No sending addresses yet"
+          description={
+            !available
+              ? "Custom sending addresses aren't available on this server."
+              : platformFrom
+                ? `Email comes from ${platformFrom}. Add an address to send from your own domain.`
+                : 'Add an address to send email from your own domain.'
+          }
+          action={
+            available ? (
+              <Button ref={addButton} variant="outline" onClick={openAdd}>
+                Add address
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : !available || actionError ? (
+        <div className="space-y-2 border-t border-border/50 px-4 py-3 sm:px-6">
+          {!available && (
+            <p className="text-[13px] text-muted-foreground">
+              Custom sending addresses aren&apos;t available on this server.
+            </p>
+          )}
+          {actionError && (
+            <p role="alert" className="text-sm text-destructive">
+              {actionError}
+            </p>
+          )}
         </div>
-        {!available && (
-          <p className="text-[13px] text-muted-foreground">
-            Custom sending addresses aren&apos;t available on this server.
-          </p>
-        )}
-        {actionError && (
-          <p role="alert" className="text-sm text-destructive">
-            {actionError}
-          </p>
-        )}
-      </div>
-      <SmtpOverrideDialog target={smtpFor} onClose={() => setSmtpFor(null)} />
-      <ConfirmDialog
-        open={removeTarget !== null}
-        onOpenChange={(open) => !open && setRemoveTarget(null)}
-        title="Delete address?"
-        description={
-          removeTarget?.alsoDomain
-            ? `Replies can no longer be sent from this address. ${removeTarget.alsoDomain} will be removed too.`
-            : 'Replies can no longer be sent from this address.'
-        }
-        confirmLabel="Delete address"
-        variant="destructive"
-        isPending={del.isPending}
-        onConfirm={() => {
-          if (removeTarget) {
-            const { id, alsoDomain } = removeTarget
-            setActionError(null)
-            del.mutate(id, {
-              // Only the domain the dialog named, and only when the server
-              // agrees no address uses it any more.
-              onSuccess: ({ lastOnDomain }) => {
-                if (alsoDomain && lastOnDomain?.domain === alsoDomain) {
-                  removeDomain.mutate(lastOnDomain.id, {
-                    onError: showError("Couldn't remove the domain."),
-                  })
-                }
-              },
-              onError: showError("Couldn't remove the address."),
-            })
-          }
-          setRemoveTarget(null)
-        }}
+      ) : null}
+      <SendingAddressDialog
+        target={dialog}
+        workspaceName={workspaceName}
+        domains={domains}
+        addressMode={addressMode}
+        ownDomains={platformDomains}
+        loadVerifiedDomains={loadVerifiedDomains}
+        // Through the router, as leaving the page goes, so a blocker asks first.
+        onAddDomain={() => void router.navigate(addDomainLink())}
+        onClose={() => setDialog(null)}
+        finalFocus={() => (openedByAdd.current ? addButton.current : true)}
       />
-      <ConfirmDialog
-        open={domainRemoveTarget !== null}
-        onOpenChange={(open) => !open && setDomainRemoveTarget(null)}
-        title={domainRemoveTarget ? `Remove ${domainRemoveTarget.domain}?` : 'Remove domain?'}
-        description="Its DNS records can be deleted afterwards."
-        confirmLabel="Remove domain"
-        variant="destructive"
-        isPending={removeDomain.isPending}
-        onConfirm={() => {
-          if (domainRemoveTarget) {
-            setActionError(null)
-            removeDomain.mutate(domainRemoveTarget.id, {
-              onError: showError("Couldn't remove the domain."),
-            })
-          }
-          setDomainRemoveTarget(null)
-        }}
+      <RemoveAddressDialog
+        target={removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onStart={() => setActionError(null)}
+        onError={showError}
+      />
+      <RemoveDomainDialog
+        target={domainRemoveTarget}
+        onClose={() => setDomainRemoveTarget(null)}
+        onStart={() => setActionError(null)}
+        onError={showError}
       />
     </SettingsCard>
   )
 }
-
-function SmtpOverrideDialog({
-  target,
-  onClose,
-}: {
-  target: {
-    id: string
-    address: string
-    smtp?: { host?: string; port?: number; secure?: boolean; user?: string }
-  } | null
-  onClose: () => void
-}) {
-  return (
-    <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        {target ? <SmtpOverrideForm key={target.id} target={target} onClose={onClose} /> : null}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function SmtpOverrideForm({
-  target,
-  onClose,
-}: {
-  target: {
-    id: string
-    address: string
-    smtp?: { host?: string; port?: number; secure?: boolean; user?: string }
-  }
-  onClose: () => void
-}) {
-  const save = useUpdateSendingAddressSmtp()
-  const [host, setHost] = useState(target.smtp?.host ?? '')
-  const [port, setPort] = useState(String(target.smtp?.port ?? 587))
-  const [user, setUser] = useState(target.smtp?.user ?? '')
-  const [secure, setSecure] = useState(target.smtp?.secure ?? true)
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>SMTP override</DialogTitle>
-        <DialogDescription>
-          Send from {target.address} through a dedicated SMTP server.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="smtp-host">Host</Label>
-          <Input
-            id="smtp-host"
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="smtp.example.com"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="smtp-port">Port</Label>
-            <Input
-              id="smtp-port"
-              inputMode="numeric"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="smtp-user">Username</Label>
-            <Input id="smtp-user" value={user} onChange={(e) => setUser(e.target.value)} />
-          </div>
-        </div>
-        <div className="flex items-center justify-between py-1">
-          <Label htmlFor="smtp-secure">Use TLS</Label>
-          <Switch id="smtp-secure" checked={secure} onCheckedChange={setSecure} />
-        </div>
-      </div>
-      <DialogFooter>
-        {target.smtp && (
-          <Button
-            variant="ghost"
-            disabled={save.isPending}
-            onClick={() =>
-              save.mutate(
-                { id: target.id, smtp: null },
-                {
-                  onSuccess: onClose,
-                  onError: reason('Could not clear the override'),
-                }
-              )
-            }
-          >
-            Clear
-          </Button>
-        )}
-        <Button
-          disabled={!host.trim() || !user.trim() || save.isPending}
-          onClick={() => {
-            const parsedPort = Number(port)
-            if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-              toast.error('Enter a valid port.')
-              return
-            }
-            save.mutate(
-              {
-                id: target.id,
-                smtp: { host: host.trim(), port: parsedPort, secure, user: user.trim() },
-              },
-              { onSuccess: onClose, onError: reason('Could not save the override') }
-            )
-          }}
-        >
-          Save
-        </Button>
-      </DialogFooter>
-    </>
-  )
-}
-
-/** The server's sentence for a failed action, or the generic line. */
-const errorText = (error: unknown, fallback: string): string =>
-  error instanceof Error && error.message ? error.message : fallback

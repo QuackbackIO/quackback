@@ -41,8 +41,10 @@ describe('SendingDomainAttentionEmail', () => {
     )
     expect(text).toContain('Sending from acme.com needs attention')
     expect(text).toContain('The return path record (MX qb-bounce.acme.com) is missing.')
-    expect(text).toContain('Replies send from the default address until it is fixed.')
-    expect(text).toContain('to see every record and verify.')
+    expect(text).toContain(
+      "Until it's fixed, email from this domain comes from your default address."
+    )
+    expect(text).toContain('to see the records and check again.')
   })
 
   it('says what was found instead when the value is wrong', async () => {
@@ -61,7 +63,7 @@ describe('SendingDomainAttentionEmail', () => {
       )
     )
     expect(text).toContain(
-      'The ownership record (TXT _quackback.acme.com) has a different value: quackback-domain-verification=old.'
+      'The verification record (TXT _quackback.acme.com) has a different value: quackback-domain-verification=old.'
     )
   })
 
@@ -100,7 +102,7 @@ describe('SendingDomainAttentionEmail', () => {
         })
       )
     )
-    expect(text).toContain('The ownership record (TXT _quackback.acme.com) is missing.')
+    expect(text).toContain('The verification record (TXT _quackback.acme.com) is missing.')
     expect(text).toContain('Value: quackback-domain-verification=abc')
     expect(text).toContain('Add it back by 17 November 2026 to keep sending from acme.com.')
     // Still sending from the domain, so it does not say replies have fallen back.
@@ -109,7 +111,7 @@ describe('SendingDomainAttentionEmail', () => {
 
   it('falls back to the provider when every record still looks right', async () => {
     const text = visibleText(await render(SendingDomainAttentionEmail({ domain: 'acme.com' })))
-    expect(text).toContain('The mail provider stopped confirming acme.com.')
+    expect(text).toContain('The email provider stopped confirming acme.com.')
   })
 
   it('links to the settings page when given one', async () => {

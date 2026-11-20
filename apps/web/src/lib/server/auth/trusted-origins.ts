@@ -7,11 +7,25 @@
  * built — a custom domain added after the first sign-in would otherwise
  * keep 403ing "Invalid origin" until auth_config_version happened to bump.
  *
+ * Every routable section host (help.acme.com for the help center) is added on
+ * top, on a single-workspace install and on Cloud alike: a sign-in posted from
+ * that host, and a callback URL back to it, must pass. Only the hosts links and
+ * routing would send a visitor to count (`getSignInSectionOrigins`): verified and
+ * on, and on Cloud a custom domain that is ready.
+ *
+ * Sign-out alone is trusted from every section host still served
+ * (`getServedSectionOrigins`), a self-hosted host kept while its lookups go
+ * unanswered and a host paused with the custom domain included: that host still serves pages for its grace, so a
+ * visitor signed in there must be able to sign out. Signing someone out is the
+ * worst a forged sign-out can do, which the primary domain already allows.
+ * Sign-in, callback URLs, the handoff and linking keep the stricter list.
+ *
  * Process-wide TRUSTED_ORIGINS is only for a single-workspace install.
  * Honouring it under pooled tenancy would trust one workspace's origin on
  * every other workspace in the process.
  */
-import { config } from '@/lib/server/config'
+import { config, configuredBaseUrl } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 
 const WILDCARD_HOST_RE = /[*?]/
@@ -59,7 +73,10 @@ export function workspaceAuthTrustedOrigins(
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  return [...originsForWorkspaceHostnames(config.baseUrl, []), ...extra]
+  // The configured origin and, while a paused custom domain overrides it for
+  // this request, the default origin too.
+  const bases = new Set([configuredBaseUrl(), config.baseUrl])
+  return [...[...bases].flatMap((base) => originsForWorkspaceHostnames(base, [])), ...extra]
 }
 
 function withMatchingRequestOrigin(
@@ -81,4 +98,43 @@ function withMatchingRequestOrigin(
   if (!allowed.has(host)) return origins
   if (origins.includes(origin.origin)) return origins
   return [...origins, origin.origin]
+}
+
+/** Better Auth's sign-out endpoint, under its default base path. */
+const SIGN_OUT_PATH = '/api/auth/sign-out'
+
+/** A sign-out request: a POST to exactly the sign-out path. */
+function isSignOut(request: Request | undefined): boolean {
+  if (request?.method !== 'POST') return false
+  try {
+    return new URL(request.url).pathname === SIGN_OUT_PATH
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The Better Auth `trustedOrigins` callback: the workspace's own origins and
+ * its routable section hosts, all those still served for a sign-out. The
+ * settings read is memoised per request; a failure to read them leaves the
+ * base list, so sign-in on the primary domain never depends on the section map.
+ */
+export async function authTrustedOrigins(
+  request?: Request,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string[]> {
+  const base = workspaceAuthTrustedOrigins(request, env)
+  try {
+    const { getServedSectionOrigins, getSignInSectionOrigins } =
+      await import('@/lib/server/domains/settings/section-links')
+    const origins = isSignOut(request)
+      ? await getServedSectionOrigins()
+      : await getSignInSectionOrigins()
+    return [...new Set([...base, ...Object.values(origins)])]
+  } catch (err) {
+    logger
+      .child({ component: 'auth-trusted-origins' })
+      .warn({ err }, 'section hosts not read; trusting the workspace origins only')
+    return base
+  }
 }

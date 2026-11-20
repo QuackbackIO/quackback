@@ -65,6 +65,9 @@ const EVENT_KIND_LABELS: Record<string, string> = {
   // sentRuns/engagedRuns rollup for the aggregate this timeline backs.
   block_sent: 'Block sent',
   block_engaged: 'Customer engaged',
+  // The run reached a rating ask the conversation could not take (still
+  // open, or already asked or rated), so it ended there (workflow.engine.ts).
+  block_skipped: 'Rating not asked',
   // Logged instead of reverting to 'waiting' when an action may already have
   // committed a non-idempotent side effect. Retrying from the old cursor could
   // duplicate customer-visible work, so the run stops here instead.

@@ -89,7 +89,9 @@ test.beforeAll(async ({ browser }) => {
 })
 
 test.afterAll(async () => {
-  setWorkspaceAnon(true) // restore baseline
+  // Restore the seed's state. The seed leaves the switch unset, which denies
+  // anonymous activity; leaving it on changed what later specs see.
+  setWorkspaceAnon(false)
   await Promise.all([anonCtx?.close(), userCtx?.close(), memberCtx?.close(), adminCtx?.close()])
 })
 
@@ -178,7 +180,13 @@ async function postState(page: Page, board: { slug: string; postId: string }) {
     denied,
     renders: !denied && body.includes('e2e access probe post'),
     signInToComment: /sign in to comment|log in to comment/.test(body),
-    hasCommentEditor: (await page.locator('[contenteditable="true"], textarea').count()) > 0,
+    // Since #589 the composer first draws a stand-in textbox and mounts the
+    // real editor when the pointer arrives, so count either.
+    hasCommentEditor:
+      (await page
+        .locator('[contenteditable="true"], textarea')
+        .or(page.getByRole('textbox', { name: /write a comment/i }))
+        .count()) > 0,
   }
 }
 
@@ -296,7 +304,8 @@ async function submitFeedback(page: Page, boardSlug: string, title: string) {
   const composer = page.getByPlaceholder(/what'?s on your mind/i).first()
   await composer.click()
   await composer.fill(title)
-  const submit = page.getByRole('button', { name: /^submit/i }).first()
+  // The composer's submit button reads "Post" since d538f26ea2 (#895).
+  const submit = page.getByRole('button', { name: 'Post', exact: true }).first()
   await expect(submit).toBeEnabled()
   await submit.click()
   await expect(page.getByText('Feedback submitted')).toBeVisible({ timeout: 10000 })

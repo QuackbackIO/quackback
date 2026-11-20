@@ -10,6 +10,8 @@ import { buildGitLabIssue } from '@/integrations/gitlab/server/message'
 import { gitlabApiBase } from '@/integrations/gitlab/server/url'
 import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'gitlab' })
 
@@ -20,6 +22,7 @@ export interface GitLabTarget {
 export interface GitLabConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
   /** Origin of a self-hosted GitLab instance; omitted for gitlab.com. */
   instanceUrl?: string
 }
@@ -31,12 +34,12 @@ export const gitlabHook: IntegrationHook = {
     }
 
     const { channelId: projectId } = target as GitLabTarget
-    const { accessToken, rootUrl, instanceUrl } = config as GitLabConfig
+    const { accessToken, rootUrl, links, instanceUrl } = config as GitLabConfig
     const api = gitlabApiBase(instanceUrl)
 
     log.debug({ event_type: event.type, project_id: projectId }, 'processing event')
 
-    const { title, description } = buildGitLabIssue(event, rootUrl)
+    const { title, description } = buildGitLabIssue(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await gitlabFetch(

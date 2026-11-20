@@ -28,6 +28,12 @@ describe('feature flag settings layout', () => {
     )
   })
 
+  it('drops a stored plan limits value from the retired rollout switch', () => {
+    const flags = resolveFeatureFlags(JSON.stringify({ supportInbox: true, planLimits: false }))
+    expect(flags).not.toHaveProperty('planLimits')
+    expect(flags.supportInbox).toBe(true)
+  })
+
   it('shows the five workspace products in the expected order', () => {
     expect(PRODUCT_DEFINITIONS.map((product) => product.label)).toEqual([
       'Feedback & Roadmaps',
