@@ -207,3 +207,29 @@ export async function notificationsOf(principalUuid: string, postUuid?: string) 
     : supportDb()`SELECT * FROM in_app_notifications WHERE principal_id = ${principalUuid}
         ORDER BY created_at DESC`
 }
+
+/** Seed an in-app notification row (a precondition for the list and page journeys). */
+export async function seedNotification(
+  principalUuid: string,
+  opts: {
+    title: string
+    type?: string
+    body?: string | null
+    postUuid?: string | null
+    commentUuid?: string | null
+    metadata?: Record<string, unknown> | null
+    createdAt?: Date
+    readAt?: Date | null
+    archivedAt?: Date | null
+  }
+): Promise<{ id: string; uuid: string }> {
+  const id = toUuid(generateId('notification'))
+  await supportDb()`INSERT INTO in_app_notifications
+      (id, principal_id, type, title, body, post_id, comment_id, metadata, read_at, archived_at,
+       created_at)
+    VALUES (${id}, ${principalUuid}, ${opts.type ?? 'post_status_changed'}, ${opts.title},
+            ${opts.body ?? null}, ${opts.postUuid ?? null}, ${opts.commentUuid ?? null},
+            ${opts.metadata ? supportDb().json(opts.metadata as never) : null},
+            ${opts.readAt ?? null}, ${opts.archivedAt ?? null}, ${opts.createdAt ?? new Date()})`
+  return { id: fromUuid('notification', id), uuid: id }
+}
