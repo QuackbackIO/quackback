@@ -78,7 +78,6 @@ async function article(
 
 describe.skipIf(!fixture.available)('public help center against the database', () => {
   beforeEach(async () => {
-    expect(fixture.available).toBe(true)
     await fixture.begin()
     await testDb.insert(principal).values({ id: AUTHOR, createdAt: new Date() })
   })
