@@ -56,33 +56,29 @@ import { createDbOnConnection, db, settings, sql } from '@/lib/server/db'
 import { CACHE_KEYS } from '@/lib/server/cache'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { getWorkspaceSettingsRow } from '../settings.service'
+import { invalidateSettingsCache } from '../settings.helpers'
 import {
   getWorkflowAbandonedAutoCloseSettings,
   updateWorkflowAbandonedAutoCloseSettings,
 } from '../settings.workflows'
 
+// This proof needs Postgres. Without a database URL it is skipped under a
+// name that says so; with one, a setup failure fails the file rather than
+// passing it quietly.
+const DATABASE_URL = process.env.DATABASE_URL
 let admin: postgres.Sql | null = null
 let pool: postgres.Sql | null = null
-let available = false
-try {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('no test database')
-  admin = postgres(url, { max: 1, onnotice: () => {} })
+if (DATABASE_URL) {
+  admin = postgres(DATABASE_URL, { max: 1, onnotice: () => {} })
   await admin.unsafe(`create schema ${race.schema}`)
   await admin.unsafe(`create table ${race.schema}.settings (like public.settings including all)`)
   await admin.unsafe(`create table ${race.schema}.kv_store (like public.kv_store including all)`)
-  pool = postgres(url, {
+  pool = postgres(DATABASE_URL, {
     max: 6,
     onnotice: () => {},
     connection: { search_path: `${race.schema}, public` },
   })
   race.db = createDbOnConnection(pool)
-  // A stale test database (a column the schema declares but no migration
-  // added yet) skips the suite rather than failing it mid-test.
-  await db.select().from(settings).limit(0)
-  available = true
-} catch {
-  // Local/unit-only runs without Postgres skip this integration proof.
 }
 
 afterAll(async () => {
@@ -107,7 +103,7 @@ const COMPLETE_SETUP = JSON.stringify({
 })
 
 beforeEach(async () => {
-  if (!available) return
+  if (!DATABASE_URL) return
   race.gate = null
   await db.execute(sql`delete from kv_store`)
   await db.delete(settings)
@@ -140,7 +136,7 @@ async function cachedMetadata(): Promise<string | null | undefined> {
   return row ? row.metadata : undefined
 }
 
-describe.skipIf(!available)('settings cache fill racing a settings write', () => {
+describe.skipIf(!DATABASE_URL)('settings cache fill racing a settings write', () => {
   it('a read that read the row before a save does not cache the old row after it', async () => {
     const held = await startHeldRead()
 
@@ -153,10 +149,10 @@ describe.skipIf(!available)('settings cache fill racing a settings write', () =>
     expect((await getWorkflowAbandonedAutoCloseSettings()).enabled).toBe(true)
   })
 
-  it('a fill while a save still holds the row does not cache the old row', async () => {
+  it('a fill does not wait on a save still in flight, and that save drops what it cached', async () => {
     const held = await startHeldRead()
 
-    // The save holds the row and has not committed when the read fills.
+    // The save has written the row and not yet committed when the read fills.
     const conn = await pool!.reserve()
     try {
       await conn`begin`
@@ -165,15 +161,49 @@ describe.skipIf(!available)('settings cache fill racing a settings write', () =>
       })}`
 
       held.release()
-      // The fill neither waits for the save nor caches the row it replaces.
-      await held.read
+      // The fill must not wait for the save: it takes no lock on the row.
+      await withTimeout(held.read, 5_000, 'the fill waited on the save')
       await conn`commit`
     } finally {
+      await conn`rollback`.catch(() => {})
       conn.release()
     }
+    // Every settings writer drops the cache after its commit.
+    await invalidateSettingsCache()
 
-    expect(await cachedMetadata()).toBeUndefined()
     expect((await getWorkflowAbandonedAutoCloseSettings()).enabled).toBe(true)
+  })
+
+  it('a fill holds no lock a save would wait on', async () => {
+    const held = await startHeldRead()
+
+    // Another connection is part way through writing the cache entry, so the
+    // fill queues behind it mid-statement.
+    const cacheWriter = await pool!.reserve()
+    const save = await pool!.reserve()
+    try {
+      await cacheWriter`begin`
+      const [{ pid }] = await cacheWriter<{ pid: number }[]>`select pg_backend_pid() as pid`
+      await cacheWriter`
+        insert into kv_store (workspace_key, key, value, expires_at)
+        values ('_', ${CACHE_KEYS.WORKSPACE_SETTINGS}, 'null'::jsonb, now() + interval '1 hour')
+        on conflict do nothing`
+      held.release()
+      await waitForBlockedBy(pid)
+
+      // While the fill waits, a save can still take the settings row at once.
+      await save`begin`
+      await expect(save`select id from settings limit 1 for update nowait`).resolves.toHaveLength(1)
+      await save`rollback`
+      await cacheWriter`rollback`
+      await held.read
+    } finally {
+      // Leave no transaction open on a pooled connection, pass or fail.
+      await save`rollback`.catch(() => {})
+      await cacheWriter`rollback`.catch(() => {})
+      save.release()
+      cacheWriter.release()
+    }
   })
 
   it('a read with no write in between still fills the cache', async () => {
@@ -181,3 +211,32 @@ describe.skipIf(!available)('settings cache fill racing a settings write', () =>
     expect(await cachedMetadata()).toBeNull()
   })
 })
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Wait until a session queues behind the backend `pid`. */
+async function waitForBlockedBy(pid: number): Promise<void> {
+  const deadline = Date.now() + 10_000
+  for (;;) {
+    const [{ blocked }] = getExecuteRows<{ blocked: number }>(
+      await db.execute(sql`
+        select count(*)::int as blocked from pg_stat_activity
+        where ${pid} = any(pg_blocking_pids(pid))`)
+    )
+    if (blocked >= 1) return
+    if (Date.now() > deadline) throw new Error(`nothing queued behind ${pid}`)
+    await new Promise((r) => setTimeout(r, 20))
+  }
+}

@@ -94,11 +94,11 @@ export async function kvSet(
 }
 
 /**
- * SET … EX, but only when `condition` holds as the statement runs. For a cache
- * fill that must not land once what it was built from has changed: the check
- * and the write are one statement, so a change committed before it is seen,
- * and a condition that locks what it reads (`FOR SHARE`) waits out a change
- * still in flight. True iff the value was written.
+ * SET … EX, but only when `condition` holds as this statement runs. For a cache
+ * fill that must not land once what it was built from has changed. The check
+ * and the write are one statement, so a change committed before the statement
+ * starts is seen; a change still uncommitted is not, and its writer must drop
+ * the key after it commits. True iff the value was written.
  */
 export async function kvSetIf(
   key: string,

@@ -36,7 +36,7 @@ describe('cacheDel', () => {
     kv.duringDelete = () => {
       // A read that starts after the local copy was forgotten and finds the
       // shared copy not yet deleted.
-      const readSince = localCacheGeneration()
+      const readSince = localCacheGeneration(KEY)
       localCacheSet(KEY, 'replaced', 5_000, readSince)
     }
 

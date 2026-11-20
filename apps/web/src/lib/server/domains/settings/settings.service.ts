@@ -1100,7 +1100,7 @@ async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   if (local) return local
   // A write that drops the settings while this read is in flight leaves the
   // copy unkept, as fillIfRowUnchanged does for the shared cache.
-  const readSince = localCacheGeneration()
+  const readSince = localCacheGeneration(CACHE_KEYS.WORKSPACE_SETTINGS)
   const settings = await readWorkspaceSettings()
   const ttlMs = settingsLocalTtlMs()
   if (settings && ttlMs > 0) {
@@ -1112,17 +1112,21 @@ async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
 /**
  * Cache settings built from the row at `rowVersion` (its `xmin`, which every
  * update of the row changes, raw SQL included), unless the row has changed
- * since. A save that commits and drops the cache while this read is
- * still building would otherwise have the old row cached after the drop, and
- * every page would serve it for the hour (an admin saves, reloads, and sees
- * the old value). A save still in flight holds the row, and the check skips a
- * held row rather than waiting on it (`SKIP LOCKED`), so the fill is skipped:
- * waiting could hang a transaction that holds the row and reads the settings.
- * A save after the fill drops it as usual.
+ * since. A save that commits and drops the cache while this read is still
+ * building would otherwise have the old row cached after the drop, and every
+ * page would serve it for the hour (an admin saves, reloads, and sees the old
+ * value).
+ *
+ * The check takes no lock, so a fill never holds up a save. A save still in
+ * flight is not visible to it: the fill may cache the row that save is
+ * replacing, and the save drops it when it invalidates after its commit, as
+ * every settings writer does. Writes to other tables the settings are built
+ * from (identity providers, verified domains) bump the row's auth config
+ * version in the same transaction, so they change the version too.
  */
 async function fillIfRowUnchanged(result: WorkspaceSettings, rowVersion: string): Promise<void> {
   await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600, {
-    onlyIf: sql`(SELECT xmin::text FROM settings LIMIT 1 FOR SHARE SKIP LOCKED) = ${rowVersion}`,
+    onlyIf: sql`(SELECT xmin::text FROM settings LIMIT 1) = ${rowVersion}`,
   })
 }
 

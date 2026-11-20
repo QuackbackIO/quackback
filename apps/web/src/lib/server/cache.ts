@@ -29,6 +29,9 @@ import { forgetCachedKeys } from '@/lib/server/local-cache'
 
 const log = logger.child({ component: 'cache' })
 
+/** Fills `cacheSet` refused because their source changed (see `onlyIf`). */
+let refusedFills = 0
+
 /**
  * Logical cache key names.
  *
@@ -92,8 +95,16 @@ export async function cacheSet(
   options: { onlyIf?: SQL } = {}
 ): Promise<void> {
   try {
-    if (options.onlyIf) await kvSetIf(key, value, ttlSeconds, options.onlyIf)
-    else await kvSet(key, value, ttlSeconds)
+    if (!options.onlyIf) {
+      await kvSet(key, value, ttlSeconds)
+      return
+    }
+    if (!(await kvSetIf(key, value, ttlSeconds, options.onlyIf))) {
+      refusedFills++
+      // Normal when a write overlapped the read. Seen on every fill, it means
+      // the shared cache has stopped filling for this key.
+      log.debug({ key, refusedFills }, 'cache fill refused: its source changed during the read')
+    }
   } catch (err) {
     log.warn({ err, key }, 'cache set failed')
   }
