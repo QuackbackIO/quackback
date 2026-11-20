@@ -340,7 +340,7 @@ export interface PortalCustomer extends MintedCustomer {
 }
 
 /** A browser context with its own client address, signed in with `token` (or none). */
-async function contextWithIp(
+export async function contextFor(
   browser: Browser,
   ip: string,
   token?: string
@@ -384,7 +384,7 @@ export async function portalCustomer(
   })
   const ip = ipFor(marker, suffix)
   const token = await mintSessionToken(customer.userUuid)
-  const context = await contextWithIp(browser, ip, token)
+  const context = await contextFor(browser, ip, token)
   const page = await context.newPage()
   return { ...customer, context, page, request: context.request, ip }
 }
@@ -396,7 +396,7 @@ export async function visitor(
   salt = 'visitor'
 ): Promise<{ context: BrowserContext; page: Page; request: APIRequestContext; ip: string }> {
   const ip = ipFor(marker, salt)
-  const context = await contextWithIp(browser, ip)
+  const context = await contextFor(browser, ip)
   const page = await context.newPage()
   return { context, page, request: context.request, ip }
 }
@@ -408,7 +408,7 @@ export async function personContext(
   marker: string
 ): Promise<{ context: BrowserContext; page: Page; request: APIRequestContext }> {
   const token = await mintSessionToken(userUuid)
-  const context = await contextWithIp(browser, ipFor(marker, `person-${userUuid}`), token)
+  const context = await contextFor(browser, ipFor(marker, `person-${userUuid}`), token)
   return { context, page: await context.newPage(), request: context.request }
 }
 

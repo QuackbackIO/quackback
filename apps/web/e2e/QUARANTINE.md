@@ -517,3 +517,18 @@ no such part beyond the wrong notification).
   colour or label for it, so its impact bar reads " · Investigating". Fix:
   refuse it for incidents (or give the template a Maintenance label). owner:
   unassigned, review by: 2026-12-03.
+
+### Product suite: FBP feed, submit and voting
+
+- `feedback/portal-voting.spec.ts` › FBP-V-14 after a vote collision the post
+  count equals its distinct voters (FBP-B15). When an anonymous visitor who
+  voted signs in to an account that also voted on the same post, the re-point
+  step drops the colliding anonymous vote
+  (`apps/web/src/lib/server/domains/principals/principal-repoint.ts:220-225`)
+  but `mergeAnonymousToIdentified`
+  (`apps/web/src/lib/server/auth/merge-anonymous.ts:40-62`) never recounts, so
+  `posts.vote_count` stays one above the number of voters (red run: expected
+  1, received 2). Smallest fix: inside the merge transaction recompute
+  `vote_count` from `post_votes` for every post the dropped votes touched.
+  Runs in product-isolated (needs the widget on). owner: unassigned, review
+  by: 2026-12-03.
