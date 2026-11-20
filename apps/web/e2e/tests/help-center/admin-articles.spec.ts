@@ -6,6 +6,7 @@
  * HC-A-19, HC-A-20.
  */
 import type { Page } from '@playwright/test'
+import { generateId } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
 import { waitForHydration } from '../../utils/helpers'
@@ -343,7 +344,7 @@ test.describe('editing articles', () => {
     },
     async ({ asPerson }) => {
       const admin = await asPerson('admin')
-      await admin.goto('/admin/help-center?article=article_01h0000000000000000000000')
+      await admin.goto(`/admin/help-center?article=${generateId('article')}`)
       const dialog = admin.getByRole('dialog')
       await expect(dialog).toBeVisible()
       await expect(dialog.getByText(/not found|no longer exists|deleted/i)).toBeVisible({

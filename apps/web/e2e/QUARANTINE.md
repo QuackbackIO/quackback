@@ -179,3 +179,17 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   until the article loads, so a missing or deleted id spins forever. Fix: when
   the detail query errors (ARTICLE_NOT_FOUND), show a not-found state or close
   the modal and drop the param.
+- `help-center/api-rest.spec.ts` › HC-A-16 a whitespace-only title or
+  category name is refused on update (HC-B13). `updateArticleSchema` and
+  `updateCategorySchema` (`lib/shared/schemas/help-center.ts`, and the REST
+  bodies) check `min(1)` before trimming; `updateArticle` / `updateCategory`
+  then store the trimmed empty string. Fix: `.trim().min(1)` in the update
+  schemas, or refuse an empty trimmed value in the services as create does.
+- `help-center/api-rest.spec.ts` › HC-A-76 a key without help_center.manage
+  cannot read drafts or private categories (HC-B3). The GET handlers in
+  `routes/api/v1/help-center/articles/index.ts`, `articles/$articleId.ts`,
+  `categories/index.ts` and `categories/$categoryId.ts` call
+  `withApiKeyAuth(request)` with no permission and read at team scope, so a
+  Contributor's key gets drafts and private categories. Fix: pass
+  `{ permission: PERMISSIONS.HELP_CENTER_MANAGE }` (as MCP does), or read with
+  the public visibility rules for keys without it.
