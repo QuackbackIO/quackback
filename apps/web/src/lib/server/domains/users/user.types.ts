@@ -113,6 +113,8 @@ export interface PortalUserListParams {
     | 'name'
   page?: number
   limit?: number
+  /** Row offset to start at; overrides `page`. */
+  offset?: number
   /** Filter by segment IDs (OR logic — users in ANY of the given segments) */
   segmentIds?: import('@quackback/ids').SegmentId[]
   /** Filter by user tag IDs (OR logic — users carrying ANY of the given tags) */

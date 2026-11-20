@@ -178,6 +178,26 @@ describe.skipIf(!fixture.available)('removePortalUser (real DB, rolled back)', (
     expect(votes).toHaveLength(0)
   })
 
+  it('clears the visitor email on the conversations it moves to the placeholder', async () => {
+    const visitor = await seedPortalUser('Emailing Em')
+    const conversationId = createId('conversation') as ConversationId
+    await testDb.insert(conversations).values({
+      id: conversationId,
+      visitorPrincipalId: visitor.principalId,
+      visitorEmail: 'em@customers.example',
+      channel: 'messenger',
+    })
+
+    await removePortalUser(visitor.principalId)
+
+    const [conversation] = await testDb
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    expect(conversation.visitorPrincipalId).toBe(DELETED_USER_PRINCIPAL_ID)
+    expect(conversation.visitorEmail).toBeNull()
+  })
+
   it('reuses one placeholder across removals and refuses to remove the placeholder itself', async () => {
     const boardId = await seedBoard()
     const first = await seedPortalUser('First Fran')
