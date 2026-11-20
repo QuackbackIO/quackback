@@ -565,6 +565,83 @@ describe('notificationHook — ticket.replied (watchers)', () => {
   })
 })
 
+describe('notificationHook — ticket.replied from the customer (presence gate)', () => {
+  // A customer message on a ticket's conversation, as a live chat sends many.
+  function customerReply(): EventData {
+    return {
+      id: 'evt-ticket-replied-2',
+      type: 'ticket.replied',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_requester' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        messageId: 'conversation_message_2',
+        content: 'Still broken for me',
+        attachments: null,
+        senderType: 'visitor',
+        title: 'Cannot log in',
+        authorName: 'Riley',
+        requesterPrincipalId: 'principal_requester',
+      },
+    } as EventData
+  }
+  const config = {
+    ticketId: 'ticket_1',
+    title: 'Cannot log in',
+    authorName: 'Riley',
+    preview: 'Still broken for me',
+    requesterPrincipalId: 'principal_requester',
+  }
+  const watchers: NotificationTarget = {
+    principalIds: ['principal_agent_1' as never, 'principal_agent_2' as never],
+  }
+
+  it('holds the bell back while a watching teammate is online', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_agent_2'])
+    const result = await notificationHook.run(customerReply(), watchers, config)
+    expect(result.success).toBe(true)
+    expect(batchSpy).not.toHaveBeenCalled()
+  })
+
+  it('holds the bell back while presence cannot be read', async () => {
+    onlineAgentIds.mockResolvedValue(null)
+    await notificationHook.run(customerReply(), watchers, config)
+    expect(batchSpy).not.toHaveBeenCalled()
+  })
+
+  it('bells the watchers when the only teammate online is not watching', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_someone_else'])
+    await notificationHook.run(customerReply(), watchers, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch.map((n) => n.principalId)).toEqual(['principal_agent_1', 'principal_agent_2'])
+  })
+
+  it('never holds back a teammate reply, which is the customer’s own news', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_agent_2'])
+    const agentReply = customerReply()
+    ;(agentReply.data as unknown as Record<string, unknown>).senderType = 'agent'
+    agentReply.actor = { type: 'user', principalId: 'principal_agent_1' } as EventData['actor']
+    await notificationHook.run(
+      agentReply,
+      { principalIds: ['principal_requester' as never, 'principal_agent_2' as never] },
+      config
+    )
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch.map((n) => n.principalId)).toEqual(['principal_requester', 'principal_agent_2'])
+  })
+
+  it('keeps the requester’s own row when a teammate is online (only teammates are held back)', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_agent_1'])
+    await notificationHook.run(
+      customerReply(),
+      { principalIds: ['principal_requester' as never, 'principal_agent_1' as never] },
+      config
+    )
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch.map((n) => n.principalId)).toEqual(['principal_requester'])
+  })
+})
+
 describe('notificationHook — ticket.note_added (agent watchers)', () => {
   it('builds admin-audience ticket_note_added rows', async () => {
     const event = {

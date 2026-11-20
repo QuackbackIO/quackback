@@ -82,10 +82,41 @@ export interface NotificationConfig {
   transition?: 'closed' | 'reopened' | null
 }
 
+/**
+ * The same anti-spam gate as the new-message team bell below, for a customer
+ * message on a ticket's conversation (`ticket.replied` sent by the visitor).
+ * Every message in a live chat signals it, and the ticket's watchers are its
+ * team bell on a pair (the conversation bell is held back there), so without
+ * this each message would bell every watching teammate. While one of the
+ * watching teammates is around (a live inbox, not set to Away) they see it
+ * live and no teammate is belled; an unreadable presence store counts as
+ * someone around. Only teammates are held back: the requester's own row, and
+ * a teammate's reply (news for everyone watching), always go out.
+ */
+async function gateCustomerTicketReply(
+  event: EventData,
+  principalIds: NotificationTarget['principalIds'],
+  cfg: NotificationConfig
+): Promise<NotificationTarget['principalIds']> {
+  if (event.type !== 'ticket.replied' || event.data.senderType !== 'visitor') return principalIds
+  if (!principalIds || principalIds.length === 0) return principalIds
+  const requester = cfg.requesterPrincipalId ?? event.data.requesterPrincipalId ?? null
+  const teammates = principalIds.filter((id) => id !== requester)
+  if (teammates.length === 0) return principalIds
+  const { readAvailableAgentIds } = await import('@/lib/server/realtime/presence')
+  const online = await readAvailableAgentIds()
+  const someoneAround = online === null || teammates.some((id) => online.includes(id))
+  return someoneAround ? principalIds.filter((id) => id === requester) : principalIds
+}
+
 export const notificationHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { principalIds } = target as NotificationTarget
     const cfg = config as NotificationConfig
+    const principalIds = await gateCustomerTicketReply(
+      event,
+      (target as NotificationTarget).principalIds,
+      cfg
+    )
 
     if (!principalIds || principalIds.length === 0) {
       return { success: true }

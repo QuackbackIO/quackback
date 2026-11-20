@@ -323,6 +323,11 @@ test.describe('ticket emails to the requester', () => {
             m.HTML.includes(`We are on it ${marker}`)
         )
 
+        // The watcher's bell for a customer message is held back while a
+        // watching teammate is online, and the shared admin (a watcher since
+        // replying) may have an inbox open in another test: the admin stops
+        // watching, leaving the watcher, who is never online.
+        await fnOk(admin, 'unwatchTicketFn', { ticketId: ticket.id })
         // The requester answers by email on the ticket thread.
         const res = await sendInboundEmail(request, {
           from: requester.email,

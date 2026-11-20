@@ -666,6 +666,11 @@ test.describe('notifications', () => {
           })
         ).ok
       ).toBe(true)
+      // The bell is held back while a watching teammate is online, and the
+      // shared admin may have an inbox open in another test: the admin (a
+      // watcher as the ticket's creator) stops watching, leaving the watcher,
+      // who is never online.
+      expect((await callServerFn(admin, 'unwatchTicketFn', { ticketId })).ok).toBe(true)
       await visitor.send(`watched reply ${marker}`, conversationId)
       await waitForBells(watcher.principalId, ticketId, (r) =>
         r.some((b) => b.type === 'ticket_replied')
