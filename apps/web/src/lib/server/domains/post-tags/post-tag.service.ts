@@ -50,9 +50,12 @@ export async function createPostTag(input: CreateTagInput): Promise<PostTag> {
     tooLong: 'PostTag name must not exceed 50 characters',
   })
 
-  // Includes soft-deleted rows — the name unique check spans archived tags.
+  // Live tags only: a deleted tag frees its name.
   const duplicate = await db.query.postTags.findFirst({
-    where: sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`,
+    where: and(
+      sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`,
+      isNull(postTags.deletedAt)
+    ),
   })
   if (duplicate) {
     throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
@@ -103,7 +106,11 @@ export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promi
       tooLong: 'PostTag name must not exceed 50 characters',
     })
     const duplicate = await db.query.postTags.findFirst({
-      where: and(sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`, ne(postTags.id, id)),
+      where: and(
+        sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`,
+        ne(postTags.id, id),
+        isNull(postTags.deletedAt)
+      ),
     })
     if (duplicate) {
       throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
@@ -147,14 +154,20 @@ export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promi
  */
 export async function deletePostTag(id: PostTagId): Promise<void> {
   log.debug({ tag_id: id }, 'delete tag')
-  // Soft delete the tag by setting deletedAt
-  const result = await db
-    .update(postTags)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(postTags.id, id), isNull(postTags.deletedAt)))
-    .returning()
+  // Soft delete the tag and take it off every post in one transaction: the
+  // tag is gone from all posts, as the delete confirmation says.
+  const deleted = await db.transaction(async (tx) => {
+    const result = await tx
+      .update(postTags)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(postTags.id, id), isNull(postTags.deletedAt)))
+      .returning({ id: postTags.id })
+    if (result.length === 0) return false
+    await tx.delete(postTagAssignments).where(eq(postTagAssignments.tagId, id))
+    return true
+  })
 
-  if (result.length === 0) {
+  if (!deleted) {
     throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)
   }
 }

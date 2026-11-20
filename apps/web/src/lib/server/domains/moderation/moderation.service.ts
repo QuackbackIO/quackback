@@ -138,7 +138,13 @@ export async function listPendingPosts(): Promise<PendingPostRow[]> {
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .leftJoin(principal, eq(posts.principalId, principal.id))
     .where(
-      and(eq(posts.moderationState, 'pending'), isNull(posts.deletedAt), isNull(boards.deletedAt))
+      and(
+        eq(posts.moderationState, 'pending'),
+        isNull(posts.deletedAt),
+        isNull(boards.deletedAt),
+        // A test customer's post stays out of the queue, as it does of the counts.
+        notTestPrincipal(posts.principalId)
+      )
     )
     .orderBy(desc(posts.createdAt))
 }
@@ -166,7 +172,11 @@ export async function listPendingComments(): Promise<PendingCommentRow[]> {
         eq(postComments.moderationState, 'pending'),
         isNull(postComments.deletedAt),
         isNull(posts.deletedAt),
-        isNull(boards.deletedAt)
+        isNull(boards.deletedAt),
+        // Same exclusions as the counts: a test customer's comment, or any
+        // comment on a test customer's post.
+        notTestPrincipal(postComments.principalId),
+        notTestPrincipal(posts.principalId)
       )
     )
     .orderBy(desc(postComments.createdAt))

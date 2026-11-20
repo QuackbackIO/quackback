@@ -75,9 +75,9 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
   }
   assertHexColor(input.color, 'Color must be in hex format (e.g., #3b82f6)')
 
-  // Check if slug already exists (moved outside transaction for HTTP-driver compatibility)
+  // Check if a live status has the slug (a deleted status frees its slug)
   const existingStatus = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.slug, input.slug),
+    where: and(eq(postStatuses.slug, input.slug), isNull(postStatuses.deletedAt)),
   })
   if (existingStatus) {
     throw new ConflictError('DUPLICATE_SLUG', `A status with slug '${input.slug}' already exists`)
@@ -132,6 +132,15 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
       throw new ValidationError('VALIDATION_ERROR', 'Color cannot be empty')
     }
     assertHexColor(input.color, 'Color must be in hex format (e.g., #3b82f6)')
+  }
+
+  // The workspace always keeps one default: it moves by marking another
+  // status default, never by unsetting the current one.
+  if (input.isDefault === false && existingStatus.isDefault) {
+    throw new ConflictError(
+      'CANNOT_UNSET_DEFAULT',
+      'Cannot unset the default status. Mark another status as default instead.'
+    )
   }
 
   // If setting as default, use atomic operation to prevent race conditions
@@ -312,7 +321,7 @@ export async function getDefaultStatus(): Promise<Status | null> {
  */
 export async function getStatusBySlug(slug: string): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.slug, slug),
+    where: and(eq(postStatuses.slug, slug), isNull(postStatuses.deletedAt)),
   })
   if (!status) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with slug '${slug}' not found`)
