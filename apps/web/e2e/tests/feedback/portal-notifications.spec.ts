@@ -306,7 +306,9 @@ test.describe('portal notifications', () => {
       })
       expect(JSON.stringify(hidden)).not.toContain('soon gone')
       expect(JSON.stringify(rows)).toContain('still here')
-      expect(res.value?.unreadCount).toBe(2)
+      // The redacted bell keeps its row but no longer counts as unread: the
+      // count (like the badge) covers only bells the reader can open (FBA-N-15).
+      expect(res.value?.unreadCount).toBe(1)
     }
   )
 
