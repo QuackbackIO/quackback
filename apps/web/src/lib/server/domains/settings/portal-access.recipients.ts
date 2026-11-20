@@ -15,7 +15,8 @@
  *   - invite: a verified email with an accepted portal invite;
  *   - segment: a verified member of an allowed segment;
  *   - widget: widget sign-in on, and a live portal session that came from
- *     the widget handoff.
+ *     the widget handoff or a live widget session identified with a verified
+ *     ssoToken.
  */
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import {
@@ -29,6 +30,7 @@ import {
   session,
   user,
   userSegments,
+  widgetIdentifiedSession,
   widgetOriginSession,
 } from '@/lib/server/db'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -93,7 +95,7 @@ export async function principalsWithPortalAccess(
   )
   const userIds = people.flatMap((p) => (p.userId ? [p.userId] : []))
 
-  const [invites, segmentRows, widgetRows] = await Promise.all([
+  const [invites, segmentRows, widgetRows, verifiedWidgetRows] = await Promise.all([
     verifiedEmails.length > 0
       ? db
           .select({ email: invitation.email })
@@ -126,10 +128,24 @@ export async function principalsWithPortalAccess(
             and(inArray(widgetOriginSession.userId, userIds), gt(session.expiresAt, new Date()))
           )
       : [],
+    // A live widget session identified with a verified ssoToken counts too.
+    widgetSignInEnabled && userIds.length > 0
+      ? db
+          .select({ userId: session.userId })
+          .from(widgetIdentifiedSession)
+          .innerJoin(session, eq(session.id, widgetIdentifiedSession.sessionId))
+          .where(
+            and(
+              inArray(session.userId, userIds),
+              eq(widgetIdentifiedSession.hmacVerified, true),
+              gt(session.expiresAt, new Date())
+            )
+          )
+      : [],
   ])
   const invitedEmails = new Set(invites.map((r) => r.email.toLowerCase()))
   const inAllowedSegment = new Set(segmentRows.map((r) => String(r.principalId)))
-  const viaWidget = new Set(widgetRows.map((r) => r.userId))
+  const viaWidget = new Set([...widgetRows, ...verifiedWidgetRows].map((r) => r.userId))
 
   const granted = new Set<PrincipalId>()
   for (const p of people) {
