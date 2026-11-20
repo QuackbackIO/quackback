@@ -93,7 +93,7 @@ function votedThreadIdsSql(principalId: PrincipalId) {
  * in, ahead of its vote rows going away. `vote_count` lives on the thread's
  * canonical post and counts each voter once, and a test customer's votes were
  * never counted. With `keptBy`, only the threads that principal also voted in
- * lose a vote: the vote that survives a merge stays counted.
+ * lose a vote: elsewhere the leaving vote is re-pointed, not dropped.
  *
  * A delta rather than a recount: an imported post can carry a count with no
  * vote rows behind it.
@@ -107,14 +107,13 @@ export async function withdrawThreadVotes(
   const threads = keptBy
     ? sql`${votedThreadIdsSql(principalId)} INTERSECT ${votedThreadIdsSql(keptBy)}`
     : votedThreadIdsSql(principalId)
-  const counted = keptBy
-    ? sql`${notTestPrincipal(sql`${toUuid(principalId)}::uuid`)} AND ${notTestPrincipal(sql`${toUuid(keptBy)}::uuid`)}`
-    : notTestPrincipal(sql`${toUuid(principalId)}::uuid`)
+  // Whether the count drops depends only on the vote leaving it: a kept test
+  // customer's vote was never counted, so it does not stand in for this one.
   await conn.execute(sql`
     UPDATE ${posts}
     SET vote_count = GREATEST(0, vote_count - 1)
     WHERE id IN (${threads})
-      AND ${counted}
+      AND ${notTestPrincipal(sql`${toUuid(principalId)}::uuid`)}
   `)
 }
 

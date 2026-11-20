@@ -55,9 +55,12 @@ export interface AddMemberInput {
  * source has strictly higher priority than the existing row. On equal
  * priority the existing row wins (no-op), mirroring the legacy
  * `newPriority > existingPriority` check.
+ *
+ * Resolves true only when the row is new: an upgrade keeps someone who was
+ * already a member, and a skipped write changes nothing.
  */
-export async function addMember(input: AddMemberInput): Promise<void> {
-  await db
+export async function addMember(input: AddMemberInput): Promise<boolean> {
+  const written = await db
     .insert(userSegments)
     .values({
       principalId: input.principalId,
@@ -82,6 +85,8 @@ export async function addMember(input: AddMemberInput): Promise<void> {
         END
       ) < ${SOURCE_PRIORITY[input.source]}`,
     })
+    // xmax is 0 on a freshly inserted row and set on one the conflict updated.
+    .returning({ inserted: sql<boolean>`(xmax = 0)` })
   forgetRequestSegmentIds()
 
   // Audit fires whenever an actor is supplied — including the no-op
@@ -99,6 +104,7 @@ export async function addMember(input: AddMemberInput): Promise<void> {
       metadata: { principalId: input.principalId, source: input.source },
     })
   }
+  return written.some((row) => row.inserted)
 }
 
 export interface RemoveMemberInput {

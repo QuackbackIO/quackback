@@ -123,20 +123,21 @@ vi.mock('@/lib/server/db', () => {
               // with a setWhere: rows are returned when the INSERT fired
               // OR when the UPDATE matched the setWhere. The phantom-audit
               // fix relies on returning() length to detect real changes.
-              const runUpsert = (): typeof state.rows => {
+              // `inserted` mirrors the service's xmax = 0 projection.
+              const runUpsert = (): Array<Row & { inserted: boolean }> => {
                 const existing = state.rows.find(
                   (r) =>
                     r.principalId === incoming.principalId && r.segmentId === incoming.segmentId
                 )
                 if (!existing) {
                   state.rows.push(incoming)
-                  return [incoming]
+                  return [{ ...incoming, inserted: true }]
                 }
                 const newPriority = MOCK_PRIORITY[String(conflict.set.addedBy)]
                 const existingPriority = MOCK_PRIORITY[existing.addedBy]
                 if (newPriority > existingPriority) {
                   existing.addedBy = String(conflict.set.addedBy)
-                  return [existing]
+                  return [{ ...existing, inserted: false }]
                 }
                 return [] // no-op (preserves stickier source)
               }

@@ -20,8 +20,9 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
   withApiKeyAuth: vi.fn(async () => ({ role: 'admin' })),
 }))
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
-  addMember: vi.fn(async () => undefined),
-  removeMember: vi.fn(async () => undefined),
+  // Both resolve whether a row was written, as the service does.
+  addMember: vi.fn(async () => true),
+  removeMember: vi.fn(async () => true),
 }))
 
 import { Route } from '../$slug.members'
