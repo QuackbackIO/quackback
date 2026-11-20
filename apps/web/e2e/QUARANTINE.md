@@ -750,3 +750,79 @@ no such part beyond the wrong notification).
   revisit) is swallowed and the invitee sees "Something went wrong". The
   invite is accepted all the same. Fix: use the router's `isRedirect(err)`.
   owner: unassigned, review by: 2026-12-03.
+
+### Product suite: feedback admin (inbox and posts)
+
+- `feedback/admin-inbox.spec.ts` › FBA-I-11 Responded lists posts with a public
+  team reply; a private note is not a response. Product bug: the Team response
+  filter (and its counts) treats a private internal note as a response, because
+  `teamResponseExistsSql` (`apps/web/src/lib/server/domains/posts/post.inbox.ts:43`)
+  matches any live comment with `is_team_member = true`. Fix: add
+  `AND post_comments.is_private = false` (and `moderation_state <> 'pending'`)
+  to that EXISTS. owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-inbox.spec.ts` › FBA-I-12 Has duplicates lists only posts with a
+  pending suggestion, and nothing when none has one. Product bug: the filter
+  runs in the browser (`feedback-table-view.tsx:244`) and is skipped when the
+  counts map is `undefined`, which `inbox-container.tsx:85` returns whenever no
+  loaded post has a pending suggestion, so every post is listed. Fix: filter on
+  the server (`hasDuplicates` in `post.inbox.ts`), or treat a missing map as
+  "no post has duplicates" when the filter is on. owner: unassigned, review by:
+- `feedback/admin-inbox.spec.ts` › FBA-I-32 a failed list read shows Failed to
+  load feedback, and Try again recovers. Product bug: the error component's Try
+  again (`apps/web/src/routes/admin/feedback.index.tsx:71`) calls only the error
+  boundary's `reset`, so the failed loader is never re-run and the alert stays
+  until a full reload. Fix: `onClick={() => { router.invalidate(); reset() }}`
+  (or `useQueryErrorResetBoundary`). owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-04 a post created over REST
+  without a status gets the workspace default status (`@isolated`). Product
+  bug: `createPost` falls back to the status slugged `open`
+  (`apps/web/src/lib/server/domains/posts/post.service.ts:145`), not the one
+  marked default, so REST, MCP and Track as feedback ignore a changed default
+  while the portal and admin dialog follow it. Fix: look up
+  `is_default = true` there (falling back to `open`). owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-08 choosing the status a post
+  already has changes nothing. Product bug: `changeStatus`
+  (`apps/web/src/lib/server/domains/posts/post.status.ts:72`) has no
+  same-status guard, so re-picking the current status writes a
+  `status.changed` activity, fires `post.status_changed` (Open to Open) and
+  emails subscribers. Fix: return early when the post already has `statusId`.
+  owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-11 a post owner must be a
+  teammate. Product bug: `setPostOwnerFn`
+  (`apps/web/src/lib/server/functions/posts.ts:497`) accepts any principal
+  id, so a customer can be made owner (and gets the owner bell). Fix: load the
+  principal and refuse unless its role is admin or member. owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-17 post.deleted from the post
+  modal names who deleted it. Product bug: `softDeletePost` builds the event
+  actor from principal and user ids only
+  (`apps/web/src/lib/server/domains/posts/post.user-actions.ts:332`), so
+  `dispatchPostDeleted` (`apps/web/src/lib/server/events/dispatch.ts:265`)
+  finds no email or name and the webhook carries no `deletedBy`. Fix: pass the
+  actor's email and display name into `buildEventActor`. owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/admin-post-actions.spec.ts` › FBA-P-21 deleting a canonical post
+  does not hide its merged duplicates. Product bug: `softDeletePost`
+  (`apps/web/src/lib/server/domains/posts/post.user-actions.ts:243`) only
+  recounts when the deleted post is itself a duplicate; the duplicates of a
+  deleted canonical keep `canonical_post_id`, and the inbox hides every such
+  post (`apps/web/src/lib/server/domains/posts/post.inbox.ts:100`). Fix:
+  unmerge (or re-point) the duplicates when a canonical is deleted. owner:
+  unassigned, review by: 2026-12-03.
+- `feedback/admin-post-comments.spec.ts` › FBA-P-30 a teammate without
+  post.set_status cannot change status through a comment. Product bug:
+  `createComment` applies `statusId` for any team author
+  (`apps/web/src/lib/server/domains/comments/comment.service.ts:146`) and
+  `createCommentFn` checks no status permission, so a role without
+  post.set_status changes status through the comment box. Fix: require
+  post.set_status for `shouldChangeStatus`. owner: unassigned, review by:
+  2026-12-03.
+- `feedback/admin-inbox.spec.ts` › FBA-I-27 a teammate cannot delete a colleague’s
+  private saved view. Product bug: `deletePostViewFn` checks only post.edit and
+  `deleteView` (`apps/web/src/lib/server/domains/post-views/post-views.service.ts:76`)
+  updates by id with no owner or shared check, so any post.edit holder deletes
+  a private view they cannot even list (or anyone's shared view). Fix: pass the
+  caller and add `created_by_principal_id = caller OR (is_shared AND caller is
+admin)` to the update; refuse when no row matched. owner: unassigned, review
+  by: 2026-12-03.
