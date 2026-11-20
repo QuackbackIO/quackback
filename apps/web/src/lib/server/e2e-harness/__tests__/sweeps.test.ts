@@ -119,12 +119,16 @@ describe('runE2eSweep', () => {
     vi.mocked(db.execute).mockResolvedValueOnce([] as never)
     const outcome = await runE2eSweep({ job: 'onboarding-email', asOf: '2030-05-03T10:00:00.000Z' })
     expect(outcome).toEqual({
+      ok: true,
       job: 'onboarding-email',
       asOf: '2030-05-03T10:00:00.000Z',
       result: { promoted: 0 },
+    })
     const query = JSON.stringify(vi.mocked(db.execute).mock.calls.at(-1)?.[0])
     expect(query).toContain('onboarding-email')
     expect(query).toContain('2030-05-03T10:00:00.000Z')
+  })
+
   it('lists the sweeps it accepts and never the one-shot queues', () => {
     expect(E2E_SWEEP_NAMES).toContain('sla-breach-sweep')
     expect(E2E_SWEEP_NAMES).toContain('snooze-sweep')
