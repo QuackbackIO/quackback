@@ -25,11 +25,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
-      select: () => ({
-        from: () => ({
+      select: () => {
+        const query = {
+          from: () => query,
+          innerJoin: () => query,
           where: () => mockQueryResults.shift() ?? Promise.resolve([{ count: 0 }]),
-        }),
-      }),
+        }
+        return query
+      },
     },
     eq: vi.fn(),
     and: vi.fn(),
