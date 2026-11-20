@@ -6,7 +6,7 @@
  * the tool, the resource it acted on and the outcome. It never holds the
  * arguments or the result. It costs one insert and no read.
  */
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { logger } from '@/lib/server/logger'
 import { recordAuditEvent, type AuditTarget } from '@/lib/server/audit/log'
 import { typeIdTarget } from '@/lib/server/audit/targets'
@@ -55,10 +55,21 @@ export function mcpToolTarget(args: unknown, result: CallToolResult): AuditTarge
   }
 }
 
-/** The caller's HTTP headers, when the call came over HTTP. */
+/**
+ * The caller's HTTP headers, when the call came over HTTP: the request on the
+ * handler context (`ctx.http.req`), or a plain header record under
+ * `requestInfo` (the older SDK context shape, still used by in-process tests).
+ */
 function headersFrom(extra: unknown): Headers | undefined {
-  const raw = (extra as { requestInfo?: { headers?: Record<string, unknown> } } | undefined)
-    ?.requestInfo?.headers
+  const ctx = extra as
+    | {
+        http?: { req?: { headers?: unknown } }
+        requestInfo?: { headers?: Record<string, unknown> }
+      }
+    | undefined
+  const reqHeaders = ctx?.http?.req?.headers
+  if (reqHeaders instanceof Headers) return reqHeaders
+  const raw = ctx?.requestInfo?.headers
   if (!raw) return undefined
   const headers = new Headers()
   for (const [name, value] of Object.entries(raw)) {

@@ -28,16 +28,16 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/mess
           )
           const includeInternal = url.searchParams.get('includeInternal') === 'true'
 
-          const { assertConversationViewable } =
-            await import('@/lib/server/domains/conversation/conversation.service')
+          const { assertConversationVisible } =
+            await import('@/lib/server/domains/conversation/conversation-visibility')
           const { listMessages } =
             await import('@/lib/server/domains/conversation/conversation.query')
 
-          // team-role API key: canViewConversation short-circuits on role; segments unused
+          // team-role API key: assertConversationVisible reads role and scope; segments unused
           const actor = serviceActorFromApiAuth(auth)
 
           // 404 if the conversation doesn't exist or isn't viewable (before listing messages).
-          await assertConversationViewable(conversationId, actor)
+          await assertConversationVisible(conversationId, actor)
 
           const result = await listMessages(conversationId, {
             before: cursor,

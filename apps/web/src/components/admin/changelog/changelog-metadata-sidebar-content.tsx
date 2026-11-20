@@ -364,7 +364,7 @@ export function ChangelogMetadataSidebarContent({
               <div className="flex items-center border-b px-3">
                 <MagnifyingGlassIcon className="mr-2 h-4 w-4 shrink-0 opacity-50" />
                 <input
-                  placeholder="Search shipped posts..."
+                  placeholder="Search shipped posts…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="flex h-9 w-full border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
@@ -373,7 +373,7 @@ export function ChangelogMetadataSidebarContent({
               <ScrollArea className="h-[250px]">
                 <div className="p-1">
                   {postsLoading ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">Loading...</div>
+                    <div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>
                   ) : posts.length === 0 ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">
                       {search ? 'No shipped posts found.' : 'No shipped posts yet.'}

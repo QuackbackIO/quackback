@@ -15,6 +15,7 @@ const DOWNLOAD_URL_TTL_SECONDS = 900
  * GET /api/export/runs/{runId}/download - download the finished workspace
  * export ZIP. Redirects to a short-lived presigned S3 URL (or streams through
  * the server when S3_PROXY is on and the browser can't reach the bucket).
+ * Never plan-gated: a finished export stays downloadable on any plan.
  * Audit-logged like the conversations export: the archive contains personal
  * data, so every download is a recorded, attributable event.
  */
@@ -35,10 +36,6 @@ export async function handleDownloadExportRun(runId: string, request: Request): 
       log.warn({ role: validation.principal.role }, 'export download access denied')
       return Response.json({ error: 'Only admins can download exports' }, { status: 403 })
     }
-
-    // Tier gate: data exports are a Pro+ feature (same gate as starting one).
-    const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
-    await assertTierFeature('analyticsExports', 'Data export')
 
     if (!isValidTypeId(runId, 'export_run')) {
       return Response.json({ error: 'Invalid export run ID format' }, { status: 400 })
@@ -86,10 +83,6 @@ export async function handleDownloadExportRun(runId: string, request: Request): 
   } catch (error) {
     if (error instanceof NotFoundError) {
       return Response.json({ error: error.message }, { status: 404 })
-    }
-    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
-    if (error instanceof TierLimitError) {
-      return Response.json(error.toResponseBody(), { status: error.statusCode })
     }
     log.error({ err: error }, 'export download failed')
     return internalRouteErrorResponse()

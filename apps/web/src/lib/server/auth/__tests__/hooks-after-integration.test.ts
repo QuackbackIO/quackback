@@ -152,6 +152,7 @@ vi.mock('@/lib/server/auth/sso-secret', () => ({
 
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: async () => ({ features: { customOidcProvider: true } }),
+  invalidateTierLimitsCache: () => {},
 }))
 
 // Task 12/13: hooksAfter loads the provider registry on callback paths and

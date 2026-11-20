@@ -50,6 +50,7 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 }))
 
 import { TicketTypesManager } from '../ticket-types-manager'
+import { createTicketTypeFn } from '@/lib/server/functions/ticket-types'
 
 function renderManager(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -86,5 +87,23 @@ describe('TicketTypesManager', () => {
   it('opens the create dialog when the page asks for a new type', async () => {
     renderManager(<TicketTypesManager creating onCreatingChange={() => {}} />)
     expect(await screen.findByRole('heading', { name: 'New type' })).toBeTruthy()
+  })
+
+  it('adds a field without saving or closing the type dialog', async () => {
+    const user = userEvent.setup()
+    renderManager(<TicketTypesManager creating onCreatingChange={() => {}} />)
+    await screen.findByRole('heading', { name: 'New type' })
+    await user.type(screen.getByLabelText('Name'), 'Refund')
+    await user.click(screen.getByRole('button', { name: 'Add field' }))
+    await screen.findByRole('heading', { name: 'Add field' })
+    await user.type(screen.getByLabelText('Field name'), 'Order number')
+    const fieldDialog = screen
+      .getByRole('heading', { name: 'Add field' })
+      .closest('[role="dialog"]')
+    await user.click(within(fieldDialog as HTMLElement).getByRole('button', { name: 'Add field' }))
+
+    expect(await screen.findByText('Order number')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'New type' })).toBeTruthy()
+    expect(createTicketTypeFn).not.toHaveBeenCalled()
   })
 })

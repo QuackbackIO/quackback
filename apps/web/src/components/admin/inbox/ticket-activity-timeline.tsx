@@ -21,6 +21,7 @@ import { TICKET_DUE_DATE_TIME } from '@/components/admin/inbox/ticket-due-marker
 import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { ViaApiBadge } from '@/components/admin/conversation/via-api-badge'
 
 /** Wire shape of one activity row from fetchTicketActivityFn. */
 interface TicketActivityItem {
@@ -31,6 +32,7 @@ interface TicketActivityItem {
   metadata: Record<string, unknown>
   createdAt: string | Date
   actorName: string | null
+  actorViaApi?: boolean
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
@@ -300,7 +302,9 @@ export function TicketActivityTimeline({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
-                <p className="min-w-0 text-[13px] leading-snug text-foreground">{content.label}</p>
+                <p className="min-w-0 text-[13px] leading-snug text-foreground">
+                  {content.label} <ViaApiBadge author={{ viaApi: activity.actorViaApi }} />
+                </p>
                 <TimeAgo
                   date={activity.createdAt}
                   className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground"

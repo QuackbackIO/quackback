@@ -4,6 +4,7 @@ import {
   SYSTEM_ROLE_PERMISSIONS,
   type PermissionKey,
 } from '@/lib/shared/permissions'
+import { canOpenSettingsPage, type GatedSettingsPage } from '@/lib/shared/settings-page-access'
 
 /**
  * Pure resolution: does the legacy `principal.role` (admin/member/...) carry
@@ -32,6 +33,27 @@ export function usePermission(key: PermissionKey): boolean {
   return useRouteContext({
     from: '/admin',
     select: (context) => permissionFromRouteContext(context, key),
+  })
+}
+
+/**
+ * Whether the viewer can open a settings page (SETTINGS_PAGE_ACCESS), so a
+ * link to it shows only to someone the page opens for.
+ */
+export function useCanOpenSettingsPage(path: GatedSettingsPage): boolean {
+  return useRouteContext({
+    from: '/admin',
+    select: (context) => {
+      const { principal, permissions } = (context ?? {}) as {
+        principal?: { role: string } | null
+        permissions?: PermissionKey[]
+      }
+      const preset = principal?.role ? presetForLegacyRole(principal.role) : null
+      return canOpenSettingsPage(
+        permissions ?? (preset ? SYSTEM_ROLE_PERMISSIONS[preset] : undefined),
+        path
+      )
+    },
   })
 }
 

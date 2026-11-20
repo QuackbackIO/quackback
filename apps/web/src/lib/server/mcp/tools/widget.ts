@@ -2,13 +2,14 @@
  * Team-only widget install status. Read-only evidence that the snippet is
  * connected — not first-connect, not the HMAC signing secret.
  */
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { McpAuthContext } from '../types'
 import { registerTool, jsonResult, READ_ONLY } from './helpers'
 
 export function registerWidgetTools(server: McpServer, auth: McpAuthContext) {
   registerTool<Record<string, never>>(server, auth, {
     name: 'widget_install_status',
+    title: 'Check widget install status',
     permissions: 'none',
     description: `Read whether the Quackback widget is connected on the customer site.
 

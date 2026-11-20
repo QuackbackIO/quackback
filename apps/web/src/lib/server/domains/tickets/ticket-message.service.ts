@@ -43,14 +43,12 @@
  * `tickets.updatedAt` is still bumped (listMyTickets orders by it), the
  * realtime `ticket_message` still publishes on the team-only ticket channel
  * (dual-publish — the conversation channel copy is the delegate's), and the
- * ticket's `firstResponseAt` column is deliberately NOT stamped by redirected
- * agent replies: at link time `linkTicketToConversation` backfills it from the
- * conversation's first agent message, and afterwards the conversation's
- * first-response machinery owns the timeline. The pair's `ticket.replied` (the
- * watcher fan-out) is raised off the delegate's `message.created` by the
- * pair-reply reaction (ticket.event-hooks.ts), as it is for replies written on
- * the conversation directly; the callers (sendTicketMessage /
- * appendRequesterReply) emit it themselves only for ticket-parented replies.
+ * ticket's `firstResponseAt` is worked out from the pair's message rows
+ * (ticket-first-response.ts): a ticket-parented write recomputes it in its own
+ * transaction, and a redirected write leaves it to the ticket-first-response
+ * reaction to the conversation's `message.created`. The caller-side `ticket.replied`
+ * emission (sendTicketMessage / appendRequesterReply) fires alongside the
+ * delegate's `message.created` — the notification matrix's watcher fan-out.
  *
  * PHASE 1a/1b BOUNDARY: the redirect only governs writes on already-linked
  * pairs. Phase 1b (createTicketCore's `withBackingConversation` intake path)
@@ -101,10 +99,18 @@ import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/
 // re-querying those tables here. Safe to import statically: conversation.query.ts
 // has no import edge back into this domain (verified — no cycle).
 import { enrichMessagesForAgent } from '../conversation/conversation.query'
-import { listPairThreadMessages, resolvePairConversationId } from './pair-thread.service'
+import {
+  listPairThreadMessages,
+  resolvePairConversationId,
+  resolvePairTicketIdForConversation,
+} from './pair-thread.service'
 import { crossPostTicketNote } from './ticket-conversation-link.service'
-import { firstResponseStamp } from './ticket.lifecycle'
-import { loadTicketOr404 } from './ticket.service'
+import {
+  messageCanMoveFirstResponse,
+  publishFirstResponseChange,
+  recomputeTicketFirstResponse,
+} from './ticket-first-response'
+import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
@@ -112,7 +118,7 @@ import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
-import { ForbiddenError } from '@/lib/shared/errors'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ticket-message' })
@@ -216,14 +222,19 @@ function requireAgentPrincipal(actor: Actor): PrincipalId {
 interface InsertTicketMessageOpts {
   senderType: 'agent' | 'visitor'
   isInternal: boolean
-  /** Stamp first_response_at (once) — true only for an agent reply. */
-  stampFirstResponse: boolean
   /** The acting principal's policy actor, threaded through so the Phase 1a
    *  redirect can hand the conversation domain's send functions an actor to
    *  re-authorize (the caller still owns the primary authorization — an agent
    *  reply passed TICKET_REPLY, a requester reply passed ownership). Unused on
    *  the ticket-parented paths. */
   actor: Actor
+  /** The ticket row, when the caller already loaded it (the visibility check),
+   *  so the write does not read it a second time. */
+  ticket?: Ticket
+  /** False for an agent-written opening message: the requester learns of the
+   *  ticket from its confirmation email, so the pair's conversation does not
+   *  also email them "replied to your conversation". */
+  notifyCustomer?: boolean
 }
 
 /**
@@ -265,9 +276,8 @@ export async function insertTicketMessage(
     attachments.length > 0 || !!fallbackLabel
   )
 
-  // Validate existence + read first_response_at before the write; the stamp is
-  // idempotent (set once), so a read-before-update race is harmless.
-  const existing = await loadTicketOr404(input.ticketId)
+  // Validate existence and read the ticket's type and parent before the write.
+  const existing = opts.ticket ?? (await loadTicketOr404(input.ticketId))
 
   // THE PHASE 1a REDIRECT. The internal-note guard comes first (notes stay
   // ticket-scoped whichever parent the pair has), then the pair resolution
@@ -285,7 +295,7 @@ export async function insertTicketMessage(
     }
   }
 
-  const messageRow = await db.transaction(async (tx) => {
+  const { row: messageRow, firstResponse } = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(conversationMessages)
       .values({
@@ -301,18 +311,15 @@ export async function insertTicketMessage(
       .returning()
     await linkFilesToMessage(tx, attachments, row!.id)
 
-    await tx
-      .update(tickets)
-      .set({
-        // Only an agent reply is a "first response"; a note or a requester reply is not.
-        firstResponseAt: opts.stampFirstResponse
-          ? firstResponseStamp(existing.firstResponseAt, true, row.createdAt)
-          : undefined,
-        updatedAt: row.createdAt,
-      })
-      .where(eq(tickets.id, input.ticketId))
-
-    return row
+    await tx.update(tickets).set({ updatedAt: row.createdAt }).where(eq(tickets.id, input.ticketId))
+    // Worked out from the rows, so a reply and a requester reply leave it
+    // right. Skipped when this message cannot move it: a note, or a message
+    // written after a first response already set.
+    const canMove = messageCanMoveFirstResponse(existing.firstResponseAt, row, 'added')
+    return {
+      row,
+      firstResponse: canMove ? await recomputeTicketFirstResponse(input.ticketId, tx) : null,
+    }
   })
 
   const author =
@@ -326,8 +333,18 @@ export async function insertTicketMessage(
   // note on both the ticket + inbox channels unstripped — both audiences are
   // team-member-only in this phase (routes/api/chat/stream.ts's `ticketId`
   // scope gate), unlike the conversation domain's visitor-facing channel.
+  // No envelope: `existing` was read before this write, and the ticket may
+  // have moved since. The publish reads its owner at send time.
   publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
-  return { message, ticket: existing }
+  // The ticket as the write left it, so a caller's webhook carries the new
+  // edit time and first response.
+  const ticket: Ticket = {
+    ...existing,
+    updatedAt: messageRow.createdAt,
+    firstResponseAt: firstResponse ? firstResponse.firstResponseAt : existing.firstResponseAt,
+  }
+  if (firstResponse) publishFirstResponseChange(ticket)
+  return { message, ticket }
 }
 
 /**
@@ -342,20 +359,18 @@ export async function insertTicketMessage(
  * (a requester reply arms the NRT clock; an agent reply stops it), the read
  * stamps and status transitions, `emitMessageCreated` (sla.event-hooks.ts's
  * FRT/NRT settle/resume/re-arm rides it), the conversation-channel realtime,
- * and the notification dispatch (the requester's email on an agent reply: on a
- * pair it is the requester's only reply email, since the ticket-side reply
- * email goes to watchers other than the requester there, see
- * getTicketRepliedEmailTargets). The already-validated/sanitized write inputs
- * are threaded through; the delegates' own validation passes are idempotent
- * over them.
+ * and the notification dispatch (presence-gated requester email on an agent
+ * reply — the matrix keeps it alongside the ticket-side email, no cross-channel
+ * dedupe in v1). The already-validated/sanitized write inputs are threaded
+ * through; the delegates' own validation passes are idempotent over them.
  *
  * Redirect invariants the delegate does NOT own (they're ticket-side):
  * `tickets.updatedAt` keeps being bumped (listMyTickets orders by it), and the
  * `ticket_message` realtime is dual-published on the team-only ticket channel
  * so agent ticket-thread views update live (the conversation-channel publish
- * is the delegate's). The ticket's `firstResponseAt` column is deliberately
- * NOT stamped: `linkTicketToConversation` backfills it at link time and the
- * conversation's first-response machinery owns the pair's timeline afterwards.
+ * is the delegate's). The ticket's `firstResponseAt` is not written here: the
+ * ticket-first-response reaction to the delegate's `message.created` works it
+ * out from the pair's rows, a few seconds after the reply.
  */
 async function sendViaPairConversation(
   input: SendTicketMessageInput,
@@ -391,7 +406,9 @@ async function sendViaPairConversation(
             },
             publicAuthor,
             opts.actor,
-            prepared.contentJson
+            prepared.contentJson,
+            // This module's caller owns the ticket.replied signal for it.
+            { fromTicketThread: true }
           )
         ).message
       : (
@@ -402,30 +419,97 @@ async function sendViaPairConversation(
             opts.actor,
             prepared.attachments,
             prepared.contentJson,
-            input.metadata as ConversationMessageMetadata | undefined
+            input.metadata as ConversationMessageMetadata | undefined,
+            // The agent caller checked the ticket, and a tracker reply-all is
+            // a system effect, so the pair's conversation is not checked again.
+            // This module's caller owns the ticket.replied signal for it.
+            { systemCascade: true, notifyCustomer: opts.notifyCustomer, fromTicketThread: true }
           )
         ).message
   const message = { ...sent, author: supportAuthor }
 
-  await db
-    .update(tickets)
-    .set({ updatedAt: new Date(message.createdAt) })
-    .where(eq(tickets.id, input.ticketId))
+  const updatedAt = new Date(message.createdAt)
+  await db.update(tickets).set({ updatedAt }).where(eq(tickets.id, input.ticketId))
+  // No envelope: `ticket` was read before the pair send, which may have moved
+  // it. The publish reads its owner at send time.
   publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
-  return { message, ticket }
+  // The reaction to the conversation's message also recomputes the first
+  // response, but only a few seconds later, so a reply that sets it does so
+  // here too and the caller's webhook carries it. Best-effort: the message
+  // landed, and the reaction corrects the value if this fails.
+  let firstResponseAt = ticket.firstResponseAt
+  const added = { createdAt: updatedAt, isInternal: false }
+  if (opts.senderType === 'agent' && messageCanMoveFirstResponse(firstResponseAt, added, 'added')) {
+    try {
+      const change = await recomputeTicketFirstResponse(input.ticketId)
+      if (change) firstResponseAt = change.firstResponseAt
+    } catch (err) {
+      log.warn(
+        { err, ticket_id: input.ticketId },
+        'ticket first response recompute after a paired reply failed'
+      )
+    }
+  }
+  const updated: Ticket = { ...ticket, updatedAt, firstResponseAt }
+  if (firstResponseAt !== ticket.firstResponseAt) publishFirstResponseChange(updated)
+  return { message, ticket: updated }
 }
 
-/** Agent reply on a customer ticket thread (customer-visible). */
+/**
+ * A message written straight on a pair's conversation is a reply on its
+ * ticket: a customer message (the widget, the portal Messages thread, an
+ * email reply to the conversation's address) or a teammate's reply typed in
+ * the conversation view. Does what a reply from the ticket view does: bumps
+ * `tickets.updatedAt` (listMyTickets orders by it), makes a teammate who
+ * replied a watcher (reason 'replier'; never a service principal such as an
+ * API key), makes the requester who replied a watcher again (reason
+ * 'requester', as appendRequesterReply does; an existing row and its mute
+ * are left alone), then signals `ticket.replied`. Called by the conversation send
+ * after its own `message.created`; a conversation with no customer ticket
+ * does nothing. Messages the ticket side writes onto the pair never come
+ * through here: their callers do all of this for themselves.
+ */
+export async function emitPairTicketReplied(
+  conversationId: ConversationId,
+  actor: Actor,
+  message: ConversationMessageDTO
+): Promise<void> {
+  const ticketId = await resolvePairTicketIdForConversation(conversationId)
+  if (!ticketId) return
+  const updatedAt = new Date(message.createdAt)
+  await db.update(tickets).set({ updatedAt }).where(eq(tickets.id, ticketId))
+  const ticket = { ...(await loadTicketOr404(ticketId)), updatedAt }
+  if (message.senderType === 'agent' && actor.principalType === 'user' && actor.principalId) {
+    await safeSubscribeToTicket(actor.principalId, ticketId, 'replier')
+  } else if (
+    message.senderType === 'visitor' &&
+    ticket.requesterPrincipalId &&
+    actor.principalId === ticket.requesterPrincipalId
+  ) {
+    await safeSubscribeToTicket(ticket.requesterPrincipalId, ticketId, 'requester')
+  }
+  await emitTicketReplied(actor, ticket, message)
+}
+
+/** Agent reply on a customer ticket thread (customer-visible). A ticket the
+ *  actor cannot see is NotFound. */
 export async function sendTicketMessage(
   actor: Actor,
   input: SendTicketMessageInput
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
+  const visible = await assertTicketVisible(input.ticketId, actor)
+  // A tracker's Reply all carries text only: its copies reach tickets the sender
+  // may not see, so nothing is written, not even on the tracker, when it has
+  // files. Elsewhere the ask is ignored, as the schema says.
+  if (input.replyAll && visible.type === 'tracker' && (input.attachments?.length ?? 0) > 0) {
+    throw new ValidationError('REPLY_ALL_ATTACHMENTS', 'Reply all cannot include attachments')
+  }
   const { message, ticket } = await insertTicketMessage(input, principalId, {
+    ticket: visible,
     senderType: 'agent',
     isInternal: false,
-    stampFirstResponse: true,
     actor,
   })
   // Replying opts the agent in as a watcher (reason 'replier'). Must never
@@ -439,11 +523,10 @@ export async function sendTicketMessage(
     await cascadeTrackerReplyAll(ticket, input, principalId, actor)
   }
   // Agent/integration-facing signal, fire-and-forget after the write commits.
-  // A reply the redirect landed on a pair's conversation is raised by the
-  // pair-reply reaction off the delegate's `message.created` instead
-  // (ticket.event-hooks.ts), the one source for every pair reply whichever
-  // surface wrote it, so emitting here too would announce it twice.
-  if (!message.conversationId) void emitTicketReplied(actor, ticket, message)
+  // On a linked pair this rides ALONGSIDE the delegate's `message.created`
+  // (notification matrix: the watcher fan-out — the requester included through
+  // their subscription row, B18 — is ticket-side, unchanged by the redirect).
+  void emitTicketReplied(actor, ticket, message)
   return { message }
 }
 
@@ -458,7 +541,10 @@ export async function sendTicketMessage(
  * already carries the stamp — the stamp outranks the ask, so a copy relayed
  * back onto a tracker cannot bounce the reply between trackers. Per-link
  * best-effort: the tracker's own reply already committed, so one failing link
- * is logged, not fatal. The dynamic import breaks the
+ * is logged, not fatal. The tracker was checked once by `sendTicketMessage`;
+ * the copies are a system effect, so they reach every linked ticket, also ones
+ * the sender cannot see, with the sender as author (`insertTicketMessage`
+ * makes no visibility check). The dynamic import breaks the
  * ticket-message.service <-> ticket-links static cycle (ticket-links imports
  * emitTicketSystemMessage from this module).
  */
@@ -481,7 +567,7 @@ async function cascadeTrackerReplyAll(
           metadata: { ...input.metadata, repliedAllFromTicketId: tracker.id },
         },
         principalId,
-        { senderType: 'agent', isInternal: false, stampFirstResponse: true, actor }
+        { senderType: 'agent', isInternal: false, actor }
       )
     } catch (err) {
       log.warn(
@@ -492,17 +578,19 @@ async function cascadeTrackerReplyAll(
   }
 }
 
-/** Agent-only internal note on a ticket thread (never customer-visible). */
+/** Agent-only internal note on a ticket thread (never customer-visible). A
+ *  ticket the actor cannot see is NotFound. */
 export async function addTicketNote(
   actor: Actor,
   input: AddTicketNoteInput
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_NOTE, 'add a note to this ticket')
   const principalId = requireAgentPrincipal(actor)
+  const visible = await assertTicketVisible(input.ticketId, actor)
   const { message, ticket } = await insertTicketMessage(input, principalId, {
+    ticket: visible,
     senderType: 'agent',
     isInternal: true,
-    stampFirstResponse: false,
     actor,
   })
   // The note stays the ticket's own (the redirect above never touches an

@@ -130,6 +130,8 @@ describe.skipIf(!available)('recordCsat concurrency', () => {
       id: conversationId,
       visitorPrincipalId: principalId,
       channel: 'messenger',
+      // A rating is only taken once the conversation is closed.
+      status: 'closed',
     })
 
     const actor: Actor = {

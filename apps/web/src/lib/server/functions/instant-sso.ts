@@ -10,6 +10,7 @@ import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { signinErrorLanding } from '@/lib/shared/auth-prompt'
+import { logger } from '@/lib/server/logger'
 
 /**
  * Server-side: returns `{ url }` to the IdP when the workspace's ONLY sign-in
@@ -52,14 +53,28 @@ export const resolveInstantSsoRedirectFn = createServerFn({ method: 'GET' })
     // errorCallbackURL: without it a failed callback strands the visitor on
     // Better-Auth's bare /api/auth/error page. Land on the sign-in dialog
     // instead, which also runs link-conflict recovery for account_not_linked.
-    const result = await auth.api.signInSocial({
-      body: {
-        provider: providerId,
-        callbackURL: safeCallback,
-        errorCallbackURL: signinErrorLanding(safeCallback),
-        disableRedirect: true,
-      },
-      headers,
-    })
-    return result?.url ? { url: result.url } : null
+    // The shortcut is only a convenience. When the provider cannot start a
+    // sign-in (its discovery document is unreachable, so the auth runtime
+    // skipped it), fall back to the sign-in page instead of failing the whole
+    // page; its button reports the failure the same way as any other.
+    try {
+      const result = await auth.api.signInSocial({
+        body: {
+          provider: providerId,
+          callbackURL: safeCallback,
+          errorCallbackURL: signinErrorLanding(safeCallback),
+          disableRedirect: true,
+        },
+        headers,
+      })
+      return result?.url ? { url: result.url } : null
+    } catch (err) {
+      logger
+        .child({ component: 'instant-sso' })
+        .warn(
+          { provider_id: providerId, error_name: err instanceof Error ? err.name : typeof err },
+          'sole provider sign-in not started; showing the sign-in page'
+        )
+      return null
+    }
   })

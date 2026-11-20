@@ -36,6 +36,15 @@ const MAX_IMAGE_FETCHES = 5
 const MAX_LOGO_SIDE = 4096
 /** A good logo is at least this large on its shorter side. */
 const MIN_GOOD_SIDE = 64
+// The logo doubles as the browser-tab icon and the square avatar, where a
+// banner shrinks to an unreadable strip, so only roughly square images count.
+const MAX_LOGO_ASPECT = 1.25
+
+function isRoughlySquare(size: ImageDimensions): boolean {
+  const longer = Math.max(size.width, size.height)
+  const shorter = Math.min(size.width, size.height)
+  return shorter > 0 && longer / shorter <= MAX_LOGO_ASPECT
+}
 /** Touch icons are published at 180px when no size is declared. */
 const TOUCH_ICON_SIZE = 180
 
@@ -132,7 +141,14 @@ export async function fetchWebsiteBranding(site: string): Promise<WebsiteBrandin
         allowUrl: isStandardWebsiteUrl,
       })
       const size = image && imageDimensions(image.buffer, image.mime)
-      if (!image || !size || size.width > MAX_LOGO_SIDE || size.height > MAX_LOGO_SIDE) continue
+      if (
+        !image ||
+        !size ||
+        size.width > MAX_LOGO_SIDE ||
+        size.height > MAX_LOGO_SIDE ||
+        !isRoughlySquare(size)
+      )
+        continue
       const quality = logoQuality(candidate.source, image, size)
       if (quality === 'good') {
         chosen = { image, quality }

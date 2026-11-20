@@ -701,7 +701,8 @@ async function seed() {
   await client.end()
 }
 
-seed().catch(async (error) => {
+/** Settles when the seed has finished, so a caller that imports this can follow it. */
+export const seedDone = seed().catch(async (error) => {
   console.error('Seed failed:', error)
   await client.end()
   process.exitCode = 1

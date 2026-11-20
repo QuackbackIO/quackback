@@ -139,7 +139,8 @@ describe('admin list loaders', () => {
             sort: 'oldest',
           })
         )
-      }
+      },
+      ['help_center.manage']
     )
     expect(afterMount).toEqual([])
     expect(warmed).toEqual(['articles', 'categories'])
@@ -147,7 +148,10 @@ describe('admin list loaders', () => {
 
   it('/admin/help-center?deleted=true leaves the article list to the deleted view', async () => {
     const loader = await loaderOf('@/routes/admin/help-center.index')
-    await loader({ context: { queryClient: client }, location: { search: { deleted: true } } })
+    await loader({
+      context: { queryClient: client, permissions: ['help_center.manage'] },
+      location: { search: { deleted: true } },
+    })
     expect(calls).toEqual(['categories'])
   })
 })

@@ -257,6 +257,14 @@ vi.mock('@/lib/server/sanitize-tiptap', () => ({
   sanitizeTiptapContent: (v: unknown) => v,
 }))
 
+// Every board is open: this suite is about the portal gate, not read-only boards.
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.board-guard', () => ({
+  isBoardOpenFor: vi.fn(async () => true),
+}))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  openBoardIds: vi.fn(async () => null),
+}))
+
 vi.mock('@/lib/shared/errors', () => ({
   NotFoundError: class NotFoundError extends Error {
     code: string
@@ -510,6 +518,7 @@ describe('portal.ts fetchPublicPostDetail — portal-visibility gate', () => {
       statusId: null,
       voteCount: 0,
       boardId: 'board_1',
+      board: { id: 'board_1', name: 'Ideas', slug: 'ideas' },
       // fetchPublicPostDetail reads boardAccess to derive canVote/canComment
       // (then strips it from the response). A public-anonymous matrix keeps the
       // gate-only test focused — the capability math is covered in policy tests.
@@ -551,6 +560,7 @@ describe('portal.ts fetchPublicPostDetail — portal-visibility gate', () => {
       statusId: null,
       voteCount: 0,
       boardId: 'board_1',
+      board: { id: 'board_1', name: 'Ideas', slug: 'ideas' },
       principalId: 'principal_author',
       boardAccess: {
         view: 'anonymous',

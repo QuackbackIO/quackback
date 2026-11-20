@@ -6,7 +6,7 @@
  * in apps.webhook_secret_enc (encrypted via integrations/encryption) and is
  * decrypted just-in-time here — it never travels in the BullMQ job payload.
  */
-import crypto from 'crypto'
+import { webhookSignatureHeaders } from '@/lib/server/domains/webhooks/signing'
 import type { HookHandler, HookResult, HookRunContext } from '../hook-types'
 import type { EventData } from '../types'
 import { safeFetch, SsrfError, TimeoutError } from '@/lib/server/content/ssrf-guard'
@@ -82,11 +82,6 @@ export const appWebhookHook: HookHandler = {
       createdAt: event.timestamp,
       data: event.data,
     })
-    const timestamp = Math.floor(Date.now() / 1000)
-    const signature = crypto
-      .createHmac('sha256', secret)
-      .update(`${timestamp}.${payload}`)
-      .digest('hex')
 
     try {
       const response = await safeFetch(url, {
@@ -94,8 +89,7 @@ export const appWebhookHook: HookHandler = {
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': USER_AGENT,
-          'X-Quackback-Signature': `sha256=${signature}`,
-          'X-Quackback-Timestamp': String(timestamp),
+          ...webhookSignatureHeaders(secret, payload),
           'X-Quackback-Event': event.type,
         },
         body: payload,

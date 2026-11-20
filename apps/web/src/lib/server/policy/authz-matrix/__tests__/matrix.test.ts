@@ -236,6 +236,13 @@ describe('entry-point inventory', () => {
 })
 
 describe('golden matrix document', () => {
+  it('records that the custom domain permission decides where sessions can be carried', () => {
+    const doc = renderMatrixDoc(surfaces, tools, entryPoints)
+    const line = doc.split('\n').find((l) => l.startsWith('- **settings.custom_domain**'))
+    expect(line).toMatch(/carried/)
+    expect(line).toMatch(/portal-scope/)
+  })
+
   it('matches the committed MATRIX.md snapshot', async () => {
     const doc = renderMatrixDoc(surfaces, tools, entryPoints)
     await expect(doc).toMatchFileSnapshot(join(__dirname, '../MATRIX.md'))

@@ -20,7 +20,22 @@ import type { TermSegment } from '@/lib/shared/utils/keyword-context'
 /** The unified inbox's sorts. All but 'relevance' are a subset of both
  *  `ConversationSort` and `TicketSort`, so they type-check as either branch's
  *  `sort` param directly (see `resolveInboxSort` for 'relevance'). */
-export type InboxSort = 'recent' | 'oldest' | 'created' | 'priority' | 'due' | 'relevance'
+export type InboxSort =
+  'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'due' | 'relevance'
+
+/**
+ * A ticket's nearest unmet SLA deadline for the 'sla' sort: its time-to-resolve
+ * deadline while that clock is open, else null (no SLA, or the ticket already
+ * resolved within one). Takes the stamp (the cursor row) or the DTO's `sla`
+ * (the merge), which carry the same two fields. The JS twin of the ticket
+ * list's SQL due expression; the two must agree or pages dupe or skip.
+ */
+export function ticketSlaDueAt(
+  sla: { timeToResolveDueAt?: string | null; resolvedAt?: string | null } | null | undefined
+): Date | null {
+  if (!sla || !sla.timeToResolveDueAt || sla.resolvedAt) return null
+  return new Date(sla.timeToResolveDueAt)
+}
 
 /** The order a unified list actually runs in. Relevance is the DEFAULT for a
  *  searched list, never an override: a pinned sort still wins, so a team can
@@ -51,6 +66,22 @@ export interface LinkedTicketSummary {
   /** The linked ticket's shared due date (ISO), null when none or when the
    *  ticket is soft-deleted (agrees with the 'due' sort expression). */
   dueAt: string | null
+}
+
+/** A conversation's paired ticket that the viewer cannot open: it exists, and
+ *  nothing else about it is said. */
+export interface HiddenLinkedTicket {
+  hidden: true
+}
+
+/** A conversation's paired customer ticket as one conversation's view reads
+ *  it: its summary, or only that it exists. */
+export type ConversationTicketLink = LinkedTicketSummary | HiddenLinkedTicket
+
+export function isHiddenTicketLink(
+  link: ConversationTicketLink | null | undefined
+): link is HiddenLinkedTicket {
+  return !!link && 'hidden' in link && link.hidden === true
 }
 
 /** The wire shape for one unified inbox row. */

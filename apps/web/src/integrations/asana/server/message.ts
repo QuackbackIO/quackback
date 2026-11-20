@@ -8,20 +8,21 @@
 import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate } from '@/lib/server/events/hook-utils'
 import { buildPostUrl, escapeHtml, getAuthorName } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 /**
  * Build an Asana task name and HTML notes body from a post.created event.
  */
 export function buildAsanaTaskBody(
   event: EventData,
-  rootUrl: string
+  links: SectionOrigins
 ): { name: string; htmlNotes: string } {
   if (event.type !== 'post.created') {
     return { name: 'Feedback', htmlNotes: '' }
   }
 
   const { post } = event.data
-  const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+  const postUrl = buildPostUrl(links, post.boardSlug, post.id)
   const content = truncate(stripHtml(post.content), 2000)
   const author = getAuthorName(post)
 

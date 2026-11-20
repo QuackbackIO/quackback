@@ -8,21 +8,33 @@
  */
 import { eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { tickets, teamMembers } from '@/lib/server/db'
+import type { TeamId } from '@quackback/ids'
 import { can } from './authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { isUnscopedService, rowScopePrincipalId, type Actor } from './types'
+import { rowInScope } from './row-scope'
+import {
+  allowDecision,
+  denyDecision,
+  isUnscopedService,
+  rowScopePrincipalId,
+  type Actor,
+  type Decision,
+} from './types'
 
 /**
  * Scalar subquery of the team ids an actor belongs to, over `team_members`.
- * Teams resolve membership team -> principals (teams.service
- * `listTeamMemberPrincipalIds`); there is no reverse principal -> teams lookup,
- * so this is the small correlated-free subquery the §4.11 filters use to stay a
- * pure predicate (no extra round trip). Shared by conversationFilter.
+ * The SQL filters use this correlated-free subquery to stay a pure predicate
+ * (no extra round trip). An in-memory check reads the same membership once
+ * with teams.service `teamIdsForPrincipal` and hands it to `rowInScope`.
+ * Shared by conversationFilter.
  */
 export function teamsForActor(principalId: string): SQL {
-  // The WHERE uses drizzle `eq` (not a raw `= ${id}`) so the principal TypeID is
-  // run through the column's driver mapping to its stored uuid form.
-  return sql`SELECT ${teamMembers.teamId} FROM ${teamMembers} WHERE ${eq(teamMembers.principalId, principalId as never)}`
+  // The inner table's columns are written raw. The relational query builder
+  // (`db.query.x.findFirst/findMany`) remaps every column object in a where
+  // onto its root table, which turned `team_members.team_id` into
+  // `conversations.team_id`. The id goes in as a param encoded by the column,
+  // so the principal TypeID still reaches Postgres as its stored uuid.
+  return sql`SELECT "team_members"."team_id" FROM "team_members" WHERE "team_members"."principal_id" = ${sql.param(principalId, teamMembers.principalId)}`
 }
 
 /**
@@ -63,4 +75,32 @@ export function ticketFilter(actor: Actor): SQL {
   const assignedToMyTeam = sql`${tickets.assigneeTeamId} IN (${teamsForActor(principalId)})`
 
   return sql`(${notDeleted} AND (${assignedToMe} OR ${assignedToMyTeam}))`
+}
+
+/** The ticket fields `canViewTicket` reads. */
+export interface TicketVisibilityFacts {
+  assigneePrincipalId: string | null
+  assigneeTeamId: string | null
+  deletedAt: Date | null
+}
+
+/**
+ * Single-ticket form of `ticketFilter`, in memory: a deleted ticket is hidden,
+ * and otherwise the scope rule decides (`rowInScope`, row-scope.ts).
+ * `actorTeamIds` stands in for the `team_members` subquery the SQL form runs.
+ * row-scope-parity.test.ts holds the two forms to the same answers.
+ */
+export function canViewTicket(
+  actor: Actor,
+  ticket: TicketVisibilityFacts,
+  actorTeamIds: ReadonlySet<TeamId | string>
+): Decision {
+  if (ticket.deletedAt) return denyDecision('ticket is deleted')
+  const inScope = rowInScope(
+    actor,
+    'ticket',
+    { assigneePrincipalId: ticket.assigneePrincipalId, teamId: ticket.assigneeTeamId },
+    actorTeamIds
+  )
+  return inScope ? allowDecision() : denyDecision('ticket is outside your scope')
 }

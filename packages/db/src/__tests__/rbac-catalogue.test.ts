@@ -92,6 +92,27 @@ describe('RBAC permission catalogue', () => {
     expect(c).not.toContain(PERMISSIONS.SEGMENT_MANAGE)
   })
 
+  it('Contributor works the inbox in its own scope: no workspace-wide view, no tickets', () => {
+    const c = SYSTEM_ROLE_PERMISSIONS.contributor
+    for (const p of [
+      PERMISSIONS.CONVERSATION_VIEW,
+      PERMISSIONS.CONVERSATION_REPLY,
+      PERMISSIONS.CONVERSATION_NOTE,
+      PERMISSIONS.CONVERSATION_ASSIGN,
+      PERMISSIONS.CONVERSATION_SET_STATUS,
+      PERMISSIONS.CONVERSATION_SET_TAGS,
+      PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.MEMBER_VIEW,
+      PERMISSIONS.PEOPLE_VIEW,
+      PERMISSIONS.COMPANY_VIEW,
+    ]) {
+      expect(c).toContain(p)
+    }
+    expect(c).not.toContain(PERMISSIONS.CONVERSATION_VIEW_ALL)
+    expect(c).not.toContain(PERMISSIONS.CONVERSATION_MANAGE)
+    expect(c.filter((p) => p.startsWith('ticket.'))).toEqual([])
+  })
+
   it('Support lead is Manager plus exactly the support-operations extras', () => {
     const manager = asSet(SYSTEM_ROLE_PERMISSIONS.manager)
     const lead = asSet(SYSTEM_ROLE_PERMISSIONS.support_lead)

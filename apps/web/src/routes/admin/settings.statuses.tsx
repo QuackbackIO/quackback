@@ -2,8 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { StatusesSettingsPage } from '@/components/admin/settings/statuses/status-list'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
 
@@ -15,7 +14,7 @@ export const Route = createFileRoute('/admin/settings/statuses')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.STATUS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/statuses')
     const { queryClient } = context
 
     // Pre-fetch statuses using React Query

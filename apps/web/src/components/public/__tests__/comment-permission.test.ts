@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveCommentingState } from '../comment-permission'
+import { resolveCommentingState, resolveSectionCommenting } from '../comment-permission'
 
 /**
  * The portal comment CTA must follow the SERVER-computed `canComment`, which
@@ -67,5 +67,37 @@ describe('resolveCommentingState', () => {
     // ensureAnonSession is idempotent, so gating on "allowed and not a real
     // user" is safe and keeps the existing anon-comment flow working.
     expect(resolveCommentingState(true, anonSession).needsAnonSession).toBe(true)
+  })
+})
+
+describe('resolveSectionCommenting', () => {
+  const base = {
+    disableCommenting: false,
+    isAdminView: false,
+    serverCanComment: true as boolean | undefined,
+    boardReadOnly: false,
+  }
+
+  it('follows the server in the portal', () => {
+    expect(resolveSectionCommenting(base)).toBe(true)
+    expect(resolveSectionCommenting({ ...base, serverCanComment: false })).toBe(false)
+  })
+
+  it('always allows the admin view on an open board', () => {
+    expect(
+      resolveSectionCommenting({ ...base, isAdminView: true, serverCanComment: undefined })
+    ).toBe(true)
+  })
+
+  it('closes the admin view too on a read-only board, team notes included', () => {
+    expect(resolveSectionCommenting({ ...base, isAdminView: true, boardReadOnly: true })).toBe(
+      false
+    )
+  })
+
+  it('a disabled section stays closed', () => {
+    expect(resolveSectionCommenting({ ...base, isAdminView: true, disableCommenting: true })).toBe(
+      false
+    )
   })
 })

@@ -27,7 +27,7 @@ export function SearchTermsTable() {
   return (
     <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-semibold text-muted-foreground">
           Visitor search terms
         </span>
         {!isLoading && rows && rows.length > 0 && (
@@ -72,9 +72,9 @@ export function SearchTermsTable() {
                       {alwaysMisses && (
                         <Badge
                           size="sm"
-                          variant="secondary"
+                          variant="warning"
                           data-testid={`search-term-no-results-${row.normalizedQuery}`}
-                          className="bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0"
+                          className="shrink-0"
                         >
                           No results
                         </Badge>

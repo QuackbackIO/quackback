@@ -47,6 +47,7 @@ import type { ConversationPriority, TicketStage } from '@/lib/shared/db-types'
 import type { Channel } from '@/lib/shared/channels'
 import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
+import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { ticketFilter } from '@/lib/server/policy/tickets'
@@ -59,10 +60,12 @@ import {
   facetToConversationStatus,
   facetToTicketStatusCategory,
   resolveInboxSort,
+  ticketSlaDueAt,
   type InboxItemDTO,
   type InboxSort,
   type InboxTriageFacet,
   type LinkedTicketSummary,
+  type ConversationTicketLink,
 } from '@/lib/shared/inbox/items'
 
 // The sort vocabulary + its resolution live in the shared inbox module; both
@@ -209,6 +212,22 @@ function itemDueAt(item: InboxItemDTO): string | null {
 }
 
 /**
+ * The 'sla' merge key: the item's nearest unmet SLA deadline (ms), read off
+ * the same DTO fields each branch's SQL due expression orders by, or
+ * +Infinity when no clock is open, so those rows follow every live deadline
+ * as the branches' NULLS LAST does.
+ */
+function itemSlaDueMs(item: InboxItemDTO): number {
+  const due =
+    item.kind === 'conversation'
+      ? item.conversation.sla
+        ? (nextSlaDue(item.conversation.sla)?.dueAt ?? null)
+        : null
+      : ticketSlaDueAt(item.ticket.sla)
+  return due ? due.getTime() : Number.POSITIVE_INFINITY
+}
+
+/**
  * The numeric sort value for one item under one sort. 'created' reads each
  * branch's own `createdAt` (NOT the activity key — "recently created" must
  * not fold in later message activity, unlike 'recent'/'oldest'). 'due'
@@ -216,6 +235,7 @@ function itemDueAt(item: InboxItemDTO): string | null {
  */
 function sortValue(item: InboxItemDTO, sort: InboxSort): number {
   if (sort === 'priority') return PRIORITY_RANK[itemPriority(item)] ?? 1
+  if (sort === 'sla') return itemSlaDueMs(item)
   if (sort === 'created') return new Date(itemCreatedAt(item)).getTime()
   if (sort === 'due') {
     const dueAt = itemDueAt(item)
@@ -273,12 +293,36 @@ export function mergeInboxBranches(input: MergeInboxBranchesInput): MergeInboxBr
   // re-deriving it (a `new Date(...).getTime()` or priority-rank lookup) on
   // every comparator call during the sort. On a searched list the key is the
   // item's position within its own branch instead (see `relevanceOrdered`).
+  //
+  // Waiting longest: a ticket has no waiting clock, so every conversation
+  // comes first, in the branch's own order (longest waiting, then the
+  // nobody-waiting tail by id), and the tickets follow, by id as their branch
+  // lists them. The conversation's waiting time is not on its DTO, so its
+  // position within the branch is its key.
   const keyed: KeyedInboxItem[] = relevanceOrdered
     ? [conversation.items, ticket.items].flatMap((b) => b.map((item, key) => ({ item, key })))
-    : [...conversation.items, ...ticket.items].map((item) => ({ item, key: sortValue(item, sort) }))
-  // Rank fusion ascends (position 0 = best match), as do the oldest and due sorts.
-  const ascending = relevanceOrdered || sort === 'oldest' || sort === 'due'
-  keyed.sort((a, b) => compareKeyedInboxItems(a, b, ascending))
+    : sort === 'waiting'
+      ? [
+          ...conversation.items.map((item, key) => ({ item, key })),
+          ...ticket.items.map((item) => ({ item, key: Number.POSITIVE_INFINITY })),
+        ]
+      : [...conversation.items, ...ticket.items].map((item) => ({
+          item,
+          key: sortValue(item, sort),
+        }))
+  // Rank fusion ascends (position 0 = best match), as do the oldest,
+  // soonest-deadline, waiting-longest and due sorts.
+  keyed.sort((a, b) =>
+    compareKeyedInboxItems(
+      a,
+      b,
+      relevanceOrdered ||
+        sort === 'oldest' ||
+        sort === 'sla' ||
+        sort === 'waiting' ||
+        sort === 'due'
+    )
+  )
   const combined = keyed.map((k) => k.item)
   const truncated = combined.length > limit ? combined.slice(0, limit) : combined
   const overflowed = combined.length > limit
@@ -315,9 +359,16 @@ const EMPTY_BRANCH = (cursor: string | null): InboxBranchFetch => ({
  * (`getLinkedCustomerTicket`, used by the unified detail panel + header's
  * ticket-status pill on a conversation item) can reuse the same join instead
  * of duplicating it.
+ *
+ * Only tickets the actor may open: a conversation whose paired ticket is
+ * outside the actor's ticket filter (or a role with no ticket key) gets no
+ * summary, so no id, number, title or status of that ticket leaves the
+ * server. A workspace-wide service actor reads every pair, a soft-deleted
+ * ticket included, so a workflow's "already a ticket" check still sees it.
  */
 export async function loadLinkedCustomerTicketSummaries(
-  conversationIds: ConversationId[]
+  conversationIds: ConversationId[],
+  actor: Actor
 ): Promise<Map<ConversationId, LinkedTicketSummary>> {
   const map = new Map<ConversationId, LinkedTicketSummary>()
   if (conversationIds.length === 0) return map
@@ -341,7 +392,8 @@ export async function loadLinkedCustomerTicketSummaries(
     .where(
       and(
         inArray(ticketConversations.conversationId, conversationIds),
-        eq(ticketConversations.ticketType, 'customer')
+        eq(ticketConversations.ticketType, 'customer'),
+        isUnscopedService(actor) ? undefined : ticketFilter(actor)
       )
     )
   for (const row of rows) {
@@ -400,7 +452,7 @@ async function fetchConversationBranch(
   // row matched; an unsearched one never runs the extra query.
   const term = filter.search?.trim()
   const [linkedTickets, snippets] = await Promise.all([
-    loadLinkedCustomerTicketSummaries(ids),
+    loadLinkedCustomerTicketSummaries(ids, actor),
     term ? loadConversationSearchSnippets(ids, term) : Promise.resolve(null),
   ])
   const items: InboxItemDTO[] = page.conversations.map((conversation) => ({
@@ -674,11 +726,48 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
  * The linked CUSTOMER ticket for one conversation (or null), for the unified
  * detail panel's Ticket card + Links section and the thread header's ticket-
  * status pill when a plain conversation links a ticket. Thin wrapper over the
- * same batched join the list branch uses.
+ * same batched join the list branch uses, so it is null for a ticket the
+ * actor cannot open.
  */
+/**
+ * The paired customer ticket of one conversation, as that conversation's own
+ * view reads it: the summary when the actor may open the ticket, a bare
+ * `{ hidden: true }` when a pair exists that the actor cannot open (so the view
+ * offers no second ticket), or null when there is no pair.
+ */
+export async function getConversationTicketLink(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<ConversationTicketLink | null> {
+  const summary = await getLinkedCustomerTicket(conversationId, actor)
+  if (summary) return summary
+  return (await hasCustomerTicketPair(conversationId)) ? { hidden: true } : null
+}
+
+/** Whether a conversation already has a live paired customer ticket, whoever
+ *  can see it. A system read: it says nothing about the ticket itself. */
+export async function hasCustomerTicketPair(conversationId: ConversationId): Promise<boolean> {
+  const [pair] = await db
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .innerJoin(
+      tickets,
+      and(eq(tickets.id, ticketConversations.ticketId), isNull(tickets.deletedAt))
+    )
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversationId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return !!pair
+}
+
 export async function getLinkedCustomerTicket(
-  conversationId: ConversationId
+  conversationId: ConversationId,
+  actor: Actor
 ): Promise<LinkedTicketSummary | null> {
-  const map = await loadLinkedCustomerTicketSummaries([conversationId])
+  const map = await loadLinkedCustomerTicketSummaries([conversationId], actor)
   return map.get(conversationId) ?? null
 }

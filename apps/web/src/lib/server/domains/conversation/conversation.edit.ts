@@ -13,8 +13,6 @@ import {
   eq,
   and,
   isNull,
-  desc,
-  ne,
   notInArray,
   conversations,
   conversationMessages,
@@ -24,7 +22,7 @@ import {
 } from '@/lib/server/db'
 import type { ConversationMessageId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
-import { canEditMessage, canViewConversation } from '@/lib/server/policy/conversation'
+import { canEditMessage } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -42,9 +40,10 @@ import {
   toMessageDTO,
 } from '@/lib/server/messages/message-core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { newestCustomerVisibleMessage } from './conversation.preview'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
-import { resolveMessageParent } from './message-parent'
+import { assertMessageParentVisible, permissionParentOf } from './message-parent'
 import { syncConversationMessageMentions } from './sync-conversation-mentions'
 import {
   conversationToDTO,
@@ -58,9 +57,11 @@ async function toAgentDto(
   message: ConversationMessage,
   viewerPrincipalId: PrincipalId
 ): Promise<AgentConversationMessageDTO> {
+  // Team-only, so the account name and the "via API" mark, as the thread shows.
   const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
+    ? ((await loadAuthors([message.principalId], { preferAccountName: true })).get(
+        message.principalId
+      ) ?? fallbackAuthor(message.principalId))
     : null
   const suggestions = new Map()
   if (message.metadata?.postSuggestion) {
@@ -121,9 +122,11 @@ async function publishTicketThreadEdit(message: ConversationMessage): Promise<vo
     ticketId = await resolvePairTicketIdForConversation(message.conversationId)
   }
   if (!ticketId) return
+  // The ticket channel is team-only: the author as the ticket thread shows it.
   const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
+    ? ((await loadAuthors([message.principalId], { preferAccountName: true })).get(
+        message.principalId
+      ) ?? fallbackAuthor(message.principalId))
     : null
   publishTicketEvent(ticketId, {
     kind: 'ticket_message_updated',
@@ -144,9 +147,13 @@ export async function editConversationMessage(
     .from(conversationMessages)
     .where(eq(conversationMessages.id, messageId))
     .limit(1)
-  if (!message || message.deletedAt) {
+  if (!message || message.deletedAt || (!message.conversationId && !message.ticketId)) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
+  // A parent the actor cannot see hides its messages too, before any other
+  // refusal could tell the message exists.
+  const parent = await assertMessageParentVisible(message, actor)
+
   if (message.metadata?.block) {
     throw new ForbiddenError('FORBIDDEN', 'This message cannot be edited')
   }
@@ -158,24 +165,10 @@ export async function editConversationMessage(
   const viewerId = actor.principalId
   if (!viewerId) throw new ForbiddenError('FORBIDDEN', 'A session is required to edit a message')
 
-  if (!message.conversationId) {
-    if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    await resolveMessageParent(message, actor)
-  } else {
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, message.conversationId))
-      .limit(1)
-    if (!conversation || !canViewConversation(actor, conversation).allowed) {
-      throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    }
-  }
-
   const decision = canEditMessage(actor, {
     senderType: message.senderType,
     authorPrincipalId: message.principalId,
-    parent: message.conversationId ? 'conversation' : 'ticket',
+    parent: permissionParentOf(parent),
     isInternal: message.isInternal,
   })
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -254,19 +247,7 @@ async function applyEdit(
     if (!row.isInternal && row.conversationId) {
       // The preview tracks the newest customer-visible message. System lines
       // never write it, so they must not stop an edit from refreshing it.
-      const [latest] = await tx
-        .select({ id: conversationMessages.id })
-        .from(conversationMessages)
-        .where(
-          and(
-            eq(conversationMessages.conversationId, row.conversationId),
-            isNull(conversationMessages.deletedAt),
-            eq(conversationMessages.isInternal, false),
-            ne(conversationMessages.senderType, 'system')
-          )
-        )
-        .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
-        .limit(1)
+      const latest = await newestCustomerVisibleMessage(tx, row.conversationId)
       if (latest?.id === row.id) {
         await tx
           .update(conversations)
@@ -303,9 +284,11 @@ async function applyEdit(
       message: dto,
     })
     if (!updated.isInternal) {
+      // The visitor's channel: the name the customer's thread shows.
       const author = updated.principalId
-        ? ((await loadAuthors([updated.principalId])).get(updated.principalId) ??
-          fallbackAuthor(updated.principalId))
+        ? ((await loadAuthors([updated.principalId], { forCustomer: true })).get(
+            updated.principalId
+          ) ?? fallbackAuthor(updated.principalId))
         : null
       publishConversationOnlyEvent(updated.conversationId, {
         kind: 'message_edited',

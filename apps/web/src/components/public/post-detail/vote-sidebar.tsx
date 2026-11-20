@@ -35,6 +35,7 @@ export function VoteSidebar({ postId, voteCount, disabled }: VoteSidebarProps): 
         voteCount={voteCount}
         disabled={disabled}
         canVote={canVote}
+        votingClosed={sidebarData?.boardReadOnly ?? false}
         isAuthenticated={isAuthenticated}
       />
     </div>

@@ -1,7 +1,7 @@
 /**
  * Real-DB coverage for the conversation side of the convergence Phase 0 pair
  * thread (scratchpad/convergence-design.md): `listMessages` with
- * `includeLinkedTicket` folds a linked CUSTOMER ticket's legacy
+ * `linkedTicketViewer` folds a linked CUSTOMER ticket's legacy
  * ticket-parented rows into the agent conversation view — one shared thread
  * per pair, merged on the same (created_at, id) keyset contract as
  * pair-thread.service.ts's ticket-side loader. Covers the merged ordering,
@@ -43,6 +43,8 @@ import {
   user,
 } from '@/lib/server/db'
 import { listMessages } from '../conversation.query'
+import type { Actor } from '@/lib/server/policy/types'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -50,6 +52,15 @@ const fixture = await createDbTestFixture({
     await db.select({ id: conversationMessages.id }).from(conversationMessages).limit(0)
   },
 })
+
+/** A teammate who sees every ticket, so the pair always merges. */
+const VIEW_ALL: Actor = {
+  principalId: null,
+  role: 'admin',
+  principalType: 'user',
+  segmentIds: new Set(),
+  permissions: new Set([PERMISSIONS.TICKET_VIEW_ALL]),
+}
 
 const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
@@ -110,7 +121,7 @@ async function post(
 }
 
 describe.skipIf(!fixture.available)(
-  'listMessages includeLinkedTicket — conversation view of a pair (real DB, rolled back)',
+  'listMessages linkedTicketViewer — conversation view of a pair (real DB, rolled back)',
   () => {
     beforeEach(fixture.begin)
     afterEach(fixture.rollback)
@@ -132,7 +143,7 @@ describe.skipIf(!fixture.available)(
 
       const page = await listMessages(conversationId, {
         includeInternal: true,
-        includeLinkedTicket: true,
+        linkedTicketViewer: VIEW_ALL,
       })
       expect(page.hasMore).toBe(false)
       expect(page.messages.map((m) => m.id)).toEqual([m1, m2, m3, m4])
@@ -167,7 +178,7 @@ describe.skipIf(!fixture.available)(
 
       const page = await listMessages(conversationId, {
         includeInternal: false,
-        includeLinkedTicket: true,
+        linkedTicketViewer: VIEW_ALL,
       })
       expect(page.messages.map((m) => m.id)).toEqual([visible1, visible2])
     })
@@ -186,7 +197,7 @@ describe.skipIf(!fixture.available)(
 
       const page = await listMessages(conversationId, {
         includeInternal: true,
-        includeLinkedTicket: true,
+        linkedTicketViewer: VIEW_ALL,
       })
       expect(page.hasMore).toBe(false)
       expect(page.messages.map((m) => m.id)).toEqual([m1, m2])
@@ -208,7 +219,7 @@ describe.skipIf(!fixture.available)(
 
       const page1 = await listMessages(conversationId, {
         includeInternal: true,
-        includeLinkedTicket: true,
+        linkedTicketViewer: VIEW_ALL,
       })
       expect(page1.messages).toHaveLength(30)
       expect(page1.hasMore).toBe(true)
@@ -219,7 +230,7 @@ describe.skipIf(!fixture.available)(
 
       const page2 = await listMessages(conversationId, {
         includeInternal: true,
-        includeLinkedTicket: true,
+        linkedTicketViewer: VIEW_ALL,
         before: anchor.id,
       })
       expect(page2.hasMore).toBe(false)

@@ -16,6 +16,7 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
 import { buildSigninRedirect, teamSigninCallback } from '@/lib/shared/auth-prompt'
 import { ALL_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { SEAT_PAUSED_DENIAL } from '@/lib/shared/billing/seat-paused'
 
 const log = logger.child({ component: 'workspace-utils' })
 
@@ -98,6 +99,14 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
     // Team routes and permission-gated routes only accept dashboard sessions.
     if ((teamOnly || data.permission) && session.session.scope !== 'dashboard') {
       throw redirect(buildSigninRedirect(destination, { error: 'not_team_member' }))
+    }
+
+    // A paused seat (the plan has fewer team seats than members) cannot open
+    // team routes. The denial renders as its own full page, with sign-out.
+    if (teamOnly || data.permission) {
+      const { isPausedTeamSeat } =
+        await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+      if (await isPausedTeamSeat(principalRecord)) throw new Error(SEAT_PAUSED_DENIAL)
     }
 
     const resolvedPermissions = await getRequestPermissions(principalRecord)

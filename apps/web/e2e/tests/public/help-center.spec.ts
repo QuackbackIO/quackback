@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { setFeatureFlag } from '../../utils/db-helpers'
 
 /**
  * Public Help Center E2E tests.
@@ -10,6 +11,12 @@ import { test, expect } from '@playwright/test'
  * workspace. Tests degrade gracefully (early return or conditional assertions)
  * when the flag is off or seed data is absent.
  */
+
+// The module is off on a fresh seed. Turn it on here rather than rely on the
+// admin help-center spec having run first, which sharding does not promise.
+test.beforeAll(() => {
+  setFeatureFlag('helpCenter', true)
+})
 
 test.describe('Public Help Center', () => {
   test.beforeEach(async ({ page }) => {
@@ -130,8 +137,8 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    // Article rows link to /hc/articles/<categorySlug>/<articleSlug>
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    // Article rows link to /hc/<locale>/articles/<id>-<slug> (909870ed2c, #454)
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) {
       // Category exists but has no articles yet
       await expect(page.getByText(/No articles in this category yet|No articles yet/)).toBeVisible()
@@ -156,7 +163,7 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
@@ -175,7 +182,7 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
@@ -195,14 +202,14 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
     await page.waitForLoadState('networkidle')
 
     // Rich text content renders inside .prose
-    const contentArea = page.locator('.prose')
+    const contentArea = page.locator('.prose').first() // the article body nests one .prose in another
     await expect(contentArea).toBeVisible()
   })
 
@@ -216,7 +223,7 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
@@ -237,7 +244,7 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
@@ -260,7 +267,7 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
@@ -316,7 +323,7 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
@@ -432,7 +439,7 @@ test.describe('Public Help Center', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) < 2) return // need at least 2 articles for prev/next
 
     // Navigate to the second article so there's a "Previous" link
@@ -600,7 +607,7 @@ test.describe('Help Center - Article Content Verification', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return false
 
     await articleLinks.first().click()
@@ -622,7 +629,7 @@ test.describe('Help Center - Article Content Verification', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     // Capture the title text from the category listing row before navigating
@@ -645,7 +652,7 @@ test.describe('Help Center - Article Content Verification', () => {
     const ok = await navigateToFirstArticle(page)
     if (!ok) return
 
-    const prose = page.locator('.prose')
+    const prose = page.locator('.prose').first() // the article body nests one .prose in another
     await expect(prose).toBeVisible()
 
     // The prose element must contain at least some text
@@ -747,7 +754,7 @@ test.describe('Help Center - Article Feedback Widget', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return false
 
     await articleLinks.first().click()
@@ -888,7 +895,7 @@ test.describe('Help Center - Navigation Accuracy', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()
@@ -951,7 +958,7 @@ test.describe('Help Center - Navigation Accuracy', () => {
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    const articleLinks = page.locator('a[href*="/hc/articles/"]')
+    const articleLinks = page.locator('a[href*="/hc/"][href*="/articles/"]')
     if ((await articleLinks.count()) === 0) return
 
     await articleLinks.first().click()

@@ -56,7 +56,7 @@ export function OAuthProviderGrid({
       <div className="relative mb-3 ml-auto w-48">
         <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Filter providers..."
+          placeholder="Filter providers…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-8 pl-8 text-sm"

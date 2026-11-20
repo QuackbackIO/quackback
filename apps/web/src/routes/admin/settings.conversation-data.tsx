@@ -1,6 +1,5 @@
 import { z } from 'zod'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
@@ -24,7 +23,7 @@ export const Route = createFileRoute('/admin/settings/conversation-data')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.CONVERSATION_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/conversation-data')
     await context.queryClient.ensureQueryData(conversationAttributeQueries.registry())
     return {}
   },

@@ -18,6 +18,7 @@ import { db } from '@/lib/server/db'
 import { getSession } from '@/lib/server/auth/session'
 import { getRequestPrincipal } from '@/lib/server/auth/request-session'
 import { logger } from '@/lib/server/logger'
+import { SEAT_PAUSED_DENIAL } from '@/lib/shared/billing/seat-paused'
 
 const log = logger.child({ component: 'workspace' })
 
@@ -52,7 +53,10 @@ export async function getCurrentUserRole(): Promise<Role | null> {
     return null
   }
   log.debug({ role: principalRecord.role }, 'current user role')
-  return sessionRole(principalRecord.role as Role, session.session.scope)
+  const role = sessionRole(principalRecord.role as Role, session.session.scope)
+  // A paused seat (the plan has fewer team seats than members) is a portal user.
+  const { roleUnlessPaused } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  return roleUnlessPaused(principalRecord, role)
 }
 
 /**
@@ -80,6 +84,13 @@ export async function validateApiWorkspaceAccess() {
 
   if (!appSettings) {
     return { success: false as const, error: 'Settings not found', status: 403 as const }
+  }
+
+  // A paused seat (the plan has fewer team seats than members) has no team
+  // authority: no export, no import.
+  const { isPausedTeamSeat } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  if (await isPausedTeamSeat(principalRecord)) {
+    return { success: false as const, error: SEAT_PAUSED_DENIAL, status: 403 as const }
   }
 
   return {

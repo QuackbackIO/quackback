@@ -1009,6 +1009,10 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
         'Invitation is no longer pending — refresh and try again'
       )
     }
+    // A pending team invite holds a seat.
+    const { invalidatePlanLimits } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.cache')
+    await invalidatePlanLimits()
 
     // Invalidate every link this invite ever minted, so a cancelled invite
     // can't sign anyone in. Revoking the full set (returned atomically by the
