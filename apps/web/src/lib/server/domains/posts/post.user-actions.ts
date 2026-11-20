@@ -5,19 +5,7 @@
  * Permission helpers (canEditPost, canDeletePost, getPostPermissions) live in post.permissions.ts.
  */
 
-import {
-  db,
-  posts,
-  boards,
-  postComments,
-  postEditHistory,
-  principal,
-  eq,
-  and,
-  sql,
-  isNull,
-  type Post,
-} from '@/lib/server/db'
+import { db, posts, boards, postEditHistory, principal, eq, type Post } from '@/lib/server/db'
 import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
@@ -25,11 +13,18 @@ import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import {
   dispatchPostDeleted,
   dispatchPostRestored,
+  dispatchPostUpdated,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { UserEditPostInput } from './post.types'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { rehostExternalImages } from '@/lib/server/content/rehost-images'
+import { authorWindow } from './post.author-window'
+import { extractMentions, extractMentionExcerpts } from './extract-mentions'
+import { syncPostMentions } from './sync-post-mentions'
+import { buildPostUrl } from '@/lib/server/integrations/message-utils'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
 import { contentHoldReason } from '@/lib/server/content/content-holds'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
@@ -69,30 +64,75 @@ async function getPortalConfig(): Promise<PortalConfig> {
   }
 }
 
-async function hasCommentsFromOthers(
-  postId: PostId,
-  authorPrincipalId: PrincipalId | null | undefined
-): Promise<boolean> {
-  if (!authorPrincipalId) return false
-
-  const otherComment = await db.query.postComments.findFirst({
-    where: and(
-      eq(postComments.postId, postId),
-      sql`${postComments.principalId} != ${authorPrincipalId}`,
-      isNull(postComments.deletedAt)
-    ),
-  })
-
-  return !!otherComment
+/**
+ * After an edit of a published post: `post.updated` for webhooks and
+ * integrations, and the @-mention reconcile (new mentions notified, removed
+ * ones dropped). The edit is already saved, so a failure here is logged, not
+ * thrown back at the author.
+ */
+async function announceAuthorEdit(
+  updated: Post,
+  before: Post,
+  actor: { principalId: PrincipalId }
+): Promise<void> {
+  try {
+    const board = await db.query.boards.findFirst({
+      where: eq(boards.id, updated.boardId),
+      columns: { id: true, slug: true },
+    })
+    if (!board) return
+    const eventActor = buildEventActor({ principalId: actor.principalId })
+    const changedFields: string[] = []
+    if (updated.title !== before.title) changedFields.push('title')
+    if (
+      updated.content !== before.content ||
+      JSON.stringify(updated.contentJson) !== JSON.stringify(before.contentJson)
+    )
+      changedFields.push('content')
+    if (changedFields.length > 0) {
+      dispatchPostUpdated(
+        eventActor,
+        { id: updated.id, title: updated.title, boardId: board.id, boardSlug: board.slug },
+        changedFields
+      )
+    }
+    const contentJson = updated.contentJson
+    await syncPostMentions({
+      postId: updated.id,
+      postTitle: updated.title,
+      postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updated.id),
+      boardId: updated.boardId,
+      mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
+      excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
+      actor: eventActor,
+    })
+  } catch (err) {
+    log.error({ err, post_id: updated.id }, 'announce author edit failed')
+  }
 }
 
-async function getCommentCount(postId: PostId): Promise<number> {
-  const result = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(postComments)
-    .where(and(eq(postComments.postId, postId), isNull(postComments.deletedAt)))
-
-  return result[0]?.count ?? 0
+/** The author's window on `post` (post.author-window.ts), refused as a typed error. */
+async function assertAuthorWindow(
+  action: 'edit' | 'delete',
+  post: Post & { postStatus?: { isDefault: boolean } | null },
+  config: PortalConfig
+): Promise<void> {
+  const result = await authorWindow(
+    action,
+    {
+      id: post.id as PostId,
+      statusId: post.statusId,
+      onDefaultStatus: !post.statusId || post.postStatus?.isDefault === true,
+      canonicalPostId: post.canonicalPostId as PostId | null,
+    },
+    config
+  )
+  if (!result.allowed) {
+    throw new ForbiddenError(
+      action === 'edit' ? 'EDIT_NOT_ALLOWED' : 'DELETE_NOT_ALLOWED',
+      result.reason ?? 'Not allowed'
+    )
+  }
 }
 
 // ============================================================================
@@ -150,28 +190,8 @@ export async function userEditPost(
       throw new ForbiddenError('EDIT_NOT_ALLOWED', 'You can only edit your own posts')
     }
 
-    // Check engagement restrictions for regular users
-    if (!config.features.allowEditAfterEngagement) {
-      // Status is default if no statusId or the status has isDefault=true
-      const isDefault = !existingPost.statusId || existingPost.postStatus?.isDefault === true
-      if (!isDefault) {
-        throw new ForbiddenError(
-          'EDIT_NOT_ALLOWED',
-          'Cannot edit posts that have been reviewed by the team'
-        )
-      }
-      if (existingPost.voteCount > 0) {
-        throw new ForbiddenError('EDIT_NOT_ALLOWED', 'Cannot edit posts that have received votes')
-      }
-      // Check for comments from others
-      const hasOtherComments = await hasCommentsFromOthers(postId, actor.principalId)
-      if (hasOtherComments) {
-        throw new ForbiddenError(
-          'EDIT_NOT_ALLOWED',
-          'Cannot edit posts that have comments from other users'
-        )
-      }
-    }
+    // Until the team acts on it (post.author-window.ts).
+    await assertAuthorWindow('edit', existingPost, config)
   }
 
   // Record edit history if enabled
@@ -197,13 +217,20 @@ export async function userEditPost(
   const wasPublished = existingPost.moderationState === 'published'
   const rehold = Boolean(holdReason && wasPublished)
 
+  // Store the document the edit describes, with external images copied in, as
+  // creating a post does. The markdown follows the stored document.
+  const contentJson = await rehostExternalImages(nextJson, {
+    contentType: 'post',
+    principalId: existingPost.principalId,
+  })
+
   // Update the post
   const [updatedPost] = await db
     .update(posts)
     .set({
       title: input.title.trim(),
-      content: input.content.trim(),
-      contentJson: input.contentJson,
+      content: projectContentJsonToMarkdown(contentJson, input.content.trim()),
+      contentJson,
       updatedAt: new Date(),
       ...(rehold ? { moderationState: 'pending' as const } : {}),
     })
@@ -222,6 +249,13 @@ export async function userEditPost(
       after: { moderationState: 'pending' },
       metadata: { reason: holdReason, previouslyPublished: true },
     })
+  }
+
+  // Tell integrations and newly mentioned people, as a team edit does, but
+  // only for a post others can see. A held post (new, or re-held by this
+  // edit) announces itself when it is approved (announcePublishedPost).
+  if (updatedPost.moderationState === 'published') {
+    await announceAuthorEdit(updatedPost, existingPost, actor)
   }
 
   // Regenerate embedding (and cascade to merge check) after user edit
@@ -275,28 +309,8 @@ export async function softDeletePost(
       throw new ForbiddenError('DELETE_NOT_ALLOWED', 'You can only delete your own posts')
     }
 
-    // Check engagement restrictions for regular users
-    if (!config.features.allowDeleteAfterEngagement) {
-      // Status is default if no statusId or the status has isDefault=true
-      const isDefault = !existingPost.statusId || existingPost.postStatus?.isDefault === true
-      if (!isDefault) {
-        throw new ForbiddenError(
-          'DELETE_NOT_ALLOWED',
-          'Cannot delete posts that have been reviewed by the team'
-        )
-      }
-      if (existingPost.voteCount > 0) {
-        throw new ForbiddenError(
-          'DELETE_NOT_ALLOWED',
-          'Cannot delete posts that have received votes'
-        )
-      }
-      // Check for any comments
-      const commentCount = await getCommentCount(postId)
-      if (commentCount > 0) {
-        throw new ForbiddenError('DELETE_NOT_ALLOWED', 'Cannot delete posts that have comments')
-      }
-    }
+    // Until the team acts on it (post.author-window.ts).
+    await assertAuthorWindow('delete', existingPost, config)
   }
 
   // Capture selected syncs in the same commit as deletion. A deleted

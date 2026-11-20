@@ -3,173 +3,105 @@
  *
  * Handles user permission checks for editing and deleting their own posts.
  * Write operations (userEditPost, softDeletePost, restorePost, permanentDeletePost)
- * live in post.user-actions.ts.
+ * live in post.user-actions.ts. The author's window itself (until the team
+ * acts on the post) lives in post.author-window.ts, shared by both.
  */
 
-import { db, posts, postComments, eq, and, sql, isNull } from '@/lib/server/db'
-import { toUuid, type PostId, type PrincipalId, type PostStatusId } from '@quackback/ids'
-import { getExecuteRows } from '@/lib/server/utils'
+import { db, posts, eq } from '@/lib/server/db'
+import type { PostId, PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult } from './post.types'
+import {
+  authorWindow,
+  authorWindowResult,
+  teamActionOn,
+  type AuthorWindowPost,
+} from './post.author-window'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'post-permissions' })
+
+type Actor = { principalId: PrincipalId; role: Role }
+
+/** The post row with what the author window and these checks read. */
+async function loadPost(postId: PostId) {
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    with: { postStatus: { columns: { isDefault: true } } },
+  })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+  return post
+}
+
+function windowPost(post: Awaited<ReturnType<typeof loadPost>>): AuthorWindowPost {
+  return {
+    id: post.id as PostId,
+    statusId: post.statusId,
+    // No status, or the default one.
+    onDefaultStatus: !post.statusId || post.postStatus?.isDefault === true,
+    canonicalPostId: post.canonicalPostId as PostId | null,
+  }
+}
 
 // ============================================================================
 // Permission Checks
 // ============================================================================
 
 /**
- * Check if a user can edit a post
- *
- * @param postId - Post ID to check
- * @param actor - Actor information (principalId, role)
- * @param portalConfig - Optional portal config (will fetch if not provided)
- * @returns Permission check result
+ * Check if a user can edit a post: team members always can; the author can
+ * until the team acts on it.
  */
 export async function canEditPost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: Role },
+  actor: Actor,
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   log.debug(
     { post_id: postId, principal_id: actor.principalId, role: actor.role },
     'can edit post check'
   )
-  // Get the post
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-  })
-
-  if (!post) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-  }
-
-  // Check if post is deleted
-  if (post.deletedAt) {
-    return { allowed: false, reason: 'Cannot edit a deleted post' }
-  }
-
-  // Team members (admin, member) can always edit
-  if (isTeamMember(actor.role)) {
-    return { allowed: true }
-  }
-
-  // Must be the author
+  const post = await loadPost(postId)
+  if (post.deletedAt) return { allowed: false, reason: 'Cannot edit a deleted post' }
+  if (isTeamMember(actor.role)) return { allowed: true }
   if (post.principalId !== actor.principalId) {
     return { allowed: false, reason: 'You can only edit your own posts' }
   }
-
-  // Get portal config if not provided
-  const config = portalConfig ?? (await getPortalConfig())
-
-  // Check if status is default (Open)
-  const isDefault = await isDefaultStatus(post.statusId)
-  if (!isDefault && !config.features.allowEditAfterEngagement) {
-    return { allowed: false, reason: 'Cannot edit posts that have been reviewed by the team' }
-  }
-
-  // Check for engagement (votes, comments from others)
-  if (!config.features.allowEditAfterEngagement) {
-    if (post.voteCount > 0) {
-      return { allowed: false, reason: 'Cannot edit posts that have received votes' }
-    }
-
-    const hasOtherComments = await hasCommentsFromOthers(postId, actor.principalId)
-    if (hasOtherComments) {
-      return {
-        allowed: false,
-        reason: 'Cannot edit posts that have comments from other users',
-      }
-    }
-  }
-
-  return { allowed: true }
+  return authorWindow('edit', windowPost(post), portalConfig ?? (await getPortalConfig()))
 }
 
 /**
- * Check if a user can delete a post
- *
- * @param postId - Post ID to check
- * @param actor - Actor information (principalId, role)
- * @param portalConfig - Optional portal config (will fetch if not provided)
- * @returns Permission check result
+ * Check if a user can delete a post: team members always can; the author can
+ * until the team acts on it.
  */
 export async function canDeletePost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: Role },
+  actor: Actor,
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   log.debug(
     { post_id: postId, principal_id: actor.principalId, role: actor.role },
     'can delete post check'
   )
-  // Get the post
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-  })
-
-  if (!post) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-  }
-
-  // Check if post is already deleted
-  if (post.deletedAt) {
-    return { allowed: false, reason: 'Post has already been deleted' }
-  }
-
-  // Team members (admin, member) can always delete
-  if (isTeamMember(actor.role)) {
-    return { allowed: true }
-  }
-
-  // Must be the author
+  const post = await loadPost(postId)
+  if (post.deletedAt) return { allowed: false, reason: 'Post has already been deleted' }
+  if (isTeamMember(actor.role)) return { allowed: true }
   if (post.principalId !== actor.principalId) {
     return { allowed: false, reason: 'You can only delete your own posts' }
   }
-
-  // Get portal config if not provided
-  const config = portalConfig ?? (await getPortalConfig())
-
-  // Check if status is default (Open)
-  const isDefault = await isDefaultStatus(post.statusId)
-  if (!isDefault && !config.features.allowDeleteAfterEngagement) {
-    return {
-      allowed: false,
-      reason: 'Cannot delete posts that have been reviewed by the team',
-    }
-  }
-
-  // Check for engagement (votes, comments)
-  if (!config.features.allowDeleteAfterEngagement) {
-    if (post.voteCount > 0) {
-      return { allowed: false, reason: 'Cannot delete posts that have received votes' }
-    }
-
-    // Check for any comments (not just from others)
-    const commentCount = await getCommentCount(postId)
-    if (commentCount > 0) {
-      return { allowed: false, reason: 'Cannot delete posts that have comments' }
-    }
-  }
-
-  return { allowed: true }
+  return authorWindow('delete', windowPost(post), portalConfig ?? (await getPortalConfig()))
 }
 
 /**
- * Combined permission check for edit and delete operations.
- * This is more efficient than calling canEditPost and canDeletePost separately
- * because it queries the post, portal config, and status only once.
- *
- * @param postId - Post ID to check
- * @param actor - Actor information (principalId, role)
- * @returns Both edit and delete permission results
+ * Both checks at once, reading the post, the portal config and the team's
+ * actions once. What the portal's post menu shows.
  */
 export async function getPostPermissions(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: Role }
+  actor: Actor
 ): Promise<{
   canEdit: PermissionCheckResult
   canDelete: PermissionCheckResult
@@ -178,17 +110,8 @@ export async function getPostPermissions(
     { post_id: postId, principal_id: actor.principalId, role: actor.role },
     'get post permissions'
   )
-  // Get the post with status in single query (eliminates separate isDefaultStatus query)
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: { postStatus: { columns: { isDefault: true } } },
-  })
+  const post = await loadPost(postId)
 
-  if (!post) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-  }
-
-  // Check if post is deleted - affects both permissions
   if (post.deletedAt) {
     return {
       canEdit: { allowed: false, reason: 'Cannot edit a deleted post' },
@@ -196,15 +119,10 @@ export async function getPostPermissions(
     }
   }
 
-  // Team members (admin, member) can always edit and delete
   if (isTeamMember(actor.role)) {
-    return {
-      canEdit: { allowed: true },
-      canDelete: { allowed: true },
-    }
+    return { canEdit: { allowed: true }, canDelete: { allowed: true } }
   }
 
-  // For regular users, must be the author
   if (post.principalId !== actor.principalId) {
     return {
       canEdit: { allowed: false, reason: 'You can only edit your own posts' },
@@ -212,147 +130,19 @@ export async function getPostPermissions(
     }
   }
 
-  // Get portal config once for both checks
-  const config = await getPortalConfig()
-
-  // Status is default if no statusId or the status has isDefault=true
-  const isDefault = !post.statusId || post.postStatus?.isDefault === true
-
-  // Initialize results
-  let canEdit: PermissionCheckResult = { allowed: true }
-  let canDelete: PermissionCheckResult = { allowed: true }
-
-  // Status check for edit
-  if (!isDefault && !config.features.allowEditAfterEngagement) {
-    canEdit = { allowed: false, reason: 'Cannot edit posts that have been reviewed by the team' }
+  const [config, teamAction] = await Promise.all([
+    getPortalConfig(),
+    teamActionOn(windowPost(post)),
+  ])
+  return {
+    canEdit: authorWindowResult('edit', teamAction, config),
+    canDelete: authorWindowResult('delete', teamAction, config),
   }
-
-  // Status check for delete
-  if (!isDefault && !config.features.allowDeleteAfterEngagement) {
-    canDelete = {
-      allowed: false,
-      reason: 'Cannot delete posts that have been reviewed by the team',
-    }
-  }
-
-  // Vote check affects both (if still allowed)
-  if (post.voteCount > 0) {
-    if (canEdit.allowed && !config.features.allowEditAfterEngagement) {
-      canEdit = { allowed: false, reason: 'Cannot edit posts that have received votes' }
-    }
-    if (canDelete.allowed && !config.features.allowDeleteAfterEngagement) {
-      canDelete = { allowed: false, reason: 'Cannot delete posts that have received votes' }
-    }
-  }
-
-  // Comment checks - use combined query if either check is needed
-  const needsEditCommentCheck = canEdit.allowed && !config.features.allowEditAfterEngagement
-  const needsDeleteCommentCheck = canDelete.allowed && !config.features.allowDeleteAfterEngagement
-
-  if (needsEditCommentCheck || needsDeleteCommentCheck) {
-    // Single query to get both total count and other-user comment count
-    const { totalCount, hasOtherComments } = await getCommentStatsForPermissions(
-      postId,
-      actor.principalId
-    )
-
-    if (needsEditCommentCheck && hasOtherComments) {
-      canEdit = {
-        allowed: false,
-        reason: 'Cannot edit posts that have comments from other users',
-      }
-    }
-
-    if (needsDeleteCommentCheck && totalCount > 0) {
-      canDelete = { allowed: false, reason: 'Cannot delete posts that have comments' }
-    }
-  }
-
-  return { canEdit, canDelete }
 }
 
 // ============================================================================
 // Helper Methods
 // ============================================================================
-
-/**
- * Check if a status is the default "open" status
- */
-async function isDefaultStatus(statusId: PostStatusId | null): Promise<boolean> {
-  if (!statusId) return true // No status = treat as default
-
-  const { postStatuses, eq, and } = await import('@/lib/server/db')
-
-  const status = await db.query.postStatuses.findFirst({
-    where: and(eq(postStatuses.id, statusId), eq(postStatuses.isDefault, true)),
-  })
-
-  return !!status
-}
-
-/**
- * Check if a post has comments from users other than the author
- */
-async function hasCommentsFromOthers(
-  postId: PostId,
-  authorPrincipalId: PrincipalId | null | undefined
-): Promise<boolean> {
-  if (!authorPrincipalId) return false // Anonymous author can't have "other" comments
-
-  // Find any comment not from the author and not deleted (LIMIT 1 is faster than COUNT)
-  const otherComment = await db.query.postComments.findFirst({
-    where: and(
-      eq(postComments.postId, postId),
-      sql`${postComments.principalId} != ${authorPrincipalId}`,
-      isNull(postComments.deletedAt)
-    ),
-  })
-
-  return !!otherComment
-}
-
-/**
- * Get the count of comments on a post (excluding deleted)
- */
-async function getCommentCount(postId: PostId): Promise<number> {
-  const result = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(postComments)
-    .where(and(eq(postComments.postId, postId), isNull(postComments.deletedAt)))
-
-  return result[0]?.count ?? 0
-}
-
-/**
- * Combined query to get comment stats for permission checks.
- * Returns both total count and whether there are comments from others in a single query.
- * This is more efficient than calling hasCommentsFromOthers and getCommentCount separately.
- */
-async function getCommentStatsForPermissions(
-  postId: PostId,
-  authorPrincipalId: PrincipalId | null | undefined
-): Promise<{ totalCount: number; hasOtherComments: boolean }> {
-  // Use conditional aggregation to get both values in one query
-  const postUuid = toUuid(postId)
-  const principalUuid = authorPrincipalId ? toUuid(authorPrincipalId) : null
-
-  const result = await db.execute(sql`
-    SELECT
-      COUNT(*) as total_count,
-      COUNT(*) FILTER (WHERE ${postComments.principalId} IS NOT NULL AND ${postComments.principalId} != ${principalUuid}::uuid) as other_count
-    FROM ${postComments}
-    WHERE ${postComments.postId} = ${postUuid}::uuid
-      AND ${postComments.deletedAt} IS NULL
-  `)
-
-  type ResultRow = { total_count: number; other_count: number }
-  const rows = getExecuteRows<ResultRow>(result)
-  const row = rows[0]
-  return {
-    totalCount: Number(row?.total_count ?? 0),
-    hasOtherComments: Number(row?.other_count ?? 0) > 0,
-  }
-}
 
 /**
  * Get portal config (single workspace mode - returns global config)
