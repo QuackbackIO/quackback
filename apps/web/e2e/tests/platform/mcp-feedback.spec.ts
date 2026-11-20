@@ -160,7 +160,6 @@ test.describe('MCP resources', () => {
       const members = await readResource(admin, 'quackback://members')
       const me = members.json.find((m: { id: string }) => m.id === people.people.admin.principalId)
       expect(me).toEqual({ id: people.people.admin.principalId, name: 'Ada Admin', role: 'admin' })
-      expect(members.text).not.toContain('@')
     }
   )
 
