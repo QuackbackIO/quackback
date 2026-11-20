@@ -12,6 +12,8 @@ import type { Request } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { supportDb, pollFor } from '../../support/db'
 import { sink } from '../../support/webhook-sink-client'
+import { expectSigned } from '../../support/webhooks'
+import { callServerFn, personApi } from '../../support/server-fns'
 import { linksIn } from '../../support/mailpit'
 import {
   attrChain,
@@ -179,7 +181,7 @@ test(
 test(
   'WFL-39 send_webhook: the sink receives workflow.send_webhook with the run ids, signed',
   { tag: '@nightly' },
-  async ({ request, customerEmail, marker }) => {
+  async ({ request, playwright, customerEmail, marker }) => {
     await withWorkflows(
       [
         {
@@ -205,10 +207,20 @@ test(
           data: { conversationId, workflowId, runId, actionId: 'hook' },
         })
         expect(typeof body.createdAt).toBe('string')
-        // The delivery id doubles as the idempotency key. (Unlike outgoing
-        // webhooks, the workflow action carries no signature header.)
+        // The delivery id doubles as the idempotency key.
         expect(delivery.headers['x-quackback-delivery-id']).toBe(`workflow:${runId}:hook`)
         expect(delivery.headers['idempotency-key']).toBe(`workflow:${runId}:hook`)
+        // Signed like an outgoing webhook, with the secret the step's
+        // inspector shows an admin for this URL.
+        const admin = await personApi(playwright, 'admin')
+        const revealed = await callServerFn<{ secret: string }>(
+          admin,
+          'getWorkflowWebhookSecretFn',
+          { url: sink.url(marker) }
+        )
+        await admin.dispose()
+        expect(revealed.ok, revealed.error).toBe(true)
+        expectSigned(delivery, revealed.data.secret)
         expect(await runEventKinds(run.id)).not.toContain('action_failed:send_webhook')
       }
     )

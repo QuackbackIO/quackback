@@ -81,7 +81,16 @@ vi.mock(
       .planLimitsServiceDouble
 )
 
-import { listRunnableWorkflowsFn, runWorkflowManuallyFn } from '../workflows'
+// The derivation itself is covered by domains/webhooks/__tests__/signing.test.ts.
+vi.mock('@/lib/server/domains/webhooks/signing', () => ({
+  workflowWebhookSecret: (url: string) => `whsec_for:${url}`,
+}))
+
+import {
+  getWorkflowWebhookSecretFn,
+  listRunnableWorkflowsFn,
+  runWorkflowManuallyFn,
+} from '../workflows'
 import {
   FEATURE_STATES,
   runsWithoutPlanGate,
@@ -300,5 +309,28 @@ describe('runWorkflowManuallyFn', () => {
         data: { workflowId: 'workflow_1', conversationId: 'conversation_1' },
       })
     ).rejects.toThrow('boom')
+  })
+})
+
+describe('getWorkflowWebhookSecretFn', () => {
+  it('gives whoever can edit workflows the secret for the URL', async () => {
+    const result = await getWorkflowWebhookSecretFn({
+      data: { url: 'https://hooks.example.com/a' },
+    })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'workflow.manage' })
+    expect(result).toEqual({ secret: 'whsec_for:https://hooks.example.com/a' })
+  })
+
+  it('reveals nothing to someone who cannot edit workflows', async () => {
+    hoisted.requireAuth.mockRejectedValue(new Error('Forbidden'))
+    await expect(
+      getWorkflowWebhookSecretFn({ data: { url: 'https://hooks.example.com/a' } })
+    ).rejects.toThrow('Forbidden')
+  })
+
+  it('refuses a URL a webhook step could not send to', async () => {
+    await expect(
+      getWorkflowWebhookSecretFn({ data: { url: 'http://hooks.example.com/a' } })
+    ).rejects.toThrow()
   })
 })

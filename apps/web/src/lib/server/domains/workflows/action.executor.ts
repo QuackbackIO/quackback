@@ -580,7 +580,20 @@ export async function applyAction(
       }
       const deliveryId = `workflow:${ctx.runId}:${action.nodeId}`
       const createdAt = new Date().toISOString()
-      const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+      const [{ safeFetch }, { webhookSignatureHeaders, workflowWebhookSecret }] = await Promise.all(
+        [import('@/lib/server/content/ssrf-guard'), import('@/lib/server/domains/webhooks/signing')]
+      )
+      const body = JSON.stringify({
+        id: deliveryId,
+        type: 'workflow.send_webhook',
+        createdAt,
+        data: {
+          conversationId,
+          workflowId: ctx.workflowId,
+          runId: ctx.runId,
+          actionId: action.nodeId,
+        },
+      })
       const res = await safeFetch(action.url, {
         // Only takes effect for the e2e suite's own sink, behind the harness
         // gate (same allowance as events/handlers/webhook.ts).
@@ -588,21 +601,14 @@ export async function applyAction(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Signed like every other webhook, with the secret for this URL
+          // (see domains/webhooks/signing.ts), so the receiver can verify it.
+          ...webhookSignatureHeaders(workflowWebhookSecret(action.url), body),
           'X-Quackback-Event': 'workflow.send_webhook',
           'X-Quackback-Delivery-Id': deliveryId,
           'Idempotency-Key': deliveryId,
         },
-        body: JSON.stringify({
-          id: deliveryId,
-          type: 'workflow.send_webhook',
-          createdAt,
-          data: {
-            conversationId,
-            workflowId: ctx.workflowId,
-            runId: ctx.runId,
-            actionId: action.nodeId,
-          },
-        }),
+        body,
         timeoutMs: 5000,
       })
       if (!res.ok) throw new Error(`send_webhook HTTP ${res.status}`)

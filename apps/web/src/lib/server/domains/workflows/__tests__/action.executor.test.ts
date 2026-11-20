@@ -7,6 +7,7 @@
  * the caller owns best-effort vs fail-fast.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createHmac } from 'node:crypto'
 import type {
   ConversationId,
   PrincipalId,
@@ -95,6 +96,13 @@ vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
 
 const { safeFetch } = vi.hoisted(() => ({ safeFetch: vi.fn() }))
 vi.mock('@/lib/server/content/ssrf-guard', () => ({ safeFetch }))
+// The per-URL secret is derived from the workspace key (signing.test.ts covers
+// the derivation); here it stands in as a value that still depends on the URL,
+// and the signer itself is the real one.
+vi.mock('@/lib/server/domains/webhooks/signing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/webhooks/signing')>()),
+  workflowWebhookSecret: (url: string) => `whsec_for:${url}`,
+}))
 
 // Ticket actions (set_ticket_status / convert_to_ticket) — each mocked at its
 // own seam so this stays a unit test of action.executor.ts's dispatch/
@@ -275,6 +283,26 @@ describe('applyAction', () => {
         actionId: 'action_webhook',
       },
     })
+  })
+
+  it('signs a workflow webhook like an outgoing webhook, with the secret for its URL', async () => {
+    const before = Math.floor(Date.now() / 1000)
+    await applyAction(
+      { type: 'send_webhook', url: 'https://example.test/hook', nodeId: 'action_webhook' },
+      ctx
+    )
+    const after = Math.floor(Date.now() / 1000)
+
+    const [url, options] = safeFetch.mock.calls[0]
+    expect(url).toBe('https://example.test/hook')
+    const timestamp = options.headers['X-Quackback-Timestamp']
+    expect(Number(timestamp)).toBeGreaterThanOrEqual(before)
+    expect(Number(timestamp)).toBeLessThanOrEqual(after)
+    // What a receiver computes: HMAC-SHA256 of "<timestamp>.<raw body>".
+    const expected = createHmac('sha256', 'whsec_for:https://example.test/hook')
+      .update(`${timestamp}.${options.body}`)
+      .digest('hex')
+    expect(options.headers['X-Quackback-Signature']).toBe(`sha256=${expected}`)
   })
 
   it('refuses to send a workflow webhook without a stable action identity', async () => {
