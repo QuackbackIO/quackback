@@ -383,6 +383,8 @@ export async function createPost(
         },
         board: { slug: board.slug, name: board.name },
         author,
+        // On a teammate's create for a customer, the teammate wrote the text.
+        writerPrincipalId: author.actor?.principalId ?? author.principalId,
       })
     }
   }

@@ -18,6 +18,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 import { ThreadPinnedComment } from '../thread-pinned-comment'
+import { PinnedCommentSection } from '../official-response-section'
 
 const pinned: PinnedCommentView = {
   id: 'comment_pinned' as PostCommentId,
@@ -67,5 +68,25 @@ describe('ThreadPinnedComment', () => {
   it('shows nothing when the thread has loaded it as a reply', () => {
     const { container } = renderPinned([comment('comment_a', [comment('comment_pinned')])])
     expect(container.textContent).toBe('')
+  })
+})
+
+describe('PinnedCommentSection (admin roadmap modal)', () => {
+  function renderSection(comments?: PublicCommentView[]) {
+    return render(
+      <IntlProvider locale="en">
+        <PinnedCommentSection comment={pinned} workspaceName="Team" comments={comments} />
+      </IntlProvider>
+    )
+  }
+
+  it('shows nothing when the thread below already holds the pinned comment', () => {
+    const { container } = renderSection([comment('comment_a'), comment('comment_pinned')])
+    expect(container.textContent).toBe('')
+  })
+
+  it('shows the card when the thread does not hold it', async () => {
+    renderSection([comment('comment_a')])
+    expect(await screen.findByText('Pinned', {}, { timeout: 8000 })).toBeTruthy()
   })
 })

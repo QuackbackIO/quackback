@@ -30,6 +30,11 @@ export interface SyncPostMentionsInput {
   /** Per-principal excerpt (paragraph text containing the mention) for email body. */
   excerptByPrincipalId: Map<PrincipalId, string>
   actor: EventActor
+  /**
+   * Who wrote the text, when that is not the event's actor: a teammate who
+   * creates a post on a customer's behalf. Defaults to the actor.
+   */
+  mentionerPrincipalId?: PrincipalId
 }
 
 /** A teammate, or a service principal (API key, integration) acting for the team. */
@@ -42,22 +47,29 @@ export async function syncPostMentions(input: SyncPostMentionsInput): Promise<vo
   const { postId, postTitle, postUrl, boardId, mentionedIds, actor } = input
   const actorPrincipalId = actor.principalId as PrincipalId | undefined
 
+  // Only a teammate, an API key or an integration may mention someone. The
+  // portal editor offers customers no mentions, so a customer's or anonymous
+  // visitor's mention node is a crafted request: their save leaves the
+  // mentions as they were (no new notice, and a teammate's rows stay).
+  const mentionerId = input.mentionerPrincipalId ?? actorPrincipalId
+  if (mentionerId) {
+    const [mentioner] = (
+      await db
+        .select({ id: principal.id, type: principal.type, role: principal.role })
+        .from(principal)
+        .where(inArray(principal.id, [mentionerId]))
+    ).filter((r) => r.id === mentionerId)
+    if (!mentioner || !mentionerMayMention(mentioner)) return
+  }
+
   // Server-side eligibility validation (defense against tampered clients).
-  // The mentioner's own row is read alongside the targets: only a teammate,
-  // an API key or an integration may mention someone. The portal editor
-  // offers customers no mentions, so a customer's or anonymous visitor's
-  // mention node is a crafted request and notifies nobody.
   const eligibleIds: Set<PrincipalId> = new Set()
   if (mentionedIds.size > 0) {
-    const lookup = new Set<PrincipalId>(mentionedIds)
-    if (actorPrincipalId) lookup.add(actorPrincipalId)
     const rows = await db
       .select({ id: principal.id, type: principal.type, role: principal.role })
       .from(principal)
-      .where(inArray(principal.id, Array.from(lookup)))
-    const mentioner = actorPrincipalId ? rows.find((r) => r.id === actorPrincipalId) : undefined
-    const mayMention = actorPrincipalId ? !!mentioner && mentionerMayMention(mentioner) : true
-    for (const r of mayMention ? rows : []) {
+      .where(inArray(principal.id, Array.from(mentionedIds)))
+    for (const r of rows) {
       if (!mentionedIds.has(r.id as PrincipalId)) continue
       if (r.type === 'user' && ['admin', 'member', 'user'].includes(r.role ?? '')) {
         eligibleIds.add(r.id as PrincipalId)

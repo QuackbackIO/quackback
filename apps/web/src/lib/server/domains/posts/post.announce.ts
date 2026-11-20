@@ -46,6 +46,11 @@ export async function announcePublishedPost(
     post: PostSnapshot
     board: { slug: string; name: string }
     author: AuthorSnapshot
+    /**
+     * Who wrote the text, when not the author: a teammate creating a post on
+     * a customer's behalf. Decides whether its mentions notify anyone.
+     */
+    writerPrincipalId?: PrincipalId
   },
   opts?: { skipCreatedWebhook?: boolean; skipMentions?: boolean }
 ): Promise<void> {
@@ -112,6 +117,9 @@ export async function announcePublishedPost(
           mentionedIds,
           excerptByPrincipalId: extractMentionExcerpts(post.contentJson),
           actor: buildEventActor(author),
+          ...(assembled?.writerPrincipalId
+            ? { mentionerPrincipalId: assembled.writerPrincipalId }
+            : {}),
         })
       } catch (error) {
         log.error({ err: error, post_id: post.id }, 'post mention notices failed')

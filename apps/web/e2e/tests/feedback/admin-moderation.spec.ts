@@ -546,6 +546,47 @@ test(
   }
 )
 
+test(
+  "FBA-Q-16 a teammate's post filed for a customer still tells the people it mentions",
+  { tag: '@core' },
+  async ({ playwright, browser, newTeammate, marker }) => {
+    // The post is the customer's, but the teammate wrote the text, so its
+    // mention notifies (FBP-B22 judges who wrote the text).
+    const api = await personApi(playwright, 'admin')
+    const customer = await portalCustomer(browser, marker)
+    const alice = await newTeammate({ roleKey: 'admin', principalRole: 'admin' })
+    try {
+      const board = await makeBoard(api, marker)
+      const res = await callServerFn<{ id: string }>(api, 'createPostFn', {
+        boardId: board.id,
+        title: `${marker} filed for a customer`,
+        content: `Over to ${alice.name}`,
+        authorPrincipalId: customer.principalId,
+        contentJson: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'Over to ' },
+                { type: 'mention', attrs: { id: alice.principalId, label: alice.name } },
+              ],
+            },
+          ],
+        },
+      })
+      expect(res.ok, res.raw).toBe(true)
+      const postId = res.data.id
+      expect((await postRow(postId))?.principal_id).toBe(customer.principalUuid)
+      await expect.poll(async () => (await bellsFor(alice.principalId, postId)).length).toBe(1)
+      await waitForMail({ to: alice.email })
+    } finally {
+      await customer.close()
+      await api.dispose()
+    }
+  }
+)
+
 // ---------------------------------------------------------------------------
 // Workspace-wide moderation switches: product-isolated job only.
 // ---------------------------------------------------------------------------

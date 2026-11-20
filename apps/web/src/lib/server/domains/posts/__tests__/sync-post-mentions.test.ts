@@ -380,4 +380,35 @@ describe('syncPostMentions', () => {
 
     expect(dispatchPostMentioned).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps the rows a teammate recorded when a customer saves, adding and removing none', async () => {
+    // A teammate mentioned P1 earlier; the customer then fixes a typo with no mention left.
+    mentionerRows = [{ id: ACTOR_PRINCIPAL, type: 'user', role: 'user' }]
+    existingRows = [{ principalId: P1, notifiedAt: new Date() }]
+
+    await syncPostMentions(defaultInput({ mentionedIds: new Set() }))
+
+    expect(deleteCalls).toHaveLength(0)
+    expect(insertCalls).toHaveLength(0)
+    expect(dispatchPostMentioned).not.toHaveBeenCalled()
+  })
+
+  it("judges the person who wrote the text, not the post's attributed author", async () => {
+    // A teammate creates a post on a customer's behalf: the event names the
+    // customer, but the teammate wrote the mention.
+    mentionerRows = [
+      { id: ACTOR_PRINCIPAL, type: 'user', role: 'user' },
+      { id: 'principal_writer', type: 'user', role: 'admin' },
+    ]
+    eligibilityRows = [userRow(P1)]
+
+    await syncPostMentions(
+      defaultInput({
+        mentionedIds: new Set([P1]),
+        mentionerPrincipalId: 'principal_writer' as PrincipalId,
+      })
+    )
+
+    expect(dispatchPostMentioned).toHaveBeenCalledTimes(1)
+  })
 })
