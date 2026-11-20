@@ -40,6 +40,7 @@ vi.mock('@/lib/server/db', () => ({
   inArray: () => null,
 }))
 
+const presence = await import('../presence')
 const {
   markPresent,
   clearPresence,
@@ -47,7 +48,7 @@ const {
   isAnyAgentOnline,
   listOnlineAgentIds,
   listAvailableAgentIds,
-} = await import('../presence')
+} = presence
 type PrincipalId = Parameters<typeof isPrincipalOnline>[0]
 
 const A = 'principal_a' as PrincipalId
@@ -86,6 +87,11 @@ describe('when the store is unreachable', () => {
     expect(await listOnlineAgentIds()).toEqual([])
   })
 
+  it('readAvailableAgentIds answers null — the alert gates treat unknown as someone around', async () => {
+    hoisted.fail = true
+    expect(await presence.readAvailableAgentIds()).toBeNull()
+  })
+
   it('listAvailableAgentIds short-circuits an empty input without touching the store', async () => {
     hoisted.fail = true
     expect(await listAvailableAgentIds([])).toEqual([])
@@ -98,6 +104,7 @@ describe('when the store is reachable', () => {
     // function that always returns its failure value.
     expect(await isPrincipalOnline(A)).toBe(false)
     expect(await listOnlineAgentIds()).toEqual([])
+    expect(await presence.readAvailableAgentIds()).toEqual([])
     expect(await clearPresence(A, 's', true)).toBe(false)
     // `db.execute` returns no rows here, so `went_offline` is undefined and the
     // guarded read yields false rather than throwing — the shape a malformed

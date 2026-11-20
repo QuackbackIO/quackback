@@ -10,12 +10,13 @@ import {
   POST_PNG,
   expectLandscapeContainThumb,
   expectLoadedImage,
+  expectSquareImageTile,
   landscapePng,
   pasteImageOn,
   stubConversationImageNetwork,
 } from '../../utils/conversation-images'
 
-test.describe('Admin conversation images', { tag: '@smoke' }, () => {
+test.describe('Admin conversation images', () => {
   test.use({ viewport: { width: 1920, height: 1080 } })
   let seeded: SeededConversation
 
@@ -38,7 +39,7 @@ test.describe('Admin conversation images', { tag: '@smoke' }, () => {
       await expect(page).toHaveURL(new RegExp(`i=${seeded.conversationId}`), { timeout: 2000 })
     }).toPass({ timeout: 15000 })
 
-    const legacy = page.getByRole('button', { name: `Enlarge ${LEGACY_WIDE_PNG}` })
+    const legacy = page.getByRole('button', { name: `Open ${LEGACY_WIDE_PNG}` })
     await expect(legacy).toBeVisible({ timeout: 10000 })
     await expectLandscapeContainThumb(legacy)
     await expect(page.locator(`img[width="500"][height="500"]`)).toHaveCount(0)
@@ -52,7 +53,7 @@ test.describe('Admin conversation images', { tag: '@smoke' }, () => {
     await expect(dialog).toBeHidden()
   })
 
-  test('paste and paperclip stage the tray, then send a contain thumb', async ({ page }) => {
+  test('paste and paperclip stage the tray, then send both images as tiles', async ({ page }) => {
     test.setTimeout(60_000)
     const png = await stubConversationImageNetwork(page)
     await page.goto(`/admin/inbox?i=${seeded.conversationId}`)
@@ -62,29 +63,32 @@ test.describe('Admin conversation images', { tag: '@smoke' }, () => {
     await expect(composer).toBeVisible()
     await pasteImageOn(composer, png, 'pasted-shot.png')
 
-    const trayThumb = composer.getByRole('button', { name: 'Enlarge pasted-shot.png' })
+    const trayThumb = composer.getByRole('button', { name: 'Open pasted-shot.png' })
     await expect(trayThumb).toBeVisible({ timeout: 10000 })
     await expect(composer.locator('.ProseMirror img')).toHaveCount(0)
 
     const [chooser] = await Promise.all([
       page.waitForEvent('filechooser'),
-      page.getByRole('button', { name: 'Attach image' }).click(),
+      page.getByRole('button', { name: 'Attach files' }).click(),
     ])
     await chooser.setFiles({
       name: 'paperclip.png',
       mimeType: 'image/png',
       buffer: landscapePng(),
     })
-    await expect(composer.getByRole('button', { name: 'Enlarge paperclip.png' })).toBeVisible({
+    await expect(composer.getByRole('button', { name: 'Open paperclip.png' })).toBeVisible({
       timeout: 10000,
     })
 
     await page.getByRole('button', { name: 'Send reply' }).click()
-    const sent = page
-      .getByRole('button', { name: 'Enlarge pasted-shot.png' })
-      .filter({ has: page.locator('img.object-contain') })
+    await expect(composer.getByRole('button', { name: /^Open .+\.png$/ })).toHaveCount(0, {
+      timeout: 15000,
+    })
+    const thread = page.locator('[data-message-id]')
+    const sent = thread.getByRole('button', { name: 'Open pasted-shot.png' })
     await expect(sent).toBeVisible({ timeout: 15000 })
-    await expectLandscapeContainThumb(sent)
+    await expectSquareImageTile(sent)
+    await expectSquareImageTile(thread.getByRole('button', { name: 'Open paperclip.png' }))
     await sent.click()
     await expect(page.getByRole('dialog').getByRole('button', { name: 'Zoom in' })).toBeVisible()
   })
@@ -111,7 +115,7 @@ test.describe('Changelog images stay inline', () => {
 
     await expect(editor.locator(`img[src*="${CHANGELOG_PNG}"]`)).toBeVisible({ timeout: 10000 })
     await expect(dialog.getByRole('button', { name: 'Remove attachment' })).toHaveCount(0)
-    await expect(dialog.getByRole('button', { name: /Enlarge / })).toHaveCount(0)
+    await expect(dialog.getByRole('button', { name: /^Open .+\.png$/ })).toHaveCount(0)
   })
 })
 
@@ -144,7 +148,7 @@ test.describe('Post images stay inline', () => {
 
     await expect(editor.locator(`img[src*="${POST_PNG}"]`)).toBeVisible({ timeout: 10000 })
     await expect(dialog.getByRole('button', { name: 'Remove attachment' })).toHaveCount(0)
-    await expect(dialog.getByRole('button', { name: /Enlarge / })).toHaveCount(0)
+    await expect(dialog.getByRole('button', { name: /^Open .+\.png$/ })).toHaveCount(0)
   })
 })
 
@@ -173,14 +177,15 @@ test.describe('Local Vite storage serves conversation thumbs', () => {
     await expect(composer).toBeVisible()
     await pasteImageOn(composer, png, 'real-refresh.png')
 
-    const trayThumb = composer.getByRole('button', { name: 'Enlarge real-refresh.png' })
+    const trayThumb = composer.getByRole('button', { name: 'Open real-refresh.png' })
     await expect(trayThumb).toBeVisible({ timeout: 15000 })
     await expectLoadedImage(trayThumb.locator('img'))
     await expect(composer.locator('.ProseMirror img')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Send reply' }).click()
     const sent = page
-      .getByRole('button', { name: 'Enlarge real-refresh.png' })
+      .locator('[data-message-id]')
+      .getByRole('button', { name: 'Open real-refresh.png' })
       .filter({ has: page.locator('img.object-contain') })
     await expect(sent).toBeVisible({ timeout: 15000 })
     await expectLoadedImage(sent.locator('img'))
@@ -189,11 +194,14 @@ test.describe('Local Vite storage serves conversation thumbs', () => {
     await page.reload()
     await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 15000 })
     const afterReload = page
-      .getByRole('button', { name: 'Enlarge real-refresh.png' })
+      .getByRole('button', { name: 'Open real-refresh.png' })
       .filter({ has: page.locator('img.object-contain') })
     await expect(afterReload).toBeVisible({ timeout: 15000 })
     await expectLoadedImage(afterReload.locator('img'))
     await expectLandscapeContainThumb(afterReload)
-    await expect(page.getByRole('link', { name: /real-refresh\.png/i })).toHaveCount(0)
+    // Not a file link in the thread (the Details panel's Files list may link it).
+    await expect(
+      page.locator('[data-message-id]').getByRole('link', { name: /real-refresh\.png/i })
+    ).toHaveCount(0)
   })
 })

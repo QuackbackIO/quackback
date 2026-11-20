@@ -11,6 +11,8 @@ interface AuthVoteButtonProps {
   disabled?: boolean
   /** Whether the current user can vote (anonymous voting enabled or logged in) */
   canVote?: boolean
+  /** The board is read-only: votes show and are no longer taken */
+  votingClosed?: boolean
   /** Whether the viewer is a signed-in real user (drives authz vs authn copy) */
   isAuthenticated?: boolean
   /** Compact horizontal variant for inline use */
@@ -32,6 +34,7 @@ export function AuthVoteButton({
   voteCount,
   disabled = false,
   canVote = false,
+  votingClosed = false,
   isAuthenticated = false,
   compact = false,
   pill = false,
@@ -61,6 +64,7 @@ export function AuthVoteButton({
       postId={postId}
       voteCount={voteCount}
       disabled={disabled}
+      closed={votingClosed}
       onAuthRequired={needsAuth ? handleAuthRequired : undefined}
       noAccessReason={noAccessReason}
       onBeforeVote={canVote ? ensureAnonSession : undefined}

@@ -7,7 +7,12 @@ import { WHO_REPLIES_FIRST } from '@/lib/shared/assistant/who-replies-first'
 
 const hoisted = vi.hoisted(() => ({
   pathname: '/admin/settings/workflows',
-  permissions: new Set<string>(['ai.customer.manage', 'office_hours.manage', 'workflow.manage']),
+  permissions: new Set<string>([
+    'ai.customer.manage',
+    'office_hours.manage',
+    'workflow.manage',
+    'routing.manage',
+  ]),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -24,16 +29,28 @@ vi.mock('@tanstack/react-router', () => ({
     select({ location: { pathname: hoisted.pathname } }),
 }))
 
-vi.mock('@/lib/client/hooks/use-permission', () => ({
-  usePermission: (key: string) => hoisted.permissions.has(key),
-}))
+vi.mock('@/lib/client/hooks/use-permission', async () => {
+  const { canOpenSettingsPage } = await vi.importActual<
+    typeof import('@/lib/shared/settings-page-access')
+  >('@/lib/shared/settings-page-access')
+  return {
+    usePermission: (key: string) => hoisted.permissions.has(key),
+    useCanOpenSettingsPage: (path: Parameters<typeof canOpenSettingsPage>[1]) =>
+      canOpenSettingsPage(hoisted.permissions, path),
+  }
+})
 
 import { WhoRepliesFirstCard } from '../who-replies-first-card'
 
 afterEach(() => {
   cleanup()
   hoisted.pathname = '/admin/settings/workflows'
-  hoisted.permissions = new Set(['ai.customer.manage', 'office_hours.manage', 'workflow.manage'])
+  hoisted.permissions = new Set([
+    'ai.customer.manage',
+    'office_hours.manage',
+    'workflow.manage',
+    'routing.manage',
+  ])
 })
 
 function renderCard() {

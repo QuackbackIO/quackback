@@ -137,7 +137,7 @@ async function renderPage(
 <meta name="robots" content="noindex">
 <title>${text(copy.title)}</title>
 <style>
-:root{--bg:#f7f6f2;--card:#fff;--fg:#111;--muted:#5f5d56;--line:#e8e5dc;--duck:#f7cc29;color-scheme:light}
+:root{--bg:#f7f6f2;--card:#fff;--fg:#111;--muted:#5f5d56;--line:#e8e5dc;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#121211;--card:#191917;--fg:#f3f1ea;--muted:#a6a398;--line:#2b2a26;color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:var(--bg);color:var(--fg);font:16px/1.55 Figtree,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
@@ -146,7 +146,7 @@ h1{margin:0;font-size:24px;line-height:1.15;font-weight:800;letter-spacing:-.02e
 p{margin:0;color:var(--muted);overflow-wrap:anywhere}
 .owner{font-size:14px}
 .btn{display:inline-flex;align-items:center;padding:10px 14px;border:1px solid color-mix(in srgb,var(--fg) 28%,transparent);border-radius:8px;color:var(--fg);font-weight:600;font-size:14px;text-decoration:none}
-.btn:focus-visible{outline:2px solid var(--fg);outline-offset:2px;box-shadow:0 0 0 5px var(--duck)}
+.btn:focus-visible{outline:2px solid var(--muted);outline-offset:2px}
 .by{display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12.5px;color:var(--muted);text-decoration:none}
 .by svg{width:16px;height:16px}
 </style>

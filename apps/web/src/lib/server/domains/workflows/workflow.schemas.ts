@@ -536,9 +536,10 @@ export const DEFAULT_INACTIVITY_MINUTES = 60
 
 /** Per-workflow lead time for sla.approaching_breach (support platform §4.6):
  *  how long before a clock's due date the warning fires. Bounded 1 minute to
- *  24 hours. Default 15. See sla.service.ts's sweepApproachingSlaBreaches for
- *  how multiple live workflows with different lead times are reconciled (the
- *  widest configured lead governs the single fire-once claim). */
+ *  24 hours. Default 15, which is also the lead the warning uses when no
+ *  workflow listens. See sla.sweep.ts's sweepApproachingSlaBreaches for how
+ *  live workflows with different lead times are reconciled (the widest of the
+ *  default and every configured lead governs the single fire-once claim). */
 export const MAX_BREACH_LEAD_MINUTES = 24 * 60
 export const DEFAULT_BREACH_LEAD_MINUTES = 15
 

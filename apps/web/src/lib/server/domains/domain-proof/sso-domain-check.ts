@@ -11,13 +11,11 @@ import { interactiveResolver } from '@/lib/server/dns/resolver'
 import {
   SSO_VERIFY_RECORD_HOST,
   ssoVerifyRecordValue,
-  type ProvenZoneSource,
+  type DomainRecordCheck,
 } from '@/lib/shared/domain-proof'
 import { ssoDomainProvenBy } from './proven-zones'
 
-export type SsoDomainCheck =
-  | { ok: true; via: 'dns' | ProvenZoneSource }
-  | { ok: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' }
+export type SsoDomainCheck = DomainRecordCheck
 
 export async function checkSsoDomainOwnership(domain: {
   name: string

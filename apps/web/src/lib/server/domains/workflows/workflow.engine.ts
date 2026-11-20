@@ -28,6 +28,7 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import { logger } from '@/lib/server/logger'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { runWithAuditAttribution, workflowAttribution } from '@/lib/server/audit/attribution'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { applyAction, type ResolvedBlockDeps } from './action.executor'
@@ -61,7 +62,7 @@ function workflowActor(): Actor {
  *  (amendment 1), and the emitted csat_submitted event needs a human actor so
  *  it can legitimately trigger other workflows. `principalType: 'anonymous'`
  *  is a safe default here (an identified visitor's real type doesn't change
- *  the ownership check either path relies on — see canViewConversation /
+ *  the ownership check either path relies on — see assertConversationVisible /
  *  recordCsat's own `actor.principalId !== conversation.visitorPrincipalId`
  *  check), only `toEventActor` cares that it isn't 'service'. */
 function visitorActor(visitorPrincipalId: PrincipalId | null): Actor {
@@ -159,6 +160,8 @@ export async function runWorkflow(
   ctx: ConditionContext,
   opts: RunWorkflowOptions
 ): Promise<WorkflowRun | null> {
+  // Paused after the plan limits grace: no run starts, by trigger or by hand.
+  if (await isFeaturePaused('workflows')) return null
   const graph = readGraph(workflow.graph)
   const plan = walkWorkflow(graph, ctx)
   if (plan.actions.length === 0 && plan.status !== 'waiting') {
@@ -265,6 +268,9 @@ async function runPlanAndSettle(
   // InputWaitCursor below as the correlation key a customer's reply matches.
   let blockMessageId: string | null = null
   let assistantDeclined = false
+  // The interactive block the plan would park on posted nothing (a declined
+  // csat ask): nothing will ever answer it.
+  let parkedBlockSkipped = false
   // Once a non-idempotent action starts, a later failure must interrupt the
   // run instead of reverting to its old cursor and replaying customer-visible
   // work. Set before execution because an action may commit and then throw.
@@ -326,6 +332,11 @@ async function runPlanAndSettle(
           resolvedBlockDeps,
         })
         if (result.blockMessageId) blockMessageId = result.blockMessageId
+        // Only the block the plan parks on (an input wait resumes at itself).
+        const parksHere = plan.waitKind === 'input' && plan.resumeNodeId
+        if (result.blockSkipped && 'nodeId' in action && action.nodeId === parksHere) {
+          parkedBlockSkipped = true
+        }
         if (result.assistantDeclined) assistantDeclined = true
       } catch (err) {
         log.error({ err, action: action.type, workflowId: workflow.id }, 'workflow action failed')
@@ -371,6 +382,18 @@ async function runPlanAndSettle(
       ...ctx,
       assistantOutcome: 'escalated',
     })
+  }
+
+  // A skipped ask ends its step without an answer. Its outgoing paths all
+  // hang off an answer (a request_csat branches on the rating), so the run
+  // ends here rather than parking: a park would hold the conversation's
+  // customer-facing lock until it expired, waiting on a question nobody saw.
+  if (parkedBlockSkipped) {
+    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'block_skipped')
+    const done = await settleRunning(run.id, { state: 'done', endedAt: new Date() })
+    if (!done) return currentRun(run.id)
+    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'completed')
+    return done
   }
 
   if (plan.status === 'waiting' && (plan.waitKind === 'input' || plan.waitKind === 'assistant')) {
@@ -544,6 +567,11 @@ export async function resumeWorkflowRun(
 
     const workflow = claimed.conversationId ? await getWorkflow(claimed.workflowId) : null
     if (workflow && workflow.status !== 'live') {
+      return await settleTerminal(claimed, 'interrupted')
+    }
+    // Paused after the plan limits grace: a run in flight stops at this step
+    // boundary, the same way it does for a workflow paused by hand.
+    if (await isFeaturePaused('workflows')) {
       return await settleTerminal(claimed, 'interrupted')
     }
 

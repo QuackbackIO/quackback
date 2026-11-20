@@ -19,6 +19,7 @@ import {
   saveWidgetHeroImageKeyFn,
   deleteWidgetHeroImageFn,
   updatePortalConfigFn,
+  updatePortalDesignFn,
   updateModerationDefaultFn,
   updateWidgetConfigFn,
   regenerateWidgetSecretFn,
@@ -27,6 +28,7 @@ import {
   updateCustomCssFn,
   updateWorkflowAbandonedAutoCloseFn,
   updateWorkflowCloseSpamFn,
+  updateConversationRoutingFn,
   updateDefaultSlaPolicyFn,
   updateSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
@@ -38,10 +40,6 @@ import {
   updateHelpCenterLocaleChromeFn,
   updateHelpCenterAutoTranslateFn,
 } from '@/lib/server/functions/help-center-settings'
-import {
-  updateHelpCenterDomainFn,
-  verifyHelpCenterDomainFn,
-} from '@/lib/server/functions/help-center-domain'
 import {
   createRedirectRuleFn,
   deleteRedirectRuleFn,
@@ -282,6 +280,21 @@ export function useUpdatePortalConfig(
   })
 }
 
+/** Saves the portal's tabs and welcome message (settings.manage or settings.branding). */
+export function useUpdatePortalDesign(
+  meta: { showServerMessage?: boolean; ownsError?: (error: unknown) => boolean } = {}
+) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    meta: { ...AUTOSAVE, ...meta },
+    mutationFn: (data: Parameters<typeof updatePortalDesignFn>[0]['data']) =>
+      updatePortalDesignFn({ data }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey }),
+  })
+}
+
 export function useUpdateModerationDefault() {
   const queryClient = useQueryClient()
 
@@ -432,34 +445,6 @@ export function useUpdateHelpCenterAutoTranslate() {
   })
 }
 
-export function useUpdateHelpCenterDomain() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    scope: HELP_CENTER_CONFIG_SCOPE,
-    // The server's reasons (a host already in use, say) are written for the person saving.
-    meta: { ...AUTOSAVE, showServerMessage: true },
-    mutationFn: (domain: string | null) => updateHelpCenterDomainFn({ data: { domain } }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
-  })
-}
-
-export function useVerifyHelpCenterDomain() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    scope: HELP_CENTER_CONFIG_SCOPE,
-    mutationFn: () => verifyHelpCenterDomainFn({ data: {} }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey })
-      queryClient.invalidateQueries({
-        queryKey: settingsQueries.helpCenterDomainStatus().queryKey,
-      })
-    },
-  })
-}
-
 export function useCreateHelpCenterRedirectRule() {
   const queryClient = useQueryClient()
 
@@ -506,6 +491,19 @@ export function useUpdateWorkflowCloseSpam() {
       updateWorkflowCloseSpamFn({ data }),
     onSuccess: (saved) =>
       queryClient.setQueryData(settingsQueries.workflowCloseSpam().queryKey, saved),
+  })
+}
+
+/** Autosave for the auto-assign switch on the Workflows page. */
+export function useUpdateConversationRouting() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (enabled: boolean) =>
+      updateConversationRoutingFn({ data: { enabled, strategy: 'auto_assign_active' } }),
+    onSuccess: (saved) =>
+      queryClient.setQueryData(settingsQueries.conversationRouting().queryKey, saved),
   })
 }
 

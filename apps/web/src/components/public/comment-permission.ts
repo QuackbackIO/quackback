@@ -47,3 +47,18 @@ export function resolveCommentingState(
     noAccess: !serverAllowCommenting && isRealUser,
   }
 }
+
+/**
+ * Whether a comments section takes new comments. The admin view is always
+ * open to the team, and the portal follows the server; a read-only board
+ * closes both, team notes included, as the server does.
+ */
+export function resolveSectionCommenting(input: {
+  disableCommenting: boolean
+  isAdminView: boolean
+  serverCanComment: boolean | undefined
+  boardReadOnly: boolean
+}): boolean | undefined {
+  if (input.disableCommenting || input.boardReadOnly) return false
+  return input.isAdminView ? true : input.serverCanComment
+}

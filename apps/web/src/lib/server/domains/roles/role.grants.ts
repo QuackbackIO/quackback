@@ -23,7 +23,7 @@ import { loadRole, permissionKeysForRole } from './role.service'
 export async function assertGrantableRole(
   roleId: RoleId,
   granter: readonly PermissionKey[]
-): Promise<{ id: RoleId; key: string; name: string }> {
+): Promise<{ id: RoleId; key: string; name: string; isSystem: boolean }> {
   const role = await loadRole(roleId)
   if (role.key === SYSTEM_ROLES.OWNER) {
     throw new ForbiddenError('FORBIDDEN', 'Grant Owner by promoting to admin instead')
@@ -34,7 +34,7 @@ export async function assertGrantableRole(
     new Set(granter),
     "You can't grant a role with permissions you don't hold"
   )
-  return { id: role.id, key: role.key, name: role.name }
+  return { id: role.id, key: role.key, name: role.name, isSystem: role.isSystem }
 }
 
 /**

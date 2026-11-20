@@ -44,7 +44,10 @@ import { INTERACTIVE_BLOCK_KINDS } from '@/lib/shared/db-types'
  * catch it). When no `chat_ended` row exists at all (older data predating
  * this event, or a status derived without ever routing through the emitter)
  * there's no in-list signal to key on, so every block conservatively counts
- * as predating the close — the exact pre-amendment-3 behavior.
+ * as predating the close — the exact pre-amendment-3 behavior. A csat block
+ * is the exception: a close never supersedes it, since a rating is only
+ * taken once the conversation is closed, and on a closed
+ * conversation only a message after the last close supersedes it.
  *
  * The `BlockState` union itself now lives in lib/shared/conversation/types.ts
  * (re-exported here unchanged) so lib/client code can type a block-states map
@@ -113,12 +116,20 @@ export function computeBlockStates(
       continue
     }
     const id = m.id as unknown as string
-    const predatesLastClose = !hasCloseSignal || i < lastCloseIndex
+    // A csat block is never superseded by a close: a rating is only taken
+    // once the conversation is closed, so a close is exactly when the ask
+    // should be answerable (a tap refused while it was open stored nothing,
+    // and must work after the next close). On a closed conversation, only a
+    // message after that close supersedes it; what was said while it was
+    // open again (a teammate's answer, say) is settled by the close.
+    const csatOnClosed = m.block.kind === 'csat' && conversationClosed
+    const predatesLastClose = m.block.kind !== 'csat' && (!hasCloseSignal || i < lastCloseIndex)
+    const after = csatOnClosed ? Math.max(i, lastCloseIndex) : i
     if (replyTargets.has(id)) {
       states.set(id, 'chosen')
     } else if (
-      suffixVisitor[i] ||
-      suffixHumanTeammate[i] ||
+      suffixVisitor[after] ||
+      suffixHumanTeammate[after] ||
       (conversationClosed && predatesLastClose)
     ) {
       states.set(id, 'superseded')

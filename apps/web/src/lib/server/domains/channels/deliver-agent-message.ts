@@ -14,6 +14,7 @@ export async function deliverAgentMessageOnChannel(
     recipient: ctx.recipient,
     direction: ctx.direction,
     senderName: ctx.agentName,
+    senderIsTeam: ctx.senderIsTeam,
     content: ctx.content,
     contentJson: ctx.contentJson,
     ctaUrl: ctx.ctaUrl,

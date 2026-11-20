@@ -123,6 +123,9 @@ vi.mock('@/lib/server/db', () => {
       transaction: vi.fn(async (fn: (t: unknown) => Promise<unknown>) => fn(tx)),
     },
     eq: vi.fn(),
+    and: vi.fn(),
+    or: vi.fn(),
+    sql: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id', isInternal: 'is_internal' },
   }

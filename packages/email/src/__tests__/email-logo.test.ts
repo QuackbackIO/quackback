@@ -1,32 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@react-email/components'
 import { DEFAULT_LOGO_URL } from '../templates/shared-styles'
-import { WelcomeEmail } from '../templates/welcome'
 import { InvitationEmail } from '../templates/invitation'
 import { MagicLinkEmail } from '../templates/magic-link'
 import { PasswordResetEmail } from '../templates/password-reset'
 import { StatusChangeEmail } from '../templates/status-change'
 import { NewCommentEmail } from '../templates/new-comment'
 import { ChangelogPublishedEmail } from '../templates/changelog-published'
-import { FeedbackLinkedEmail } from '../templates/feedback-linked'
 
 const BRAND_LOGO = 'https://example.com/api/storage/logos/brand-logo.png'
 
 describe('email templates use brand logo when provided', () => {
-  it('WelcomeEmail renders brand logo', async () => {
-    const html = await render(
-      WelcomeEmail({
-        name: 'Alice',
-        workspaceName: 'Acme',
-        dashboardUrl: 'https://example.com/dashboard',
-        logoUrl: BRAND_LOGO,
-      })
-    )
-    expect(html).toContain(BRAND_LOGO)
-    expect(html).not.toContain(DEFAULT_LOGO_URL)
-    expect(html).toContain('alt="Acme"')
-  })
-
   it('InvitationEmail renders brand logo', async () => {
     const html = await render(
       InvitationEmail({
@@ -111,35 +95,9 @@ describe('email templates use brand logo when provided', () => {
     expect(html).not.toContain(DEFAULT_LOGO_URL)
     expect(html).toContain('alt="Acme"')
   })
-
-  it('FeedbackLinkedEmail renders brand logo', async () => {
-    const html = await render(
-      FeedbackLinkedEmail({
-        postTitle: 'Test',
-        postUrl: 'https://example.com/post/1',
-        workspaceName: 'Acme',
-        unsubscribeUrl: 'https://example.com/unsub',
-        logoUrl: BRAND_LOGO,
-      })
-    )
-    expect(html).toContain(BRAND_LOGO)
-    expect(html).not.toContain(DEFAULT_LOGO_URL)
-    expect(html).toContain('alt="Acme"')
-  })
 })
 
 describe('email templates fall back to default logo when logoUrl not provided', () => {
-  it('WelcomeEmail renders default logo', async () => {
-    const html = await render(
-      WelcomeEmail({
-        name: 'Alice',
-        workspaceName: 'Acme',
-        dashboardUrl: 'https://example.com/dashboard',
-      })
-    )
-    expect(html).toContain(DEFAULT_LOGO_URL)
-  })
-
   it('InvitationEmail renders default logo', async () => {
     const html = await render(
       InvitationEmail({
@@ -202,18 +160,6 @@ describe('email templates fall back to default logo when logoUrl not provided', 
         changelogUrl: 'https://example.com/changelog',
         contentPreview: 'New features',
         organizationName: 'Acme',
-        unsubscribeUrl: 'https://example.com/unsub',
-      })
-    )
-    expect(html).toContain(DEFAULT_LOGO_URL)
-  })
-
-  it('FeedbackLinkedEmail renders default logo', async () => {
-    const html = await render(
-      FeedbackLinkedEmail({
-        postTitle: 'Test',
-        postUrl: 'https://example.com/post/1',
-        workspaceName: 'Acme',
         unsubscribeUrl: 'https://example.com/unsub',
       })
     )

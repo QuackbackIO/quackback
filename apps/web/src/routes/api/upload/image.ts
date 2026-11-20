@@ -4,6 +4,8 @@ import { auth } from '@/lib/server/auth'
 import { toSessionScope } from '@/lib/shared/roles'
 import { db, eq, principal } from '@/lib/server/db'
 import { isS3Usable, uploadMediaFromFormData } from '@/lib/server/storage/s3'
+import { isPausedTeamSeat } from '@/lib/server/domains/plan-limits/plan-limits.seats'
+import { SEAT_PAUSED_DENIAL } from '@/lib/shared/billing/seat-paused'
 
 const ALLOWED_PREFIXES = new Set([
   'uploads',
@@ -26,10 +28,13 @@ export async function handleAdminUpload({ request }: { request: Request }): Prom
   }
   const principalRecord = await db.query.principal.findFirst({
     where: eq(principal.userId, session.user.id as UserId),
-    columns: { role: true },
+    columns: { id: true, role: true, type: true },
   })
   if (!principalRecord || (principalRecord.role !== 'admin' && principalRecord.role !== 'member')) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (await isPausedTeamSeat(principalRecord)) {
+    return Response.json({ error: SEAT_PAUSED_DENIAL }, { status: 403 })
   }
   if (!isS3Usable()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })

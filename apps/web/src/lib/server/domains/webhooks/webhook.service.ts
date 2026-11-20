@@ -4,6 +4,7 @@
  * Shared by both API routes and admin UI server functions.
  */
 
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import crypto from 'crypto'
 import { db, webhooks, eq, and, isNull, sql } from '@/lib/server/db'
 import { createId, type PrincipalId, type WebhookId } from '@quackback/ids'
@@ -65,8 +66,12 @@ export async function createWebhook(
     throw new ValidationError('VALIDATION_ERROR', 'At least one event is required')
   }
 
-  // Check webhook limit
-  const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(webhooks)
+  // Check webhook limit. Deleting a webhook is a soft delete, so only live
+  // webhooks count; otherwise deleted ones would use up the limit for good.
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(webhooks)
+    .where(isNull(webhooks.deletedAt))
   if (count >= MAX_WEBHOOKS) {
     throw new ValidationError(
       'WEBHOOK_LIMIT_REACHED',
@@ -176,6 +181,8 @@ export async function updateWebhook(id: WebhookId, input: UpdateWebhookInput): P
   }
 
   await cacheDel(CACHE_KEYS.ACTIVE_WEBHOOKS)
+  // An endpoint switched off may be the fix for a webhooks plan limit.
+  await invalidatePlanLimits()
   return mapWebhook(webhook)
 }
 
@@ -197,6 +204,7 @@ export async function deleteWebhook(id: WebhookId): Promise<void> {
   }
 
   await cacheDel(CACHE_KEYS.ACTIVE_WEBHOOKS)
+  await invalidatePlanLimits()
 }
 
 /**

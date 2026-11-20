@@ -32,13 +32,19 @@ import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import type { TiptapContent, ConversationAttachment } from '@/lib/shared/db-types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
+import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
 import {
   emitTicketReplied,
   emitTicketSubscriberAdded,
   emitTicketSubscriberRemoved,
 } from './ticket.webhooks'
-import { buildTicketContext, ticketToDTO, toRequesterTicketDTO } from './ticket.dto'
+import {
+  buildRequesterTicketContext,
+  loadCustomerVisibleStatusIds,
+  requesterUpdatedAtSql,
+  toRequesterTicketDTO,
+} from './requester-ticket.dto'
 import { hasParticipantThreadAccess } from '../conversation/conversation-participant.service'
 import { insertTicketMessage, type SendTicketMessageInput } from './ticket-message.service'
 import type { RequesterTicketDTO, TicketStageRef } from './ticket.types'
@@ -74,7 +80,9 @@ export function isPlausibleContactEmail(raw: string | undefined | null): boolean
  * principal string (auth-helpers warns that collapsing anonymous is a security
  * bug). `service` principals never reach these requester paths.
  */
-export async function requesterHasContactChannel(actor: Actor): Promise<boolean> {
+export async function requesterHasContactChannel(
+  actor: Pick<Actor, 'principalId' | 'principalType'>
+): Promise<boolean> {
   if (actor.principalType !== 'anonymous') return true
   if (!actor.principalId) return false
   const [row] = await db
@@ -176,8 +184,8 @@ export async function getRequesterTicketForConversation(
     )
     .limit(1)
   if (!row) return null
-  const ctx = await buildTicketContext([row.ticket])
-  return ticketToDTO(row.ticket, ctx, 'requester')
+  const ctx = await buildRequesterTicketContext([row.ticket])
+  return toRequesterTicketDTO(row.ticket, ctx)
 }
 
 /** A Messages-list row's linked-ticket decoration: stage chip + reference. */
@@ -275,6 +283,7 @@ export interface MyTicketSummary {
   /** The pair's conversation — the row's click-through to its thread. Null on
    *  a legacy standalone ticket (pre-pair rows were never backfilled). */
   conversationId: ConversationId | null
+  /** The last change the customer can see (see `requesterUpdatedAtSql`). */
   updatedAt: string
   /** The ticket's shared due date (ISO), null when none. */
   dueAt: string | null
@@ -283,10 +292,12 @@ export interface MyTicketSummary {
 }
 
 /**
- * The requester's own customer tickets, plus the ones shared with them,
- * newest-activity first. Ownership or a share IS the scope (no ticket.*
- * permission anywhere on this path), so a customer only ever sees tickets
- * that are theirs or were given to them;
+ * The requester's own customer tickets, plus the ones shared with them, latest
+ * customer-visible change first (`requesterUpdatedAtSql`, the same time the
+ * ticket header shows), so an internal note or an assignment never reorders
+ * the list. Ownership or a share IS the scope (no ticket.* permission anywhere
+ * on this path), so a customer only ever sees tickets that are theirs or were
+ * given to them;
  * internal-only statuses project to a null stage instead of leaking. Each row
  * carries its pair's conversation id so the widget row opens the shared
  * thread straight from the list.
@@ -294,6 +305,7 @@ export interface MyTicketSummary {
 export async function listMyTicketSummaries(
   requesterPrincipalId: PrincipalId
 ): Promise<MyTicketSummary[]> {
+  const updatedAt = requesterUpdatedAtSql(await loadCustomerVisibleStatusIds())
   // One read: the caller's own tickets and those shared with them (a
   // participant row with thread access on the pair's conversation).
   const rows = await db
@@ -303,7 +315,7 @@ export async function listMyTicketSummaries(
       title: tickets.title,
       statusId: tickets.statusId,
       conversationId: ticketConversations.conversationId,
-      updatedAt: tickets.updatedAt,
+      updatedAt,
       dueAt: tickets.dueAt,
       relation: sql<TicketRelation>`case when ${tickets.requesterPrincipalId} = ${sql.param(requesterPrincipalId, tickets.requesterPrincipalId)} then 'requester' else 'participant' end`,
     })
@@ -333,7 +345,7 @@ export async function listMyTicketSummaries(
         )
       )
     )
-    .orderBy(desc(tickets.updatedAt))
+    .orderBy(desc(updatedAt), desc(tickets.id))
     .limit(50)
   if (rows.length === 0) return []
   const statusIds = [...new Set(rows.map((r) => r.statusId))]
@@ -393,6 +405,12 @@ export async function createMyTicket(
   }
 ): Promise<RequesterTicketDTO> {
   const principalId = requireRequester(actor)
+  // A blocked person cannot send new messages, and filing a ticket is one.
+  // Refused before anything is written, with the same answer the messenger
+  // send gives them.
+  if (await isBlocked(principalId)) {
+    throw new ForbiddenError('BLOCKED', 'You are not able to send messages here.')
+  }
   // Anonymous requesters must have a durable contact channel (email) on file —
   // the widget email-capture tier writes it before calling this (defense in
   // depth: the fn layer enforces the same guard).
@@ -412,7 +430,11 @@ export async function createMyTicket(
     },
     actor
   )
-  return toRequesterTicketDTO(created)
+  // Re-read through the requester projection, as the other requester reads
+  // do: the create path returns the agent DTO. The read is the requester's
+  // own ownership-scoped loader, like every other requester read.
+  const { ticket: row } = await loadAccessibleTicketOr404(created.id, principalId)
+  return toRequesterTicketDTO(row, await buildRequesterTicketContext([row]))
 }
 
 /**
@@ -444,20 +466,17 @@ async function appendRequesterReply(
   actor: Actor
 ): Promise<{ message: ConversationMessageDTO }> {
   // CONVERGENCE PHASE 1a: on a linked pair the insert redirects to the
-  // conversation (the full conversation write pipeline runs there). The reopen
-  // below is ticket-side and runs either way; `ticket.replied` is emitted here
-  // only for a ticket-parented reply, since the pair-reply reaction raises it
-  // off the conversation's `message.created` (ticket.event-hooks.ts).
+  // conversation (the full conversation write pipeline runs there); the
+  // reopen + `ticket.replied` below are ticket-side and fire either way.
   const { message, ticket } = await insertTicketMessage(input, requesterPrincipalId, {
     senderType: 'visitor',
     isInternal: false,
-    stampFirstResponse: false,
     actor,
   })
   const { safeSubscribeToTicket } = await import('./ticket-subscription.service')
   await safeSubscribeToTicket(requesterPrincipalId, ticketId, 'requester')
   await autoReopenOnRequesterReply(ticketId, requesterPrincipalId)
-  if (!message.conversationId) void emitTicketReplied(actor, ticket, message)
+  void emitTicketReplied(actor, ticket, message)
   return { message }
 }
 

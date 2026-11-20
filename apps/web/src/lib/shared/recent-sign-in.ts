@@ -5,9 +5,9 @@
  *
  * A server function reports the refusal as a returned value,
  * `{ ok: false, code: 'RECENT_SIGN_IN_REQUIRED', message }`, rather than as a
- * thrown error. A thrown error reaches the browser as a plain `Error` with its
- * message only (its `code` and `statusCode` are dropped on the wire), so the
- * client could not tell this refusal from any other failure. Server code
+ * thrown error, so every caller reads the refusal in one shape from the
+ * result. (A thrown typed error also reaches the browser with its `code`, as
+ * a plain `Error`; the client still checks the returned value.) Server code
  * throws `RecentSignInRequiredError`; the server function's boundary turns it
  * into the value with `toRecentSignInRefusal`; the client checks the result
  * with `isRecentSignInRequired`.

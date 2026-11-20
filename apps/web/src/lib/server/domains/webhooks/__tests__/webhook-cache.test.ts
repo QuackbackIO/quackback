@@ -107,7 +107,7 @@ describe('webhook service cache invalidation', () => {
   it('createWebhook invalidates ACTIVE_WEBHOOKS cache', async () => {
     // Mock: count query returns 0
     mockSelect.mockReturnValue({
-      from: vi.fn().mockResolvedValue([{ count: 0 }]),
+      from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 0 }]) }),
     })
     // Mock: insert chain
     mockInsert.mockReturnValue({
