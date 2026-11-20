@@ -525,7 +525,7 @@ test.describe('REST changelog: update and delete', () => {
         (await jobRows(`changelog-publish--${scheduled.id}`)).length === 0 ? true : null
       )
 
-      // 4: a draft published at a past date is announced once, as its author.
+      // 4: a draft published at a past date is announced once, as whoever published it.
       const draft = await createEntry(api, { title: `${marker} draft`, content: 'Draft' })
       const past = '2024-05-01T12:00:00.000Z'
       const pub = await expectJson(await patch(draft.id, { publishedAt: past }), 200)
@@ -533,8 +533,8 @@ test.describe('REST changelog: update and delete', () => {
       await waitForEventHandled(draft.id, { type: 'changelog.published' })
       const events = await eventRows(draft.id, 'changelog.published')
       expect(events).toHaveLength(1)
-      expect(events[0].actor_id).toBe(principalId)
-      expect(events[0].actor_id).not.toBe(otherPrincipal)
+      expect(events[0].actor_id).toBe(otherPrincipal)
+      expect(events[0].actor_id).not.toBe(principalId)
 
       // 5: a future date on a draft schedules it.
       const draft2 = await createEntry(api, { title: `${marker} draft2`, content: 'Draft' })

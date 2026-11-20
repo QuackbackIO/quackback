@@ -1,7 +1,7 @@
 /**
  * The changelog RSS feed (/changelog/feed).
  *
- * Journeys: CHG-F-01, CHG-F-02, CHG-F-05 (quarantined), CHG-F-06, CHG-F-07
+ * Journeys: CHG-F-01, CHG-F-02, CHG-F-05, CHG-F-06, CHG-F-07
  * (@isolated), CHG-F-08, CHG-F-09, CHG-F-10, CHG-F-11, CHG-F-12.
  *
  * Entries are announced silently (notify: false), so no subscriber mail; the
@@ -107,14 +107,7 @@ test(
 
 test(
   'CHG-F-05 item descriptions are plain text, not markdown syntax',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'routes/changelog/feed.ts strips HTML from the markdown projection, so markdown syntax reaches readers (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@nightly' },
   async ({ playwright, request, marker }) => {
     const admin = await personApi(playwright, 'admin')
     const entry = await createEntry(admin, {

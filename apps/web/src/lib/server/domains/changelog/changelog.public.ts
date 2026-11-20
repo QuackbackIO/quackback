@@ -19,7 +19,11 @@ import {
 import type { ChangelogId, PostStatusId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
-import { getCategoriesForEntries, categoryGateAllows } from './changelog-category.service'
+import {
+  getCategoriesForEntries,
+  categoryGateAllows,
+  categoryGateCondition,
+} from './changelog-category.service'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
@@ -194,7 +198,12 @@ export async function listPublicChangelogs(
   const { cursor, limit = 20 } = params
   const now = new Date()
 
-  const conditions = publicChangelogConditions(now)
+  // The category segment gate is part of the paged query, so a page is never
+  // cut first and emptied after: `limit` counts only entries the viewer may see.
+  const conditions = [
+    ...publicChangelogConditions(now),
+    categoryGateCondition(actor, changelogEntries.id),
+  ]
 
   // Cursor-based pagination. The lookup does NOT filter on deletedAt:
   // if an admin deleted the cursor row between page load and "Load
@@ -289,16 +298,11 @@ export async function listPublicChangelogs(
     statuses.forEach((s) => publicStatusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
-  // Category segment gate. Applied as a display-time filter over the
-  // already-paginated page (not a SQL predicate) — cheap given a workspace's
-  // changelog volume, and it keeps the cursor anchored on the underlying
-  // publish ordering rather than reshuffling pagination around a rare gate.
   const categoriesByEntry = await getCategoriesForEntries(entryIds)
 
   // Transform to output format (no author info for public view)
   const result: PublicChangelogEntry[] = items
     .filter((entry) => entry.publishedAt !== null)
-    .filter((entry) => categoryGateAllows(categoriesByEntry.get(entry.id) ?? [], actor))
     .map((entry) => {
       const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
       const entryCategories = categoriesByEntry.get(entry.id) ?? []

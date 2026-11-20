@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Жоден запис журналу змін не відповідає фільтрам",
   "admin.changelog.list.loadMore": "Завантажити ще",
   "admin.changelog.delete.title": "Видалити запис журналу змін?",
-  "admin.changelog.delete.description": "Цю дію не можна скасувати. Запис журналу змін буде видалено назавжди.",
+  "admin.changelog.delete.description": "Запис буде видалено з журналу змін і його стрічки.",
   "admin.changelog.delete.confirm": "Видалити",
   "admin.changelog.status.all": "Усі",
   "admin.changelog.status.draft": "Чернетка",

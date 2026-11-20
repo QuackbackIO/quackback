@@ -58,7 +58,9 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { permission: PERMISSIONS.CHANGELOG_MANAGE })
+          const authResult = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.CHANGELOG_MANAGE,
+          })
 
           const entryId = parseTypeId<ChangelogId>(
             params.entryId,
@@ -95,16 +97,20 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
             'linked post IDs'
           )
 
-          const updated = await updateChangelog(entryId, {
-            title: parsed.data.title,
-            content: parsed.data.content,
-            ...(publishState && { publishState }),
-            ...(parsed.data.displayDate !== undefined && {
-              displayDate:
-                parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
-            }),
-            ...(linkedPostIds !== undefined && { linkedPostIds }),
-          })
+          const updated = await updateChangelog(
+            entryId,
+            {
+              title: parsed.data.title,
+              content: parsed.data.content,
+              ...(publishState && { publishState }),
+              ...(parsed.data.displayDate !== undefined && {
+                displayDate:
+                  parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
+              }),
+              ...(linkedPostIds !== undefined && { linkedPostIds }),
+            },
+            { principalId: authResult.principalId }
+          )
 
           return successResponse(formatChangelogResponse(updated))
         } catch (error) {

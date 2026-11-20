@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Aucune entrée ne correspond à vos filtres",
   "admin.changelog.list.loadMore": "Charger plus",
   "admin.changelog.delete.title": "Supprimer l'entrée ?",
-  "admin.changelog.delete.description": "Cette action est irréversible. L'entrée sera définitivement supprimée.",
+  "admin.changelog.delete.description": "L'entrée sera supprimée du journal des modifications et de son flux.",
   "admin.changelog.delete.confirm": "Supprimer",
   "admin.changelog.status.all": "Toutes",
   "admin.changelog.status.draft": "Brouillon",

@@ -215,3 +215,66 @@ describe('changelog RSS feed escaping', () => {
     expect(xml).not.toContain(content)
   })
 })
+
+describe('changelog RSS feed descriptions', () => {
+  const MARKDOWN = '## Heading\n\nSome **bold** and a [link](https://example.com).'
+
+  it('CHG-F-05 describes an entry in plain text from its document, not markdown syntax', async () => {
+    mockSelectLimit.mockResolvedValueOnce([
+      {
+        ...entryRow(ENTRY_A),
+        content: MARKDOWN,
+        contentJson: {
+          type: 'doc',
+          content: [
+            { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Heading' }] },
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'Some ' },
+                { type: 'text', text: 'bold', marks: [{ type: 'bold' }] },
+                { type: 'text', text: ' and a ' },
+                {
+                  type: 'text',
+                  text: 'link',
+                  marks: [{ type: 'link', attrs: { href: 'https://example.com' } }],
+                },
+                { type: 'text', text: '. 1 < 2 & 3' },
+              ],
+            },
+          ],
+        },
+      },
+    ])
+
+    const xml = await fetchFeed()
+
+    expect(xml).toContain(
+      '<description>Heading Some bold and a link. 1 &lt; 2 &amp; 3</description>'
+    )
+  })
+
+  it('CHG-F-05 strips markdown syntax when an entry has no document', async () => {
+    mockSelectLimit.mockResolvedValueOnce([
+      { ...entryRow(ENTRY_A), content: MARKDOWN, contentJson: null },
+    ])
+
+    const xml = await fetchFeed()
+
+    expect(xml).toContain('<description>Heading Some bold and a link.</description>')
+  })
+
+  it('CHG-F-05 drops images and old HTML when an entry has no document', async () => {
+    mockSelectLimit.mockResolvedValueOnce([
+      {
+        ...entryRow(ENTRY_A),
+        content: '<p>Old <b>html</b></p> ![shot](https://x.test/a.png) done',
+        contentJson: null,
+      },
+    ])
+
+    const xml = await fetchFeed()
+
+    expect(xml).toContain('<description>Old html done</description>')
+  })
+})

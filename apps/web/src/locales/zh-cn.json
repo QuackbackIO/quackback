@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "没有与筛选条件匹配的条目",
   "admin.changelog.list.loadMore": "加载更多",
   "admin.changelog.delete.title": "删除条目？",
-  "admin.changelog.delete.description": "此操作无法撤销。该条目将被永久删除。",
+  "admin.changelog.delete.description": "该条目将从更新日志及其订阅源中删除。",
   "admin.changelog.delete.confirm": "删除",
   "admin.changelog.status.all": "全部",
   "admin.changelog.status.draft": "草稿",

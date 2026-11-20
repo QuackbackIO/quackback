@@ -4,7 +4,7 @@
  * may open the page.
  *
  * Journeys: CHG-A-01, CHG-A-02, CHG-A-04, CHG-A-12, CHG-A-13, CHG-A-14,
- * CHG-A-16 (quarantined), CHG-A-18, CHG-A-21, CHG-A-24, CHG-A-28, CHG-A-29,
+ * CHG-A-16, CHG-A-18, CHG-A-21, CHG-A-24, CHG-A-28, CHG-A-29,
  * CHG-A-36, CHG-A-39, CHG-A-41, CHG-A-42.
  *
  * Entries carry the test's marker in their titles and are soft-deleted
@@ -299,14 +299,7 @@ test(
 
 test(
   'CHG-A-16 deleting an entry: confirm copy that matches a soft delete, then gone from admin and portal',
-  {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'changelog-list.tsx says the entry "will be permanently deleted" but deleteChangelog only sets deletedAt (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@core' },
   async ({ asPerson, page, playwright, marker }) => {
     const api = await personApi(playwright, 'admin')
     const entry = await createEntry(api, {

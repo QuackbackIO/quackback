@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Żaden wpis nie pasuje do filtrów",
   "admin.changelog.list.loadMore": "Załaduj więcej",
   "admin.changelog.delete.title": "Usunąć wpis?",
-  "admin.changelog.delete.description": "Tej operacji nie można cofnąć. Wpis zostanie trwale usunięty.",
+  "admin.changelog.delete.description": "Wpis zostanie usunięty z dziennika zmian i jego kanału.",
   "admin.changelog.delete.confirm": "Usuń",
   "admin.changelog.status.all": "Wszystkie",
   "admin.changelog.status.draft": "Szkic",

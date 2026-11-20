@@ -127,50 +127,32 @@ describe.skipIf(!fixture.available)('changelog linked posts (real DB)', () => {
       await updateChangelog(entry.id, { linkedPostIds: [unknown, second] })
       expect(await linkedIds(entry.id)).toEqual([second])
     })
+    it('CHG-A-23 a duplicate post id in an update is saved once', async () => {
+      const author = await seedPrincipal()
+      const board = await seedBoard()
+      const first = await seedPost(board, author)
+      const second = await seedPost(board, author)
+      const entry = await createChangelog(
+        { title: 'Links', content: 'Body', publishState: DRAFT, linkedPostIds: [first] },
+        { principalId: author, name: 'Author' }
+      )
 
-    // Root cause: linkPostsToChangelog does not de-duplicate postIds
-    // (apps/web/src/lib/server/domains/changelog/changelog.service.ts:569), so
-    // the insert hits changelog_entry_posts_pk; updateChangelog has already
-    // deleted the old links outside any transaction (changelog.service.ts:252),
-    // so outside this rolled-back fixture the entry is left with no links.
-    // See apps/web/e2e/QUARANTINE.md.
-    it.fails(
-      'CHG-A-23 a duplicate post id in an update is saved once (quarantined: duplicate linkedPostIds fail the insert after the old links were deleted)',
-      async () => {
-        const author = await seedPrincipal()
-        const board = await seedBoard()
-        const first = await seedPost(board, author)
-        const second = await seedPost(board, author)
-        const entry = await createChangelog(
-          { title: 'Links', content: 'Body', publishState: DRAFT, linkedPostIds: [first] },
-          { principalId: author, name: 'Author' }
-        )
+      await updateChangelog(entry.id, { linkedPostIds: [second, second] })
 
-        await updateChangelog(entry.id, { linkedPostIds: [second, second] })
+      expect(await linkedIds(entry.id)).toEqual([second])
+    })
+    it('CHG-A-23 a duplicate post id on create is saved once', async () => {
+      const author = await seedPrincipal()
+      const board = await seedBoard()
+      const first = await seedPost(board, author)
 
-        expect(await linkedIds(entry.id)).toEqual([second])
-      }
-    )
+      const entry = await createChangelog(
+        { title: 'Links', content: 'Body', publishState: DRAFT, linkedPostIds: [first, first] },
+        { principalId: author, name: 'Author' }
+      )
 
-    // Root cause: same as above on the create path
-    // (apps/web/src/lib/server/domains/changelog/changelog.service.ts:135): the
-    // entry row is inserted, then the duplicate link insert throws, leaving an
-    // entry without its links or categories. See apps/web/e2e/QUARANTINE.md.
-    it.fails(
-      'CHG-A-23 a duplicate post id on create is saved once (quarantined: duplicate linkedPostIds fail the insert after the entry was written)',
-      async () => {
-        const author = await seedPrincipal()
-        const board = await seedBoard()
-        const first = await seedPost(board, author)
-
-        const entry = await createChangelog(
-          { title: 'Links', content: 'Body', publishState: DRAFT, linkedPostIds: [first, first] },
-          { principalId: author, name: 'Author' }
-        )
-
-        expect(await linkedIds(entry.id)).toEqual([first])
-      }
-    )
+      expect(await linkedIds(entry.id)).toEqual([first])
+    })
   })
 
   describe('CHG-P-08 linked posts on the public entry', () => {

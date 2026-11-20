@@ -408,13 +408,15 @@ function extractPostId(event: EventData): PostId | null {
  * Check if subscriber is the actor (don't notify yourself).
  */
 function isActorSubscriber(subscriber: Subscriber, actor: EventActor): boolean {
-  if (actor.type === 'service') return false
   // principalId is the primary match: it survives the DomainEvent round-trip
   // (the envelope carries actorId=principalId but not email/userId), so the
   // "don't notify yourself" filter works identically whether the event came
-  // through the legacy full-actor path or the resolver registry. For a real
-  // user, principalId maps 1:1 to userId, so this is behaviour-preserving.
+  // through the legacy full-actor path or the resolver registry. It is checked
+  // for every actor type: a publish built from a principal id alone (a
+  // changelog entry, its scheduled job) is a `service` actor that is still a
+  // person who may be subscribed.
   if (actor.principalId && subscriber.principalId === actor.principalId) return true
+  if (actor.type === 'service') return false
   return subscriber.userId === actor.userId || subscriber.email === actor.email
 }
 
@@ -2246,8 +2248,8 @@ export async function getChangelogSubscriberTargets(
 
   const targets: HookTarget[] = []
 
-  // Build changelog URL
-  const changelogUrl = sectionUrl('changelog', '/changelog', hookOrigins(context))
+  // The email button and the bell open the entry itself, not the index.
+  const changelogUrl = sectionUrl('changelog', `/changelog/${changelogId}`, hookOrigins(context))
 
   // Email targets — gated on the per-principal notification matrix
   // (changelog_published/email, which subsumes emailMuted) and the

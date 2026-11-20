@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Нет записей, подходящих под фильтры",
   "admin.changelog.list.loadMore": "Загрузить ещё",
   "admin.changelog.delete.title": "Удалить запись?",
-  "admin.changelog.delete.description": "Это действие нельзя отменить. Запись будет удалена навсегда.",
+  "admin.changelog.delete.description": "Запись будет удалена из журнала изменений и его ленты.",
   "admin.changelog.delete.confirm": "Удалить",
   "admin.changelog.status.all": "Все",
   "admin.changelog.status.draft": "Черновик",

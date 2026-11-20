@@ -1995,7 +1995,7 @@
   "admin.changelog.list.noFilterMatch": "ไม่มีรายการบันทึกการเปลี่ยนแปลงที่ตรงกับตัวกรอง",
   "admin.changelog.list.loadMore": "โหลดเพิ่ม",
   "admin.changelog.delete.title": "ลบรายการบันทึกการเปลี่ยนแปลง?",
-  "admin.changelog.delete.description": "การกระทำนี้ย้อนกลับไม่ได้ รายการบันทึกการเปลี่ยนแปลงจะถูกลบถาวร",
+  "admin.changelog.delete.description": "รายการนี้จะถูกลบออกจากบันทึกการเปลี่ยนแปลงและฟีด",
   "admin.changelog.delete.confirm": "ลบ",
   "admin.changelog.status.all": "ทั้งหมด",
   "admin.changelog.status.draft": "ฉบับร่าง",

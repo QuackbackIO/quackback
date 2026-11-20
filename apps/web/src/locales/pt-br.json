@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Nenhum registro corresponde aos seus filtros",
   "admin.changelog.list.loadMore": "Carregar mais",
   "admin.changelog.delete.title": "Excluir registro?",
-  "admin.changelog.delete.description": "Esta ação não pode ser desfeita. O registro será excluído permanentemente.",
+  "admin.changelog.delete.description": "O registro será excluído do changelog e do feed.",
   "admin.changelog.delete.confirm": "Excluir",
   "admin.changelog.status.all": "Todos",
   "admin.changelog.status.draft": "Rascunho",

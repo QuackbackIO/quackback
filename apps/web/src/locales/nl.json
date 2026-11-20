@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Geen items komen overeen met je filters",
   "admin.changelog.list.loadMore": "Meer laden",
   "admin.changelog.delete.title": "Item verwijderen?",
-  "admin.changelog.delete.description": "Dit kan niet ongedaan worden gemaakt. Het item wordt permanent verwijderd.",
+  "admin.changelog.delete.description": "Het item wordt verwijderd uit de changelog en de feed.",
   "admin.changelog.delete.confirm": "Verwijderen",
   "admin.changelog.status.all": "Alle",
   "admin.changelog.status.draft": "Concept",

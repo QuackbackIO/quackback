@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Ninguna entrada coincide con tus filtros",
   "admin.changelog.list.loadMore": "Cargar más",
   "admin.changelog.delete.title": "¿Eliminar la entrada?",
-  "admin.changelog.delete.description": "Esta acción no se puede deshacer. La entrada se eliminará de forma permanente.",
+  "admin.changelog.delete.description": "La entrada se eliminará del registro de cambios y de su feed.",
   "admin.changelog.delete.confirm": "Eliminar",
   "admin.changelog.status.all": "Todas",
   "admin.changelog.status.draft": "Borrador",
