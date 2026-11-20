@@ -623,3 +623,82 @@ no such part beyond the wrong notification).
   can never edit their own post by default. Smallest fix: use
   `ne(postComments.principalId, authorPrincipalId)` in both copies. owner:
   unassigned, review by: 2026-12-03.
+
+### Product suite: FBP comments and notifications
+
+- `feedback/portal-comments.spec.ts` › FBP-C-03 with the anonymous switch off,
+  an anonymous comment is refused with the code votes and posts use
+  (FBP-B04). The comment gate throws `ANONYMOUS_NOT_ENABLED`
+  (`apps/web/src/lib/server/functions/comments.ts:84`) where votes and posts
+  throw `ANONYMOUS_NOT_ALLOWED` for the same rule
+  (`apps/web/src/lib/server/functions/public-posts.ts`, toggleVote and
+  createPublicPost). Smallest fix: use `ANONYMOUS_NOT_ALLOWED` in
+  comments.ts. Runs in product-isolated. owner: unassigned, review by:
+  2026-12-03.
+- `feedback/portal-comments.spec.ts` › FBP-C-09 the author of a held comment is
+  not told that customers cannot see it (FBP-B06). The thread renders the
+  moderator panel for the author's own pending comment
+  (`apps/web/src/components/public/comment-thread.tsx:809`), whose copy is
+  hard-coded, English only and written for moderators: "Customers cannot see
+  this comment yet."
+  (`apps/web/src/components/shared/inline-moderation-actions.tsx:39-42`).
+  The test asserts only that the wrong claim is absent while a pending label
+  shows. Smallest fix: an author-facing, localised line ("Waiting for review")
+  when the viewer is the author and not a moderator. owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/portal-comments.spec.ts` › FBP-C-11 after a teammate replies, the
+  author is no longer offered Edit or Delete (FBP-B17). The server refuses both
+  (`getCommentPermissionsFn` answers `{canEdit:false, canDelete:false}`), but
+  the thread decides from authorship alone
+  (`apps/web/src/components/public/comment-thread.tsx:435-437`) and never
+  calls `useCommentPermissions`, so the buttons show and fail after Save or
+  the confirm dialog. Smallest fix: gate the buttons on
+  `useCommentPermissions(comment.id)` for non-team viewers. owner:
+  unassigned, review by: 2026-12-03.
+- `feedback/portal-comment-extras.spec.ts` › FBP-C-15 a customer the board
+  refuses comments cannot react either, nor on a read-only board; and (in
+  product-isolated) with anonymous interaction off, an anonymous session
+  cannot react (FBP-B18). `runAddReaction`
+  (`apps/web/src/lib/server/functions/comments.ts:128-145`) and `addReaction`
+  (`apps/web/src/lib/server/domains/comments/comment.reactions.ts:54`) check
+  only that the comment is viewable: no comment tier, no read-only board, no
+  workspace anonymous ceiling, no lock. Smallest fix: run the same
+  `canCreateComment` decision (minus moderation) and the anonymous ceiling
+  before inserting a reaction. owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-comment-extras.spec.ts` › FBP-C-19 a customer cannot make the
+  system notify someone by crafting a mention in a post (FBP-B22). The
+  sanitiser keeps `mention` nodes from any author
+  (`apps/web/src/lib/server/sanitize-tiptap.ts:245`) and
+  `syncPostMentions` (`apps/web/src/lib/server/domains/posts/sync-post-mentions.ts:34`)
+  notifies any user, member or admin principal who can view the post, so a
+  customer's crafted contentJson bells and emails the admin
+  ("<name> mentioned you in ..."). The portal editor has no mention picker.
+  Smallest fix: strip mention nodes from non-team authors in
+  `runCreatePublicPost` (or skip mention sync when the author is not team).
+  owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-emails.spec.ts` › FBP-N-17 a link that was never issued is
+  not called expired (FBP-B24). `getValidUnsubscribeToken` collapses unknown,
+  used and expired tokens to null
+  (`apps/web/src/lib/server/domains/subscriptions/subscription.service.ts:549-575`)
+  and the page shows "This link has expired / It was already used or is too
+  old" for all three. The test asserts only that a never-issued token is not
+  called expired. Smallest fix: return the reason (unknown, used, expired) and
+  show "This link is not valid" for an unknown token. owner: unassigned,
+  review by: 2026-12-03.
+- `feedback/portal-emails.spec.ts` › FBP-N-19 the mention email does not label
+  an unsubscribe-all link as "Unsubscribe from this post" (FBP-B20). The
+  mention email's token is `unsubscribe_all`
+  (`apps/web/src/lib/server/events/targets.ts:693`) and the page it opens asks
+  "Turn off all email?", but the footer keeps the layout's default label
+  `Unsubscribe from this post`
+  (`packages/email/src/templates/email-layout.tsx:97`). Smallest fix: pass an
+  `unsubscribeLabel` such as "Turn off email notifications" from
+  `sendPostMentionEmail`. owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-emails.spec.ts` › FBP-N-20 the post unsubscribe page does not
+  promise that only email stops (FBP-B24). The page says "You will stop
+  getting email updates about it" (`apps/web/src/routes/unsubscribe.tsx:243-257`),
+  but confirming deletes the whole subscription
+  (`apps/web/src/lib/server/domains/subscriptions/subscription.service.ts:103-113`),
+  so the in-app bell for the post stops too (the companion test FBP-N-20 pins
+  that both stop). Smallest fix: reword to "You will stop getting updates
+  about this post." owner: unassigned, review by: 2026-12-03.
