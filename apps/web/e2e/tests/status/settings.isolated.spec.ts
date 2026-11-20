@@ -279,12 +279,7 @@ test(
 test(
   'STA-A-62 clear history keeps the events behind statuses still held',
   {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'clearStatusHistory (status.service.ts:792) deletes every service event, including those behind statuses open incidents still hold, so uptime reads operational for services that are down; see QUARANTINE.md',
-    },
+    tag: ['@nightly', '@isolated'],
   },
   async ({ marker }) => {
     const held = await createService(admin, `${marker} Held`)

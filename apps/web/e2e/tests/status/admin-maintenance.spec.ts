@@ -467,12 +467,7 @@ test('STA-A-45 delete a scheduled or running window', { tag: '@core' }, async ({
 test(
   'STA-A-46 a maintenance window with no dates is refused',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'createIncident (status.service.ts:183) accepts kind maintenance without scheduledStartAt/scheduledEndAt; the window never starts and its email reads "to"; see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ marker }) => {
     const svc = await createService(admin, `${marker} NoDates`)

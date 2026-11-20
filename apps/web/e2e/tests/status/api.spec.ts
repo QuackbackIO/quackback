@@ -164,12 +164,7 @@ test(
 test(
   'STA-X-04 a service created with a non-operational status records it',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'createStatusComponent (status.components.ts:176) writes no status_component_events row and no status.component_changed for an initial non-operational status; see QUARANTINE.md (STA-P-15)',
-    },
+    tag: '@nightly',
   },
   async ({ playwright, people, marker }) => {
     const api = await keyApi(playwright, people, 'admin')

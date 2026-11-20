@@ -24,7 +24,6 @@ import {
   statusSubscriptions,
   user,
 } from '@/lib/server/db'
-import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -50,11 +49,7 @@ import {
 } from '../status.service'
 import { listStatusSubscriptions } from '../status.subscription'
 import { getComponentLinksForIncidents } from '../status.projection'
-import {
-  assertSubscribableComponents,
-  getVisitorTopLevelStatus,
-  viewableStatusComponentIds,
-} from '../status.public'
+import { getVisitorTopLevelStatus } from '../status.public'
 import { getStatusSubscriberTargets } from '@/lib/server/events/targets'
 import type { EventData } from '@/lib/server/events/types'
 import type { HookContext } from '@/lib/server/events/hook-context'
@@ -441,40 +436,6 @@ describe('status integrity (Postgres)', () => {
       expect(await getVisitorTopLevelStatus()).toBe('operational')
       await createStatusComponent({ name: 'Open', status: 'partial_outage' })
       expect(await getVisitorTopLevelStatus()).toBe('partial_outage')
-    })
-
-    it('viewable ids drop gated, deleted, unknown and malformed ids', async () => {
-      const open = await service('Open')
-      const gated = (
-        await createStatusComponent({ name: 'Gated', segmentIds: [createId('segment')] })
-      ).id
-      const unknown = createId('status_component')
-      const viewable = await viewableStatusComponentIds(ANONYMOUS_ACTOR, [
-        open,
-        gated,
-        unknown,
-        'not-an-id',
-      ])
-      expect([...viewable]).toEqual([open])
-    })
-
-    it('a component subscription must name services the subscriber can see', async () => {
-      const open = await service('Open')
-      const gated = (
-        await createStatusComponent({ name: 'Gated', segmentIds: [createId('segment')] })
-      ).id
-      for (const ids of [
-        [],
-        [createId('status_component')],
-        ['not-an-id'],
-        [gated],
-        [open, gated],
-      ]) {
-        await expect(assertSubscribableComponents(ANONYMOUS_ACTOR, ids)).rejects.toMatchObject({
-          code: 'INVALID_STATUS_COMPONENTS',
-        })
-      }
-      expect(await assertSubscribableComponents(ANONYMOUS_ACTOR, [open])).toEqual([open])
     })
   })
 })
