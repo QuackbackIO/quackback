@@ -5,7 +5,7 @@
  * follow. A mention email's footer link turns off all email, so it says so.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render } from '@react-email/components'
+import { render, toPlainText } from '@react-email/components'
 import * as email from '../index'
 import { PostMentionEmail } from '../templates/post-mention'
 import { sealedTo } from './brands'
@@ -52,14 +52,13 @@ afterEach(() => {
 
 const sent = () => resendSend.mock.calls.at(-1)?.[0] as { subject: string; html: string }
 
-/** The rendered HTML as text, without tags or the comment nodes React leaves between parts. */
+/** The rendered HTML as plain text, the way a mail client's text view reads it. */
 function textOf(html: string): string {
-  return html
-    .replace(/<!--.*?-->/g, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/\s+/g, ' ')
+  const keepCase = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((selector) => ({
+    selector,
+    options: { uppercase: false },
+  }))
+  return toPlainText(html, { selectors: keepCase }).replace(/\s+/g, ' ')
 }
 
 const status = (isPostAuthor?: boolean) =>
