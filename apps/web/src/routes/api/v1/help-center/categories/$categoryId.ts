@@ -67,7 +67,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const access = await helpCenterApiAccess(request)
+          const access = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const categoryId = parseTypeId<KbCategoryId>(
             params.categoryId,

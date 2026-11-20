@@ -61,7 +61,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const { manages } = await helpCenterApiAccess(request)
+          const { manages } = helpCenterApiAccess(await withApiKeyAuth(request))
 
           // Private and gated categories, and counts that include drafts, are
           // team material: a key without help_center.manage reads the public

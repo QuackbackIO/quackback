@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   helpCenterApiAccess,
   assertArticleOpenToKey,
@@ -27,7 +28,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId/fe
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const access = await helpCenterApiAccess(request)
+          const access = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
           // A key votes only on an article it may read: a draft, or an article

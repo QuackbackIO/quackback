@@ -75,7 +75,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const { manages } = await helpCenterApiAccess(request)
+          const { manages } = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const url = new URL(request.url)
           const { limit } = parsePaginationParams(url)

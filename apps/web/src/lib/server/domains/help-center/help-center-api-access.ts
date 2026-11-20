@@ -6,12 +6,7 @@
  * segment-gated content are team material and need `help_center.manage`,
  * including the scope that permission maps to.
  */
-import {
-  apiKeyHolds,
-  assertApiScope,
-  withApiKeyAuth,
-  type ApiAuthContext,
-} from '@/lib/server/domains/api/auth'
+import { apiKeyHolds, assertApiScope, type ApiAuthContext } from '@/lib/server/domains/api/auth'
 import {
   getArticleById,
   getCategoryById,
@@ -28,9 +23,11 @@ export interface HelpCenterApiAccess {
   manages: boolean
 }
 
-/** Authenticate a key for a help center read or vote. */
-export async function helpCenterApiAccess(request: Request): Promise<HelpCenterApiAccess> {
-  const auth = await withApiKeyAuth(request)
+/**
+ * What an authenticated key may do with the help center. Each route calls
+ * `withApiKeyAuth` itself, so the authorization matrix still lists it.
+ */
+export function helpCenterApiAccess(auth: ApiAuthContext): HelpCenterApiAccess {
   assertApiScope(auth, 'read:article')
   return { auth, manages: apiKeyHolds(auth, PERMISSIONS.HELP_CENTER_MANAGE) }
 }

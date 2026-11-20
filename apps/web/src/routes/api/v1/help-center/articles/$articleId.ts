@@ -80,7 +80,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const access = await helpCenterApiAccess(request)
+          const access = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
