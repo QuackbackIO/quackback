@@ -195,7 +195,8 @@ export const E2E_SWEEP_NAMES: readonly string[] = Object.keys(SWEEPS)
 /**
  * Make every pending row of `queue` that is due by `at` due now, then wake the
  * worker so it claims them at once instead of at its next poll. With
- * `jobIdPrefix`, only rows whose job id starts with it.
+ * `jobIdPrefix`, only rows whose job id (the dedupe key a delayed job is
+ * scheduled under) starts with it.
  */
 async function promoteDueJobs(
   queue: string,
@@ -205,7 +206,7 @@ async function promoteDueJobs(
   const result = await db.execute(sql`
     UPDATE job_queue SET run_at = now(), updated_at = now()
     WHERE queue = ${queue} AND status = 'pending' AND run_at <= ${at.toISOString()}::timestamptz
-      AND starts_with(job_id, ${jobIdPrefix})
+      AND starts_with(coalesce(dedupe_key, ''), ${jobIdPrefix})
     RETURNING job_id, workspace_key
   `)
   const rows = getExecuteRows<{ job_id: string; workspace_key: string | null }>(result)

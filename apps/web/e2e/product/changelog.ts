@@ -82,7 +82,7 @@ export async function segmentWith(marker: string, principalUuids: string[]): Pro
 /** Make an entry's delayed announcement job due now (only this entry's). */
 export async function makeJobDue(entryId: string): Promise<void> {
   await supportDb()`UPDATE job_queue SET run_at = now() - interval '1 second'
-    WHERE job_id = ${`changelog-publish--${entryId}`} AND status = 'pending'`
+    WHERE dedupe_key = ${`changelog-publish--${entryId}`} AND status = 'pending'`
 }
 
 export interface Entry {
@@ -235,7 +235,7 @@ export async function announcementEvents(entryId: string): Promise<number> {
 /** The pending delayed announcement job of an entry, if any. */
 export async function publishJob(entryId: string) {
   const [row] = await supportDb()`SELECT job_id, run_at, status FROM job_queue
-    WHERE job_id = ${`changelog-publish--${entryId}`} AND status = 'pending'`
+    WHERE dedupe_key = ${`changelog-publish--${entryId}`} AND status = 'pending'`
   return row ?? null
 }
 
