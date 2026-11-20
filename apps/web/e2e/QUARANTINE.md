@@ -966,3 +966,12 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   audience), so gated entry URLs reach crawlers. Fix: apply
   `categoryGateCondition` for an anonymous actor and skip entries when the
   audience is signed-in only. owner: unassigned, review by: 2026-12-03.
+- `changelog/admin-authoring.spec.ts` › CHG-A-16 deleting an entry: confirm
+  copy that matches a soft delete, then gone from admin and portal. Product bug:
+  the confirm dialog says "This action cannot be undone. The changelog entry
+  will be permanently deleted."
+  (`apps/web/src/components/admin/changelog/changelog-list.tsx:335`), but
+  `deleteChangelog` only sets `deletedAt`; the row, its links and its view
+  count stay. Fix: reword the copy (for example "The entry is removed from
+  your changelog and feed.") or make the delete real. owner: unassigned,
+  review by: 2026-12-03.
