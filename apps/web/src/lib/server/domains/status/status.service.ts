@@ -27,11 +27,12 @@ import {
   type Database,
   type Transaction,
 } from '@/lib/server/db'
-import type {
-  StatusIncidentId,
-  StatusIncidentTemplateId,
-  StatusComponentId,
-  PrincipalId,
+import {
+  isTypeId,
+  type StatusIncidentId,
+  type StatusIncidentTemplateId,
+  type StatusComponentId,
+  type PrincipalId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
@@ -66,6 +67,15 @@ function validateTitle(title: string): string {
   if (!trimmed) throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   if (trimmed.length > 200) {
     throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
+  }
+  return trimmed
+}
+
+function validateTemplateName(name: string): string {
+  const trimmed = name.trim()
+  if (!trimmed) throw new ValidationError('VALIDATION_ERROR', 'Name is required')
+  if (trimmed.length > 200) {
+    throw new ValidationError('VALIDATION_ERROR', 'Name must not exceed 200 characters')
   }
   return trimmed
 }
@@ -118,6 +128,16 @@ function assertBackfillStaysResolved(
     reopening
       ? `A logged past ${KIND_NOUN[kind]} can't be reopened. ${kind === 'incident' ? 'Report a new incident' : 'Schedule a new window'} instead.`
       : `A past ${KIND_NOUN[kind]} is logged as ${TERMINAL_STATUS[kind]}. Use the "${TERMINAL_STATUS[kind]}" status.`
+  )
+}
+
+/** "maintenance" is a window's impact: an incident pinned to it would read as
+ *  planned work on the page and carry no impact label in its email. */
+function assertIncidentImpact(impact: string | undefined): void {
+  if (impact !== 'maintenance') return
+  throw new ValidationError(
+    'VALIDATION_ERROR',
+    'An incident can\'t have the "maintenance" impact. Use one of: none, minor, major, critical.'
   )
 }
 
@@ -214,6 +234,20 @@ export async function createIncident(
         ? (input.impact ?? 'none')
         : deriveImpact(componentStatuses)
 
+  if (input.kind === 'incident' && input.impactOverride) assertIncidentImpact(input.impact)
+  // A window with no start never starts (nothing is scheduled for it) and one
+  // with no end never completes, so a live window needs both. A logged past
+  // window is dated by its backfill instead.
+  if (
+    input.kind === 'maintenance' &&
+    !input.backfill &&
+    (!input.scheduledStartAt || !input.scheduledEndAt)
+  ) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'A maintenance window needs a scheduled start and end'
+    )
+  }
   assertWindowOrder(input.scheduledStartAt, input.scheduledEndAt)
   if (input.backfill) assertBackfillStaysResolved(input.kind, input.status, false)
   if (input.backfill && input.backfill.resolvedAt.getTime() <= input.backfill.startedAt.getTime()) {
@@ -253,7 +287,14 @@ export async function createIncident(
   // notify_subscribers. A backfill is never announced by any version and
   // keeps notified_at null. The sweep still announces rows an older version
   // left unclaimed.
-  const notifySubscribers = !backfilled && (input.notifySubscribers ?? true)
+  //
+  // A row created already resolved or completed is announced like a backfill:
+  // not at all. "New incident reported" for something already over is noise,
+  // and the window's transition already happened. It is still claimed
+  // (notified_at stamped, notify_subscribers off), so no sweep of any version
+  // announces it later.
+  const announced = !backfilled && !terminal
+  const notifySubscribers = announced && (input.notifySubscribers ?? true)
   const notifiedAt = !backfilled ? now : null
 
   // One transaction: the row, its links, the first update and the component
@@ -330,7 +371,7 @@ export async function createIncident(
 
     // The publish event commits with the row, or not at all; the row is
     // already stamped notified, so no sweep sends it a second time.
-    if (!backfilled) {
+    if (announced) {
       const { writeEventToOutbox } = await import('@/lib/server/events/outbox-dispatch')
       await writeEventToOutbox(
         statusPublishEvent(
@@ -345,12 +386,11 @@ export async function createIncident(
     // A window created already under way, or already finished, has made its
     // transition at create: announce it here, in the same transaction, so the
     // scheduler (which only moves a window still scheduled or still running)
-    // has nothing left to add for it. A backfill is history and says nothing.
-    if (!backfilled && created.kind === 'maintenance' && created.status !== 'scheduled') {
+    // has nothing left to add for it. A backfill, or a window created already
+    // completed, is history and says nothing.
+    if (announced && created.kind === 'maintenance' && created.status !== 'scheduled') {
       await writeStatusEvent(
-        created.status === 'completed'
-          ? 'status.maintenance_completed'
-          : 'status.maintenance_started',
+        'status.maintenance_started',
         buildEventActor({ principalId: author.principalId }),
         {
           incidentId: created.id,
@@ -491,6 +531,7 @@ export async function updateIncident(
     if (detailsChanged) updateData.detailsEditedAt = sql`now()`
 
     if (existing.kind === 'incident') {
+      if (impactOverride) assertIncidentImpact(input.impact)
       if (impactOverride && input.impact !== undefined) {
         updateData.impact = input.impact
       } else if (!impactOverride && nextComponents) {
@@ -804,14 +845,29 @@ export async function deleteIncident(id: StatusIncidentId): Promise<void> {
  * are left untouched. Returns the counts removed.
  */
 export async function clearStatusHistory(): Promise<{ incidents: number; events: number }> {
-  const removedIncidents = await db
-    .delete(statusIncidents)
-    .where(isNotNull(statusIncidents.resolvedAt))
-    .returning({ id: statusIncidents.id })
+  const { removedIncidents, removedEvents } = await db.transaction(async (tx) => {
+    const removedIncidents = await tx
+      .delete(statusIncidents)
+      .where(isNotNull(statusIncidents.resolvedAt))
+      .returning({ id: statusIncidents.id })
 
-  const removedEvents = await db
-    .delete(statusComponentEvents)
-    .returning({ id: statusComponentEvents.id })
+    // A service that is not operational now keeps the newest event behind its
+    // status (an open incident or a status set by hand still holds it), or its
+    // uptime would read operational while it is down. Everything else goes.
+    const removedEvents = await tx
+      .delete(statusComponentEvents)
+      .where(
+        sql`${statusComponentEvents.id} NOT IN (
+          SELECT DISTINCT ON (e.component_id) e.id
+          FROM status_component_events e
+          JOIN status_components c ON c.id = e.component_id
+          WHERE c.status <> 'operational' AND c.deleted_at IS NULL
+          ORDER BY e.component_id, e.created_at DESC, e.id DESC
+        )`
+      )
+      .returning({ id: statusComponentEvents.id })
+    return { removedIncidents, removedEvents }
+  })
 
   log.info(
     { incidents: removedIncidents.length, events: removedEvents.length },
@@ -851,6 +907,8 @@ export async function getStatusIncidentById(
     // A deleted service is off the page and out of the picker; leaving it out
     // here keeps the editor from resubmitting it on every autosave.
     .where(and(eq(statusIncidentComponents.incidentId, id), isNull(statusComponents.deletedAt)))
+    // Page order, so the editor and every reader list the services alike.
+    .orderBy(asc(statusComponents.position), asc(statusComponents.id))
 
   const updates = await db.query.statusIncidentUpdates.findMany({
     where: eq(statusIncidentUpdates.incidentId, id),
@@ -886,6 +944,9 @@ export async function getStatusIncidentById(
 export async function findStatusIncidentById(
   id: StatusIncidentId
 ): Promise<StatusIncidentWithDetails | null> {
+  // The id can come from a link. One that isn't an incident id names no
+  // incident, and converting it for the query would throw.
+  if (!isTypeId(id, 'status_incident')) return null
   try {
     return await getStatusIncidentById(id)
   } catch (err) {
@@ -953,7 +1014,11 @@ export async function listStatusIncidents(
 
   const hasMore = rows.length > limit
   const items = hasMore ? rows.slice(0, limit) : rows
-  const details = await Promise.all(items.map((r) => getStatusIncidentById(r.id)))
+  // A row deleted between the list read and its detail read is left out, not
+  // thrown on: the list is a moment's view either way.
+  const details = (await Promise.all(items.map((r) => findStatusIncidentById(r.id)))).filter(
+    (d): d is StatusIncidentWithDetails => d !== null
+  )
 
   return {
     items: details,
@@ -1178,7 +1243,7 @@ export async function listStatusIncidentTemplates(): Promise<StatusIncidentTempl
 export async function createStatusIncidentTemplate(
   input: CreateStatusIncidentTemplateInput
 ): Promise<StatusIncidentTemplateRow> {
-  const name = validateTitle(input.name)
+  const name = validateTemplateName(input.name)
   const title = validateTitle(input.title)
   const body = validateBody(input.body)
 
@@ -1208,7 +1273,7 @@ export async function updateStatusIncidentTemplate(
   }
 
   const updateData: Record<string, unknown> = { updatedAt: new Date() }
-  if (input.name !== undefined) updateData.name = validateTitle(input.name)
+  if (input.name !== undefined) updateData.name = validateTemplateName(input.name)
   if (input.title !== undefined) updateData.title = validateTitle(input.title)
   if (input.body !== undefined) updateData.body = validateBody(input.body)
   if (input.impact !== undefined) updateData.impact = input.impact

@@ -116,6 +116,9 @@ export {
   listIncidentHistory,
   listStatusFeedItems,
   statusIncidentLastActivityAt,
+  getVisitorTopLevelStatus,
+  viewableStatusComponentIds,
+  assertSubscribableComponents,
 } from './status.public'
 
 export {

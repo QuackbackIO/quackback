@@ -26,8 +26,9 @@ import {
   statusIncidents,
 } from '@/lib/server/db'
 import { isTypeId, type StatusComponentId, type StatusIncidentId } from '@quackback/ids'
+import { ValidationError } from '@/lib/shared/errors'
 import { canViewStatusComponent, statusComponentViewFilter } from '@/lib/server/policy/status'
-import type { Actor } from '@/lib/server/policy/types'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import { deriveTopLevelStatus, deriveUptimeDays } from './status.calc'
 import {
@@ -39,6 +40,7 @@ import {
   visibleIncidentFilter,
 } from './status.projection'
 import type {
+  StatusComponentStatus,
   StatusPageSnapshot,
   PublicStatusComponent,
   PublicStatusComponentGroup,
@@ -199,6 +201,79 @@ export async function getStatusPageSnapshot(
     recentIncidents: recentIncidents_grouped,
     recentWindow: { start: recentWindowStart, days: RECENT_INCIDENTS_WINDOW_DAYS },
   }
+}
+
+/**
+ * The top-level status an anonymous visitor sees: the public page's own
+ * `topLevel.status`, without building the rest of the page. Gated services
+ * and those the plan hides don't count.
+ */
+export async function getVisitorTopLevelStatus(): Promise<StatusComponentStatus> {
+  const [rows, planVisible] = await Promise.all([
+    db
+      .select({ id: statusComponents.id, status: statusComponents.status })
+      .from(statusComponents)
+      .where(and(isNull(statusComponents.deletedAt), statusComponentViewFilter(ANONYMOUS_ACTOR))),
+    planVisibleComponentIds(),
+  ])
+  return deriveTopLevelStatus(
+    rows.filter((c) => planVisible === null || planVisible.includes(c.id)).map((c) => c.status)
+  )
+}
+
+/**
+ * The ids in `ids` that name a live service `actor` can see on the page (the
+ * segment gate and the plan's visible services). Ids that aren't service ids
+ * are dropped, not queried.
+ */
+export async function viewableStatusComponentIds(
+  actor: Actor,
+  ids: readonly string[]
+): Promise<Set<StatusComponentId>> {
+  const wellFormed = [
+    ...new Set(ids.filter((id): id is StatusComponentId => isTypeId(id, 'status_component'))),
+  ]
+  if (wellFormed.length === 0) return new Set()
+  const [rows, planVisible] = await Promise.all([
+    db
+      .select({ id: statusComponents.id })
+      .from(statusComponents)
+      .where(
+        and(
+          inArray(statusComponents.id, wellFormed),
+          isNull(statusComponents.deletedAt),
+          statusComponentViewFilter(actor)
+        )
+      ),
+    planVisibleComponentIds(),
+  ])
+  return new Set(
+    rows.map((r) => r.id).filter((id) => planVisible === null || planVisible.includes(id))
+  )
+}
+
+/**
+ * The services a self-serve subscription to chosen services names, refused
+ * unless there is at least one and every one is a live service the subscriber
+ * can see. A list that names nothing they can see would store an active
+ * subscription no incident could ever match, which still counts as a
+ * subscriber (and takes a plan slot).
+ */
+export async function assertSubscribableComponents(
+  actor: Actor,
+  componentIds: readonly string[]
+): Promise<StatusComponentId[]> {
+  if (componentIds.length === 0) {
+    throw new ValidationError('VALIDATION_ERROR', 'Choose at least one service to follow')
+  }
+  const viewable = await viewableStatusComponentIds(actor, componentIds)
+  if (componentIds.some((id) => !viewable.has(id as StatusComponentId))) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'A chosen service is no longer on the status page. Choose the services again.'
+    )
+  }
+  return [...viewable]
 }
 
 function groupByUtcDay(

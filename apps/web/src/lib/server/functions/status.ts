@@ -44,7 +44,7 @@ import {
   countStatusIncidentsSince,
   countStatusSubscriptionsSince,
   startMaintenanceNow,
-  deriveTopLevelStatus,
+  getVisitorTopLevelStatus,
   listStatusIncidentTemplates,
   createStatusIncidentTemplate,
   updateStatusIncidentTemplate,
@@ -621,7 +621,9 @@ export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handle
 
   return {
     enabled: settings.enabled,
-    topLevelStatus: deriveTopLevelStatus(allComponents.map((c) => c.status)),
+    // What an anonymous visitor sees, as the banner says: gated services and
+    // those the plan hides don't count.
+    topLevelStatus: await getVisitorTopLevelStatus(),
     ungroupedComponents: ungrouped.map(leanComponent),
     groups: groups.map((g) => ({
       id: g.id,

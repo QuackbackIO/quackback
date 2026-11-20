@@ -659,7 +659,10 @@ describe('status lifecycle (Postgres)', () => {
     it('still sends the creation event, once, flagged as not emailed', async () => {
       const api = await service('API')
       const quiet = await openIncident([{ componentId: api, componentStatus: 'major_outage' }])
-      const window = await scheduleWindow(new Date(Date.now() + HOUR), null)
+      const window = await scheduleWindow(
+        new Date(Date.now() + HOUR),
+        new Date(Date.now() + 2 * HOUR)
+      )
 
       const actor = { type: 'service' as const, displayName: 'test' }
       expect(await notifyStatusIncidentPublished(quiet.id, actor)).toBe(false)
@@ -1047,7 +1050,10 @@ describe('status lifecycle (Postgres)', () => {
       })
     })
 
-    it('a window created already completed writes scheduled and completed, and the scheduler adds nothing', async () => {
+    // Created already over, it is history, announced like a logged past
+    // window: no scheduled or completed event, so no "maintenance scheduled"
+    // email for work that is done.
+    it('a window created already completed writes no events, and the scheduler adds none', async () => {
       const db = await service('Database')
       const window = await createIncident(
         {
@@ -1064,8 +1070,8 @@ describe('status lifecycle (Postgres)', () => {
       )
       await handleMaintenanceStart(window.id)
       await handleMaintenanceComplete(window.id)
-      expect(await sent('status.maintenance_scheduled', window.id)).toBe(1)
-      expect(await sent('status.maintenance_completed', window.id)).toBe(1)
+      expect(await sent('status.maintenance_scheduled', window.id)).toBe(0)
+      expect(await sent('status.maintenance_completed', window.id)).toBe(0)
       expect(await sent('status.maintenance_started', window.id)).toBe(0)
     })
 
