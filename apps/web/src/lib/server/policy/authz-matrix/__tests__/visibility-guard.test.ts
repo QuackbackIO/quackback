@@ -112,7 +112,7 @@ const ALLOWLIST: Record<string, string> = {
     'shared by the requester reply and intake; agent callers check visibility first',
   'lib/server/domains/tickets/ticket-message.service.ts::emitPairTicketReplied::loadTicketOr404':
     'the ticket.replied signal for a message already written on its pair conversation',
-  'lib/server/domains/tickets/ticket-external-links.service.ts::buildTicketIssueData::loadTicketOr404':
+  'lib/server/domains/tickets/ticket-issue-source.ts::buildTicketIssueData::loadTicketOr404':
     'the integration sync worker builds the issue body after the write was checked',
   'lib/server/domains/tickets/requester.service.ts::loadAccessibleTicketOr404::loadTicketOr404':
     'the customer path checks ownership, or a share with thread access, instead of team scope',
