@@ -34,21 +34,14 @@ describe.skipIf(!fixture.available)('roadmap slug reuse (real DB)', () => {
     })
   })
 
-  // Root cause: createRoadmap's slug check queries roadmaps by slug without
-  // isNull(deletedAt) (apps/web/src/lib/server/domains/roadmaps/roadmap.service.ts:143),
-  // and roadmaps.slug is a plain unique constraint (packages/db/src/schema/boards.ts:55),
-  // so a soft-deleted roadmap keeps its slug forever. See apps/web/e2e/QUARANTINE.md.
-  it.fails(
-    'RMP-A-05 a deleted roadmap frees its slug for a new one (quarantined: soft-deleted roadmap still reserves its slug)',
-    async () => {
-      const slug = `q4-${suffix()}`
-      const first = await createRoadmap({ name: 'Q4', slug, columns: [] })
-      await deleteRoadmap(first.id)
+  it('RMP-A-05 a deleted roadmap frees its slug for a new one', async () => {
+    const slug = `q4-${suffix()}`
+    const first = await createRoadmap({ name: 'Q4', slug, columns: [] })
+    await deleteRoadmap(first.id)
 
-      const second = await createRoadmap({ name: 'Q4', slug, columns: [] })
+    const second = await createRoadmap({ name: 'Q4', slug, columns: [] })
 
-      expect(second.id).not.toBe(first.id)
-      expect((await getRoadmapBySlug(slug)).id).toBe(second.id)
-    }
-  )
+    expect(second.id).not.toBe(first.id)
+    expect((await getRoadmapBySlug(slug)).id).toBe(second.id)
+  })
 })

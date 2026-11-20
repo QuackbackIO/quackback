@@ -5,6 +5,7 @@ import {
   roadmapBucketWriteback,
   roadmapDateBucketFor,
   roadmapDateBucketsBetween,
+  roadmapToSelect,
 } from '../roadmap-config'
 
 describe('roadmap date buckets', () => {
@@ -96,5 +97,26 @@ describe('roadmap date buckets', () => {
       new Date('2026-11-20T00:00:00.000Z')
     )
     expect(buckets.map((bucket) => bucket.id)).toEqual(['2026-Q4', 'no-eta'])
+  })
+})
+
+describe('roadmapToSelect', () => {
+  const roadmaps = [{ id: 'roadmap_a' }, { id: 'roadmap_b' }, { id: 'roadmap_c' }]
+
+  it('keeps a requested roadmap the viewer can see', () => {
+    expect(roadmapToSelect(roadmaps, 'roadmap_b')?.id).toBe('roadmap_b')
+  })
+
+  it('RMP-P-05 falls back to the first roadmap when the requested one is hidden or deleted', () => {
+    expect(roadmapToSelect(roadmaps, 'roadmap_gone')?.id).toBe('roadmap_a')
+  })
+
+  it('picks the first roadmap when none is requested', () => {
+    expect(roadmapToSelect(roadmaps, null)?.id).toBe('roadmap_a')
+  })
+
+  it('RMP-A-16 never picks the roadmap being deleted', () => {
+    expect(roadmapToSelect(roadmaps, null, { excluding: 'roadmap_a' })?.id).toBe('roadmap_b')
+    expect(roadmapToSelect([{ id: 'roadmap_a' }], null, { excluding: 'roadmap_a' })).toBeUndefined()
   })
 })

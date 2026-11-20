@@ -394,6 +394,7 @@ describe('replayGateVerdict', () => {
       '0317_plan_limits_state',
       '0318_board_read_only',
       '0319_outbound_email_sent_message_id',
+      '0320_roadmap_slug_live_only',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

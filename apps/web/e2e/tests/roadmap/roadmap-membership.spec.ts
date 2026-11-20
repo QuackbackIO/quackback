@@ -3,7 +3,7 @@
  * status (column roadmaps), and the admin board's drag and drop and post modal.
  *
  * Journeys: RMP-E-01, RMP-E-02, RMP-E-04, RMP-E-05, RMP-E-08, RMP-E-10,
- * RMP-E-11, RMP-E-12, RMP-E-13, RMP-E-14, RMP-E-16 (quarantined), RMP-E-18.
+ * RMP-E-11, RMP-E-12, RMP-E-13, RMP-E-14, RMP-E-16, RMP-E-18.
  *
  * Date roadmaps here are filtered to the test's own board, so their periods
  * come from the test's posts alone.
@@ -545,14 +545,7 @@ test(
 
 test(
   'RMP-E-16 deleting a status takes its column off every roadmap that used it',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'status.service.ts deleteStatus soft-deletes the status but never touches roadmap_columns, so the column stays (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@nightly' },
   async ({ playwright, people, marker }) => {
     const rm = await roadmapApi(playwright, people)
     const keep = await rm.status(marker, { name: `${marker} keep` })

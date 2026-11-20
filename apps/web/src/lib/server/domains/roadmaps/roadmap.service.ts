@@ -27,15 +27,19 @@ import type {
   UpdateRoadmapInput,
 } from './roadmap.types'
 
-function validateColumns(columns: RoadmapColumnInput[]): void {
+function validateColumnFields(column: { name?: string; color?: string }): void {
+  if (column.name !== undefined && !column.name.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Column name is required')
+  }
+  if (column.color !== undefined && !column.color.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Column color is required')
+  }
+}
+
+function validateColumns(columns: Pick<RoadmapColumnInput, 'statusId' | 'name' | 'color'>[]): void {
   const statuses = new Set<string>()
   for (const column of columns) {
-    if (!column.name.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Column name is required')
-    }
-    if (!column.color.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Column color is required')
-    }
+    validateColumnFields(column)
     if (statuses.has(column.statusId)) {
       throw new ValidationError('VALIDATION_ERROR', 'Each status can appear only once in a roadmap')
     }
@@ -140,7 +144,9 @@ export async function createRoadmap(input: CreateRoadmapInput): Promise<RoadmapW
   }
   validateConfig(input)
 
-  const existing = await db.query.roadmaps.findFirst({ where: eq(roadmaps.slug, input.slug) })
+  const existing = await db.query.roadmaps.findFirst({
+    where: and(eq(roadmaps.slug, input.slug), isNull(roadmaps.deletedAt)),
+  })
   if (existing) {
     throw new ConflictError('DUPLICATE_SLUG', `A roadmap with slug "${input.slug}" already exists`)
   }
@@ -348,6 +354,7 @@ export async function createRoadmapColumn(input: CreateRoadmapColumnInput): Prom
   if (!status) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${input.statusId} not found`)
   }
+  validateColumns([...roadmap.columns, input])
   const [column] = await db
     .insert(roadmapColumns)
     .values({
@@ -374,6 +381,7 @@ export async function updateRoadmapColumn(
   input: UpdateRoadmapColumnInput,
   roadmapId?: RoadmapId
 ): Promise<RoadmapColumn> {
+  validateColumnFields(input)
   const [column] = await db
     .update(roadmapColumns)
     .set({

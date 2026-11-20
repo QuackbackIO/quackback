@@ -52,7 +52,7 @@ export const roadmaps = pgTable(
   'roadmaps',
   {
     id: typeIdWithDefault('roadmap')('id').primaryKey(),
-    slug: text('slug').notNull().unique(),
+    slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
     type: text('type', { enum: ROADMAP_TYPES }).default('column').notNull(),
@@ -68,7 +68,10 @@ export const roadmaps = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    // Note: roadmaps_slug_unique constraint already provides uniqueness; no separate index needed
+    // A deleted roadmap frees its slug: only live roadmaps must be unique.
+    uniqueIndex('roadmaps_slug_unique')
+      .on(table.slug)
+      .where(sql`deleted_at IS NULL`),
     index('roadmaps_position_idx').on(table.position),
     index('roadmaps_visibility_idx').on(table.visibility),
     index('roadmaps_deleted_at_idx').on(table.deletedAt),
