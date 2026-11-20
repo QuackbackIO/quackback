@@ -345,3 +345,23 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   (`apps/web/src/routes/api/v1/roadmaps/$roadmapId.columns.$columnId.ts:27-41`).
   Fix: scope the update and delete to `roadmapId`, 404 otherwise. owner:
   unassigned, review by: 2026-12-03.
+- `platform/rest-apps.spec.ts` › API-R-092 apps search fills in each post
+  status name and colour. Product bug: `statusName` and `statusColor` are
+  hard-coded to null (`apps/web/src/routes/api/v1/apps/search.ts:45-46`),
+  while `/apps/linked` returns real values. Fix: join `post_statuses`.
+  owner: unassigned, review by: 2026-12-03.
+- `platform/rest-apps.spec.ts` › API-R-096 linking a deleted or unknown post
+  answers 404 and leaves no link row. Product bug: the link row is inserted
+  before the post is checked, so a deleted post leaves an orphan link (and a
+  404), and an unknown post id answers 500 from the foreign key
+  (`apps/web/src/lib/server/integrations/apps/service.ts:53-67`). Fix: load
+  the live post first and 404 before inserting. owner: unassigned, review by:
+  2026-12-03.
+- `platform/rest-apps.spec.ts` › API-R-100 apps error responses carry the
+  CORS headers too. Product bug: 401 and 400 answers from `/apps/*` come from
+  `handleDomainError` / `badRequestResponse` without
+  `Access-Control-Allow-Origin`, so the cross-origin helpdesk iframe cannot
+  read them (`apps/web/src/routes/api/v1/apps/boards.ts:34-35`,
+  `apps/web/src/lib/server/domains/api/responses.ts:21-33`). Fix: wrap the
+  apps error responses with `corsHeaders()`. owner: unassigned, review by:
+  2026-12-03.
