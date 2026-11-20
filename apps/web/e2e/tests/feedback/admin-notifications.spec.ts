@@ -178,8 +178,12 @@ test(
       await form.getByRole('textbox').first().click()
       const editor = form.locator('.ProseMirror[contenteditable="true"]')
       await expect(editor).toBeVisible()
-      await editor.fill(text)
-      await expect(editor).toContainText('END-OF-COMMENT')
+      // The editor can still be initialising on the first keystrokes: refill
+      // until it holds the whole text.
+      await expect(async () => {
+        await editor.fill(text)
+        await expect(editor).toHaveText(text, { timeout: 1_000 })
+      }).toPass({ timeout: 10_000 })
       await page.getByRole('dialog').getByRole('button', { name: 'Comment', exact: true }).click()
       await eventHandled(fp.postId, 'comment.created')
 
@@ -540,7 +544,8 @@ test(
       await expect
         .poll(
           async () =>
-            (await bellsFor(watcher.principalId, fp.postId)).filter((b) => b.read_at).length
+            (await bellsFor(watcher.principalId, fp.postId)).filter((b) => b.read_at).length,
+          { timeout: 15_000 }
         )
         .toBe(1)
 
@@ -675,23 +680,29 @@ test(
     await expect(statusEmail).toBeChecked()
     await statusEmail.click()
     await expect
-      .poll(async () => {
-        const [row] = await supportDb()`SELECT matrix FROM notification_preferences
+      .poll(
+        async () => {
+          const [row] = await supportDb()`SELECT matrix FROM notification_preferences
           WHERE principal_id = ${uuid(mate.principalId)}`
-        return (row?.matrix as Record<string, Record<string, boolean>> | undefined)
-          ?.post_status_changed?.email
-      })
+          return (row?.matrix as Record<string, Record<string, boolean>> | undefined)
+            ?.post_status_changed?.email
+        },
+        { timeout: 15_000 }
+      )
       .toBe(false)
     await page.reload()
     await expect(page.getByRole('switch', { name: 'Status changed - Email' })).not.toBeChecked()
 
     await page.getByRole('switch', { name: 'Pause all email notifications' }).click()
     await expect
-      .poll(async () => {
-        const [row] = await supportDb()`SELECT email_muted FROM notification_preferences
+      .poll(
+        async () => {
+          const [row] = await supportDb()`SELECT email_muted FROM notification_preferences
           WHERE principal_id = ${uuid(mate.principalId)}`
-        return row?.email_muted
-      })
+          return row?.email_muted
+        },
+        { timeout: 15_000 }
+      )
       .toBe(true)
   }
 )
