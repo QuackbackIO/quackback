@@ -57,6 +57,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 // --- Other mocks ---
+// No mentioner here is an API key (the API key case runs on Postgres in
+// api-key-feedback-author.db.test.ts), so its lookup reads nothing.
+vi.mock('@/lib/server/domains/principals/principal-display', () => ({
+  loadApiKeyFeedbackAuthors: vi.fn(async () => new Map()),
+}))
 vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
 }))

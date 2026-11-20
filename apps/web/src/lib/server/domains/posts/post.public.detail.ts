@@ -18,7 +18,9 @@ import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } f
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { DEFAULT_COMMENT_PAGE_SIZE, encodeCommentCursor, decodeCommentCursor } from './comment-page'
-import { resolveAvatarUrl, parseJson, publicTagSqlFilter } from './post.public'
+import { parseJson, publicTagSqlFilter } from './post.public'
+import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
+import { authorIsApiKeySql, resolveAvatarUrl } from './feedback-authors'
 import { getExecuteRows } from '@/lib/server/utils'
 import {
   canViewPost,
@@ -165,6 +167,7 @@ export async function getPublicPostDetail(
           SELECT m.display_name FROM ${principalTable} m
           WHERE m.id = ${posts.principalId}
         )`.as('author_name'),
+        authorIsApiKey: authorIsApiKeySql(posts.principalId).as('author_is_api_key'),
         // All four sources — resolveUserAvatarUrl still needs the OAuth
         // URLs when a stored key cannot produce a public URL (storage off).
         authorAvatarData: sql<string | null>`(
@@ -257,6 +260,7 @@ export async function getPublicPostDetail(
     user_image: string | null
     user_image_key: string | null
     reactions_json: string
+    author_is_api_key: boolean | null
     sc_from_name: string | null
     sc_from_color: string | null
     sc_to_name: string | null
@@ -289,6 +293,7 @@ export async function getPublicPostDetail(
           FILTER (WHERE cr.id IS NOT NULL),
           '[]'
         ) as reactions_json,
+        bool_or(m.service_metadata->>'kind' = 'api_key') as author_is_api_key,
         scf.name as sc_from_name, scf.color as sc_from_color,
         sct.name as sc_to_name, sct.color as sc_to_color
       FROM ${postComments} c
@@ -382,6 +387,45 @@ export async function getPublicPostDetail(
   const ensureDate = (value: Date | string): Date =>
     typeof value === 'string' ? new Date(value) : value
 
+  // The pinned comment must render regardless of which page it falls on, so
+  // resolve it independently of the paginated set. Prefer the already-loaded
+  // page row (common: pins are usually recent/top), else fetch it directly.
+  let pinnedRow: CommentRow | null = null
+  if (postResult.pinnedCommentId) {
+    const pinnedUuid = toUuid(postResult.pinnedCommentId)
+    pinnedRow = commentsRaw.find((c) => c.id === pinnedUuid) ?? null
+    if (!pinnedRow) {
+      const pinnedResult = await commentSelect(sql`AND c.id = ${pinnedUuid}::uuid`, sql``)
+      pinnedRow = getExecuteRows<CommentRow>(pinnedResult)[0] ?? null
+    }
+  }
+
+  // Feedback an API key wrote shows as the support team (or a personal key's
+  // creator), never under the key's own name. Everyone else keeps the name and
+  // avatar read above.
+  // The rows already say which authors are keys, so a page without one makes
+  // no further read.
+  const keyAuthors = await loadApiKeyFeedbackAuthors([
+    ...(postResult.authorIsApiKey ? [postResult.principalId] : []),
+    ...[...commentsRaw, ...(pinnedRow ? [pinnedRow] : [])]
+      .filter((c) => c.author_is_api_key)
+      .map((c) => fromUuid('principal', c.principal_id) as PrincipalId),
+  ])
+  const commentAuthor = (row: CommentRow) => {
+    const keyAuthor = keyAuthors.get(fromUuid('principal', row.principal_id) as PrincipalId)
+    if (keyAuthor) return { name: keyAuthor.displayName, avatarUrl: keyAuthor.avatarUrl }
+    return {
+      name: row.author_name,
+      avatarUrl: resolveAvatarUrl({
+        avatarKey: row.avatar_key,
+        avatarUrl: row.avatar_url,
+        userImageKey: row.user_image_key,
+        userImage: row.user_image,
+      }),
+    }
+  }
+  const postKeyAuthor = keyAuthors.get(postResult.principalId)
+
   // Raw SQL returns id columns as UUIDs (no TypeID encoder in the path),
   // but the rest of the pipeline — public API contract, the post's
   // pinnedCommentId, the client mutations — speaks TypeIDs. Normalize
@@ -391,13 +435,13 @@ export async function getPublicPostDetail(
   //   2. clients receive the documented `comment_…` / `principal_…`
   //      shape and can round-trip it back into pin/react/reply mutations
   const commentsResult = commentsRaw.map((comment) => ({
+    ...authorFields(commentAuthor(comment)),
     id: fromUuid('post_comment', comment.id) as PostCommentId,
     postId: fromUuid('post', comment.post_id) as PostId,
     parentId: comment.parent_id
       ? (fromUuid('post_comment', comment.parent_id) as PostCommentId)
       : null,
     principalId: fromUuid('principal', comment.principal_id) as PrincipalId,
-    authorName: comment.author_name,
     content: comment.content,
     contentJson:
       (comment.content_json as import('@/lib/shared/db-types').TiptapContent | null | undefined) ??
@@ -411,12 +455,6 @@ export async function getPublicPostDetail(
     deletedByPrincipalId: comment.deleted_by_principal_id
       ? (fromUuid('principal', comment.deleted_by_principal_id) as PrincipalId)
       : null,
-    avatarUrl: resolveAvatarUrl({
-      avatarKey: comment.avatar_key,
-      avatarUrl: comment.avatar_url,
-      userImageKey: comment.user_image_key,
-      userImage: comment.user_image,
-    }),
     statusChange: toStatusChange(
       comment.sc_from_name ? { name: comment.sc_from_name, color: comment.sc_from_color! } : null,
       comment.sc_to_name ? { name: comment.sc_to_name, color: comment.sc_to_color! } : null
@@ -473,41 +511,24 @@ export async function getPublicPostDetail(
   const hydratedRootComments = await Promise.all(rootComments.map(hydratePublicCommentTree))
 
   let pinnedComment: PinnedComment | null = null
-  if (postResult.pinnedCommentId) {
-    // The pinned comment must render regardless of which page it falls on, so
-    // resolve it independently of the paginated set. Prefer the already-loaded
-    // page row (common: pins are usually recent/top), else fetch it directly.
-    const pinnedUuid = toUuid(postResult.pinnedCommentId)
-    let pinnedRow = commentsRaw.find((c) => c.id === pinnedUuid) ?? null
-    if (!pinnedRow) {
-      const pinnedResult = await commentSelect(sql`AND c.id = ${pinnedUuid}::uuid`, sql``)
-      pinnedRow = getExecuteRows<CommentRow>(pinnedResult)[0] ?? null
-    }
-    if (pinnedRow && !pinnedRow.deleted_at) {
-      const pinnedContentJson =
-        (pinnedRow.content_json as PinnedComment['contentJson'] | null | undefined) ?? null
-      const pinnedHydrated = contentJsonForClient(
-        pinnedContentJson
-          ? ((await hydrateMentions(
-              pinnedContentJson as JSONContent
-            )) as PinnedComment['contentJson'])
-          : null
-      )
-      pinnedComment = {
-        id: fromUuid('post_comment', pinnedRow.id) as PostCommentId,
-        content: pinnedRow.content,
-        contentJson: pinnedHydrated,
-        authorName: pinnedRow.author_name,
-        principalId: fromUuid('principal', pinnedRow.principal_id) as PrincipalId,
-        avatarUrl: resolveAvatarUrl({
-          avatarKey: pinnedRow.avatar_key,
-          avatarUrl: pinnedRow.avatar_url,
-          userImageKey: pinnedRow.user_image_key,
-          userImage: pinnedRow.user_image,
-        }),
-        createdAt: ensureDate(pinnedRow.created_at),
-        isTeamMember: pinnedRow.is_team_member,
-      }
+  if (pinnedRow && !pinnedRow.deleted_at) {
+    const pinnedContentJson =
+      (pinnedRow.content_json as PinnedComment['contentJson'] | null | undefined) ?? null
+    const pinnedHydrated = contentJsonForClient(
+      pinnedContentJson
+        ? ((await hydrateMentions(
+            pinnedContentJson as JSONContent
+          )) as PinnedComment['contentJson'])
+        : null
+    )
+    pinnedComment = {
+      id: fromUuid('post_comment', pinnedRow.id) as PostCommentId,
+      content: pinnedRow.content,
+      contentJson: pinnedHydrated,
+      ...authorFields(commentAuthor(pinnedRow)),
+      principalId: fromUuid('principal', pinnedRow.principal_id) as PrincipalId,
+      createdAt: ensureDate(pinnedRow.created_at),
+      isTeamMember: pinnedRow.is_team_member,
     }
   }
 
@@ -524,9 +545,9 @@ export async function getPublicPostDetail(
     contentJson: hydratedPostContentJson,
     statusId: postResult.statusId,
     voteCount: postResult.voteCount,
-    authorName: postResult.authorName,
+    authorName: postKeyAuthor ? postKeyAuthor.displayName : postResult.authorName,
     principalId: postResult.principalId,
-    authorAvatarUrl,
+    authorAvatarUrl: postKeyAuthor ? postKeyAuthor.avatarUrl : authorAvatarUrl,
     createdAt: postResult.createdAt,
     eta: postResult.eta,
     board: { id: postResult.boardId, name: postResult.boardName, slug: postResult.boardSlug },
@@ -544,4 +565,8 @@ export async function getPublicPostDetail(
     isCommentsLocked: postResult.isCommentsLocked,
     moderationState: postResult.postModerationState,
   }
+}
+
+function authorFields(author: { name: string | null; avatarUrl: string | null }) {
+  return { authorName: author.name, avatarUrl: author.avatarUrl }
 }

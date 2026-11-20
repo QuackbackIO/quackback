@@ -108,7 +108,8 @@ function authorFromRow(row: AuthorRow, preferAccountName: boolean): Conversation
 }
 
 async function selectAuthorRows(
-  ids: ReadonlyArray<PrincipalId | null | undefined>
+  ids: ReadonlyArray<PrincipalId | null | undefined>,
+  opts?: { apiKeysOnly?: boolean }
 ): Promise<AuthorRow[]> {
   const unique = [...new Set(ids.filter((id): id is PrincipalId => !!id))]
   if (unique.length === 0) return []
@@ -131,7 +132,11 @@ async function selectAuthorRows(
     })
     .from(principal)
     .leftJoin(user, eq(user.id, principal.userId))
-    .where(inArray(principal.id, unique))
+    .where(
+      opts?.apiKeysOnly
+        ? and(inArray(principal.id, unique), sql`${principal.serviceMetadata}->>'kind' = 'api_key'`)
+        : inArray(principal.id, unique)
+    )
   // The same read answers whether each author is a test customer.
   for (const row of rows) rememberTestOwner(row)
   return showPersonalKeysAsCreator(rows)
@@ -240,8 +245,9 @@ async function teamNameFor(rows: AuthorRow[]): Promise<string | null> {
  *
  * `forCustomer` is for what a customer reads in a support thread (the portal,
  * the widget, their emails): an author that shows as an API key takes the
- * support team's name instead of the key's. Webhooks and feedback leave it
- * off. It has no effect with `preferAccountName`.
+ * support team's name instead of the key's. Webhooks leave it off, and
+ * feedback reads use loadApiKeyFeedbackAuthors. It has no effect with
+ * `preferAccountName`.
  */
 export async function loadAuthors(
   ids: ReadonlyArray<PrincipalId | null | undefined>,
@@ -257,6 +263,30 @@ export async function loadAuthors(
   for (const row of rows) {
     map.set(row.id, authorFromRow(row, opts?.preferAccountName === true))
   }
+  return map
+}
+
+/**
+ * What a feedback reader sees for each author that is an API key: the portal
+ * and widget post page, the public feedback lists, and the emails and bells
+ * that link to them. A workspace key, or a personal key that keeps its own
+ * name, shows as the support team with no avatar, the same rule support
+ * messages follow. A personal key that shows its creator shows that
+ * teammate's public name and avatar.
+ *
+ * Only API key authors are in the map. Every other author keeps the name the
+ * caller already read. Callers pass only the authors their own rows mark as
+ * keys, so a page with none makes no read here. Admin views leave this off
+ * and keep the key's own name.
+ */
+export async function loadApiKeyFeedbackAuthors(
+  ids: ReadonlyArray<PrincipalId | null | undefined>
+): Promise<Map<PrincipalId, ConversationAuthorDTO>> {
+  const map = new Map<PrincipalId, ConversationAuthorDTO>()
+  const rows = await selectAuthorRows(ids, { apiKeysOnly: true })
+  if (rows.length === 0) return map
+  const teamName = await teamNameFor(rows)
+  for (const row of rows) map.set(row.id, customerAuthorFromRow(row, teamName).author)
   return map
 }
 
