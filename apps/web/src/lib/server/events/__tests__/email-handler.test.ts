@@ -542,6 +542,35 @@ describe('emailHook — post.mentioned', () => {
     })
   })
 
+  it('a comment mention links to the comment the target resolved', async () => {
+    mockPostMentionEmail.mockClear()
+    mockPostMentionEmail.mockResolvedValue({ sent: true })
+
+    const event = {
+      id: 'evt-comment-mention',
+      type: 'comment.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: { ...mentionData, commentId: 'comment_9', isPrivate: false },
+    } as unknown as EventData
+
+    const result = await emailHook.run(event, baseTarget, {
+      ...baseConfig,
+      postUrl: 'https://example.com/p/123#comment-comment_9',
+      mentionerName: 'Bea',
+    })
+
+    expect(result).toEqual({ success: true })
+    expect(mockPostMentionEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mentionerName: 'Bea',
+        postTitle: 'Why we should add dark mode',
+        excerpt: 'Hey @alice, what do you think?',
+        postUrl: 'https://example.com/p/123#comment-comment_9',
+      })
+    )
+  })
+
   it('names the mentioner the target resolved, as the relayed event carries no name', async () => {
     mockPostMentionEmail.mockClear()
     mockPostMentionEmail.mockResolvedValue({ sent: true })
