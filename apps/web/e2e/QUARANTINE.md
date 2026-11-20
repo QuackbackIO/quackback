@@ -789,3 +789,16 @@ no such part beyond the wrong notification).
   incident still holds, so those services' uptime reads operational while they
   are down. Fix: keep (or re-write) the latest event of each service with a
   live hold. owner: unassigned, review by: 2026-12-03.
+
+### Product suite: platform (INT)
+
+- `platform/getting-started.spec.ts` › INT-ON-03 connecting an integration
+  completes its launch task. Product bug: `loadLaunchStatus` looks for a
+  connected integration with `integrations.status = 'connected'`
+  (`apps/web/src/lib/server/domains/onboarding/launch-status.ts:77`), but
+  connections are stored `'active'` or `'paused'` (`saveIntegration`,
+  `apps/web/src/lib/server/integrations/save.ts`; `updateIntegrationFn`) and
+  the column defaults to `'pending'`, so `hasIntegration` is always false and
+  "Connect an integration" never completes. Fix: filter on `'active'`. The
+  test passes against a row seeded as `'connected'`. owner: unassigned, review
+  by: 2026-12-03.
