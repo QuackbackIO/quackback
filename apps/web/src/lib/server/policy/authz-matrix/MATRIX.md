@@ -930,16 +930,16 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/conversations/$conversationId.ts`::GET | conversation.view |
 | `routes/api/v1/conversations/index.ts`::GET | conversation.view |
 | `routes/api/v1/files/index.ts`::POST | conversation.reply |
-| `routes/api/v1/help-center/articles/$articleId.feedback.ts`::POST | PUBLIC (any valid key) |
-| `routes/api/v1/help-center/articles/$articleId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/help-center/articles/$articleId.feedback.ts`::POST | DYNAMIC (help_center.manage) |
+| `routes/api/v1/help-center/articles/$articleId.ts`::GET | DYNAMIC (help_center.manage) |
 | `routes/api/v1/help-center/articles/$articleId.ts`::PATCH | help_center.manage |
 | `routes/api/v1/help-center/articles/$articleId.ts`::DELETE | help_center.manage |
-| `routes/api/v1/help-center/articles/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/help-center/articles/index.ts`::GET | DYNAMIC (help_center.manage) |
 | `routes/api/v1/help-center/articles/index.ts`::POST | help_center.manage |
-| `routes/api/v1/help-center/categories/$categoryId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/help-center/categories/$categoryId.ts`::GET | DYNAMIC (help_center.manage) |
 | `routes/api/v1/help-center/categories/$categoryId.ts`::PATCH | help_center.manage |
 | `routes/api/v1/help-center/categories/$categoryId.ts`::DELETE | help_center.manage |
-| `routes/api/v1/help-center/categories/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/help-center/categories/index.ts`::GET | DYNAMIC (help_center.manage) |
 | `routes/api/v1/help-center/categories/index.ts`::POST | help_center.manage |
 | `routes/api/v1/moderation/comments.$commentId.approve.ts`::POST | post.approve |
 | `routes/api/v1/moderation/comments.$commentId.reject.ts`::POST | post.approve |

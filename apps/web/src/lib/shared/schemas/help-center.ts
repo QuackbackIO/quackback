@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { isValidTypeId } from '@quackback/ids'
 import { PageLimitSchema } from './taxonomy'
 import { tiptapContentSchema } from './posts'
 import { SUPPORTED_LOCALES } from '../i18n'
@@ -117,6 +118,14 @@ export const publishArticleSchema = z.object({
 export const articleFeedbackSchema = z.object({
   articleId: z.string().min(1),
   helpful: z.boolean(),
+  /**
+   * The vote this visitor cast earlier on the page, so a changed mind replaces
+   * it. A signed-out visitor has no other handle on their own vote.
+   */
+  replacesFeedbackId: z
+    .string()
+    .refine((v) => isValidTypeId(v, 'kb_article_feedback'), 'Invalid feedback ID')
+    .optional(),
 })
 
 /** Longest reason accepted from a visitor, in characters. */

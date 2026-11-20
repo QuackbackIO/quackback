@@ -718,12 +718,29 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     PUBLIC_DATA('public status service'),
   'routes/api/v1/status/incidents/index.ts::GET': PUBLIC_DATA('public status incident list'),
   'routes/api/v1/status/incidents/$incidentId.ts::GET': PUBLIC_DATA('public status incident'),
-  'routes/api/v1/help-center/articles/$articleId.feedback.ts::POST':
-    PUBLIC_DATA('end-user article rating'),
-  'routes/api/v1/help-center/articles/$articleId.ts::GET': PUBLIC_DATA('public help article'),
-  'routes/api/v1/help-center/articles/index.ts::GET': PUBLIC_DATA('public help article list'),
-  'routes/api/v1/help-center/categories/$categoryId.ts::GET': PUBLIC_DATA('public help category'),
-  'routes/api/v1/help-center/categories/index.ts::GET': PUBLIC_DATA('public help category list'),
+  // Help center reads and the article vote by key (helpCenterApiAccess): any
+  // key with read:article gets what is published to everyone; drafts, private
+  // and gated content need help_center.manage.
+  'routes/api/v1/help-center/articles/$articleId.feedback.ts::POST': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'article rating: read:article for a public article, help_center.manage for any other'
+  ),
+  'routes/api/v1/help-center/articles/$articleId.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help article: read:article for a public article, help_center.manage for any other'
+  ),
+  'routes/api/v1/help-center/articles/index.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help article list: read:article lists public articles, help_center.manage lists all'
+  ),
+  'routes/api/v1/help-center/categories/$categoryId.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help category: read:article for a public category, help_center.manage for any other'
+  ),
+  'routes/api/v1/help-center/categories/index.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help category list: read:article lists public categories, help_center.manage lists all'
+  ),
   'routes/api/v1/roadmaps/$roadmapId.columns.ts::GET': PUBLIC_DATA('public roadmap columns'),
   'routes/api/v1/roadmaps/$roadmapId.posts.ts::GET': PUBLIC_DATA('public roadmap posts'),
   'routes/api/v1/roadmaps/$roadmapId.ts::GET': PUBLIC_DATA('public roadmap'),

@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import {
+  helpCenterApiAccess,
+  assertArticleOpenToKey,
+} from '@/lib/server/domains/help-center/help-center-api-access'
+
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -75,10 +80,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request)
+          const access = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
+          // A draft, or an article in a private or gated category, needs
+          // help_center.manage.
+          await assertArticleOpenToKey(access, articleId)
           const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {

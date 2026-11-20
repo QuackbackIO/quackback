@@ -195,7 +195,11 @@ test(
       await api.post('/api/v1/boards', { data: { name: `Nope ${marker}` } }),
       "Requires the 'board.manage' permission"
     )
-    await expectJson(await api.get('/api/v1/help-center/articles'), 200)
+    // Help center reads need read:article, which this key does not hold.
+    await expectForbidden(
+      await api.get('/api/v1/help-center/articles'),
+      "This API key is missing the 'read:article' scope"
+    )
     await api.dispose()
     await owner.api.dispose()
   }

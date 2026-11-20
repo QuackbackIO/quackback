@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import {
+  helpCenterApiAccess,
+  assertCategoryOpenToKey,
+} from '@/lib/server/domains/help-center/help-center-api-access'
+
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -62,7 +67,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request)
+          const access = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const categoryId = parseTypeId<KbCategoryId>(
             params.categoryId,
@@ -70,6 +75,8 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
             'category ID'
           )
 
+          // A private or gated category needs help_center.manage.
+          await assertCategoryOpenToKey(access, categoryId)
           const category = await getCategoryById(categoryId)
           return successResponse(formatCategory(category))
         } catch (error) {

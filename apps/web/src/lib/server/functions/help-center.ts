@@ -536,10 +536,11 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
     const feedbackId = await recordArticleFeedback(
       data.articleId as KbArticleId,
       data.helpful,
-      (auth?.principal?.id as PrincipalId) ?? null
+      (auth?.principal?.id as PrincipalId) ?? null,
+      { replaces: (data.replacesFeedbackId as KbArticleFeedbackId | undefined) ?? null }
     )
     // The id is the visitor's handle on their own vote, and the only one an
-    // anonymous visitor has for attaching a reason to it afterwards.
+    // anonymous visitor has for attaching a reason to it, or for changing it.
     return { success: true, feedbackId }
   })
 

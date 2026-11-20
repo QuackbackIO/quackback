@@ -234,6 +234,18 @@ export function assertApiPermissions(
 }
 
 /**
+ * Whether a key's authority holds a permission: the resolved permission set
+ * grants it AND, for a scoped key, the key holds the scope it maps to. For a
+ * read that answers everyone but shows more to keys that hold the permission.
+ */
+export function apiKeyHolds(auth: ApiAuthContext, permission: PermissionKey): boolean {
+  return (
+    auth.permissions.has(permission) &&
+    hasApiScope(auth.apiKey.scopes, scopeForPermission(permission))
+  )
+}
+
+/**
  * Assert a key holds a scope, for a read whose rows are authorized one by one
  * rather than by a single permission. Legacy keys (NULL scopes) hold every
  * scope.

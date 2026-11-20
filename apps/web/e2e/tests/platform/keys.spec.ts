@@ -633,12 +633,16 @@ test.describe('Scopes on the non-support resources', () => {
         '/api/v1/tags',
         '/api/v1/statuses',
         '/api/v1/roadmaps',
-        '/api/v1/help-center/articles',
         '/api/v1/status/summary',
       ]) {
         const res = await chat.api.get(path)
         expect(res.status(), `${path}: ${await res.text()}`).toBe(200)
       }
+      // Help center reads need read:article, even for what is public.
+      await expectForbidden(
+        await chat.api.get('/api/v1/help-center/articles'),
+        "This API key is missing the 'read:article' scope"
+      )
       await chat.api.dispose()
     }
   )

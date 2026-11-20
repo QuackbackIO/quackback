@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mocks must be before imports
-vi.mock('@/lib/server/domains/api/auth', () => ({
+vi.mock('@/lib/server/domains/api/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/api/auth')>()),
   withApiKeyAuth: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
