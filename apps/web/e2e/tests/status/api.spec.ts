@@ -82,7 +82,17 @@ test('STA-X-01 the summary endpoint', { tag: '@core' }, async ({ playwright, peo
 })
 
 test('STA-X-02 list and get services', { tag: '@core' }, async ({ playwright, people, marker }) => {
-  const api = await keyApi(playwright, people, 'noAccess')
+  // Reading services (with their segment ids) needs read:feedback and
+  // status_page.publish or status_page.manage: a Contributor holds publish.
+  const api = await keyApi(playwright, people, 'contributor')
+  const noAccess = await keyApi(playwright, people, 'noAccess')
+  for (const path of ['/api/v1/status/services', '/api/v1/status/components']) {
+    const refused = await expectJson<Wire>(await noAccess.get(path), 403)
+    expect(refused.error).toEqual({
+      code: 'FORBIDDEN',
+      message: "Requires the 'status_page.publish' or 'status_page.manage' permission",
+    })
+  }
   const svc = await createService(admin, `${marker} Listed`)
   const gone = await createService(admin, `${marker} Gone`)
   await must(admin, 'deleteStatusComponentFn', { id: gone.id })
@@ -435,7 +445,8 @@ test(
   'STA-X-08 get one incident over REST',
   { tag: '@nightly' },
   async ({ playwright, people, marker }) => {
-    const api = await keyApi(playwright, people, 'noAccess')
+    // Incident detail (with its audit fields) needs status_page.publish or manage.
+    const api = await keyApi(playwright, people, 'contributor')
     const a = await createService(admin, `${marker} A`)
     const b = await createService(admin, `${marker} B`)
     const inc = await must<{ id: string }>(admin, 'createStatusIncidentFn', {
