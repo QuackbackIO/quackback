@@ -689,7 +689,7 @@ describe('getTicketDueEmailTargets', () => {
       ticketLabel: '#142',
       title: 'Cannot log in',
       ctaUrl: 'https://p/admin/inbox?i=ticket_1',
-      dueLabel: 'Jul 17 at 02:00 AM UTC',
+      dueLabel: 'Jul 17, 02:00 AM UTC',
     })
     // The assignee wins: the team is never consulted.
     expect(listTeamMemberPrincipalIds).not.toHaveBeenCalled()
