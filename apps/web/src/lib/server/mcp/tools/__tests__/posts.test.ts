@@ -11,6 +11,11 @@ vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: vi.fn(),
   addVoteOnBehalf: vi.fn(),
   removeVote: vi.fn(),
+  blockedVoteToggle: vi.fn(async () => null),
+}))
+// No one here is blocked; blocked-person-tools.db.test.ts drives the guard.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  assertNotBlocked: vi.fn(async () => undefined),
 }))
 vi.mock('@/lib/server/domains/posts/post.merge', () => ({
   mergePost: vi.fn(),
