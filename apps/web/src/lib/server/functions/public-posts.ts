@@ -40,7 +40,7 @@ import {
   getVoteAndSubscriptionStatus,
 } from '@/lib/server/domains/posts/post.public.utils'
 import { createPost } from '@/lib/server/domains/posts/post.service'
-import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
+import { blockedVoteToggle, voteOnPost } from '@/lib/server/domains/posts/post.voting'
 import {
   isBoardOpenFor,
   withVisitorPostCapCopy,
@@ -350,7 +350,9 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
   data: ToggleVoteInput
 ): Promise<{ voted: boolean; voteCount: number }> {
   log.debug({ post_id: data.postId }, 'toggle vote')
-  await assertNotBlocked(ctx.principal.id)
+  // A blocked person may only take back a vote they gave.
+  const blockedAnswer = await blockedVoteToggle(data.postId as PostId, ctx.principal.id)
+  if (blockedAnswer) return blockedAnswer
   // Per-post audience gate: portal-access alone is not enough — an
   // authenticated caller could still vote on a team-only / segment-
   // restricted post if they knew the id. `assertPostVotable`

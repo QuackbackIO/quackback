@@ -71,6 +71,7 @@ const mockReserveAnonPostSlot = vi.fn().mockResolvedValue(true)
 
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: (...args: unknown[]) => mockVoteOnPost(...args),
+  blockedVoteToggle: async () => null,
 }))
 
 // The per-post audience gate inside toggleVoteFn dynamically imports

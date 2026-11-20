@@ -187,6 +187,26 @@ describe.skipIf(!fixture.available)('a blocked person on the portal and in the w
     expect(await countFor(postVotes)).toBe(0)
   })
 
+  it('may take back a vote given before the block, and no more', async () => {
+    const { runToggleVote } = await import('../public-posts')
+    await runToggleVote(auth, { postId })
+    await block()
+    await expect(runToggleVote(auth, { postId })).resolves.toMatchObject({ voted: false })
+    expect(await countFor(postVotes)).toBe(0)
+    await expect(runToggleVote(auth, { postId })).rejects.toMatchObject(refused)
+    expect(await countFor(postVotes)).toBe(0)
+  })
+
+  it('a teammate is never refused, even with a block left on their row', async () => {
+    await testDb
+      .update(principal)
+      .set({ role: 'member', blockedAt: new Date() })
+      .where(eq(principal.id, personId))
+    const { runCreateComment } = await import('../comments')
+    await runCreateComment(auth, { postId, content: 'From the team' })
+    expect(await commentsBy()).toBe(1)
+  })
+
   it('cannot submit a post', async () => {
     await block()
     const { runCreatePublicPost } = await import('../public-posts')

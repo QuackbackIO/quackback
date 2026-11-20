@@ -1226,12 +1226,13 @@ export async function revokeSession(ctx: SessionCtx, token: string): Promise<voi
 }
 
 /**
- * Paths that mint a session without anyone signing in: the anonymous mint
- * (a brand-new person, never blocked) and the session read, whose cookie
- * refresh must not end a live session. A blocked person keeps a session they
- * already hold; every portal and widget write refuses them (blocking.ts), and
- * ending an anonymous visitor's session would only hand them a fresh, unblocked
- * identity.
+ * Paths that are not someone proving who they are. `/sign-in/anonymous` mints
+ * a session for a brand-new anonymous person, who cannot be blocked yet.
+ * `/get-session` mints nothing: it reads the session the request already
+ * holds, and may refresh its cookie. Skipping it means a blocked person keeps a
+ * session they held before the block; every portal and widget write refuses
+ * them (blocking.ts), and ending an anonymous visitor's session would only hand
+ * them a fresh, unblocked identity.
  */
 const NOT_A_SIGN_IN = new Set<string>(['/sign-in/anonymous', '/get-session'])
 
@@ -1266,9 +1267,12 @@ export async function handleBlockedSignInAfter(ctx: {
   const { db, principal: principalTable, eq } = await import('@/lib/server/db')
   const row = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userId as UserId),
-    columns: { id: true, blockedAt: true },
+    columns: { id: true, role: true, blockedAt: true },
   })
-  if (!row?.blockedAt) return
+  // A teammate is never refused here: blocking is for customers, and joining
+  // the team clears a block (principal.factory.ts).
+  const { isBlockedCustomer } = await import('@/lib/server/domains/principals/blocking')
+  if (!row || !isBlockedCustomer(row)) return
 
   await revokeSession(ctx as unknown as SessionCtx, token)
   log.info({ principal_id: row.id, path: ctx.path }, 'sign-in refused: the person is blocked')
@@ -1929,8 +1933,6 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   // in-process call is followed by the rest of its request, which must read
   // the identity afresh rather than the memoized one.
   if (ctx.path !== '/get-session') forgetRequestIdentity()
-  // First, so a refused sign-in reaches no audit, profile or device step.
-  await handleBlockedSignInAfter(ctx as Parameters<typeof handleBlockedSignInAfter>[0])
   await handleSessionJwtHeader(ctx as Parameters<typeof handleSessionJwtHeader>[0])
 
   // The provider registry is only consulted by the OAuth-callback after-hooks
@@ -1994,6 +1996,10 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     providers,
     registeredOidcIds
   )
+  // After auto-provision, so a person the identity provider puts on the team
+  // joins it (which ends their block) before this asks; before the profile,
+  // audit and device steps, so a refused sign-in reaches none of them.
+  await handleBlockedSignInAfter(ctx as Parameters<typeof handleBlockedSignInAfter>[0])
   // After cleanup, so a revoked session changes no profile. Never throws.
   await handleProfileRefreshAfter(
     ctx as Parameters<typeof handleProfileRefreshAfter>[0],

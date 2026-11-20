@@ -82,6 +82,10 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
   getActivityForPost: mocks.getActivityForPost,
   createActivity: vi.fn(),
 }))
+// No one here is blocked; blocked-person-tools.db.test.ts drives the guard.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  assertNotBlocked: async () => undefined,
+}))
 vi.mock('@/lib/server/domains/comments/comment.reactions', () => ({
   addReaction: mocks.addReaction,
   removeReaction: vi.fn(),

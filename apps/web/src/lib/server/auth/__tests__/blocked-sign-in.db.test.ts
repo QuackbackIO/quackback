@@ -14,7 +14,18 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { account, eq, oauthResource, principal, session, settings, user } from '@/lib/server/db'
+import {
+  account,
+  and,
+  auditLog,
+  eq,
+  oauthResource,
+  principal,
+  session,
+  settings,
+  user,
+  verification,
+} from '@/lib/server/db'
 import { ensureMcpOauthResource } from '@/lib/server/auth/ensure-mcp-oauth-resource'
 import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 
@@ -233,6 +244,90 @@ describe.skipIf(!fixture.available)('a blocked person signing in', () => {
     expect([200, 302]).toContain(response.status)
     expect(response.headers.get('location') ?? '').not.toContain('error=')
     expect(liveSessionCookies(response)).toHaveLength(1)
+    expect(await liveSessions()).toBe(1)
+  })
+  /** A live session for the person, as one held from before a block. */
+  async function heldSession(): Promise<string> {
+    const token = `held${suffix()}${suffix()}`
+    await testDb.insert(session).values({
+      id: `sess-${suffix()}`,
+      token,
+      userId: personUserId,
+      scope: 'portal',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      updatedAt: new Date(),
+    })
+    return token
+  }
+
+  it('a one-time-token verify (the widget and section handoff) is refused too', async () => {
+    const held = await heldSession()
+    await block()
+    const ott = `ott${suffix()}`
+    await testDb.insert(verification).values({
+      id: crypto.randomUUID(),
+      identifier: `one-time-token:${ott}`,
+      value: held,
+      expiresAt: new Date(Date.now() + 60 * 1000),
+    })
+    const auth = await getAuth()
+    const response = await auth.handler(
+      new Request(`https://${HOST}/api/auth/one-time-token/verify`, {
+        method: 'POST',
+        headers: { host: HOST, origin: `https://${HOST}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ token: ott }),
+      })
+    )
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ code: 'account_blocked' })
+    expect(liveSessionCookies(response)).toEqual([])
+  })
+
+  it('a provider callback (OIDC or SSO) is redirected with the blocked code, its session gone', async () => {
+    await block()
+    const token = await heldSession()
+    const { handleBlockedSignInAfter } = await import('@/lib/server/auth/hooks')
+    const context = await (await getAuth()).$context
+    const ctx = {
+      path: '/callback/:id',
+      request: { method: 'GET' },
+      context: { ...context, newSession: { user: { id: personUserId }, session: { token } } },
+      setCookie: vi.fn(),
+      redirect: (url: string) => Object.assign(new Error('redirect'), { url }),
+    }
+    await expect(
+      handleBlockedSignInAfter(ctx as Parameters<typeof handleBlockedSignInAfter>[0])
+    ).rejects.toMatchObject({ url: '/?auth=signin&error=account_blocked' })
+    expect(await liveSessions()).toBe(0)
+  })
+
+  it('a teammate is never refused, even with a block left on their row', async () => {
+    await testDb
+      .update(principal)
+      .set({ role: 'member', blockedAt: new Date() })
+      .where(eq(principal.id, personId))
+    const response = await passwordSignIn()
+    expect(response.status).toBe(200)
+    expect(liveSessionCookies(response)).toHaveLength(1)
+  })
+
+  it('joining the team ends the block, with an audit row, and the teammate signs in', async () => {
+    await block()
+    const { setPrincipalRole } = await import('@/lib/server/domains/principals/principal.factory')
+    await setPrincipalRole({ principalId: personId }, 'member', { executor: testDb as never })
+    const [row] = await testDb
+      .select({ role: principal.role, blockedAt: principal.blockedAt })
+      .from(principal)
+      .where(eq(principal.id, personId))
+    expect(row).toEqual({ role: 'member', blockedAt: null })
+    const audits = await testDb
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(and(eq(auditLog.eventType, 'person.unblocked'), eq(auditLog.targetId, personId)))
+    expect(audits).toHaveLength(1)
+
+    const response = await passwordSignIn()
+    expect(response.status).toBe(200)
     expect(await liveSessions()).toBe(1)
   })
 })

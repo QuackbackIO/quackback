@@ -79,6 +79,8 @@ export type AuditEventType =
   | 'session.revoked.bulk'
   | 'session.revoked.individual'
   | 'user.role.changed'
+  // A customer's block ended because they joined the team (principal.factory.ts).
+  | 'person.unblocked'
   | 'user.invited'
   | 'user.removed'
   // Custom-role CRUD (role.manage)

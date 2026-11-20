@@ -55,15 +55,31 @@ export async function isBlocked(principalId: PrincipalId): Promise<boolean> {
 }
 
 /**
- * The one guard every portal and widget action a person takes in their own
- * name asks first: posting, voting, commenting, reacting and uploading. The
+ * Whether a principal row is a blocked customer. A teammate never is: only
+ * customers can be blocked, and joining the team clears a block
+ * (principal.factory.ts). The one rule every block check shares.
+ */
+export function isBlockedCustomer(row: { role: string; blockedAt: Date | null }): boolean {
+  return row.blockedAt != null && !isTeamMember(row.role)
+}
+
+/**
+ * The one guard every portal, widget and MCP action a person takes in their
+ * own name asks first: posting, voting, commenting, reacting and uploading. The
  * refusal is typed, so the portal and widget word it in the visitor's
  * language.
  *
- * @throws ForbiddenError (`BLOCKED`) when the principal is blocked
+ * A teammate is never refused: only customers can be blocked, and joining the
+ * team clears a block (principal.factory.ts).
+ *
+ * @throws ForbiddenError (`BLOCKED`) when the principal is a blocked customer
  */
 export async function assertNotBlocked(principalId: PrincipalId): Promise<void> {
-  if (await isBlocked(principalId)) {
+  const row = await db.query.principal.findFirst({
+    columns: { role: true, blockedAt: true },
+    where: eq(principal.id, principalId),
+  })
+  if (row && isBlockedCustomer(row)) {
     throw new ForbiddenError(PERSON_BLOCKED_CODE, PERSON_BLOCKED_MESSAGE)
   }
 }

@@ -22,6 +22,12 @@ vi.mock('@/lib/server/utils/rate-bucket', () => ({
   bucketRetryAfter: (...args: unknown[]) => mockBucketRetryAfter(...args),
 }))
 
+const mockFindPrincipal = vi.fn()
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: { query: { principal: { findFirst: (...args: unknown[]) => mockFindPrincipal(...args) } } },
+}))
+
 import { auth } from '@/lib/server/auth'
 import { isS3Usable, uploadObject } from '@/lib/server/storage/s3'
 import { handleWidgetUpload } from '../upload'
@@ -56,6 +62,32 @@ describe('POST /api/widget/upload', () => {
     mockGetSettings.mockResolvedValue({ id: 'settings_1' })
     mockIncrementBucket.mockResolvedValue({ count: 1 })
     mockBucketRetryAfter.mockResolvedValue(42)
+    mockFindPrincipal.mockResolvedValue({ role: 'user', blockedAt: null })
+  })
+
+  it('refuses a blocked person with the typed BLOCKED refusal and stores nothing', async () => {
+    authAs()
+    mockFindPrincipal.mockResolvedValueOnce({ role: 'user', blockedAt: new Date() })
+    const res = await handleWidgetUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({
+      error: "You can't post, vote or comment here.",
+      code: 'BLOCKED',
+    })
+    expect(uploadObject).not.toHaveBeenCalled()
+    expect(mockIncrementBucket).not.toHaveBeenCalled()
+  })
+
+  it('lets a teammate upload even with a block left on their row', async () => {
+    authAs()
+    mockFindPrincipal.mockResolvedValueOnce({ role: 'member', blockedAt: new Date() })
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/widget-media/a.jpg')
+    const res = await handleWidgetUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+    })
+    expect(res.status).toBe(200)
   })
 
   it('returns 401 when there is no valid widget session', async () => {
