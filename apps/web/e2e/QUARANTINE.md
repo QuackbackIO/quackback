@@ -193,3 +193,10 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   Contributor's key gets drafts and private categories. Fix: pass
   `{ permission: PERMISSIONS.HELP_CENTER_MANAGE }` (as MCP does), or read with
   the public visibility rules for keys without it.
+- `help-center/admin-trash.spec.ts` › HC-A-26 the delete dialogs say a
+  deleted article or category can be restored (HC-B5). The article confirm
+  (`components/admin/help-center/help-center-list.tsx`, ConfirmDialog
+  description) says "This action cannot be undone. The article will be
+  permanently deleted." and the category confirm says "the UI provides no
+  restore flow", but both are soft deletes that Other › Deleted items restores
+  for 30 days. Fix: reword both to point at Deleted items.

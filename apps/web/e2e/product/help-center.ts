@@ -18,7 +18,7 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import type { APIRequestContext, PlaywrightWorkerArgs } from '@playwright/test'
 import { expect } from '@playwright/test'
-import { toUuid } from '@quackback/ids'
+import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import { apiFor, createKey, expectJson, type Wire } from '../support/api-client'
 import { supportDb } from '../support/db'
 import { supportEnv } from '../support/env'
@@ -177,6 +177,39 @@ export async function articleRow(uuid: string): Promise<Record<string, unknown> 
 export async function categoryRow(uuid: string): Promise<Record<string, unknown> | undefined> {
   const [row] = await supportDb()`SELECT * FROM kb_categories WHERE id = ${uuid}`
   return row
+}
+
+/**
+ * A manual segment of this test's own (SQL), with `members` (principal
+ * uuids) in it. Gates store the segment's TypeID.
+ */
+export async function hcSegment(
+  marker: string,
+  members: string[] = []
+): Promise<{ id: string; uuid: string; name: string }> {
+  const sql = supportDb()
+  const uuid = toUuid(generateId('segment'))
+  const name = `Segment ${marker} ${randomBytes(2).toString('hex')}`
+  await sql`INSERT INTO segments (id, name, slug, type, created_at, updated_at)
+    VALUES (${uuid}, ${name}, ${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}, 'manual', NOW(), NOW())`
+  for (const principalUuid of members) {
+    await sql`INSERT INTO user_segments (principal_id, segment_id, added_by)
+      VALUES (${principalUuid}, ${uuid}, 'manual')`
+  }
+  return { id: fromUuid('segment', uuid), uuid, name }
+}
+
+/** Gate a category or an article to segments (SQL; the admin UI is tested on its own). */
+export async function gateToSegments(
+  target: { kind: 'category' | 'article'; uuid: string },
+  segmentIds: string[]
+): Promise<void> {
+  const json = JSON.stringify(segmentIds)
+  if (target.kind === 'category') {
+    await supportDb()`UPDATE kb_categories SET segment_ids = ${json}::jsonb WHERE id = ${target.uuid}`
+  } else {
+    await supportDb()`UPDATE kb_articles SET segment_ids = ${json}::jsonb WHERE id = ${target.uuid}`
+  }
 }
 
 /** Fetch a public page as a signed-out visitor, bypassing the shared cache. */
