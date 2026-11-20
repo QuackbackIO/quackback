@@ -1,7 +1,7 @@
 /**
  * Outgoing webhooks for feedback events: posts, votes and comments, from the
  * portal, the admin, REST and MCP. Journeys API-W-28, 31, 32, 33, 36, 37, 38,
- * 39, 41, 42, 43, 45, 47, 48, 49, 50, 51, 52, 55, 56, 57, 58, 60.
+ * 39, 41, 42, 43, 45, 47, 48, 49, 50, 51, 52, 54, 55, 56, 57, 58, 60.
  *
  * Each test subscribes webhooks on its own sink channels (deleted in
  * `finally`), filters deliveries by its own post or comment ids, and proves
@@ -1187,3 +1187,87 @@ test.describe('more feedback events', () => {
     }
   )
 })
+
+test(
+  'API-W-54 post.mentioned once per newly mentioned person, self-mentions included',
+  { tag: '@nightly' },
+  async ({ playwright, baseURL, people, marker }) => {
+    const api = await adminApi(playwright, baseURL, people, marker)
+    const board = await newBoard(api, marker)
+    const admin = await personApi(playwright, 'admin')
+    const t = people.people.agentB
+    const u = people.people.contributor
+    const me = people.people.admin
+    const doc = (...who: Array<{ principalId: string; displayName: string }>) => ({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: `Looping in ${marker} ` },
+            ...who.map((p) => ({
+              type: 'mention',
+              attrs: { id: p.principalId, label: p.displayName },
+            })),
+          ],
+        },
+      ],
+    })
+    try {
+      await withHook(
+        api,
+        marker,
+        ['post.mentioned'],
+        async () => {
+          const created = await callServerFn<{ id: string }>(admin, 'createPostFn', {
+            boardId: board.id,
+            title: `Mentions ${marker}`,
+            content: `Looping in ${marker}`,
+            contentJson: doc(t),
+          })
+          expect(created.ok, created.error).toBe(true)
+          const postId = created.data.id
+          const [first] = await delivered(marker, 'post.mentioned', t.principalId)
+          expect(data(first)).toMatchObject({
+            postId,
+            postTitle: `Mentions ${marker}`,
+            postUrl: expect.stringContaining(postId),
+            boardId: board.id,
+            mentionedPrincipalId: t.principalId,
+            mentioningPrincipalId: me.principalId,
+            excerpt: expect.stringContaining(marker),
+          })
+
+          const edit = async (contentJson: Json) => {
+            const res = await callServerFn(admin, 'updatePostFn', {
+              id: postId,
+              content: `Looping in ${marker}`,
+              contentJson,
+            })
+            expect(res.ok, res.error).toBe(true)
+          }
+          await edit(doc(t))
+          await edit(doc(t, u))
+          await delivered(marker, 'post.mentioned', u.principalId)
+          await edit(doc(t, u, me))
+          const self = await delivered(
+            marker,
+            'post.mentioned',
+            `"mentionedPrincipalId":"${me.principalId}"`
+          )
+          expect(data(self[0]).mentioningPrincipalId).toBe(me.principalId)
+
+          await new Promise((r) => setTimeout(r, 1_500))
+          const all = (await sink.deliveries(marker)).filter(is('post.mentioned', postId))
+          expect(all.map((d) => data(d).mentionedPrincipalId).sort()).toEqual(
+            [t.principalId, u.principalId, me.principalId].sort()
+          )
+        },
+        [board.id]
+      )
+    } finally {
+      await admin.dispose()
+      await api.dispose()
+    }
+  }
+)
