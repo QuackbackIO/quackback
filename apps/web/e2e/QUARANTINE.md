@@ -240,3 +240,12 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   a category with only hidden content is listed at all). Fix: compute the
   roll-up with the same visibility predicate the collection page uses
   (`helpCenterVisibilityConditions` for the viewer).
+- `help-center/widget.spec.ts` › HC-W-10 the first widget vote of a fresh
+  visitor confirms it (new bug, `@isolated`). The vote is stored against the
+  freshly minted session, but the footer
+  (`components/widget/widget-article-footer.tsx`) still says "Was this
+  helpful?" and no button is pressed. `cast` calls `ensureSession()` before
+  the write; minting the session changes the widget identity, which appears
+  to remount the article view (session-keyed queries) and drop the local
+  `vote` state. Root cause unconfirmed. Fix: keep the vote state above the
+  remount (or key it by article), or mint the session without remounting.
