@@ -164,3 +164,18 @@ id IN (SELECT post_id FROM post_votes WHERE principal_id = $1)`. owner:
   just stays open. Same component backs user attributes (PPL-U-51). Fix:
   catch in `handleCreate` (and the edit/delete handlers) and toast the
   error message. owner: unassigned, review by: 2026-12-03.
+### Product suite: help center
+Each test asserts the right behaviour and fails on the product bug named.
+owner: unassigned, review by: 2026-12-03 for every entry.
+- `help-center/admin-articles.spec.ts` › HC-A-15 emptying the description in
+  the editor clears it (HC-B12). `article-modal.tsx` sends
+  `description: data.description?.trim() || undefined`, and `updateArticle`
+  (`help-center.article.service.ts`) treats `undefined` as "leave unchanged",
+  so the old description stays. Fix: send `''` (or `null`) for an emptied
+  field; the service already stores `'' || null` as null.
+- `help-center/admin-articles.spec.ts` › HC-A-20 an unknown article id in the
+  URL says the article was not found (HC-B18). `use-url-modal.ts` opens the
+  dialog whenever `?article=` is set and `article-modal.tsx` renders a spinner
+  until the article loads, so a missing or deleted id spins forever. Fix: when
+  the detail query errors (ARTICLE_NOT_FOUND), show a not-found state or close
+  the modal and drop the param.
