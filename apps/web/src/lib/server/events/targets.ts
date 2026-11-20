@@ -35,6 +35,7 @@ import {
   type ContactEmail,
 } from '@/lib/server/email/recipient'
 import { formatTicketNumber } from '@/lib/shared/tickets'
+import { isTeamMember } from '@/lib/shared/roles'
 import { isSupportTicketsEnabled } from '@/lib/server/domains/settings/settings.support'
 import { canViewPost, type Actor } from '@/lib/server/policy'
 import {
@@ -174,7 +175,7 @@ export const SUBSCRIBER_EVENT_TYPES = [
   'changelog.published',
 ] as const
 /** Events that resolve a single mentioned principal as the notification target */
-export const MENTION_EVENT_TYPES = ['post.mentioned'] as const
+export const MENTION_EVENT_TYPES = ['post.mentioned', 'comment.mentioned'] as const
 /**
  * Get all hook targets for an event.
  * Gracefully handles errors - returns empty array on failure.
@@ -607,7 +608,7 @@ async function mentionerNameOf(
 const MENTION_ELIGIBLE_ROLES = new Set(['admin', 'member', 'user'])
 
 /**
- * Resolve hook targets for a `post.mentioned` event.
+ * Resolve hook targets for a `post.mentioned` or `comment.mentioned` event.
  *
  * The event payload carries a single `mentionedPrincipalId`. We look up that
  * principal (left-joined to user for email), apply defensive type/role
@@ -615,12 +616,17 @@ const MENTION_ELIGIBLE_ROLES = new Set(['admin', 'member', 'user'])
  * return:
  *  - one notification target (always, when the principal exists and is eligible)
  *  - one email target (only when the joined user has a non-null email)
+ *
+ * A comment mention is its own preference ("Mentioned in a comment"), links to
+ * the comment, and for a private comment reaches teammates only.
  */
 export async function getMentionTargets(
   event: EventData,
   context: HookContext
 ): Promise<HookTarget[]> {
-  if (event.type !== 'post.mentioned') return []
+  if (event.type !== 'post.mentioned' && event.type !== 'comment.mentioned') return []
+  const comment = event.type === 'comment.mentioned' ? event.data : null
+  const preference = comment ? 'comment_mentioned' : 'post_mentioned'
   if (
     await isTestEvent({
       entityId: event.data.postId,
@@ -630,7 +636,10 @@ export async function getMentionTargets(
   )
     return []
 
-  const { mentionedPrincipalId, postTitle, postUrl } = event.data
+  const { mentionedPrincipalId, postTitle } = event.data
+  const postUrl = comment
+    ? `${event.data.postUrl}#comment-${comment.commentId}`
+    : event.data.postUrl
   if (!mentionedPrincipalId) return []
   // The event fires for a self-mention (webhooks see it); nobody is told
   // about their own mention.
@@ -657,6 +666,8 @@ export async function getMentionTargets(
   // are integrations/API keys, not humans. The role check is belt-and-suspenders for
   // the same reason.
   if (row.type !== 'user' || !MENTION_ELIGIBLE_ROLES.has(row.role)) return []
+  // A private comment is team-only: a portal user never hears of it.
+  if (comment?.isPrivate && !isTeamMember(row.role)) return []
 
   // Audience filter: the mentioned principal must be able to see the
   // post under its board's current audience. Without this, an admin can
@@ -693,8 +704,9 @@ export async function getMentionTargets(
       postId: event.data.postId,
       postTitle,
       postUrl,
-      eventType: 'post.mentioned',
+      eventType: event.type,
       mentionerName,
+      ...(comment ? { commentId: comment.commentId } : {}),
     },
   })
 
@@ -710,7 +722,7 @@ export async function getMentionTargets(
     // subscriber filter that runs shouldNotify.
     const prefsMap = await batchGetNotificationPreferences([row.id as PrincipalId])
     const prefs = prefsMap.get(row.id as PrincipalId)
-    if (!prefs || shouldNotify(prefs, 'post_mentioned', 'email')) {
+    if (!prefs || shouldNotify(prefs, preference, 'email')) {
       const [sender, tokenMap] = await Promise.all([
         surfaceSender('feedback'),
         batchGenerateUnsubscribeTokens([
@@ -732,7 +744,7 @@ export async function getMentionTargets(
             workspaceName: context.workspaceName,
             logoUrl: context.logoUrl ?? undefined,
             preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
-            eventType: 'post.mentioned',
+            eventType: event.type,
             mentionerName,
             ...sender,
           }

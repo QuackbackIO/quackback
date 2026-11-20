@@ -90,6 +90,18 @@ export function notificationText(n: NotificationTextSource, intl: IntlShape): No
           { name }
         ),
       }
+    case 'comment_mentioned':
+      if (!name) return stored
+      return {
+        ...stored,
+        title: intl.formatMessage(
+          {
+            id: 'portal.notifications.text.commentMentioned',
+            defaultMessage: '{name} mentioned you in a comment',
+          },
+          { name }
+        ),
+      }
     case 'changelog_published':
       if (!p.changelogTitle) return stored
       return {

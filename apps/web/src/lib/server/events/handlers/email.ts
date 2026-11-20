@@ -254,6 +254,24 @@ async function deliverEmail(
         logoUrl: cfg.logoUrl,
         ...sender,
       })
+    } else if (event.type === 'comment.mentioned') {
+      // Worded like a post mention; the link (resolved by the target) opens
+      // the comment itself.
+      result = await sendPostMentionEmail({
+        to: email,
+        mentionerName:
+          cfg.mentionerName?.trim() ||
+          (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+          '',
+        postTitle: event.data.postTitle,
+        excerpt: event.data.excerpt,
+        postUrl: cfg.postUrl,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+        ...sender,
+      })
     } else if (event.type === 'conversation.note_mentioned') {
       const c = config as unknown as NoteMentionEmailConfig
       result = await sendNoteMentionEmail({

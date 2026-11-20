@@ -1944,6 +1944,7 @@
   "portal.notifications.text.commentCreated.team": "علّق {name} (من الفريق)",
   "portal.notifications.text.commentCreated": "علّق {name}",
   "portal.notifications.text.postMentioned": "أشار إليك {name} في منشور",
+  "portal.notifications.text.commentMentioned": "أشار إليك {name} في تعليق",
   "portal.notifications.text.changelogPublished": "تحديث جديد: {title}",
   "portal.notifications.text.maintenanceScheduled": "صيانة مجدولة: {title}",
   "portal.notifications.text.incidentCreated": "حادثة جديدة: {title}",

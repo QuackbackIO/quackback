@@ -1944,6 +1944,7 @@
   "portal.notifications.text.commentCreated.team": "{name} (equipo) comentó",
   "portal.notifications.text.commentCreated": "{name} comentó",
   "portal.notifications.text.postMentioned": "{name} te mencionó en una publicación",
+  "portal.notifications.text.commentMentioned": "{name} te mencionó en un comentario",
   "portal.notifications.text.changelogPublished": "Novedad: {title}",
   "portal.notifications.text.maintenanceScheduled": "Mantenimiento programado: {title}",
   "portal.notifications.text.incidentCreated": "Nueva incidencia: {title}",

@@ -215,6 +215,33 @@ export async function dispatchPostMentioned(
   })
 }
 
+export interface CommentMentionedInput extends PostMentionedInput {
+  commentId: PostCommentId
+  isPrivate: boolean
+}
+
+/** A published comment @-mentions someone: their bell and email, never a webhook. */
+export async function dispatchCommentMentioned(
+  actor: EventActor,
+  input: CommentMentionedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'comment.mentioned',
+    data: {
+      postId: input.postId,
+      postTitle: input.postTitle,
+      postUrl: input.postUrl,
+      ...(input.boardId ? { boardId: input.boardId } : {}),
+      commentId: input.commentId,
+      isPrivate: input.isPrivate,
+      mentionedPrincipalId: input.mentionedPrincipalId,
+      mentioningPrincipalId: input.mentioningPrincipalId,
+      excerpt: input.excerpt,
+    },
+  })
+}
+
 export interface PostOwnerAssignedInput {
   postId: PostId
   postTitle: string

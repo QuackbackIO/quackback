@@ -116,6 +116,17 @@ export const P = {
     comment: z.looseObject({ id, isPrivate: z.boolean().optional() }),
     post: postRef,
   }),
+  'comment.mentioned': z.looseObject({
+    postId: id,
+    postTitle: z.string(),
+    postUrl: z.string(),
+    boardId: id.optional(),
+    commentId: id,
+    isPrivate: z.boolean(),
+    mentionedPrincipalId: id,
+    mentioningPrincipalId: id,
+    excerpt: z.string(),
+  }),
   // changelog
   'changelog.published': z.looseObject({
     changelog: z.looseObject({

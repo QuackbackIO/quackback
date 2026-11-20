@@ -12,10 +12,25 @@ import { EVENT_TYPES, type EventType } from '../../types'
 // ============================================
 
 /**
- * Supported webhook event types -- derived from the shared EVENT_TYPES source.
+ * Events that only ever tell people (a bell, an email) and never reach a
+ * webhook: a comment mention can carry a private comment's words.
  */
-export const WEBHOOK_EVENTS = EVENT_TYPES
-export type WebhookEventType = EventType
+const NOTIFICATION_ONLY_EVENTS = ['comment.mentioned'] as const satisfies readonly EventType[]
+
+export type WebhookEventType = Exclude<EventType, (typeof NOTIFICATION_ONLY_EVENTS)[number]>
+
+function isWebhookEvent(type: EventType): type is WebhookEventType {
+  return !(NOTIFICATION_ONLY_EVENTS as readonly EventType[]).includes(type)
+}
+
+/**
+ * Supported webhook event types -- derived from the shared EVENT_TYPES source,
+ * less the notification-only events.
+ */
+export const WEBHOOK_EVENTS = EVENT_TYPES.filter(isWebhookEvent) as unknown as readonly [
+  WebhookEventType,
+  ...WebhookEventType[],
+]
 
 /**
  * Human-readable labels and descriptions for webhook events.
