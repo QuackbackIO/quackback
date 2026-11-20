@@ -17,6 +17,7 @@ import {
   NotFoundErrorSchema,
   ValidationErrorSchema,
 } from './common'
+import { ForbiddenErrorSchema } from './errors'
 
 const ComponentStatusSchema = z
   .enum([
@@ -201,7 +202,7 @@ registerPath('/status/summary', {
     tags: ['Status'],
     summary: 'Get the status page summary',
     description:
-      'Top-level status, all components, and active incidents — the public page snapshot',
+      'Top-level status, all components, and active incidents — the public page snapshot. Requires the read:feedback scope.',
     responses: {
       200: {
         description: 'Status page summary',
@@ -214,6 +215,10 @@ registerPath('/status/summary', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description: 'The key lacks the read:feedback scope',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
     },
   },
@@ -229,6 +234,15 @@ const componentUnauthorizedResponse = {
   description: 'Unauthorized',
   content: { 'application/json': { schema: UnauthorizedErrorSchema } },
 } as const
+
+const componentReadForbiddenResponse = {
+  description:
+    'The key lacks the read:feedback scope, or its creator lacks both the status_page.publish and status_page.manage permissions',
+  content: { 'application/json': { schema: ForbiddenErrorSchema } },
+} as const
+
+const componentReadRequirement =
+  ' Requires the read:feedback scope and the status_page.publish or status_page.manage permission.'
 
 const componentValidationErrorResponse = {
   description: 'Validation error',
@@ -261,7 +275,7 @@ function componentCollectionPath(label: string, deprecatedNote?: string) {
     get: {
       tags: ['Status'],
       summary: `List status ${label}s`,
-      description: `Returns all status ${label}s (grouped and ungrouped), flattened.${deprecatedNote ?? ''}`,
+      description: `Returns all status ${label}s (grouped and ungrouped), flattened.${componentReadRequirement}${deprecatedNote ?? ''}`,
       ...deprecated,
       responses: {
         200: {
@@ -276,6 +290,7 @@ function componentCollectionPath(label: string, deprecatedNote?: string) {
           },
         },
         401: componentUnauthorizedResponse,
+        403: componentReadForbiddenResponse,
       },
     },
     post: {
@@ -309,7 +324,7 @@ function componentDetailPath(label: string, paramName: string, deprecatedNote?: 
     get: {
       tags: ['Status'],
       summary: `Get a status ${label}`,
-      description: deprecatedNote || undefined,
+      description: `${componentReadRequirement.trim()}${deprecatedNote ?? ''}`,
       ...deprecated,
       parameters: componentIdParam(paramName, label),
       responses: {
@@ -322,6 +337,7 @@ function componentDetailPath(label: string, paramName: string, deprecatedNote?: 
           },
         },
         401: componentUnauthorizedResponse,
+        403: componentReadForbiddenResponse,
         404: componentNotFoundResponse(label),
       },
     },
@@ -382,7 +398,8 @@ registerPath('/status/incidents', {
   get: {
     tags: ['Status'],
     summary: 'List status incidents',
-    description: 'Returns incidents and scheduled maintenance windows (full admin detail)',
+    description:
+      'Returns incidents and scheduled maintenance windows (full admin detail). Requires the read:feedback scope and the status_page.publish or status_page.manage permission.',
     parameters: [
       { name: 'kind', in: 'query', schema: { type: 'string', enum: ['incident', 'maintenance'] } },
       {
@@ -405,6 +422,11 @@ registerPath('/status/incidents', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks both the status_page.publish and status_page.manage permissions',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
     },
   },
@@ -446,6 +468,8 @@ registerPath('/status/incidents/{incidentId}', {
   get: {
     tags: ['Status'],
     summary: 'Get a status incident',
+    description:
+      'Requires the read:feedback scope and the status_page.publish or status_page.manage permission.',
     parameters: [
       {
         name: 'incidentId',
@@ -467,6 +491,11 @@ registerPath('/status/incidents/{incidentId}', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks both the status_page.publish and status_page.manage permissions',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
       404: {
         description: 'Status incident not found',

@@ -32,7 +32,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 

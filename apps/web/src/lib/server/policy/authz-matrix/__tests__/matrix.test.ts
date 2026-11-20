@@ -156,12 +156,32 @@ describe('API key scope enforcement (owner permissions ∩ key scopes)', () => {
     expect(tightened.length).toBeGreaterThan(0)
   })
 
-  it('public-tier reads still admit any valid key regardless of scopes', () => {
-    const publicReads = surfaces.filter((s) => s.authz.type === 'public_data')
-    expect(publicReads.length).toBeGreaterThan(0)
-    for (const s of publicReads) {
+  it('scoped reads admit a read-only key and refuse a key without the read scope', () => {
+    const scopedReads = surfaces.filter((s) => s.authz.type === 'scoped_read')
+    expect(scopedReads.length).toBeGreaterThan(0)
+    const chatOnly = { ...byId('scoped_api_key'), mcpScopes: new Set(['read:chat']) }
+    for (const s of scopedReads) {
       expect(evaluate(byId('scoped_api_key'), s), `${s.file}::${s.surface}`).toBe('allow')
+      expect(evaluate(chatOnly, s), `${s.file}::${s.surface}`).toBe('deny')
     }
+  })
+
+  it('a scoped read that lists permissions refuses a key whose creator holds none', () => {
+    const gated = surfaces.filter(
+      (s) => s.authz.type === 'scoped_read' && s.authz.permissions.length > 0
+    )
+    expect(gated.length).toBeGreaterThan(0)
+    const portalRole = { ...byId('scoped_api_key'), role: 'user' as const }
+    for (const s of gated) {
+      expect(evaluate(portalRole, s), `${s.file}::${s.surface}`).toBe('deny')
+    }
+  })
+
+  it('no REST read is open to any valid key: each names a scope or a permission', () => {
+    const publicReads = surfaces.filter(
+      (s) => s.channel === 'api-route' && s.authz.type === 'public_data'
+    )
+    expect(publicReads.map((s) => `${s.file}::${s.surface}`)).toEqual([])
   })
 })
 

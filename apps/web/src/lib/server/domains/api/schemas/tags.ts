@@ -17,6 +17,7 @@ import {
   NotFoundErrorSchema,
   ValidationErrorSchema,
 } from './common'
+import { ForbiddenErrorSchema } from './errors'
 
 // PostTag schema
 const IsPublicSchema = z.boolean().meta({
@@ -55,7 +56,8 @@ registerPath('/tags', {
   get: {
     tags: ['Tags'],
     summary: 'List tags',
-    description: 'Returns all tags in the workspace',
+    description:
+      'Returns all tags in the workspace. Requires the read:feedback scope and the tag.view permission.',
     responses: {
       200: {
         description: 'List of tags',
@@ -68,6 +70,11 @@ registerPath('/tags', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the tag.view permission',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
     },
   },
@@ -111,7 +118,8 @@ registerPath('/tags/{tagId}', {
   get: {
     tags: ['Tags'],
     summary: 'Get a tag',
-    description: 'Get a single tag by ID',
+    description:
+      'Get a single tag by ID. Requires the read:feedback scope and the tag.view permission.',
     parameters: [
       {
         name: 'tagId',
@@ -131,6 +139,11 @@ registerPath('/tags/{tagId}', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the tag.view permission',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
       404: {
         description: 'Tag not found',

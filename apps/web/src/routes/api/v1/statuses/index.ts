@@ -35,7 +35,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_VIEW })
 
           // Import service function
           const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')

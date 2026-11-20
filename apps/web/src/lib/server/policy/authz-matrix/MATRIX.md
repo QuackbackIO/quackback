@@ -896,17 +896,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/export.companies.ts`::GET | company.view |
 | `routes/api/export.ts`::GET | post.export |
 | `routes/api/export.users.ts`::handleExportUsers | people.view |
-| `routes/api/v1/apps/boards.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/apps/boards.ts`::GET | post.view_private |
 | `routes/api/v1/apps/link.ts`::POST | post.vote_on_behalf |
 | `routes/api/v1/apps/linked.ts`::GET | integration.view |
 | `routes/api/v1/apps/posts.ts`::POST | post.create |
 | `routes/api/v1/apps/search.ts`::GET | post.view_private |
 | `routes/api/v1/apps/suggest.ts`::GET | post.view_private |
 | `routes/api/v1/apps/unlink.ts`::POST | post.vote_on_behalf |
-| `routes/api/v1/boards/$boardId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/boards/$boardId.ts`::GET | post.view_private |
 | `routes/api/v1/boards/$boardId.ts`::PATCH | board.manage |
 | `routes/api/v1/boards/$boardId.ts`::DELETE | board.manage |
-| `routes/api/v1/boards/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/boards/index.ts`::GET | post.view_private |
 | `routes/api/v1/boards/index.ts`::POST | board.manage |
 | `routes/api/v1/changelog/$entryId.ts`::GET | changelog.view_draft |
 | `routes/api/v1/changelog/$entryId.ts`::PATCH | changelog.manage |
@@ -965,13 +965,13 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/principals/index.ts`::GET | member.view |
 | `routes/api/v1/roadmaps/$roadmapId.columns.$columnId.ts`::PATCH | roadmap.manage |
 | `routes/api/v1/roadmaps/$roadmapId.columns.$columnId.ts`::DELETE | roadmap.manage |
-| `routes/api/v1/roadmaps/$roadmapId.columns.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/roadmaps/$roadmapId.columns.ts`::GET | post.view_private |
 | `routes/api/v1/roadmaps/$roadmapId.columns.ts`::POST | roadmap.manage |
-| `routes/api/v1/roadmaps/$roadmapId.posts.ts`::GET | PUBLIC (any valid key) |
-| `routes/api/v1/roadmaps/$roadmapId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/roadmaps/$roadmapId.posts.ts`::GET | post.view_private |
+| `routes/api/v1/roadmaps/$roadmapId.ts`::GET | post.view_private |
 | `routes/api/v1/roadmaps/$roadmapId.ts`::PATCH | roadmap.manage |
 | `routes/api/v1/roadmaps/$roadmapId.ts`::DELETE | roadmap.manage |
-| `routes/api/v1/roadmaps/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/roadmaps/index.ts`::GET | post.view_private |
 | `routes/api/v1/roadmaps/index.ts`::POST | roadmap.manage |
 | `routes/api/v1/segments/$slug.members.ts`::POST | segment.manage |
 | `routes/api/v1/segments/$slug.members.ts`::DELETE | segment.manage |
@@ -979,27 +979,27 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/settings/$area.ts`::PATCH | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/index.ts`::GET | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/receipts.$receiptId.undo.ts`::POST | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
-| `routes/api/v1/status/-service-handlers.ts`::listStatusComponentsHandler | PUBLIC (any valid key) |
+| `routes/api/v1/status/-service-handlers.ts`::listStatusComponentsHandler | SCOPED READ (read:feedback; status_page.publish | status_page.manage) |
 | `routes/api/v1/status/-service-handlers.ts`::createStatusComponentHandler | status_page.manage |
-| `routes/api/v1/status/-service-handlers.ts`::getStatusComponentHandler | PUBLIC (any valid key) |
+| `routes/api/v1/status/-service-handlers.ts`::getStatusComponentHandler | SCOPED READ (read:feedback; status_page.publish | status_page.manage) |
 | `routes/api/v1/status/-service-handlers.ts`::patchStatusComponentHandler | status_page.manage |
-| `routes/api/v1/status/incidents/$incidentId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/status/incidents/$incidentId.ts`::GET | SCOPED READ (read:feedback; status_page.publish | status_page.manage) |
 | `routes/api/v1/status/incidents/$incidentId.updates.ts`::POST | status_page.publish |
-| `routes/api/v1/status/incidents/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/status/incidents/index.ts`::GET | SCOPED READ (read:feedback; status_page.publish | status_page.manage) |
 | `routes/api/v1/status/incidents/index.ts`::POST | status_page.publish |
-| `routes/api/v1/status/summary.ts`::GET | PUBLIC (any valid key) |
-| `routes/api/v1/statuses/$statusId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/status/summary.ts`::GET | SCOPED READ (read:feedback) |
+| `routes/api/v1/statuses/$statusId.ts`::GET | status.view |
 | `routes/api/v1/statuses/$statusId.ts`::PATCH | status.manage |
 | `routes/api/v1/statuses/$statusId.ts`::DELETE | status.manage |
-| `routes/api/v1/statuses/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/statuses/index.ts`::GET | status.view |
 | `routes/api/v1/statuses/index.ts`::POST | status.manage |
 | `routes/api/v1/suggestions/$suggestionId.accept.ts`::POST | suggestion.manage |
 | `routes/api/v1/suggestions/$suggestionId.dismiss.ts`::POST | suggestion.manage |
 | `routes/api/v1/suggestions/$suggestionId.restore.ts`::POST | suggestion.manage |
-| `routes/api/v1/tags/$tagId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/tags/$tagId.ts`::GET | tag.view |
 | `routes/api/v1/tags/$tagId.ts`::PATCH | tag.manage |
 | `routes/api/v1/tags/$tagId.ts`::DELETE | tag.manage |
-| `routes/api/v1/tags/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/tags/index.ts`::GET | tag.view |
 | `routes/api/v1/tags/index.ts`::POST | tag.manage |
 | `routes/api/v1/ticket-statuses/index.ts`::GET | ticket.view |
 | `routes/api/v1/tickets/$ticketId.assign.ts`::POST | ticket.assign |

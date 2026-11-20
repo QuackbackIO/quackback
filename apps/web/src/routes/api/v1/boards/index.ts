@@ -36,7 +36,7 @@ export const Route = createFileRoute('/api/v1/boards/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           // Import service function
           const { listBoardsWithDetails, accessToAudience } =

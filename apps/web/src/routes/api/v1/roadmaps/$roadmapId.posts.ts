@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   badRequestResponse,
   successResponse,
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
 
