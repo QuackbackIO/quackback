@@ -19,6 +19,7 @@
 import { db, postMentions, principal, eq, and, inArray } from '@/lib/server/db'
 import { dispatchPostMentioned, type EventActor } from '../../events/dispatch'
 import type { BoardId, PostId, PrincipalId } from '@quackback/ids'
+import { isTeamMember } from '@/lib/shared/roles'
 
 export interface SyncPostMentionsInput {
   postId: PostId
@@ -31,18 +32,33 @@ export interface SyncPostMentionsInput {
   actor: EventActor
 }
 
+/** A teammate, or a service principal (API key, integration) acting for the team. */
+function mentionerMayMention(row: { type: string; role: string | null }): boolean {
+  if (row.type === 'service') return true
+  return row.type === 'user' && isTeamMember(row.role)
+}
+
 export async function syncPostMentions(input: SyncPostMentionsInput): Promise<void> {
   const { postId, postTitle, postUrl, boardId, mentionedIds, actor } = input
   const actorPrincipalId = actor.principalId as PrincipalId | undefined
 
   // Server-side eligibility validation (defense against tampered clients).
+  // The mentioner's own row is read alongside the targets: only a teammate,
+  // an API key or an integration may mention someone. The portal editor
+  // offers customers no mentions, so a customer's or anonymous visitor's
+  // mention node is a crafted request and notifies nobody.
   const eligibleIds: Set<PrincipalId> = new Set()
   if (mentionedIds.size > 0) {
+    const lookup = new Set<PrincipalId>(mentionedIds)
+    if (actorPrincipalId) lookup.add(actorPrincipalId)
     const rows = await db
       .select({ id: principal.id, type: principal.type, role: principal.role })
       .from(principal)
-      .where(inArray(principal.id, Array.from(mentionedIds)))
-    for (const r of rows) {
+      .where(inArray(principal.id, Array.from(lookup)))
+    const mentioner = actorPrincipalId ? rows.find((r) => r.id === actorPrincipalId) : undefined
+    const mayMention = actorPrincipalId ? !!mentioner && mentionerMayMention(mentioner) : true
+    for (const r of mayMention ? rows : []) {
+      if (!mentionedIds.has(r.id as PrincipalId)) continue
       if (r.type === 'user' && ['admin', 'member', 'user'].includes(r.role ?? '')) {
         eligibleIds.add(r.id as PrincipalId)
       }

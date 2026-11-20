@@ -39,6 +39,7 @@ import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 import { useApproveComment, useRejectComment } from '@/lib/client/mutations/moderation'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { useCommentPermissions } from '@/lib/client/hooks/use-comments-query'
 import { errorText } from '@/lib/client/error-text'
 
 // Asked only when someone deletes a comment, so it loads on first use.
@@ -364,6 +365,11 @@ interface CommentItemProps {
 
 const MAX_NESTING_DEPTH = 5
 
+/** Whether a teammate has replied under this comment (live replies only, as the server counts). */
+function hasTeamReply(comment: PublicCommentView): boolean {
+  return comment.replies.some((r) => !r.deletedAt && (r.isTeamMember || hasTeamReply(r)))
+}
+
 function CommentItem({
   postId,
   comment,
@@ -430,11 +436,20 @@ function CommentItem({
     depth === 0 &&
     !isDeleted &&
     !comment.isPrivate
-  // Can edit/delete: not already deleted, and user is author or team member
-  // Server re-checks; client heuristic avoids showing the button to unrelated users
+  // Can edit/delete: not already deleted, and the viewer is a team member or
+  // the author. The author loses both once a teammate replies: hidden at once
+  // when the thread shows the reply, and otherwise as the server answers (a
+  // reply the author cannot see locks the comment too). The server re-checks.
   const isAuthor = !!user?.principalId && comment.principalId === user.principalId
-  const canEdit = !isDeleted && (isTeamMember || isAuthor)
-  const canDelete = !isDeleted && !!onDeleteComment && (isTeamMember || isAuthor)
+  const lockedByTeamReply = hasTeamReply(comment)
+  const { data: ownPermissions } = useCommentPermissions({
+    commentId: comment.id as PostCommentId,
+    enabled: isAuthor && !isTeamMember && !isDeleted && !lockedByTeamReply,
+  })
+  const authorMayEdit = isAuthor && !lockedByTeamReply && ownPermissions?.canEdit !== false
+  const authorMayDelete = isAuthor && !lockedByTeamReply && ownPermissions?.canDelete !== false
+  const canEdit = !isDeleted && (isTeamMember || authorMayEdit)
+  const canDelete = !isDeleted && !!onDeleteComment && (isTeamMember || authorMayDelete)
   const isBeingDeleted = deletingCommentId === comment.id
   // Can restore: deleted, team member, and restore handler provided
   const canRestore = isDeleted && isTeamMember && !!onRestoreComment

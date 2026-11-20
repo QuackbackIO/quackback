@@ -490,3 +490,43 @@ describe('createCommentFn anonymous feature flag', () => {
     expect(mockGetSettings).not.toHaveBeenCalled()
   })
 })
+
+// ============================================
+// runAddReaction: the workspace anonymous ceiling
+// ============================================
+
+describe('adding a reaction as an anonymous visitor', () => {
+  const REACTION = { commentId: 'post_comment_123', emoji: '👍' }
+
+  it('is refused while the workspace does not allow anonymous interaction', async () => {
+    const { runAddReaction } = await import('../comments')
+    const { addReaction } = await import('@/lib/server/domains/comments/comment.reactions')
+    mockGetSettings.mockResolvedValue({ portalConfig: { features: { allowAnonymous: false } } })
+
+    await expect(runAddReaction(ANON_AUTH as never, REACTION as never)).rejects.toMatchObject({
+      code: 'ANONYMOUS_NOT_ALLOWED',
+      statusCode: 403,
+    })
+    expect(addReaction).not.toHaveBeenCalled()
+  })
+
+  it('goes through when the workspace allows it', async () => {
+    const { runAddReaction } = await import('../comments')
+    const { addReaction } = await import('@/lib/server/domains/comments/comment.reactions')
+    vi.mocked(addReaction).mockResolvedValue({ added: true, reactions: [] })
+    mockGetSettings.mockResolvedValue({ portalConfig: { features: { allowAnonymous: true } } })
+
+    await expect(runAddReaction(ANON_AUTH as never, REACTION as never)).resolves.toMatchObject({
+      added: true,
+    })
+  })
+
+  it('never asks the workspace switch for a signed-in person', async () => {
+    const { runAddReaction } = await import('../comments')
+    const { addReaction } = await import('@/lib/server/domains/comments/comment.reactions')
+    vi.mocked(addReaction).mockResolvedValue({ added: true, reactions: [] })
+
+    await runAddReaction(USER_AUTH as never, REACTION as never)
+    expect(mockGetSettings).not.toHaveBeenCalled()
+  })
+})

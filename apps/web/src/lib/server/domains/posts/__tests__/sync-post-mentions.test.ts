@@ -20,6 +20,8 @@ const POST_MENTIONS_TABLE = { __tag: 'postMentions' } as const
 // Per-test state for the two select branches.
 let eligibilityRows: Array<{ id: string; type: string; role: string | null }> = []
 let existingRows: Array<{ principalId: string; notifiedAt: Date | null }> = []
+// The mentioner's own principal row, read with the targets (a teammate unless a test says otherwise).
+let mentionerRows: Array<{ id: string; type: string; role: string | null }> = []
 
 // Captured side effects from the chain mocks.
 const insertCalls: { rows: Array<{ postId: string; principalId: string }> }[] = []
@@ -35,7 +37,8 @@ function makeSelect() {
   return {
     from: (table: unknown) => ({
       where: (..._args: unknown[]) => {
-        if (table === PRINCIPAL_TABLE) return Promise.resolve(eligibilityRows)
+        if (table === PRINCIPAL_TABLE)
+          return Promise.resolve([...eligibilityRows, ...mentionerRows])
         if (table === POST_MENTIONS_TABLE) return Promise.resolve(existingRows)
         return Promise.resolve([])
       },
@@ -162,6 +165,7 @@ function defaultInput(overrides: Partial<Parameters<typeof syncPostMentions>[0]>
 describe('syncPostMentions', () => {
   beforeEach(() => {
     eligibilityRows = []
+    mentionerRows = [{ id: ACTOR_PRINCIPAL, type: 'user', role: 'member' }]
     existingRows = []
     insertCalls.length = 0
     deleteCalls.length = 0
@@ -342,5 +346,38 @@ describe('syncPostMentions', () => {
     // Both rows get inserted and marked notified.
     expect(insertCalls[0].rows.map((r) => r.principalId).sort()).toEqual([P1, P2].sort())
     expect(updateNotifiedCalls.map((c) => c.principalId).sort()).toEqual([P1, P2].sort())
+  })
+
+  it('notifies nobody when a customer crafts a mention into their post', async () => {
+    mentionerRows = [{ id: ACTOR_PRINCIPAL, type: 'user', role: 'user' }]
+    eligibilityRows = [userRow(P1)]
+
+    await syncPostMentions(defaultInput({ mentionedIds: new Set([P1]) }))
+
+    expect(dispatchPostMentioned).not.toHaveBeenCalled()
+    expect(insertCalls).toHaveLength(0)
+  })
+
+  it('notifies nobody when an anonymous visitor crafts a mention', async () => {
+    mentionerRows = [{ id: ACTOR_PRINCIPAL, type: 'anonymous', role: 'user' }]
+    eligibilityRows = [userRow(P1)]
+
+    await syncPostMentions(defaultInput({ mentionedIds: new Set([P1]) }))
+
+    expect(dispatchPostMentioned).not.toHaveBeenCalled()
+  })
+
+  it('still notifies for a mention written by an API key or integration', async () => {
+    mentionerRows = [{ id: ACTOR_PRINCIPAL, type: 'service', role: 'admin' }]
+    eligibilityRows = [userRow(P1)]
+
+    await syncPostMentions(
+      defaultInput({
+        mentionedIds: new Set([P1]),
+        actor: { type: 'service' as const, principalId: ACTOR_PRINCIPAL },
+      })
+    )
+
+    expect(dispatchPostMentioned).toHaveBeenCalledTimes(1)
   })
 })

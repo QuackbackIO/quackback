@@ -67,7 +67,7 @@ interface PostShape {
   authorIsTest?: boolean
 }
 
-interface BoardShape {
+export interface BoardShape {
   access: BoardAccess
 }
 
@@ -158,6 +158,19 @@ function tierDenyMessage(action: 'comment' | 'vote' | 'submit', tier: AccessTier
     case 'team':
       return `Only team members can ${action} on this board`
   }
+}
+
+/**
+ * Adding a reaction to a comment follows the board's comment tier: whoever may
+ * not comment there may not react either. The comment must already be
+ * viewable (assertCommentViewable); taking a reaction back is not gated.
+ */
+export function canReactToComment(actor: Actor, board: BoardShape): Decision {
+  const access = accessOf(board)
+  if (!tierAllows(actor, access.comment, access.segments.comment)) {
+    return denyDecision(tierDenyMessage('comment', access.comment))
+  }
+  return allowDecision()
 }
 
 /**

@@ -31,6 +31,7 @@ import {
 } from '@/lib/client/mutations/portal-comments'
 import { useLoadMorePortalComments } from '@/lib/client/mutations/load-more-comments'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
+import { ThreadPinnedComment } from '@/components/public/post-detail/official-response-section'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
 import { isValidTypeId, type PostCommentId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
@@ -143,7 +144,8 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 })
 
 function PostDetailPage() {
-  const { postId, slug } = Route.useLoaderData()
+  const { postId, slug, settings } = Route.useLoaderData()
+  const workspaceName = settings.name
   const session = useSessionContext()
 
   const intl = useIntl()
@@ -392,6 +394,11 @@ function PostDetailPage() {
 
       {/* Comments card */}
       <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
+        <ThreadPinnedComment
+          pinnedComment={post.pinnedComment}
+          comments={post.comments}
+          workspaceName={workspaceName}
+        />
         <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
           <CommentsSection
             postId={postId}
