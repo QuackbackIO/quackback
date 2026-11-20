@@ -222,3 +222,12 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   uses `getPublicArticleByUrlId`, which never counts, so the list "N views",
   the performance table and Popular articles miss real reads. Fix: count in
   the canonical page's loader (and decide whether previews/embeds count).
+- `help-center/feedback.spec.ts` › HC-F-05 a signed-out visitor who flips Yes
+  to No is counted once (HC-B2). `recordArticleFeedback`
+  (`domains/help-center/help-center.article-feedback.service.ts`) looks up an
+  existing vote only when there is a principal; with none it always inserts
+  (null principals never collide on the unique index), so Yes then No adds
+  one helpful and one not-helpful vote, and every request adds another. Fix:
+  have the portal mint an anonymous session before voting (as the widget
+  does), or accept the previous `feedbackId` from the client and flip that
+  row; add a rate limit either way.
