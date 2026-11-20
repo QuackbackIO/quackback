@@ -591,12 +591,19 @@ test(
     try {
       for (const who of ['noAccess', 'contributor', 'admin', 'workspace'] as const) {
         const api = await keyApi(playwright, people, who)
-        for (const path of [
-          '/api/v1/status/summary',
-          '/api/v1/status/services',
-          '/api/v1/status/incidents',
-        ]) {
-          expect((await api.get(path)).status(), `${who} ${path}`).toBe(200)
+        // The public snapshot needs only read:feedback; services and incidents
+        // (segment ids, audit fields) also need status_page.publish or manage.
+        expect((await api.get('/api/v1/status/summary')).status(), `${who} summary`).toBe(200)
+        for (const path of ['/api/v1/status/services', '/api/v1/status/incidents']) {
+          const res = await api.get(path)
+          if (who === 'noAccess') {
+            expect(res.status(), `${who} ${path}`).toBe(403)
+            expect(((await res.json()) as Wire).error.message).toBe(
+              "Requires the 'status_page.publish' or 'status_page.manage' permission"
+            )
+          } else {
+            expect(res.status(), `${who} ${path}`).toBe(200)
+          }
         }
         const inc = await api.post('/api/v1/status/incidents', { data: incidentBody })
         const svcPatch = await api.patch(`/api/v1/status/services/${svc.id}`, {
@@ -632,6 +639,8 @@ test(
       expect(
         (await scopedApi.post('/api/v1/status/incidents', { data: incidentBody })).status()
       ).toBe(403)
+      // ...but it reads them: a read needs only the read scope.
+      expect((await scopedApi.get('/api/v1/status/incidents')).status()).toBe(200)
     } finally {
       for (const id of made) await deleteRestIncident(id)
     }
