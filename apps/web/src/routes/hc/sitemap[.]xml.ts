@@ -28,8 +28,16 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
         }
 
         // A private portal advertises nothing to crawlers, as /sitemap.xml.
-        const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
-        if ((await getPortalConfig()).access?.visibility === 'private') {
+        // No settings row yet (a fresh install): nothing to advertise either.
+        const [{ getPortalConfig }, { NotFoundError }] = await Promise.all([
+          import('@/lib/server/domains/settings/settings.service'),
+          import('@/lib/shared/errors'),
+        ])
+        const portalConfig = await getPortalConfig().catch((err: unknown) => {
+          if (err instanceof NotFoundError) return null
+          throw err
+        })
+        if (!portalConfig || portalConfig.access?.visibility === 'private') {
           return new Response('Not Found', { status: 404 })
         }
 

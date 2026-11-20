@@ -22,14 +22,18 @@ const workspace = vi.hoisted(() => ({
   audience: 'public' as 'public' | 'authenticated',
   portal: { access: { visibility: 'public' } } as Record<string, unknown>,
 }))
+const settingsReads = vi.hoisted(() => ({ count: 0 }))
 vi.mock('@/lib/server/domains/settings/settings.changelog', () => ({
-  getChangelogSettings: async () => ({
-    audience: workspace.audience,
-    showInNav: true,
-    allowComments: true,
-    autoSubscribe: false,
-    emailsDisabled: false,
-  }),
+  getChangelogSettings: async () => {
+    settingsReads.count++
+    return {
+      audience: workspace.audience,
+      showInNav: true,
+      allowComments: true,
+      autoSubscribe: false,
+      emailsDisabled: false,
+    }
+  },
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()),
@@ -193,6 +197,14 @@ describe.skipIf(!fixture.available)('changelog announcements respect the changel
       emailed: [MEMBER_EMAIL, OUTSIDER_EMAIL].sort(),
       belled: [P_MEMBER, P_OUTSIDER].sort(),
     })
+  })
+
+  it('reads the changelog settings once per announcement, not once per recipient', async () => {
+    workspace.audience = 'authenticated'
+    settingsReads.count = 0
+    await announced(GATED)
+    // One read for the reader filter, one for the email kill switch.
+    expect(settingsReads.count).toBeLessThanOrEqual(2)
   })
 
   it('on a private portal, announces only to subscribers the portal lets in', async () => {

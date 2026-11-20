@@ -64,8 +64,8 @@ vi.mock('@/lib/server/db', () => ({
   principal: { userId: 'userId', id: 'id' },
   invitation: { email: 'email', kind: 'kind', status: 'status' },
   widgetOriginSession: { sessionId: 'sessionId' },
-  widgetIdentifiedSession: { sessionId: 'sessionId' },
-  eq: vi.fn(),
+  widgetIdentifiedSession: { sessionId: 'widget_identified_session.session_id' },
+  eq: vi.fn((column: unknown, value: unknown) => ({ eq: [column, value] })),
   and: vi.fn((...args: unknown[]) => args),
   inArray: vi.fn(),
   sql: vi.fn((parts: TemplateStringsArray) => parts.raw[0]),
@@ -684,6 +684,26 @@ describe('resolvePortalAccessForRequest — the widget session itself', () => {
     privatePortal(true)
 
     expect(await resolvePortalAccessForRequest()).toEqual({ granted: true, reason: 'widget' })
+  })
+
+  it('asks about the current widget session, not another session of the same person', async () => {
+    mockGetSession.mockResolvedValue(WIDGET_SESSION)
+    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
+    // Only another session of this person was identified with a verified token.
+    mockWidgetIdentifiedSessionFindFirst.mockImplementation(
+      async ({ where }: { where: { eq: [string, string] } }) =>
+        where.eq[0] === 'widget_identified_session.session_id' && where.eq[1] === 'sess_other'
+          ? { hmacVerified: true }
+          : null
+    )
+    privatePortal(true)
+
+    expect((await resolvePortalAccessForRequest()).granted).toBe(false)
+    expect(mockWidgetIdentifiedSessionFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { eq: ['widget_identified_session.session_id', 'sess_widget'] },
+      })
+    )
   })
 
   it('keeps an unverified identity out', async () => {

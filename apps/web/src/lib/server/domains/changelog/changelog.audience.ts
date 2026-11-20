@@ -19,11 +19,18 @@ import { getChangelogSettings } from '@/lib/server/domains/settings/settings.cha
 import { getPortalConfig, isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { NotFoundError } from '@/lib/shared/errors'
 
-export async function isChangelogAudienceGranted(actor: Actor): Promise<boolean> {
-  const { audience } = await getChangelogSettings()
+/** The audience rule on an audience already read: 'authenticated' lets in
+ *  the team and signed-in people only. For a fan-out, which reads the
+ *  settings once rather than per recipient. */
+export function isAudienceOpenTo(audience: string | undefined, actor: Actor): boolean {
   if (audience !== 'authenticated') return true
   if (isTeamActor(actor)) return true
   return actor.principalType === 'user'
+}
+
+export async function isChangelogAudienceGranted(actor: Actor): Promise<boolean> {
+  const { audience } = await getChangelogSettings()
+  return isAudienceOpenTo(audience, actor)
 }
 
 /** The Changelog product is on and its audience lets `actor` in. */

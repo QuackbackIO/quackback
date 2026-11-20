@@ -2125,12 +2125,13 @@ async function filterChangelogReaders(
   subscribers: Subscriber[]
 ): Promise<Subscriber[]> {
   if (subscribers.length === 0) return subscribers
-  const [{ principalsWithPortalAccess }, { isChangelogAudienceGranted }, categoryService] =
-    await Promise.all([
+  const [{ principalsWithPortalAccess }, { isAudienceOpenTo }, categoryService] = await Promise.all(
+    [
       import('@/lib/server/domains/settings/portal-access.recipients'),
       import('@/lib/server/domains/changelog/changelog.audience'),
       import('@/lib/server/domains/changelog/changelog-category.service'),
-    ])
+    ]
+  )
 
   const admitted = await principalsWithPortalAccess(
     subscribers.map((s) => s.principalId as PrincipalId)
@@ -2177,7 +2178,7 @@ async function filterChangelogReaders(
       segmentIds: segmentsByPrincipal.get(String(p.id)) ?? new Set(),
     }
     if (
-      (await isChangelogAudienceGranted(actor)) &&
+      isAudienceOpenTo(audience, actor) &&
       categoryService.categoryGateAllows(categories, actor)
     ) {
       readers.add(String(p.id))
