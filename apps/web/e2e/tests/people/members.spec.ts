@@ -116,7 +116,7 @@ test.describe('changing roles', () => {
       const page = await asPerson('admin')
       await page.goto(`/admin/settings/members?q=${encodeURIComponent(marker)}`)
       await openMemberMenu(page, mate.name)
-      await page.getByRole('menuitem', { name: 'Admin' }).click()
+      await page.getByRole('menuitem', { name: 'Admin', exact: true }).click()
       const dialog = page.getByRole('alertdialog')
       await expect(dialog).toContainText('Change role to Admin?')
       await expect(dialog).toContainText(
@@ -144,7 +144,7 @@ test.describe('changing roles', () => {
       const page = await asPerson('admin')
       await page.goto(`/admin/settings/members?q=${encodeURIComponent(marker)}`)
       await openMemberMenu(page, mate.name)
-      await page.getByRole('menuitem', { name: role.name }).click()
+      await page.getByRole('menuitem', { name: role.name, exact: true }).click()
       const dialog = page.getByRole('alertdialog')
       await expect(dialog).toContainText(
         `${mate.name} will hold the "${role.name}" role and exactly the permissions it grants.`
