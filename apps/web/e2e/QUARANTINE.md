@@ -249,3 +249,11 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   to remount the article view (session-keyed queries) and drop the local
   `vote` state. Root cause unconfirmed. Fix: keep the vote state above the
   remount (or key it by article), or mint the session without remounting.
+- `help-center/public-locales.spec.ts` › HC-P-27 an untranslated article has
+  no French page, and related links on a French page work (HC-B26;
+  `@isolated`). `getPublicArticlePageFn` (`lib/server/functions/help-center.ts`)
+  loads related articles without the page language, so a French article page
+  lists English titles linking to `/hc/fr/articles/<id>-<slug>`, which 404
+  when that article has no published French translation. Fix: load related
+  articles for the locale (translated only), or link untranslated ones to the
+  default-language URL.
