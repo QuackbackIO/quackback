@@ -43,6 +43,21 @@ describe('isE2eOidcFakeUrl', () => {
     }
   })
 
+  it('refuses a configured fake carrying userinfo or a path', () => {
+    for (const host of ['x.localhost:1@10.0.0.5', 'oidc-fake.localhost:4014/p']) {
+      const env = { ...ENV, E2E_OIDC_FAKE_HOST: host }
+      for (const url of [
+        `https://${host}/`,
+        'https://10.0.0.5/',
+        'https://x.localhost:1/',
+        'https://oidc-fake.localhost:4014/p',
+        FAKE,
+      ]) {
+        expect(isE2eOidcFakeUrl(url, env), `${host} ${url}`).toBe(false)
+      }
+    }
+  })
+
   it('refuses a configured fake that is not a loopback name', () => {
     for (const host of ['10.0.0.5:4014', '127.0.0.1:4014', 'idp.example.com:443', '[::1]:4014']) {
       const env = { ...ENV, E2E_OIDC_FAKE_HOST: host }

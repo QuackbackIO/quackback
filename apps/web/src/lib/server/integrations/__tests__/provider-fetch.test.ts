@@ -32,6 +32,8 @@ describe('providerFetch', () => {
     const init = { method: 'POST', body: '{}' }
     await providerFetch('https://api.linear.app/graphql', init)
     expect(fetchMock).toHaveBeenCalledWith('https://api.linear.app/graphql', init)
+    // The very same init object, not a copy.
+    expect((fetchMock.mock.lastCall as unknown as [string, RequestInit])[1]).toBe(init)
 
     const url = new URL('https://api.github.com/user')
     await providerFetch(url)
@@ -51,6 +53,7 @@ describe('providerFetch', () => {
     const init = { method: 'POST', body: '{}' }
     await providerFetch('https://api.linear.app/graphql', init)
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:4013/api.linear.app/graphql', init)
+    expect((fetchMock.mock.lastCall as unknown as [string, RequestInit])[1]).toBe(init)
   })
 
   it('keeps a Request input a Request, aimed at the fake', async () => {

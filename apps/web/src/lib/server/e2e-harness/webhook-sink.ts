@@ -41,6 +41,8 @@ export function isNamedLoopbackHttpsUrl(url: string, configuredHost: string | un
   } catch {
     return false
   }
+  // Exactly `host[:port]`: no userinfo, path, query or fragment smuggled in.
+  if (named.host !== configured) return false
   if (!isLoopbackHostname(named.hostname) || /^[\d.]+$|:/.test(named.hostname)) return false
   if (target.protocol !== 'https:') return false
   return target.host.toLowerCase() === named.host
