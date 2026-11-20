@@ -309,7 +309,7 @@ Examples:
     // A teammate needs post.create, as the dashboard requires; a portal user
     // is gated by the board's submit policy inside createPost.
     permissions: (_args, caller) => (isTeamMember(caller.role) ? [PERMISSIONS.POST_CREATE] : []),
-    description: `Submit new feedback on a board. Requires board and title; content/status/tags optional.
+    description: `Submit new feedback on a board. Requires board and title; content/status/tags optional. Status and tags apply only for team members.
 
 Examples:
 - Minimal: create_post({ boardId: "board_01abc...", title: "Add dark mode" })
@@ -321,14 +321,17 @@ Examples:
       // The actor carries the caller's REAL role so the policy gate inside
       // createPost (submit tier + moderation axis) reflects who is writing.
       const actor = await mcpMemberActor(auth)
+      // Status and tags are triage, which the portal never offers its users: a
+      // portal user's post takes the board default status and no tags.
+      const team = isTeamMember(auth.role)
 
       const result = await createPost(
         {
           boardId: args.boardId as BoardId,
           title: args.title,
           content: args.content ?? '',
-          statusId: args.statusId as PostStatusId | undefined,
-          tagIds: args.tagIds as PostTagId[] | undefined,
+          statusId: team ? (args.statusId as PostStatusId | undefined) : undefined,
+          tagIds: team ? (args.tagIds as PostTagId[] | undefined) : undefined,
         },
         {
           principalId: auth.principalId,

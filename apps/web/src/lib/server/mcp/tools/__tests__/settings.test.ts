@@ -24,7 +24,14 @@ vi.mock('@/lib/server/domains/settings-registry/service', () => ({
     value: {},
   }),
   listSettingsAreas: async () => [{ id: 'branding', revision: 'rev' }],
-  changeSettingsArea: async (_caller: unknown, area: string, input: unknown) => {
+  // The real service checks the credential's scope for the area before it
+  // changes anything; the tool supplies that check.
+  changeSettingsArea: async (
+    caller: { assertAreaScope?: (area: string) => void },
+    area: string,
+    input: unknown
+  ) => {
+    caller.assertAreaScope?.(area)
     state.changes.push({ area, input })
     return state.change
   },
@@ -126,6 +133,35 @@ describe('settings MCP tools', () => {
       expected_revision: 'rev',
     })
     expect(JSON.parse(text(result))).toMatchObject({ status: 'applied', receipt })
+  })
+
+  it('update_settings refuses an area whose own scope the credential lacks, as REST does', async () => {
+    const tools = collect({
+      permissions: new Set(['settings.branding', 'settings.manage', 'changelog.manage']),
+      authMethod: 'api-key',
+    } as never)
+    const refused = await tools.get('update_settings')!({
+      area: 'changelog',
+      patch: { autoSubscribe: true },
+      expected_revision: 'rev',
+    })
+    expect(refused.isError).toBe(true)
+    expect(text(refused)).toBe(
+      "Error: This API key is missing the 'write:changelog' scope required by 'changelog.manage' (code: FORBIDDEN)"
+    )
+    expect(state.changes).toEqual([])
+
+    const granted = collect({
+      permissions: new Set(['changelog.manage']),
+      scopes: ['write:settings', 'write:changelog'],
+    } as never)
+    const applied = await granted.get('update_settings')!({
+      area: 'changelog',
+      patch: { autoSubscribe: true },
+      expected_revision: 'rev',
+    })
+    expect(applied.isError).not.toBe(true)
+    expect(state.changes).toHaveLength(1)
   })
 
   it('never offers a settings card, in the app or to an outside client', () => {
