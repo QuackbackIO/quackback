@@ -6,11 +6,12 @@
  * workspace-wide switches are `@isolated`.
  *
  * Journeys: FBA-Q-05, FBA-I-23, FBA-P-38, FBA-Q-03, FBA-Q-04, FBA-Q-06, FBA-Q-07, FBA-Q-09,
- * FBA-Q-10, FBA-Q-11, FBA-Q-15, FBA-Q-14; isolated: FBA-Q-01, FBA-Q-02, FBA-Q-13
+ * FBA-Q-10, FBA-Q-11, FBA-Q-15, FBA-Q-14, FBA-Q-08; isolated: FBA-Q-01, FBA-Q-02, FBA-Q-13
  */
 import { test, expect } from '../../support/fixtures'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { supportDb } from '../../support/db'
+import { createRole } from '../../support/access'
 import { bellsFor } from '../../support/bells'
 import { fakeAi } from '../../support/fake-ai-client'
 import { emailLogFor, mailTo, waitForMail } from '../../support/mailpit'
@@ -667,5 +668,42 @@ test(
     await expect(admin).toHaveURL(/\/admin\/settings\/boards/)
     await admin.goto('/admin/settings/moderation')
     await expect(admin.getByText('Signed-in posts')).toBeVisible()
+  }
+)
+
+test(
+  'FBA-Q-08 a teammate without post.approve cannot list, approve or reject, nor open the queue',
+  { tag: '@core' },
+  async ({ playwright, browser, newTeammate, marker }) => {
+    const api = await personApi(playwright, 'admin')
+    const customer = await portalCustomer(browser, marker)
+    const roleKey = await createRole(marker, ['post.view_private', 'member.view'])
+    const mate = await newTeammate({ roleKey })
+    const mateApi = await mate.api(playwright)
+    try {
+      const board = await makeBoard(api, marker)
+      const postId = await heldPost(api, customer, board.id, `${marker} out of reach`)
+      const listed = await callServerFn(mateApi, 'listPendingPostsFn', undefined, { method: 'GET' })
+      expect(listed.ok).toBe(false)
+      for (const fn of ['approvePostFn', 'rejectPostFn']) {
+        const res = await callServerFn(mateApi, fn, { postId })
+        expect(res.ok, fn).toBe(false)
+      }
+      const row = await postRow(postId)
+      expect(row?.moderation_state).toBe('pending')
+      expect(row?.deleted_at).toBeNull()
+
+      const page = await mate.newPage(browser)
+      await page.goto('/admin/feedback/moderation')
+      await expect(page).toHaveURL(/error=not_team_member/)
+      await openInbox(page, { board: [board.id] })
+      await expect.poll(() => inboxTitles(page, marker)).toEqual([`${marker} out of reach`])
+      await expect(page.getByText(/pending moderation/)).toHaveCount(0)
+      await expect(page.getByText(/waiting for review/)).toHaveCount(0)
+    } finally {
+      await mateApi.dispose()
+      await customer.close()
+      await api.dispose()
+    }
   }
 )
