@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "Keine Einträge passen zu deinen Filtern",
   "admin.changelog.list.loadMore": "Mehr laden",
   "admin.changelog.delete.title": "Eintrag löschen?",
-  "admin.changelog.delete.description": "Das lässt sich nicht rückgängig machen. Der Eintrag wird dauerhaft gelöscht.",
+  "admin.changelog.delete.description": "Der Eintrag wird aus dem Changelog und seinem Feed gelöscht.",
   "admin.changelog.delete.confirm": "Löschen",
   "admin.changelog.status.all": "Alle",
   "admin.changelog.status.draft": "Entwurf",

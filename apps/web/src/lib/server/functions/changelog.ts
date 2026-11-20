@@ -96,20 +96,24 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
   .validator(updateChangelogSchema)
   .handler(async ({ data }) => {
     log.debug({ changelog_id: data.id }, 'update changelog')
-    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
 
-    const entry = await updateChangelog(data.id as ChangelogId, {
-      title: data.title,
-      content: data.content,
-      contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-      linkedPostIds: data.linkedPostIds as PostId[] | undefined,
-      categoryIds: data.categoryIds as ChangelogCategoryId[] | undefined,
-      publishState: data.publishState as PublishState | undefined,
-      ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
-      ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
-      ...(data.segmentIds !== undefined && { segmentIds: data.segmentIds as SegmentId[] }),
-      notify: data.notify,
-    })
+    const entry = await updateChangelog(
+      data.id as ChangelogId,
+      {
+        title: data.title,
+        content: data.content,
+        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+        linkedPostIds: data.linkedPostIds as PostId[] | undefined,
+        categoryIds: data.categoryIds as ChangelogCategoryId[] | undefined,
+        publishState: data.publishState as PublishState | undefined,
+        ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
+        ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
+        ...(data.segmentIds !== undefined && { segmentIds: data.segmentIds as SegmentId[] }),
+        notify: data.notify,
+      },
+      { principalId: auth.principal.id }
+    )
 
     return {
       ...entry,

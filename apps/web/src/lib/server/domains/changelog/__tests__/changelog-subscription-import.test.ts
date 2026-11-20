@@ -59,29 +59,21 @@ describe.skipIf(!fixture.available)('changelog CSV subscriber import (real DB)',
       `nobody-${suffix()}@example.com`,
     ])
 
-    expect(result).toEqual({ imported: 1, skipped: 1, total: 2 })
+    expect(result).toEqual({ imported: 1, skipped: 1, optedOut: 0, total: 2 })
     expect(await getChangelogSubscriptionStatus(person.principalId)).toMatchObject({
       subscribed: true,
       source: 'csv_import',
     })
   })
+  it('CHG-S-26 importing someone who unsubscribed leaves them unsubscribed', async () => {
+    const person = await seedPerson()
+    await unsubscribeChangelog(person.principalId)
 
-  // Root cause: importChangelogSubscribersFromEmails goes through
-  // upsertSubscription, whose conflict branch sets unsubscribedAt = null
-  // (apps/web/src/lib/server/domains/changelog/changelog-subscription.service.ts:115
-  // calling :28), so a spreadsheet re-subscribes someone who opted out.
-  // See apps/web/e2e/QUARANTINE.md.
-  it.fails(
-    'CHG-S-26 importing someone who unsubscribed leaves them unsubscribed (quarantined: CSV import clears unsubscribedAt)',
-    async () => {
-      const person = await seedPerson()
-      await unsubscribeChangelog(person.principalId)
+    const result = await importChangelogSubscribersFromEmails([person.email])
 
-      await importChangelogSubscribersFromEmails([person.email])
-
-      expect(await getChangelogSubscriptionStatus(person.principalId)).toMatchObject({
-        subscribed: false,
-      })
-    }
-  )
+    expect(result).toEqual({ imported: 0, skipped: 0, optedOut: 1, total: 1 })
+    expect(await getChangelogSubscriptionStatus(person.principalId)).toMatchObject({
+      subscribed: false,
+    })
+  })
 })

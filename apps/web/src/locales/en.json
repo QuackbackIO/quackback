@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "No changelog entries match your filters",
   "admin.changelog.list.loadMore": "Load more",
   "admin.changelog.delete.title": "Delete changelog entry?",
-  "admin.changelog.delete.description": "This action cannot be undone. The changelog entry will be permanently deleted.",
+  "admin.changelog.delete.description": "The entry will be deleted from your changelog and its feed.",
   "admin.changelog.delete.confirm": "Delete",
   "admin.changelog.status.all": "All",
   "admin.changelog.status.draft": "Draft",

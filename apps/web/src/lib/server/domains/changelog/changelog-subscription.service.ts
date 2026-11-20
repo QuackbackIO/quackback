@@ -117,10 +117,11 @@ export async function importChangelogSubscribersFromEmails(
 ): Promise<ChangelogCsvImportResult> {
   const normalized = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))]
   if (normalized.length === 0) {
-    return { imported: 0, skipped: 0, total: 0 }
+    return { imported: 0, skipped: 0, optedOut: 0, total: 0 }
   }
 
   let imported = 0
+  let optedOut = 0
   for (const email of normalized) {
     const matchedPrincipal = await db
       .select({ principalId: principal.id })
@@ -132,9 +133,21 @@ export async function importChangelogSubscribersFromEmails(
     const row = matchedPrincipal[0]
     if (!row) continue
 
-    await upsertSubscription(row.principalId, 'csv_import')
-    imported++
+    // A spreadsheet never overrides a person's own opt-out: insert only when
+    // there is no row, and leave an existing one (subscribed or not) alone.
+    await db
+      .insert(changelogSubscriptions)
+      .values({ principalId: row.principalId, source: 'csv_import' })
+      .onConflictDoNothing({ target: changelogSubscriptions.principalId })
+    const status = await getChangelogSubscriptionStatus(row.principalId)
+    if (status.subscribed) imported++
+    else optedOut++
   }
 
-  return { imported, skipped: normalized.length - imported, total: normalized.length }
+  return {
+    imported,
+    skipped: normalized.length - imported - optedOut,
+    optedOut,
+    total: normalized.length,
+  }
 }

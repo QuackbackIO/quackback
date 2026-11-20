@@ -1617,7 +1617,7 @@
   "admin.changelog.list.noFilterMatch": "لا توجد إدخالات تطابق عوامل التصفية",
   "admin.changelog.list.loadMore": "تحميل المزيد",
   "admin.changelog.delete.title": "حذف الإدخال؟",
-  "admin.changelog.delete.description": "لا يمكن التراجع عن هذا الإجراء. سيتم حذف الإدخال نهائيًا.",
+  "admin.changelog.delete.description": "سيتم حذف الإدخال من سجل التغييرات وخلاصته.",
   "admin.changelog.delete.confirm": "حذف",
   "admin.changelog.status.all": "الكل",
   "admin.changelog.status.draft": "مسودة",

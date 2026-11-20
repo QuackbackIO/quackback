@@ -83,23 +83,15 @@ describe.skipIf(!fixture.available)('changelog update validation (real DB)', () 
 
     expect(await storedContent(id)).toBe('A new body')
   })
+  it('CHG-A-33 update refuses an empty body like create does', async () => {
+    const id = await seedEntry()
 
-  // Root cause: updateChangelog validates the title but has no empty-body
-  // check (apps/web/src/lib/server/domains/changelog/changelog.service.ts:195),
-  // while createChangelog refuses one (changelog.service.ts:86), so an edit can
-  // blank a saved or published entry. See apps/web/e2e/QUARANTINE.md.
-  it.fails(
-    'CHG-A-33 update refuses an empty body like create does (quarantined: updateChangelog saves an empty body)',
-    async () => {
-      const id = await seedEntry()
-
-      await expect(updateChangelog(id, { content: '   ' })).rejects.toMatchObject({
-        code: 'VALIDATION_ERROR',
-        message: 'Content is required',
-      })
-      expect(await storedContent(id)).toBe('The original body')
-    }
-  )
+    await expect(updateChangelog(id, { content: '   ' })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'Content is required',
+    })
+    expect(await storedContent(id)).toBe('The original body')
+  })
 
   it('CHG-A-45 an edit to the title or body re-embeds the entry; other edits do not', async () => {
     const id = await seedEntry()

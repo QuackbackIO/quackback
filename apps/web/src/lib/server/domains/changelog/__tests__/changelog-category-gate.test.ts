@@ -120,36 +120,23 @@ describe.skipIf(!fixture.available)(
       return { open }
     }
 
-    it('CHG-P-05 following the cursor still reaches the open entry behind gated ones', async () => {
+    it('CHG-P-05 the first page already holds the open entry behind gated ones', async () => {
       const { open } = await seedGatedNewest()
-      const seen: string[] = []
-      let cursor: string | undefined
-      for (let guard = 0; guard < 10; guard++) {
-        const page = await listPublicChangelogs({ cursor, limit: 2 })
-        seen.push(...page.items.map((e) => e.id))
-        if (!page.hasMore || !page.nextCursor) break
-        cursor = page.nextCursor
-      }
-      expect(seen).toEqual([open])
+
+      const page = await listPublicChangelogs({ limit: 2 }, ANONYMOUS_ACTOR)
+
+      expect(page.items.map((e) => e.id)).toEqual([open])
+      expect(page.hasMore).toBe(false)
     })
+    it('CHG-P-05 a fully gated page is not returned empty with more to load', async () => {
+      await seedGatedNewest()
 
-    // Root cause: listPublicChangelogs filters by categoryGateAllows after the
-    // page has been cut with LIMIT
-    // (apps/web/src/lib/server/domains/changelog/changelog.public.ts:301), so a
-    // page whose entries are all gated comes back empty with hasMore=true and
-    // the portal shows nothing. See apps/web/e2e/QUARANTINE.md.
-    it.fails(
-      'CHG-P-05 a fully gated page is not returned empty with more to load (quarantined: label gate applied after paging)',
-      async () => {
-        await seedGatedNewest()
+      const page = await listPublicChangelogs({ limit: 2 }, ANONYMOUS_ACTOR)
 
-        const page = await listPublicChangelogs({ limit: 2 }, ANONYMOUS_ACTOR)
-
-        expect({ empty: page.items.length === 0, hasMore: page.hasMore }).not.toEqual({
-          empty: true,
-          hasMore: true,
-        })
-      }
-    )
+      expect({ empty: page.items.length === 0, hasMore: page.hasMore }).not.toEqual({
+        empty: true,
+        hasMore: true,
+      })
+    })
   }
 )
