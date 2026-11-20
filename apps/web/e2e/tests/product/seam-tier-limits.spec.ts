@@ -33,8 +33,9 @@ test(
       })
     })
 
-    // The previous limits are back exactly, and so is room for a board.
-    expect(await snapshotTierLimits()).toBe(before)
+    // The previous limits and plan limits state are back exactly, and so is
+    // room for a board.
+    expect(await snapshotTierLimits()).toEqual(before)
     await createBoard(api, `${marker} after the cap`)
   }
 )

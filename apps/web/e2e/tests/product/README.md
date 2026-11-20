@@ -91,6 +91,10 @@ unit tests pin each refusal. Each seam has a self-test here
 Event mappings for a connected integration go through `addNotificationChannelFn`
 (it drops the mappings cache); give each test its own board (`boardIds`) and a
 destination id carrying its marker, since the integration row is shared.
+A connected integration stays connected for the rest of the run, so no test
+may assume a provider is not connected (connect it in an `@isolated` test if
+that matters). Only the five families above are mapped to the fake: connecting
+any other type would make it call its real provider.
 
 ## CI
 
