@@ -59,6 +59,7 @@ import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { logger } from '@/lib/server/logger'
 import { isTestEvent } from './test-event'
+import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
 
 const log = logger.child({ component: 'targets' })
 
@@ -463,6 +464,25 @@ function resolveCommenterName(comment: { authorName?: string; authorEmail?: stri
 }
 
 /**
+ * The commenter's name in the subscriber email and bell: the name the post
+ * page shows. The event keeps the author's own name for integrators, so a
+ * comment an API key wrote is renamed here to the support team (or a personal
+ * key's creator), never the key's name.
+ */
+async function feedbackCommenterName(
+  actor: EventActor,
+  comment: { authorName?: string; authorEmail?: string }
+): Promise<string> {
+  const keyAuthor = actor.principalId
+    ? (await loadApiKeyFeedbackAuthors([actor.principalId as PrincipalId])).get(
+        actor.principalId as PrincipalId
+      )
+    : undefined
+  if (keyAuthor) return keyAuthor.displayName || 'Someone'
+  return resolveCommenterName(comment)
+}
+
+/**
  * Build event-specific email config.
  */
 async function buildEmailEventConfig(
@@ -484,7 +504,7 @@ async function buildEmailEventConfig(
     return {
       postTitle: post.title,
       postUrl: `${buildPostUrl(origins, post)}#comment-${comment.id}`,
-      commenterName: resolveCommenterName(comment),
+      commenterName: await feedbackCommenterName(event.actor, comment),
       commentPreview: truncate(commentPlainText(comment), 200),
       isTeamMember: await isActorTeamMember(event.actor),
     }
@@ -540,7 +560,7 @@ async function buildNotificationConfig(
       boardSlug: post.boardSlug,
       postUrl: `${buildPostUrl(origins, post)}#comment-${comment.id}`,
       commentId: comment.id,
-      commenterName: resolveCommenterName(comment),
+      commenterName: await feedbackCommenterName(event.actor, comment),
       commentPreview: truncate(commentPlainText(comment), 200),
       isTeamMember: await isActorTeamMember(event.actor),
     }
@@ -563,6 +583,12 @@ async function mentionerNameOf(
   actor: EventActor
 ): Promise<string | null> {
   if (mentioningPrincipalId) {
+    // An API key mentions as the support team (or a personal key's creator),
+    // the name the post page shows for what it wrote.
+    const keyAuthor = (await loadApiKeyFeedbackAuthors([mentioningPrincipalId as PrincipalId])).get(
+      mentioningPrincipalId as PrincipalId
+    )
+    if (keyAuthor) return keyAuthor.displayName?.trim() || null
     const [row] = await db
       .select({ displayName: principal.displayName, userName: user.name })
       .from(principal)

@@ -37,6 +37,7 @@ import {
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { withFeedbackAuthors } from './feedback-authors'
 import { feedViewCondition, feedViewFor } from './post.public.views'
 import {
   changelogLinkColumn,
@@ -411,7 +412,7 @@ export async function listPublicPostsWithVotesAndAvatars(
     }
   })
 
-  return { items, hasMore }
+  return { items: await withFeedbackAuthors(items), hasMore }
 }
 
 export async function listPublicPosts(
@@ -475,7 +476,7 @@ export async function listPublicPosts(
     changelogEntry: toChangelogLink(post.changelogEntry),
   }))
 
-  return { items, total: undefined, hasMore }
+  return { items: await withFeedbackAuthors(items), total: undefined, hasMore }
 }
 
 export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<Set<PostId>> {
