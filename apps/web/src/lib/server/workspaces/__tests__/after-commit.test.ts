@@ -26,6 +26,35 @@ describe('after-commit signaling', () => {
     expect(await later).toBe(false)
   })
 
+  it('gives work started after a commit transactions of its own', async () => {
+    const seen: string[] = []
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let first!: Promise<void>
+    let siblingInside: boolean | undefined
+    await runInAfterCommitFrame(async () => {
+      // Two pieces of work started inside the transaction that run on after it.
+      first = (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        await runInAfterCommitFrame(async () => {
+          noteDurableWork('ws_later')
+          await gate
+        })
+      })()
+      void (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15))
+        siblingInside = isInsideDbTransaction()
+        release()
+      })()
+    })
+    await first
+    // The sibling ran while the first one's transaction was open, and was not in it.
+    expect(siblingInside).toBe(false)
+    // The later transaction flushed its own work at its own commit.
+    expect(seen).toEqual(['ws_later'])
+  })
+
   it('delivers immediately when no transaction is open', () => {
     const seen: string[] = []
     onDurableWorkCommitted((work) => seen.push(work.workspaceKey))

@@ -111,7 +111,11 @@ function flushPending(pending: Map<string, Set<string>>): void {
  */
 export async function runInAfterCommitFrame<T>(fn: () => Promise<T>): Promise<T> {
   const parent = frames.getStore()
-  if (parent) {
+  // Only an open transaction is a parent. Work started at a commit (a job
+  // the commit woke, say) inherits that transaction's closed frame; its own
+  // transaction must get a frame of its own, or it would flush nothing and
+  // make every sibling sharing the old frame look as if it were inside it.
+  if (parent && parent.depth > 0) {
     const snapshot = clonePending(parent.pending)
     const callbackCount = parent.callbacks.length
     parent.depth += 1
