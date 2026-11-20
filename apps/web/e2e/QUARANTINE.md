@@ -200,3 +200,10 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   permanently deleted." and the category confirm says "the UI provides no
   restore flow", but both are soft deletes that Other › Deleted items restores
   for 30 days. Fix: reword both to point at Deleted items.
+- `help-center/admin-settings.spec.ts` › HC-A-67 a protocol-relative header
+  link is refused (HC-B20; `@isolated`). `helpCenterHeaderLinkUrl`
+  (`lib/shared/schemas/help-center.ts`) accepts any value starting with `/`,
+  so `//example.com` is stored, and `components/public/portal-header.tsx`
+  decides "external" by `!startsWith('/')`, rendering it as an in-tab internal
+  link to another host. Fix: require `startsWith('/') && !startsWith('//')`
+  in the schema (and treat `//` as external in the header).
