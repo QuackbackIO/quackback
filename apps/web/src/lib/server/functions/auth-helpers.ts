@@ -1,3 +1,5 @@
+import { config } from '@/lib/server/config'
+import { hasSessionCookie as carriesSessionCookie } from '@/lib/shared/auth-cookies'
 /**
  * Auth helper functions for server functions.
  *
@@ -38,7 +40,7 @@ export type RequireAuthOptions = {
 export function hasSessionCookie(): boolean {
   const headers = getRequestHeaders()
   const cookie = headers.get('cookie') ?? ''
-  return cookie.includes('better-auth.session_token')
+  return carriesSessionCookie(cookie, config.authCookiePrefix)
 }
 
 /**
@@ -50,7 +52,7 @@ export function hasAuthCredentials(): boolean {
   const headers = getRequestHeaders()
   const cookie = headers.get('cookie') ?? ''
   const auth = headers.get('authorization') ?? ''
-  return cookie.includes('better-auth.session_token') || auth.startsWith('Bearer ')
+  return carriesSessionCookie(cookie, config.authCookiePrefix) || auth.startsWith('Bearer ')
 }
 
 /**
