@@ -32,13 +32,6 @@ import {
 
 test.describe.configure({ timeout: 60_000 })
 
-const QUARANTINE_DELETED = {
-  type: 'quarantine',
-  description:
-    'API-W-09/10: webhook.service.ts getWebhookById, updateWebhook and rotateWebhookSecret ' +
-    'ignore deleted_at, so a deleted webhook still reads, updates and rotates (QUARANTINE.md)',
-}
-
 test.describe('webhooks over REST', () => {
   test(
     'API-W-01 creating a feedback webhook returns its secret once and stores it encrypted',
@@ -346,7 +339,7 @@ test.describe('webhooks over REST', () => {
 
   test(
     'API-W-09 a deleted webhook reads as not found',
-    { tag: ['@core', '@quarantine'], annotation: QUARANTINE_DELETED },
+    { tag: '@core' },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)
       try {
@@ -362,7 +355,7 @@ test.describe('webhooks over REST', () => {
 
   test(
     'API-W-10 a deleted webhook cannot be updated or rotated; a second delete is 404',
-    { tag: ['@nightly', '@quarantine'], annotation: QUARANTINE_DELETED },
+    { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)
       try {
@@ -718,13 +711,7 @@ test.describe('webhooks in Settings > Developers', () => {
   test(
     "API-W-22 saving an unrelated edit keeps a failing webhook's failure count",
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'API-W-22: edit-webhook-dialog.tsx always sends status "active", and ' +
-          'webhook.service.ts updateWebhook resets failureCount/lastError for it (QUARANTINE.md)',
-      },
+      tag: '@core',
     },
     async ({ asPerson, playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)

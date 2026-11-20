@@ -206,13 +206,7 @@ test.describe('REST changelog: reads', () => {
   test(
     'API-R-106 a malformed cursor is refused as bad input, not a server error',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A malformed cursor reaches the typeid column and the driver throws: 500 INTERNAL_ERROR ' +
-          '(apps/web/src/routes/api/v1/changelog/index.ts:41, changelog.query.ts:72)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people }) => {
       const { api } = await adminApi(playwright, baseURL, people)
@@ -713,13 +707,7 @@ test.describe('REST changelog: validation', () => {
   test(
     'API-R-111 a body that is not JSON is refused as bad input, not a server error',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'request.json() throws outside the domain error mapping: 500 INTERNAL_ERROR ' +
-          '(apps/web/src/routes/api/v1/changelog/index.ts:78, $entryId.ts:68)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await adminApi(playwright, baseURL, people)

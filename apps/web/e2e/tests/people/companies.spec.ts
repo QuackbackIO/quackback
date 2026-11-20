@@ -143,12 +143,7 @@ test.describe('companies directory and profile', () => {
   test(
     'PPL-C-03 a company the admin creates is not labelled as API-sourced',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'createCompanyFn passes no source and company.service.ts defaults to api; see QUARANTINE.md',
-      },
+      tag: '@core',
     },
     async ({ playwright, marker }) => {
       const admin = await personApi(playwright, 'admin')
@@ -438,12 +433,7 @@ test.describe('company attributes settings', () => {
   test(
     'PPL-C-31 a duplicate company attribute key is refused and the dialog says so',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'scalar-attribute-list.tsx handleCreate awaits onCreate with no catch; the DUPLICATE_KEY refusal shows nothing; see QUARANTINE.md',
-      },
+      tag: '@core',
     },
     async ({ asPerson, playwright, marker }) => {
       const key = `dup_${hex()}`

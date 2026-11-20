@@ -281,13 +281,7 @@ test.describe('REST status: reads', () => {
   test(
     'API-R-127 the services path names a service, not a component, in its errors',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The services path answers "Invalid component ID format" and "Status component not found" ' +
-          '(apps/web/src/routes/api/v1/status/-service-handlers.ts:148, :153)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people }) => {
       const { api } = await adminApi(playwright, baseURL, people)
@@ -514,7 +508,7 @@ test.describe('REST status: services', () => {
       )
       expect(missing.error).toMatchObject({
         code: 'NOT_FOUND',
-        message: 'Status component not found',
+        message: 'Status service not found',
       })
       await api.dispose()
     }
@@ -809,13 +803,7 @@ test.describe('REST status: incidents', () => {
   test(
     'API-R-132 a service id that never existed is reported as unknown, not as deleted',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A never-existing service id gets "An affected service has been deleted. Choose the services again." ' +
-          '(apps/web/src/lib/server/domains/status/status.service.ts:137)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await adminApi(playwright, baseURL, people)
@@ -944,13 +932,7 @@ test.describe('REST status: incidents', () => {
   test(
     'API-R-126 a status body that is not JSON is refused as bad input, not a server error',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'request.json() throws outside the domain error mapping: 500 on status writes ' +
-          '(apps/web/src/routes/api/v1/status/-service-handlers.ts:94, incidents/index.ts:104)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people }) => {
       const { api } = await adminApi(playwright, baseURL, people)
