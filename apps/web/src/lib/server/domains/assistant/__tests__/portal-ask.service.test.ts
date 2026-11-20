@@ -299,12 +299,12 @@ describe('askPortalCustomise: the model', () => {
   })
 
   it('runs Import when the model names a website', async () => {
-    mockStructuredChat.mockImplementation(async () => ({ matchWebsite: 'stripe.com' }))
+    mockStructuredChat.mockImplementation(async () => ({ matchWebsite: 'example.com' }))
     const answer = await askPortalCustomise({
-      request: 'look like the Stripe site',
+      request: 'look like the Example site',
       draft: draft(),
     })
-    expect(answer).toMatchObject({ outcome: 'import', host: 'stripe.com', handled: 'model' })
+    expect(answer).toMatchObject({ outcome: 'import', host: 'example.com', handled: 'model' })
   })
 })
 

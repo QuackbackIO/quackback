@@ -178,12 +178,12 @@ describe('AskDock', () => {
     askFn.mockResolvedValue({
       outcome: 'import',
       handled: 'model',
-      host: 'stripe.com',
-      reply: 'Matching stripe.com.',
+      host: 'example.com',
+      reply: 'Matching example.com.',
     })
     const { handlers } = setup()
     await ask('look like our site please')
-    expect(handlers.onImport).toHaveBeenCalledWith('stripe.com')
+    expect(handlers.onImport).toHaveBeenCalledWith('example.com')
   })
 
   it('shows a refusal or an unavailable reply as is, changing nothing', async () => {
@@ -212,6 +212,15 @@ describe('AskDock', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Import/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Make the header navy' })).toBeInTheDocument()
+  })
+
+  it('offers to import your own website, never a named brand', () => {
+    const { handlers } = setup()
+    const field = screen.getByLabelText('Ask for a change')
+    fireEvent.focus(field)
+    fireEvent.click(screen.getByRole('button', { name: 'Import my website' }))
+    expect(field).toHaveValue('Import ')
+    expect(handlers.onImport).not.toHaveBeenCalled()
   })
 
   it('draws focus on the box, not on the field inside it', () => {

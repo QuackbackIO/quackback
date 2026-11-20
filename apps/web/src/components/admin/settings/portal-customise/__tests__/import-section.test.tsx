@@ -32,13 +32,13 @@ const loaded: LoadedPortal = {
 }
 
 const brand: BrandImport = {
-  host: 'stripe.com',
+  host: 'example.com',
   reader: 'static',
   primary: '#533afd',
   background: '#ffffff',
   text: '#061b31',
   scheme: 'light',
-  font: { site: 'Söhne', id: 'inter', exact: false },
+  font: { site: 'Brand Sans', id: 'inter', exact: false },
   radius: 0.25,
   buttonShape: 'pill',
   logo: { kind: 'wide', stagedKey: 'header-logos/a.svg', url: '/api/storage/header-logos/a.svg' },
@@ -78,23 +78,23 @@ describe('useBrandImport', () => {
   it('fills the draft as one step and counts the import without its address', async () => {
     importFn.mockResolvedValue({ ok: true, brand })
     const { hook, steps, current } = setup()
-    await act(() => hook.result.current.run('https://stripe.com/pricing'))
-    expect(importFn).toHaveBeenCalledWith({ data: { url: 'https://stripe.com/pricing' } })
+    await act(() => hook.result.current.run('https://example.com/pricing'))
+    expect(importFn).toHaveBeenCalledWith({ data: { url: 'https://example.com/pricing' } })
     expect(steps).toHaveLength(1)
     expect(draftPalette(current(), 'light').primary).toBe('#533afd')
-    expect(hook.result.current.state).toMatchObject({ status: 'done', host: 'stripe.com' })
+    expect(hook.result.current.state).toMatchObject({ status: 'done', host: 'example.com' })
     expect(track).toHaveBeenCalledWith('portal_brand_import', {
       ok: true,
       reader: 'static',
       missing: [],
     })
-    expect(JSON.stringify(track.mock.calls)).not.toContain('stripe')
+    expect(JSON.stringify(track.mock.calls)).not.toContain('example')
   })
 
   it('takes one row back as its own step', async () => {
     importFn.mockResolvedValue({ ok: true, brand })
     const { hook, steps, current } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.undoRow('primary'))
     expect(steps).toHaveLength(2)
     expect(draftPalette(current(), 'light').primary).not.toBe('#533afd')
@@ -107,14 +107,14 @@ describe('useBrandImport', () => {
     importFn.mockResolvedValue({
       ok: false,
       code: 'ROBOTS_DISALLOWED',
-      message: 'stripe.com asks robots not to read it.',
+      message: 'example.com asks robots not to read it.',
     })
     const { hook, steps } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     expect(steps).toHaveLength(0)
     expect(hook.result.current.state).toEqual({
       status: 'refused',
-      message: 'stripe.com asks robots not to read it.',
+      message: 'example.com asks robots not to read it.',
     })
     expect(track).toHaveBeenCalledWith('portal_brand_import', {
       ok: false,
@@ -136,7 +136,7 @@ describe('useBrandImport and the brand assets', () => {
   it('holds the logo and icon when the portal is on another domain', async () => {
     importFn.mockResolvedValue({ ok: true, brand: { ...assets, portalOnSite: false } })
     const { hook, steps, current } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     expect(doneState(hook).preTicked).toBe(false)
     expect(hook.result.current.confirmed).toBe(false)
     expect(current().logo).toMatchObject({ wideKey: null, icon: null })
@@ -147,7 +147,7 @@ describe('useBrandImport and the brand assets', () => {
   it('ticks for the person when the portal is on the site’s own domain', async () => {
     importFn.mockResolvedValue({ ok: true, brand: { ...assets, portalOnSite: true } })
     const { hook, current } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     expect(doneState(hook).preTicked).toBe(true)
     expect(hook.result.current.confirmed).toBe(true)
     expect(current().logo.wideKey).toBe('header-logos/a.svg')
@@ -156,7 +156,7 @@ describe('useBrandImport and the brand assets', () => {
   it('applies the assets as one step when ticked, and takes them back as one when unticked', async () => {
     importFn.mockResolvedValue({ ok: true, brand: assets })
     const { hook, steps, current } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.confirmAssets(true))
     expect(steps).toHaveLength(2)
     expect(current().logo).toMatchObject({ wideKey: 'header-logos/a.svg', icon: { key: icon.key } })
@@ -171,7 +171,7 @@ describe('useBrandImport and the brand assets', () => {
   it('follows the editor’s own undo: assets an undo brings back are ticked, and recorded on publish', async () => {
     importFn.mockResolvedValue({ ok: true, brand: assets })
     const { hook, base, current, editorUndo } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.confirmAssets(true))
     act(() => hook.result.current.confirmAssets(false))
     expect(hook.result.current.confirmed).toBe(false)
@@ -183,7 +183,7 @@ describe('useBrandImport and the brand assets', () => {
       brandAssets: confirmedImport(hook.result.current.state),
     })
     expect(input?.brandAssets).toEqual({
-      host: 'stripe.com',
+      host: 'example.com',
       assets: ['logo', 'icon'],
       preTicked: false,
     })
@@ -200,7 +200,7 @@ describe('useBrandImport and the brand assets', () => {
   it('a tick the person made themselves is no longer a pre-tick, even ticked again', async () => {
     importFn.mockResolvedValue({ ok: true, brand: { ...assets, portalOnSite: true } })
     const { hook } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.confirmAssets(false))
     act(() => hook.result.current.confirmAssets(true))
     expect(hook.result.current.confirmed).toBe(true)
@@ -210,7 +210,7 @@ describe('useBrandImport and the brand assets', () => {
   it('ticking again brings back a row that was taken back', async () => {
     importFn.mockResolvedValue({ ok: true, brand: { ...assets, portalOnSite: true } })
     const { hook, current } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.undoRow('logo'))
     act(() => hook.result.current.confirmAssets(false))
     act(() => hook.result.current.confirmAssets(true))
@@ -221,7 +221,7 @@ describe('useBrandImport and the brand assets', () => {
   it('never takes a held row back', async () => {
     importFn.mockResolvedValue({ ok: true, brand: assets })
     const { hook, steps } = setup()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.undoRow('logo'))
     expect(steps).toHaveLength(1)
     expect(doneState(hook).undone).toEqual([])
@@ -231,17 +231,17 @@ describe('useBrandImport and the brand assets', () => {
 describe('importSummary', () => {
   it('reads as the closed section shows it', () => {
     expect(importSummary({ status: 'idle' })).toBe('From your website')
-    expect(importSummary({ status: 'reading', host: 'stripe.com' })).toBe('Reading…')
+    expect(importSummary({ status: 'reading', host: 'example.com' })).toBe('Reading…')
     expect(
       importSummary({
         status: 'done',
-        host: 'stripe.com',
+        host: 'example.com',
         brand,
         before: { logo: { wideKey: null, mode: 'logo_and_name', icon: null } } as never,
         undone: [],
         preTicked: false,
       })
-    ).toBe('From stripe.com')
+    ).toBe('From example.com')
   })
 })
 
@@ -259,15 +259,15 @@ describe('ImportSection', () => {
         onUploadFont={onUploadFont}
       />
     )
-    fireEvent.change(screen.getByLabelText('Your website'), { target: { value: 'stripe.com' } })
+    fireEvent.change(screen.getByLabelText('Your website'), { target: { value: 'example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Import' }))
-    expect(onRun).toHaveBeenCalledWith('stripe.com')
+    expect(onRun).toHaveBeenCalledWith('example.com')
     const status = screen.getByRole('status')
     expect(status).toBeEmptyDOMElement()
 
     rerender(
       <ImportSection
-        state={{ status: 'reading', host: 'stripe.com' }}
+        state={{ status: 'reading', host: 'example.com' }}
         onRun={onRun}
         onUndoRow={onUndoRow}
         onUploadWide={vi.fn()}
@@ -276,14 +276,14 @@ describe('ImportSection', () => {
     )
     // One status region, there before the read, says each stage once.
     expect(status).toBe(screen.getByRole('status'))
-    expect(status).toHaveTextContent('Reading stripe.com: logo, colours, font and shape…')
-    expect(screen.getAllByText(/Reading stripe\.com/)).toHaveLength(1)
+    expect(status).toHaveTextContent('Reading example.com: logo, colours, font and shape…')
+    expect(screen.getAllByText(/Reading example\.com/)).toHaveLength(1)
 
     rerender(
       <ImportSection
         state={{
           status: 'done',
-          host: 'stripe.com',
+          host: 'example.com',
           brand,
           before: { logo: { wideKey: null, mode: 'logo_and_name', icon: null } } as never,
           undone: ['logo'],
@@ -301,20 +301,20 @@ describe('ImportSection', () => {
     expect(screen.getAllByRole('button', { name: /^Undo/ })).toHaveLength(4)
     fireEvent.click(screen.getByRole('button', { name: 'Undo Main colour' }))
     expect(onUndoRow).toHaveBeenCalledWith('primary')
-    fireEvent.click(screen.getByRole('button', { name: 'Upload Söhne' }))
-    expect(onUploadFont).toHaveBeenCalledWith('Söhne')
+    fireEvent.click(screen.getByRole('button', { name: 'Upload Brand Sans' }))
+    expect(onUploadFont).toHaveBeenCalledWith('Brand Sans')
     expect(status).toBe(screen.getByRole('status'))
     expect(status).toHaveTextContent(
-      'Found. Matched from stripe.com. Everything is in your draft until you publish.'
+      'Found. Matched from example.com. Everything is in your draft until you publish.'
     )
-    expect(screen.getAllByText(/Matched from stripe\.com/)).toHaveLength(1)
+    expect(screen.getAllByText(/Matched from example\.com/)).toHaveLength(1)
   })
 
   it('announces the read when the section opens with one under way (started from the chat)', async () => {
     const { renderToString } = await import('react-dom/server')
     const section = (
       <ImportSection
-        state={{ status: 'reading', host: 'stripe.com' }}
+        state={{ status: 'reading', host: 'example.com' }}
         onRun={vi.fn()}
         onUndoRow={vi.fn()}
         onUploadWide={vi.fn()}
@@ -328,7 +328,7 @@ describe('ImportSection', () => {
     expect(first).not.toContain('Reading')
     render(section)
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Reading stripe.com: logo, colours, font and shape…'
+      'Reading example.com: logo, colours, font and shape…'
     )
   })
 
@@ -339,7 +339,7 @@ describe('ImportSection', () => {
       confirmed,
       state: {
         status: 'done' as const,
-        host: 'stripe.com',
+        host: 'example.com',
         brand: { ...brand, ...over },
         before: { logo: { wideKey: null, mode: 'logo_and_name', icon: null } } as never,
         undone: [],
@@ -362,7 +362,7 @@ describe('ImportSection', () => {
     }
 
     it('holds the logo, icon and font behind one unticked box, with no note under it', () => {
-      const siteFont = { family: 'Söhne', licence: 'commercial' as const, files }
+      const siteFont = { family: 'Brand Sans', licence: 'commercial' as const, files }
       const onConfirm = show(done({ icon, siteFont }, false))
       const box = screen.getByRole('checkbox', {
         name: 'We own this logo, icon and font, or have a licence to use them',
@@ -379,19 +379,19 @@ describe('ImportSection', () => {
     })
 
     it('shows them applied once ticked, and unticks', () => {
-      const siteFont = { family: 'Söhne', licence: 'commercial' as const, files }
+      const siteFont = { family: 'Brand Sans', licence: 'commercial' as const, files }
       const onConfirm = show(done({ icon, siteFont }, true))
       const box = screen.getByRole('checkbox')
       expect(box).toBeChecked()
       expect(screen.getByText('From the site')).toBeInTheDocument()
-      expect(screen.getByText('Söhne, from the site')).toBeInTheDocument()
+      expect(screen.getByText('Brand Sans, from the site')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Undo Logo' })).toBeInTheDocument()
       fireEvent.click(box)
       expect(onConfirm).toHaveBeenCalledWith(false)
     })
 
     it('leaves the font out of the label when a font service serves it', () => {
-      show(done({ icon, siteFont: { family: 'Söhne', notCopied: 'service' } }, true))
+      show(done({ icon, siteFont: { family: 'Brand Sans', notCopied: 'service' } }, true))
       expect(
         screen.getByRole('checkbox', {
           name: 'We own this logo and icon, or have a licence to use them',
@@ -491,18 +491,18 @@ describe('ImportSection', () => {
   })
 
   it('keeps what the site showed with a refusal, for the editor to say', async () => {
-    const notRead = { reason: 'error' as const, host: 'stripe.com', candidates: [] }
+    const notRead = { reason: 'error' as const, host: 'example.com', candidates: [] }
     importFn.mockResolvedValue({ ok: false, code: 'SITE_ERROR_PAGE', message: 'words', notRead })
     let draft = draftFromLoaded(loaded)
     const hook = renderHook(() =>
       useBrandImport({ update: (edit) => (draft = edit(draft)), getDraft: () => draft })
     )
-    await act(() => hook.result.current.run(' stripe.com '))
+    await act(() => hook.result.current.run(' example.com '))
     expect(hook.result.current.state).toEqual({
       status: 'refused',
       message: 'words',
       notRead,
-      input: 'stripe.com',
+      input: 'example.com',
     })
   })
 
@@ -545,7 +545,7 @@ describe('suggested words', () => {
   it('an import offers the name and a welcome line, and applies neither', async () => {
     importFn.mockResolvedValue({ ok: true, brand: named })
     const { hook, current } = start()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     expect(hook.result.current.suggestions.map((s) => [s.key, s.text, s.used])).toEqual([
       ['name', 'Northwind, now Acme Corp', false],
       ['welcome', 'Tell us what would make Northwind better for your team.', false],
@@ -556,7 +556,7 @@ describe('suggested words', () => {
   it('using one changes the draft as one step and hands over the change, for the reply and its Undo', async () => {
     importFn.mockResolvedValue({ ok: true, brand: named })
     const { hook, used, undo, current } = start()
-    await act(() => hook.result.current.run('stripe.com'))
+    await act(() => hook.result.current.run('example.com'))
     const before = current()
     act(() => hook.result.current.useSuggestion('name'))
     hook.rerender()
@@ -579,7 +579,7 @@ describe('suggested words', () => {
     const onUse = vi.fn()
     const state = {
       status: 'done' as const,
-      host: 'stripe.com',
+      host: 'example.com',
       brand: named,
       before: draftFromLoaded(loaded),
       undone: [],
@@ -624,5 +624,23 @@ describe('suggested words', () => {
       />
     )
     expect(screen.queryByRole('group', { name: 'Suggestions' })).toBeNull()
+  })
+})
+
+describe('the website field', () => {
+  it('gives a neutral example', () => {
+    render(
+      <ImportSection
+        state={{ status: 'idle' }}
+        onRun={vi.fn()}
+        onUndoRow={vi.fn()}
+        onUploadWide={vi.fn()}
+        onUploadFont={vi.fn()}
+      />
+    )
+    expect(screen.getByLabelText('Your website')).toHaveAttribute(
+      'placeholder',
+      'Your website, like example.com'
+    )
   })
 })

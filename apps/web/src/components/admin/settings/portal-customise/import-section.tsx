@@ -268,7 +268,7 @@ export function ImportSection({
       <form className="flex gap-2" onSubmit={submit}>
         <Input
           aria-label="Your website"
-          placeholder="Your website, like stripe.com"
+          placeholder="Your website, like example.com"
           value={value}
           maxLength={2048}
           onChange={(event) => setValue(event.target.value)}

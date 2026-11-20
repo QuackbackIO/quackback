@@ -18,8 +18,11 @@ import { applyDraftPatch, summariseDraftForAsk } from './ask-draft'
 import { summariseChange, type ChangeLine, type ChangeSummary } from './change-summary'
 import type { PortalDraft } from './portal-draft'
 
+/** Starts a request for the person's own website: they type its address. */
+const IMPORT_SUGGESTION = 'Import my website'
+
 const SUGGESTIONS = [
-  'Import stripe.com',
+  IMPORT_SUGGESTION,
   'Use #1a73e8 for buttons',
   'Make the buttons less rounded',
   'Make the header navy',
@@ -81,6 +84,7 @@ export const AskDock = memo(function AskDock({
   const [focused, setFocused] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const nextId = useRef(0)
+  const field = useRef<HTMLInputElement>(null)
 
   const say = (message: Omit<Message, 'id'>) =>
     setMessages((all) => [...all, { ...message, id: nextId.current++ }].slice(-6))
@@ -197,7 +201,12 @@ export const AskDock = memo(function AskDock({
               type="button"
               // Keeps the field focused, so the chips stay while one is sent.
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void ask(chip)}
+              onClick={() => {
+                if (chip === IMPORT_SUGGESTION) {
+                  setValue('Import ')
+                  field.current?.focus()
+                } else void ask(chip)
+              }}
               className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {chip}
@@ -211,6 +220,7 @@ export const AskDock = memo(function AskDock({
       >
         <SparklesIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <input
+          ref={field}
           data-bare-field
           aria-label="Ask for a change"
           placeholder="Ask for a change"
