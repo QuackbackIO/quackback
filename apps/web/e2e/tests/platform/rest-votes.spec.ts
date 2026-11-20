@@ -59,10 +59,11 @@ test.describe('REST votes: the key votes as itself', () => {
         expect((await votesOf(post.id)).map((v) => v.principalId)).toEqual([admin.principalId])
 
         // An unvote never fires post.voted: a third (re-)vote is the control.
+        // The webhook is workspace-wide, so count this post's deliveries only.
         await expectJson(await voter.api.post(`/api/v1/posts/${post.id}/vote`), 200)
         await deliveriesOf(marker, 'post.voted', post.id, { count: 2 })
         const all = (await sink.deliveries(marker)).filter(
-          (d) => d.headers['x-quackback-event'] === 'post.voted'
+          (d) => d.headers['x-quackback-event'] === 'post.voted' && d.body.includes(post.id)
         )
         expect(all).toHaveLength(2)
       } finally {

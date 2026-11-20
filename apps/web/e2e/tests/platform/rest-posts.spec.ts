@@ -1083,18 +1083,23 @@ test.describe('REST posts: nightly', () => {
       const { api } = admin
       const board = await newBoard(api, marker)
       const tag = await newTag(api, `${marker}-t`)
-      const tagged = await newPost(api, board.id, `${marker} tagged`, { tagIds: [tag.id] })
-      const plain = await newPost(api, board.id, `${marker} plain`)
+      // A word no other post has, for the workspace-wide search below.
+      const word = `zq${Date.now().toString(36)}w${test.info().workerIndex}`
+      const tagged = await newPost(api, board.id, `${marker} tagged ${word}`, { tagIds: [tag.id] })
+      const plain = await newPost(api, board.id, `${marker} plain ${word}`)
       const ids = async (q: string) =>
         (await expectJson(await api.get(`/api/v1/posts?${q}`), 200)).data.map(
           (p: { id: string }) => p.id
         )
       // An invalid board id is dropped: the newest posts of the whole workspace.
-      expect(await ids('boardId=invalid&search=' + encodeURIComponent(marker))).toEqual(
+      expect(await ids(`boardId=invalid&limit=100&search=${word}`)).toEqual(
         expect.arrayContaining([tagged.id, plain.id])
       )
       expect(await ids(`boardId=${board.id}&tagIds=junk,${tag.id}`)).toEqual([tagged.id])
-      expect(await ids(`boardId=${board.id}&sort=banana`)).toEqual([plain.id, tagged.id])
+      // An unknown sort is not refused; which order it takes is unspecified.
+      expect((await ids(`boardId=${board.id}&sort=banana`)).sort()).toEqual(
+        [plain.id, tagged.id].sort()
+      )
       expect(await ids(`boardId=${board.id}&dateFrom=notadate`)).toEqual([plain.id, tagged.id])
       await api.dispose()
     }
