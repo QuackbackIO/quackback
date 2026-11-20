@@ -33,6 +33,7 @@ import {
 } from './provider-ids'
 import { AUTH_BLOCK_MESSAGES } from './redirect-errors'
 import { handleRefreshGraceHeal } from './refresh-grace'
+import { isTwoFactorPendingSession, TWO_FACTOR_PENDING_ALLOWLIST } from './two-factor-pending'
 import { captureCountryFromHeaders } from './country-capture'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
@@ -476,6 +477,13 @@ const WIDGET_AUTH_ALLOWLIST = new Set([
   '/one-time-token/verify',
 ])
 
+/**
+ * Widget-allowlisted paths that turn the caller's session into another one. A
+ * session pending two-factor enrolment must not reach them: a one-time token
+ * redeems for an ordinary session.
+ */
+const SESSION_TRADING_PATHS = new Set(['/one-time-token/generate'])
+
 type HeaderBag = { get(name: string): string | null }
 
 function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
@@ -503,13 +511,19 @@ function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | n
 }
 
 /**
- * Widget-scoped sessions may only hit the Better Auth allowlist. Portal and
- * dashboard sessions still pass; missing sessions are left to the endpoint's
- * own auth middleware.
+ * Sessions that may only reach some Better Auth endpoints, from one lookup:
  *
- * An allowlisted path passes whatever the session is, so it returns before the
- * lookup: `/get-session` backs every authenticated request, and resolving the
- * session here as well would double its cost.
+ *  - widget-scoped sessions may only hit {@link WIDGET_AUTH_ALLOWLIST};
+ *  - a session still pending two-factor enrolment may only finish it or sign
+ *    out ({@link TWO_FACTOR_PENDING_ALLOWLIST}, `two-factor-pending.ts`).
+ *
+ * Portal and dashboard sessions still pass; missing sessions are left to the
+ * endpoint's own auth middleware.
+ *
+ * A widget-allowlisted path that cannot trade the session for another passes
+ * whatever the session is, so it returns before the lookup: `/get-session`
+ * backs every authenticated request, and resolving the session here as well
+ * would double its cost.
  */
 export async function handleWidgetAccountMutationGate(ctx: {
   path?: string
@@ -526,7 +540,13 @@ export async function handleWidgetAccountMutationGate(ctx: {
   if (token?.startsWith(TEST_CUSTOMER_SESSION_PREFIX)) {
     throw new APIError('FORBIDDEN', { message: 'A test session only works in the test widget' })
   }
-  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
+  const widgetAllowed = WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')
+  // A fresh sign-in (any path `inferProvider` names) never acts on the session
+  // the caller already holds, so a pending one does not stand in its way.
+  const pendingAllowed =
+    TWO_FACTOR_PENDING_ALLOWLIST.has(ctx.path ?? '') ||
+    inferProvider(ctx as Parameters<typeof inferProvider>[0]) !== null
+  if (widgetAllowed && !SESSION_TRADING_PATHS.has(ctx.path ?? '')) return
   if (!token) return
   const found = await ctx.context?.internalAdapter?.findSession?.(token)
   const session =
@@ -536,6 +556,13 @@ export async function handleWidgetAccountMutationGate(ctx: {
       ? (found as { session?: { scope?: unknown } }).session
       : undefined
   if (!session) return
+  if (!pendingAllowed && isTwoFactorPendingSession(session)) {
+    throw new APIError('FORBIDDEN', {
+      code: 'two_factor_enrollment_required',
+      message: 'Set up two-factor authentication to finish signing in.',
+    })
+  }
+  if (widgetAllowed) return
   if (toSessionScope(session.scope) !== 'widget') return
   throw new APIError('FORBIDDEN', {
     message: 'Widget sessions cannot access this endpoint',
@@ -1962,6 +1989,14 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   if (process.env.AUTH_HOOKS_DEBUG === '1') {
     const provider = inferProvider(ctx as Parameters<typeof inferProvider>[0])
     log.debug({ path: ctx.path, provider: provider ?? null }, 'after-hook')
+  }
+
+  // A session still pending two-factor enrolment is no session to anyone who
+  // reads one, in-process `auth.api.getSession` included; the enrolment
+  // endpoints read it through the library's own middleware, which this does
+  // not run for (two-factor-pending.ts).
+  if (ctx.path === '/get-session' && isTwoFactorPendingSession(ctx.context?.session?.session)) {
+    return ctx.json(null)
   }
 
   // Any endpoint but a session read may have changed who the request is

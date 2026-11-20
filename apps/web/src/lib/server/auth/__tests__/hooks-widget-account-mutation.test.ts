@@ -61,7 +61,7 @@ function ctx(opts: { path: string; token?: string; cookie?: string; scope?: stri
     headers,
     context: {
       internalAdapter: {
-        findSession: vi.fn(async (token: string) => {
+        findSession: vi.fn(async (token: string): Promise<{ session: object } | null> => {
           if (opts.scope === null) return null
           if (opts.token && token !== opts.token.split('.')[0]) return null
           return { session: { scope: opts.scope } }
@@ -189,6 +189,33 @@ describe('handleWidgetAccountMutationGate', () => {
         ctx({ path: '/sign-out', token: 'widget-tok', scope: 'widget' })
       )
     ).rejects.toThrow(/Widget sessions/)
+  })
+
+  // A session pending two-factor enrolment may finish enrolment or sign out;
+  // a one-time token would trade it for an ordinary session.
+  it('holds a session pending two-factor enrolment to enrolment and sign-out', async () => {
+    const pending = (path: string) => {
+      const c = ctx({ path, cookie: 'better-auth.session_token=pend-tok.sig', scope: 'portal' })
+      c.context.internalAdapter.findSession.mockResolvedValue({
+        session: { scope: 'portal', twoFactorPending: true },
+      })
+      return c
+    }
+    for (const path of ['/one-time-token/generate', '/update-user', '/list-sessions']) {
+      await expect(handleWidgetAccountMutationGate(pending(path))).rejects.toThrow(/two-factor/)
+    }
+    // Enrolment, sign-out, and starting over: signing in again, or resetting
+    // the password, never act on the session already held.
+    for (const path of [
+      '/two-factor/enable',
+      '/two-factor/verify-totp',
+      '/sign-out',
+      '/sign-in/email',
+      '/sign-in/email-otp',
+      '/request-password-reset',
+    ]) {
+      await expect(handleWidgetAccountMutationGate(pending(path))).resolves.toBeUndefined()
+    }
   })
 
   it('no-ops when there is no session token', async () => {
