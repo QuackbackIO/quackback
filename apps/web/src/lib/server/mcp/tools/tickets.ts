@@ -416,6 +416,7 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
     priority?: 'none' | 'low' | 'medium' | 'high' | 'urgent'
   }>(server, auth, {
     name: 'update_ticket',
+    title: 'Update ticket',
     permissions: [PERMISSIONS.TICKET_SET_STATUS],
     description: `Rename a ticket, change its triage priority, or both. Pass only the fields to change; a field equal to its current value changes nothing.
 
