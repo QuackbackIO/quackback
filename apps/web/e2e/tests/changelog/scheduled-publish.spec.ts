@@ -131,6 +131,7 @@ test(
       title: `${marker} now instead`,
       state: { type: 'scheduled', publishAt: hoursFromNow(2) },
     })
+    await expect.poll(() => publishJob(entry.id)).not.toBeNull()
     expect((await updateEntry(admin, entry.id, { publishState: { type: 'published' } })).ok).toBe(
       true
     )
@@ -218,9 +219,15 @@ test(
       title: `${marker} deleted before`,
       state: { type: 'scheduled', publishAt: hoursFromNow(1) },
     })
+    await expect.poll(() => publishJob(entry.id)).not.toBeNull()
     expect((await callServerFn(admin, 'deleteChangelogFn', { id: entry.id })).ok).toBe(true)
     await timeComes(entry.id)
     await runDue(request, entry.id)
+    // The job ran (it is no longer pending) and claimed nothing.
+    await expect.poll(() => publishJob(entry.id)).toBeNull()
+    const [ran] = await supportDb()`SELECT status FROM job_queue
+      WHERE dedupe_key = ${`changelog-publish--${entry.id}`}`
+    expect(ran?.status).toBe('succeeded')
 
     const control = await createEntry(admin, { title: `${marker} control`, state: 'published' })
     await waitForMail({ to: sub.email, subject: control.title })
