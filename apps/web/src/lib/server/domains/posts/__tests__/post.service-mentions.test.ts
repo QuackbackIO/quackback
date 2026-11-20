@@ -67,6 +67,31 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     return c
   }
 
+  // Used by updatePost. Echoes back a fake "updated post" using the contentJson
+  // captured from the call site via updateReturningContentJson.
+  const update = vi.fn(() => ({
+    set: vi.fn(() => ({
+      where: vi.fn(() => ({
+        returning: vi.fn(async () => [
+          {
+            id: 'post_update' as unknown,
+            boardId: 'board_b' as unknown,
+            statusId: 'post_status_open' as unknown,
+            title: updateReturningTitle,
+            content: 'Body',
+            contentJson: updateReturningContentJson,
+            principalId: 'principal_author' as unknown,
+            ownerPrincipalId: null,
+            voteCount: 1,
+            commentCount: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ]),
+      })),
+    })),
+  }))
+
   return {
     db: {
       query: {
@@ -97,6 +122,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
         const tx = {
+          update,
           insert: vi.fn((table: { __name?: string }) => {
             const label =
               table === undefined
@@ -134,30 +160,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         return fn(tx)
       }),
       select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
-      // Used by updatePost. Echoes back a fake "updated post" using the contentJson
-      // captured from the call site via updateReturningContentJson.
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => ({
-            returning: vi.fn(async () => [
-              {
-                id: 'post_update' as unknown,
-                boardId: 'board_b' as unknown,
-                statusId: 'post_status_open' as unknown,
-                title: updateReturningTitle,
-                content: 'Body',
-                contentJson: updateReturningContentJson,
-                principalId: 'principal_author' as unknown,
-                ownerPrincipalId: null,
-                voteCount: 1,
-                commentCount: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              },
-            ]),
-          })),
-        })),
-      })),
+      update,
       delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
       insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
     },

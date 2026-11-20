@@ -43,6 +43,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       update: dbUpdate,
       delete: dbDelete,
       insert: dbInsert,
+      transaction: (fn: (tx: unknown) => unknown) =>
+        fn({ update: dbUpdate, delete: dbDelete, insert: dbInsert }),
     },
     eq: vi.fn(),
     inArray: vi.fn(),
@@ -110,10 +112,14 @@ describe('post.service updatePost', () => {
         name: 'Closed',
         color: '#111111',
       })
-    selectWhere.mockResolvedValueOnce([{ tagId: 'tag_old' as PostTagId }]).mockResolvedValueOnce([
-      { id: 'tag_old' as PostTagId, name: 'Old tag' },
-      { id: 'tag_new' as PostTagId, name: 'New tag' },
-    ])
+    // Current tags, then the live-tag check for the new ones, then the activity names.
+    selectWhere
+      .mockResolvedValueOnce([{ tagId: 'tag_old' as PostTagId }])
+      .mockResolvedValueOnce([{ id: 'tag_new' as PostTagId }])
+      .mockResolvedValueOnce([
+        { id: 'tag_old' as PostTagId, name: 'Old tag' },
+        { id: 'tag_new' as PostTagId, name: 'New tag' },
+      ])
     updateReturning.mockResolvedValue([
       {
         id: 'post_123' as PostId,
