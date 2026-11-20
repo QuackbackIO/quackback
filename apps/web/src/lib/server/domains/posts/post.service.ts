@@ -675,15 +675,21 @@ export async function updatePost(
   // was part of the update — a title-only edit must not clobber existing rows.
   if (input.contentJson !== undefined || input.content !== undefined) {
     const contentJson = updatedPost.contentJson
-    await syncPostMentions({
-      postId: updatedPost.id,
-      postTitle: updatedPost.title,
-      postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
-      boardId: updatedPost.boardId,
-      mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
-      excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
-      actor: buildEventActor(actor),
-    })
+    // The edit is already saved: a failure reconciling its mentions is logged,
+    // never turned into a failed request.
+    try {
+      await syncPostMentions({
+        postId: updatedPost.id,
+        postTitle: updatedPost.title,
+        postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
+        boardId: updatedPost.boardId,
+        mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
+        excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
+        actor: buildEventActor(actor),
+      })
+    } catch (error) {
+      log.error({ err: error, post_id: updatedPost.id }, 'post mention reconcile failed')
+    }
   }
 
   return updatedPost

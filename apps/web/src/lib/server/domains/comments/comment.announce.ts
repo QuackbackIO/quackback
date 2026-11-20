@@ -21,6 +21,9 @@ import {
 } from '@quackback/ids'
 import { dispatchCommentCreated, buildEventActor } from '@/lib/server/events/dispatch'
 import { dispatchCommentMentions } from './comment-mentions'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'comment-announce' })
 
 /** Author of a published comment, as the `comment.created` event sees it. */
 export interface PublishedCommentAuthor {
@@ -68,7 +71,13 @@ export async function dispatchCommentCreatedEvent(
       boardSlug: post.boardSlug,
     }
   )
-  await dispatchCommentMentions(actor, author.principalId, comment, post)
+  // The comment is already saved: a failure telling the people it mentions
+  // is logged, never turned into a failed request a retry would duplicate.
+  try {
+    await dispatchCommentMentions(actor, author.principalId, comment, post)
+  } catch (error) {
+    log.error({ err: error, comment_id: comment.id }, 'comment mention notices failed')
+  }
 }
 
 /**

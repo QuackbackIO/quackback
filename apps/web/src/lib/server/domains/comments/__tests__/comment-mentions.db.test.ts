@@ -23,8 +23,11 @@ vi.mock('@/lib/server/events/dispatch', async (importOriginal) => ({
   dispatchCommentCreated: dispatched.commentCreated,
   dispatchCommentMentioned: dispatched.commentMentioned,
 }))
+const sectionOrigins = vi.hoisted(() =>
+  vi.fn(async (): Promise<Record<string, string>> => ({ feedback: 'https://acme.example' }))
+)
 vi.mock('@/lib/server/domains/settings/section-links', () => ({
-  getSectionOrigins: async () => ({ feedback: 'https://acme.example' }),
+  getSectionOrigins: sectionOrigins,
 }))
 vi.mock('@/lib/server/integrations/message-utils', () => ({
   buildPostUrl: (_links: unknown, boardSlug: string, postId: string) =>
@@ -126,5 +129,16 @@ describe.skipIf(!fixture.available)('comment mentions (real DB)', () => {
 
     expect(mentionedIds()).toEqual([teammate])
     expect(dispatched.commentMentioned.mock.calls[0][1]).toMatchObject({ isPrivate: true })
+  })
+
+  it('a failure telling people never fails the comment, which is already saved', async () => {
+    const author = await person('user')
+    const teammate = await person('member')
+    sectionOrigins.mockRejectedValueOnce(new Error('settings unavailable'))
+
+    await expect(publish(author, mentionDoc(teammate))).resolves.toBeDefined()
+
+    expect(dispatched.commentCreated).toHaveBeenCalledOnce()
+    expect(dispatched.commentMentioned).not.toHaveBeenCalled()
   })
 })

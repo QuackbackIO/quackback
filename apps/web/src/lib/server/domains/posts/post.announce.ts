@@ -18,6 +18,9 @@ import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'post-announce' })
 
 type PostSnapshot = Pick<Post, 'id' | 'title' | 'content' | 'boardId' | 'contentJson' | 'voteCount'>
 type AuthorSnapshot = {
@@ -98,15 +101,21 @@ export async function announcePublishedPost(
   if (!opts?.skipMentions && post.contentJson) {
     const mentionedIds = extractMentions(post.contentJson)
     if (mentionedIds.size > 0) {
-      await syncPostMentions({
-        postId: post.id,
-        postTitle: post.title,
-        postUrl: buildPostUrl(await getSectionOrigins(), board.slug, post.id),
-        boardId: post.boardId,
-        mentionedIds,
-        excerptByPrincipalId: extractMentionExcerpts(post.contentJson),
-        actor: buildEventActor(author),
-      })
+      // The post is already saved: a failure telling the people it mentions
+      // is logged, never turned into a failed request a retry would duplicate.
+      try {
+        await syncPostMentions({
+          postId: post.id,
+          postTitle: post.title,
+          postUrl: buildPostUrl(await getSectionOrigins(), board.slug, post.id),
+          boardId: post.boardId,
+          mentionedIds,
+          excerptByPrincipalId: extractMentionExcerpts(post.contentJson),
+          actor: buildEventActor(author),
+        })
+      } catch (error) {
+        log.error({ err: error, post_id: post.id }, 'post mention notices failed')
+      }
     }
   }
 }
