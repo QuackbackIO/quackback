@@ -489,12 +489,27 @@ test(
 )
 
 test(
-  'FBA-Q-15 a held post sends its @-mention notice only once approved',
+  "FBA-Q-15 a customer's held post never sends an @-mention notice, before or after approval",
   { tag: '@core' },
   async ({ playwright, browser, newTeammate, marker }) => {
+    // Customers get no mention picker, so a mention node in their post is a
+    // crafted request and notifies nobody (FBP-B22). A teammate's mention of
+    // the same person, sent last, is the control that the notices ran.
     const api = await personApi(playwright, 'admin')
     const customer = await portalCustomer(browser, marker)
     const mate = await newTeammate({ roleKey: 'admin', principalRole: 'admin' })
+    const mentionDoc = (text: string) => ({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text },
+            { type: 'mention', attrs: { id: mate.principalId, label: mate.name } },
+          ],
+        },
+      ],
+    })
     try {
       const board = await makeBoard(api, marker)
       await setBoardModeration(api, board.id, { signedPosts: 'on' })
@@ -502,29 +517,28 @@ test(
         boardId: board.id,
         title: `${marker} mentions a teammate`,
         content: `Hello ${mate.name}`,
-        contentJson: {
-          type: 'doc',
-          content: [
-            {
-              type: 'paragraph',
-              content: [
-                { type: 'text', text: 'Hello ' },
-                { type: 'mention', attrs: { id: mate.principalId, label: mate.name } },
-              ],
-            },
-          ],
-        },
+        contentJson: mentionDoc('Hello '),
       })
       expect(res.ok, res.raw).toBe(true)
       const postId = res.data.id
       expect((await postRow(postId))?.moderation_state).toBe('pending')
-      await new Promise((r) => setTimeout(r, 1_500))
-      expect(await bellsFor(mate.principalId, postId)).toEqual([])
-      expect(await mailTo(mate.email)).toEqual([])
-
       expect((await callServerFn(api, 'approvePostFn', { postId })).ok).toBe(true)
-      await expect.poll(async () => (await bellsFor(mate.principalId, postId)).length).toBe(1)
+      expect((await postRow(postId))?.moderation_state).toBe('published')
+
+      const control = await callServerFn<{ id: string }>(api, 'createPublicPostFn', {
+        boardId: board.id,
+        title: `${marker} team mention`,
+        content: `Hi ${mate.name}`,
+        contentJson: mentionDoc('Hi '),
+      })
+      expect(control.ok, control.raw).toBe(true)
+      await expect
+        .poll(async () => (await bellsFor(mate.principalId, control.data.id)).length)
+        .toBe(1)
       await waitForMail({ to: mate.email })
+
+      expect(await bellsFor(mate.principalId, postId)).toEqual([])
+      expect(await mailTo(mate.email)).toHaveLength(1)
     } finally {
       await customer.close()
       await api.dispose()

@@ -229,7 +229,7 @@ test(
       })
       expect(changed.ok, changed.raw).toBe(true)
       for (const person of [dupOnly, both]) {
-        await waitForMail({ to: person.email, subject: 'Your feedback is now Planned' })
+        await waitForMail({ to: person.email, subject: 'A post you follow is now Planned' })
         await expect
           .poll(async () => (await bellsFor(person.principalId, canonical.id)).length)
           .toBe(1)
