@@ -3,7 +3,7 @@
  * in-app bells, the outgoing webhook, and the once-only announcement claim.
  *
  * Journeys: CHG-S-08, CHG-S-09, CHG-S-10, CHG-S-11, CHG-S-12, CHG-S-13,
- * CHG-S-14 (quarantined), CHG-S-15, CHG-S-16, CHG-S-17 (@isolated), CHG-S-18,
+ * CHG-S-14, CHG-S-15, CHG-S-16, CHG-S-17 (@isolated), CHG-S-18,
  * CHG-S-19, CHG-S-21, CHG-S-27, CHG-S-28 (quarantined), CHG-A-15.
  *
  * Every publish mails every active subscriber in the workspace, so each test
@@ -184,14 +184,7 @@ test(
 
 test(
   'CHG-S-11 the publisher is not notified of their own announcement',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'changelog.service.ts builds a service actor (no userId), and isActorSubscriber skips service actors, so the publisher is mailed (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@nightly' },
   async ({ playwright, people, marker }) => {
     const admin = await personApi(playwright, 'admin')
     const adminUuid = toUuid(people.people.admin.principalId as `principal_${string}`)
@@ -280,14 +273,7 @@ test(
 
 test(
   'CHG-S-14 the email "View Update" button links to the entry itself',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'targets.ts builds changelogUrl from the section index, not /changelog/<id> (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@nightly' },
   async ({ playwright, marker }) => {
     const admin = await personApi(playwright, 'admin')
     const sub = await changelogSubscriber(marker)

@@ -3,7 +3,7 @@
  * labels (create, edit, delete, validation, segment gates).
  *
  * Journeys: CHG-A-43 (@isolated), CHG-A-46, CHG-A-47 (@isolated), CHG-A-48
- * (@isolated), CHG-A-49 (rename quarantined), CHG-A-50, CHG-A-51, CHG-A-52 (quarantined),
+ * (@isolated), CHG-A-49, CHG-A-50, CHG-A-51, CHG-A-52 (quarantined),
  * CHG-A-53.
  *
  * Workspace-wide switches (audience, emails, auto-subscribe, the product
@@ -161,14 +161,7 @@ test(
 
 test(
   'CHG-A-49 renaming a label keeps its id, and a rename onto a taken name is refused',
-  {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'changelog-category.service.ts updateChangelogCategory compares the uuid column to the raw TypeID in a sql template, so every rename fails with a database error (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@core' },
   async ({ asPerson, playwright, marker }) => {
     const api = await personApi(playwright, 'admin')
     const name = `${marker.slice(-28)} old`
