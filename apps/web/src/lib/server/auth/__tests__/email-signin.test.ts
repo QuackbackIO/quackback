@@ -108,6 +108,28 @@ describe('requestEmailSignin — failed-verify redirect', () => {
   })
 })
 
+describe('requestEmailSignin: the host the link signs in on', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('signs in on the primary domain by default', async () => {
+    await requestEmailSignin({ email: 'jess@example.com', callbackURL: '/hc' })
+    expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ portalUrl: 'https://acme.quackback.io', callbackPath: '/hc' })
+    )
+  })
+
+  it('signs in on the section host the sign-in started on', async () => {
+    await requestEmailSignin({
+      email: 'jess@example.com',
+      callbackURL: '/hc',
+      linkOrigin: 'https://help.acme.com',
+    })
+    expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ portalUrl: 'https://help.acme.com', callbackPath: '/hc' })
+    )
+  })
+})
+
 describe('requestEmailSignin: the sign-in email', () => {
   beforeEach(() => vi.clearAllMocks())
 

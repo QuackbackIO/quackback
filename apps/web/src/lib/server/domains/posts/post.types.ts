@@ -79,6 +79,8 @@ export interface PostWithDetails extends Post {
     id: BoardId
     name: string
     slug: string
+    /** Set read-only by an admin. */
+    readOnly?: boolean
   }
   tags: Array<{
     id: PostTagId
@@ -300,6 +302,8 @@ export interface PublicPostDetail {
    * strips it before serializing to the client (segment ids must not leak).
    */
   boardAccess: BoardAccess
+  /** Set read-only by an admin. Server-only, like `boardAccess`. */
+  boardManualReadOnly?: boolean
   tags: Array<{ id: string; name: string; color: string }>
   /**
    * First page of root comments (each carrying its full reply subtree).

@@ -1,6 +1,6 @@
 /**
  * Countdown chip for a conversation's active SLA: the nearest unmet target,
- * stepping grey → yellow (<15m) → orange (<5m) → red (overdue), or "paused"
+ * stepping grey → a warning tint (<15m) → a stronger, bold warning tint (<5m) → danger (overdue), or "paused"
  * while a snoozed conversation's policy pauses its clocks. Ticks every 30s and
  * renders only after mount (the label depends on "now", which would otherwise
  * differ between the SSR pass and hydration).
@@ -15,9 +15,9 @@ import { cn } from '@/lib/shared/utils'
  *  inbox-detail-panel.tsx) share this exact tone → color mapping. */
 export const TONE_CLASSES: Record<SlaChipTone, string> = {
   ok: 'bg-muted text-muted-foreground',
-  due_soon: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
-  due_now: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
-  overdue: 'bg-red-500/15 text-red-700 dark:text-red-400',
+  due_soon: 'bg-warning/10 text-warning',
+  due_now: 'bg-warning/20 font-semibold text-warning',
+  overdue: 'bg-destructive/10 text-destructive',
   paused: 'bg-muted text-muted-foreground/70',
 }
 

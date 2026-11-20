@@ -90,6 +90,7 @@ describe('resolveRows email_verified plumb', () => {
       nextActiveStatusPosition: 0,
       tagMap: new Map(),
       boardMap: new Map(),
+      readOnlyBoardIds: new Set(),
       boardNames: new Map(),
     }
   }

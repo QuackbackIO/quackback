@@ -94,10 +94,10 @@ try {
     await sql`
       INSERT INTO conversations
         (id, visitor_principal_id, status, channel, priority, subject,
-         last_message_preview, last_message_at, created_at)
+         last_message_preview, last_message_at, resolved_at, created_at)
       VALUES
-        (${csatConversationId}, ${customerPrincipalId}, 'open', 'messenger', 'none', ${CSAT_SUBJECT},
-         ${'How did we do?'}, NOW(), NOW())`
+        (${csatConversationId}, ${customerPrincipalId}, 'closed', 'messenger', 'none', ${CSAT_SUBJECT},
+         ${'How did we do?'}, NOW(), NOW(), NOW())`
     const visitorMsg = toUuid(generateId('conversation_msg'))
     await sql`
       INSERT INTO conversation_messages
@@ -105,6 +105,15 @@ try {
       VALUES
         (${visitorMsg}, ${csatConversationId}, ${customerPrincipalId}, 'visitor', ${'Please rate this.'}, false,
          NOW() - interval '2 minutes')`
+    // Closed the way the app closes: the chat_ended row marks the close, and
+    // the rating block that follows it is the close's own ask (still live).
+    const endedMsg = toUuid(generateId('conversation_msg'))
+    await sql`
+      INSERT INTO conversation_messages
+        (id, conversation_id, principal_id, sender_type, content, is_internal, metadata, created_at)
+      VALUES
+        (${endedMsg}, ${csatConversationId}, NULL, 'system', ${'Conversation ended'}, false,
+         ${sql.json({ systemEvent: { kind: 'chat_ended' } })}, NOW() - interval '90 seconds')`
     const csatMsg = toUuid(generateId('conversation_msg'))
     const block = {
       v: 1,

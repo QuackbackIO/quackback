@@ -1,6 +1,7 @@
 import { db, eq, principal, apiKeys } from '@/lib/server/db'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import { resolveApiKeyAuthority } from '@/lib/server/domains/api-keys/api-key-authority'
+import { isPausedTeamSeat } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 import { hasApiScope, parseApiKeyScopes } from '@/lib/shared/api-key-scopes'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
@@ -32,6 +33,9 @@ export async function resolveMcpActor(
     .where(eq(principal.id, auth.principalId))
     .limit(1)
   if (!record || (record.role !== 'admin' && record.role !== 'member'))
+    throw new ForbiddenError('MCP_TEAM_MEMBER_REQUIRED', 'This operation requires a team member.')
+  // A paused seat (the plan has fewer team seats than members) has no team authority.
+  if (await isPausedTeamSeat(record))
     throw new ForbiddenError('MCP_TEAM_MEMBER_REQUIRED', 'This operation requires a team member.')
 
   const ceiling = auth.permissions

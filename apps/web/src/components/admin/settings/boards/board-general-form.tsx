@@ -2,6 +2,8 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { updateBoardSchema, type UpdateBoardInput } from '@/lib/shared/schemas/boards'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Form,
@@ -20,6 +22,7 @@ interface Board {
   name: string
   slug: string
   description: string | null
+  readOnly?: boolean
 }
 
 interface BoardGeneralFormProps {
@@ -99,6 +102,19 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
           )}
         />
       </form>
+      <SettingRow
+        label="Read-only"
+        description="Posts stay visible. Nobody can post, vote or comment."
+        htmlFor="board-read-only"
+        control={
+          <Switch
+            id="board-read-only"
+            checked={board.readOnly ?? false}
+            disabled={mutation.isPending}
+            onCheckedChange={(readOnly) => mutation.mutate({ id: board.id, readOnly })}
+          />
+        }
+      />
     </Form>
   )
 }

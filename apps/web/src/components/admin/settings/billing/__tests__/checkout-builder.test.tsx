@@ -169,7 +169,7 @@ describe('CheckoutBuilder', () => {
     expect(screen.getAllByText('Current').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
     expect(checkoutForm()).toBeNull()
-    expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Downgrade to Free' })).toBeInTheDocument()
   })
 
   it('explains pro-rata and end-of-period timing when moving between paid plans', () => {
@@ -183,7 +183,7 @@ describe('CheckoutBuilder', () => {
     renderBuilder(proOverview, { plan: 'pro' })
     const summary = screen.getByRole('complementary')
     expect(checkoutForm()).toBeNull()
-    expect(within(summary).getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()
+    expect(within(summary).getByRole('button', { name: 'Downgrade to Pro' })).toBeInTheDocument()
   })
 
   it('asks for a plan when none is selected', () => {

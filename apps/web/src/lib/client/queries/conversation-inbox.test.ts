@@ -136,6 +136,29 @@ describe('conversationInboxQueries key parity', () => {
     ).toEqual(['admin', 'inbox', 'conversations', 'custom:conversation_view_v', 'all', 'all', ''])
   })
 
+  it('keys a custom view by its rules too, so an edited view refetches', () => {
+    const nav = { kind: 'custom', viewId: 'conversation_view_v' } as never
+    const keyFor = (params?: Record<string, unknown>) =>
+      conversationInboxQueries.conversationList(
+        nav,
+        'all',
+        'all',
+        '',
+        undefined,
+        undefined,
+        params as never
+      ).queryKey
+    const before = keyFor({ tagIds: ['conversation_tag_first'] })
+    const after = keyFor({ tagIds: ['conversation_tag_second'] })
+    expect(after).not.toEqual(before)
+    // The same rules give the same key, whatever order their fields arrive in.
+    expect(keyFor({ status: 'open', tagIds: ['conversation_tag_first'] })).toEqual(
+      keyFor({ tagIds: ['conversation_tag_first'], status: 'open' })
+    )
+    // Still under the conversations prefix SSE invalidations target.
+    expect(before.slice(0, 3)).toEqual(['admin', 'inbox', 'conversations'])
+  })
+
   it('views key matches agentViews()', () => {
     expect(conversationInboxQueries.views().queryKey).toEqual(['admin', 'inbox', 'views'])
   })

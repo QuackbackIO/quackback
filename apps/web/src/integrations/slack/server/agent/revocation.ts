@@ -11,3 +11,11 @@ export function revokesSlackInstallation(
       event.tokens.bot.includes(botUserId))
   )
 }
+
+/**
+ * Events that remove or invalidate the connection. They are queued marked as
+ * lifecycle events, so they run even while integrations are paused.
+ */
+export function isSlackLifecycleEvent(event: { type?: string } | undefined): boolean {
+  return event?.type === 'app_uninstalled' || event?.type === 'tokens_revoked'
+}

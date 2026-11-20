@@ -23,6 +23,13 @@ describe('planUsageLines', () => {
     ])
   })
 
+  it('names the seat line team seats, as every other surface does', () => {
+    const seats = planUsageLines({ maxTeamSeats: 5 }, { maxTeamSeats: 3 }).find(
+      (line) => line.key === 'maxTeamSeats'
+    )
+    expect(seats?.label).toBe('team seats')
+  })
+
   it('reads a missing usage count as zero and a missing limit as unlimited', () => {
     const lines = planUsageLines({}, {})
     const subscribers = lines.find((line) => line.key === 'maxStatusSubscribers')

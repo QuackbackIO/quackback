@@ -215,11 +215,14 @@ export async function sweepOrphanedWaitingRuns(now: Date): Promise<number> {
 }
 
 /** The bounded authority this sweep's own close acts with — just enough to
- *  pass setConversationStatus's canActAsAgent gate (CONVERSATION_REPLY) and
- *  perform the status change itself. Deliberately narrower than the run
- *  engine's own workflowActor (workflow.engine.ts): this pass only ever
- *  closes a conversation, never anything else. */
-const SWEEP_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+ *  see the conversation (CONVERSATION_VIEW, which the writer's visibility
+ *  check asks of a service principal), pass setConversationStatus's
+ *  canActAsAgent gate (CONVERSATION_REPLY) and perform the status change
+ *  itself. Deliberately narrower than the run engine's own workflowActor
+ *  (workflow.engine.ts): this pass only ever closes a conversation, never
+ *  anything else. */
+export const SWEEP_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PERMISSIONS.CONVERSATION_VIEW,
   PERMISSIONS.CONVERSATION_REPLY,
   PERMISSIONS.CONVERSATION_SET_STATUS,
 ])
@@ -598,9 +601,9 @@ export async function sweepUnresponsiveConversations(now: Date): Promise<number>
 // sla.breached. The actual scan + fire-once marker claim lives in the SLA
 // domain (sla.sweep.ts's sweepApproachingSlaBreaches / sweepSlaBreachTriggers
 // + claimSlaTimerTriggerMarker, and their ticket twins in
-// ticket-sla.sweep.ts) — this section only orchestrates: reads which live
-// workflows care (so an idle workspace with none pays no extra scan), resolves
-// the lead-time input those functions need, enqueues a synthetic event per
+// ticket-sla.sweep.ts) — this section only orchestrates: resolves the
+// warning lead (the default, widened by any live workflow that asks for
+// more), enqueues a synthetic event per
 // scanned candidate, and claims each candidate's marker after its enqueue
 // (claim-after-enqueue — see sweepSlaTimerTriggers' doc). See sla.sweep.ts's
 // module doc for why this pair dispatches through the STANDARD
@@ -615,10 +618,7 @@ function readBreachLeadMinutes(workflow: Pick<Workflow, 'triggerSettings'>): num
   )
 }
 
-/** The live workflows subscribed to `triggerType`, or `[]` when none — a
- *  cheap pre-check so an idle workspace (the overwhelming common case) skips
- *  the SLA domain's scan entirely instead of paying a query every 5 minutes
- *  for nothing. */
+/** The live workflows subscribed to `triggerType`, or `[]` when none. */
 async function liveWorkflowsForTrigger(triggerType: string): Promise<Workflow[]> {
   return db
     .select()
@@ -632,14 +632,32 @@ async function liveWorkflowsForTrigger(triggerType: string): Promise<Workflow[]>
     )
 }
 
+/** The warning lead the approaching-breach scan uses: DEFAULT_BREACH_LEAD_MINUTES,
+ *  widened by the widest lead any live sla.approaching_breach workflow asks for.
+ *  Never narrowed: the warning email and webhook fire whether or not a
+ *  workflow listens, so a workflow asking for a shorter lead hears at the
+ *  default instead (the one fire-once marker per clock can't fire twice). */
+async function resolveBreachLeadMinutes(): Promise<number> {
+  const approachingWorkflows = await liveWorkflowsForTrigger('sla.approaching_breach')
+  return Math.max(DEFAULT_BREACH_LEAD_MINUTES, ...approachingWorkflows.map(readBreachLeadMinutes))
+}
+
 /**
- * Scan + dispatch both SLA timer triggers. `sla.approaching_breach` scans at
- * the WIDEST `breachLeadMinutes` configured across every live workflow of
- * that type (see sla.sweep.ts's module doc for why one scalar marker can't
- * fire each live workflow independently at ITS OWN lead); `sla.breached` has
- * no configurable lead, so it only needs a live-workflow existence check.
- * Each trigger scans TWO axes per tick, sharing the same live-workflow
- * pre-check and lead resolution: the conversation clocks (sla.sweep.ts) and
+ * Scan + dispatch both SLA timer triggers on every tick, whether or not any
+ * workflow listens: the events also drive the SLA warning/breach emails and
+ * the `sla.approaching_breach` / `sla.breached` webhooks. Each clock fires
+ * each event once (the fire-once marker below), and one event fans out to
+ * every consumer, so a workflow using the trigger never causes a second one.
+ * `sla.approaching_breach` scans at resolveBreachLeadMinutes' lead: the
+ * default, or the WIDEST `breachLeadMinutes` across the live workflows of
+ * that type when wider (see sla.sweep.ts's module doc for why one scalar
+ * marker can't fire each live workflow independently at ITS OWN lead);
+ * `sla.breached` has no configurable lead, and looks back only
+ * SLA_BREACH_TRIGGER_LOOKBACK_MS (sla.sweep.ts). Both scans ride the
+ * conversations_sla_unsettled_idx / tickets_sla_unsettled_idx partial
+ * indexes, the same candidate set the per-minute reporting sweep reads.
+ * Each trigger scans TWO axes per tick, sharing the same lead resolution:
+ * the conversation clocks (sla.sweep.ts) and
  * the ticket-anchored TTR clock (ticket-sla.sweep.ts). A scanned ticket
  * candidate dispatches the same synthetic event shape as a conversation one,
  * extended with the ticket identity (`ticketId` + `ticket` ref) and
@@ -668,107 +686,101 @@ async function liveWorkflowsForTrigger(triggerType: string): Promise<Workflow[]>
 export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
   let fired = 0
 
-  const approachingWorkflows = await liveWorkflowsForTrigger('sla.approaching_breach')
-  if (approachingWorkflows.length > 0) {
-    const leadMinutes = Math.max(...approachingWorkflows.map(readBreachLeadMinutes))
-    const candidates = await sweepApproachingSlaBreaches(leadMinutes, now)
-    await mapWithConcurrency(candidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
-      const jobId = `timer:sla.approaching_breach:${c.conversationId}:${c.clock}:${c.dueAt}`
-      try {
-        await dispatchSlaApproachingBreach(jobId, {
-          conversationId: c.conversationId,
-          conversation: c.conversation,
-          clock: c.clock,
-          dueAt: c.dueAt,
-        })
-      } catch (err) {
-        // Marker left unclaimed — a later tick re-scans and retries (see the
-        // claim-after-enqueue doc above).
-        log.error(
-          { err, conversationId: c.conversationId, clock: c.clock },
-          'sla.approaching_breach dispatch failed; continuing the rest of the batch'
-        )
-        return
-      }
-      await claimSlaTimerTriggerMarker(c, 'warning', now)
-      fired++
-    })
+  const leadMinutes = await resolveBreachLeadMinutes()
+  const candidates = await sweepApproachingSlaBreaches(leadMinutes, now)
+  await mapWithConcurrency(candidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
+    const jobId = `timer:sla.approaching_breach:${c.conversationId}:${c.clock}:${c.dueAt}`
+    try {
+      await dispatchSlaApproachingBreach(jobId, {
+        conversationId: c.conversationId,
+        conversation: c.conversation,
+        clock: c.clock,
+        dueAt: c.dueAt,
+      })
+    } catch (err) {
+      // Marker left unclaimed — a later tick re-scans and retries (see the
+      // claim-after-enqueue doc above).
+      log.error(
+        { err, conversationId: c.conversationId, clock: c.clock },
+        'sla.approaching_breach dispatch failed; continuing the rest of the batch'
+      )
+      return
+    }
+    await claimSlaTimerTriggerMarker(c, 'warning', now)
+    fired++
+  })
 
-    // Ticket-anchored TTR pass — same lead window, same trigger type; the
-    // jobId keys on the TICKET id (not the conversation's) so a ticket-clock
-    // dispatch never collides with a conversation-clock one in the queue's
-    // dedupe window.
-    const ticketCandidates = await sweepApproachingTicketSlaBreaches(leadMinutes, now)
-    await mapWithConcurrency(ticketCandidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
-      const jobId = `timer:sla.approaching_breach:ticket:${c.ticketId}:${c.clock}:${c.dueAt}`
-      try {
-        await dispatchSlaApproachingBreach(jobId, {
-          conversationId: c.conversationId,
-          conversation: c.conversation,
-          clock: c.clock,
-          dueAt: c.dueAt,
-          ticketId: c.ticketId,
-          ticket: c.ticket,
-        })
-      } catch (err) {
-        log.error(
-          { err, ticketId: c.ticketId, clock: c.clock },
-          'sla.approaching_breach ticket dispatch failed; continuing the rest of the batch'
-        )
-        return
-      }
-      await claimTicketSlaTimerTriggerMarker(c, 'warning', now)
-      fired++
-    })
-  }
+  // Ticket-anchored TTR pass — same lead window, same trigger type; the
+  // jobId keys on the TICKET id (not the conversation's) so a ticket-clock
+  // dispatch never collides with a conversation-clock one in the queue's
+  // dedupe window.
+  const ticketCandidates = await sweepApproachingTicketSlaBreaches(leadMinutes, now)
+  await mapWithConcurrency(ticketCandidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
+    const jobId = `timer:sla.approaching_breach:ticket:${c.ticketId}:${c.clock}:${c.dueAt}`
+    try {
+      await dispatchSlaApproachingBreach(jobId, {
+        conversationId: c.conversationId,
+        conversation: c.conversation,
+        clock: c.clock,
+        dueAt: c.dueAt,
+        ticketId: c.ticketId,
+        ticket: c.ticket,
+      })
+    } catch (err) {
+      log.error(
+        { err, ticketId: c.ticketId, clock: c.clock },
+        'sla.approaching_breach ticket dispatch failed; continuing the rest of the batch'
+      )
+      return
+    }
+    await claimTicketSlaTimerTriggerMarker(c, 'warning', now)
+    fired++
+  })
 
-  const breachedWorkflows = await liveWorkflowsForTrigger('sla.breached')
-  if (breachedWorkflows.length > 0) {
-    const candidates = await sweepSlaBreachTriggers(now)
-    await mapWithConcurrency(candidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
-      const jobId = `timer:sla.breached:${c.conversationId}:${c.clock}:${c.dueAt}`
-      try {
-        await dispatchSlaBreached(jobId, {
-          conversationId: c.conversationId,
-          conversation: c.conversation,
-          clock: c.clock,
-          dueAt: c.dueAt,
-        })
-      } catch (err) {
-        log.error(
-          { err, conversationId: c.conversationId, clock: c.clock },
-          'sla.breached dispatch failed; continuing the rest of the batch'
-        )
-        return
-      }
-      await claimSlaTimerTriggerMarker(c, 'breach', now)
-      fired++
-    })
+  const breachCandidates = await sweepSlaBreachTriggers(now)
+  await mapWithConcurrency(breachCandidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
+    const jobId = `timer:sla.breached:${c.conversationId}:${c.clock}:${c.dueAt}`
+    try {
+      await dispatchSlaBreached(jobId, {
+        conversationId: c.conversationId,
+        conversation: c.conversation,
+        clock: c.clock,
+        dueAt: c.dueAt,
+      })
+    } catch (err) {
+      log.error(
+        { err, conversationId: c.conversationId, clock: c.clock },
+        'sla.breached dispatch failed; continuing the rest of the batch'
+      )
+      return
+    }
+    await claimSlaTimerTriggerMarker(c, 'breach', now)
+    fired++
+  })
 
-    // Ticket-anchored TTR pass — see the approaching_breach ticket pass above.
-    const ticketCandidates = await sweepTicketSlaBreachTriggers(now)
-    await mapWithConcurrency(ticketCandidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
-      const jobId = `timer:sla.breached:ticket:${c.ticketId}:${c.clock}:${c.dueAt}`
-      try {
-        await dispatchSlaBreached(jobId, {
-          conversationId: c.conversationId,
-          conversation: c.conversation,
-          clock: c.clock,
-          dueAt: c.dueAt,
-          ticketId: c.ticketId,
-          ticket: c.ticket,
-        })
-      } catch (err) {
-        log.error(
-          { err, ticketId: c.ticketId, clock: c.clock },
-          'sla.breached ticket dispatch failed; continuing the rest of the batch'
-        )
-        return
-      }
-      await claimTicketSlaTimerTriggerMarker(c, 'breach', now)
-      fired++
-    })
-  }
+  // Ticket-anchored TTR pass — see the approaching_breach ticket pass above.
+  const ticketBreachCandidates = await sweepTicketSlaBreachTriggers(now)
+  await mapWithConcurrency(ticketBreachCandidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
+    const jobId = `timer:sla.breached:ticket:${c.ticketId}:${c.clock}:${c.dueAt}`
+    try {
+      await dispatchSlaBreached(jobId, {
+        conversationId: c.conversationId,
+        conversation: c.conversation,
+        clock: c.clock,
+        dueAt: c.dueAt,
+        ticketId: c.ticketId,
+        ticket: c.ticket,
+      })
+    } catch (err) {
+      log.error(
+        { err, ticketId: c.ticketId, clock: c.clock },
+        'sla.breached ticket dispatch failed; continuing the rest of the batch'
+      )
+      return
+    }
+    await claimTicketSlaTimerTriggerMarker(c, 'breach', now)
+    fired++
+  })
 
   return fired
 }
@@ -779,8 +791,7 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
  * guards inside them, which are expected races, not failures) and propagates
  * rather than being swallowed here.
  */
-export async function sweepWorkflowRuns(): Promise<void> {
-  const now = new Date()
+export async function sweepWorkflowRuns(now: Date = new Date()): Promise<void> {
   const staleCount = await sweepStaleRunningRuns(now)
   const rescheduledCount = await sweepOrphanedWaitingRuns(now)
   const expiredCount = await sweepExpiredInputWaits(now)

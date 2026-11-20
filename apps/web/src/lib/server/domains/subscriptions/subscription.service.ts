@@ -297,6 +297,17 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesData = {
 }
 
 /**
+ * Whether this person turned on "Pause all email". Automated email to a
+ * customer (a closing notice, a rating request, an automatic acknowledgement)
+ * honours it, as notifications do. A teammate's reply does not: it is the
+ * conversation, not a notification.
+ */
+export async function hasPausedAllEmail(principalId: PrincipalId): Promise<boolean> {
+  const prefs = await batchGetNotificationPreferences([principalId])
+  return prefs.get(principalId)?.emailMuted === true
+}
+
+/**
  * Batch get notification preferences for multiple members.
  * Returns a Map with defaults filled in for members without preferences.
  */

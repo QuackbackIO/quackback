@@ -256,6 +256,9 @@ export type ChannelThreadId = TypeId<'channel_thread'>
 /** Sending domain ID (§4.8) - e.g., sending_domain_01h455vb4pex5vsknk084sn02q */
 export type SendingDomainId = TypeId<'sending_domain'>
 
+/** Workspace domain ID - e.g., workspace_domain_01h455vb4pex5vsknk084sn02q */
+export type WorkspaceDomainId = TypeId<'workspace_domain'>
+
 /** Office-hours schedule ID (§4.6) - e.g., office_hours_01h455vb4pex5vsknk084sn02q */
 export type OfficeHoursId = TypeId<'office_hours'>
 
@@ -468,6 +471,7 @@ export interface EntityIdMap {
   channel_account: ChannelAccountId
   channel_thread: ChannelThreadId
   sending_domain: SendingDomainId
+  workspace_domain: WorkspaceDomainId
   office_hours: OfficeHoursId
   sla_policy: SlaPolicyId
   sla_event: SlaEventId

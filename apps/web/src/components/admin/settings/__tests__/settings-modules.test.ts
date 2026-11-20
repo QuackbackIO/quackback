@@ -1,4 +1,5 @@
 import { PERMISSIONS, SYSTEM_ROLE_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { holdsPageGate } from '@/lib/shared/settings-page-access'
 import { describe, expect, it } from 'vitest'
 import {
   buildSettingsModules,
@@ -103,7 +104,7 @@ describe('module pages and permissions', () => {
       .find((m) => m.id === 'support')!
       .pages.find((p) => p.to === to)
     expect(page).toBeDefined()
-    expect(manager.has(page!.permission)).toBe(true)
+    expect(holdsPageGate(manager, page!.gate)).toBe(true)
     expect(to).not.toBe('/admin/settings/channels')
   })
 

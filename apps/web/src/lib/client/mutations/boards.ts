@@ -54,6 +54,7 @@ export function useCreateBoard() {
         description: input.description ?? null,
         access: accessForPreset(input.preset ?? 'public'),
         settings: {},
+        readOnly: false,
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
@@ -103,6 +104,7 @@ export function useUpdateBoard() {
             ...(input.name !== undefined && { name: input.name }),
             ...(input.description !== undefined && { description: input.description }),
             ...(optimisticSettings !== undefined && { settings: optimisticSettings }),
+            ...(input.readOnly !== undefined && { readOnly: input.readOnly }),
             updatedAt: new Date(),
           }
         })
@@ -115,6 +117,7 @@ export function useUpdateBoard() {
           ...(input.name !== undefined && { name: input.name }),
           ...(input.description !== undefined && { description: input.description }),
           ...(optimisticSettings !== undefined && { settings: optimisticSettings }),
+          ...(input.readOnly !== undefined && { readOnly: input.readOnly }),
           updatedAt: new Date(),
         })
       }

@@ -38,6 +38,28 @@ describe('VisitorMessageBubble', () => {
     expect(attribution.querySelector('.rounded')).toBeNull()
   })
 
+  it.each([
+    ['Quackback AI', 'Quackback AI'],
+    ['Acme ai', 'Acme ai'],
+    ['Acme Ai', 'Acme Ai'],
+    ['AcmeAI', 'AcmeAI'],
+    ['HelpAI', 'HelpAI'],
+    ['Kai', 'Kai AI'],
+    ['Thai Bot', 'Thai Bot AI'],
+  ])('labels assistant %s as "%s"', (authorName, label) => {
+    renderBubble({
+      side: 'peer',
+      content: 'Hello there',
+      authorName,
+      isAssistant: true,
+      time: '10:30 AM',
+    })
+
+    expect(
+      screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === `${label} · 10:30 AM`)
+    ).toBeInTheDocument()
+  })
+
   it('does not render the AI suffix for non-assistant peer messages', () => {
     renderBubble({
       side: 'peer',

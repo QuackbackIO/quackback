@@ -185,6 +185,10 @@ test.describe('Changelog create entry', () => {
     if (!dialog) return
 
     await dialog.getByPlaceholder("What's new?").fill(`Close Test ${Date.now()}`)
+    // An entry needs a body to save (changelog.service rejects an empty one
+    // with "Content is required"), so give it one.
+    await dialog.locator('.ProseMirror[contenteditable="true"]').click()
+    await page.keyboard.type('Close test content.')
     await dialog.getByRole('button', { name: /save draft/i }).click()
 
     await expect(dialog).toBeHidden({ timeout: 15000 })
@@ -885,10 +889,12 @@ test.describe('Changelog search and filter', () => {
     await draftFilter.click()
     await page.waitForLoadState('networkidle')
 
-    // If entries are visible, none should have a "Published" badge
-    const publishedBadges = page.getByText(/^Published$/)
-    const count = await publishedBadges.count()
-    expect(count).toBe(0)
+    // If entries are visible, none should have a "Published" badge. Scope to
+    // the entry cards (the badge sits beside each title): the Status filter
+    // list on the left also has a "Published" item. Wait for the list to
+    // refetch rather than reading it once.
+    const publishedBadges = page.locator('div:has(> h3)').getByText(/^Published$/)
+    await expect(publishedBadges).toHaveCount(0, { timeout: 10000 })
   })
 
   test('status filter: clicking All resets the filter', async ({ page }) => {

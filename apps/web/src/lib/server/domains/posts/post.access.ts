@@ -47,12 +47,12 @@ import {
  */
 export async function loadBoardAccessForPost(postId: PostId) {
   const rows = await db
-    .select({ access: boards.access })
+    .select({ access: boards.access, boardId: boards.id, readOnly: boards.readOnly })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
     .limit(1)
-  return rows[0]?.access ?? null
+  return rows[0] ?? null
 }
 
 /**
@@ -66,6 +66,8 @@ export async function loadCommentContextForPost(postId: PostId) {
   const rows = await db
     .select({
       access: boards.access,
+      boardId: boards.id,
+      boardReadOnly: boards.readOnly,
       moderationState: posts.moderationState,
       principalId: posts.principalId,
     })

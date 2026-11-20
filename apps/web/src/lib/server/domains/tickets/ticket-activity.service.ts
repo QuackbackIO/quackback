@@ -6,22 +6,14 @@
  * watcher.
  *
  * Inserts are fire-and-forget and never block or fail the parent operation;
- * reads resolve actor names from the principal table (null principal = a
- * system-initiated action).
+ * reads resolve actors through the shared author loader, as the inbox shows
+ * them (null principal = a system-initiated action).
  */
 
-import {
-  db,
-  ticketActivity,
-  and,
-  eq,
-  gt,
-  inArray,
-  desc,
-  principal as principalTable,
-} from '@/lib/server/db'
+import { db, ticketActivity, and, eq, gt, inArray, desc } from '@/lib/server/db'
 import type { TicketId, PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 
 const log = logger.child({ component: 'ticket-activity' })
 
@@ -58,6 +50,8 @@ export interface TicketActivityRow {
   metadata: Record<string, any>
   createdAt: Date
   actorName: string | null
+  /** The actor shows as an API key (see ConversationAuthorDTO.viaApi). */
+  actorViaApi?: boolean
 }
 
 // ============================================
@@ -69,19 +63,29 @@ export interface TicketActivityRow {
  * failed activity insert can never break the parent ticket operation.
  */
 export function recordTicketActivity(opts: RecordTicketActivityOpts): void {
-  db.insert(ticketActivity)
-    .values({
+  void recordTicketActivityAwaited(opts)
+}
+
+/**
+ * Record a ticket activity event and wait for the insert. Never throws: a
+ * failed insert is logged, exactly as in `recordTicketActivity`. For a caller
+ * whose next step reads the row back, such as the create-then-link step,
+ * which reads the creator from the `ticket.created` row.
+ */
+export async function recordTicketActivityAwaited(opts: RecordTicketActivityOpts): Promise<void> {
+  try {
+    await db.insert(ticketActivity).values({
       ticketId: opts.ticketId,
       principalId: opts.principalId,
       type: opts.type,
       metadata: opts.metadata ?? {},
     })
-    .catch((err) => {
-      log.error(
-        { activity_type: opts.type, ticket_id: opts.ticketId, err },
-        'failed to record ticket activity'
-      )
-    })
+  } catch (err) {
+    log.error(
+      { activity_type: opts.type, ticket_id: opts.ticketId, err },
+      'failed to record ticket activity'
+    )
+  }
 }
 
 // ============================================
@@ -89,7 +93,7 @@ export function recordTicketActivity(opts: RecordTicketActivityOpts): void {
 // ============================================
 
 /** The activity types that record a move of the ticket's status. */
-const STATUS_MOVES: TicketActivityType[] = ['status.changed', 'ticket.reopened']
+export const STATUS_MOVES: readonly TicketActivityType[] = ['status.changed', 'ticket.reopened']
 
 /**
  * Whether the ticket's status moved after `since`, as its activity log records
@@ -114,11 +118,13 @@ export async function statusMovedSince(ticketId: TicketId, since: Date): Promise
 }
 
 /**
- * Get activity for a ticket, newest first. Resolves actor names from the
- * principal table. Limited to the 200 most recent entries (the post-side
- * convention). The id tiebreak keeps same-timestamp rows (e.g. several
- * events inside one transaction) in insertion order — TypeIDs are
- * time-ordered.
+ * Get activity for a ticket, newest first. Names each actor as the inbox
+ * does, through one batched read of the shared author loader: a teammate by
+ * their account name, a personal key made after the cutoff by its creator,
+ * and an actor that shows as an API key by the key's name with `actorViaApi`.
+ * Limited to the 200 most recent entries (the post-side convention). The id
+ * tiebreak keeps same-timestamp rows (e.g. several events inside one
+ * transaction) in insertion order — TypeIDs are time-ordered.
  */
 export async function listTicketActivity(ticketId: TicketId): Promise<TicketActivityRow[]> {
   const rows = await db
@@ -129,13 +135,22 @@ export async function listTicketActivity(ticketId: TicketId): Promise<TicketActi
       type: ticketActivity.type,
       metadata: ticketActivity.metadata,
       createdAt: ticketActivity.createdAt,
-      actorName: principalTable.displayName,
     })
     .from(ticketActivity)
-    .leftJoin(principalTable, eq(ticketActivity.principalId, principalTable.id))
     .where(eq(ticketActivity.ticketId, ticketId))
     .orderBy(desc(ticketActivity.createdAt), desc(ticketActivity.id))
     .limit(200)
 
-  return rows as TicketActivityRow[]
+  const actors = await loadAuthors(
+    rows.map((row) => row.principalId),
+    { preferAccountName: true }
+  )
+  return rows.map((row) => {
+    const actor = row.principalId ? actors.get(row.principalId) : undefined
+    return {
+      ...row,
+      actorName: actor?.displayName ?? null,
+      ...(actor?.viaApi ? { actorViaApi: true } : {}),
+    } as TicketActivityRow
+  })
 }

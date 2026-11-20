@@ -5,6 +5,7 @@ import type { ConversationStatus } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
 import type { Channel } from '@/lib/shared/channels'
+import type { BlockReplyKind } from '@/lib/shared/conversation/block-reply-kinds'
 
 /**
  * Timer-driven workflow triggers (support platform §4.6): synthetic events
@@ -347,6 +348,10 @@ export interface EventMessageData {
   authorEmail: string | null // realEmail()
   content: string
   createdAt: string
+  /** The kind of conversation block the message answers ('csat', 'buttons',
+   *  ...), taken from the stored, server-matched block reply; null for every
+   *  other message. Absent on events stored before the field existed. */
+  blockReplyKind?: BlockReplyKind | null
 }
 
 export interface ConversationCreatedPayload {
@@ -482,6 +487,21 @@ export interface EventTicketData extends EventTicketRef {
   createdAt: string
   updatedAt: string
   resolvedAt: string | null
+  /** The ticket's SLA (its time-to-resolve clock), or null when none applies.
+   *  Same shape as the ticket's `sla` in the REST API. */
+  sla: EventTicketSla | null
+}
+
+/** A ticket's SLA as events and the REST API carry it (TicketSlaRef). */
+export interface EventTicketSla {
+  /** The policy name when the SLA was applied. */
+  policyName: string
+  /** When the ticket is due to be resolved (ISO), office hours included. */
+  timeToResolveDueAt: string
+  /** When the ticket was first resolved (ISO), or null while the clock runs. */
+  resolvedAt: string | null
+  /** Whether the clock is paused because the ticket is waiting on the customer. */
+  paused: boolean
 }
 
 export interface TicketCreatedPayload {

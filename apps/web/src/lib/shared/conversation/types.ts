@@ -45,8 +45,9 @@ export type {
 }
 export { CONVERSATION_END_REASONS }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
-// 'system' = a status event (e.g. assignment) shown to both sides, rendered as
-// a centered notice rather than a message bubble.
+// 'system' = an author-less status event (e.g. conversation ended), rendered as
+// a centered notice rather than a message bubble. Shown to both sides unless
+// the row is internal (assignment, priority, snooze), which is team-only.
 export type MessageSenderType = 'visitor' | 'agent' | 'system'
 /** A human side of a conversation — who acts (types, reads); 'system' is neither. */
 export type ConversationSide = Exclude<MessageSenderType, 'system'>
@@ -88,6 +89,10 @@ export interface ConversationAuthorDTO {
   principalId: PrincipalId
   displayName: string | null
   avatarUrl: string | null
+  /** Agent views only: true when the author shows as an API key (a workspace
+   *  key, or a personal key that keeps its own name), so the inbox can mark
+   *  its messages "via API". Absent otherwise, and never on a customer view. */
+  viaApi?: boolean
 }
 
 /** A conversation label ("tag") as surfaced to the inbox. Agent-only. */
@@ -301,6 +306,8 @@ export interface FlaggedMessageDTO {
   preview: string
   /** Who wrote the flagged message. */
   authorName: string | null
+  /** The author shows as an API key (see ConversationAuthorDTO.viaApi). */
+  authorViaApi?: boolean
   /** The conversation's visitor (so the list reads "in <conversation>"). */
   conversationLabel: string | null
   flaggedAt: string
@@ -505,6 +512,18 @@ export type TicketStreamEvent =
   | { kind: 'ticket_updated'; ticket: TicketDTO }
   | { kind: 'ticket_read'; ticketId: TicketId; side: MessageSenderType; at: string }
 
+/**
+ * Scope events on the inbox stream. `inbox_item_removed`: an item this
+ * teammate held left their scope, so its row leaves their lists. The stream
+ * builds it per subscriber for a reassignment (realtime/inbox-scope-gate.ts),
+ * and a delete publishes it with the item's scope from before the delete
+ * (realtime/inbox-publish.ts), so only teammates who held the item get it.
+ * `inbox_scope_changed`: their role or teams changed, so lists are refetched.
+ */
+export type InboxScopeStreamEvent =
+  | { kind: 'inbox_item_removed'; itemKind: 'conversation' | 'ticket'; id: string }
+  | { kind: 'inbox_scope_changed' }
+
 export type ConversationStreamEvent =
   | {
       kind: 'message'
@@ -573,6 +592,13 @@ export type ConversationStreamEvent =
       at: string
     }
   | TicketStreamEvent
+  | InboxScopeStreamEvent
+
+/** The conversation a stream event is about, when it names one. */
+export function conversationIdOf(event: ConversationStreamEvent): ConversationId | undefined {
+  if (event.kind === 'conversation') return event.conversation.id
+  return 'conversationId' in event ? event.conversationId : undefined
+}
 
 /** Hard caps shared by client + server validation. */
 export const MAX_CONVERSATION_MESSAGE_LENGTH = 4000

@@ -64,6 +64,14 @@ export interface SpamSignalHints {
  * email-auth.ts computes it precisely so the condition is not re-spelled at
  * each call site, where it would drift.
  */
+/**
+ * The conversation attribute a cold email conversation carries when its first
+ * mail failed sender authentication (any non-null senderAuthSpamSignal), so its
+ * From address is never trusted downstream. Written by the cold-inbound create,
+ * read by the workflow condition context.
+ */
+export const SENDER_AUTH_FAILED_ATTRIBUTE = 'senderAuthFailed'
+
 export function senderAuthSpamSignal(verdict: InboundAuthResult): SpamSignal | null {
   if (verdict.verdict === 'reject') return 'sender_auth_reject'
   if (verdict.arcRescued) return 'sender_auth_arc_rescued'
@@ -71,9 +79,18 @@ export function senderAuthSpamSignal(verdict: InboundAuthResult): SpamSignal | n
 }
 
 export interface DetectSpamSignalInput extends SpamSignalHints {
-  /** Canonical sender address, or null when the channel has none — a null
-   *  sender skips the burst signal (there is no key to count on). */
+  /** Canonical sender address, or null when the channel has none. */
   senderEmail: string | null
+  /** The sender's principal, when the channel knows it. The burst signal
+   *  counts on it when there is no address; with neither, it is skipped
+   *  (there is no key to count on). */
+  senderPrincipalId?: string | null
+}
+
+/** What the burst signal counts on: the address, else the principal. */
+function burstKeyOf(input: DetectSpamSignalInput): string | null {
+  if (input.senderEmail) return input.senderEmail
+  return input.senderPrincipalId ? `principal:${input.senderPrincipalId}` : null
 }
 
 /**
@@ -84,10 +101,11 @@ export interface DetectSpamSignalInput extends SpamSignalHints {
 export async function detectSpamSignal(input: DetectSpamSignalInput): Promise<SpamSignal | null> {
   if (input.autoResponder) return 'auto_responder'
   if (input.senderAuthSignal) return input.senderAuthSignal
-  if (input.senderEmail) {
+  const burstKey = burstKeyOf(input)
+  if (burstKey) {
     try {
       const { isColdInboundBurst } = await import('./conversation.ratelimit')
-      if (await isColdInboundBurst(input.senderEmail)) return 'burst_rate'
+      if (await isColdInboundBurst(burstKey)) return 'burst_rate'
     } catch (err) {
       log.warn({ err }, 'spam signals: burst check failed, failing open')
     }

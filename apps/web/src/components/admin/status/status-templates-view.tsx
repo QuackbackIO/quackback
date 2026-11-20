@@ -82,7 +82,7 @@ export function StatusTemplatesView() {
       <AdminListHeader
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search templates..."
+        searchPlaceholder="Search templates…"
         action={
           canManage ? <NewButton noun="template" onClick={() => setCreating(true)} /> : undefined
         }

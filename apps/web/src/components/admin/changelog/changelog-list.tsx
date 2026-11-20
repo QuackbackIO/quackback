@@ -217,7 +217,7 @@ export function ChangelogList() {
             onSearchChange={setSearchValue}
             searchPlaceholder={intl.formatMessage({
               id: 'admin.changelog.list.searchPlaceholder',
-              defaultMessage: 'Search entries...',
+              defaultMessage: 'Search entries…',
             })}
             sortOptions={sortOptions}
             formatSortLabel={formatSortLabel}

@@ -12,9 +12,11 @@ vi.mock('@/lib/server/db', () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: (...args: unknown[]) => mockLimit(...args),
+        innerJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: (...args: unknown[]) => mockLimit(...args),
+            }),
           }),
         }),
       }),
@@ -27,6 +29,7 @@ vi.mock('@/lib/server/db', () => ({
     embedding: 'embedding',
     createdAt: 'created_at',
   },
+  conversations: { id: 'conversations.id' },
   eq: vi.fn((...args: unknown[]) => ({ op: 'eq', args })),
   and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
   ne: vi.fn((...args: unknown[]) => ({ op: 'ne', args })),
@@ -41,7 +44,13 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
+vi.mock('@/lib/server/policy/conversations', () => ({
+  conversationFilter: vi.fn(() => ({ op: 'conversationFilter' })),
+}))
+
 import { db, eq, ne } from '@/lib/server/db'
+import { conversationFilter } from '@/lib/server/policy/conversations'
+import type { Actor } from '@/lib/server/policy/types'
 import {
   retrieveConversationSummaries,
   conversationSummariesKnowledgeSource,
@@ -55,6 +64,14 @@ function row(conversationId: string, overrides: Partial<Record<string, unknown>>
     createdAt: new Date('2026-06-01T00:00:00.000Z'),
     ...overrides,
   }
+}
+
+/** A teammate asking the copilot; the policy filter itself is mocked here. */
+const viewer: Actor = {
+  principalId: 'principal_teammate' as never,
+  principalType: 'user',
+  role: 'member',
+  segmentIds: new Set(),
 }
 
 beforeEach(() => {
@@ -96,9 +113,21 @@ describe('retrieveConversationSummaries: MANDATORY customer scope', () => {
 
     await retrieveConversationSummaries('billing question', 'team', {
       customerPrincipalId: 'principal_customer_1' as never,
+      viewer,
     })
 
     expect(vi.mocked(eq)).toHaveBeenCalledWith('visitor_principal_id', 'principal_customer_1')
+    expect(vi.mocked(conversationFilter)).toHaveBeenCalledWith(viewer)
+  })
+
+  it('returns [] without touching the DB when there is no viewer to scope to', async () => {
+    const items = await retrieveConversationSummaries('billing question', 'team', {
+      customerPrincipalId: 'principal_customer_1' as never,
+    })
+
+    expect(items).toEqual([])
+    expect(mockGenerateEmbedding).not.toHaveBeenCalled()
+    expect(db.select).not.toHaveBeenCalled()
   })
 
   it('excludes the current conversation when conversationId is given', async () => {
@@ -108,6 +137,7 @@ describe('retrieveConversationSummaries: MANDATORY customer scope', () => {
     await retrieveConversationSummaries('billing question', 'team', {
       customerPrincipalId: 'principal_customer_1' as never,
       conversationId: 'conversation_current' as never,
+      viewer,
     })
 
     expect(vi.mocked(ne)).toHaveBeenCalledWith('conversation_id', 'conversation_current')
@@ -119,6 +149,7 @@ describe('retrieveConversationSummaries: MANDATORY customer scope', () => {
 
     await retrieveConversationSummaries('billing question', 'team', {
       customerPrincipalId: 'principal_customer_1' as never,
+      viewer,
     })
 
     expect(vi.mocked(ne)).not.toHaveBeenCalled()
@@ -132,6 +163,7 @@ describe('retrieveConversationSummaries: ranking paths', () => {
 
     const items = await retrieveConversationSummaries('billing', 'team', {
       customerPrincipalId: 'principal_customer_1' as never,
+      viewer,
     })
 
     expect(items).toEqual([
@@ -150,6 +182,7 @@ describe('retrieveConversationSummaries: ranking paths', () => {
 
     const items = await retrieveConversationSummaries('billing', 'team', {
       customerPrincipalId: 'principal_customer_1' as never,
+      viewer,
     })
 
     expect(items).toHaveLength(1)
@@ -166,6 +199,7 @@ describe('conversationSummariesKnowledgeSource', () => {
       topK: 5,
       customerPrincipalId: 'principal_customer_1' as never,
       conversationId: 'conversation_current' as never,
+      viewer,
     })
 
     expect(items).toEqual([

@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { WorkflowId, WorkflowVersionId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Workflow, WorkflowClass, WorkflowStatus, WorkflowRunState } from '@/lib/server/db'
 import {
@@ -46,6 +47,8 @@ import {
   type ValidatedWorkflowGraph,
 } from '@/lib/server/domains/workflows/workflow.schemas'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { httpsUrl } from '@/lib/shared/schemas/auth'
+import { workflowWebhookSecret } from '@/lib/server/domains/webhooks/signing'
 
 // createServerFn constrains returns to serializable types, so the jsonb fields
 // are typed as JSON (not Record<string, unknown> — `unknown` isn't provably
@@ -349,7 +352,8 @@ const previewSchema = z.object({ workflowId: z.string(), conversationId: z.strin
 export const previewWorkflowFn = createServerFn({ method: 'POST' })
   .validator(previewSchema)
   .handler(async ({ data }): Promise<WorkflowPreviewResult> => {
-    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    const ctx = await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     return previewWorkflow({
       workflowId: data.workflowId as WorkflowId,
       conversationId: data.conversationId as ConversationId,
@@ -399,6 +403,21 @@ export const listRunnableWorkflowsFn = createServerFn({ method: 'GET' }).handler
   }
 )
 
+const webhookSecretSchema = z.object({ url: httpsUrl })
+
+/**
+ * The secret a "Send webhook" step signs with for this URL, so whoever builds
+ * the workflow can set up the receiver to verify deliveries. Derived from the
+ * URL (domains/webhooks/signing.ts), so it is the same before and after the
+ * step is saved. POST, so the secret never sits in a URL.
+ */
+export const getWorkflowWebhookSecretFn = createServerFn({ method: 'POST' })
+  .validator(webhookSecretSchema)
+  .handler(async ({ data }): Promise<{ secret: string }> => {
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    return { secret: workflowWebhookSecret(data.url) }
+  })
+
 const runManuallySchema = z.object({ workflowId: z.string(), conversationId: z.string() })
 
 export type RunWorkflowManuallyResult =
@@ -443,11 +462,17 @@ export type RunWorkflowManuallyResult =
 export const runWorkflowManuallyFn = createServerFn({ method: 'POST' })
   .validator(runManuallySchema)
   .handler(async ({ data }): Promise<RunWorkflowManuallyResult> => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    // The conversation first: a hidden one is NotFound before any lock or
+    // condition read, and no run starts.
+    await requireVisibleConversation(auth, data.conversationId as ConversationId)
     const workflow = await getWorkflow(data.workflowId as WorkflowId)
     if (!workflow || workflow.status !== 'live') {
       return { ok: false, reason: 'not_live' }
     }
+    // Paused after the plan limits grace reads as not live to the inbox.
+    const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    if (await isFeaturePaused('workflows')) return { ok: false, reason: 'not_live' }
     const conversationId = data.conversationId as ConversationId
 
     if (

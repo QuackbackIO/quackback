@@ -26,7 +26,10 @@ import type {
 import { generateArticleEmbedding } from './help-center-embedding.service'
 import { ensureDefaultHelpCategory } from './help-center.default-category'
 import { helpCenterVisibilityConditions } from './help-center-search.service'
-import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import {
+  loadApiKeyFeedbackAuthors,
+  resolveUserAvatarUrl,
+} from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-articles' })
@@ -35,8 +38,17 @@ const log = logger.child({ component: 'help-center-articles' })
 // Articles
 // ============================================================================
 
+/**
+ * The article with its category and author. `audience: 'public'` is for what
+ * the public help center shows (the portal article page and its structured
+ * data, widget help, embeds): an article an API key wrote shows the support
+ * team with no avatar, or a personal key's creator (see
+ * loadApiKeyFeedbackAuthors). The team's views (admin, REST, MCP) keep the
+ * key's own name.
+ */
 export async function resolveArticleWithCategory(
-  article: typeof helpCenterArticles.$inferSelect
+  article: typeof helpCenterArticles.$inferSelect,
+  audience: 'team' | 'public' = 'team'
 ): Promise<HelpCenterArticleWithCategory> {
   const [category, authorRecord] = await Promise.all([
     db.query.helpCenterCategories.findFirst({
@@ -46,11 +58,23 @@ export async function resolveArticleWithCategory(
     article.principalId
       ? db.query.principal.findFirst({
           where: eq(principal.id, article.principalId),
-          columns: { id: true, displayName: true, avatarUrl: true, avatarKey: true },
+          columns: {
+            id: true,
+            displayName: true,
+            avatarUrl: true,
+            avatarKey: true,
+            serviceMetadata: true,
+          },
           with: { user: { columns: { image: true, imageKey: true } } },
         })
       : null,
   ])
+  const keyAuthor =
+    audience === 'public' && authorRecord?.serviceMetadata?.kind === 'api_key'
+      ? (await loadApiKeyFeedbackAuthors([authorRecord.id as PrincipalId])).get(
+          authorRecord.id as PrincipalId
+        )
+      : undefined
 
   return {
     ...article,
@@ -62,18 +86,22 @@ export async function resolveArticleWithCategory(
           name: category.name,
         }
       : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
-    author: authorRecord?.displayName
-      ? {
-          id: authorRecord.id as PrincipalId,
-          name: authorRecord.displayName,
-          avatarUrl: resolveUserAvatarUrl({
-            userImage: authorRecord.user?.image,
-            userImageKey: authorRecord.user?.imageKey,
-            principalAvatarUrl: authorRecord.avatarUrl,
-            principalAvatarKey: authorRecord.avatarKey,
-          }),
-        }
-      : null,
+    author: keyAuthor
+      ? keyAuthor.displayName
+        ? { id: keyAuthor.principalId, name: keyAuthor.displayName, avatarUrl: keyAuthor.avatarUrl }
+        : null
+      : authorRecord?.displayName
+        ? {
+            id: authorRecord.id as PrincipalId,
+            name: authorRecord.displayName,
+            avatarUrl: resolveUserAvatarUrl({
+              userImage: authorRecord.user?.image,
+              userImageKey: authorRecord.user?.imageKey,
+              principalAvatarUrl: authorRecord.avatarUrl,
+              principalAvatarKey: authorRecord.avatarKey,
+            }),
+          }
+        : null,
   }
 }
 
@@ -113,7 +141,7 @@ export async function getPublicArticleByUrlId(
   if (!article) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }
-  return resolveArticleWithCategory(article)
+  return resolveArticleWithCategory(article, 'public')
 }
 
 export async function getPublicArticleById(
@@ -130,7 +158,7 @@ export async function getPublicArticleById(
   if (!article) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }
-  return resolveArticleWithCategory(article)
+  return resolveArticleWithCategory(article, 'public')
 }
 
 export async function getPublicArticleBySlug(
@@ -161,7 +189,7 @@ export async function getPublicArticleBySlug(
     .where(eq(helpCenterArticles.id, article.id))
     .catch(() => {})
 
-  return resolveArticleWithCategory(article)
+  return resolveArticleWithCategory(article, 'public')
 }
 
 // Fallback slug base for article titles that romanize to nothing (see

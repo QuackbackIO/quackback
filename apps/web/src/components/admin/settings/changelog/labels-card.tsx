@@ -212,7 +212,7 @@ function CategoryDialog({ open, onOpenChange, category, segments, onSaved }: Cat
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create label'}
+            {isSaving ? 'Saving…' : isEdit ? 'Save changes' : 'Create label'}
           </Button>
         </DialogFooter>
       </DialogContent>

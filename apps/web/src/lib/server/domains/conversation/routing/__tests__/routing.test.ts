@@ -141,6 +141,18 @@ describe('routeConversation', () => {
       strategy: 'auto_assign_active',
     })
     listOnlineAgentIds.mockRejectedValue(new Error('redis down'))
-    expect((await routeConversation(conversation)).assignedPrincipalId).toBeNull()
+    expect(await routeConversation(conversation)).toEqual({
+      assignedPrincipalId: null,
+      strategyId: 'error',
+    })
+  })
+
+  // RTE-11: a settings read that throws fails soft the same way.
+  it('fails soft to no assignment when the routing settings read throws', async () => {
+    getConversationRouting.mockRejectedValue(new Error('settings unavailable'))
+    expect(await routeConversation(conversation)).toEqual({
+      assignedPrincipalId: null,
+      strategyId: 'error',
+    })
   })
 })

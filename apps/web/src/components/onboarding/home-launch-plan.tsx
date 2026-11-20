@@ -52,9 +52,13 @@ function useInPlaceChange(area: RefObject<HTMLDivElement | null>, view: AreaView
   const shown = useRef(view?.key)
   const [announcement, setAnnouncement] = useState('')
   useEffect(() => {
+    const inside = (node: EventTarget | null) => area.current?.contains(node as Node) ?? false
     const track = (event: FocusEvent) => {
-      focusInside.current = area.current?.contains(event.target as Node) ?? false
+      focusInside.current = inside(event.target)
     }
+    // Focus can land in the plan before this effect runs (the effect runs
+    // after paint), and that focusin is never heard, so start from where it is.
+    focusInside.current = inside(document.activeElement)
     document.addEventListener('focusin', track)
     return () => document.removeEventListener('focusin', track)
   }, [area])

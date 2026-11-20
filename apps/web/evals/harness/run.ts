@@ -102,7 +102,15 @@ async function buildTurnInput(
     }
   }
   if (role === 'copilot_qa') {
-    return { ...common, role, surface: 'copilot', messages }
+    if (!teammate) throw new Error('copilot_qa scenarios need a seeded teammate')
+    return {
+      ...common,
+      role,
+      surface: 'copilot',
+      messages,
+      viewer: await slackMemberActor(teammate),
+      actorPrincipalId: teammate.id,
+    }
   }
   return { ...common, role: 'customer_support', surface: surface as never, messages }
 }
@@ -152,7 +160,9 @@ async function runTurnOnce(scenario: TurnScenario, role: AssistantRole): Promise
   let teammate: SlackMember | undefined
   try {
     seeded = await seedFixtures(scenario.config, scenario.fixtures)
-    if (role === 'workspace_assistant') teammate = await seedTeammate()
+    // The copilot answers a teammate too: its viewer bounds team-scoped
+    // knowledge (closed tickets), so seed one with workspace-wide access.
+    if (role === 'workspace_assistant' || role === 'copilot_qa') teammate = await seedTeammate()
   } catch (err) {
     return { failures: [String(err)], detail: { seedError: String(err) }, errored: true }
   }

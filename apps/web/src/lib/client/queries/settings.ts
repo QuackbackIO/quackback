@@ -3,6 +3,7 @@ import type { IdentityProviderId, UserId } from '@quackback/ids'
 import {
   fetchBrandingConfig,
   fetchPortalConfig,
+  fetchPortalPageConfigFn,
   fetchPublicPortalConfig,
   fetchPublicAuthConfig,
   fetchAuthConfigFn,
@@ -14,11 +15,11 @@ import {
   fetchWidgetSecret,
   fetchWorkflowAbandonedAutoCloseFn,
   fetchWorkflowCloseSpamFn,
+  fetchConversationRoutingFn,
   fetchDefaultSlaPolicyFn,
   getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
-import { getHelpCenterDomainStatusFn } from '@/lib/server/functions/help-center-domain'
 import { listRedirectRulesFn } from '@/lib/server/functions/help-center-redirect-rules'
 import {
   listTeamsAdminFn,
@@ -95,6 +96,18 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'portalConfig'],
       queryFn: fetchPortalConfig,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  /**
+   * The parts of the portal config Moderation and the Portal's Design tab
+   * show, readable with their own permissions. Under portalConfig's key, so
+   * every refresh of the portal config refreshes it too.
+   */
+  portalPageConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'portalConfig', 'page'],
+      queryFn: fetchPortalPageConfigFn,
       staleTime: STALE_TIME_LONG,
     }),
 
@@ -191,14 +204,6 @@ export const settingsQueries = {
       staleTime: STALE_TIME_LONG,
     }),
 
-  helpCenterDomainStatus: () =>
-    queryOptions({
-      queryKey: ['settings', 'helpCenterDomainStatus'],
-      queryFn: () => getHelpCenterDomainStatusFn({ data: {} }),
-      staleTime: STALE_TIME_SHORT,
-      // Only meaningful once a domain is configured -- callers gate `enabled`.
-    }),
-
   helpCenterRedirectRules: () =>
     queryOptions({
       queryKey: ['settings', 'helpCenterRedirectRules'],
@@ -217,6 +222,14 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'workflowCloseSpam'],
       queryFn: fetchWorkflowCloseSpamFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  /** The auto-assign switch on the Workflows page (routing.manage). */
+  conversationRouting: () =>
+    queryOptions({
+      queryKey: ['settings', 'conversationRouting'],
+      queryFn: () => fetchConversationRoutingFn(),
       staleTime: STALE_TIME_MEDIUM,
     }),
 
