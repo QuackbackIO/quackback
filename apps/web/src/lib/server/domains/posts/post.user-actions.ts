@@ -299,19 +299,45 @@ export async function softDeletePost(
     }
   }
 
-  // Capture selected syncs in the same commit as deletion.
-  const updatedPost = await db.transaction(async (tx) => {
+  // Capture selected syncs in the same commit as deletion. A deleted
+  // canonical releases its merged duplicates in the same commit: the inbox
+  // hides every merged post, so left merged into a deleted post they would
+  // vanish. Each released post gets back its own votes and comments.
+  const { updatedPost, released } = await db.transaction(async (tx) => {
     if (beforeDelete) await beforeDelete(tx)
     const [updated] = await tx
       .update(posts)
       .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId })
       .where(eq(posts.id, postId))
       .returning()
-    return updated
+    if (!updated) return { updatedPost: undefined, released: [] }
+    const releasedRows = await tx
+      .update(posts)
+      .set({
+        canonicalPostId: null,
+        mergedAt: null,
+        mergedByPrincipalId: null,
+        mergeCheckedAt: null,
+      })
+      .where(eq(posts.canonicalPostId, postId))
+      .returning({ id: posts.id })
+    for (const row of releasedRows) {
+      await recalculateCanonicalVoteCount(row.id as PostId, undefined, tx)
+    }
+    return { updatedPost: updated, released: releasedRows.map((r) => r.id as PostId) }
   })
 
   if (!updatedPost) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  for (const releasedId of released) {
+    createActivity({
+      postId: releasedId,
+      principalId: actor.principalId,
+      type: 'post.unmerged',
+      metadata: { otherPostId: postId, otherPostTitle: existingPost.title },
+    })
   }
 
   if (existingPost.canonicalPostId) {

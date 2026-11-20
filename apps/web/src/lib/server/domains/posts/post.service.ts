@@ -43,6 +43,7 @@ import {
 } from '@/lib/server/events/dispatch'
 import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
@@ -457,6 +458,17 @@ export async function updatePost(
   if (input.content !== undefined) {
     if (input.content.length > 10000) {
       throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
+    }
+  }
+
+  // A post's owner is a teammate: refuse a customer (or nobody) before writing.
+  if (input.ownerPrincipalId && input.ownerPrincipalId !== existingPost.ownerPrincipalId) {
+    const owner = await db.query.principal.findFirst({
+      where: eq(principalTable.id, input.ownerPrincipalId),
+      columns: { role: true },
+    })
+    if (!owner || !isTeamMember(owner.role)) {
+      throw new ValidationError('INVALID_OWNER', 'A post owner must be a teammate')
     }
   }
 
