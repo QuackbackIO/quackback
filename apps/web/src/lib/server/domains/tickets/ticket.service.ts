@@ -1094,7 +1094,7 @@ export async function setTicketTitle(
       `A ticket title can be at most ${TICKET_TITLE_MAX_LENGTH} characters`
     )
   }
-  const existing = await loadTicketOr404(id)
+  const existing = await assertTicketVisible(id, actor)
   if (existing.title === next) return ticketRowToDTO(existing)
 
   const [updated] = await db
