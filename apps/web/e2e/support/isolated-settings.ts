@@ -19,7 +19,12 @@ import { ISOLATED } from './automation'
 
 /** The settings columns these helpers may flip (all JSON stored as text). */
 export type SettingsColumn =
-  'feature_flags' | 'widget_config' | 'portal_config' | 'help_center_config' | 'metadata'
+  | 'feature_flags'
+  | 'widget_config'
+  | 'portal_config'
+  | 'help_center_config'
+  | 'metadata'
+  | 'developer_config'
 
 /** Dotted path -> value, per column. A value of `undefined` deletes the key. */
 export type SettingsPatch = Partial<Record<SettingsColumn, Record<string, unknown>>>
