@@ -11,6 +11,7 @@
  */
 import { test as setup, expect } from '@playwright/test'
 import {
+  enableMagicLinkMethod,
   ensureStorageBucket,
   mintSupportSessions,
   seedSupportPeople,
@@ -28,6 +29,9 @@ setup('prepare the product suite', async ({ request }) => {
   // take over 40 s.
   setup.setTimeout(120_000)
   for (const flag of PRODUCT_FLAGS) setFeatureFlag(flag, true)
+  // Sign-in by emailed link and code is opt-in (absent = off). Tests that sign
+  // a portal person in through it need it on, as a workspace using it would.
+  enableMagicLinkMethod()
   // Turning Status on in Settings also publishes the page
   // (settings.service updateFeatureFlags); the raw flag write above does not.
   await supportDb()`
