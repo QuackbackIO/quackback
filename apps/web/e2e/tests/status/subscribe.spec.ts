@@ -246,14 +246,7 @@ test(
 
 test(
   'STA-S-09 a component subscription with no or unknown services is refused',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'subscribeStatusFn (functions/status-subscriptions.ts:25) does not validate scope components against componentIds, so an empty or bogus list is stored as an active subscription; see QUARANTINE.md',
-    },
-  },
+  { tag: '@nightly' },
   async ({ playwright, marker }) => {
     const empty = await user(playwright, marker, 'empty')
     const res = await callServerFn(empty.api, 'subscribeStatusFn', {

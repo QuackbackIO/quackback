@@ -2327,9 +2327,10 @@ export async function getChangelogSubscriberTargets(
 
 /**
  * Subscriber targets for the two status publish events (incident_created,
- * maintenance_scheduled). A subscriber is notified iff (a) they pass the
- * page-level audience gate AND (b) they can see at least one affected
- * component (Status Product Spec §4). Email is additionally gated on the
+ * maintenance_scheduled). Nothing goes out while the page is unpublished. A
+ * subscriber is notified iff (a) the portal lets them in (a private portal
+ * turns some away), (b) they pass the page-level audience gate AND (c) they
+ * can see at least one affected component (Status Product Spec §4). Email is additionally gated on the
  * workspace `emailsDisabled` switch and the per-principal notification
  * matrix (`status_incident`/email, which subsumes `emailMuted`); the in-app
  * notification ignores `emailsDisabled` (it's email-specific).
@@ -2371,6 +2372,13 @@ export async function getStatusSubscriberTargets(
     await import('@/lib/server/domains/subscriptions/subscription.service')
 
   const settings = await getStatusSettings()
+
+  // An unpublished page announces nothing: its links would lead nowhere.
+  const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+  const { isStatusPagePublished } = await import('@/lib/shared/status-settings')
+  if (!isStatusPagePublished({ statusPage: await isFeatureEnabled('statusPage') }, settings)) {
+    return []
+  }
 
   // Affected components (for the per-subscriber visibility check + email
   // body), each with the status this incident set on it. A component whose
@@ -2418,7 +2426,14 @@ export async function getStatusSubscriberTargets(
   // with the components each one chose (null: the whole page).
   const subscriptions = await getActiveSubscriptionsForComponents(affectedComponentIds as never)
   if (subscriptions.length === 0) return []
-  const principalIds = subscriptions.map((s) => s.principalId as PrincipalId)
+  // A private portal keeps its status page from whoever it would turn away.
+  const { principalsWithPortalAccess } =
+    await import('@/lib/server/domains/settings/portal-access.recipients')
+  const admitted = await principalsWithPortalAccess(
+    subscriptions.map((s) => s.principalId as PrincipalId)
+  )
+  const principalIds = [...admitted]
+  if (principalIds.length === 0) return []
   const chosenComponents = new Map(
     subscriptions.map((s) => [
       String(s.principalId),
