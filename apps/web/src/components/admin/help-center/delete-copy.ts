@@ -24,5 +24,5 @@ export function categoryDeleteDescription(
   if (parts.length === 0) {
     return `"${name}" moves to Deleted items. You can restore it from there for 30 days.`
   }
-  return `"${name}" and its ${parts.join(' and ')} move to Deleted items. You can restore them from there for 30 days.`
+  return `"${name}" along with ${parts.join(' and ')} moves to Deleted items. You can restore them from there for 30 days.`
 }
