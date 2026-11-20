@@ -50,14 +50,12 @@ const key = (...parts: string[]) => JSON.stringify(parts)
 
 describe('settings page loaders', () => {
   it('macros: warms the macro library when the plan includes it', async () => {
+    // The page changes macros (conversation.manage) and lists them (conversation.reply).
+    const perms = [PERMISSIONS.CONVERSATION_MANAGE, PERMISSIONS.CONVERSATION_REPLY]
     entitled.current = true
-    expect(await warmedKeys(MacrosRoute, [PERMISSIONS.CONVERSATION_MANAGE])).toContain(
-      key('macros', 'all')
-    )
+    expect(await warmedKeys(MacrosRoute, perms)).toContain(key('macros', 'all'))
     entitled.current = false
-    expect(await warmedKeys(MacrosRoute, [PERMISSIONS.CONVERSATION_MANAGE])).not.toContain(
-      key('macros', 'all')
-    )
+    expect(await warmedKeys(MacrosRoute, perms)).not.toContain(key('macros', 'all'))
   })
 
   it('SLA: warms the office hours the policies are measured against', async () => {
