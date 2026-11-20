@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { apiKeyHolds, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -11,8 +11,10 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import {
   getCategoryById,
+  getPublicCategoryById,
   updateCategory,
   deleteCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
@@ -62,7 +64,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request)
+          const auth = await withApiKeyAuth(request)
 
           const categoryId = parseTypeId<KbCategoryId>(
             params.categoryId,
@@ -71,6 +73,16 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
           )
 
           const category = await getCategoryById(categoryId)
+          if (!apiKeyHolds(auth, PERMISSIONS.HELP_CENTER_MANAGE)) {
+            // A private or gated category needs help_center.manage.
+            await getPublicCategoryById(categoryId).catch((error: unknown) => {
+              if (!(error instanceof NotFoundError)) throw error
+              throw new ForbiddenError(
+                'FORBIDDEN',
+                `Requires the '${PERMISSIONS.HELP_CENTER_MANAGE}' permission to read a category that is not public`
+              )
+            })
+          }
           return successResponse(formatCategory(category))
         } catch (error) {
           return handleDomainError(error)

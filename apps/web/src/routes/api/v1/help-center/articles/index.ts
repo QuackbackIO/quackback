@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { apiKeyHolds, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -12,7 +12,11 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { listArticles, createArticle } from '@/lib/server/domains/help-center/help-center.service'
+import {
+  listArticles,
+  listPublicArticles,
+  createArticle,
+} from '@/lib/server/domains/help-center/help-center.service'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
 import type { KbCategoryId, PrincipalId } from '@quackback/ids'
@@ -70,7 +74,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request)
+          const auth = await withApiKeyAuth(request)
 
           const url = new URL(request.url)
           const { limit } = parsePaginationParams(url)
@@ -83,7 +87,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
           const status = (url.searchParams.get('status') as 'draft' | 'published' | 'all') ?? 'all'
           const search = url.searchParams.get('search') ?? undefined
 
-          const result = await listArticles({ categoryId, status, search, cursor, limit })
+          // Drafts, private categories and gated articles are team material:
+          // a key without help_center.manage reads the published public slice.
+          const result = apiKeyHolds(auth, PERMISSIONS.HELP_CENTER_MANAGE)
+            ? await listArticles({ categoryId, status, search, cursor, limit })
+            : await listPublicArticles({ categoryId, search, cursor, limit })
 
           return successResponse(result.items.map(formatArticle), {
             pagination: {

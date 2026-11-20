@@ -131,12 +131,15 @@ const articleIdParam = {
 } as const
 
 const MANAGE = 'Requires the help_center.manage permission.'
+const PUBLIC_READ =
+  'Any key reads what is published to everyone. Drafts, private categories and segment-gated content need the help_center.manage permission.'
 
 registerPath('/help-center/categories', {
   get: {
     tags: ['Help Center'],
     summary: 'List help center categories',
-    description: 'Returns every category with its article count.',
+    description:
+      'Returns every category with its article count. A key without the help_center.manage permission gets the public categories only, counted by the articles everyone can open.',
     responses: {
       200: {
         description: 'List of categories',
@@ -173,6 +176,7 @@ registerPath('/help-center/categories/{categoryId}', {
   get: {
     tags: ['Help Center'],
     summary: 'Get a help center category',
+    description: PUBLIC_READ,
     parameters: [categoryIdParam],
     responses: {
       200: {
@@ -181,7 +185,7 @@ registerPath('/help-center/categories/{categoryId}', {
           'application/json': { schema: createItemResponseSchema(CategorySchema, 'Category') },
         },
       },
-      ...errorResponses(400),
+      ...errorResponses(400, 403),
       ...featureOff,
     },
   },
@@ -222,7 +226,8 @@ registerPath('/help-center/articles', {
   get: {
     tags: ['Help Center'],
     summary: 'List help center articles',
-    description: 'Returns articles newest first, with cursor pagination.',
+    description:
+      'Returns articles newest first, with cursor pagination. A key without the help_center.manage permission gets published public articles only, whatever the status filter.',
     parameters: [
       {
         name: 'categoryId',
@@ -298,6 +303,7 @@ registerPath('/help-center/articles/{articleId}', {
   get: {
     tags: ['Help Center'],
     summary: 'Get a help center article',
+    description: PUBLIC_READ,
     parameters: [articleIdParam],
     responses: {
       200: {
@@ -306,7 +312,7 @@ registerPath('/help-center/articles/{articleId}', {
           'application/json': { schema: createItemResponseSchema(ArticleSchema, 'Article') },
         },
       },
-      ...errorResponses(400),
+      ...errorResponses(400, 403),
       ...featureOff,
     },
   },
