@@ -24,6 +24,9 @@ import { bustSettingsCache } from '../support/isolated-settings'
 const PRODUCT_FLAGS = ['feedback', 'changelog', 'helpCenter', 'statusPage'] as const
 
 setup('prepare the product suite', async ({ request }) => {
+  // A fresh database's first run (seeding the people, minting sessions) can
+  // take over 40 s.
+  setup.setTimeout(120_000)
   for (const flag of PRODUCT_FLAGS) setFeatureFlag(flag, true)
   // Turning Status on in Settings also publishes the page
   // (settings.service updateFeatureFlags); the raw flag write above does not.
