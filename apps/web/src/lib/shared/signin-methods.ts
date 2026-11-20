@@ -24,3 +24,27 @@ export function normalizeMethodKey(provider: string): string {
   }
   return provider
 }
+
+/**
+ * The sign-in methods in force right now, computed at read time from the
+ * stored ones.
+ *
+ * When identity providers are set up but single sign-on is not live (the plan
+ * does not include it), email sign-in links are offered even if the stored
+ * setting has them off, so a workspace that signs in only through its
+ * provider is never left without a way in. Everything else is exactly as
+ * stored, and the stored map itself is never changed: once single sign-on is
+ * live again, the result is the stored methods with no setup.
+ *
+ * `ssoLive` is whether single sign-on works right now, not merely whether the
+ * plan includes it, so a caller can keep it live for longer than the plan.
+ */
+export function effectiveSignInMethods(input: {
+  stored: Record<string, boolean | undefined> | undefined
+  ssoLive: boolean
+  providersConfigured: boolean
+}): Record<string, boolean | undefined> {
+  const stored = { ...input.stored }
+  if (input.ssoLive || !input.providersConfigured) return stored
+  return { ...stored, magicLink: true }
+}

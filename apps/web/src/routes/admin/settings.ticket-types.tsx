@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { useState } from 'react'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { NewButton } from '@/components/shared/new-button'
@@ -16,7 +15,7 @@ export const Route = createFileRoute('/admin/settings/ticket-types')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.TICKET_MANAGE_TYPES)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/ticket-types')
     await context.queryClient.ensureQueryData(ticketTypesQuery)
     return {}
   },

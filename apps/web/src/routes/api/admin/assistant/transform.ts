@@ -7,7 +7,7 @@
  * transform kind, and get back the rewritten text.
  *
  * The item id (conversation OR ticket — exactly one, see `item-ref.schema.ts`)
- * anchors context + authorization ONLY: `assertConversationViewable` /
+ * anchors context + authorization ONLY: `assertConversationVisible` /
  * `assertTicketViewable` confirms the caller may see this item (so a teammate
  * can't probe a transform against one they have no business in), but the
  * transform itself never reads or writes the item's messages, and (like

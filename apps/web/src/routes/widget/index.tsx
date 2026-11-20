@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import {
@@ -152,7 +153,7 @@ export const Route = createFileRoute('/widget/')({
       posts: { items: [], hasMore: false },
       statuses: [],
       votedPostIds: [],
-      boardPermissions: {} as Record<string, { canSubmit: boolean; canVote: boolean }>,
+      boardPermissions: {} as Record<string, BoardPermission>,
     }
     let topArticles: { slug: string; title: string }[] = []
     // Teammate-avatar cluster for the Home header. Workspace-global and public-safe
@@ -470,6 +471,9 @@ function WidgetPage() {
   const [conversationTarget, setConversationTarget] = useState<ConversationId | 'new' | null>(
     resumeConversationId ? (resumeConversationId as ConversationId) : null
   )
+  // Whether a reply can reach this visitor by email, as the open thread
+  // reports it. The header's away badge promises email only then.
+  const [canReplyByEmail, setCanReplyByEmail] = useState(false)
   // A host's `open({ view: 'chat', body })`. The nonce remounts the messenger
   // so a draft sent while it is already open still lands in the composer.
   const [messengerDraft, setMessengerDraft] = useState<{ nonce: number; body: string } | null>(null)
@@ -887,6 +891,7 @@ function WidgetPage() {
         <div className="min-w-0 ps-1">
           <ConversationPresenceBadge
             available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
+            canReplyByEmail={canReplyByEmail}
             // When office hours are configured, the badge tells the visitor up
             // front when the team is back; the thread body only says so once
             // they have typed.
@@ -986,6 +991,7 @@ function WidgetPage() {
             // A fresh thread exists to be typed into; a resumed one to be read.
             // Mobile hosts skip it — the software keyboard would cover the thread.
             autofocusComposer={conversationTarget === 'new' && !hostIsMobile}
+            onReplyByEmailChange={setCanReplyByEmail}
           />
         </ViewTransition>
       )}

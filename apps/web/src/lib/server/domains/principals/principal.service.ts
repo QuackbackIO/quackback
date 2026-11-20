@@ -14,6 +14,7 @@ import {
   ilike,
   max,
   principal,
+  principalRoleAssignments,
   session,
   user,
   type Principal,
@@ -309,6 +310,22 @@ export async function updateMemberRole(
     }
     const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
     const target = await assertGrantableRole(opts.assignRoleId, opts.granterPermissions)
+    if (!target.isSystem) {
+      // Past the plan's custom-role cap, a custom role goes to nobody new.
+      const { assertCustomRoleAssignable } =
+        await import('@/lib/server/domains/roles/role.plan-lock')
+      const [held] = await db
+        .select({ id: principalRoleAssignments.id })
+        .from(principalRoleAssignments)
+        .where(
+          and(
+            eq(principalRoleAssignments.principalId, principalId),
+            eq(principalRoleAssignments.roleId, target.id)
+          )
+        )
+        .limit(1)
+      await assertCustomRoleAssignable(target, !!held)
+    }
     assignedRoleName = target.name
   }
   const { assertCanGrantTeamRole } = await import('@/lib/server/domains/roles/role.grants')

@@ -7,6 +7,7 @@ import { BackLink } from '@/components/ui/back-link'
 import type { ChangelogId } from '@quackback/ids'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 export const Route = createFileRoute('/_portal/changelog/$entryId')({
   loader: async ({ context, params }) => {
@@ -27,15 +28,14 @@ export const Route = createFileRoute('/_portal/changelog/$entryId')({
       entryId,
       entryTitle: entry.title,
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
+      canonicalUrl: pageCanonical('changelog', `/changelog/${entryId}`, context),
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { entryTitle, entryId, workspaceName, baseUrl } = loaderData
+    const { entryTitle, workspaceName, canonicalUrl } = loaderData
     const title = `${entryTitle} - ${workspaceName} Changelog`
     const description = `${entryTitle}. A product update from ${workspaceName}.`
-    const canonicalUrl = baseUrl ? `${baseUrl}/changelog/${entryId}` : ''
     return {
       meta: [
         { title },

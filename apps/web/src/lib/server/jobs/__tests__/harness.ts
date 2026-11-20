@@ -50,10 +50,7 @@ export function testDb(): Database {
 export async function ensureJobQueueSchema(): Promise<void> {
   const sql = testSql()
   const [{ ready }] = await sql<{ ready: boolean }[]>`
-    SELECT (
-      to_regclass('public.job_queue') IS NOT NULL
-      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'job_queue_wake_trg')
-    ) AS ready
+    SELECT to_regclass('public.job_queue') IS NOT NULL AS ready
   `
   if (ready) return
   await sql.unsafe(readFileSync(MIGRATION, 'utf8'))

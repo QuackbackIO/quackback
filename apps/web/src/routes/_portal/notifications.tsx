@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
   BellIcon,
@@ -50,6 +51,15 @@ export const Route = createFileRoute('/_portal/notifications')({
   validateSearch: (search: Record<string, unknown>): NotificationsSearch => ({
     filter: search.filter === 'unread' ? 'unread' : undefined,
   }),
+  // Notifications are a signed-in visitor's own: anyone else is sent to sign
+  // in, and comes back here after. An anonymous (widget) session has none
+  // either, as the header bell's own check says.
+  beforeLoad: ({ context, location }) => {
+    const user = context.session?.user
+    if (!user || user.principalType === 'anonymous') {
+      throw redirect(buildSigninRedirect(location.href))
+    }
+  },
   component: NotificationsPage,
 })
 

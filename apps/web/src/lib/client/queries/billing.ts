@@ -6,10 +6,7 @@ import {
   fetchPlanUsageFn,
   fetchDowngradePreviewFn,
   fetchFreeDowngradePreviewFn,
-  fetchPendingDowngradeFn,
   fetchUpgradeContextFn,
-  beginPlanDowngradeFn,
-  cancelPlanDowngradeFn,
 } from '@/lib/server/functions/billing'
 
 /** Billing state and catalogue from the control plane. */
@@ -57,15 +54,9 @@ export const billingQueries = {
       queryFn: () => fetchDowngradePreviewFn({ data: { planId } }),
       staleTime: 10_000,
     }),
-  pendingDowngrade: () =>
-    queryOptions({
-      queryKey: ['billing', 'pending-downgrade'] as const,
-      queryFn: () => fetchPendingDowngradeFn(),
-      staleTime: 10_000,
-    }),
 }
 
-export { beginPlanDowngradeFn, cancelPlanDowngradeFn }
+export { fetchDowngradePreviewFn }
 
 /**
  * Warm everything an upgrade surface reads before it renders: the advertised

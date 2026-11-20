@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod'
-import type { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
+import type { McpServer } from '@modelcontextprotocol/server'
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/server'
 import type { SegmentId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
@@ -30,6 +30,7 @@ import {
   type UntrustedSpec,
 } from '../untrusted'
 import { recordMcpToolCall, type McpToolErrorCode } from '../tool-call-audit'
+import { TOOL_SCOPES, declaredToolScopes } from '../required-scope'
 
 const log = logger.child({ component: 'mcp-tools' })
 
@@ -203,6 +204,8 @@ async function requireFeature(feature: ToolFeature): Promise<CallToolResult | nu
 export interface ToolDef<TArgs> {
   /** Must be declared in UNTRUSTED_TOOL_FIELDS (../untrusted). */
   name: McpToolName
+  /** Human-readable name shown by clients in place of `name`. */
+  title: string
   description: string
   schema: z.ZodRawShape
   annotations: ToolAnnotations
@@ -265,31 +268,38 @@ export function registerTool<TArgs>(
   if (!untrusted) {
     throw new Error(`MCP tool "${def.name}" has no UNTRUSTED_TOOL_FIELDS declaration`)
   }
+  if (def.scope && TOOL_SCOPES[def.name] !== def.scope) {
+    throw new Error(`MCP tool "${def.name}" declares a scope that differs from TOOL_SCOPES`)
+  }
   const audited = def.annotations.readOnlyHint !== true
-  const wrapped = (async (args: TArgs, extra?: unknown): Promise<CallToolResult> => {
-    const { result, errorCode } = await runGuardedTool(auth, def, args, untrusted)
+  const wrapped = async (args: unknown, ctx?: unknown): Promise<CallToolResult> => {
+    const { result, errorCode } = await runGuardedTool(auth, def, args as TArgs, untrusted)
     // Every call that can change something is audited, refused ones included,
     // on the result the caller receives.
     if (audited) {
-      await recordMcpToolCall({ auth, tool: def.name, args, result, errorCode, extra })
+      await recordMcpToolCall({ auth, tool: def.name, args, result, errorCode, extra: ctx })
     }
     return result
-  }) as unknown as ToolCallback<never>
+  }
 
-  // MCP SDK still types against an older Zod shape; the runtime schema is ours.
-  const registered = server.tool(
+  // The listing declares the scopes a tool needs (OpenAI Apps SDK
+  // `securitySchemes`), for clients that plan their authorization from it.
+  // It is the same for every caller: it says what a tool needs, not what this
+  // caller holds. Argument-dispatched tools name every scope a branch can need.
+  const scopes = declaredToolScopes(def.name)
+  server.registerTool(
     def.name,
-    def.description,
-    def.schema as never,
-    def.annotations,
+    {
+      title: def.title,
+      description: def.description,
+      inputSchema: z.object(def.schema),
+      annotations: def.annotations,
+      ...(scopes.length > 0
+        ? { _meta: { securitySchemes: [{ type: 'oauth2', scopes: [...scopes] }] } }
+        : {}),
+    },
     wrapped
   )
-  // Declares the scope a tool needs in the listing, for clients that plan
-  // their authorization from it. A tool that picks its scope from its
-  // arguments declares none.
-  if (def.scope) {
-    registered?.update({ _meta: { securitySchemes: [{ type: 'oauth2', scopes: [def.scope] }] } })
-  }
 }
 
 /** Run a tool behind its guards, naming the outcome for the audit. */
@@ -359,7 +369,7 @@ export function principalTypeOf(auth: McpAuthContext): 'user' | 'service' {
 
 /**
  * Policy actor for the agent-side conversation tools. The conversation gates
- * (canViewConversation / canActAsAgent) short-circuit on the team role, so
+ * (assertConversationVisible / canActAsAgent) read the role and scope, so
  * segment memberships are never consulted and stay empty. A permission ceiling
  * on the context (an API key's resolved authority) rides along, and so does a
  * personal key's creator, whose row scope the actor follows.

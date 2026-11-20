@@ -35,6 +35,7 @@ const ALL_TYPES: Record<NotificationType, true> = {
   assistant_handed_off: true,
   sending_domain_live: true,
   sending_domain_needs_attention: true,
+  domain_needs_attention: true,
 }
 
 describe('notification catalog bijection', () => {

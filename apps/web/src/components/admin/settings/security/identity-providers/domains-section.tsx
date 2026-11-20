@@ -63,7 +63,7 @@ export function ssoTxtRecord(
   result: VerifyDomainResult | null
 ): DnsRecordRow {
   const record = {
-    label: 'Ownership',
+    label: 'Verification',
     type: 'TXT',
     name: SSO_VERIFY_RECORD_HOST,
     value: ssoVerifyRecordValue(domain.verificationToken),

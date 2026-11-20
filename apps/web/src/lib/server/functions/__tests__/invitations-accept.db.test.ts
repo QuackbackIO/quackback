@@ -6,9 +6,17 @@
  * projected maxTeamSeats, so a refused accept leaves the invite pending.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createId, type PrincipalId, type UserId } from '@quackback/ids'
+import { createId, type PrincipalId, type RoleId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { eq, invitation, principal, settings, user } from '@/lib/server/db'
+import {
+  eq,
+  invitation,
+  principal,
+  principalRoleAssignments,
+  roles,
+  settings,
+  user,
+} from '@/lib/server/db'
 import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
@@ -52,6 +60,16 @@ vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
 }))
 vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
   getCloudConfig: async () => ({ enabled: true, plan: 'business', trialActive: false }),
+}))
+
+// Which caps the plan enforces now (past the grace). The real answer is proved
+// against a database in plan-limits.team.db.test.ts.
+const enforced = vi.hoisted(() => ({ keys: new Set<string>() }))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/plan-limits/plan-limits.service')
+  >()),
+  isCapEnforced: async (key: string) => enforced.keys.has(key),
 }))
 
 const { acceptInvitationFn } = await import('../invitations')
@@ -124,8 +142,62 @@ describe.skipIf(!fixture.available)('acceptInvitationFn seat backstop', () => {
     hoisted.getSession.mockReset()
     invalidateTierLimitsCache()
   })
-  afterEach(() => fixture.rollback())
+  afterEach(() => {
+    enforced.keys.clear()
+    return fixture.rollback()
+  })
   afterAll(() => fixture.close())
+
+  async function acceptCustomRoleInvite(): Promise<{ inviteeId: UserId; roleId: RoleId }> {
+    const before = await countSeatUsage()
+    const inviterId = await seedMember(`inviter-${suffix()}@acme.test`)
+    await projectMaxTeamSeats(before.members + 5)
+    const roleId = createId('role') as RoleId
+    await testDb
+      .insert(roles)
+      .values({ id: roleId, key: roleId, name: 'Acme Support', isSystem: false })
+    const email = `invitee-${suffix()}@acme.test`
+    const inviteeId = await seedUser(email)
+    const invitationId = createId('invite')
+    await testDb.insert(invitation).values({
+      id: invitationId,
+      email,
+      status: 'pending',
+      kind: 'team',
+      role: 'member',
+      roleId,
+      expiresAt: new Date(Date.now() + 86_400_000),
+      createdAt: new Date(),
+      inviterId,
+    })
+    hoisted.getSession.mockResolvedValue({
+      session: { id: 'sess_1' },
+      user: { id: inviteeId, email, name: 'Invitee', createdAt: new Date().toISOString() },
+    })
+    await acceptInvitationFn({ data: { invitationId } })
+    return { inviteeId, roleId }
+  }
+
+  async function assignedRoles(userId: UserId): Promise<string[]> {
+    const p = await testDb.query.principal.findFirst({ where: eq(principal.userId, userId) })
+    expect(p?.role).toBe('member')
+    const rows = await testDb
+      .select({ roleId: principalRoleAssignments.roleId })
+      .from(principalRoleAssignments)
+      .where(eq(principalRoleAssignments.principalId, p!.id))
+    return rows.map((r) => r.roleId)
+  }
+
+  it('lands an old custom-role invite as the plain member once the plan holds custom roles', async () => {
+    enforced.keys.add('maxCustomRoles')
+    const { inviteeId, roleId } = await acceptCustomRoleInvite()
+    expect(await assignedRoles(inviteeId)).not.toContain(roleId)
+  })
+
+  it('gives the custom role while the plan does not hold custom roles', async () => {
+    const { inviteeId, roleId } = await acceptCustomRoleInvite()
+    expect(await assignedRoles(inviteeId)).toContain(roleId)
+  })
 
   it('refuses accept when members already fill the purchased cap and leaves the invite pending', async () => {
     const before = await countSeatUsage()

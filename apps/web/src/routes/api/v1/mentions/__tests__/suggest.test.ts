@@ -53,6 +53,12 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
+// The item marks (`itemKind`/`itemId`) run over real rows in
+// suggest-scope.db.test.ts; these cases name no item.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).recipientScopePassThrough()
+)
+
 vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => mockIncrementBucket(...args),
 }))

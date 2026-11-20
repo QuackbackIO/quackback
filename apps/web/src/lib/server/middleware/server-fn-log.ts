@@ -16,7 +16,7 @@ import { isNotFound, isRedirect } from '@tanstack/react-router'
 import type { AppLogger } from '@quackback/logger'
 import { logger } from '@/lib/server/logger'
 import { getLogContext } from '@/lib/server/log-context'
-import { DomainException, isSafeToShow } from '@/lib/shared/errors'
+import { DomainException, HiddenMessageRefusal, isSafeToShow } from '@/lib/shared/errors'
 import { UNEXPECTED_ERROR_MESSAGE, withErrorReference } from '@/lib/shared/error-reference'
 import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
 import { isTechnicalFailure, newErrorReference } from './technical-failure'
@@ -78,6 +78,14 @@ function statusCodeOf(error: unknown): number | undefined {
   return typeof candidate.statusCode === 'number' ? candidate.statusCode : undefined
 }
 
+/** The code and status of a refusal below 500, or null for anything else. */
+function refusalCodeOf(error: unknown): { code: string; statusCode: number } | null {
+  const statusCode = statusCodeOf(error)
+  const code = (error as { code?: unknown } | null)?.code
+  if (statusCode === undefined || statusCode >= 500 || typeof code !== 'string') return null
+  return { code, statusCode }
+}
+
 /**
  * Severity for a thrown value, or `null` when it is not a failure at all.
  *
@@ -107,7 +115,8 @@ export function classifyServerFnError(error: unknown): 'warn' | 'error' | null {
  * logger. Mirrors `handleRequestWithContext` in request-context.ts.
  *
  * A thrown error crosses to the browser with its message intact, and the
- * interface prints it. In production only a planned failure keeps its message:
+ * interface prints it; a typed error below 500 also keeps its code and status
+ * (typed-error-serialization.ts). In production only a planned failure keeps its message:
  * one logged at warn (a typed 4xx, an auth denial, a rejected payload), or a
  * failure on our side whose class says its message was written for people
  * (`ServiceUnavailableError`). Anything else, which is every plain
@@ -153,7 +162,15 @@ export async function runWithServerFnLogging<T>({
         `${name} failed`
       )
     }
-    if (reference) throw new Error(withErrorReference(UNEXPECTED_ERROR_MESSAGE, reference))
+    if (reference) {
+      const hiddenMessage = withErrorReference(UNEXPECTED_ERROR_MESSAGE, reference)
+      // A refusal below 500 keeps its code and status, only its words go.
+      const refusal = refusalCodeOf(error)
+      if (refusal) {
+        throw new HiddenMessageRefusal(refusal.code, refusal.statusCode, hiddenMessage)
+      }
+      throw new Error(hiddenMessage)
+    }
     throw error
   }
 }

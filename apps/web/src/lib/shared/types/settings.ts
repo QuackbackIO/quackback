@@ -11,6 +11,7 @@
 
 export type {
   PortalConfig,
+  PortalPageConfig,
   PortalNavConfig,
   PortalNavItemConfig,
   PortalNavItemType,

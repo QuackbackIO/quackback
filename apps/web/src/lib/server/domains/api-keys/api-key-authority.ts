@@ -9,8 +9,8 @@
  * intersection of the key's own role preset and that person's current
  * permission set, resolved exactly as a signed-in session resolves it (custom
  * roles included). Key scopes narrow it further at each gate. A key whose
- * creator is gone, is no longer on the team, or is blocked carries no
- * authority and is refused like an unknown key. Every key records its creator
+ * creator is gone, is no longer on the team, is blocked or holds a paused seat
+ * carries no authority and is refused like an unknown key. Every key records its creator
  * when it is made, and deleting that person clears the column, so a key with
  * no recorded creator is a deleted person's key and is refused too.
  *
@@ -24,6 +24,7 @@ import { permissionsForPrincipal, resolveActorPermissions } from '@/lib/server/p
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
+import { isPausedTeamSeat } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 import type { ApiKey } from './api-key.types'
 
 const log = logger.child({ component: 'api-key-authority' })
@@ -93,6 +94,9 @@ export async function resolveApiKeyAuthority(
   })
   const owner = rows.find((row) => row.id === key.createdById)
   if (!isActiveTeammate(owner)) return null
+  // A personal key acts as its creator, so a creator whose seat is paused
+  // (the plan has fewer team seats than members) cannot use it either.
+  if (await isPausedTeamSeat(owner)) return null
 
   const keyPrincipal = rows.find((row) => row.id === key.principalId) ?? null
   const keyRole = (keyPrincipal?.role as Role | undefined) ?? 'user'

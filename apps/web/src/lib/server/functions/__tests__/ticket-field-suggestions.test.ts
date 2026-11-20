@@ -34,7 +34,7 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   policyActorFromAuth: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   suggestTicketFieldValues: vi.fn(),
 }))
 
@@ -42,8 +42,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.requireAuth,
   policyActorFromAuth: hoisted.policyActorFromAuth,
 }))
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: hoisted.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/assistant/ticket-field-suggestion.service', () => ({
   suggestTicketFieldValues: hoisted.suggestTicketFieldValues,
@@ -58,7 +59,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue({ principal: { id: 'principal_admin' } })
   hoisted.policyActorFromAuth.mockResolvedValue({ type: 'user', principalId: 'principal_admin' })
-  hoisted.assertConversationViewable.mockResolvedValue({ id: CONVERSATION_ID })
+  hoisted.assertConversationVisible.mockResolvedValue({ id: CONVERSATION_ID })
   hoisted.suggestTicketFieldValues.mockResolvedValue({
     suggestions: { title: 'CSV export drops filter columns', severity: 'High' },
   })
@@ -77,7 +78,7 @@ describe('suggestTicketFieldValuesFn', () => {
       data: { conversationId: CONVERSATION_ID, ticketTypeId: TICKET_TYPE_ID },
     })
     const actor = await hoisted.policyActorFromAuth.mock.results[0].value
-    expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(CONVERSATION_ID, actor)
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith(CONVERSATION_ID, actor)
   })
 
   it('returns the suggestion set on success', async () => {
@@ -87,7 +88,13 @@ describe('suggestTicketFieldValuesFn', () => {
     expect(result).toEqual({
       suggestions: { title: 'CSV export drops filter columns', severity: 'High' },
     })
-    expect(hoisted.suggestTicketFieldValues).toHaveBeenCalledWith(CONVERSATION_ID, TICKET_TYPE_ID)
+    // The caller's actor decides whether a paired ticket's thread is grounded on.
+    const actor = await hoisted.policyActorFromAuth.mock.results[0].value
+    expect(hoisted.suggestTicketFieldValues).toHaveBeenCalledWith(
+      CONVERSATION_ID,
+      TICKET_TYPE_ID,
+      actor
+    )
   })
 
   it('passes `unavailable` through as a result, never a throw (the quiet fallback)', async () => {
@@ -123,12 +130,12 @@ describe('suggestTicketFieldValuesFn', () => {
         data: { conversationId: CONVERSATION_ID, ticketTypeId: TICKET_TYPE_ID },
       })
     ).rejects.toThrow('Access denied')
-    expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+    expect(hoisted.assertConversationVisible).not.toHaveBeenCalled()
     expect(hoisted.suggestTicketFieldValues).not.toHaveBeenCalled()
   })
 
   it('propagates a viewability denial without suggesting', async () => {
-    hoisted.assertConversationViewable.mockRejectedValue(new Error('Conversation not found'))
+    hoisted.assertConversationVisible.mockRejectedValue(new Error('Conversation not found'))
     await expect(
       suggestTicketFieldValuesFn({
         data: { conversationId: CONVERSATION_ID, ticketTypeId: TICKET_TYPE_ID },

@@ -1044,6 +1044,75 @@ describe.skipIf(!fixture.available)('runWorkflow (real DB, rolled back)', () => 
     })
   })
 
+  describe('a request_csat step that asks nothing', () => {
+    function csatGraph(): WorkflowGraph {
+      return {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          {
+            id: 'csat',
+            type: 'request_csat',
+            body: { type: 'doc', content: [{ type: 'text', text: 'How did we do?' }] },
+            allowTypingInterrupt: false,
+          },
+          { id: 'a', type: 'action', action: { type: 'close' } },
+        ],
+        edges: [
+          { from: 't', to: 'csat' },
+          { from: 'csat', to: 'a', branch: '5' },
+        ],
+      }
+    }
+
+    it('ends the run instead of parking, so the conversation is free for the next workflow', async () => {
+      // What the executor returns when the ask is declined (open conversation,
+      // or already asked or rated): nothing was posted.
+      applyAction.mockResolvedValueOnce({
+        label: 'csat skipped — already asked, or the conversation is open',
+        blockSkipped: true,
+      })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Ask for a rating',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: csatGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      expect(run?.state).toBe('done')
+      // The skipped step ran nothing after it: no rating to branch on.
+      expect(applyAction).toHaveBeenCalledTimes(1)
+
+      // The customer_facing lock is released: another customer-facing run
+      // on the same conversation starts instead of losing the lock.
+      applyAction.mockResolvedValueOnce({ label: 'sent csat block', blockMessageId: 'msg_1' })
+      const next = await runWorkflow(wf, ctx(), { conversationId })
+      expect(next).not.toBeNull()
+      expect(next?.state).toBe('waiting')
+    })
+
+    it('still parks when the ask was posted', async () => {
+      applyAction.mockResolvedValueOnce({
+        label: 'sent csat block',
+        blockMessageId: 'conversation_message_csat_1',
+      })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Ask for a rating',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: csatGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      expect(run?.state).toBe('waiting')
+      expect(run?.cursor).toMatchObject({ waitKind: 'input', blockKind: 'csat' })
+    })
+  })
+
   describe('conversational block layer (Phase C, slice C-1)', () => {
     /** A graph with one interactive reply_buttons node, matching graph.test.ts's
      *  fixture: two labeled branches, keyed by the button's own key. */

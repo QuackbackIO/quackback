@@ -19,6 +19,8 @@ const widgetMotionFiles = [
   'components/widget/widget-home-animated.tsx',
   'components/widget/widget-messages.tsx',
   'components/widget/widget-overview.tsx',
+  // The messenger's reply buttons and CSAT row.
+  'components/shared/conversation/block-affordance.tsx',
 ]
 
 describe('widget framer-motion usage', () => {

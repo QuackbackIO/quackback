@@ -39,6 +39,10 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   // About the workspace's own setup, to a teammate: never part of a customer
   // thread, and the domain it reports on is the one that just stopped verifying.
   sendSendingDomainAttentionEmail: 'platform',
+  sendPlanLimitsEmail: 'platform',
+  // About a domain the workspace added, to a teammate: never part of a
+  // customer thread.
+  sendDomainAttentionEmail: 'platform',
   sendMagicLinkEmail: 'platform',
   // The other half of the sign-in request, and it must speak as the same
   // sender: it is the answer to a sign-in attempt, not part of any thread a
@@ -70,11 +74,6 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   sendTicketEventEmail: 'workspace-identity',
   sendChangelogPublishedEmail: 'workspace-identity',
   sendRawEmail: 'workspace-identity',
-
-  // Exported with no production caller. Classified rather than deleted so the
-  // decision to remove them is a separate, deliberate change.
-  sendWelcomeEmail: 'platform',
-  sendFeedbackLinkedEmail: 'platform',
 }
 
 const SENDER_MODULE = path.resolve(__dirname, '../../../../../../../packages/email/src/index.ts')

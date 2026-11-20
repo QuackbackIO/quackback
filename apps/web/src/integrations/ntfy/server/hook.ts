@@ -9,6 +9,8 @@ import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { buildNtfyPayload } from '@/integrations/ntfy/server/message'
 import { parseNtfyUrl } from '@/integrations/ntfy/server/url'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'ntfy' })
 
@@ -19,12 +21,13 @@ export interface NtfyTarget {
 export interface NtfyConfig {
   accessToken?: string // optional Bearer token (empty string when none)
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const ntfyHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as NtfyTarget
-    const { accessToken, rootUrl } = config as NtfyConfig
+    const { accessToken, rootUrl, links } = config as NtfyConfig
 
     const parsed = parseNtfyUrl(channelId)
     if (!parsed) {
@@ -32,7 +35,7 @@ export const ntfyHook: IntegrationHook = {
     }
     const { origin, topic } = parsed
 
-    const payload = buildNtfyPayload(event, topic, rootUrl)
+    const payload = buildNtfyPayload(event, topic, hookLinks({ rootUrl, links }))
     if (!payload) return { state: 'succeeded' } // event type we do not notify on
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }

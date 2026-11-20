@@ -132,12 +132,14 @@ describe('workspace search reads each source only as far as its own permission',
       ticket: mockTicketsRetrieve.mock.calls.length,
     }
   }
-  it('keeps private articles, private posts, drafts and tickets from a teammate without access', async () => {
+  // The tickets source is always consulted: it scopes itself to the viewer
+  // (tickets-retrieval-scope.db.test.ts) and fails closed without one.
+  it('keeps private articles, private posts and drafts from a teammate without access', async () => {
     expect(await ceilings(member())).toEqual({
       article: 'public',
       post: 'public',
       changelog: 'public',
-      ticket: 0,
+      ticket: 1,
     })
   })
   it('fails closed without an actor', async () => {
@@ -145,7 +147,7 @@ describe('workspace search reads each source only as far as its own permission',
       article: 'public',
       post: 'public',
       changelog: 'public',
-      ticket: 0,
+      ticket: 1,
     })
   })
   it('reads team content for a teammate holding each permission', async () => {

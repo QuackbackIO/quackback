@@ -21,7 +21,8 @@
  *   - The row is NOT customer-scoped. A closed ticket is team knowledge
  *     retrieved across every requester (tickets-retrieval.ts is a copilot-only,
  *     team-ceiling source), so `requesterPrincipalId` is denormalized for
- *     provenance only, never a retrieval predicate.
+ *     provenance only, never a retrieval predicate. Retrieval is scoped to the
+ *     asking teammate instead, through the parent ticket's `ticketFilter`.
  *
  * `summarizeTicketOnClose` is best-effort end to end: every failure
  * (unconfigured AI, a malformed model response, a DB error) is caught and

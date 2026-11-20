@@ -4,6 +4,8 @@ import { auth } from '@/lib/server/auth'
 import { toSessionScope } from '@/lib/shared/roles'
 import { db, eq, principal } from '@/lib/server/db'
 import { handleFileUploadRequest } from '@/lib/server/domains/files/files.upload'
+import { isPausedTeamSeat } from '@/lib/server/domains/plan-limits/plan-limits.seats'
+import { SEAT_PAUSED_DENIAL } from '@/lib/shared/billing/seat-paused'
 
 /** POST /api/upload/file?name=<file name> — a team member attaching a file. */
 export async function handleAgentFileUpload({ request }: { request: Request }): Promise<Response> {
@@ -14,10 +16,13 @@ export async function handleAgentFileUpload({ request }: { request: Request }): 
   }
   const member = await db.query.principal.findFirst({
     where: eq(principal.userId, session.user.id as UserId),
-    columns: { id: true, role: true },
+    columns: { id: true, role: true, type: true },
   })
   if (!member || (member.role !== 'admin' && member.role !== 'member')) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (await isPausedTeamSeat(member)) {
+    return Response.json({ error: SEAT_PAUSED_DENIAL }, { status: 403 })
   }
   return handleFileUploadRequest(request, {
     source: 'agent',

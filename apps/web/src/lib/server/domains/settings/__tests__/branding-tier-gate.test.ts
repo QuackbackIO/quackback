@@ -24,7 +24,11 @@ vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),
-  CACHE_KEYS: { WORKSPACE_SETTINGS: 'settings:workspace', REGISTERED_AUTH_PROVIDERS: 'auth:p' },
+  CACHE_KEYS: {
+    WORKSPACE_SETTINGS: 'settings:workspace',
+    REGISTERED_AUTH_PROVIDERS: 'auth:p',
+    PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
+  },
 }))
 
 vi.mock('../settings.helpers', async (importOriginal) => {

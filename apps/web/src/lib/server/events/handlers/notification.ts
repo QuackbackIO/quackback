@@ -55,6 +55,8 @@ export interface NotificationConfig {
   // conversation.note_mentioned (WO-3 slice 3)
   conversationMessageId?: string
   authorName?: string
+  /** ticket.replied: the author as the requester's thread names them, for their row. */
+  requesterAuthorName?: string
   // post.mentioned: who mentioned the recipient, resolved by getMentionTargets
   mentionerName?: string | null
   preview?: string
@@ -75,6 +77,11 @@ export interface NotificationConfig {
   // message.created (WO-3 slice 5) — read back out by the anti-spam presence
   // gate in run(), below.
   isFirstMessage?: boolean
+  // message.created: the conversation is still closed after this customer
+  // message (a button tap answering a block posted after the close). It
+  // shows in no one's open inbox, so the presence gate cannot assume an
+  // online teammate sees it live.
+  stillClosed?: boolean
   // ticket.external_status_changed — the link row's display reference plus the
   // provider's status/transition, resolved by getTicketExternalStatusChangedTargets.
   reference?: string | null
@@ -85,27 +92,61 @@ export interface NotificationConfig {
   dueAt?: string
 }
 
+/**
+ * The same anti-spam gate as the new-message team bell below, for a customer
+ * message on a ticket's conversation (`ticket.replied` sent by the visitor).
+ * Every message in a live chat signals it, and the ticket's watchers are its
+ * team bell on a pair (the conversation bell is held back there), so without
+ * this each message would bell every watching teammate. While one of the
+ * watching teammates is around (a live inbox, not set to Away) they see it
+ * live and no teammate is belled; an unreadable presence store counts as
+ * someone around. Only teammates are held back: the requester's own row, and
+ * a teammate's reply (news for everyone watching), always go out.
+ */
+async function gateCustomerTicketReply(
+  event: EventData,
+  principalIds: NotificationTarget['principalIds'],
+  cfg: NotificationConfig
+): Promise<NotificationTarget['principalIds']> {
+  if (event.type !== 'ticket.replied' || event.data.senderType !== 'visitor') return principalIds
+  if (!principalIds || principalIds.length === 0) return principalIds
+  const requester = cfg.requesterPrincipalId ?? event.data.requesterPrincipalId ?? null
+  const teammates = principalIds.filter((id) => id !== requester)
+  if (teammates.length === 0) return principalIds
+  const { readAvailableAgentIds } = await import('@/lib/server/realtime/presence')
+  const online = await readAvailableAgentIds()
+  const someoneAround = online === null || teammates.some((id) => online.includes(id))
+  return someoneAround ? principalIds.filter((id) => id === requester) : principalIds
+}
+
 export const notificationHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { principalIds } = target as NotificationTarget
     const cfg = config as NotificationConfig
+    const principalIds = await gateCustomerTicketReply(
+      event,
+      (target as NotificationTarget).principalIds,
+      cfg
+    )
 
     if (!principalIds || principalIds.length === 0) {
       return { success: true }
     }
 
-    // Anti-spam gate for the new-message team bell (WO-3 slice 5), moved
-    // here from notifyVisitorMessage's request-time check: only ping the
-    // team on the first message of a conversation, or when nobody is around
-    // to see it live. isAnyAgentOnline is a single GLOBAL presence check, not
-    // per-recipient, so it's evaluated once for the whole target. This is a
-    // deliberate skew from notifyVisitorMessage's own (still request-time)
-    // presence check for the offline email — the two are never unified.
-    if (event.type === 'message.created' && !cfg.isFirstMessage) {
-      const { isAnyAgentOnline } = await import('@/lib/server/realtime/presence')
-      if (await isAnyAgentOnline()) {
-        return { success: true }
-      }
+    // Anti-spam gate for the new-message team bell (WO-3 slice 5): only ping
+    // on the first message of a conversation, or when none of the recipients
+    // is around to see it live (a live inbox and not set to Away). The
+    // recipients are already cut to the teammates whose scope holds the
+    // conversation, so an agent online who
+    // cannot see it never silences the ones who can. An unreadable presence
+    // store counts as someone online, so an outage cannot ping everyone on
+    // every message. This is a deliberate skew from notifyVisitorMessage's own
+    // (request-time) presence check for the offline email — never unified.
+    if (event.type === 'message.created' && !cfg.isFirstMessage && !cfg.stillClosed) {
+      const { readAvailableAgentIds } = await import('@/lib/server/realtime/presence')
+      const online = await readAvailableAgentIds()
+      if (online === null) return { success: true }
+      const onlineSet = new Set(online)
+      if (principalIds.some((id) => onlineSet.has(id))) return { success: true }
     }
 
     log.debug(
@@ -374,19 +415,25 @@ function buildNotifications(
       requesterPrincipalId,
       portalPrincipalIds,
     } = config
-    return principalIds.map((principalId) => ({
-      principalId,
-      type: 'ticket_replied' as NotificationType,
-      title: `${authorName} replied on ${title}`,
-      body: preview,
-      metadata: {
-        ticketId,
-        conversationId,
-        ticketTitle: title,
-        actorName: authorName,
-        audience: customerAudience(principalId, requesterPrincipalId, portalPrincipalIds),
-      },
-    }))
+    return principalIds.map((principalId) => {
+      const audience = customerAudience(principalId, requesterPrincipalId, portalPrincipalIds)
+      // A customer's row (the requester's, or one the ticket was shared with)
+      // names the author as their thread does.
+      const name = (audience === 'portal' && config.requesterAuthorName) || authorName
+      return {
+        principalId,
+        type: 'ticket_replied' as NotificationType,
+        title: `${name} replied on ${title}`,
+        body: preview,
+        metadata: {
+          ticketId,
+          conversationId,
+          ticketTitle: title,
+          actorName: name,
+          audience,
+        },
+      }
+    })
   }
 
   if (event.type === 'ticket.note_added') {

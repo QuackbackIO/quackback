@@ -79,7 +79,17 @@ export const Route = createFileRoute('/api/auth/$')({
           await import('@/lib/server/auth/legacy-oauth-callback')
         const { rewriteMcpAuthorizeRequest } = await import('@/lib/shared/mcp-consent-scopes')
         const { auth } = await import('@/lib/server/auth/index')
-        return await auth.handler(rewriteMcpAuthorizeRequest(rewriteLegacyOAuthCallback(request)))
+        const response = await auth.handler(
+          rewriteMcpAuthorizeRequest(rewriteLegacyOAuthCallback(request))
+        )
+        // The consent screen needs to know what the server can vouch for
+        // about the client, not only what the client says about itself.
+        if (url.pathname.endsWith('/oauth2/public-client')) {
+          const { withConsentClientIdentity } =
+            await import('@/lib/server/auth/consent-client-identity')
+          return withConsentClientIdentity(request, response)
+        }
+        return response
       },
 
       /**

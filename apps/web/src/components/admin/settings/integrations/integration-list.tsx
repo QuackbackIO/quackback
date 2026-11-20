@@ -10,6 +10,8 @@ import {
 } from '@/lib/shared/integration-types'
 import { canInstallIntegration } from '@/lib/shared/integration-connect'
 import { cn } from '@/lib/shared/utils'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const PlatformCredentialsDialog = lazy(() =>
   import('./platform-credentials-dialog').then((m) => ({ default: m.PlatformCredentialsDialog }))
@@ -43,6 +45,9 @@ interface SelectedIntegration {
 export function IntegrationList({ catalog, integrations }: IntegrationListProps) {
   const [selectedIntegration, setSelectedIntegration] = useState<SelectedIntegration | null>(null)
   const [activeCategory, setActiveCategory] = useState<IntegrationCategory | 'all'>('all')
+  // An integration's page and its credentials are set up under integration.manage;
+  // a viewer with integration.view alone sees each tile and its status.
+  const canManage = usePermission(PERMISSIONS.INTEGRATION_MANAGE)
 
   const getIntegrationStatus = (integrationId: string) => {
     return integrations.find((i) => i.id === integrationId)
@@ -127,6 +132,15 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
           const TILE =
             'flex items-center gap-3 rounded-panel border border-border bg-transparent p-3 text-left transition-colors'
           const TILE_ACTIVE = 'hover:bg-accent'
+
+          // Read-only: the tile and its status, nothing to open
+          if (!canManage && (canInstallIntegration(entry) || entry.configurable)) {
+            return (
+              <div key={entry.id} data-settings-tile="" className={TILE}>
+                {body}
+              </div>
+            )
+          }
 
           // Platform-managed or already configured: open the install/settings page
           if (canInstallIntegration(entry)) {

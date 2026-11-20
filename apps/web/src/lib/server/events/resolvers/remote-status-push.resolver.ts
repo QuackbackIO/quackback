@@ -21,6 +21,7 @@ import {
   and,
 } from '@/lib/server/db'
 import { getIntegration } from '@/lib/server/integrations'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
 import type { HookTarget } from '../hook-types'
@@ -164,6 +165,8 @@ export const remoteStatusPushResolver: SinkResolver = {
       ? await resolvePostLinks(event.entityId)
       : await resolveTicketLinks(event.entityId)
     if (!statusId || links.length === 0) return []
+    // Paused after the plan limits grace: nothing is queued for later.
+    if (await isFeaturePaused('integrations')) return []
 
     return buildRemoteStatusPushTargets({
       links,

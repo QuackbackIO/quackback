@@ -26,6 +26,8 @@ export function serializeTicket(dto: TicketDTO) {
     firstResponseAt: dto.firstResponseAt,
     dueAt: dto.dueAt,
     resolvedAt: dto.resolvedAt,
+    // The time-to-resolve SLA, null when none applies.
+    sla: dto.sla,
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
     reopenedCount: dto.reopenedCount,

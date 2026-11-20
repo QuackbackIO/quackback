@@ -43,7 +43,7 @@ const hoisted = vi.hoisted(() => ({
   getAssistantRuntimeConfig: vi.fn(),
   executeApprovedPendingAction: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   assertTicketVisible: vi.fn(),
   log: {
     trace: vi.fn(),
@@ -127,8 +127,9 @@ vi.mock('@/lib/server/domains/assistant/assistant.principal', () => ({
   ensureAssistantPrincipal: hoisted.ensureAssistantPrincipal,
 }))
 
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: hoisted.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
@@ -206,7 +207,7 @@ beforeEach(() => {
   hoisted.getConnectorSpecByToolName.mockResolvedValue(null)
   hoisted.getAssistantRuntimeConfig.mockResolvedValue({})
   hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
-  hoisted.assertConversationViewable.mockResolvedValue(undefined)
+  hoisted.assertConversationVisible.mockResolvedValue(undefined)
   hoisted.assertTicketVisible.mockResolvedValue(undefined)
 })
 
@@ -412,7 +413,7 @@ describe('approveAssistantActionFn', () => {
 
       await approve({ pendingActionId: 'assistant_action_1' })
 
-      expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(
+      expect(hoisted.assertConversationVisible).toHaveBeenCalledWith(
         'conversation_1',
         expect.objectContaining({ principalId: 'principal_agent1' })
       )
@@ -435,7 +436,7 @@ describe('approveAssistantActionFn', () => {
         'ticket_1',
         expect.objectContaining({ principalId: 'principal_agent1' })
       )
-      expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+      expect(hoisted.assertConversationVisible).not.toHaveBeenCalled()
     })
 
     it('404s (never executing or deciding) when the approver holds conversation.view but cannot see this ticket-scoped row', async () => {
@@ -456,7 +457,7 @@ describe('approveAssistantActionFn', () => {
     it('404s (never executing or deciding) when the approver cannot view the conversation this row is scoped to', async () => {
       const pending = pendingRow({ conversationId: 'conversation_1', ticketId: null })
       hoisted.getPendingActionById.mockResolvedValue(pending)
-      hoisted.assertConversationViewable.mockRejectedValue(
+      hoisted.assertConversationVisible.mockRejectedValue(
         new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
       )
 
