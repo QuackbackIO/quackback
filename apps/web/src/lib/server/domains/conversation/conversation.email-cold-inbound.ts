@@ -26,6 +26,7 @@
  *
  * Resolution only touches identity; the caller owns creating the conversation.
  */
+import { SENDER_AUTH_FAILED_ATTRIBUTE } from './conversation.spam-signals'
 import {
   db,
   sql,
@@ -156,8 +157,9 @@ export async function resolveColdInboundSender(
  * signals a widget-started one does. Direct inserts (the visitor-message create
  * path hardcodes channel='messenger'); the emit bridge is error-isolated.
  *
- * `quarantine` inverts both halves of that for a message we REFUSED. It files
- * the thread to Spam in the same INSERT, and it fires neither emit.
+ * `quarantine` inverts both halves of that for a message we REFUSED, and for
+ * one a fixed spam rule filed. It files the thread to Spam in the same INSERT,
+ * and it fires neither emit.
  *
  * Filing in the insert rather than with a follow-up update is what makes the
  * refusal hold: there is no instant at which a refused message sits in the open
@@ -178,13 +180,20 @@ export async function createEmailConversation(input: {
   channelAccountId: ChannelAccountId
   principalId: PrincipalId
   unverified: boolean
+  /** The mail failed sender authentication (a DMARC failure, ARC-rescued or
+   *  not, or a hard reject): stamped on the conversation so nothing downstream
+   *  trusts its From address (a workflow `person.email` condition reads it).
+   *  Stays after an agent releases the thread from Spam: a release says the
+   *  message is wanted, not that the sender is who they claim. */
+  senderAuthFailed?: boolean
   content: string
   /** Rich body converted from the inbound HTML, or null for a plaintext mail. */
   contentJson?: TiptapContent | null
   /** Discrete files rehosted from the inbound MIME parts, or none. */
   attachments?: ConversationAttachment[]
-  /** Refused mail: file to Spam in the insert and raise no signals. The cause
-   *  is the enumerated one the Spam view badges the row with. */
+  /** Refused mail, or mail a fixed spam rule filed: file to Spam in the
+   *  insert and raise no signals. The cause is the enumerated one the Spam
+   *  view badges the row with. */
   quarantine?: { cause: ConversationSpamFiledBy; note: string } | null
 }): Promise<ConversationId> {
   const { parsed, channelAccountId, principalId, unverified, content, contentJson } = input
@@ -236,7 +245,10 @@ export async function createEmailConversation(input: {
             }
           : {}),
         visitorEmail: isTest ? null : normalizeSenderAddress(parsed.from),
-        customAttributes: unverified ? { unverifiedSender: true } : {},
+        customAttributes: {
+          ...(unverified ? { unverifiedSender: true } : {}),
+          ...(input.senderAuthFailed ? { [SENDER_AUTH_FAILED_ATTRIBUTE]: true } : {}),
+        },
       })
       .returning()
 
@@ -279,9 +291,14 @@ export async function createEmailConversation(input: {
   // online, so passing false here would leave this defect half-fixed.
   await emitMessageCreated(actor, author, message, conversation, true)
 
-  // Routing is channel-agnostic: a cold-inbound email conversation auto-assigns
-  // the same way a widget conversation does when routing is enabled.
-  const { routeUnassignedConversation } = await import('./conversation.service')
+  // Live in the team inbox before routing runs, so a conversation routing
+  // leaves unassigned shows up without a refresh, and an assignment's own
+  // update lands after it. Routing is channel-agnostic: a cold-inbound email
+  // conversation auto-assigns the same way a widget conversation does when
+  // routing is enabled.
+  const { publishConversationStarted, routeUnassignedConversation } =
+    await import('./conversation.service')
+  await publishConversationStarted(conversation, message, author)
   await routeUnassignedConversation(conversation)
 
   return conversation.id

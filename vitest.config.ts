@@ -45,6 +45,9 @@ export default defineConfig({
         process.env.TEST_DATABASE_URL ??
         'postgresql://postgres:password@localhost:5432/quackback_test',
     },
+    // Run the CIMD fetch transport through Vite so its tests can stand in for
+    // DNS and the address classifier (cimd-transport.test.ts).
+    server: { deps: { inline: ['@better-auth/cimd'] } },
     deps: {
       optimizer: {
         ssr: { enabled: true },

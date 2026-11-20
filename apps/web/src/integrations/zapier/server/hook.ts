@@ -9,6 +9,8 @@ import type { EventData } from '@/lib/server/events/types'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
 import { buildZapierPayload } from '@/integrations/zapier/server/message'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'zapier' })
 
@@ -19,12 +21,13 @@ export interface ZapierTarget {
 export interface ZapierConfig {
   accessToken: string // not used, but present from targets system
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const zapierHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: webhookUrl } = target as ZapierTarget
-    const { rootUrl } = config as ZapierConfig
+    const { rootUrl, links } = config as ZapierConfig
 
     if (!webhookUrl || !webhookUrl.startsWith('https://')) {
       return { state: 'failed', errorCode: 'provider_failed' }
@@ -42,7 +45,7 @@ export const zapierHook: IntegrationHook = {
 
     log.debug({ event_type: event.type }, 'processing event')
 
-    const payload = buildZapierPayload(event, rootUrl)
+    const payload = buildZapierPayload(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await safeFetch(webhookUrl, {

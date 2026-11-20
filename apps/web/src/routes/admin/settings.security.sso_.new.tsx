@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { ProviderCreatePage } from '@/components/admin/settings/security/identity-providers/provider-create-page'
 import { UpgradeScreen } from '@/components/admin/upgrade'
@@ -13,7 +12,7 @@ import { adminPageHead } from '@/lib/client/admin-head'
 export const Route = createFileRoute('/admin/settings/security/sso_/new')({
   head: adminPageHead('New single sign-on provider'),
   beforeLoad: ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/security/sso/new')
   },
   loader: async ({ context }) => {
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')

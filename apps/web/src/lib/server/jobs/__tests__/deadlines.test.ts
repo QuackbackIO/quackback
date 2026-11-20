@@ -126,7 +126,14 @@ describe('a gated-off schedule keeps its slot memory', () => {
           cronEnabled: async () => due,
         },
       ]
-      return { ...actual, JOB_DEFINITIONS: only, jobDefinitions: () => only }
+      return {
+        ...actual,
+        JOB_DEFINITIONS: only,
+        jobDefinitions: () => only,
+        runnableJobDefinitions: () => only,
+        runnableQueues: () => only.map((d) => d.name),
+        pausedQueues: () => [],
+      }
     })
     const runner = await import('../runner')
     const state = runner.createScheduleState()

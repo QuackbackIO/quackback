@@ -194,6 +194,11 @@ export type AuditEventType =
   // match was removed; the target is the mapping.
   | 'integration.user_mapping.added'
   | 'integration.user_mapping.removed'
+  // An MCP client identified by its metadata document URL (CIMD): created on
+  // first use, and refreshed when a re-fetched document changed its name or
+  // redirect URIs.
+  | 'oauth.client.discovered'
+  | 'oauth.client.refreshed'
 
 export type AuditEventOutcome = 'success' | 'failure'
 

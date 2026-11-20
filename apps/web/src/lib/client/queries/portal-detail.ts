@@ -91,6 +91,8 @@ export interface PublicPostDetailView {
    */
   canVote?: boolean
   canComment?: boolean
+  /** The board shows its posts and takes no new votes or comments. */
+  boardReadOnly?: boolean
   /**
    * The board's reply rule. `'author-only'` means only the post's own author
    * and the team may reply — `canComment` already accounts for it; this field

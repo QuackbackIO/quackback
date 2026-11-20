@@ -5,6 +5,9 @@ import { EmailCard } from '../email-card'
 import { DEFAULT_CHANGELOG_SETTINGS, type ChangelogSettings } from '@/lib/shared/changelog-settings'
 
 vi.mock('../csv-import-section', () => ({ CsvImportSection: () => null }))
+vi.mock('@/components/admin/channels/surface-sender-row', () => ({
+  SurfaceSenderRow: ({ surface }: { surface: string }) => <p>sender for {surface}</p>,
+}))
 
 afterEach(cleanup)
 
@@ -41,5 +44,12 @@ describe('EmailCard send switch', () => {
   it('has no inverted Disable switch', () => {
     renderCard({})
     expect(screen.queryByText(/Disable changelog emails/)).toBeNull()
+  })
+})
+
+describe('EmailCard sender', () => {
+  it('shows the address changelog email comes from', () => {
+    renderCard({})
+    expect(screen.getByText('sender for changelog')).toBeTruthy()
   })
 })

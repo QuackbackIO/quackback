@@ -338,6 +338,13 @@ const copilotQaInput = {
   ...baseInput,
   role: 'copilot_qa' as const,
   surface: 'copilot' as const,
+  viewer: {
+    principalId: 'principal_teammate' as never,
+    principalType: 'user' as const,
+    role: 'member' as const,
+    segmentIds: new Set<never>(),
+    permissions: new Set<never>(),
+  },
 }
 
 beforeEach(() => {
@@ -1103,6 +1110,33 @@ describe('runAssistantTurn', () => {
     if (widget.status === 'answered') {
       expect(widget.citations[0].updatedAt).toBe('2026-06-01T00:00:00.000Z')
     }
+  })
+
+  it("bounds closed-ticket retrieval on a copilot turn by the asking teammate, not Quinn's actor", async () => {
+    mockChat.mockImplementation(
+      (opts: {
+        tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
+        context: unknown
+      }) =>
+        (async function* () {
+          const search = opts.tools.find((t) => t.name === 'search')!
+          await search.execute(
+            { query: 'sso callback' },
+            { context: opts.context, emitCustomEvent: () => {} }
+          )
+          const object = { text: 'Nothing on file.', citations: [] }
+          yield { type: 'CUSTOM', name: 'structured-output.complete', value: { object } }
+          yield { type: 'RUN_FINISHED', usage: undefined }
+        })()
+    )
+
+    await runAssistantTurn({ ...copilotQaInput, messages: customerAsks('seen this before?') })
+
+    expect(mockTicketsRetrieve).toHaveBeenCalledWith(
+      'sso callback',
+      'team',
+      expect.objectContaining({ viewer: copilotQaInput.viewer })
+    )
   })
 
   it('returns an explicit inability outcome when retrieval finds nothing', async () => {

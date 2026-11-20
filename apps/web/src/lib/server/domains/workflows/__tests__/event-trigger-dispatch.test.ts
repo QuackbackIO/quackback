@@ -30,6 +30,9 @@ vi.mock('../workflow-run-events', () => ({ logRunEvent }))
 // resume-vs-interrupt check falls through to the interrupt path exactly as
 // before it existed.
 vi.mock('../dispatcher.guards', () => ({ findWaitingCustomerFacingRun, readMessageBlockReply }))
+// No service principal here is a personal API key (personal-key-trigger.db.test.ts
+// covers one that is), so every service actor stays automated.
+vi.mock('@/lib/server/messages/reply-rule', () => ({ keyActsAsPerson: vi.fn(async () => false) }))
 
 // Ticket triggers' own async pre-resolution (resolveTicketConversationId):
 // one indexed ticket_conversations lookup, mocked at the db chain — every

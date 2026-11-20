@@ -44,6 +44,27 @@ describe('SettingsListRow', () => {
     expect(screen.getByText('42')).toBeTruthy()
   })
 
+  it('wraps a long title on a phone, with the badges dropping under it, and cuts it only from sm up', () => {
+    render(
+      <SettingsList>
+        <SettingsListRow
+          title="Acme Corp <hello@oldbrand.example>"
+          badges={<span>Needs attention</span>}
+          trailing={<button>Send test</button>}
+        />
+      </SettingsList>
+    )
+    const title = screen.getByText('Acme Corp <hello@oldbrand.example>')
+    const classes = title.className.split(' ')
+    // Cut to one line only where there is room for what identifies the row.
+    expect(classes).not.toContain('truncate')
+    expect(classes).toContain('sm:truncate')
+    expect(classes).toContain('wrap-anywhere')
+    const line = title.parentElement!.className.split(' ')
+    expect(line).toContain('flex-wrap')
+    expect(line).toContain('sm:flex-nowrap')
+  })
+
   it('is 52px with a meta line and 44px without', () => {
     render(
       <SettingsList>
@@ -227,5 +248,39 @@ describe('SettingsListRow meta', () => {
     )
     expect(screen.getByText('one line')).toHaveClass('truncate')
     expect(screen.getByText('a whole sentence')).not.toHaveClass('truncate')
+  })
+
+  it('breaks a long wrapped meta anywhere, so a hostname never runs under the controls', () => {
+    render(
+      <SettingsList>
+        <SettingsListRow title="b" meta="help.a-very-long-hostname.example.com" wrapMeta />
+      </SettingsList>
+    )
+    expect(screen.getByText('help.a-very-long-hostname.example.com')).toHaveClass('wrap-anywhere')
+  })
+
+  it('puts the trailing controls under the text on a phone only when asked', () => {
+    render(
+      <SettingsList>
+        <SettingsListRow title="a" trailing={<button type="button">One</button>} />
+        <SettingsListRow
+          title="b"
+          stackTrailing
+          trailing={
+            <>
+              <button type="button">Two</button>
+              <button type="button">Three</button>
+            </>
+          }
+        />
+      </SettingsList>
+    )
+    const rowOf = (name: string) =>
+      screen.getByRole('button', { name }).closest('[data-slot="settings-list-row"]')!
+    const trailingOf = (name: string) => screen.getByRole('button', { name }).parentElement!
+    expect(rowOf('One')).not.toHaveClass('max-sm:flex-wrap')
+    expect(trailingOf('One')).not.toHaveClass('max-sm:basis-full')
+    expect(rowOf('Two')).toHaveClass('max-sm:flex-wrap')
+    expect(trailingOf('Two')).toHaveClass('max-sm:basis-full')
   })
 })

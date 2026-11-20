@@ -18,7 +18,7 @@ export function finiteUsageLines(lines: PlanUsageLine[]): PlanUsageLine[] {
 const USAGE_QUOTAS = [
   { key: 'maxBoards', label: 'boards' },
   { key: 'maxPosts', label: 'posts' },
-  { key: 'maxTeamSeats', label: 'seats' },
+  { key: 'maxTeamSeats', label: 'team seats' },
   { key: 'maxStatusComponents', label: 'status components' },
   { key: 'maxCustomRoles', label: 'custom roles' },
   { key: 'maxSendingDomains', label: 'sending domains' },

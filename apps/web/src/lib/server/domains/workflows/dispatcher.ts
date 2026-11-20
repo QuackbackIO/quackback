@@ -32,6 +32,7 @@ import type { PrincipalType } from '@/lib/server/policy/types'
 import type { Workflow } from '@/lib/server/db'
 import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { listLiveWorkflowsForTrigger, getWorkflow } from './workflow.service'
 import { resolveConditionContext } from './condition.context'
 import { runWorkflow } from './workflow.engine'
@@ -250,6 +251,15 @@ export async function dispatchWorkflowTrigger(
     ? await loadTargetedWorkflow(opts.targetWorkflowId, trigger.triggerType, trigger.conversationId)
     : await listLiveWorkflowsForTrigger(trigger.triggerType)
   if (live.length === 0) return
+  // Paused after the plan limits grace: live workflows keep their status and
+  // start again on upgrade. Asked only once a live workflow would run.
+  if (await isFeaturePaused('workflows')) {
+    log.debug(
+      { triggerType: trigger.triggerType },
+      'workflows paused on this plan; not dispatching'
+    )
+    return
+  }
 
   const customerFacing = live.filter((w) => w.class === 'customer_facing')
   const background = live.filter((w) => w.class === 'background')

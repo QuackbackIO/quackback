@@ -49,7 +49,16 @@ vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn(() => ({ accessToken: 'test-token' })),
 }))
 
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
+
 import { createTicket } from '../ticket.service'
+import { setFeatureState } from '@/lib/server/domains/plan-limits/__tests__/feature-states'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import {
   linkTicketToIssue,
   unlinkTicketIssue,
@@ -86,6 +95,8 @@ const fixture = await createDbTestFixture({
     await db.select({ id: ticketExternalLinks.id }).from(ticketExternalLinks).limit(0)
   },
 })
+
+afterAll(fixture.close)
 
 const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
@@ -295,7 +306,6 @@ describe('azureDevOpsIssues.parseRef', () => {
 describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
-  afterAll(fixture.close)
 
   it('links a ticket to an existing issue and records a team-only note', async () => {
     await seedSettings()
@@ -888,5 +898,64 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
           .map((m) => m.content)
       ).toEqual(['Unlinked GitHub issue acme/gadgets#1'])
     })
+  })
+})
+
+// Integrations paused after the plan limits grace: Create issue is refused up
+// front, so no create identity is spent, and one cancelled by the pause can be
+// asked for again after an upgrade.
+describe.skipIf(!fixture.available)('Create issue and the plan limits pause (real DB)', () => {
+  beforeEach(fixture.begin)
+  afterEach(async () => {
+    setFeatureState('tierOff')
+    await fixture.rollback()
+  })
+
+  async function ready() {
+    await seedSettings()
+    await seedDefaultStatus()
+    await seedGitHubIntegration({})
+    await testDb
+      .update(integrations)
+      .set({ secrets: 'encrypted-blob' })
+      .where(eq(integrations.integrationType, 'github'))
+    const actor = await seedActor()
+    return { actor, ticketId: await makeTicket(actor) }
+  }
+
+  it('refuses while integrations are paused, with a plain message and no operation', async () => {
+    const { actor, ticketId } = await ready()
+    setFeatureState('enforced', 'integrations')
+    const { planLimitsServiceDouble } =
+      await import('@/lib/server/domains/plan-limits/__tests__/feature-states')
+    const view = await planLimitsServiceDouble.getPlanLimits()
+    planLimitsServiceDouble.getPlanLimits.mockResolvedValueOnce({ ...view, plan: 'free' })
+    const refusal = await createIssueForTicket(ticketId, 'github', actor).catch((e: unknown) => e)
+    expect(refusal).toBeInstanceOf(TierLimitError)
+    expect(refusal).toMatchObject({
+      code: 'INTEGRATIONS_PAUSED',
+      message: "Integrations are paused on the Free plan, so you can't create issues right now.",
+    })
+    expect(
+      await testDb.query.integrationSyncOperations.findMany({
+        where: eq(integrationSyncOperations.sourceId, ticketId),
+      })
+    ).toHaveLength(0)
+  })
+
+  it('queues again after an upgrade when the pause cancelled the earlier attempt', async () => {
+    const { actor, ticketId } = await ready()
+    const first = await createIssueForTicket(ticketId, 'github', actor)
+    setFeatureState('enforced', 'integrations')
+    await runIntegrationSync(syncTestJob(first.operationId))
+    expect(
+      await testDb.query.integrationSyncOperations.findFirst({
+        where: eq(integrationSyncOperations.id, first.operationId),
+      })
+    ).toMatchObject({ state: 'cancelled', errorCode: 'plan_paused' })
+
+    setFeatureState('included', 'integrations')
+    const again = await createIssueForTicket(ticketId, 'github', actor)
+    expect(again).toMatchObject({ operationId: first.operationId, state: 'queued' })
   })
 })

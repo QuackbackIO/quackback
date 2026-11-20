@@ -1,6 +1,6 @@
 import type { PlanNotice } from '../tier-limits.types'
 import { PLAN_CATALOGUE, type CloudConfig } from './cloud.types'
-import { daysUntil, trialChoiceDueAt } from '@/lib/shared/billing/trial-state'
+import { daysUntil, isTrialEnded } from '@/lib/shared/billing/trial-state'
 
 export function plansActionUrl(config: Pick<CloudConfig, 'enabled' | 'canUpgrade'>): string | null {
   return config.enabled && config.canUpgrade ? '/admin/settings/billing' : null
@@ -11,21 +11,28 @@ function planLabel(config: CloudConfig, trialPlanName?: string | null): string {
   return config.plan ? PLAN_CATALOGUE[config.plan].name : PLAN_CATALOGUE.pro.name
 }
 
-/** Trial countdown derived from the control-plane-owned expiry timestamp. */
-export function trialNotice(config: CloudConfig, now: Date = new Date()): PlanNotice | null {
+/**
+ * Trial countdown derived from the control-plane-owned expiry timestamp. The
+ * billing link is only for someone who can open billing.
+ */
+export function trialNotice(
+  config: CloudConfig,
+  now: Date = new Date(),
+  options: { canManageBilling?: boolean } = {}
+): PlanNotice | null {
   if (!config.enabled || !config.trialActive || !config.trialExpiresAt) return null
-  const actionUrl = plansActionUrl(config)
+  const actionUrl = options.canManageBilling === false ? null : plansActionUrl(config)
   const daysLeft = daysUntil(config.trialExpiresAt, now)
   const urgent = daysLeft !== null && daysLeft <= 3
   return {
     label: `${planLabel(config)} trial`,
     trialPlan: planLabel(config),
-    message: 'When this ends, pick a paid plan or switch to Free from billing.',
+    message: 'When it ends, upgrade to keep everything, or downgrade to Free.',
     expiresAt: config.trialExpiresAt,
     ...(actionUrl
       ? {
           actionUrl,
-          actionLabel: urgent ? `Continue with ${planLabel(config)}` : 'See plans',
+          actionLabel: urgent ? `Upgrade to ${planLabel(config)}` : 'Compare plans',
         }
       : {}),
   }
@@ -34,8 +41,8 @@ export function trialNotice(config: CloudConfig, now: Date = new Date()): PlanNo
 /**
  * The strip for an ended trial nobody has chosen a plan for. The workspace is
  * already running on Free limits, so it never asks for billing details: it
- * asks for a choice, and says by when. Teammates who cannot manage billing get
- * the same news without a button they could not use.
+ * asks for a choice. Teammates who cannot manage billing get the same news
+ * without a button they could not use.
  */
 export function trialEndedNotice(
   config: CloudConfig,
@@ -43,31 +50,29 @@ export function trialEndedNotice(
 ): PlanNotice | null {
   if (!config.enabled || !config.plan) return null
   const now = options.now ?? new Date()
-  const dueAt = trialChoiceDueAt({
+  const ended = isTrialEnded({
     plan: config.plan,
     trialActive: config.trialActive,
     trialExpiresAt: config.trialExpiresAt,
     status: config.subscriptionStatus,
     now,
   })
-  if (!dueAt) return null
+  if (!ended) return null
   const name = options.trialPlanName
   const label = name ? `${name} trial ended` : 'Trial ended'
   const base = { label, expiresAt: config.trialExpiresAt!, ended: true as const }
   if (options.canManageBilling === false) {
     return {
       ...base,
-      message: 'The workspace owner needs to choose a plan. Until then, Free limits apply.',
+      message: 'Ask someone who manages billing to upgrade. Until then, Free limits apply.',
     }
   }
   const actionUrl = plansActionUrl(config)
   return {
     ...base,
     message: name
-      ? `Choose how this workspace continues: keep ${name}, or switch to Free.`
-      : 'Choose how this workspace continues: pick a paid plan, or switch to Free.',
-    ...(actionUrl
-      ? { actionUrl, actionLabel: 'Choose a plan', choiceDueAt: dueAt.toISOString() }
-      : {}),
+      ? `Upgrade to ${name} to keep everything, or downgrade to Free.`
+      : 'Upgrade to a paid plan to keep everything, or downgrade to Free.',
+    ...(actionUrl ? { actionUrl, actionLabel: 'Compare plans' } : {}),
   }
 }

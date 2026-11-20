@@ -84,7 +84,7 @@ export function StatusLifecycleStepper({
                 aria-hidden="true"
                 className={cn(
                   'absolute top-3 left-[calc(50%+16px)] right-[calc(-50%+16px)] h-0.5 rounded-full',
-                  isDone ? 'bg-emerald-500/50' : 'bg-border'
+                  isDone ? 'bg-success/15' : 'bg-border'
                 )}
               />
             )}

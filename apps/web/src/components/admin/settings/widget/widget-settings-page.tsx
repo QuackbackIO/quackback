@@ -1,5 +1,5 @@
 import { useRouter, useHydrated, Link, Outlet, useChildMatches } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { useState, useTransition, useMemo } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useTheme } from 'next-themes'
@@ -43,6 +43,9 @@ import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/her
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useAdminBoards } from '@/lib/client/hooks/use-admin-catalogues'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export function WidgetSettingsGate() {
   const childMatches = useChildMatches()
@@ -52,12 +55,14 @@ export function WidgetSettingsGate() {
 
 function WidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
-  const boardsQuery = useSuspenseQuery(adminQueries.boards())
+  const boardsQuery = useAdminBoards()
   // The install status the page was delivered with stays fresh for a few
-  // seconds, so a hydration that takes a moment does not fetch it again.
-  const onboardingQuery = useSuspenseQuery({
+  // seconds, so a hydration that takes a moment does not fetch it again. It is
+  // served only with member.view; without it the card shows no install badge.
+  const onboardingQuery = useQuery({
     ...adminQueries.onboardingStatus(),
     staleTime: 5_000,
+    enabled: usePermission(PERMISSIONS.MEMBER_VIEW),
   })
   const settings = useWorkspaceSettings()
 
@@ -89,11 +94,11 @@ function WidgetSettingsPage() {
       {/* Full-screen editor: controls left, live preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
         <div className="space-y-4 min-w-0">
-          <VisibilityCard initialEnabled={config.enabled} status={onboardingQuery.data} />
+          <VisibilityCard initialEnabled={config.enabled} status={onboardingQuery.data ?? {}} />
 
           <TabsCard
             config={config}
-            boards={boardsQuery.data}
+            boards={boardsQuery.data ?? []}
             helpCenterFlagEnabled={helpCenterFlagEnabled}
             supportInboxFlagEnabled={supportInboxFlagEnabled}
             feedbackFlagEnabled={feedbackFlagEnabled}

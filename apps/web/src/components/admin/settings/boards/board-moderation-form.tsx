@@ -8,6 +8,7 @@ import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { useUpdateBoardAccess } from '@/lib/client/mutations'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { useCanOpenSettingsPage } from '@/lib/client/hooks/use-permission'
 import type { BoardId } from '@quackback/ids'
 import {
   type BoardAccess,
@@ -77,6 +78,7 @@ type ModerationShape = BoardAccess['moderation']
 
 export function BoardModerationForm({ board }: BoardModerationFormProps) {
   const mutation = useUpdateBoardAccess()
+  const canOpenModeration = useCanOpenSettingsPage('/admin/settings/moderation')
 
   // Non-suspense so the form keeps rendering when the portalConfig cache
   // is empty (e.g. in tests). The default falls back to "none" so the
@@ -141,12 +143,14 @@ export function BoardModerationForm({ board }: BoardModerationFormProps) {
             <>Inheriting all workspace defaults.</>
           )}
         </div>
-        <Link
-          to="/admin/settings/moderation"
-          className={`${INLINE_LINK} text-[13px] whitespace-nowrap`}
-        >
-          Workspace moderation →
-        </Link>
+        {canOpenModeration && (
+          <Link
+            to="/admin/settings/moderation"
+            className={`${INLINE_LINK} text-[13px] whitespace-nowrap`}
+          >
+            Workspace moderation →
+          </Link>
+        )}
       </div>
 
       <SettingRows>

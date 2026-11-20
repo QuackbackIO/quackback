@@ -1,6 +1,7 @@
 import type { MessageDescriptor } from 'react-intl'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 
 /**
  * The guided tour's stops, as data. Each stop names the `data-tour` element it
@@ -157,7 +158,10 @@ const GOAL_MODULE: Partial<Record<OnboardingOutcome, ModuleKey>> = {
 }
 
 function moduleOn(key: ModuleKey, ctx: TourContext): boolean {
-  return key === 'roadmap' ? ctx.modules.feedback : ctx.modules[key]
+  // Roadmap rides on Feedback, but its page needs the roadmap list's permission.
+  return key === 'roadmap'
+    ? ctx.modules.feedback && canOpenAdminPage(ctx.permissions, '/admin/roadmap')
+    : ctx.modules[key]
 }
 
 /** A module's stop, on its own sidebar item, with its Try it where that will work. */

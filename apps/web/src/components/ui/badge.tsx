@@ -45,6 +45,7 @@ function Badge({
   return (
     <span
       data-slot="badge"
+      data-variant={variant ?? 'default'}
       className={cn(badgeVariants({ variant, size }), className)}
       {...props}
     />

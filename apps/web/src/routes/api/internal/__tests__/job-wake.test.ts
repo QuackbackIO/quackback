@@ -63,6 +63,31 @@ describe('POST /api/internal/job-wake', () => {
     )
   })
 
+  it('refuses a body over 16 KB, bad JSON and a short workspace key without touching the worker (JOB-02)', async () => {
+    mocks.authorize.mockReturnValue(true)
+    const big = JSON.stringify({ workspaceKey: 'inst_a', pad: 'x'.repeat(17 * 1024) })
+    const oversized = await handleJobWakeRequest(
+      new Request('http://worker/api/internal/job-wake', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(Buffer.byteLength(big)),
+        },
+        body: big,
+      })
+    )
+    expect(oversized.status).toBe(413)
+
+    const badJson = await handleJobWakeRequest(
+      new Request('http://worker/api/internal/job-wake', { method: 'POST', body: '{not json' })
+    )
+    expect(badJson.status).toBe(400)
+
+    const shortKey = await handleJobWakeRequest(request({ workspaceKey: 'ab' }))
+    expect(shortKey.status).toBe(400)
+    expect(mocks.handle).not.toHaveBeenCalled()
+  })
+
   it('returns 503 when this process is not running workers', async () => {
     mocks.running.mockReturnValue(false)
     const response = await handleJobWakeRequest(request({ workspaceKey: 'inst_a' }))

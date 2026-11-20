@@ -21,6 +21,7 @@ import {
 } from '@/lib/server/auth/request-session'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { logger } from '@/lib/server/logger'
+import { SEAT_PAUSED_DENIAL } from '@/lib/shared/billing/seat-paused'
 
 const log = logger.child({ component: 'auth-helpers' })
 
@@ -63,6 +64,22 @@ async function getSessionDirect(): Promise<RequestSession | null> {
     log.error({ err: error }, 'get session failed')
     return null
   }
+}
+
+/**
+ * Whether a dashboard session's teammate holds a paused seat (see
+ * plan-limits.seats.ts). A paused seat keeps the portal and loses team
+ * authority, so the gates below treat it as a portal session. Loaded lazily:
+ * every server function imports this file, and only a dashboard teammate
+ * needs the plan limits read.
+ */
+async function isPausedDashboardSeat(
+  scope: SessionScope,
+  record: { id: string; role: string; type: string }
+): Promise<boolean> {
+  if (scope !== 'dashboard') return false
+  const { isPausedTeamSeat } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  return isPausedTeamSeat(record)
 }
 
 /**
@@ -141,11 +158,16 @@ export async function requireAuth(options?: RequireAuthOptions): Promise<AuthCon
   if (!principalRecord) {
     throw new Error('Access denied: Not a team member')
   }
+  const paused = await isPausedDashboardSeat(scope, principalRecord)
+  if (paused && options?.permission) {
+    throw new Error(SEAT_PAUSED_DENIAL)
+  }
   const resolvedPermissions = await getRequestPermissions(principalRecord)
 
-  const role: Role = sessionRole(principalRecord.role as Role, scope)
-  // Non-dashboard audiences never carry team authority downstream.
-  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
+  // Non-dashboard audiences, and a paused seat, never carry team authority downstream.
+  const teamAuthority = scope === 'dashboard' && !paused
+  const role: Role = teamAuthority ? sessionRole(principalRecord.role as Role, scope) : 'user'
+  const permissions: PermissionKey[] = teamAuthority ? [...resolvedPermissions] : []
 
   if (options?.permission && scope !== 'dashboard') {
     throw new Error(
@@ -289,9 +311,11 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       ? new Set<PermissionKey>()
       : await getRequestPermissions(principalRecord)
 
-  const role: Role = sessionRole(principalRecord.role as Role, scope)
-  // Non-dashboard audiences never carry team authority downstream.
-  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
+  // Non-dashboard audiences, and a paused seat, never carry team authority downstream.
+  const teamAuthority =
+    scope === 'dashboard' && !(await isPausedDashboardSeat(scope, principalRecord))
+  const role: Role = teamAuthority ? sessionRole(principalRecord.role as Role, scope) : 'user'
+  const permissions: PermissionKey[] = teamAuthority ? [...resolvedPermissions] : []
 
   return {
     settings: {

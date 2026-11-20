@@ -226,7 +226,7 @@ function SupportListPage() {
                         <StatusLabel status={c.status} />
                       )}
                       <span>·</span>
-                      <TimeAgo date={c.lastMessageAt} />
+                      <TimeAgo date={c.activityAt} />
                     </span>
                   </span>
                   <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 rtl:rotate-180" />

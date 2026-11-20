@@ -12,6 +12,7 @@ import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
+import type { SectionDomainMap } from '@/lib/shared/section-domains'
 // Vite aliases this to a no-op stub for the client bundle (see
 // logger.client-stub.ts), so it is safe for this otherwise client-bundled
 // module to import it for the one server-side parse-failure log below.
@@ -369,7 +370,27 @@ export interface PortalConfig {
   nav?: PortalNavConfig
   /** Support tab (conversations on the portal). Optional — absent = disabled. */
   support?: PortalSupportConfig
+  /**
+   * The hostname each portal section is served at (help.acme.com for the help
+   * center). Read through `effectiveSectionDomains`.
+   *
+   * **Optional, and deliberately absent from {@link DEFAULT_PORTAL_CONFIG}.**
+   * Absent means the map was never written, and the help center's own domain
+   * (`helpCenterConfig.domain`, the setting this replaces) still stands in for
+   * the help entry. The first write stores the whole map, after which an empty
+   * map means no section has a hostname. Always written whole, never merged.
+   */
+  sectionDomains?: SectionDomainMap
 }
+
+/**
+ * What `fetchPortalPageConfigFn` returns: the parts of {@link PortalConfig} the
+ * viewer's permissions read. `moderationDefault` for settings.moderation,
+ * `welcomeCard` and `nav` for settings.branding; settings.manage reads both.
+ */
+export type PortalPageConfig = Partial<
+  Pick<PortalConfig, 'moderationDefault' | 'welcomeCard' | 'nav'>
+>
 
 /**
  * Portal Support tab configuration. Gated by `isPortalSupportSurfaceEnabled`
@@ -1018,6 +1039,8 @@ export interface UpdatePortalConfigInput {
   /** Replaced wholesale (items is an ordered array — never merged). */
   nav?: PortalNavConfig
   support?: Partial<PortalSupportConfig>
+  /** Replaced wholesale, so a section taken off the map is gone. */
+  sectionDomains?: SectionDomainMap
 }
 
 // =============================================================================
@@ -1126,6 +1149,11 @@ export interface WorkspaceSettings {
    *  have been added. The auth runtime reads this to decide routing
    *  (sso-default vs methods) and hard-binding (per-row `enforced`). */
   verifiedDomains: VerifiedDomain[]
+  /** Whether any identity provider is enabled with its secret saved. Server
+   *  side, read with the plan to decide whether email links stand in for
+   *  single sign-on (see `effectiveSignInMethods`). Absent on an entry cached
+   *  before it existed. */
+  ssoProvidersConfigured?: boolean
   /** Workspace state. INERT — app-level suspension enforcement was removed
    *  (dormant workspaces are scaled to 0 by the control plane; the gateway
    *  serves their hostnames). Nothing reads this anymore. */

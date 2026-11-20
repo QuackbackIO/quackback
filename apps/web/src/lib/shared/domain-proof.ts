@@ -4,6 +4,7 @@
  * `domains/domain-proof/proven-zones.ts`).
  */
 import { PERMISSIONS, type PermissionKey } from './permissions'
+import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
 
 /**
  * - `email-sending`: a verified sending domain, proven by its own ownership
@@ -13,8 +14,10 @@ import { PERMISSIONS, type PermissionKey } from './permissions'
  *   sign-on domain.
  * - `web-address`: an operator-managed hostname that is ready. It proves that
  *   exact hostname and nothing under or above it.
+ * - `domain`: a domain added by name on Settings > Domains, verified by its own
+ *   ownership record. It proves the domain and the names under it.
  */
-export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address'
+export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address' | 'domain'
 
 /**
  * A source as a viewer may see it: named when they may see what proved it,
@@ -22,11 +25,19 @@ export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address'
  */
 export type ShownProofSource = ProvenZoneSource | 'workspace'
 
+/**
+ * What a check of a domain's own record found: verified by the record (`dns`)
+ * or by a proof that already covers the name, or why not.
+ */
+export type DomainRecordCheck<Via extends string = ProvenZoneSource> =
+  { ok: true; via: 'dns' | Via } | { ok: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' }
+
 /** The permission that shows each kind of proof. */
 const SOURCE_PERMISSION: Record<ProvenZoneSource, PermissionKey> = {
-  'email-sending': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  'email-sending': EMAIL_SENDING_PERMISSION,
   sso: PERMISSIONS.AUTH_MANAGE,
   'web-address': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+  domain: PERMISSIONS.SETTINGS_MANAGE,
 }
 
 export function shownProofSource(
@@ -39,7 +50,8 @@ export function shownProofSource(
 const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'email-sending': 'email sending',
   sso: 'single sign-on',
-  'web-address': 'a web address',
+  'web-address': 'a custom domain',
+  domain: 'domain verification',
 }
 
 /** "Verified through email sending" and the like. */

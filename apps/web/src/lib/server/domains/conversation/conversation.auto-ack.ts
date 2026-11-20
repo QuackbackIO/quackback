@@ -4,7 +4,7 @@
  */
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 import { logger } from '@/lib/server/logger'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { ParsedInboundEmail } from './conversation.email-inbound'
 import { ownEmailDomains } from './conversation.email-channel'
 import { normalizeSenderAddress } from './conversation.email-inbound'
@@ -15,7 +15,14 @@ const ACK_WINDOW_SECONDS = 3600
 const ACK_MAX = 2
 
 export type AutoAckRefusal =
-  'disabled' | 'auto_submitted' | 'precedence' | 'list' | 'own_domain' | 'no_sender' | 'rate_capped'
+  | 'disabled'
+  | 'auto_submitted'
+  | 'precedence'
+  | 'list'
+  | 'own_domain'
+  | 'no_sender'
+  | 'rate_capped'
+  | 'email_paused'
 
 export function evaluateAutoAckGuards(
   parsed: ParsedInboundEmail,
@@ -50,6 +57,9 @@ export async function maybeSendColdInboundAck(opts: {
   parsed: ParsedInboundEmail
   conversationId: ConversationId
   conversationSubject: string | null
+  /** The person the sender's address resolved to, whose "Pause all email"
+   *  holds the acknowledgement back. */
+  senderPrincipalId?: PrincipalId
 }): Promise<AutoAckRefusal | 'sent' | 'skipped'> {
   const { getEmailAutoAck } = await import('@/lib/server/domains/settings/settings.email-auto-ack')
   const setting = await getEmailAutoAck()
@@ -67,6 +77,14 @@ export async function maybeSendColdInboundAck(opts: {
     log.info({ reason: 'rate_capped' }, 'auto-ack suppressed')
     return 'rate_capped'
   }
+  // An automated acknowledgement, so the sender's "Pause all email" holds it
+  // back when they are someone we already know.
+  const { hasPausedAllEmail } =
+    await import('@/lib/server/domains/subscriptions/subscription.service')
+  if (opts.senderPrincipalId && (await hasPausedAllEmail(opts.senderPrincipalId))) {
+    log.info({ reason: 'email_paused' }, 'auto-ack suppressed')
+    return 'email_paused'
+  }
 
   try {
     const { sendConversationAutoAckEmail } = await import('@quackback/email')
@@ -74,8 +92,10 @@ export async function maybeSendColdInboundAck(opts: {
       await import('./conversation.email-channel')
     const { currentMailSlug } = await import('./conversation.mail-slug')
     const { typedAddressRecipient } = await import('@/lib/server/email/recipient')
-    const { recordOutboundEmail } = await import('./conversation.email-store')
+    const { recordSent } = await import('./conversation.email-envelope')
     const { requireSettings } = await import('@/lib/server/domains/settings/settings.helpers')
+    const { senderFrom, resolveConversationSender } =
+      await import('@/lib/server/domains/channel-accounts/sender-resolver')
     const org = await requireSettings()
     const workspaceName = org.name ?? 'Support'
     const to = typedAddressRecipient(sender)
@@ -83,18 +103,24 @@ export async function maybeSendColdInboundAck(opts: {
     const replyTo = inboundReplyToAddress(opts.conversationId, currentMailSlug())
     const inboundId = opts.parsed.messageId
     const minted = mintOutboundMessageId(opts.conversationId) ?? undefined
+    // Usually the thread's first outbound email, so this is also the call that
+    // fixes the address every later reply on it sends from. Automated mail
+    // speaks as the address's sender name (else the workspace), not as any one
+    // teammate.
+    const resolved = await resolveConversationSender(opts.conversationId)
+    const from = senderFrom(resolved, workspaceName)
     const result = await sendConversationAutoAckEmail({
       to,
       workspaceName,
       conversationSubject: opts.conversationSubject,
       replyTo: replyTo ?? undefined,
+      from,
       messageId: minted,
       inReplyTo: inboundId ?? undefined,
       references: inboundId ? [inboundId] : undefined,
       conversationId: opts.conversationId,
     })
-    const outboundId = result.messageId === undefined ? minted : (result.messageId ?? undefined)
-    if (outboundId) await recordOutboundEmail(outboundId, opts.conversationId)
+    await recordSent(opts.conversationId, minted, result)
     return 'sent'
   } catch (err) {
     log.warn({ err }, 'auto-ack send failed')
