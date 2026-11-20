@@ -86,8 +86,9 @@ const removeAvatar = () => call(removeAvatarFn)
 const getAvatarUploadUrl = (data: Record<string, unknown>) => call(getAvatarUploadUrlFn, data)
 
 const ME = 'user_me'
-const MINE = `avatars/${ME}/2026/11/uuid-me.png`
-const THEIRS = 'avatars/user_other/2026/11/uuid-them.png'
+const UUID = '0b8f3c2e-4d1a-4e6b-9a7c-1f2e3d4c5b6a'
+const MINE = `avatars/${ME}/2026/11/${UUID}-me.png`
+const THEIRS = `avatars/user_other/2026/11/${UUID}-them.png`
 const LEGACY = 'avatars/2026/01/uuid-old.png'
 
 function signedIn() {
@@ -121,7 +122,7 @@ describe('saving an avatar key', () => {
   })
 
   it('saves a key from their own folder and deletes their previous upload', async () => {
-    const previous = `avatars/${ME}/2026/10/uuid-prev.png`
+    const previous = `avatars/${ME}/2026/10/${UUID}-prev.png`
     hoisted.mockFindUser.mockResolvedValue({ imageKey: previous })
     await saveAvatarKey({ key: MINE })
     expect(hoisted.mockSet).toHaveBeenCalledWith({ imageKey: MINE })

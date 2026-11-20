@@ -15,7 +15,22 @@ export function avatarFolderFor(userId: UserId | string): string {
   return `avatars/${userId}`
 }
 
-/** Whether `key` is an object in this person's own avatar folder. */
+/** Escape a string for use inside a RegExp. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Whether `key` is an object in this person's own avatar folder, in exactly
+ * the shape `generateStorageKey` gives an upload there:
+ * `avatars/<userId>/<yyyy>/<mm>/<uuid>-<safe filename>`. Matching the whole
+ * shape (not a prefix) means no encoded or literal dot segment, slash or
+ * backslash can walk the key into somebody else's folder.
+ */
 export function isOwnAvatarKey(key: string, userId: UserId | string): boolean {
-  return key.startsWith(`${avatarFolderFor(userId)}/`) && !key.includes('..')
+  const folder = escapeRegExp(avatarFolderFor(userId))
+  const shape = new RegExp(
+    `^${folder}/\\d{4}/\\d{2}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[a-z0-9._-]+$`
+  )
+  return shape.test(key)
 }
