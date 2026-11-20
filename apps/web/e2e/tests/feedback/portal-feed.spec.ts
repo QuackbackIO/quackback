@@ -6,7 +6,7 @@
  * Every assertion is scoped to the test's own board or a search word only
  * the test uses.
  *
- * Journeys: FBP-L-01 FBP-L-02 FBP-L-03 FBP-L-05 FBP-L-06 FBP-L-07 FBP-L-08
+ * Journeys: FBP-L-01 FBP-L-02 FBP-L-03 FBP-L-04 FBP-L-05 FBP-L-06 FBP-L-07 FBP-L-08
  * FBP-L-09 FBP-L-10 FBP-L-11 FBP-L-12 FBP-L-13 FBP-L-14 FBP-L-15 FBP-L-16
  * FBP-L-18 FBP-L-19 FBP-L-20 FBP-L-21 FBP-L-24 FBP-L-25 FBP-L-26
  */
@@ -804,6 +804,34 @@ test.describe('portal feed', () => {
       await anon.page.locator('.post-card[data-post-id]').last().scrollIntoViewIfNeeded()
       await anon.page.mouse.wheel(0, 5000)
       await expect(anon.page.locator('.post-card[data-post-id]')).toHaveCount(25)
+    }
+  )
+
+  test(
+    'FBP-L-04 pinned posts lead Top, New and Trending, most recently pinned first',
+    { tag: '@nightly' },
+    async ({ browser, marker }) => {
+      const board = await createBoard(marker)
+      const order = await sortFixture(board, marker)
+      const now = Date.now()
+      const early = await seedPost(board, {
+        title: `${marker} pinned early`,
+        pinnedAt: new Date(now - 60_000),
+        createdAt: new Date(now - 20 * DAY),
+      })
+      const late = await seedPost(board, {
+        title: `${marker} pinned late`,
+        pinnedAt: new Date(now - 1_000),
+        createdAt: new Date(now - 30 * DAY),
+      })
+      const anon = await visitor(browser, marker)
+      for (const sort of ['top', 'new', 'trending'] as const) {
+        expect(ids(await feed(anon.request, { boardSlug: board.slug, sort })), sort).toEqual([
+          late.id,
+          early.id,
+          ...order[sort],
+        ])
+      }
     }
   )
 })
