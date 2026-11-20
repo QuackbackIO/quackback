@@ -655,13 +655,7 @@ test.describe('REST posts: update, delete, merge', () => {
   test(
     'API-R-026 a PATCH with no recognised field is refused to a key that cannot read posts',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'PATCH /posts/:id with {} checks no permission or scope and returns the post ' +
-          '(apps/web/src/routes/api/v1/posts/$postId.ts:117, permissionsForPostPatch :31-38)',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const admin = await keyApi(playwright, baseURL, {
@@ -692,14 +686,7 @@ test.describe('REST posts: update, delete, merge', () => {
   test(
     "API-R-027 PATCH tags with an unknown tag id is refused and keeps the post's tags",
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'updatePost deletes every tag assignment, then the insert of an unknown or repeated ' +
-          'tag id fails outside a transaction: 500 and the post loses its tags ' +
-          '(apps/web/src/lib/server/domains/posts/post.service.ts:480-486)',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const admin = await keyApi(playwright, baseURL, {
@@ -1295,14 +1282,7 @@ test.describe('REST posts: nightly', () => {
   test(
     'API-R-012 an unknown or repeated tag id on create is refused without leaving a post',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'createPost inserts tag assignments without looking the tags up; an unknown tag id ' +
-          '(foreign key) or a repeated one (primary key) answers 500 ' +
-          '(apps/web/src/lib/server/domains/posts/post.service.ts:271-276)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, {
@@ -1328,13 +1308,7 @@ test.describe('REST posts: nightly', () => {
   test(
     'API-R-013 a soft-deleted status is not found on create or update',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'createPost and updatePost look the status up without a deletedAt filter, so a ' +
-          'deleted status is accepted (apps/web/src/lib/server/domains/posts/post.service.ts:148, :393-394)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, {
@@ -1515,13 +1489,7 @@ test.describe('REST posts: nightly', () => {
   test(
     'API-R-028 a deleted post cannot be edited',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'updatePost never checks deletedAt, so PATCH edits a soft-deleted post and fires ' +
-          'status events (apps/web/src/lib/server/domains/posts/post.service.ts:379-383)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, {

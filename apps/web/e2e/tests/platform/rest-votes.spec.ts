@@ -310,15 +310,7 @@ test.describe('REST votes: proxy votes', () => {
   test(
     'API-R-041 a proxy vote for an unknown voter is a not-found refusal, not a server error',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'POST /posts/:id/vote/proxy never looks the voter up; the vote insert hits the ' +
-          'principal foreign key and answers 500 ' +
-          '(apps/web/src/routes/api/v1/posts/$postId.vote.proxy.ts:43-63, ' +
-          'apps/web/src/lib/server/domains/posts/post.voting.ts addVoteOnBehalf)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const admin = await keyApi(playwright, baseURL, {

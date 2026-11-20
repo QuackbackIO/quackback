@@ -446,12 +446,7 @@ test.describe('REST statuses', () => {
   test(
     'API-R-072 a status PATCH holding only ignored fields answers 200 with nothing changed',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'PATCH /statuses/:id with only stripped fields (slug, category, position) answers 500: updateStatus runs an UPDATE with an empty SET (apps/web/src/lib/server/domains/statuses/status.service.ts:100-150)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -625,12 +620,7 @@ test.describe('REST tags', () => {
   test(
     'API-R-076 a missing tag answers "Tag not found", not the internal model name',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'TAG_NOT_FOUND maps to the public text "PostTag not found" (apps/web/src/lib/server/domains/api/responses.ts:180)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -648,12 +638,7 @@ test.describe('REST taxonomy: deleted rows', () => {
   test(
     'API-R-077 deleted boards, statuses and tags answer 404 on GET and PATCH',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Soft-deleted boards, statuses and tags stay readable and editable by id (board.service.ts:184-186,321-324; status.service.ts:103-105,204-207; post-tag.service.ts:93-95,165-169)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)

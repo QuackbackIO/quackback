@@ -179,12 +179,7 @@ test.describe('REST roadmaps: reads', () => {
   test(
     'API-R-080 roadmap posts refuse a negative offset with 400',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'offset reaches SQL unguarded: offset=-1 answers 500 (apps/web/src/routes/api/v1/roadmaps/$roadmapId.posts.ts:27-28)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -374,12 +369,7 @@ test.describe('REST roadmaps: writes', () => {
   test(
     'API-R-084 a column with an unknown status is refused with a client error',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'An unknown statusId on a new roadmap column is not looked up; the foreign key fails and the API answers 500 (apps/web/src/lib/server/domains/roadmaps/roadmap.service.ts:339-356)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -395,12 +385,7 @@ test.describe('REST roadmaps: writes', () => {
   test(
     "API-R-085 a column of another roadmap cannot be edited or removed through a roadmap's URL",
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Column PATCH/DELETE ignore the roadmap id in the path (apps/web/src/routes/api/v1/roadmaps/$roadmapId.columns.$columnId.ts:27-41)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)

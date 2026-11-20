@@ -100,12 +100,7 @@ test.describe('REST apps: reads', () => {
   test(
     'API-R-092 apps search fills in each post status name and colour',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'apps/search hard-codes statusName and statusColor to null (apps/web/src/routes/api/v1/apps/search.ts:45-46)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -184,12 +179,7 @@ test.describe('REST apps: ticket links', () => {
   test(
     'API-R-096 linking a deleted or unknown post answers 404 and leaves no link row',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The link row is inserted before the post is checked: a deleted post leaves an orphan link and an unknown post answers 500 from the foreign key (apps/web/src/lib/server/integrations/apps/service.ts:53-67)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -371,12 +361,7 @@ test.describe('REST apps: ticket links', () => {
   test(
     'API-R-100 apps error responses carry the CORS headers too',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'apps/* error responses come from handleDomainError/badRequestResponse without CORS headers (apps/web/src/routes/api/v1/apps/boards.ts:34-35, apps/web/src/lib/server/domains/api/responses.ts:21-33)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people }) => {
       const { api } = await keyApi(playwright, baseURL, people)
