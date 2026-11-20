@@ -614,7 +614,8 @@ test.describe('REST segment members', () => {
         }),
         200
       )
-      expect(body.data.added).toBe(2)
+      // Only a was not a member yet; b already was.
+      expect(body.data.added).toBe(1)
       expect([...body.data.failed].sort()).toEqual([anon.principalId, unknown].sort())
       const rows = await membersOf(seg.id)
       expect(rows).toEqual(
