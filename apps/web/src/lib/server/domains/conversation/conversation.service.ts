@@ -2503,13 +2503,16 @@ interface AppendAssistantReplyOpts {
   citations?: ConversationMessageCitation[]
   contentJson?: TiptapContent | null
   metadata?: ConversationMessageMetadata | null
+  /** The assistant closed this conversation earlier in the same turn
+   *  (end_conversation): its closing words leave it closed. */
+  closedThisTurn?: boolean
 }
 
 /**
  * Append a reply authored by the assistant service principal — the message-
  * append primitive for Quinn. Like an agent reply it bumps the last-message
- * preview and reopens a closed thread (except a rating ask, which leaves it
- * closed), but it never claims assignment (Quinn
+ * preview and reopens a closed thread (except a rating ask, or the AI agent's
+ * last words after it closed the thread itself, which leave it closed), but it never claims assignment (Quinn
  * fronts, it does not own) and it never marks the agent side read. `waiting`
  * controls the customer wait clock: an answer stops it; a hand-off restarts it
  * so the team sees a thread waiting on a human. Delivered over the normal
@@ -2564,11 +2567,12 @@ export async function appendAssistantReply(
         metadata: opts.metadata ?? null,
       })
       .returning()
-    // A rating ask (a csat block) follows the close it rates: it leaves a
-    // closed conversation closed, keeping when it was resolved. Every other
-    // reply reopens as the channel says.
-    const isRatingAsk = opts.metadata?.block?.kind === 'csat'
-    const nextStatus = isRatingAsk
+    // A rating ask (a csat block) follows the close it rates, and the AI
+    // agent's last words follow the close it made itself: both leave a closed
+    // conversation closed, keeping when it was resolved. Every other reply
+    // reopens as the channel says.
+    const keepsStatus = opts.metadata?.block?.kind === 'csat' || opts.closedThisTurn === true
+    const nextStatus = keepsStatus
       ? existing.status
       : applyAgentReopenStatus(
           existing.status,
@@ -2581,7 +2585,7 @@ export async function appendAssistantReply(
         lastMessagePreview: preview(content, []),
         status: nextStatus,
         waitingSince: opts.waiting ? message.createdAt : null,
-        resolvedAt: isRatingAsk
+        resolvedAt: keepsStatus
           ? existing.resolvedAt
           : resolvedAtForStatus(nextStatus, message.createdAt),
         updatedAt: message.createdAt,

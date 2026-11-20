@@ -254,14 +254,7 @@ test.describe('AI agent in the widget', { tag: '@isolated' }, () => {
 
   test(
     'WFL-76 the model closes the conversation: closed by a service actor with "Conversation ended"',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'end_conversation is always denied: it needs conversation.set_status, which the AI agent permission ceiling (assistant.actor.ts ASSISTANT_PERMISSIONS) does not hold',
-      },
-    },
+    { tag: '@nightly' },
     async ({ page, marker }) => {
       const conversationId = await openWithDefaultReply(page)
       await fakeAi.script({
@@ -274,13 +267,21 @@ test.describe('AI agent in the widget', { tag: '@isolated' }, () => {
         toolCalls: [{ name: 'end_conversation', arguments: { reason: 'Customer confirmed done' } }],
       })
       await widgetSend(page, `All done thanks ${marker}`)
+      // The model's closing words land after its close; wait for both.
       await expect
-        .poll(async () => (await conversationRow(conversationId)).status, { timeout: 30_000 })
-        .toBe('closed')
-      const ended = (await messagesOf(conversationId)).find(
-        (m) => m.content === 'Conversation ended'
-      )
-      expect(ended, 'Conversation ended notice').toBeTruthy()
+        .poll(
+          async () => {
+            const contents = (await messagesOf(conversationId)).map((m) => m.content)
+            return (
+              contents.includes('Conversation ended') &&
+              contents.includes(`Glad that is sorted ${marker}`)
+            )
+          },
+          { timeout: 30_000 }
+        )
+        .toBe(true)
+      // Those closing words do not reopen the conversation.
+      expect((await conversationRow(conversationId)).status).toBe('closed')
       const [event] = await supportDb()`SELECT actor_type FROM events
         WHERE type = 'conversation.status_changed'
           AND payload -> 'conversation' ->> 'id' = ${conversationId} ORDER BY id DESC LIMIT 1`
