@@ -13,6 +13,17 @@ function post(body: unknown, headers: Record<string, string> = {}): Request {
   })
 }
 
+/** As the handler does: parse the body once, `undefined` when it is not JSON. */
+async function summarize(request: Request) {
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    body = undefined
+  }
+  return summarizeMcpRequest(request, body)
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -22,7 +33,7 @@ function json(body: unknown, status = 200): Response {
 
 describe('summarizeMcpRequest', () => {
   it('reads the client and revision from a 2025-era initialize', async () => {
-    const summary = await summarizeMcpRequest(
+    const summary = await summarize(
       post(
         {
           jsonrpc: '2.0',
@@ -47,7 +58,7 @@ describe('summarizeMcpRequest', () => {
   })
 
   it('reads the client and revision from 2026-07-28 _meta and headers', async () => {
-    const summary = await summarizeMcpRequest(
+    const summary = await summarize(
       post(
         {
           jsonrpc: '2.0',
@@ -77,7 +88,7 @@ describe('summarizeMcpRequest', () => {
   })
 
   it('lists every method of a batch', async () => {
-    const summary = await summarizeMcpRequest(
+    const summary = await summarize(
       post([
         { jsonrpc: '2.0', id: 1, method: 'tools/list' },
         { jsonrpc: '2.0', method: 'notifications/initialized' },
@@ -88,7 +99,7 @@ describe('summarizeMcpRequest', () => {
 
   it('survives a body that is not JSON and leaves it readable', async () => {
     const request = post('not json')
-    const summary = await summarizeMcpRequest(request)
+    const summary = await summarize(request)
     expect(summary.methods).toEqual([])
     expect(await request.text()).toBe('not json')
   })
