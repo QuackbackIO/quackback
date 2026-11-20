@@ -975,3 +975,34 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   count stay. Fix: reword the copy (for example "The entry is removed from
   your changelog and feed.") or make the delete real. owner: unassigned,
   review by: 2026-12-03.
+- Vitest `it.fails` (fails today, passes once fixed, then flip it to `it`), all
+  under `apps/web/src/lib/server/domains/changelog/__tests__/`:
+  - `changelog-display-date.test.ts` › CHG-A-19 clears a stale display date on
+    a draft entry with null. `validateDisplayDate` also runs for `null`
+    (`changelog.service.ts:617`, called at `:221`), so clearing the override on
+    a draft or scheduled entry throws "Display date can only be set on
+    published changelog entries". Fix: skip the check when `displayDate` is
+    null.
+  - `changelog-linked-posts.test.ts` › CHG-A-23 a duplicate post id on create
+    or update is saved once. `createChangelog`/`updateChangelog` do not
+    de-duplicate `linkedPostIds` and do not wrap entry, links and labels in a
+    transaction (`changelog.service.ts:569`), so a duplicate violates the
+    unique index after the old links were already deleted. Fix: de-duplicate
+    the ids and run the writes in one transaction.
+  - `changelog-update-validation.test.ts` › CHG-A-33 update refuses an empty
+    body like create does. `updateChangelog` validates only the title
+    (`changelog.service.ts:195`), so the editor can blank a published entry.
+    Fix: apply create's content check when `content` or `contentJson` is
+    sent.
+  - `changelog-category-gate.test.ts` › CHG-P-05 a fully gated page is not
+    returned empty with more to load. `listPublicChangelogs` applies the label
+    gate after paging (`changelog.public.ts:301`), so the portal gets empty
+    pages with `hasMore: true`. Fix: put `categoryGateCondition` in the paged
+    query.
+  - `changelog-subscription-import.test.ts` › CHG-S-26 importing someone who
+    unsubscribed leaves them unsubscribed. `importChangelogSubscribersFromEmails`
+    upserts with `unsubscribedAt = null` (`changelog-subscription.service.ts:115`),
+    so a spreadsheet overrides the person's opt-out. Fix: insert with
+    `onConflictDoNothing` for the import path.
+
+  owner: unassigned, review by: 2026-12-03.
