@@ -14,7 +14,7 @@
  *   4. Accepted → redirect to / (portal gate now sees the accepted invite).
  *   5. Any other status → return it so the component renders a message.
  */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, isRedirect, redirect } from '@tanstack/react-router'
 import {
   acceptPortalInviteFn,
   type AcceptPortalInviteResult,
@@ -49,10 +49,9 @@ export const Route = createFileRoute('/portal-invite/$inviteId')({
 
       return result
     } catch (err) {
-      // Re-throw redirects so TanStack Router handles them.
-      if (err && typeof err === 'object' && 'isRedirect' in err) {
-        throw err
-      }
+      // Re-throw redirects so TanStack Router handles them. A redirect is a
+      // `Response` carrying `options`, so only the router's own check knows one.
+      if (isRedirect(err)) throw err
 
       const message = err instanceof Error ? err.message : ''
 

@@ -26,6 +26,10 @@ export type AuthBlockCode =
   | 'require_two_factor'
   | 'token_expired'
   | 'invalid_token'
+  // The magic-link plugin's own spelling: a spent, unknown or expired link
+  // redirects to its errorCallbackURL with these, uppercase.
+  | 'INVALID_TOKEN'
+  | 'EXPIRED_TOKEN'
   | 'signup_disabled'
   | 'signup_not_allowed'
   | 'OAUTH_CALLBACK_ERROR'
@@ -73,6 +77,10 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   require_two_factor: 'Two-factor authentication is required. Please verify your second factor.',
   token_expired: 'Your login link has expired. Please request a new one.',
   invalid_token: 'Your login link is invalid or has been tampered with. Please try again.',
+  // A used link is the common case (a second click, or a mail scanner opening
+  // it first), so both read as "ask for a new one", which is what helps.
+  INVALID_TOKEN: 'Your login link has expired. Please request a new one.',
+  EXPIRED_TOKEN: 'Your login link has expired. Please request a new one.',
   signup_disabled:
     "Your account isn't pre-provisioned for SSO. Ask an administrator to invite you first.",
   signup_not_allowed:
