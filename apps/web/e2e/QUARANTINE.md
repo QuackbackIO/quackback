@@ -214,3 +214,11 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   published translation's live text changes at once. Fix: either set
   `status: 'draft'` on that save, or label the button "Save" when the
   translation is published.
+- `help-center/public-pages.spec.ts` › HC-P-33 reading the canonical article
+  page counts a view (HC-B1). `view_count` is incremented only in
+  `getPublicArticleBySlug` (`domains/help-center/help-center.article.service.ts`),
+  which serves the legacy URLs, the widget's slug opens, embed cards and the
+  admin View button. The canonical `/hc/<locale>/articles/<urlId>-<slug>` page
+  uses `getPublicArticleByUrlId`, which never counts, so the list "N views",
+  the performance table and Popular articles miss real reads. Fix: count in
+  the canonical page's loader (and decide whether previews/embeds count).
