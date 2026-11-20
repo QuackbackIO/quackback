@@ -353,10 +353,8 @@ test.describe('portal voting', () => {
             { postId: id }
           )
         ).value
-      expect(await perms()).toMatchObject({
-        canEdit: false,
-        editReason: 'Cannot edit posts that have received votes',
-      })
+      // The author's own vote does not lock their post (D13).
+      expect(await perms()).toMatchObject({ canEdit: true, canDelete: true })
       const off = await fbFn<{ voted: boolean; voteCount: number }>(
         cass.request,
         'publicPosts',
