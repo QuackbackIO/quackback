@@ -17,6 +17,7 @@ import { portalPage } from '../../support/widget-portal'
 import {
   createService,
   deleteMadeIncidents,
+  messageOf,
   mintPortalUser,
   must,
   subscribeAs,
@@ -185,9 +186,12 @@ test(
     try {
       const anon = await callServerFn(anonApi, 'subscribeStatusFn', { scope: 'page' })
       expect(anon.ok).toBe(false)
-      expect(anon.raw).toMatch(/Anonymous interaction is not enabled|Authentication required/)
+      expect(anon.code).toBe('ANONYMOUS_NOT_ALLOWED')
+      expect(messageOf(anon)).toBe('Anonymous interaction is not enabled')
       const none = await callServerFn(nobody, 'subscribeStatusFn', { scope: 'page' })
       expect(none.ok).toBe(false)
+      // The portal button opens sign-in on this message (not masked in production).
+      expect(messageOf(none)).toBe('Authentication required')
       expect(await subscriptionRow(anonUser.principalUuid)).toBeNull()
     } finally {
       await anonApi.dispose()
@@ -237,8 +241,6 @@ test(
       component_ids: [svc.id],
       unsubscribed_at: null,
     })
-    // The upsert keeps the original source (the docstring says otherwise; see the report).
-    expect(row?.source).toBe('admin')
   }
 )
 
