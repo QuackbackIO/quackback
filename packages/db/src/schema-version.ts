@@ -32,7 +32,7 @@
  */
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import journal from '../drizzle/meta/_journal.json'
 
 /**
@@ -131,7 +131,7 @@ export function tagForVersion(when: number): string {
 
 /** Anything that can run a raw statement — a drizzle Database or a postgres.Sql. */
 export interface LedgerReader {
-  execute?: (query: unknown) => Promise<unknown>
+  execute?: (query: SQL) => Promise<unknown>
   unsafe?: (query: string) => Promise<unknown>
 }
 

@@ -3,7 +3,6 @@ import {
   isEmailConfigured,
   getReceivedEmail,
   sendInvitationEmail,
-  sendWelcomeEmail,
   sendMagicLinkEmail,
   sendStatusChangeEmail,
   sendNewCommentEmail,
@@ -96,16 +95,6 @@ describe('console mode returns { sent: false }', () => {
       invitedByName: 'Admin',
       workspaceName: 'TestWorkspace',
       inviteLink: 'https://example.com/invite',
-    })
-    expect(result).toEqual({ sent: false, reason: 'no_provider' })
-  })
-
-  it('sendWelcomeEmail returns { sent: false }', async () => {
-    const result = await sendWelcomeEmail({
-      to: sealedTo('test@example.com'),
-      name: 'Test',
-      workspaceName: 'TestWorkspace',
-      dashboardUrl: 'https://example.com/dashboard',
     })
     expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })

@@ -152,7 +152,7 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
 
   const getSubmitButtonText = () => {
     if (updateChangelogMutation.isPending) {
-      return publishState.type === 'published' ? 'Publishing...' : 'Saving...'
+      return publishState.type === 'published' ? 'Publishing…' : 'Saving…'
     }
     switch (publishState.type) {
       case 'draft':

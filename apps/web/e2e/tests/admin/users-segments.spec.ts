@@ -19,7 +19,9 @@ test.describe('Admin Users Segments', () => {
     await page.waitForTimeout(500)
 
     const emptyState = page.getByText(/no segments yet/i)
-    const editButtons = page.getByRole('button', { name: 'Edit segment' })
+    // The edit button is display:none until hover, so it is not in the
+    // accessibility tree; count it in the DOM by its title instead.
+    const editButtons = page.locator('button[title="Edit segment"]')
 
     // Either at least one segment row exists (each has a hover edit button in
     // the DOM) or the empty state prompt is shown.
@@ -44,8 +46,8 @@ test.describe('Admin Users Segments', () => {
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
     // Type selector buttons (manual / dynamic) — text is lowercase in the DOM (CSS capitalize)
-    await expect(dialog.getByText('manual')).toBeVisible()
-    await expect(dialog.getByText('dynamic')).toBeVisible()
+    await expect(dialog.getByText('manual', { exact: true })).toBeVisible()
+    await expect(dialog.getByText('dynamic', { exact: true })).toBeVisible()
   })
 
   test('create dialog has name and description fields', async ({ page }) => {
@@ -110,10 +112,10 @@ test.describe('Admin Users Segments', () => {
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
     // Click the "dynamic" type option (text is lowercase in DOM; CSS capitalize makes it visually "Dynamic")
-    await dialog.getByText('dynamic').click()
+    await dialog.getByText('dynamic', { exact: true }).click()
 
     // Rule builder should appear
-    await expect(dialog.getByText('Rules')).toBeVisible({ timeout: 3000 })
+    await expect(dialog.getByText('Rules', { exact: true })).toBeVisible({ timeout: 3000 })
     await expect(dialog.getByText(/add condition/i)).toBeVisible()
   })
 
@@ -123,7 +125,7 @@ test.describe('Admin Users Segments', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
-    await dialog.getByText('dynamic').click()
+    await dialog.getByText('dynamic', { exact: true }).click()
 
     const addConditionButton = dialog.getByRole('button', { name: /add condition/i })
     await expect(addConditionButton).toBeVisible({ timeout: 3000 })
@@ -142,7 +144,7 @@ test.describe('Admin Users Segments', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
-    await dialog.getByText('dynamic').click()
+    await dialog.getByText('dynamic', { exact: true }).click()
     await dialog.getByRole('button', { name: /add condition/i }).click()
 
     // At least 2 comboboxes: attribute + operator
@@ -156,7 +158,7 @@ test.describe('Admin Users Segments', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
-    await dialog.getByText('dynamic').click()
+    await dialog.getByText('dynamic', { exact: true }).click()
     await dialog.getByRole('button', { name: /add condition/i }).click()
 
     // Click the attribute combobox (second combobox — first is match all/any)
@@ -168,8 +170,8 @@ test.describe('Admin Users Segments', () => {
       .or(page.locator('[data-slot="select-content"]'))
 
     if ((await optionContainer.count()) > 0) {
-      await expect(optionContainer.getByText('Email Domain')).toBeVisible()
-      await expect(optionContainer.getByText('Post Count')).toBeVisible()
+      await expect(optionContainer.getByText('Email', { exact: true })).toBeVisible()
+      await expect(optionContainer.getByText('Post Count', { exact: true })).toBeVisible()
     }
 
     await page.keyboard.press('Escape')
@@ -183,7 +185,7 @@ test.describe('Admin Users Segments', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
-    await dialog.getByText('dynamic').click()
+    await dialog.getByText('dynamic', { exact: true }).click()
     await dialog.locator('#seg-name').fill(segmentName)
 
     // Add a condition
@@ -198,7 +200,7 @@ test.describe('Admin Users Segments', () => {
       .or(page.locator('[data-slot="select-content"]'))
 
     if ((await optionContainer.count()) > 0) {
-      const postCountOption = optionContainer.getByText('Post Count')
+      const postCountOption = optionContainer.getByText('Post Count', { exact: true })
       if ((await postCountOption.count()) > 0) {
         await postCountOption.click()
       } else {
@@ -246,7 +248,7 @@ test.describe('Admin Users Segments', () => {
     await expect(editDialog.getByRole('button', { name: /save changes/i })).toBeVisible()
 
     // Type selector should NOT be shown when editing
-    await expect(editDialog.getByText('manual')).not.toBeVisible()
+    await expect(editDialog.getByText('manual', { exact: true })).not.toBeVisible()
 
     await editDialog.getByRole('button', { name: /cancel/i }).click()
     await expect(editDialog).toBeHidden({ timeout: 5000 })
@@ -314,7 +316,7 @@ test.describe('Admin Users Segments', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
-    await dialog.getByText('dynamic').click()
+    await dialog.getByText('dynamic', { exact: true }).click()
     await dialog.getByRole('button', { name: /add condition/i }).click()
 
     // The match selector is the first combobox (renders "ALL" / "ANY")

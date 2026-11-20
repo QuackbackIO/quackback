@@ -10,7 +10,7 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import postgres from 'postgres'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
-import { BENCH_DATABASE_URL, BENCH_PORT } from './config'
+import { BENCH_DATABASE_URL, BENCH_DOMAIN, BENCH_PORT } from './config'
 
 export type Actor = 'anon' | 'admin'
 
@@ -203,6 +203,8 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'copilot',
     'developers',
     'domains',
+    `domains/${BENCH_DOMAIN}`,
+    'email',
     'general',
     'help-center',
     'imports',
@@ -216,6 +218,8 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'office-hours',
     'people',
     'portal',
+    // The Custom domains tab, whose code and reads load only when it is open.
+    'portal?tab=custom-domains',
     'security/authentication',
     'security/sso/new',
     'skills',
@@ -228,7 +232,8 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'widget/install',
     'workflows',
   ].map((page) => ({ path: `/admin/settings/${page}`, as: 'admin' as const })),
-  ...['/roadmap', '/changelog', '/hc', '/support', '/notifications'].map((path) => ({
+  // /notifications is left out for a visitor: it sends them to sign in.
+  ...['/roadmap', '/changelog', '/hc', '/support'].map((path) => ({
     path,
     as: 'anon' as const,
   })),

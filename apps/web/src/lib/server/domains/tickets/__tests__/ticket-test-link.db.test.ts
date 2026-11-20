@@ -55,7 +55,11 @@ beforeEach(async () => {
     principalId: owner,
     principalType: 'user',
     role: 'admin',
-    permissions: new Set([PERMISSIONS.TICKET_CREATE]),
+    permissions: new Set([
+      PERMISSIONS.TICKET_CREATE,
+      PERMISSIONS.TICKET_VIEW_ALL,
+      PERMISSIONS.CONVERSATION_VIEW_ALL,
+    ]),
     segmentIds: new Set(),
   }
   const [status] = await testDb

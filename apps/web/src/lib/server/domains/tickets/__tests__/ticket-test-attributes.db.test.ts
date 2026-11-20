@@ -37,7 +37,7 @@ vi.mock('../ticket.webhooks', () => ({
   }),
 }))
 vi.mock('../ticket-activity.service', () => ({
-  recordTicketActivity: vi.fn((input) => {
+  recordTicketActivityAwaited: vi.fn(async (input) => {
     expect(input.type).toBe('ticket.created')
     expect(input.ticketId).toBeTruthy()
     expect(input.principalId).toBeTruthy()

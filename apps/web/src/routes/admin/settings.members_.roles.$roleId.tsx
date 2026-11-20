@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { RoleEditor } from '@/components/admin/settings/team/role-editor'
 
 export const Route = createFileRoute('/admin/settings/members_/roles/$roleId')({
@@ -8,7 +8,11 @@ export const Route = createFileRoute('/admin/settings/members_/roles/$roleId')({
   // without role.manage (and always for presets). Editing is enforced by the
   // server on save.
   beforeLoad: ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/members/roles/$roleId')
+  },
+  // The editor shows the role from the roles list.
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(settingsQueries.roles())
   },
   component: RoleEditorPage,
 })

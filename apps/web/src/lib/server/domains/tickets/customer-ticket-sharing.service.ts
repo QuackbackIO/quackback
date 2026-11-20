@@ -38,7 +38,11 @@ import {
   hasParticipantThreadAccess,
   removeConversationParticipant,
 } from '@/lib/server/domains/conversation/conversation-participant.service'
-import { buildTicketContext, ticketToDTO, toSharedTicketDTO } from './ticket.dto'
+import {
+  buildRequesterTicketContext,
+  toRequesterTicketDTO,
+  toSharedTicketDTO,
+} from './requester-ticket.dto'
 import type { RequesterTicketDTO } from './ticket.types'
 import {
   getRequesterTicketForConversation,
@@ -117,9 +121,9 @@ export async function getCustomerTicketForConversation(
     )
     .limit(1)
   if (!row) return null
-  const ctx = await buildTicketContext([row.ticket])
+  const ctx = await buildRequesterTicketContext([row.ticket])
   return {
-    ticket: toSharedTicketDTO(ticketToDTO(row.ticket, ctx, 'requester')),
+    ticket: toSharedTicketDTO(toRequesterTicketDTO(row.ticket, ctx)),
     relation: 'participant',
   }
 }
@@ -376,7 +380,12 @@ export async function removeTicketShare(
   if (!leaving && !ownAdd) {
     throw new ForbiddenError('FORBIDDEN', 'You can remove only the people you added')
   }
-  const { removed } = await removeConversationParticipant(conversationId, principalId, actor, opts)
+  // Checked above (the ticket is theirs or shared with them, and the customer
+  // rules), and someone leaving cannot see the conversation as its visitor.
+  const { removed } = await removeConversationParticipant(conversationId, principalId, actor, {
+    ...opts,
+    systemCascade: true,
+  })
   if (removed) await afterUnshare(ticket, principalId, actor)
   return { removed }
 }

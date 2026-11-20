@@ -81,6 +81,28 @@ describe('shouldNotify', () => {
     expect(shouldNotify(prefs, 'comment_created', 'email')).toBe(false)
   })
 
+  it('SLA rows only gate email: the email key and Pause all email stop it, the in-app key does not', () => {
+    for (const type of ['sla_warning', 'sla_breach'] as const) {
+      expect(shouldNotify(basePrefs, type, 'email')).toBe(true)
+
+      const emailOff: NotificationPreferencesData = {
+        ...basePrefs,
+        matrix: { [type]: { email: false } },
+      }
+      expect(shouldNotify(emailOff, type, 'email')).toBe(false)
+
+      // There is no SLA bell, so turning the in-app cell off leaves the email on.
+      const inAppOff: NotificationPreferencesData = {
+        ...basePrefs,
+        matrix: { [type]: { inApp: false } },
+      }
+      expect(shouldNotify(inAppOff, type, 'email')).toBe(true)
+
+      const muted: NotificationPreferencesData = { ...basePrefs, emailMuted: true }
+      expect(shouldNotify(muted, type, 'email')).toBe(false)
+    }
+  })
+
   it('unknown/new types with no matrix entry default to true, still subject to emailMuted', () => {
     expect(shouldNotify(basePrefs, 'conversation_assigned', 'inApp')).toBe(true)
     expect(shouldNotify(basePrefs, 'conversation_assigned', 'email')).toBe(true)

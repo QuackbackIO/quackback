@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery, queryOptions } from '@tanstack/react-query'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
@@ -55,7 +54,7 @@ export const Route = createFileRoute('/admin/settings/office-hours')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.OFFICE_HOURS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/office-hours')
     await context.queryClient.ensureQueryData(officeHoursQuery)
     return {}
   },

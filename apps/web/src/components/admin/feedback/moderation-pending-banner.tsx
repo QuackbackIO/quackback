@@ -3,9 +3,15 @@ import { useQuery } from '@tanstack/react-query'
 import { ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { ArrowRightIcon } from '@heroicons/react/24/outline'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export function ModerationPendingBanner() {
-  const { data } = useQuery(adminQueries.moderationStatus())
+  // The count is served only to a viewer who may review (post.approve).
+  const { data } = useQuery({
+    ...adminQueries.moderationStatus(),
+    enabled: usePermission(PERMISSIONS.POST_APPROVE),
+  })
   const pendingCount = data?.pendingCount ?? 0
   if (pendingCount <= 0) return null
 

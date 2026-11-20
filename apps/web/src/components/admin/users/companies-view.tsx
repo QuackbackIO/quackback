@@ -266,7 +266,7 @@ function AddCompanyFilterButton({
             {availableCustom.length > 0 && (
               <>
                 <div className="border-b border-border/30 my-1" />
-                <div className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="px-2.5 py-1 text-xs font-semibold text-muted-foreground">
                   Custom attributes
                 </div>
                 {availableCustom.map((attr) => (
@@ -446,7 +446,7 @@ function NewCompanyDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!name.trim() || create.isPending}>
-              {create.isPending ? 'Creating...' : 'Create company'}
+              {create.isPending ? 'Creating…' : 'Create company'}
             </Button>
           </DialogFooter>
         </form>
@@ -511,7 +511,7 @@ export function CompaniesView({
       <AdminListHeader
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Search companies..."
+        searchPlaceholder="Search companies…"
         filters={
           <AddCompanyFilterButton companyAttrs={companyAttrs} onChange={onCompanyAttrsChange} />
         }

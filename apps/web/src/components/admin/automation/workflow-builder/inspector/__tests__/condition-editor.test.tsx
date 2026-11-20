@@ -56,7 +56,7 @@ const ATTRIBUTES = [
 ]
 
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
-  useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
   useInboxTeams: () => ({

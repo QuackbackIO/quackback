@@ -38,7 +38,7 @@ export function ChangelogFormFields({
               <RichTextEditor
                 value={contentJson || ''}
                 onDocumentChange={onContentChange}
-                placeholder="Share the details of your update..."
+                placeholder="Share the details of your update…"
                 minHeight="100%"
                 fill
                 className="min-h-0 flex-1"

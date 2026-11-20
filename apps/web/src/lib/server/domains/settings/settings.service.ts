@@ -9,7 +9,12 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
-import { localCacheGet, localCacheSet, settingsLocalTtlMs } from '@/lib/server/local-cache'
+import {
+  localCacheGeneration,
+  localCacheGet,
+  localCacheSet,
+  settingsLocalTtlMs,
+} from '@/lib/server/local-cache'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
@@ -23,6 +28,8 @@ import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import { effectiveSignInMethods } from '@/lib/shared/signin-methods'
+import type { IdentityProvider } from './identity-providers.service'
 import type {
   AuthConfig,
   UpdateAuthConfigInput,
@@ -166,16 +173,30 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  */
 export async function getPublicOidcProviders(
   /** The settings row's raw `auth_config`, which every caller already holds. */
-  authConfig: string | null | undefined
+  authConfig: string | null | undefined,
+  /** The provider list, when the caller has already read it. */
+  knownProviders?: IdentityProvider[],
+  /**
+   * `configured` skips the single sign-on check: the cached workspace settings
+   * hold every set-up provider's button, and `getWorkspaceSettings` drops them
+   * after the cache while single sign-on is not live. Plan limits decide that
+   * from the settings row, so it cannot be asked while the row is loading.
+   */
+  gate: 'registered' | 'configured' = 'registered'
 ): Promise<OidcSignInButton[]> {
   const { listIdentityProviders, shouldRenderPublicButton } =
     await import('./identity-providers.service')
-  const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+  const { getRegisteredOidcProviderIds, getConfiguredOidcProviderIds } =
+    await import('@/lib/server/auth/registered-providers')
 
-  const providers = await listIdentityProviders({ authConfig: authConfig ?? null })
+  const providers =
+    knownProviders ?? (await listIdentityProviders({ authConfig: authConfig ?? null }))
   // No providers → no buttons; skip the tier + credential round-trips.
   if (providers.length === 0) return []
-  const registered = await getRegisteredOidcProviderIds(providers)
+  const registered =
+    gate === 'configured'
+      ? await getConfiguredOidcProviderIds(providers)
+      : await getRegisteredOidcProviderIds(providers)
 
   return providers
     .filter((p) => registered.has(p.registrationId) && shouldRenderPublicButton(p))
@@ -490,18 +511,19 @@ function generateVerificationToken(): string {
  * but *unlinked* row is adopted by the given provider (a previously
  * global / backfilled domain). A row already owned by another provider is
  * returned untouched — `name` is globally unique, so a domain belongs to
- * exactly one provider.
+ * exactly one provider. The name is put on Settings > Domains too.
  */
 export async function insertVerifiedDomain(
   name: string,
   providerId?: IdentityProviderId
 ): Promise<VerifiedDomain> {
   log.info({ name, providerId }, 'insert verified domain')
+  let inserted: { row: typeof ssoVerifiedDomain.$inferSelect; changed: boolean }
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
 
-    const inserted = await db.transaction(async (tx) => {
+    inserted = await db.transaction(async (tx) => {
       const existing = await tx
         .select()
         .from(ssoVerifiedDomain)
@@ -542,11 +564,15 @@ export async function insertVerifiedDomain(
       resetAuth()
       await invalidateSettingsCache()
     }
-    return rowToVerifiedDomain(inserted.row)
   } catch (error) {
     log.error({ err: error }, 'insert verified domain failed')
     wrapDbError('insert verified domain', error)
   }
+  // The same domain on Settings > Domains, made in this one step. After the
+  // write and the resets, and never a reason to report the write as failed.
+  const { ensureDomainAfterUse } = await import('@/lib/server/domains/domain-proof/ensure-domain')
+  await ensureDomainAfterUse(name)
+  return rowToVerifiedDomain(inserted.row)
 }
 
 /** Remove a verified-domain row by id. No-op if the row doesn't exist. */
@@ -687,6 +713,8 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     if (normalizedWelcome) {
       updated.welcomeCard = mergeWelcomeCard(existing.welcomeCard, normalizedWelcome)
     }
+    // The section map replaces too, or a section taken off it would come back.
+    if (input.sectionDomains) updated.sectionDomains = input.sectionDomains
 
     await db
       .update(settings)
@@ -884,6 +912,10 @@ export async function updateHelpCenterLocaleChrome(input: {
   if (!current.locales.additional.includes(input.locale)) {
     throw new NotFoundError('HC_LOCALE_NOT_ENABLED', 'That locale is not enabled')
   }
+  // A language held back by the plan keeps its published words, unedited.
+  const { assertHelpCenterLocaleEditable } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.locales')
+  await assertHelpCenterLocaleEditable(input.locale)
   const existingChrome = current.locales.chrome[input.locale] ?? {
     homepageTitle: '',
     homepageDescription: '',
@@ -906,12 +938,14 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
     const org = await requireSettingsCached()
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
-    const [configuredTypes, passthroughKeys] = await Promise.all([
+    const { getSsoSignInState } = await import('@/lib/server/auth/registered-providers')
+    const [configuredTypes, passthroughKeys, ssoState] = await Promise.all([
       getConfiguredAuthTypes(),
       getEmailDependentPassthroughKeys(),
+      getSsoSignInState(),
     ])
     const filteredOAuth = filterOAuthByCredentials(
-      authConfig.oauth,
+      effectiveSignInMethods({ stored: authConfig.oauth, ...ssoState }),
       configuredTypes,
       passthroughKeys
     )
@@ -967,7 +1001,53 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
  */
 export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
-  return settings ? liveWorkspaceSettings(structuredClone(settings)) : null
+  return settings
+    ? withEffectiveSignInMethods(liveWorkspaceSettings(structuredClone(settings)))
+    : null
+}
+
+/**
+ * The login forms' sign-in methods as they are in force right now. The cached
+ * settings hold the stored methods; while identity providers are set up but
+ * single sign-on is not live, `effectiveSignInMethods` adds email links and
+ * the portal's provider buttons are dropped. That is decided here, after the
+ * cache, so it follows the plan as soon as plan limits do (a clock-driven plan expiry included) rather than when the
+ * cached entry is next rebuilt. Nothing stored is changed.
+ *
+ * The provider half is cached with the settings (`ssoProvidersConfigured`,
+ * dropped by every provider and credential write), so a workspace with no
+ * provider pays nothing here and one with a provider pays one plan-limits read.
+ */
+async function withEffectiveSignInMethods(settings: WorkspaceSettings): Promise<WorkspaceSettings> {
+  if (settings.ssoProvidersConfigured === false) return settings
+  const { isSsoLive, getConfiguredOidcProviderIds } =
+    await import('@/lib/server/auth/registered-providers')
+  if (await isSsoLive()) return settings
+  // An entry cached before the flag existed: read the providers instead.
+  const providersConfigured =
+    settings.ssoProvidersConfigured ?? (await getConfiguredOidcProviderIds()).size > 0
+  if (!providersConfigured) return settings
+  const [configuredTypes, passthroughKeys] = await Promise.all([
+    getConfiguredAuthTypes(),
+    getEmailDependentPassthroughKeys(),
+  ])
+  const oauth = filterOAuthByCredentials(
+    effectiveSignInMethods({
+      stored: settings.authConfig.oauth,
+      ssoLive: false,
+      providersConfigured,
+    }),
+    configuredTypes,
+    passthroughKeys
+  )
+  // The cached buttons are every set-up provider's; none signs in now.
+  const publicPortalConfig = { ...settings.publicPortalConfig }
+  delete publicPortalConfig.oidcProviders
+  return {
+    ...settings,
+    publicAuthConfig: { ...settings.publicAuthConfig, oauth },
+    publicPortalConfig,
+  }
 }
 
 /**
@@ -983,13 +1063,71 @@ export async function getWorkspaceSettingsRow(): Promise<SettingsRecord | null> 
   return row ? structuredClone(row) : null
 }
 
+/** Values derived from one cached copy of the settings, by name. */
+const derivedFromSettings = new WeakMap<WorkspaceSettings, Map<string, unknown>>()
+
+/**
+ * A value derived from the cached settings row, computed once per cached copy
+ * of it rather than on every read: a request shares one copy, and this process
+ * keeps it for a few seconds (local-cache.ts). A settings write replaces the
+ * copy, so the next read derives again. `derive` must not change the row, and
+ * nothing may change the value it returns, which every reader of the copy
+ * shares. `name` must say everything else the value depends on. Null before
+ * the workspace has a settings row.
+ *
+ * @internal
+ */
+export async function deriveFromWorkspaceSettingsRow<T>(
+  name: string,
+  derive: (row: Readonly<SettingsRecord>) => T
+): Promise<T | null> {
+  const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
+  const row = settings?.settings as SettingsRecord | undefined
+  if (!settings || !row) return null
+  let derived = derivedFromSettings.get(settings)
+  if (!derived) {
+    derived = new Map()
+    derivedFromSettings.set(settings, derived)
+  }
+  if (derived.has(name)) return derived.get(name) as T
+  const value = derive(row)
+  derived.set(name, value)
+  return value
+}
+
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   const local = localCacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
   if (local) return local
+  // A write that drops the settings while this read is in flight leaves the
+  // copy unkept, as fillIfRowUnchanged does for the shared cache.
+  const readSince = localCacheGeneration(CACHE_KEYS.WORKSPACE_SETTINGS)
   const settings = await readWorkspaceSettings()
   const ttlMs = settingsLocalTtlMs()
-  if (settings && ttlMs > 0) localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, ttlMs)
+  if (settings && ttlMs > 0) {
+    localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, ttlMs, readSince)
+  }
   return settings
+}
+
+/**
+ * Cache settings built from the row at `rowVersion` (its `xmin`, which every
+ * update of the row changes, raw SQL included), unless the row has changed
+ * since. A save that commits and drops the cache while this read is still
+ * building would otherwise have the old row cached after the drop, and every
+ * page would serve it for the hour (an admin saves, reloads, and sees the old
+ * value).
+ *
+ * The check takes no lock, so a fill never holds up a save. A save still in
+ * flight is not visible to it: the fill may cache the row that save is
+ * replacing, and the save drops it when it invalidates after its commit, as
+ * every settings writer does. Writes to other tables the settings are built
+ * from (identity providers, verified domains) bump the row's auth config
+ * version in the same transaction, so they change the version too.
+ */
+async function fillIfRowUnchanged(result: WorkspaceSettings, rowVersion: string): Promise<void> {
+  await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600, {
+    onlyIf: sql`(SELECT xmin::text FROM settings LIMIT 1) = ${rowVersion}`,
+  })
 }
 
 async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
@@ -1013,8 +1151,13 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
       }
     }
 
-    const org = await db.query.settings.findFirst()
-    if (!org) return null
+    // The row with its version: the fill below lands only if the row is
+    // still this version (see fillIfRowUnchanged).
+    const read = await db.query.settings.findFirst({
+      extras: { rowVersion: sql<string>`xmin::text`.as('row_version') },
+    })
+    if (!read) return null
+    const { rowVersion, ...org } = read
 
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     const portalConfig = parsePortalConfig(org.portalConfig)
@@ -1043,7 +1186,13 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     )
     // Public OIDC buttons come from the identity_provider table (portal
     // surface only); the static map supplies social providers only.
-    const portalOidcProviders = await getPublicOidcProviders(org.authConfig)
+    const { listIdentityProviders } = await import('./identity-providers.service')
+    const identityProviders = await listIdentityProviders({ authConfig: org.authConfig })
+    const portalOidcProviders = await getPublicOidcProviders(
+      org.authConfig,
+      identityProviders,
+      'configured'
+    )
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -1091,12 +1240,13 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
       managedFieldPaths: org.managedFieldPaths ?? [],
       state: (org.state as 'active' | 'suspended' | 'deleting' | null) ?? 'active',
       verifiedDomains,
+      ssoProvidersConfigured: identityProviders.some((p) => p.enabled && p.configured),
     }
 
     // 1h TTL: settings change rarely and every mutation in this file
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
     // the per-request cost of getWorkspaceSettings to a single Redis GET.
-    await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
+    await fillIfRowUnchanged(result, rowVersion)
     return result
   } catch (error) {
     logSettingsReadError(log, error, 'get workspace settings failed')

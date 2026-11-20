@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ChangelogList } from '@/components/admin/changelog/changelog-list'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
 
 const searchSchema = z.object({
   status: z.enum(['draft', 'scheduled', 'published']).optional().catch(undefined),
@@ -24,8 +25,10 @@ export const Route = createFileRoute('/admin/changelog')({
 
 function ChangelogPage() {
   return (
-    <div className="h-full">
-      <ChangelogList />
-    </div>
+    <AdminPageGate page="/admin/changelog">
+      <div className="h-full">
+        <ChangelogList />
+      </div>
+    </AdminPageGate>
   )
 }

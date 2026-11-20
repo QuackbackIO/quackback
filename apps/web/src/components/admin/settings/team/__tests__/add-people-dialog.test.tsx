@@ -182,6 +182,33 @@ describe('AddPeopleDialog', () => {
     expect(fns.searchPeopleToAddFn).toHaveBeenCalledWith({ data: { query: '' } })
   })
 
+  it('keeps the results open until a press that blurs the field is over', async () => {
+    // The results sit above Cancel. Closing them on the press's way down moved
+    // Cancel before the press ended, so its first click was lost.
+    renderDialog()
+    fireEvent.focus(field())
+    const list = await screen.findByRole('listbox', { name: 'Recently active' })
+    await within(list).findByRole('option', { name: /Maya Chen/ })
+
+    fireEvent.pointerDown(window)
+    act(() => field().blur())
+    expect(screen.getByRole('listbox', { name: 'Recently active' })).toBeVisible()
+
+    fireEvent.pointerUp(window)
+    await waitFor(() =>
+      expect(screen.queryByRole('listbox', { name: 'Recently active' })).toBeNull()
+    )
+  })
+
+  it('closes the results at once on a blur without a press (Tab)', async () => {
+    renderDialog()
+    fireEvent.focus(field())
+    const list = await screen.findByRole('listbox', { name: 'Recently active' })
+    await within(list).findByRole('option', { name: /Maya Chen/ })
+    act(() => field().blur())
+    expect(screen.queryByRole('listbox', { name: 'Recently active' })).toBeNull()
+  })
+
   it('searches once the typing settles, not on every keystroke', async () => {
     answers.may = { canSearchPeople: true, people: [MAYA, TEAMMATE] }
     renderDialog()

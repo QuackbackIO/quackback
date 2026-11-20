@@ -35,6 +35,8 @@ export const boards = pgTable(
     // `is_public` boolean before that.
     access: jsonb('access').$type<BoardAccess>().default(DEFAULT_BOARD_ACCESS).notNull(),
     settings: jsonb('settings').$type<BoardSettings>().default({}).notNull(),
+    // Set by an admin: posts stay visible, nobody can post, vote or comment.
+    readOnly: boolean('read_only').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support

@@ -3,12 +3,11 @@ import { useIntl } from 'react-intl'
 import { BeakerIcon } from '@heroicons/react/24/solid'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { EmptyState } from '@/components/shared/empty-state'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 
 export const Route = createFileRoute('/admin/settings/labs')({
   loader: ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/labs')
   },
   component: LabsSettingsPage,
 })

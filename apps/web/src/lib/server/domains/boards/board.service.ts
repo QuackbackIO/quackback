@@ -8,6 +8,7 @@
  * - Validation
  */
 
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import {
   db,
   type Board,
@@ -148,12 +149,14 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     slug: string
     description: string | null
     settings: BoardSettings
+    readOnly: boolean
     access?: BoardAccess
   } = {
     name: input.name.trim(),
     slug,
     description: input.description?.trim() || null,
     settings: input.settings || {},
+    readOnly: input.readOnly ?? false,
   }
   if (input.access) {
     insertValues.access = input.access
@@ -169,6 +172,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     context: { source: 'admin' },
   })
 
+  await invalidatePlanLimits()
   return board
 }
 
@@ -236,6 +240,7 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (slug !== existingBoard.slug) updateData.slug = slug
   if (input.settings !== undefined) updateData.settings = input.settings
+  if (input.readOnly !== undefined) updateData.readOnly = input.readOnly
 
   // Update the board
   const [updatedBoard] = await db
@@ -247,6 +252,9 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
   if (!updatedBoard) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
+
+  // Which board the plan keeps open depends on which boards are read-only.
+  if (updatedBoard.readOnly !== existingBoard.readOnly) await invalidatePlanLimits()
 
   return updatedBoard
 }
@@ -268,6 +276,7 @@ export async function deleteBoard(id: BoardId): Promise<void> {
   if (result.length === 0) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
+  await invalidatePlanLimits()
 
   // WO-6b: audit-relevant board deletion event.
   void emitBestEffort(boardDeleted, {

@@ -79,7 +79,12 @@ vi.mock('../conversation.query', () => ({
       displayName: a.displayName ?? null,
       avatarUrl: null,
     }
-    return { publicAuthor: author, supportAuthor: author }
+    return {
+      publicAuthor: author,
+      supportAuthor: author,
+      customerAuthor: author,
+      shownAsTeam: false,
+    }
   }),
   loadAuthors: vi.fn(async () => new Map()),
 }))
@@ -298,7 +303,8 @@ describe('startAgentConversation happy path', () => {
         visitor: expect.anything(),
         agent: expect.anything(),
       }),
-      { conversationUpdated: true }
+      { conversationUpdated: true },
+      expect.objectContaining({ teamId: null }) // the item scope envelope
     )
     expect(emit.emitConversationCreated).toHaveBeenCalledTimes(1)
     expect(emit.emitMessageCreated).toHaveBeenCalledTimes(1)

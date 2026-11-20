@@ -3,6 +3,7 @@
  * the invited role, and the mint / insert / deliver steps the add-people
  * batch (team-additions.ts, the one invite path) composes.
  */
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import {
   generateId,
   type InviteId,
@@ -165,7 +166,10 @@ export async function assertInviteGrant(
       throw new ValidationError('VALIDATION_ERROR', 'Custom role invites use the member role')
     }
     const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
-    roleName = (await assertGrantableRole(roleId, granter.permissions)).name
+    const target = await assertGrantableRole(roleId, granter.permissions)
+    const { assertCustomRoleAssignable } = await import('@/lib/server/domains/roles/role.plan-lock')
+    await assertCustomRoleAssignable(target)
+    roleName = target.name
   }
   assertCanGrantTeamRole(role, granter.role)
   return roleName
@@ -237,6 +241,8 @@ export async function insertTeamInvites(
       magicLinkTokens: [invite.magicLinkToken],
     }))
   )
+  // A pending team invite holds a seat; recounted once the invite commits.
+  await invalidatePlanLimits()
 }
 
 /** The invitation's wording in the team's language; English when absent. */

@@ -19,6 +19,9 @@ export default defineConfig({
     // import so the transform is paid at file load — see the changelog tests.)
     testTimeout: 15_000,
     include: ['src/**/*.test.tsx', 'src/**/*.test.ts'],
+    // Run the CIMD fetch transport through Vite so its tests can stand in for
+    // DNS (cimd-transport.test.ts). Matches the root config.
+    server: { deps: { inline: ['@better-auth/cimd'] } },
     setupFiles: [path.resolve(__dirname, '../../vitest.setup.ts')],
     exclude: ['**/node_modules/**', '**/.output/**', '**/e2e/**'],
     env: {

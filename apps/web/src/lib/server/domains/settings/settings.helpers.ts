@@ -154,6 +154,21 @@ export async function findSettingsCached(): Promise<SettingsRecord | null> {
   return getWorkspaceSettingsRow()
 }
 
+/**
+ * A value derived from the cached settings row once per cached copy of it
+ * (see `deriveFromWorkspaceSettingsRow`). Null before the workspace has one.
+ *
+ * @internal
+ */
+export async function deriveFromSettingsCached<T>(
+  name: string,
+  derive: (row: Readonly<SettingsRecord>) => T
+): Promise<T | null> {
+  // Dynamic import, as in findSettingsCached.
+  const { deriveFromWorkspaceSettingsRow } = await import('./settings.service')
+  return deriveFromWorkspaceSettingsRow(name, derive)
+}
+
 /** @internal */
 export function wrapDbError(operation: string, error: unknown): never {
   // Named refusals (402/403/404/…) must stay themselves. Wrapping a
@@ -169,7 +184,12 @@ export async function invalidateSettingsCache(): Promise<void> {
   // REGISTERED_AUTH_PROVIDERS is derived from authConfig.oauth (part of workspace
   // settings) and the identity_provider list; every identity-provider write
   // funnels through here, so drop it alongside the settings row.
-  await cacheDel(CACHE_KEYS.WORKSPACE_SETTINGS, CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
+  // The plan limits inputs go too, so a fix made through settings shows at once.
+  await cacheDel(
+    CACHE_KEYS.WORKSPACE_SETTINGS,
+    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS,
+    CACHE_KEYS.PLAN_LIMITS_INPUTS
+  )
 }
 
 /**

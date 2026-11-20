@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { authorizeFleetInternal } from '@/lib/server/fleet/internal-auth'
+import { readTextBodyWithLimit } from '@/lib/server/utils/read-body'
 import {
   handleJobWake,
   isJobWorkerRunning,
@@ -33,12 +34,13 @@ export async function handleJobWakeRequest(request: Request): Promise<Response> 
   if (!authorizeFleetInternal(request)) {
     return new Response(null, { status: 401 })
   }
-  if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) {
-    return new Response(null, { status: 413 })
-  }
+  // Capped on the bytes read, not only the Content-Length header: a chunked
+  // body has none, and a header can understate the body.
   let raw: unknown
   try {
-    raw = await request.json()
+    const text = await readTextBodyWithLimit(request, MAX_BODY_BYTES)
+    if (text === null) return new Response(null, { status: 413 })
+    raw = JSON.parse(text)
   } catch {
     return new Response(null, { status: 400 })
   }

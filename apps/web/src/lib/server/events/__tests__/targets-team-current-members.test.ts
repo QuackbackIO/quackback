@@ -13,6 +13,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type TicketId, type UserId } from '@quackback/ids'
 
+/** A well-formed id for the reply an event names; no row is stored under it. */
+const MESSAGE_ID = createId('conversation_message')
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   tickets,
@@ -131,7 +134,7 @@ function repliedEvent(w: World, type: string): EventData {
     actor: { type: 'user', principalId: w.actor.id },
     data: {
       ticket: ticketRef(w, type),
-      messageId: 'conversation_message_1',
+      messageId: MESSAGE_ID,
       content: 'Fix is queued.',
       attachments: null,
       senderType: 'agent',
@@ -217,11 +220,11 @@ describe.skipIf(!fixture.available)('team notifications reach current members on
     expect([...ids].sort()).toEqual([w.current.id, w.requester.id].sort())
   })
 
-  it('status bell keeps the requester of a back-office ticket', async () => {
+  it('status bell skips the nominal requester of a back-office ticket, as the email does', async () => {
     const w = await seedWorld('back_office')
     const target = await getTicketStatusChangedTargets(closedEvent(w, 'back_office'))
     const ids = (target?.target as { principalIds: string[] }).principalIds
-    expect([...ids].sort()).toEqual([w.current.id, w.requester.id].sort())
+    expect([...ids].sort()).toEqual([w.current.id])
   })
 
   it('a ticket assigned to a team emails current members, not a removed one', async () => {

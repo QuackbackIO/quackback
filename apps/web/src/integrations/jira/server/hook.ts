@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildJiraIssueBody } from '@/integrations/jira/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'jira' })
 
@@ -34,12 +36,13 @@ export interface JiraConfig {
   siteUrl?: string
   issueTypeId?: string
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const jiraHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as JiraTarget
-    const { accessToken, cloudId, siteUrl, issueTypeId, rootUrl } = config as JiraConfig
+    const { accessToken, cloudId, siteUrl, issueTypeId, rootUrl, links } = config as JiraConfig
 
     if (event.type !== 'post.created') {
       return { state: 'succeeded' }
@@ -58,7 +61,7 @@ export const jiraHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, project_id: projectId }, 'creating issue')
 
-    const { title, description } = buildJiraIssueBody(event, rootUrl)
+    const { title, description } = buildJiraIssueBody(event, hookLinks({ rootUrl, links }))
 
     const issueBody: Record<string, unknown> = {
       fields: {

@@ -75,6 +75,8 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
   }, [queryClient, postId])
 
   const post = postQuery.data as PostDetails
+  // A read-only board takes no comments, team notes included.
+  const boardReadOnly = !!(post as { boardReadOnly?: boolean }).boardReadOnly
 
   // UI state
   const [isUpdating, setIsUpdating] = useState(false)
@@ -179,6 +181,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
               onUnpinComment={() => unpinComment.mutate()}
               isPinPending={pinComment.isPending || unpinComment.isPending}
               adminUser={{ name: currentUser.name, email: currentUser.email }}
+              boardReadOnly={boardReadOnly}
             />
           </Suspense>
         </div>

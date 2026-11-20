@@ -25,6 +25,7 @@ import {
   deleteCategoryTranslation,
 } from '@/lib/server/domains/help-center/help-center-translations.service'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
+import { assertHelpCenterLocaleEditable } from '@/lib/server/domains/plan-limits/plan-limits.locales'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 
 // ============================================================================
@@ -60,6 +61,7 @@ export const upsertArticleTranslationFn = createServerFn({ method: 'POST' })
   .validator(upsertArticleTranslationSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    await assertHelpCenterLocaleEditable(data.locale)
     return upsertArticleTranslation({ ...data, articleId: data.articleId as KbArticleId })
   })
 
@@ -67,6 +69,7 @@ export const setArticleTranslationStatusFn = createServerFn({ method: 'POST' })
   .validator(setArticleTranslationStatusSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    await assertHelpCenterLocaleEditable(data.locale)
     return setArticleTranslationStatus(data.articleId as KbArticleId, data.locale, data.status)
   })
 
@@ -74,6 +77,7 @@ export const deleteArticleTranslationFn = createServerFn({ method: 'POST' })
   .validator(deleteArticleTranslationSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    await assertHelpCenterLocaleEditable(data.locale)
     await deleteArticleTranslation(data.articleId as KbArticleId, data.locale)
     return { success: true }
   })
@@ -104,6 +108,7 @@ export const upsertCategoryTranslationFn = createServerFn({ method: 'POST' })
   .validator(upsertCategoryTranslationSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    await assertHelpCenterLocaleEditable(data.locale)
     return upsertCategoryTranslation({ ...data, categoryId: data.categoryId as KbCategoryId })
   })
 
@@ -111,6 +116,7 @@ export const deleteCategoryTranslationFn = createServerFn({ method: 'POST' })
   .validator(deleteCategoryTranslationSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    await assertHelpCenterLocaleEditable(data.locale)
     await deleteCategoryTranslation(data.categoryId as KbCategoryId, data.locale)
     return { success: true }
   })

@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const calls = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ const calls = vi.hoisted(() => ({
   canManage: true,
   publishFailures: 0,
   navigate: vi.fn(),
+  portaledInput: false,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -80,7 +82,10 @@ vi.mock('../help-center-form-fields', () => ({
   },
 }))
 vi.mock('../help-center-metadata-sidebar', () => ({
-  HelpCenterMetadataSidebar: () => null,
+  // The real sidebar portals its New category dialog to document.body while it
+  // stays a React child of the article dialog; this stands in for that dialog.
+  HelpCenterMetadataSidebar: () =>
+    calls.portaledInput ? createPortal(<input aria-label="Category name" />, document.body) : null,
   HelpCenterMetadataSidebarContent: () => null,
 }))
 
@@ -95,6 +100,22 @@ afterEach(() => {
   calls.updated.length = 0
   calls.updateFailures = 0
   calls.navigate.mockReset()
+  calls.portaledInput = false
+})
+
+it('ignores the save shortcut pressed inside a portaled child dialog', async () => {
+  calls.portaledInput = true
+  render(<CreateArticleDialog open onOpenChange={() => {}} />)
+  const user = userEvent.setup()
+  await user.click(await screen.findByLabelText('Category name'))
+  await user.keyboard('{Control>}{Enter}{/Control}')
+  await new Promise((r) => setTimeout(r, 0))
+  expect(calls.created).toEqual([])
+
+  // The same shortcut from the article's own fields still saves.
+  await user.click(screen.getByRole('button', { name: 'Edit' }))
+  await user.keyboard('{Control>}{Enter}{/Control}')
+  await waitFor(() => expect(calls.created).toHaveLength(1))
 })
 
 it('publishes the new article in one step', async () => {
