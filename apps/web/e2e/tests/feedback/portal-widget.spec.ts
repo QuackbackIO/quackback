@@ -256,12 +256,7 @@ test.describe('widget feedback', () => {
     test(
       'FBP-W-07 a held widget post is confirmed as waiting for review',
       {
-        tag: ['@core', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B07: the widget success view says "Your post has been submitted." for a held post and the widget has no pending hint',
-        },
+        tag: ['@core', '@isolated'],
       },
       async ({ page, marker }) => {
         await withSettings(WIDGET_ON, async () => {

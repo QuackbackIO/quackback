@@ -117,7 +117,7 @@ test.describe('portal notifications', () => {
   )
 
   test(
-    'FBP-N-10 a held comment sends nothing until a moderator approves it',
+    'FBP-N-10 a held comment sends nothing until a moderator approves it; then its author hears so',
     { tag: '@core' },
     async ({ browser, playwright, marker }) => {
       const board = await createBoard(marker, { access: { moderation: { comments: 'on' } } })
@@ -140,7 +140,10 @@ test.describe('portal notifications', () => {
       expect((await notificationsOf(cass.principalUuid, post.uuid)).map((r) => r.type)).toEqual([
         'comment_created',
       ])
-      expect(await notificationsOf(dana.principalUuid, post.uuid)).toHaveLength(0)
+      // D12: the commenter is told their comment is public, and nothing else.
+      expect((await notificationsOf(dana.principalUuid, post.uuid)).map((r) => r.type)).toEqual([
+        'post_moderated',
+      ])
     }
   )
 

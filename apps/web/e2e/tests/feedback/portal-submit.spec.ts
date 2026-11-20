@@ -359,7 +359,7 @@ test.describe('portal submit', () => {
   )
 
   test(
-    'FBP-S-14 a held post: the author sees it, others do not, no post.created, toast still says submitted',
+    'FBP-S-14 a held post: the author sees it waiting for review, others do not, no post.created',
     { tag: '@core' },
     async ({ browser, marker, playwright, baseURL, people }) => {
       const board = await createBoard(marker, { access: { moderation: { signedPosts: 'on' } } })
@@ -372,9 +372,9 @@ test.describe('portal submit', () => {
         const title = `${marker} needs review`
         await startPost(page, title)
         await page.getByRole('button', { name: 'Post', exact: true }).click()
-        await expect(toastWith(page, 'Feedback submitted')).toBeVisible()
+        await expect(toastWith(page, 'Your post is waiting for review')).toBeVisible()
         await expect(cardFor(page, title)).toBeVisible()
-        await expect(cardFor(page, title).getByText('Pending review')).toBeVisible()
+        await expect(cardFor(page, title).getByText('Waiting for review')).toBeVisible()
 
         const row = await postByTitle(board, title)
         expect(row).toMatchObject({ moderation_state: 'pending', vote_count: 1 })
@@ -730,14 +730,7 @@ test.describe('portal submit', () => {
 
   test(
     'FBP-S-14 the confirmation of a held post tells the author it awaits review',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B07: a held post gets the same "Feedback submitted" toast as a published one, with no hint it waits for review',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const { page } = await postHeld(browser, marker)
       await expect(page.locator('[data-sonner-toast]').first()).toContainText(/review/i)
@@ -746,18 +739,14 @@ test.describe('portal submit', () => {
 
   test(
     "FBP-S-14 the held post's panel does not tell its author that customers cannot see it",
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B06: inline-moderation-actions renders the moderator copy "Customers cannot see this post yet." to the author',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const { page, title } = await postHeld(browser, marker)
       const card = cardFor(page, title)
-      await expect(card.getByText('Pending review')).toBeVisible()
+      await expect(card.getByText('Waiting for review')).toBeVisible()
+      await expect(
+        card.getByText('Only you can see this post until the team reviews it.')
+      ).toBeVisible()
       await expect(card.getByText('Customers cannot see this post yet.')).toHaveCount(0)
     }
   )

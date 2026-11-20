@@ -489,14 +489,7 @@ test.describe('portal comments', () => {
 
   test(
     'FBP-C-09 the author of a held comment is not told that customers cannot see it',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B06: inline-moderation-actions.tsx:39-42 shows moderator copy to the author (comment-thread.tsx:808)',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const board = await createBoard(marker, { access: { moderation: { comments: 'on' } } })
       const post = await seedPost(board, { title: `${marker} post` })
@@ -507,7 +500,10 @@ test.describe('portal comments', () => {
       await cass.page.goto(postPath(post))
       const el = commentEl(cass.page, row.typeId)
       await expect(el).toContainText(text)
-      await expect(el.getByText(/pending|review/i).first()).toBeVisible()
+      await expect(el.getByText('Waiting for review')).toBeVisible()
+      await expect(
+        el.getByText('Only you can see this comment until the team reviews it.')
+      ).toBeVisible()
       await expect(el.getByText(/Customers cannot see/)).toHaveCount(0)
     }
   )

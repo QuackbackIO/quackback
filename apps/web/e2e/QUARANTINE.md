@@ -319,25 +319,6 @@ no such part beyond the wrong notification).
   (`apps/web/src/routes/_portal/index.tsx:32-37`) while `sort` and `view` have
   one. Smallest fix: `.optional().catch(undefined)` on both. owner:
   unassigned, review by: 2026-12-03.
-- `feedback/portal-submit.spec.ts` › FBP-S-14 the confirmation of a held post
-  tells the author it awaits review (FBP-B07). The composer shows the same
-  "Feedback submitted" toast for a held post as for a published one
-  (`apps/web/src/components/public/feedback/feedback-header-animated.tsx:281-297`);
-  `createPublicPostFn` does not return the moderation state, so the client
-  cannot tell. Smallest fix: return `moderationState` from
-  `runCreatePublicPost` and show a "waiting for review" toast when it is
-  `pending`. The right copy does not exist yet: the test only asks for the
-  word "review". owner: unassigned, review by: 2026-12-03.
-- `feedback/portal-submit.spec.ts` › FBP-S-14 the held post's panel does not
-  tell its author that customers cannot see it (FBP-B06). The card renders
-  `InlineModerationActions` for any viewer of a pending post
-  (`apps/web/src/components/public/post-card.tsx:597-603`), and its hardcoded,
-  unlocalised moderator copy "Customers cannot see this post yet."
-  (`apps/web/src/components/shared/inline-moderation-actions.tsx:39-42`) is
-  shown to the customer who wrote it. Smallest fix: an author variant
-  ("Waiting for review: only you can see this") passed when the viewer is the
-  author, through the message catalogue. owner: unassigned, review by:
-  2026-12-03.
 - `feedback/portal-submit.spec.ts` › FBP-S-22 an anonymous session cannot
   upload while anonymous posting is off (FBP-B13). `handlePortalUpload`
   (`apps/web/src/routes/api/portal/upload.ts:8-37`) accepts any session with
@@ -405,17 +386,6 @@ no such part beyond the wrong notification).
   createPublicPost). Smallest fix: use `ANONYMOUS_NOT_ALLOWED` in
   comments.ts. Runs in product-isolated. owner: unassigned, review by:
   2026-12-03.
-- `feedback/portal-comments.spec.ts` › FBP-C-09 the author of a held comment is
-  not told that customers cannot see it (FBP-B06). The thread renders the
-  moderator panel for the author's own pending comment
-  (`apps/web/src/components/public/comment-thread.tsx:809`), whose copy is
-  hard-coded, English only and written for moderators: "Customers cannot see
-  this comment yet."
-  (`apps/web/src/components/shared/inline-moderation-actions.tsx:39-42`).
-  The test asserts only that the wrong claim is absent while a pending label
-  shows. Smallest fix: an author-facing, localised line ("Waiting for review")
-  when the viewer is the author and not a moderator. owner: unassigned,
-  review by: 2026-12-03.
 - `feedback/portal-comments.spec.ts` › FBP-C-11 after a teammate replies, the
   author is no longer offered Edit or Delete (FBP-B17). The server refuses both
   (`getCommentPermissionsFn` answers `{canEdit:false, canDelete:false}`), but
@@ -508,15 +478,6 @@ no such part beyond the wrong notification).
   least show the server's validation message. Runs in product-isolated (the
   widget is off on a fresh workspace). owner: unassigned, review by:
   2026-12-03.
-- `feedback/portal-widget.spec.ts` › FBP-W-07 a held widget post is confirmed
-  as waiting for review (FBP-B07, widget half). The success view says "Thanks
-  for your feedback! Your post has been submitted."
-  (`apps/web/src/routes/widget/index.tsx:1203-1209`) for a held post, and no
-  widget component shows a pending state. Smallest fix: return
-  `moderationState` from the create call and show "waiting for review" in the
-  success view and on the author's own pending row. The right copy does not
-  exist yet: the test only asks for the word "review". Runs in
-  product-isolated. owner: unassigned, review by: 2026-12-03.
 - `feedback/portal-widget.spec.ts` › FBP-W-12 the widget counts agree with the
   public profile (FBP-B29). `runGetUserStats`
   (`apps/web/src/lib/server/functions/user.ts:349-371`) counts every post the
