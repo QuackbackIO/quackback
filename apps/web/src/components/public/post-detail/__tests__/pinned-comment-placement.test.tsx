@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 /**
- * The pinned comment shows even when it is not among the root comments loaded
- * so far (the first page holds 30), and never twice: on the portal it joins
- * the thread, which floats it to the top; in the admin roadmap modal the card
- * is skipped when the thread below holds it.
+ * The admin roadmap modal shows the pinned comment once: its card is skipped
+ * when the thread below holds the comment. (On the portal the server puts the
+ * pinned comment in the thread itself: post-detail-pinned.db.test.ts.)
  */
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -18,7 +17,6 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
-import { withPinnedComment } from '@/lib/client/queries/portal-detail'
 import { PinnedCommentSection } from '../official-response-section'
 
 const pinned: PinnedCommentView = {
@@ -45,32 +43,6 @@ function comment(id: string, replies: PublicCommentView[] = []): PublicCommentVi
     reactions: [],
   } as unknown as PublicCommentView
 }
-
-describe('withPinnedComment (portal post page)', () => {
-  it('adds the pinned comment as a root when the thread has not loaded it', () => {
-    const list = withPinnedComment([comment('comment_a'), comment('comment_b')], pinned)
-    expect(list.map((c) => c.id)).toEqual(['comment_pinned', 'comment_a', 'comment_b'])
-    expect(list[0]).toMatchObject({
-      content: 'The answer is in settings',
-      parentId: null,
-      replies: [],
-      reactions: [],
-      deletedAt: null,
-    })
-  })
-
-  it('leaves the thread as it is once it holds the pinned comment, as a root or a reply', () => {
-    const roots = [comment('comment_a'), comment('comment_pinned')]
-    expect(withPinnedComment(roots, pinned)).toBe(roots)
-    const nested = [comment('comment_a', [comment('comment_pinned')])]
-    expect(withPinnedComment(nested, pinned)).toBe(nested)
-  })
-
-  it('leaves the thread as it is when nothing is pinned', () => {
-    const roots = [comment('comment_a')]
-    expect(withPinnedComment(roots, null)).toBe(roots)
-  })
-})
 
 describe('PinnedCommentSection (admin roadmap modal)', () => {
   function renderSection(comments?: PublicCommentView[]) {

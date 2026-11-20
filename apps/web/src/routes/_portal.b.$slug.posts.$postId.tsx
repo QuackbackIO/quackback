@@ -3,11 +3,7 @@ import { useIntl } from 'react-intl'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
-import {
-  portalDetailQueries,
-  withPinnedComment,
-  type PublicPostDetailView,
-} from '@/lib/client/queries/portal-detail'
+import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
@@ -399,7 +395,7 @@ function PostDetailPage() {
         <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
           <CommentsSection
             postId={postId}
-            comments={withPinnedComment(post.comments, post.pinnedComment)}
+            comments={post.comments}
             pinnedCommentId={post.pinnedCommentId}
             disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
             lockedMessage={

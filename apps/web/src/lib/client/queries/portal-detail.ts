@@ -47,34 +47,6 @@ export interface PinnedCommentView {
 }
 
 /**
- * The thread's comments with the pinned comment among them. The first page
- * holds only the newest roots, so an older pinned comment may not be loaded
- * yet; it is added as a root here and the thread floats it to the top as it
- * does any pinned comment. Once loaded, the list is returned as it is.
- */
-export function withPinnedComment(
-  comments: PublicCommentView[],
-  pinned: PinnedCommentView | null
-): PublicCommentView[] {
-  if (!pinned) return comments
-  const has = (list: PublicCommentView[]): boolean =>
-    list.some((c) => c.id === pinned.id || has(c.replies))
-  if (has(comments)) return comments
-  return [
-    {
-      ...pinned,
-      deletedAt: null,
-      isRemovedByTeam: false,
-      parentId: null,
-      isEdited: false,
-      replies: [],
-      reactions: [],
-    },
-    ...comments,
-  ]
-}
-
-/**
  * Post detail type for client components (Date fields may be strings after serialization)
  */
 export interface PublicPostDetailView {
