@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { UNEXPECTED_ERROR_MESSAGE } from '@/lib/shared/error-reference'
 import { describeError } from '@/lib/shared/describe-error'
