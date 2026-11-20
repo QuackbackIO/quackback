@@ -30,6 +30,7 @@ export const BATCHED_READS: readonly BatchedRead[] = [
   settingsQueries.importRuns,
   settingsQueries.logo,
   settingsQueries.portalConfig,
+  settingsQueries.portalPageConfig,
   settingsQueries.roles,
   settingsQueries.spamFilterConfig,
   settingsQueries.teamMembersAndInvitations,

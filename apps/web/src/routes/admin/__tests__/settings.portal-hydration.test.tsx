@@ -155,7 +155,7 @@ function seededClient() {
   queryClient.setQueryData(['settings', 'branding'], { themeMode: 'user' })
   queryClient.setQueryData(['settings', 'logo'], { url: null })
   queryClient.setQueryData(['settings', 'customCss'], '')
-  queryClient.setQueryData(['settings', 'portalConfig'], {})
+  queryClient.setQueryData(['settings', 'portalConfig', 'page'], {})
   return queryClient
 }
 
@@ -209,6 +209,13 @@ describe('portal settings page hydration', () => {
     }
     // Nothing is unsaved: the save bar stays hidden.
     expect(container.querySelector('[data-slot="draft-bar"]')).toBeNull()
+  })
+
+  it('gives settings.branding alone the look, without the tabs and welcome message it cannot save', async () => {
+    rootContext.permissions = ['settings.branding']
+    const container = await hydratePage()
+    expect([...cardRenders.keys()]).toEqual(['Appearance'])
+    expect(container.querySelector('[data-testid="portal-preview"]')).toBeTruthy()
   })
 
   it('takes an edit to the welcome message as an unsaved change', async () => {

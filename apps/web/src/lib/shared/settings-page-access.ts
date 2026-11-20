@@ -36,18 +36,14 @@ export const SETTINGS_PAGE_ACCESS = {
   // Each lists under its view permission and changes under its manage one.
   '/admin/settings/statuses': all(PERMISSIONS.STATUS_MANAGE, PERMISSIONS.STATUS_VIEW),
   '/admin/settings/tags': all(PERMISSIONS.TAG_MANAGE, PERMISSIONS.TAG_VIEW),
-  // Reads the portal config (settings.manage); saves under settings.moderation.
-  '/admin/settings/moderation': all(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_MODERATION),
+  // Reads the moderation default (fetchPortalPageConfigFn) and saves it under settings.moderation.
+  '/admin/settings/moderation': one(PERMISSIONS.SETTINGS_MODERATION),
   // Support
   '/admin/settings/channels': one(PERMISSIONS.SETTINGS_MANAGE),
   '/admin/settings/channels/messenger': one(PERMISSIONS.SETTINGS_MANAGE),
   '/admin/settings/channels/email': one(PERMISSIONS.CHANNEL_ACCOUNT_MANAGE),
-  // Reads the connection status (settings.manage); its switch saves under
-  // channel_account.manage.
-  '/admin/settings/channels/github': all(
-    PERMISSIONS.SETTINGS_MANAGE,
-    PERMISSIONS.CHANNEL_ACCOUNT_MANAGE
-  ),
+  // Reads the connection status and saves its switch under channel_account.manage.
+  '/admin/settings/channels/github': one(PERMISSIONS.CHANNEL_ACCOUNT_MANAGE),
   // Changes macros (conversation.manage); lists them (conversation.reply).
   '/admin/settings/macros': all(PERMISSIONS.CONVERSATION_MANAGE, PERMISSIONS.CONVERSATION_REPLY),
   '/admin/settings/office-hours': one(PERMISSIONS.OFFICE_HOURS_MANAGE),
@@ -75,7 +71,7 @@ export const SETTINGS_PAGE_ACCESS = {
   '/admin/settings/domains': any(DOMAINS_PAGE_PERMISSIONS),
   '/admin/settings/domains/$domain': any(DOMAINS_PAGE_PERMISSIONS),
   '/admin/settings/email': one(EMAIL_SENDING_PERMISSION),
-  // Design needs settings.branding and settings.manage; Custom domains settings.custom_domain.
+  // Design needs settings.branding; Custom domains settings.custom_domain.
   '/admin/settings/portal': PORTAL_PAGE_GATE,
   '/admin/settings/widget': one(PERMISSIONS.SETTINGS_MANAGE),
   '/admin/settings/widget/install': one(PERMISSIONS.SETTINGS_MANAGE),
@@ -134,11 +130,7 @@ export const SETTINGS_PAGE_ACTIONS: Partial<Record<GatedSettingsPage, readonly P
   '/admin/settings/channels/email': [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
   '/admin/settings/domains': DOMAINS_PAGE_PERMISSIONS,
   '/admin/settings/domains/$domain': DOMAINS_PAGE_PERMISSIONS,
-  '/admin/settings/portal': [
-    PERMISSIONS.SETTINGS_BRANDING,
-    PERMISSIONS.SETTINGS_MANAGE,
-    PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-  ],
+  '/admin/settings/portal': [PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
   '/admin/settings/security/sso/new': [PERMISSIONS.AUTH_MANAGE],
   '/admin/settings/developers/workspace-keys/new': [PERMISSIONS.API_KEY_MANAGE],
   '/admin/settings/labs': [PERMISSIONS.SETTINGS_MANAGE],

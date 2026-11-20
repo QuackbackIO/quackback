@@ -16,7 +16,7 @@ export const Route = createFileRoute('/admin/settings/moderation')({
     assertSettingsPageAccess(context.permissions, '/admin/settings/moderation')
 
     const { queryClient } = context
-    await queryClient.ensureQueryData(settingsQueries.portalConfig())
+    await queryClient.ensureQueryData(settingsQueries.portalPageConfig())
     return {}
   },
   component: ModerationPage,

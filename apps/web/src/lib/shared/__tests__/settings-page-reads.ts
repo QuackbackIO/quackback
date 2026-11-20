@@ -26,6 +26,10 @@ import {
   EMAIL_SENDING_PERMISSION,
   SURFACE_SENDER_READ_PERMISSIONS,
 } from '@/lib/shared/email-sending-permissions'
+import {
+  GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+} from '@/lib/shared/settings-read-permissions'
 import { portalTabPermissions, type PortalTab } from '@/lib/shared/portal-settings-tabs'
 import { authTabPermissions, type AuthTab } from '@/lib/shared/authentication-tabs'
 
@@ -35,6 +39,8 @@ export const SRC = resolve(__dirname, '../../..')
 const KNOWN_PERMISSION_LISTS: Record<string, readonly PermissionKey[]> = {
   AI_ANY_PERMISSIONS,
   SUPPORT_SENDER_PERMISSIONS,
+  GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
 }
 const KNOWN_PERMISSIONS: Record<string, PermissionKey> = { EMAIL_SENDING_PERMISSION }
 /** Lists keyed by the request (`RECORD[data.x]`): any list's permission may pass. */

@@ -84,17 +84,16 @@ describe('channels settings loaders', () => {
     )
   })
 
-  it('GitHub: warms the connection status, and opens only with the settings.manage it needs', async () => {
-    const withManage = await warmedKeys(GitHubRoute, [
-      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-      PERMISSIONS.SETTINGS_MANAGE,
-    ])
-    expect(withManage).toContain(key('settings', 'github-channel-status'))
+  it('GitHub: warms the connection status, and opens with channel_account.manage alone', async () => {
+    // The status is read under channel_account.manage, so the page's own
+    // permission is enough (a Support lead has it without settings.manage).
+    const withOwn = await warmedKeys(GitHubRoute, [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])
+    expect(withOwn).toContain(key('settings', 'github-channel-status'))
 
-    // Without settings.manage the page does not open, so nothing is read.
-    await expect(
-      warmedKeys(GitHubRoute, [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])
-    ).rejects.toMatchObject({ options: { search: { error: 'not_team_member' } } })
+    // Without it the page does not open, so nothing is read.
+    await expect(warmedKeys(GitHubRoute, [PERMISSIONS.SETTINGS_MANAGE])).rejects.toMatchObject({
+      options: { search: { error: 'not_team_member' } },
+    })
   })
 
   it('GitHub: the warmed status stays fresh for its row', () => {

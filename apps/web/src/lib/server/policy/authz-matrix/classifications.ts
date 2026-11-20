@@ -19,6 +19,10 @@
  * expectation" gate from the feature request.
  */
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import {
+  GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+} from '@/lib/shared/settings-read-permissions'
 
 export type SurfaceIntent =
   /** Bare `requireAuth()`: any authenticated principal (team, portal, or widget). */
@@ -199,6 +203,15 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/assistant-documents.ts::uploadAssistantDocumentFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'shared AI settings: a holder of either AI permission may use them'
+  ),
+  // Settings pages owned by a narrower permission read what they show with it.
+  'lib/server/functions/settings.ts::fetchPortalPageConfigFn': DYNAMIC_PERMISSION(
+    PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+    'any one of these reads; the moderation default goes only to settings.manage or settings.moderation, the portal tabs and welcome message only to settings.manage or settings.branding, and nothing else of the portal config'
+  ),
+  'integrations/github/server/functions.ts::getGitHubChannelStatusFn': DYNAMIC_PERMISSION(
+    GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+    'the GitHub channel page (channel_account.manage) and the Channels hub (settings.manage) read the connection status; never the token'
   ),
   'lib/server/functions/assistant-guidance-stats.ts::getGuidanceRuleStatsFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],

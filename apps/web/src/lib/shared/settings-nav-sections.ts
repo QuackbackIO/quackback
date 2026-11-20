@@ -232,7 +232,7 @@ export function buildNavSections(
           label: SETTINGS_PAGES['/admin/settings/notifications'].label,
           to: '/admin/settings/notifications',
         },
-        // Its Design tab opens to settings.branding with settings.manage, its Custom domains tab to settings.custom_domain.
+        // Its Design tab opens to settings.branding, its Custom domains tab to settings.custom_domain.
         navPage('/admin/settings/portal'),
         navPage('/admin/settings/widget'),
         navPage('/admin/settings/members'),

@@ -3,6 +3,7 @@ import type { IdentityProviderId, UserId } from '@quackback/ids'
 import {
   fetchBrandingConfig,
   fetchPortalConfig,
+  fetchPortalPageConfigFn,
   fetchPublicPortalConfig,
   fetchPublicAuthConfig,
   fetchAuthConfigFn,
@@ -95,6 +96,18 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'portalConfig'],
       queryFn: fetchPortalConfig,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  /**
+   * The parts of the portal config Moderation and the Portal's Design tab
+   * show, readable with their own permissions. Under portalConfig's key, so
+   * every refresh of the portal config refreshes it too.
+   */
+  portalPageConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'portalConfig', 'page'],
+      queryFn: fetchPortalPageConfigFn,
       staleTime: STALE_TIME_LONG,
     }),
 

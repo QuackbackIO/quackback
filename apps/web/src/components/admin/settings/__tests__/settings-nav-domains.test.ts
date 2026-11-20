@@ -45,17 +45,15 @@ describe('settings nav Domains row', () => {
     expect(workspace.items.find((item) => item.label === 'Portal')).toEqual({
       label: 'Portal',
       to: '/admin/settings/portal',
-      gate: [
-        [PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.SETTINGS_MANAGE],
-        [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
-      ],
+      gate: [[PERMISSIONS.SETTINGS_BRANDING], [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]],
     })
     expect(workspaceLabels([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toContain('Portal')
     expect(workspaceLabels([PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.SETTINGS_MANAGE])).toContain(
       'Portal'
     )
-    // Its Design tab reads the portal config, which settings.branding alone cannot.
-    expect(workspaceLabels([PERMISSIONS.SETTINGS_BRANDING])).not.toContain('Portal')
+    // Its Design tab reads what it shows of the portal config with settings.branding alone.
+    expect(workspaceLabels([PERMISSIONS.SETTINGS_BRANDING])).toContain('Portal')
+    expect(workspaceLabels([PERMISSIONS.SETTINGS_MANAGE])).not.toContain('Portal')
     expect(workspace.items.map((item) => item.label)).not.toContain('Custom domains')
   })
 

@@ -15,7 +15,7 @@ export const Route = createFileRoute('/admin/settings/channels_/github')({
   loader: async ({ context }) => {
     const { permissions, queryClient } = context
     assertSettingsPageAccess(permissions, '/admin/settings/channels/github')
-    // The connection status renders the page (its read needs settings.manage,
+    // The connection status renders the page (its read takes channel_account.manage,
     // which the page's gate holds); warm it into the document.
     const { githubChannelStatusQuery: githubStatus } =
       await import('@/integrations/github/ui/github-channel-status-query')

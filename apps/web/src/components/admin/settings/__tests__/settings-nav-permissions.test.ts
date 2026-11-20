@@ -43,8 +43,11 @@ describe('navSectionsFor', () => {
       'Labs',
     ])
     expect(labels(only(PERMISSIONS.SETTINGS_MANAGE), 'Data')).toEqual(['Imports & exports'])
-    // Portal's Design tab reads the portal config, so settings.branding alone opens nothing.
-    expect(labels(only(PERMISSIONS.SETTINGS_BRANDING), 'Workspace')).toEqual(['Notifications'])
+    // Portal's Design tab reads what it shows with settings.branding alone.
+    expect(labels(only(PERMISSIONS.SETTINGS_BRANDING), 'Workspace')).toEqual([
+      'Notifications',
+      'Portal',
+    ])
     expect(labels(only(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN), 'Workspace')).toEqual([
       'Domains',
       'Notifications',

@@ -144,7 +144,7 @@ describe('<BoardModerationForm> rendering', () => {
   })
 
   it('leaves the workspace moderation link out for a viewer who cannot open it', () => {
-    // Board managers without settings.manage and settings.moderation.
+    // Board managers without settings.moderation.
     canOpen.moderation = false
     renderForm(PUBLIC_ACCESS)
     expect(screen.queryByRole('link', { name: /Workspace moderation/ })).toBeNull()

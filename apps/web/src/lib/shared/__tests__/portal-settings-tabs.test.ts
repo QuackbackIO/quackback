@@ -13,11 +13,11 @@ const CUSTOM_DOMAIN = PERMISSIONS.SETTINGS_CUSTOM_DOMAIN
 const MANAGE = PERMISSIONS.SETTINGS_MANAGE
 
 describe('portal settings tabs', () => {
-  it('offers Design to settings.branding with settings.manage, Custom domains to settings.custom_domain', () => {
+  it('offers Design to settings.branding, Custom domains to settings.custom_domain', () => {
     expect(portalTabsFor([BRANDING, MANAGE, CUSTOM_DOMAIN])).toEqual(['design', 'custom-domains'])
     expect(portalTabsFor([BRANDING, MANAGE])).toEqual(['design'])
-    // Design reads and saves the portal config, which needs settings.manage.
-    expect(portalTabsFor([BRANDING])).toEqual([])
+    // Design reads what it shows of the portal config with settings.branding alone.
+    expect(portalTabsFor([BRANDING])).toEqual(['design'])
     expect(portalTabsFor([MANAGE])).toEqual([])
     expect(portalTabsFor([CUSTOM_DOMAIN])).toEqual(['custom-domains'])
     expect(portalTabsFor([])).toEqual([])

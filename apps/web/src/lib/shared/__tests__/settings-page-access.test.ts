@@ -207,3 +207,24 @@ describe.each(Object.entries(ROLES))('%s', (_name, held) => {
     }
   })
 })
+
+describe('pages owned by a narrower permission', () => {
+  const opens = (held: Iterable<PermissionKey>, path: GatedSettingsPage) =>
+    canOpenSettingsPage(new Set(held), path)
+
+  it('opens Support > GitHub to a Support lead, whose channel_account.manage reads its status', () => {
+    expect(opens(SYSTEM_ROLE_PERMISSIONS.support_lead, '/admin/settings/channels/github')).toBe(
+      true
+    )
+    expect(opens([PERMISSIONS.CHANNEL_ACCOUNT_MANAGE], '/admin/settings/channels/github')).toBe(
+      true
+    )
+  })
+
+  it('opens Moderation to settings.moderation and Portal to settings.branding, alone', () => {
+    expect(opens([PERMISSIONS.SETTINGS_MODERATION], '/admin/settings/moderation')).toBe(true)
+    expect(opens([PERMISSIONS.SETTINGS_BRANDING], '/admin/settings/portal')).toBe(true)
+    expect(opens([PERMISSIONS.SETTINGS_MANAGE], '/admin/settings/moderation')).toBe(false)
+    expect(opens([PERMISSIONS.SETTINGS_MANAGE], '/admin/settings/portal')).toBe(false)
+  })
+})

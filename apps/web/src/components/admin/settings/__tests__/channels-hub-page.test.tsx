@@ -135,7 +135,7 @@ describe('ChannelsHubPage', () => {
   })
 
   it('leaves out a channel row whose page the viewer cannot open', () => {
-    // The GitHub page needs settings.manage and channel_account.manage.
+    // The GitHub page needs channel_account.manage.
     canOpen.github = false
     seed(WORKING_GITHUB)
     renderPage()

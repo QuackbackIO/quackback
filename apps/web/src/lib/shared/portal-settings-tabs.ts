@@ -20,12 +20,13 @@ export const PORTAL_TAB_LABELS: Record<PortalTab, string> = {
 }
 
 /**
- * What each tab needs. Design reads and saves the portal config (its tabs and
- * welcome message, under settings.manage) as well as the theme
- * (settings.branding); Custom domains needs settings.custom_domain alone.
+ * What each tab needs. Design reads and saves the theme under
+ * settings.branding; its tabs and welcome message editors show only with
+ * settings.manage, which they save under. Custom domains needs
+ * settings.custom_domain alone.
  */
 const TAB_PERMISSIONS: Record<PortalTab, readonly PermissionKey[]> = {
-  design: [PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.SETTINGS_MANAGE],
+  design: [PERMISSIONS.SETTINGS_BRANDING],
   'custom-domains': [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
 }
 
