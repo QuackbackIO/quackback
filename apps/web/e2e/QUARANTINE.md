@@ -164,3 +164,53 @@ id IN (SELECT post_id FROM post_votes WHERE principal_id = $1)`. owner:
   just stays open. Same component backs user attributes (PPL-U-51). Fix:
   catch in `handleCreate` (and the edit/delete handlers) and toast the
   error message. owner: unassigned, review by: 2026-12-03.
+### Product suite: help center
+Each test asserts the right behaviour and fails on the product bug named.
+owner: unassigned, review by: 2026-12-03 for every entry.
+- `help-center/admin-articles.spec.ts` › HC-A-15 emptying the description in
+  the editor clears it (HC-B12). `article-modal.tsx` sends
+  `description: data.description?.trim() || undefined`, and `updateArticle`
+  (`help-center.article.service.ts`) treats `undefined` as "leave unchanged",
+  so the old description stays. Fix: send `''` (or `null`) for an emptied
+  field; the service already stores `'' || null` as null.
+- `help-center/admin-articles.spec.ts` › HC-A-20 an unknown article id in the
+  URL says the article was not found (HC-B18). `use-url-modal.ts` opens the
+  dialog whenever `?article=` is set and `article-modal.tsx` renders a spinner
+  until the article loads, so a missing or deleted id spins forever. Fix: when
+  the detail query errors (ARTICLE_NOT_FOUND), show a not-found state or close
+  the modal and drop the param.
+- `help-center/api-rest.spec.ts` › HC-A-16 a whitespace-only title or
+  category name is refused on update (HC-B13). `updateArticleSchema` and
+  `updateCategorySchema` (`lib/shared/schemas/help-center.ts`, and the REST
+  bodies) check `min(1)` before trimming; `updateArticle` / `updateCategory`
+  then store the trimmed empty string. Fix: `.trim().min(1)` in the update
+  schemas, or refuse an empty trimmed value in the services as create does.
+- `help-center/api-rest.spec.ts` › HC-A-76 a key without help_center.manage
+  cannot read drafts or private categories (HC-B3). The GET handlers in
+  `routes/api/v1/help-center/articles/index.ts`, `articles/$articleId.ts`,
+  `categories/index.ts` and `categories/$categoryId.ts` call
+  `withApiKeyAuth(request)` with no permission and read at team scope, so a
+  Contributor's key gets drafts and private categories. Fix: pass
+  `{ permission: PERMISSIONS.HELP_CENTER_MANAGE }` (as MCP does), or read with
+  the public visibility rules for keys without it.
+- `help-center/admin-trash.spec.ts` › HC-A-26 the delete dialogs say a
+  deleted article or category can be restored (HC-B5). The article confirm
+  (`components/admin/help-center/help-center-list.tsx`, ConfirmDialog
+  description) says "This action cannot be undone. The article will be
+  permanently deleted." and the category confirm says "the UI provides no
+  restore flow", but both are soft deletes that Other › Deleted items restores
+  for 30 days. Fix: reword both to point at Deleted items.
+- `help-center/admin-settings.spec.ts` › HC-A-67 a protocol-relative header
+  link is refused (HC-B20; `@isolated`). `helpCenterHeaderLinkUrl`
+  (`lib/shared/schemas/help-center.ts`) accepts any value starting with `/`,
+  so `//example.com` is stored, and `components/public/portal-header.tsx`
+  decides "external" by `!startsWith('/')`, rendering it as an in-tab internal
+  link to another host. Fix: require `startsWith('/') && !startsWith('//')`
+  in the schema (and treat `//` as external in the header).
+- `help-center/translations.spec.ts` › HC-A-53 Save draft on a published
+  translation does not change the live page (HC-B9; `@isolated`). The
+  dialog's Save draft (`components/admin/help-center/article-translations-dialog.tsx`)
+  calls `upsertArticleTranslationFn`, which never touches `status`, so a
+  published translation's live text changes at once. Fix: either set
+  `status: 'draft'` on that save, or label the button "Save" when the
+  translation is published.
