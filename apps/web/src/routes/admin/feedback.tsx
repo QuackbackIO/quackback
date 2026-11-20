@@ -25,6 +25,7 @@ const searchSchema = z.object({
   // Portal leftover `sort=trending` must not fail this route.
   sort: z.enum(INBOX_POST_SORTS).optional().catch(undefined),
   hasDuplicates: z.boolean().optional().catch(undefined),
+  following: z.boolean().optional().catch(undefined),
   deleted: z.boolean().optional().catch(undefined),
   post: z.string().optional(),
   // Roadmap-specific

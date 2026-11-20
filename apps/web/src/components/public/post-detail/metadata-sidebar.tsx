@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -32,6 +32,7 @@ import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import { AdminAuthorHoverCard } from '@/components/admin/admin-author-hover-card'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
+import { SubscriptionBell, type SubscriptionStatus } from '@/components/public/subscription-bell'
 import {
   VotersAvatarStack,
   type VotersQuerySource,
@@ -320,6 +321,19 @@ interface MetadataSidebarProps {
   isUpdating?: boolean
   /** Hide subscribe section (for admin context) */
   hideSubscribe?: boolean
+  /**
+   * With `hideSubscribe`, the signed-in teammate's own follow bell and, when
+   * they may see them, the post's subscribers. The admin modals read the
+   * status (it comes with the post) and render the list, so their code stays
+   * out of the portal's post page and the portal-only sidebar query stays off.
+   */
+  teamSubscribe?: {
+    /** The teammate's own status; the bell shows once it is known. */
+    status?: SubscriptionStatus
+    /** After the bell changed it. */
+    onChange?: () => void
+    subscribers?: ReactNode
+  }
   /** Hide vote button (for admin context where voting is handled differently) */
   hideVote?: boolean
   /** Visual variant: 'column' (default border-l) or 'card' (floating card) */
@@ -374,6 +388,7 @@ export function MetadataSidebar({
   onOwnerChange,
   isUpdating = false,
   hideSubscribe = false,
+  teamSubscribe,
   hideVote = false,
   variant = 'column',
   votersAdditionalPostIds,
@@ -958,8 +973,8 @@ export function MetadataSidebar({
           )}
         </div>
 
-        {/* Subscribe section - hidden in admin mode */}
-        {!hideSubscribe && (
+        {/* Subscribe section: the portal bell, or in admin mode the teammate's own */}
+        {(!hideSubscribe || teamSubscribe) && (
           <div className="border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
@@ -968,11 +983,23 @@ export function MetadataSidebar({
                   defaultMessage="Subscribe"
                 />
               </span>
-              <AuthSubscriptionBell
-                postId={postId}
-                initialStatus={subscriptionStatus}
-                disabled={!isMember}
-              />
+              {hideSubscribe ? (
+                teamSubscribe?.status && (
+                  <SubscriptionBell
+                    key={postId}
+                    postId={postId}
+                    initialStatus={teamSubscribe.status}
+                    initialStatusFresh
+                    onStatusChange={teamSubscribe.onChange}
+                  />
+                )
+              ) : (
+                <AuthSubscriptionBell
+                  postId={postId}
+                  initialStatus={subscriptionStatus}
+                  disabled={!isMember}
+                />
+              )}
             </div>
             <p className="text-xs text-muted-foreground/70 mt-2">
               <FormattedMessage
@@ -980,6 +1007,9 @@ export function MetadataSidebar({
                 defaultMessage="Get notified when there are updates to this post"
               />
             </p>
+            {hideSubscribe && teamSubscribe?.subscribers && (
+              <div className="mt-3">{teamSubscribe.subscribers}</div>
+            )}
           </div>
         )}
       </div>

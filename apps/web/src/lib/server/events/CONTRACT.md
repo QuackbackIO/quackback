@@ -17,7 +17,11 @@ checklist.
   - semantic (curated): `status_changed`, `assigned`, `owner_assigned`,
     `priority_changed`, `merged`, `unmerged`, `mentioned`, `published`,
     `replied`, `handed_off`, `resolved`, `csat_submitted`, `breached`, `voted`,
-    `external_status_changed` (a linked tracker issue moved upstream), …
+    `external_status_changed` (a linked tracker issue moved upstream),
+    `due_changed` · `due_soon` · `overdue` (a ticket's due date moved, is
+    within 24 hours, or has passed),
+    `subscriber_added` · `subscriber_removed` (someone starts or stops
+    following the entity by hand: a watcher, a subscriber), …
     (add new ones to the list _on purpose_).
 - A new verb is a deliberate decision, not a drive-by string. Adding one and
   forgetting the list turns CI red.

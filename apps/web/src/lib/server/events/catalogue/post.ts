@@ -23,6 +23,18 @@ export const postMentioned = decl(
   { webhook: true, notification: 'mention' },
   S
 )
+export const postSubscriberAdded = decl(
+  'post.subscriber_added',
+  'post',
+  { webhook: true, notification: 'post_subscriber_added', activity: A },
+  S
+)
+export const postSubscriberRemoved = decl(
+  'post.subscriber_removed',
+  'post',
+  { webhook: true, activity: A },
+  S
+)
 export const postOwnerAssigned = decl(
   'post.owner_assigned',
   'post',

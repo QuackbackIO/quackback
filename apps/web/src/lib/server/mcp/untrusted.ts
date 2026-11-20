@@ -99,6 +99,20 @@ export type UntrustedSpec = readonly UntrustedRule[]
  */
 const NONE: UntrustedSpec = []
 
+/** Ticket watchers' names, marked unless the watcher is a teammate today. */
+/** Post subscribers off the team chose their own names and addresses. */
+const POST_SUBSCRIBER_NAMES: UntrustedItemsRule = {
+  each: 'subscribers',
+  where: (subscriber) => subscriber.isTeamMember !== true,
+  fields: ['displayName', 'email'],
+}
+
+const TICKET_WATCHER_NAMES: UntrustedItemsRule = {
+  each: 'watchers',
+  where: (watcher) => watcher.isTeamMember !== true,
+  fields: ['displayName'],
+}
+
 /**
  * True unless a teammate sent the message. Visitor messages are outside text,
  * and so are system notices, which quote customer names and emails and
@@ -158,6 +172,8 @@ const ACTIVITY_METADATA = {
   'comment.removed': [],
   'comment.restored': [],
   'external.status_changed': ['externalStatus', 'externalDisplayId', 'externalUrl'],
+  'subscriber.added': ['subscriberName'],
+  'subscriber.removed': ['subscriberName'],
   'roadmap.added': [],
   'roadmap.removed': [],
 } satisfies Record<ActivityType | 'roadmap.added' | 'roadmap.removed', readonly string[]>
@@ -260,6 +276,8 @@ export const UNTRUSTED_TOOL_FIELDS = {
   triage_post: ['title'],
   vote_post: NONE,
   proxy_vote: NONE,
+  list_post_subscribers: [POST_SUBSCRIBER_NAMES],
+  subscribe_post: NONE,
   create_post: NONE,
   merge_post: NONE,
   unmerge_post: NONE,
@@ -302,6 +320,18 @@ export const UNTRUSTED_TOOL_FIELDS = {
   add_ticket_note: NONE,
   link_ticket: NONE,
   unlink_ticket: NONE,
+  set_ticket_due_date: NONE,
+  // A watcher who is not a teammate today (the requester, or a former
+  // teammate) chose their own name.
+  list_ticket_watchers: [TICKET_WATCHER_NAMES],
+  watch_ticket: [TICKET_WATCHER_NAMES],
+  unwatch_ticket: [TICKET_WATCHER_NAMES],
+  add_ticket_watcher: [TICKET_WATCHER_NAMES],
+  remove_ticket_watcher: [TICKET_WATCHER_NAMES],
+  // Customers chose their own names and addresses.
+  list_ticket_participants: ['participants[].displayName', 'participants[].email'],
+  add_ticket_participant: ['participants[].displayName', 'participants[].email'],
+  remove_ticket_participant: ['participants[].displayName', 'participants[].email'],
 
   upload_file: NONE,
   // Taken from the Origin or Referer of whichever page loaded the widget.
