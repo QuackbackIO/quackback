@@ -281,20 +281,69 @@ export async function domainEventTypes(entityId: string): Promise<string[]> {
   return (await domainEvents(entityId)).map((e) => e.type)
 }
 
-/** Move a window's planned bounds (the handlers compare them with the wall clock). */
+/**
+ * Move a window's planned bounds (the handlers compare them with the wall
+ * clock). A window still scheduled is dated at its planned start, so that
+ * moves with it, as it would had the window been planned that way.
+ */
 export async function backdateWindow(
   id: string,
   bounds: { start?: Date; end?: Date }
 ): Promise<void> {
   const sql = supportDb()
   if (bounds.start) {
-    await sql`UPDATE status_incidents SET scheduled_start_at = ${bounds.start}
+    await sql`UPDATE status_incidents SET scheduled_start_at = ${bounds.start},
+      started_at = CASE WHEN status = 'scheduled' THEN ${bounds.start} ELSE started_at END
       WHERE id = ${uuid(id)}`
   }
   if (bounds.end) {
     await sql`UPDATE status_incidents SET scheduled_end_at = ${bounds.end}
       WHERE id = ${uuid(id)}`
   }
+}
+
+/**
+ * Pending scheduler jobs for a window's current schedule (`start` /
+ * `complete`). Jobs keyed by an older schedule (a backdated or moved window)
+ * are left out: their handlers re-check the row and do nothing.
+ */
+export async function maintenanceJobs(id: string) {
+  const row = await incidentRow(id)
+  const hash = `${row.scheduled_start_at?.getTime() ?? 'none'}-${row.scheduled_end_at?.getTime() ?? 'none'}`
+  const rows = await supportDb()<{ job_id: string; run_at: Date }[]>`
+    SELECT dedupe_key AS job_id, run_at FROM job_queue
+    WHERE dedupe_key LIKE ${`status-maintenance-%--${id}--${hash}`} AND status = 'pending'
+    ORDER BY dedupe_key`
+  return rows.map((r) => {
+    const m = /^status-maintenance-(start|complete)--/.exec(r.job_id)
+    return { kind: m?.[1] ?? '?', hash, runAt: r.run_at }
+  })
+}
+
+/** Run the scheduler's safety net (every overdue window in the workspace). */
+export async function runMaintenanceSweep(request: APIRequestContext): Promise<void> {
+  const res = await request.post('/api/e2e/sweep', { data: { job: 'status-maintenance' } })
+  expect(res.status(), await res.text()).toBe(200)
+}
+
+/** Choose a date and time in a DateTimePicker opened by `trigger`. */
+export async function pickDateTime(page: Page, trigger: Locator, when: Date): Promise<void> {
+  await trigger.click()
+  const iso = [
+    when.getFullYear(),
+    String(when.getMonth() + 1).padStart(2, '0'),
+    String(when.getDate()).padStart(2, '0'),
+  ].join('-')
+  const day = page.locator(`[data-day="${iso}"]:not([data-outside]) button`)
+  if ((await day.count()) === 0) {
+    await page.getByRole('button', { name: /next month/i }).click()
+  }
+  await day.click()
+  const hh = String(when.getHours()).padStart(2, '0')
+  const mm = String(when.getMinutes()).padStart(2, '0')
+  await page.locator('input[type="time"]').fill(`${hh}:${mm}`)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-day]').first()).toBeHidden()
 }
 
 export async function pollIncident(

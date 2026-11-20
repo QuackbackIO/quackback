@@ -557,3 +557,12 @@ proved by a separate test that is not quarantined.
   side") and the editor shows "Couldn't load this incident" with Try again.
   Fix: return null for an id that fails `isTypeId(id, 'status_incident')`, as
   the public path does. owner: unassigned, review by: 2026-12-03.
+- `status/admin-maintenance.spec.ts` › STA-A-46 a maintenance window with no
+  dates is refused. `createIncident`
+  (`apps/web/src/lib/server/domains/status/status.service.ts:183`) and the
+  REST create accept `kind: 'maintenance'` with no `scheduledStartAt` or
+  `scheduledEndAt`: no job is ever enqueued, so the window stays "scheduled"
+  (and in Upcoming maintenance) forever, and its email reads "<blank> to
+  <blank>". The schedule dialog requires both bounds for exactly this reason.
+  Fix: refuse a maintenance create without both bounds (VALIDATION_ERROR).
+  owner: unassigned, review by: 2026-12-03.
