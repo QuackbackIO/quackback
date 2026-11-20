@@ -30,7 +30,7 @@ import {
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
-import { sql, isNull } from 'drizzle-orm'
+import { sql, isNull, or, desc } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
@@ -171,7 +171,15 @@ export async function createPost(
       ? db
           .select()
           .from(postStatuses)
-          .where(and(eq(postStatuses.slug, 'open'), isNull(postStatuses.deletedAt)))
+          // The status marked default, as the portal and admin dialog use;
+          // the open slug only when no status is marked.
+          .where(
+            and(
+              isNull(postStatuses.deletedAt),
+              or(eq(postStatuses.isDefault, true), eq(postStatuses.slug, 'open'))
+            )
+          )
+          .orderBy(desc(postStatuses.isDefault))
           .limit(1)
           .then((rows) => rows[0])
       : db.query.postStatuses.findFirst({
@@ -219,13 +227,13 @@ export async function createPost(
     : 'published'
   let holdReason: ReturnType<typeof contentHoldReason> = null
 
-  // Determine statusId - either from input or use default "open" status
+  // Determine statusId - either from input or the default status
   let statusId = input.statusId
   if (!statusId) {
     if (!statusResult) {
       throw new ValidationError(
         'VALIDATION_ERROR',
-        'Default "open" status not found. Please ensure post statuses are configured for this organization.'
+        'No default status found. Please ensure post statuses are configured for this organization.'
       )
     }
     statusId = statusResult.id
