@@ -43,6 +43,7 @@ import { db, principal, user, invitation, account, eq, and } from '@/lib/server/
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import {
   PORTAL_DESIGN_READ_PERMISSIONS,
+  PORTAL_DESIGN_WRITE_PERMISSIONS,
   PORTAL_MODERATION_READ_PERMISSIONS,
   PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
 } from '@/lib/shared/settings-read-permissions'
@@ -440,6 +441,46 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
     log.info('update portal config')
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return await updatePortalConfig(data as UpdatePortalConfigInput)
+  })
+
+/**
+ * The two parts of the portal config the Design tab of Settings > Portal
+ * edits: the portal's top tabs and its welcome message. Strict, so a save that
+ * names anything else (who may open the portal, signup, section domains) is
+ * refused rather than quietly dropped.
+ */
+export const updatePortalDesignSchema = updatePortalConfigSchema
+  .pick({ nav: true, welcomeCard: true })
+  .strict()
+
+const PORTAL_DESIGN_FIELDS: ReadonlySet<string> = new Set(['nav', 'welcomeCard'])
+
+/**
+ * Saves the portal's tabs and welcome message for settings.manage or
+ * settings.branding. Every other part of the portal config saves through
+ * `updatePortalConfigFn`, under settings.manage alone; this write takes only
+ * these two fields and hands back only them.
+ */
+export const updatePortalDesignFn = createServerFn({ method: 'POST' })
+  .validator(updatePortalDesignSchema)
+  .handler(async ({ data }): Promise<PortalPageConfig> => {
+    log.info('update portal design')
+    const auth = await requireAuth()
+    assertAnyPermission(auth, PORTAL_DESIGN_WRITE_PERMISSIONS)
+    // The schema refuses other fields at the boundary; this holds the line for
+    // any caller that reaches the handler past it.
+    const other = Object.keys(data).filter((key) => !PORTAL_DESIGN_FIELDS.has(key))
+    if (other.length > 0) {
+      throw new ForbiddenError(
+        'FORBIDDEN',
+        `Access denied: The portal design save takes only nav and welcomeCard, not ${other.join(', ')}`
+      )
+    }
+    const updated = await updatePortalConfig({
+      ...(data.nav && { nav: data.nav }),
+      ...(data.welcomeCard && { welcomeCard: data.welcomeCard }),
+    } as UpdatePortalConfigInput)
+    return { nav: updated.nav, welcomeCard: updated.welcomeCard }
   })
 
 export const updateAuthConfigSchema = z.object({

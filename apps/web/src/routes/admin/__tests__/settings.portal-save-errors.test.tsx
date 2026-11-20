@@ -47,7 +47,7 @@ vi.mock('@tanstack/react-router', async () => {
 // `meta` decides what the shared handler shows.
 vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
-  updatePortalConfigFn: vi.fn(async () => {
+  updatePortalDesignFn: vi.fn(async () => {
     if (saveFails.value) throw saveError.value
   }),
 }))
