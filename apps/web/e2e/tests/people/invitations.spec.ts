@@ -165,8 +165,11 @@ test.describe('adding people', () => {
       const email = inviteeEmail(marker)
       const page = await asPerson('admin')
       await page.goto('/admin/settings/members')
-      await page.getByRole('button', { name: 'Add people' }).click()
       const dialog = page.getByRole('dialog')
+      await expect(async () => {
+        await page.getByRole('button', { name: 'Add people' }).click()
+        await expect(dialog).toBeVisible({ timeout: 1_000 })
+      }).toPass({ timeout: 15_000 })
       await dialog.getByRole('combobox').first().fill(email)
       await page.getByText(`Invite ${email}`).click()
       await dialog.getByRole('button', { name: 'Invite 1 person' }).click()
