@@ -20,7 +20,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: async () => DEFAULT_PORTAL_CONFIG,
 }))
-vi.mock('@/lib/server/domains/activity/activity.service', () => ({ createActivity: vi.fn() }))
+const createActivity = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/domains/activity/activity.service', () => ({ createActivity }))
 vi.mock('@/lib/server/events/dispatch', async (original) => ({
   ...(await original<typeof import('@/lib/server/events/dispatch')>()),
   dispatchCommentCreated: vi.fn(),
@@ -122,4 +123,19 @@ it('changes the status for a teammate who holds post.set_status', async () => {
     skipDispatch: true,
   })
   expect(await statusOf(postId)).toBe(done)
+})
+
+it('posts a plain comment when the status picked is the one the post has', async () => {
+  createActivity.mockClear()
+  const result = await createComment(
+    { postId, content: 'Still open', statusId: open },
+    author(),
+    memberActor(true),
+    { skipDispatch: true }
+  )
+  expect(result.comment.statusChangeToId).toBeNull()
+  expect(createActivity).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'status.changed' })
+  )
+  expect(await statusOf(postId)).toBe(open)
 })

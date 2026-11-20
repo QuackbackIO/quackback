@@ -18,6 +18,7 @@ vi.mock('@/lib/server/db', async (original) => ({
 vi.mock('@/lib/server/events/dispatch', async (original) => ({
   ...(await original<typeof import('@/lib/server/events/dispatch')>()),
   dispatchPostDeleted: vi.fn(),
+  dispatchPostRestored: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/activity/activity.service', () => ({ createActivity }))
 vi.mock('@/lib/server/domains/settings/settings.service', async (original) => ({
@@ -25,7 +26,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (original) => ({
   getPortalConfig: async () => DEFAULT_PORTAL_CONFIG,
 }))
 
-import { softDeletePost } from '../post.user-actions'
+import { restorePost, softDeletePost } from '../post.user-actions'
 import { listInboxPosts } from '../post.inbox'
 
 const fixture = await createDbTestFixture()
@@ -104,4 +105,23 @@ it('leaves a deleted duplicate’s canonical alone', async () => {
   expect(row.canonicalPostId).toBe(canonical)
   const listed = await listInboxPosts({ boardIds: [boardId] })
   expect(listed.items.map((p) => p.title)).toEqual(['Canonical'])
+})
+
+it('leaves a deleted canonical counting only its own votes, so a restore shows the right count', async () => {
+  // C carries its own voter A; its duplicate D carries voter B, so merged C counts 2.
+  const ownVoter = await seedPrincipal('user')
+  await testDb.insert(postVotes).values({ postId: canonical, principalId: ownVoter })
+  await testDb.update(posts).set({ voteCount: 2 }).where(eq(posts.id, canonical))
+
+  await softDeletePost(canonical, { principalId: admin, role: 'admin' })
+  await restorePost(canonical, admin)
+
+  const counts = await testDb
+    .select({ id: posts.id, voteCount: posts.voteCount })
+    .from(posts)
+    .where(eq(posts.boardId, boardId))
+  expect(Object.fromEntries(counts.map((r) => [r.id, r.voteCount]))).toEqual({
+    [canonical]: 1,
+    [duplicate]: 1,
+  })
 })

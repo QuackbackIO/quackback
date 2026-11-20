@@ -145,7 +145,14 @@ export async function createComment(
 
   // Determine if a status change should be applied
   // Only for team members, root-level comments, with a valid statusId
-  const shouldChangeStatus = !!(input.statusId && authorIsTeamMember && !input.parentId)
+  // Re-picking the post's current status is no change: the comment posts as a
+  // plain comment, with no status activity or event.
+  const shouldChangeStatus = !!(
+    input.statusId &&
+    input.statusId !== post.statusId &&
+    authorIsTeamMember &&
+    !input.parentId
+  )
   // Changing status through a comment is still changing status: it needs
   // post.set_status, checked before anything is written.
   if (shouldChangeStatus && !can(actor, PERMISSIONS.POST_SET_STATUS)) {

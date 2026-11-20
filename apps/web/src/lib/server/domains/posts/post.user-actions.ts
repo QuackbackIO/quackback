@@ -324,6 +324,11 @@ export async function softDeletePost(
     for (const row of releasedRows) {
       await recalculateCanonicalVoteCount(row.id as PostId, undefined, tx)
     }
+    // The canonical no longer carries their votes and comments, so a later
+    // restore shows only its own.
+    if (releasedRows.length > 0) {
+      await recalculateCanonicalVoteCount(postId, undefined, tx)
+    }
     return { updatedPost: updated, released: releasedRows.map((r) => r.id as PostId) }
   })
 
