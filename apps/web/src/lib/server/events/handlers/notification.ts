@@ -293,6 +293,23 @@ function buildNotifications(
     }))
   }
 
+  if (event.type === 'comment.mentioned') {
+    const data = event.data
+    const actorName =
+      config.mentionerName?.trim() ||
+      (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+      'Anonymous user'
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'comment_mentioned' as NotificationType,
+      title: `${actorName} mentioned you in a comment`,
+      body: truncate(data.postTitle, 150),
+      postId: data.postId as PostId,
+      commentId: data.commentId as PostCommentId,
+      metadata: { postUrl: data.postUrl, excerpt: data.excerpt, actorName },
+    }))
+  }
+
   if (event.type === 'post.owner_assigned') {
     return principalIds.map((principalId) => ({
       principalId,

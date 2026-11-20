@@ -19,13 +19,19 @@ import {
 } from '@/lib/server/db'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import { deleteObject } from '@/lib/server/storage/s3'
+import { isOwnAvatarKey } from '@/lib/server/storage/avatar-keys'
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { logger } from '@/lib/server/logger'
-import { NotFoundError, UnauthorizedError, ValidationError } from '@/lib/shared/errors'
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'user' })
 
@@ -105,22 +111,28 @@ async function requirePrincipalId(): Promise<PrincipalId> {
   return ctx.principal.id
 }
 
-/** Delete a user's existing S3 avatar if one exists. Silently ignores missing files. */
-async function deleteExistingAvatar(userId: string): Promise<string | null> {
+/** The avatar key a person holds now, or null. */
+async function currentAvatarKey(userId: UserId): Promise<string | null> {
   const currentUser = await db.query.user.findFirst({
-    where: eq(user.id, userId as UserId),
+    where: eq(user.id, userId),
     columns: { imageKey: true },
   })
-
-  if (currentUser?.imageKey) {
-    try {
-      await deleteObject(currentUser.imageKey)
-    } catch {
-      // Ignore deletion errors - old file may not exist
-    }
-  }
-
   return currentUser?.imageKey ?? null
+}
+
+/**
+ * Delete a person's previous avatar object from storage, but only one they
+ * uploaded into their own folder: a key from anywhere else (an avatar saved
+ * before per-person folders, or one pointing at someone else's upload) is
+ * cleared from their profile and never deleted. Missing files are ignored.
+ */
+async function deleteOwnAvatarObject(userId: UserId, key: string | null): Promise<void> {
+  if (!key || !isOwnAvatarKey(key, userId)) return
+  try {
+    await deleteObject(key)
+  } catch {
+    // Ignore deletion errors - old file may not exist
+  }
 }
 
 // ============================================
@@ -224,7 +236,8 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
     log.debug('remove avatar')
     const session = requireNonWidgetSession(await getSession())
 
-    await deleteExistingAvatar(session.user.id)
+    const userId = session.user.id as UserId
+    await deleteOwnAvatarObject(userId, await currentAvatarKey(userId))
 
     const [updated] = await db
       .update(user)
@@ -251,7 +264,14 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
     log.debug('save avatar key')
     const session = requireNonWidgetSession(await getSession())
 
-    await deleteExistingAvatar(session.user.id)
+    const userId = session.user.id as UserId
+    // A new avatar must come from the caller's own upload folder; the key they
+    // already hold is kept as it is, so an older avatar stays valid.
+    const previous = await currentAvatarKey(userId)
+    if (data.key !== previous && !isOwnAvatarKey(data.key, userId)) {
+      throw new ForbiddenError('AVATAR_NOT_YOURS', 'That image was not uploaded by you')
+    }
+    if (data.key !== previous) await deleteOwnAvatarObject(userId, previous)
 
     const [updated] = await db
       .update(user)

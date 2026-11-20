@@ -62,4 +62,13 @@ describe('appMatches (WO-13 scope gate)', () => {
     expect(appWebhookResolver.interestedIn('conversation.created')).toBe(true)
     expect(appWebhookResolver.interestedIn('not.a_real_event')).toBe(false)
   })
+
+  it('never hands a notification-only event (a comment mention) to an app', async () => {
+    expect(appWebhookResolver.interestedIn('comment.mentioned')).toBe(false)
+    const targets = await appWebhookResolver.resolve({
+      type: 'comment.mentioned',
+      payload: { isPrivate: true, excerpt: 'internal words' },
+    } as never)
+    expect(targets).toEqual([])
+  })
 })

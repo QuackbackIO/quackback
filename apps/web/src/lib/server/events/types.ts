@@ -45,6 +45,9 @@ export const EVENT_TYPES = [
   'comment.created',
   'comment.updated',
   'comment.deleted',
+  // Notification-only: a published comment @-mentions someone. Never a
+  // webhook (a private comment's words must not leave), never a trigger.
+  'comment.mentioned',
   'changelog.published',
   'status.incident_created',
   'status.incident_updated',
@@ -83,6 +86,20 @@ export const EVENT_TYPES = [
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]
+
+/**
+ * Events that only ever tell people (a bell, an email) and never leave the
+ * workspace: no webhook, integration or app receives them. A comment mention
+ * can carry a private comment's words.
+ */
+export const NOTIFICATION_ONLY_EVENT_TYPES = [
+  'comment.mentioned',
+] as const satisfies readonly EventType[]
+
+/** Whether an event type only ever notifies people and never leaves the workspace. */
+export function isNotificationOnlyEvent(type: string): boolean {
+  return (NOTIFICATION_ONLY_EVENT_TYPES as readonly string[]).includes(type)
+}
 
 /**
  * Actor information for events - identifies who or what triggered the event.
@@ -166,6 +183,16 @@ export interface EventPostMentionedData {
   mentioningPrincipalId: string
   /** Text of the paragraph containing the mention (≤200 chars), used as email body context. */
   excerpt: string
+}
+
+/**
+ * Payload for comment.mentioned — fired once per principal a comment
+ * @-mentions, when the comment becomes visible (at create, or on approval).
+ */
+export interface EventCommentMentionedData extends EventPostMentionedData {
+  commentId: string
+  /** A private (team-only) comment: only teammates hear about it. */
+  isPrivate: boolean
 }
 
 export interface PostUpdatedPayload {
@@ -676,6 +703,9 @@ export interface CommentUpdatedEvent extends EventBase<'comment.updated'> {
 export interface CommentDeletedEvent extends EventBase<'comment.deleted'> {
   data: CommentDeletedPayload
 }
+export interface CommentMentionedEvent extends EventBase<'comment.mentioned'> {
+  data: EventCommentMentionedData
+}
 
 export interface ChangelogPublishedEvent extends EventBase<'changelog.published'> {
   data: ChangelogPublishedPayload
@@ -806,6 +836,7 @@ export type EventData =
   | CommentCreatedEvent
   | CommentUpdatedEvent
   | CommentDeletedEvent
+  | CommentMentionedEvent
   | ChangelogPublishedEvent
   | StatusIncidentCreatedEvent
   | StatusMaintenanceScheduledEvent

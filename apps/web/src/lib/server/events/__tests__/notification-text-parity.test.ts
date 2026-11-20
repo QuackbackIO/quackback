@@ -101,6 +101,24 @@ const CASES: {
     config: {},
   },
   {
+    name: 'comment mention',
+    event: {
+      ...base,
+      type: 'comment.mentioned',
+      data: {
+        postId: 'post_1',
+        postTitle: 'Dark mode',
+        postUrl: '/p/1',
+        commentId: 'comment_1',
+        isPrivate: false,
+        mentionedPrincipalId: 'principal_target',
+        mentioningPrincipalId: 'principal_actor',
+        excerpt: 'Take a look',
+      },
+    } as EventData,
+    config: {},
+  },
+  {
     name: 'changelog',
     event: { ...base, type: 'changelog.published', data: {} } as EventData,
     config: {

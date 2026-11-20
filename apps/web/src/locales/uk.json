@@ -1944,6 +1944,7 @@
   "portal.notifications.text.commentCreated.team": "{name} (команда) прокоментував(-ла)",
   "portal.notifications.text.commentCreated": "{name} прокоментував(-ла)",
   "portal.notifications.text.postMentioned": "{name} згадав(-ла) вас у дописі",
+  "portal.notifications.text.commentMentioned": "{name} згадав(-ла) вас у коментарі",
   "portal.notifications.text.changelogPublished": "Нове оновлення: {title}",
   "portal.notifications.text.maintenanceScheduled": "Заплановані технічні роботи: {title}",
   "portal.notifications.text.incidentCreated": "Новий інцидент: {title}",

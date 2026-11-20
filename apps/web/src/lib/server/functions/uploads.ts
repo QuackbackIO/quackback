@@ -15,6 +15,7 @@ import {
   isAllowedImageType,
   MAX_FILE_SIZE,
 } from '../storage/s3'
+import { avatarFolderFor } from '../storage/avatar-keys'
 import { logger } from '@/lib/server/logger'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { UnauthorizedError, ValidationError, ServiceUnavailableError } from '@/lib/shared/errors'
@@ -253,13 +254,15 @@ export const getWidgetHeroUploadUrlFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Get a presigned URL for uploading user avatars.
+ * Get a presigned URL for uploading user avatars. The key sits in the
+ * uploader's own avatar folder, which is the only place saveAvatarKeyFn
+ * accepts a new avatar from.
  */
 export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })
   .validator(imageUploadSchema)
   .handler(async ({ data }) => {
-    await requireAuth()
-    return presignedImageUpload(data, { label: 'avatar', prefix: 'avatars' })
+    const auth = await requireAuth()
+    return presignedImageUpload(data, { label: 'avatar', prefix: avatarFolderFor(auth.user.id) })
   })
 
 /**

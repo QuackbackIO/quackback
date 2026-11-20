@@ -632,6 +632,10 @@ export async function processUnsubscribeToken(token: string): Promise<{
   // Perform the action
   switch (tokenRecord.action) {
     case 'unsubscribe_post':
+    // Muting a post ends every notification about it for this person, in the
+    // app and by email: the subscription goes, so neither comments nor
+    // status changes reach them. The post's bell subscribes them again.
+    case 'mute_post':
       if (tokenRecord.postId) {
         await unsubscribeFromPost(tokenRecord.principalId, tokenRecord.postId)
       }

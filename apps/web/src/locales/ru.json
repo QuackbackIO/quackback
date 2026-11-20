@@ -1944,6 +1944,7 @@
   "portal.notifications.text.commentCreated.team": "{name} (команда) оставил(а) комментарий",
   "portal.notifications.text.commentCreated": "{name} оставил(а) комментарий",
   "portal.notifications.text.postMentioned": "{name} упомянул(а) вас в публикации",
+  "portal.notifications.text.commentMentioned": "{name} упомянул(а) вас в комментарии",
   "portal.notifications.text.changelogPublished": "Новое обновление: {title}",
   "portal.notifications.text.maintenanceScheduled": "Плановые работы: {title}",
   "portal.notifications.text.incidentCreated": "Новый инцидент: {title}",

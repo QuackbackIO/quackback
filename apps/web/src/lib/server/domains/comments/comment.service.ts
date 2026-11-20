@@ -323,7 +323,7 @@ export async function createComment(
     // mapping with approveCommentFn's release path via dispatchCommentCreatedEvent.
     await dispatchCommentCreatedEvent(
       author,
-      { id: comment.id, content: comment.content, isPrivate },
+      { id: comment.id, content: comment.content, isPrivate, contentJson },
       { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug }
     )
 

@@ -1944,6 +1944,7 @@
   "portal.notifications.text.commentCreated.team": "{name}（团队）发表了评论",
   "portal.notifications.text.commentCreated": "{name} 发表了评论",
   "portal.notifications.text.postMentioned": "{name} 在帖子中提到了你",
+  "portal.notifications.text.commentMentioned": "{name} 在评论中提到了你",
   "portal.notifications.text.changelogPublished": "新更新：{title}",
   "portal.notifications.text.maintenanceScheduled": "计划维护：{title}",
   "portal.notifications.text.incidentCreated": "新事件：{title}",

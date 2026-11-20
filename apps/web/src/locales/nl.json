@@ -1944,6 +1944,7 @@
   "portal.notifications.text.commentCreated.team": "{name} (team) heeft gereageerd",
   "portal.notifications.text.commentCreated": "{name} heeft gereageerd",
   "portal.notifications.text.postMentioned": "{name} heeft je genoemd in een post",
+  "portal.notifications.text.commentMentioned": "{name} heeft je genoemd in een reactie",
   "portal.notifications.text.changelogPublished": "Nieuwe update: {title}",
   "portal.notifications.text.maintenanceScheduled": "Gepland onderhoud: {title}",
   "portal.notifications.text.incidentCreated": "Nieuw incident: {title}",

@@ -405,6 +405,7 @@
   "portal.notifications.text.commentCreated.team": "{name} (ทีมงาน) แสดงความคิดเห็น",
   "portal.notifications.text.commentCreated": "{name} แสดงความคิดเห็น",
   "portal.notifications.text.postMentioned": "{name} กล่าวถึงคุณในโพสต์",
+  "portal.notifications.text.commentMentioned": "{name} กล่าวถึงคุณในความคิดเห็น",
   "portal.notifications.text.changelogPublished": "อัปเดตใหม่: {title}",
   "portal.notifications.text.maintenanceScheduled": "การบำรุงรักษาตามกำหนด: {title}",
   "portal.notifications.text.incidentCreated": "เหตุการณ์ใหม่: {title}",
