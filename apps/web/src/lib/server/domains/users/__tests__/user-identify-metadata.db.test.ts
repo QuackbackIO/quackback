@@ -43,6 +43,7 @@ describe.skipIf(!fixture.available)('metadata writes on an existing user', () =>
     await testDb.insert(userAttributeDefinitions).values([
       { key: 'plan', label: 'Plan', type: 'string' },
       { key: 'seats', label: 'Seats', type: 'number' },
+      { key: 'region', label: 'Region', type: 'string' },
     ])
   })
   afterEach(() => fixture.rollback())
@@ -68,6 +69,20 @@ describe.skipIf(!fixture.available)('metadata writes on an existing user', () =>
     expect(result.created).toBe(false)
     expect(result.attributes).toEqual({ seats: 5 })
     expect(await storedMetadata(email)).toEqual({ seats: 5 })
+  })
+
+  it('identify removes several attributes sent as null in one call', async () => {
+    const email = `remove-many-${runSuffix()}@example.com`
+    await identifyPortalUser({
+      email,
+      name: 'Many M',
+      attributes: { plan: 'pro', seats: 5, region: 'eu' },
+    })
+
+    const result = await identifyPortalUser({ email, attributes: { plan: null, seats: null } })
+
+    expect(result.attributes).toEqual({ region: 'eu' })
+    expect(await storedMetadata(email)).toEqual({ region: 'eu' })
   })
 
   it('identify sets and then clears externalId on an existing user', async () => {
