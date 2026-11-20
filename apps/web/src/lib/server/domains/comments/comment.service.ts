@@ -30,7 +30,7 @@ import { dispatchCommentCreatedEvent } from './comment.announce'
 import { prepareCommentContent } from './comment-content'
 import { contentHoldReason } from '@/lib/server/content/content-holds'
 import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from './comment.types'
-import { canCreateComment } from '@/lib/server/policy/posts'
+import { canCreateComment, canViewPost } from '@/lib/server/policy/posts'
 import type { Actor } from '@/lib/server/policy/types'
 import { can } from '@/lib/server/policy/authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -70,6 +70,16 @@ export async function createComment(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
   }
   const board = post.board
+  const postShape = {
+    moderationState: post.moderationState,
+    principalId: post.principalId,
+    authorIsTest: await isTestCustomer(post.principalId),
+  }
+  // A post the caller cannot see answers exactly like a missing one, so a
+  // refusal never confirms that a held or hidden post exists.
+  if (!canViewPost(actor, postShape, { access: board.access }).allowed) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
+  }
   await assertBoardOpen(board.id, board.readOnly ?? false)
 
   // Enforce access-control policy: board audience + post visibility + comments-locked
@@ -78,9 +88,7 @@ export async function createComment(
   const decision = canCreateComment(
     actor,
     {
-      moderationState: post.moderationState,
-      principalId: post.principalId,
-      authorIsTest: await isTestCustomer(post.principalId),
+      ...postShape,
       isCommentsLocked: post.isCommentsLocked,
       isMerged: !!post.canonicalPostId,
     },

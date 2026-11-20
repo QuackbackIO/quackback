@@ -25,6 +25,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   eq: vi.fn(),
 }))
 
+const { portalConfig } = vi.hoisted(() => ({
+  portalConfig: { features: { allowAnonymous: true } },
+}))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getPortalConfig: vi.fn(async () => portalConfig),
+}))
+
 vi.mock('@/lib/server/storage/s3', async () => {
   const { createS3MockFactory } = await import('../../__tests__/s3-upload-mock')
   return createS3MockFactory()
@@ -64,6 +71,7 @@ describe('POST /api/portal/upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(isS3Configured).mockReturnValue(true)
+    portalConfig.features.allowAnonymous = true
   })
 
   it('returns 401 when no session', async () => {
@@ -94,6 +102,43 @@ describe('POST /api/portal/upload', () => {
   it('allows an anonymous portal session to upload media', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(anonymousSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(anonymousPrincipal)
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/photo.jpg')
+    const res = await handlePortalUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg')),
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses an anonymous session when the workspace does not allow anonymous interaction', async () => {
+    portalConfig.features.allowAnonymous = false
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(anonymousSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(anonymousPrincipal)
+    const res = await handlePortalUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg')),
+    })
+    expect(res.status).toBe(403)
+    expect(uploadObject).not.toHaveBeenCalled()
+    expect(incrementBucket).not.toHaveBeenCalled()
+  })
+
+  it("still lets a teammate's test customer upload when anonymous interaction is off", async () => {
+    portalConfig.features.allowAnonymous = false
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(anonymousSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce({
+      ...anonymousPrincipal,
+      testOwnerPrincipalId: 'principal_owner',
+    } as typeof anonymousPrincipal)
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/photo.jpg')
+    const res = await handlePortalUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg')),
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('still lets a signed-in person upload when anonymous interaction is off', async () => {
+    portalConfig.features.allowAnonymous = false
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
     vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/photo.jpg')
     const res = await handlePortalUpload({
       request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg')),

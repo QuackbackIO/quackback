@@ -238,6 +238,7 @@
   "portal.feedback.header.errorSignIn": "يرجى تسجيل الدخول لإرسال الملاحظات",
   "portal.feedback.header.errorSession": "فشل إنشاء الجلسة",
   "portal.feedback.header.errorSubmit": "تعذّر إرسال ملاحظاتك. يرجى المحاولة مرة أخرى.",
+  "portal.feedback.header.errorRateLimited": "منشورات كثيرة جدًا من هنا خلال الساعة الماضية. حاول مرة أخرى بعد {minutes, plural, one {دقيقة واحدة} two {دقيقتين} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
   "portal.feedback.header.submitTooltipSignIn": "يرجى تسجيل الدخول لإرسال الملاحظات",
   "portal.feedback.header.toastSubmitted": "تم إرسال الملاحظات",
   "portal.feedback.header.toastPending": "منشورك في انتظار المراجعة",

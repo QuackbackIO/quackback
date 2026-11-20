@@ -238,6 +238,7 @@
   "portal.feedback.header.errorSignIn": "Log in om feedback te versturen",
   "portal.feedback.header.errorSession": "Sessie aanmaken mislukt",
   "portal.feedback.header.errorSubmit": "Kon je feedback niet versturen. Probeer het opnieuw.",
+  "portal.feedback.header.errorRateLimited": "Te veel berichten vanaf hier in het afgelopen uur. Probeer het over {minutes, plural, one {# minuut} other {# minuten}} opnieuw.",
   "portal.feedback.header.submitTooltipSignIn": "Log in om feedback te versturen",
   "portal.feedback.header.toastSubmitted": "Feedback verstuurd",
   "portal.feedback.header.toastPending": "Je post wacht op beoordeling",

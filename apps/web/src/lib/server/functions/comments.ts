@@ -83,7 +83,7 @@ export const runCreateComment = createServerOnlyFn(async function runCreateComme
       await import('@/lib/server/domains/settings/settings.types')
     const settings = await getSettings()
     if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
-      throw new ForbiddenError('ANONYMOUS_NOT_ENABLED', 'Anonymous interaction is not enabled')
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
     }
   }
 

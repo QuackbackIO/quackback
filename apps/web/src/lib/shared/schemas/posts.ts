@@ -132,12 +132,29 @@ export const listPublicPostsSchema = z.object({
 })
 export type ListPublicPostsInput = z.infer<typeof listPublicPostsSchema>
 
+/**
+ * Session context a host page attaches to feedback through the widget
+ * (`Quackback.metadata`). Stored on the post, so it is bounded: a few dozen
+ * short keys with short values.
+ */
+export const POST_METADATA_MAX_KEYS = 50
+export const POST_METADATA_MAX_KEY_LENGTH = 100
+export const POST_METADATA_MAX_VALUE_LENGTH = 1000
+const postMetadataSchema = z
+  .record(
+    z.string().min(1).max(POST_METADATA_MAX_KEY_LENGTH),
+    z.string().max(POST_METADATA_MAX_VALUE_LENGTH)
+  )
+  .refine((m) => Object.keys(m).length <= POST_METADATA_MAX_KEYS, {
+    message: `At most ${POST_METADATA_MAX_KEYS} metadata keys`,
+  })
+
 export const createPublicPostSchema = z.object({
   boardId: z.string(),
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().max(10000).optional().default(''),
   contentJson: tiptapContentSchema.optional(),
-  metadata: z.record(z.string(), z.string()).optional(),
+  metadata: postMetadataSchema.optional(),
   customFields: z.record(z.string(), z.unknown()).optional(),
 })
 export type CreatePublicPostInput = z.infer<typeof createPublicPostSchema>

@@ -45,7 +45,12 @@ import {
   isBoardOpenFor,
   withVisitorPostCapCopy,
 } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
-import { checkAnonVoteRateLimit, reserveAnonPostSlot } from '@/lib/server/utils/anon-rate-limit'
+import {
+  anonPostRetryAfter,
+  anonVoteRetryAfter,
+  checkAnonVoteRateLimit,
+  reserveAnonPostSlot,
+} from '@/lib/server/utils/anon-rate-limit'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { getPostPermissions } from '@/lib/server/domains/posts/post.permissions'
 import { userEditPost, softDeletePost } from '@/lib/server/domains/posts/post.user-actions'
@@ -61,7 +66,7 @@ import { countPublicPostFacetsOrNull } from '@/lib/server/domains/posts/post.pub
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError, RateLimitError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'public-posts' })
 
@@ -379,8 +384,12 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
 
     // Rate limit anonymous voters by IP. Resolved the same way as the
     // `ipAddress` Better Auth records on the anonymous sessions it counts.
-    if (!(await checkAnonVoteRateLimit(clientIp()))) {
-      throw new ValidationError('RATE_LIMITED', 'Too many votes, please try again later')
+    const ip = clientIp()
+    if (!(await checkAnonVoteRateLimit(ip))) {
+      throw new RateLimitError(
+        await anonVoteRetryAfter(ip),
+        'Too many votes, please try again later'
+      )
     }
   }
 
@@ -455,8 +464,12 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     }
     // Boards can take ideas without an account, so cap how many one address
     // can post in an hour, across every anonymous identity it mints.
-    if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(clientIp()))) {
-      throw new ValidationError('RATE_LIMITED', 'Too many posts, please try again later')
+    const ip = clientIp()
+    if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(ip))) {
+      throw new RateLimitError(
+        await anonPostRetryAfter(ip),
+        'Too many posts, please try again later'
+      )
     }
   } else if (!principalRecord) {
     throw new ForbiddenError('POST_CREATE_DENIED', 'You must be a member to submit feedback.')

@@ -238,6 +238,7 @@
   "portal.feedback.header.errorSignIn": "Entre para enviar feedback",
   "portal.feedback.header.errorSession": "Falha ao criar a sessão",
   "portal.feedback.header.errorSubmit": "Não foi possível enviar seu feedback. Tente novamente.",
+  "portal.feedback.header.errorRateLimited": "Publicações demais daqui na última hora. Tente novamente em {minutes, plural, one {# minuto} other {# minutos}}.",
   "portal.feedback.header.submitTooltipSignIn": "Entre para enviar feedback",
   "portal.feedback.header.toastSubmitted": "Feedback enviado",
   "portal.feedback.header.toastPending": "Seu post está aguardando revisão",

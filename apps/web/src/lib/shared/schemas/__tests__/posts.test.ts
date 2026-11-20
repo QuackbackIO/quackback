@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tiptapContentSchema } from '../posts'
+import { createPublicPostSchema, tiptapContentSchema } from '../posts'
 
 describe('tiptapContentSchema', () => {
   it('accepts link marks with null title attribute', () => {
@@ -82,5 +82,31 @@ describe('tiptapContentSchema', () => {
     }
     const result = tiptapContentSchema.safeParse(input)
     expect(result.success).toBe(false)
+  })
+})
+
+describe('createPublicPostSchema metadata', () => {
+  const post = (metadata: Record<string, string>) =>
+    createPublicPostSchema.safeParse({ boardId: 'board_x', title: 'T', metadata })
+
+  it('accepts ordinary session context', () => {
+    expect(post({ plan: 'pro', page: 'https://example.com/settings' }).success).toBe(true)
+  })
+
+  it('refuses more than 50 keys', () => {
+    const many = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, 'v']))
+    expect(post(many).success).toBe(false)
+  })
+
+  it('refuses a long key or a long value', () => {
+    expect(post({ ['k'.repeat(101)]: 'v' }).success).toBe(false)
+    expect(post({ k: 'v'.repeat(1001) }).success).toBe(false)
+  })
+
+  it('refuses the oversized payload a crafted request sends', () => {
+    const heavy = Object.fromEntries(
+      Array.from({ length: 2000 }, (_, i) => [`k${i}`, 'v'.repeat(200)])
+    )
+    expect(post(heavy).success).toBe(false)
   })
 })

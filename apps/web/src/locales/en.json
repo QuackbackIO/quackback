@@ -238,6 +238,7 @@
   "portal.feedback.header.errorSignIn": "Please sign in to submit feedback",
   "portal.feedback.header.errorSession": "Failed to create session",
   "portal.feedback.header.errorSubmit": "Could not submit your feedback. Please try again.",
+  "portal.feedback.header.errorRateLimited": "Too many posts from here in the last hour. Try again in {minutes, plural, one {# minute} other {# minutes}}.",
   "portal.feedback.header.submitTooltipSignIn": "Please sign in to submit feedback",
   "portal.feedback.header.toastSubmitted": "Feedback submitted",
   "portal.feedback.header.toastPending": "Your post is waiting for review",

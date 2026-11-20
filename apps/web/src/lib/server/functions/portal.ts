@@ -267,6 +267,8 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         commentCount: post.commentCount,
         tags: post.tags,
         board: post.board,
+        // The author's own held post is in the feed; the card marks it pending.
+        moderationState: post.moderationState,
         changelogEntry: post.changelogEntry,
       })),
       hasMore: postsResult.hasMore,
