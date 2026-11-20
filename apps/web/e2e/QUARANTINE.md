@@ -750,3 +750,26 @@ no such part beyond the wrong notification).
   revisit) is swallowed and the invitee sees "Something went wrong". The
   invite is accepted all the same. Fix: use the router's `isRedirect(err)`.
   owner: unassigned, review by: 2026-12-03.
+
+### Product suite: feedback admin (inbox and posts)
+
+- `feedback/admin-inbox.spec.ts` › FBA-I-11 Responded lists posts with a public
+  team reply; a private note is not a response. Product bug: the Team response
+  filter (and its counts) treats a private internal note as a response, because
+  `teamResponseExistsSql` (`apps/web/src/lib/server/domains/posts/post.inbox.ts:43`)
+  matches any live comment with `is_team_member = true`. Fix: add
+  `AND post_comments.is_private = false` (and `moderation_state <> 'pending'`)
+  to that EXISTS. owner: unassigned, review by: 2026-12-03.
+- `feedback/admin-inbox.spec.ts` › FBA-I-12 Has duplicates lists only posts with a
+  pending suggestion, and nothing when none has one. Product bug: the filter
+  runs in the browser (`feedback-table-view.tsx:244`) and is skipped when the
+  counts map is `undefined`, which `inbox-container.tsx:85` returns whenever no
+  loaded post has a pending suggestion, so every post is listed. Fix: filter on
+  the server (`hasDuplicates` in `post.inbox.ts`), or treat a missing map as
+  "no post has duplicates" when the filter is on. owner: unassigned, review by:
+- `feedback/admin-inbox.spec.ts` › FBA-I-32 a failed list read shows Failed to
+  load feedback, and Try again recovers. Product bug: the error component's Try
+  again (`apps/web/src/routes/admin/feedback.index.tsx:71`) calls only the error
+  boundary's `reset`, so the failed loader is never re-run and the alert stays
+  until a full reload. Fix: `onClick={() => { router.invalidate(); reset() }}`
+  (or `useQueryErrorResetBoundary`). owner: unassigned, review by: 2026-12-03.
