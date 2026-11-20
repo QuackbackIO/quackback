@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { apiKeyHolds, withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { helpCenterApiAccess } from '@/lib/server/domains/help-center/help-center-api-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -74,7 +75,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const auth = await withApiKeyAuth(request)
+          const { manages } = await helpCenterApiAccess(request)
 
           const url = new URL(request.url)
           const { limit } = parsePaginationParams(url)
@@ -89,7 +90,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
 
           // Drafts, private categories and gated articles are team material:
           // a key without help_center.manage reads the published public slice.
-          const result = apiKeyHolds(auth, PERMISSIONS.HELP_CENTER_MANAGE)
+          const result = manages
             ? await listArticles({ categoryId, status, search, cursor, limit })
             : await listPublicArticles({ categoryId, search, cursor, limit })
 

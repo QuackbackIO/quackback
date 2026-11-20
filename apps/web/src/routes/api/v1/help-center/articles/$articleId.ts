@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { apiKeyHolds, withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import {
+  helpCenterApiAccess,
+  assertArticleOpenToKey,
+} from '@/lib/server/domains/help-center/help-center-api-access'
+
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -11,10 +16,8 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import {
   getArticleById,
-  getPublicArticleById,
   updateArticle,
   publishArticle,
   unpublishArticle,
@@ -77,23 +80,14 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const auth = await withApiKeyAuth(request)
+          const access = await helpCenterApiAccess(request)
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
+          // A draft, or an article in a private or gated category, needs
+          // help_center.manage.
+          await assertArticleOpenToKey(access, articleId)
           const article = await getArticleById(articleId)
-          if (!apiKeyHolds(auth, PERMISSIONS.HELP_CENTER_MANAGE)) {
-            // Only the published public article is open to every key. A draft,
-            // or an article in a private or gated category, needs
-            // help_center.manage.
-            await getPublicArticleById(articleId).catch((error: unknown) => {
-              if (!(error instanceof NotFoundError)) throw error
-              throw new ForbiddenError(
-                'FORBIDDEN',
-                `Requires the '${PERMISSIONS.HELP_CENTER_MANAGE}' permission to read an article that is not published to everyone`
-              )
-            })
-          }
           return successResponse(formatArticle(article))
         } catch (error) {
           return handleDomainError(error)

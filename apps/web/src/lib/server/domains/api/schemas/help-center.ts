@@ -132,14 +132,14 @@ const articleIdParam = {
 
 const MANAGE = 'Requires the help_center.manage permission.'
 const PUBLIC_READ =
-  'Any key reads what is published to everyone. Drafts, private categories and segment-gated content need the help_center.manage permission.'
+  'Requires the read:article scope. A key reads what is published to everyone; drafts, private categories and segment-gated content need the help_center.manage permission.'
 
 registerPath('/help-center/categories', {
   get: {
     tags: ['Help Center'],
     summary: 'List help center categories',
     description:
-      'Returns every category with its article count. A key without the help_center.manage permission gets the public categories only, counted by the articles everyone can open.',
+      'Requires the read:article scope. Returns every category with its article count. A key without the help_center.manage permission gets the public categories only, counted by the articles everyone can open.',
     responses: {
       200: {
         description: 'List of categories',
@@ -147,7 +147,7 @@ registerPath('/help-center/categories', {
           'application/json': { schema: z.object({ data: z.array(CategoryWithCountSchema) }) },
         },
       },
-      ...errorResponses(),
+      ...errorResponses(403),
       ...featureOff,
     },
   },
@@ -227,7 +227,7 @@ registerPath('/help-center/articles', {
     tags: ['Help Center'],
     summary: 'List help center articles',
     description:
-      'Returns articles newest first, with cursor pagination. A key without the help_center.manage permission gets published public articles only, whatever the status filter.',
+      'Requires the read:article scope. Returns articles newest first, with cursor pagination. A key without the help_center.manage permission gets published public articles only, whatever the status filter.',
     parameters: [
       {
         name: 'categoryId',
@@ -274,7 +274,7 @@ registerPath('/help-center/articles', {
           },
         },
       },
-      ...errorResponses(),
+      ...errorResponses(403),
       ...featureOff,
     },
   },
@@ -353,7 +353,8 @@ registerPath('/help-center/articles/{articleId}/feedback', {
   post: {
     tags: ['Help Center'],
     summary: 'Record article feedback',
-    description: 'Records whether the article was helpful, on behalf of the API key owner.',
+    description:
+      'Records whether the article was helpful, on behalf of the API key owner. Requires the read:article scope; a draft, or an article in a private or gated category, needs the help_center.manage permission.',
     parameters: [articleIdParam],
     requestBody: {
       required: true,
@@ -368,7 +369,7 @@ registerPath('/help-center/articles/{articleId}/feedback', {
           },
         },
       },
-      ...errorResponses(400),
+      ...errorResponses(400, 403),
       ...featureOff,
     },
   },

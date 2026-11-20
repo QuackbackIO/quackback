@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { apiKeyHolds, withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { helpCenterApiAccess } from '@/lib/server/domains/help-center/help-center-api-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -60,14 +61,12 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const auth = await withApiKeyAuth(request)
+          const { manages } = await helpCenterApiAccess(request)
 
           // Private and gated categories, and counts that include drafts, are
           // team material: a key without help_center.manage reads the public
           // categories, counted by the articles everyone can open.
-          const categories = apiKeyHolds(auth, PERMISSIONS.HELP_CENTER_MANAGE)
-            ? await listCategories()
-            : await listPublicCategories()
+          const categories = manages ? await listCategories() : await listPublicCategories()
           return successResponse(
             categories.map((cat) => ({
               ...formatCategory(cat),

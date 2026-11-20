@@ -23,10 +23,11 @@ vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
   listPublicCategories: vi.fn(),
   getCategoryById: vi.fn(),
   getPublicCategoryById: vi.fn(),
+  recordArticleFeedback: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/api/validation', () => ({
   parseTypeId: vi.fn((v: string) => v),
-  parseOptionalTypeId: vi.fn(),
+  parseOptionalTypeId: vi.fn((v: string | null) => v ?? undefined),
 }))
 vi.mock('@/lib/server/domains/api/responses', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/api/responses')>()),
@@ -47,6 +48,7 @@ import {
   listPublicCategories,
   getCategoryById,
   getPublicCategoryById,
+  recordArticleFeedback,
 } from '@/lib/server/domains/help-center/help-center.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
@@ -62,6 +64,7 @@ import { Route as ArticlesListRoute } from '../articles/index'
 import { Route as ArticleDetailRoute } from '../articles/$articleId'
 import { Route as CategoriesListRoute } from '../categories/index'
 import { Route as CategoryDetailRoute } from '../categories/$categoryId'
+import { Route as ArticleFeedbackRoute } from '../articles/$articleId.feedback'
 
 type Handler = (ctx: { request: Request; params?: Record<string, string> }) => Promise<Response>
 type RouteShape = { options: { server: { handlers: Record<string, Handler> } } }
@@ -146,6 +149,15 @@ const counted = (cat: HelpCenterCategory, n: number): HelpCenterCategoryWithCoun
 })
 
 const get = (url: string) => new Request(url, { method: 'GET' })
+const vote = () =>
+  handlers(ArticleFeedbackRoute).POST({
+    request: new Request('http://localhost/api/v1/help-center/articles/kb_article_1/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ helpful: true }),
+    }),
+    params: { articleId: 'kb_article_1' },
+  })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -240,6 +252,76 @@ describe('a key without help_center.manage', () => {
       params: { articleId: 'kb_article_1' },
     })
     expect(res.status).toBe(404)
+  })
+})
+
+describe('voting over REST', () => {
+  it('refuses a vote on a draft from a key without help_center.manage', async () => {
+    vi.mocked(withApiKeyAuth).mockResolvedValue(contributor)
+    const res = await vote()
+    expect(res.status).toBe(403)
+    expect(recordArticleFeedback).not.toHaveBeenCalled()
+  })
+
+  it('answers 404, not 403, for an article that does not exist', async () => {
+    vi.mocked(withApiKeyAuth).mockResolvedValue(contributor)
+    vi.mocked(getArticleById).mockRejectedValue(
+      new NotFoundError('ARTICLE_NOT_FOUND', 'Article not found')
+    )
+    const res = await vote()
+    expect(res.status).toBe(404)
+    expect(recordArticleFeedback).not.toHaveBeenCalled()
+  })
+
+  it('records a vote on a published public article', async () => {
+    vi.mocked(withApiKeyAuth).mockResolvedValue(contributor)
+    vi.mocked(getPublicArticleById).mockResolvedValue({ ...draft, publishedAt: new Date() })
+    const res = await vote()
+    expect(res.status).toBe(200)
+    expect(recordArticleFeedback).toHaveBeenCalledWith('kb_article_1', true, 'principal_1')
+  })
+
+  it('lets a key with help_center.manage vote on a draft', async () => {
+    vi.mocked(withApiKeyAuth).mockResolvedValue(owner)
+    expect((await vote()).status).toBe(200)
+  })
+})
+
+describe('the read:article scope', () => {
+  /** An owner's key scoped to feedback only: no help center reads at all. */
+  const feedbackOnly = keyFor('owner', ['read:feedback', 'write:feedback'])
+
+  it('is required for every help center read and vote', async () => {
+    vi.mocked(withApiKeyAuth).mockResolvedValue(feedbackOnly)
+    vi.mocked(getPublicArticleById).mockResolvedValue({ ...draft, publishedAt: new Date() })
+    const responses = [
+      await handlers(ArticlesListRoute).GET({
+        request: get('http://localhost/api/v1/help-center/articles'),
+      }),
+      await handlers(ArticleDetailRoute).GET({
+        request: get('http://localhost/api/v1/help-center/articles/kb_article_1'),
+        params: { articleId: 'kb_article_1' },
+      }),
+      await handlers(CategoriesListRoute).GET({
+        request: get('http://localhost/api/v1/help-center/categories'),
+      }),
+      await handlers(CategoryDetailRoute).GET({
+        request: get('http://localhost/api/v1/help-center/categories/kb_category_1'),
+        params: { categoryId: 'kb_category_1' },
+      }),
+      await vote(),
+    ]
+    expect(responses.map((r) => r.status)).toEqual([403, 403, 403, 403, 403])
+    expect(listPublicArticles).not.toHaveBeenCalled()
+    expect(recordArticleFeedback).not.toHaveBeenCalled()
+  })
+
+  it('is enough on its own to read the public help center', async () => {
+    vi.mocked(withApiKeyAuth).mockResolvedValue(readOnlyOwner)
+    const res = await handlers(ArticlesListRoute).GET({
+      request: get('http://localhost/api/v1/help-center/articles'),
+    })
+    expect(res.status).toBe(200)
   })
 })
 
