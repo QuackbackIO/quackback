@@ -70,6 +70,14 @@ vi.mock('@/lib/server/events/segment-scheduler', () => ({
   }),
 }))
 
+vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
+  reconcileChangelogNotifications: vi.fn(async () => {
+    calls.push({ job: 'changelog-notify' })
+    return 3
+  }),
+}))
+
+import { db } from '@/lib/server/db'
 import { E2E_SWEEP_NAMES, runE2eSweep } from '../sweeps'
 
 beforeEach(() => {
@@ -213,5 +221,33 @@ describe('runE2eSweep', () => {
     expect(E2E_SWEEP_NAMES).toContain('workflow-wait')
     expect(E2E_SWEEP_NAMES).not.toContain('import')
     expect(E2E_SWEEP_NAMES).not.toContain('export')
+  })
+
+  it('runs the changelog reconciler at the wall clock and reports what it announced', async () => {
+    const outcome = await runE2eSweep({ job: 'changelog-notify' })
+    expect(outcome).toEqual({
+      ok: true,
+      job: 'changelog-notify',
+      asOf: expect.any(String),
+      result: { announced: 3 },
+    })
+    expect(calls).toEqual([{ job: 'changelog-notify' }])
+    expect(
+      await runE2eSweep({ job: 'changelog-notify', asOf: '2030-01-01T00:00:00Z' })
+    ).toMatchObject({ ok: false, status: 400 })
+  })
+
+  it('promotes only changelog-publish jobs of the events queue due by asOf', async () => {
+    const execute = vi.mocked(db.execute)
+    execute.mockResolvedValueOnce({ rows: [] } as never)
+    const outcome = await runE2eSweep({
+      job: 'changelog-publish',
+      asOf: '2030-05-01T10:00:00.000Z',
+    })
+    expect(outcome).toMatchObject({ ok: true, result: { promoted: 0 } })
+    const query = JSON.stringify(execute.mock.calls.at(-1)?.[0])
+    expect(query).toContain('"events"')
+    expect(query).toContain('"changelog-publish--"')
+    expect(query).toContain('2030-05-01T10:00:00.000Z')
   })
 })

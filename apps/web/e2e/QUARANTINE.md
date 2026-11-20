@@ -902,3 +902,32 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   return as `summaryJson`. Fix: add `eq(postComments.isPrivate, false)` (and
   skip held comments) to that query. owner: unassigned, review by:
   2026-12-03.
+
+### Product suite: changelog
+
+- `changelog/publish-notifications.spec.ts` › CHG-S-11 the publisher is not
+  notified of their own announcement. Product bug: `createChangelog` and
+  `updateChangelog` build the event actor with
+  `buildEventActor({ principalId })` and no `userId`
+  (`apps/web/src/lib/server/domains/changelog/changelog.service.ts:147`), which
+  makes it a `service` actor (`apps/web/src/lib/server/events/dispatch.ts:70`).
+  `isActorSubscriber` returns false for every service actor
+  (`apps/web/src/lib/server/events/targets.ts:391`), so a publisher who is
+  subscribed gets their own email and bell. Fix: pass the author's `userId`
+  (and email) to `buildEventActor`, or match `principalId` before the
+  service-actor early return. owner: unassigned, review by: 2026-12-03.
+- `changelog/publish-notifications.spec.ts` › CHG-S-14 the email "View Update"
+  button links to the entry itself. Product bug: `getChangelogSubscriberTargets`
+  builds `changelogUrl` as `sectionUrl('changelog', '/changelog')`
+  (`apps/web/src/lib/server/events/targets.ts:2044`), so the button opens the
+  index, not `/changelog/<id>` (the entry id is in the event). Fix: use
+  `/changelog/${event.data.changelog.id}` for the email and Slack link. owner:
+  unassigned, review by: 2026-12-03.
+- `changelog/publish-notifications.spec.ts` › CHG-S-28 an entry with a
+  segment-gated label is not announced to subscribers outside the segment.
+  Product bug: `getChangelogSubscriberTargets`
+  (`apps/web/src/lib/server/events/targets.ts:1916`) ignores the label
+  segment gate, so subscribers outside the segment get the full body of a
+  gated entry by email and bell. Fix: intersect the fan-out with the members
+  of the entry's gated labels' segments, as the public reads do. owner:
+  unassigned, review by: 2026-12-03.

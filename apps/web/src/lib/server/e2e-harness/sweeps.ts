@@ -63,6 +63,21 @@ const SWEEPS: Record<string, SweepEntry> = {
     asOf: true,
     run: (at) => promoteDueJobs('onboarding-email', at),
   },
+  'changelog-notify': {
+    asOf: false,
+    run: async () => {
+      const { reconcileChangelogNotifications } =
+        await import('@/lib/server/domains/changelog/changelog.service')
+      return { announced: await reconcileChangelogNotifications() }
+    },
+  },
+  // A scheduled changelog entry's announcement is a delayed `events` job
+  // named changelog-publish--<entry id>; promote only those, never the rest
+  // of the events queue.
+  'changelog-publish': {
+    asOf: true,
+    run: (at) => promoteDueJobs('events', at, 'changelog-publish--'),
+  },
   'email-log-retention': {
     asOf: false,
     run: async () => {
@@ -179,12 +194,18 @@ export const E2E_SWEEP_NAMES: readonly string[] = Object.keys(SWEEPS)
 
 /**
  * Make every pending row of `queue` that is due by `at` due now, then wake the
- * worker so it claims them at once instead of at its next poll.
+ * worker so it claims them at once instead of at its next poll. With
+ * `jobIdPrefix`, only rows whose job id starts with it.
  */
-async function promoteDueJobs(queue: string, at: Date): Promise<Record<string, unknown>> {
+async function promoteDueJobs(
+  queue: string,
+  at: Date,
+  jobIdPrefix = ''
+): Promise<Record<string, unknown>> {
   const result = await db.execute(sql`
     UPDATE job_queue SET run_at = now(), updated_at = now()
     WHERE queue = ${queue} AND status = 'pending' AND run_at <= ${at.toISOString()}::timestamptz
+      AND starts_with(job_id, ${jobIdPrefix})
     RETURNING job_id, workspace_key
   `)
   const rows = getExecuteRows<{ job_id: string; workspace_key: string | null }>(result)
