@@ -29,7 +29,7 @@ import { apiFor, createKey, type CreatedKey } from '../support/api-client'
 import { callServerFn, type ServerFnResult } from '../support/server-fns'
 import { mintCustomer, portalContext, type MintedCustomer } from '../support/widget-portal'
 
-export { personApi, callServerFn } from '../support/server-fns'
+export { personApi } from '../support/server-fns'
 
 /** The fixed placeholder principal removed people's content is re-pointed to. */
 export const DELETED_USER_PRINCIPAL = 'principal_00000000000000000000000000'
@@ -120,6 +120,37 @@ export async function seedLead(
   }
 }
 
+/** Server functions the people specs call that are GETs. */
+const GET_FNS = new Set([
+  'listPortalUsersFn',
+  'getPortalUserFn',
+  'listDuplicateUsersFn',
+  'listUserTagsFn',
+  'listUserTagsForPrincipalFn',
+  'getPersonBlockStatusFn',
+  'getChangelogSubscriptionStatusFn',
+  'getProfileTeamContextFn',
+  'searchPeopleFn',
+  'listCompaniesFn',
+  'getCompanyFn',
+  'listCompanyAttributesFn',
+  'listUserAttributesFn',
+])
+
+function methodOf(name: string, method?: 'POST' | 'GET'): 'POST' | 'GET' {
+  return method ?? (GET_FNS.has(name) ? 'GET' : 'POST')
+}
+
+/** Call a server function by name; GETs are known by name (GET_FNS). */
+export function call<T = unknown>(
+  api: APIRequestContext,
+  name: string,
+  data?: unknown,
+  opts: { sourceFile?: string; method?: 'POST' | 'GET' } = {}
+): Promise<ServerFnResult<T>> {
+  return callServerFn<T>(api, name, data, { ...opts, method: methodOf(name, opts.method) })
+}
+
 /** Call a server function and fail the test when it throws. */
 export async function mustCall<T = unknown>(
   api: APIRequestContext,
@@ -127,7 +158,7 @@ export async function mustCall<T = unknown>(
   data?: unknown,
   opts: { sourceFile?: string; method?: 'POST' | 'GET' } = {}
 ): Promise<T> {
-  const res = await callServerFn<T>(api, name, data, opts)
+  const res = await call<T>(api, name, data, opts)
   expect(res.ok, `${name}: ${res.raw.slice(0, 400)}`).toBe(true)
   return res.data
 }
@@ -139,7 +170,7 @@ export async function refusedCall(
   data?: unknown,
   opts: { sourceFile?: string; method?: 'POST' | 'GET' } = {}
 ): Promise<ServerFnResult> {
-  const res = await callServerFn(api, name, data, opts)
+  const res = await call(api, name, data, opts)
   expect(res.ok, `${name} should be refused: ${res.raw.slice(0, 300)}`).toBe(false)
   return res
 }
@@ -255,4 +286,105 @@ export function usersUrl(opts: {
   if (opts.lifecycle) q.set('lifecycle', opts.lifecycle)
   const s = q.toString()
   return `/admin/users${s ? `?${s}` : ''}`
+}
+
+/** A teammate's or portal user's name/email/verified straight from the rows. */
+export async function userRow(
+  userUuid: string
+): Promise<{
+  name: string
+  email: string | null
+  email_verified: boolean
+  metadata: string | null
+}> {
+  const [row] = await supportDb()`SELECT name, email, email_verified, metadata FROM "user"
+                                  WHERE id = ${userUuid}`
+  if (!row) throw new Error(`no user ${userUuid}`)
+  return row as never
+}
+
+/** The workspace's post status id by slug (open, planned, complete, ...). */
+export async function postStatusId(slug: string): Promise<string> {
+  const [row] = await supportDb()`SELECT id FROM post_statuses WHERE slug = ${slug} LIMIT 1`
+  if (!row) throw new Error(`no post status ${slug}`)
+  return fromUuid('post_status', row.id as string)
+}
+
+/**
+ * Activity a lead left while anonymous interaction was on (the suite's
+ * workspace has it off, so leads cannot act through the portal here). Each
+ * row is written as the vote, post and comment paths write it, counters
+ * included.
+ */
+export async function seedLeadActivity(
+  leadPrincipalUuid: string,
+  act:
+    | { vote: string }
+    | { post: { boardId: string; title: string } }
+    | { comment: { postId: string; content: string } }
+): Promise<string> {
+  const sql = supportDb()
+  if ('vote' in act) {
+    const id = toUuid(generateId('vote'))
+    await sql.begin(async (tx) => {
+      await tx`INSERT INTO post_votes (id, post_id, principal_id)
+               VALUES (${id}, ${uuid(act.vote)}, ${leadPrincipalUuid})`
+      await tx`UPDATE posts SET vote_count = vote_count + 1 WHERE id = ${uuid(act.vote)}`
+    })
+    return fromUuid('vote', id)
+  }
+  if ('post' in act) {
+    const id = toUuid(generateId('post'))
+    await sql`INSERT INTO posts (id, board_id, title, content, principal_id)
+              VALUES (${id}, ${uuid(act.post.boardId)}, ${act.post.title}, '', ${leadPrincipalUuid})`
+    return fromUuid('post', id)
+  }
+  const id = toUuid(generateId('comment'))
+  await sql.begin(async (tx) => {
+    await tx`INSERT INTO post_comments (id, post_id, principal_id, content)
+             VALUES (${id}, ${uuid(act.comment.postId)}, ${leadPrincipalUuid}, ${act.comment.content})`
+    await tx`UPDATE posts SET comment_count = comment_count + 1
+             WHERE id = ${uuid(act.comment.postId)}`
+  })
+  return fromUuid('comment', id)
+}
+
+/** A browser context signed in as a lead (anonymous principal with a session). */
+export async function leadContext(
+  browser: Browser,
+  lead: Pick<MintedCustomer, 'userUuid'>
+): Promise<BrowserContext> {
+  return portalContext(browser, lead)
+}
+
+/** A user attribute definition with a fresh key; returns the key. */
+export async function seedUserAttribute(
+  type: 'string' | 'number' | 'boolean' | 'date' | 'currency',
+  opts: { label?: string; currencyCode?: string } = {}
+): Promise<string> {
+  const key = `e2e_${type}_${suffix()}${suffix()}`
+  await supportDb()`INSERT INTO user_attribute_definitions (id, key, label, type, currency_code)
+    VALUES (${toUuid(generateId('user_attr'))}, ${key}, ${opts.label ?? key}, ${type},
+            ${opts.currencyCode ?? (type === 'currency' ? 'USD' : null)})`
+  return key
+}
+
+/** A user's metadata JSON (attributes live here). */
+export async function metadataOf(userUuid: string): Promise<Record<string, unknown>> {
+  const [row] = await supportDb()`SELECT metadata FROM "user" WHERE id = ${userUuid}`
+  return row?.metadata ? (JSON.parse(row.metadata as string) as Record<string, unknown>) : {}
+}
+
+export interface AuditRow {
+  event_type: string
+  before_value: Record<string, unknown> | null
+  after_value: Record<string, unknown> | null
+  metadata: Record<string, unknown> | null
+}
+
+/** Audit rows of one event type for a target id, oldest first. */
+export async function auditRows(eventType: string, targetId: string): Promise<AuditRow[]> {
+  return supportDb()<AuditRow[]>`SELECT event_type, before_value, after_value, metadata
+    FROM audit_log WHERE event_type = ${eventType} AND target_id = ${targetId}
+    ORDER BY occurred_at`
 }

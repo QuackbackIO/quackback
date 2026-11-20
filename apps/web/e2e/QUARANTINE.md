@@ -122,3 +122,27 @@ id IN (SELECT post_id FROM post_votes WHERE principal_id = $1)`. owner:
   Fix: throw a `USER_NOT_FOUND` (or a portal-user code) from
   `removePortalUser` (`user.service.ts:476`), or map the error in the route.
   owner: unassigned, review by: 2026-12-03.
+- `people/users.spec.ts` › merging a lead › PPL-U-31 merging a lead that
+  voted the same post as the user leaves one vote counted. Product bug: the
+  `post_votes` step of the re-point registry is a `collisionRepoint` that
+  drops the lead's colliding vote (the user's vote wins)
+  (`apps/web/src/lib/server/domains/principals/principal-repoint.ts:220`)
+  without decrementing `posts.vote_count`, so the post keeps one vote too
+  many. Fix: in that step, decrement `posts.vote_count` for every dropped
+  vote row (or recompute the count for the affected posts). owner:
+  unassigned, review by: 2026-12-03.
+- `people/users-api.spec.ts` › REST /api/v1/users › PPL-U-60 PATCH merges
+  coerced attributes, unsets null keys and sets the external id; PPL-U-61
+  boolean and date attributes accept their valid spellings; PPL-U-66
+  identify merges an attribute into an existing user, keeping the others.
+  Product bug: every attribute or `externalId` write on an EXISTING user over
+  REST (PATCH /api/v1/users/:id and identify of a known email) answers 500.
+  `user.identify.ts:81` and `:257` build
+  `... ::jsonb - ${metadataRemovals}::text[]`; drizzle expands a JS array in
+  a `sql` template into a parameter list, so the SQL is `- ()::text[]`
+  (syntax error) with no removals and `- ($4)::text[]` (malformed array
+  literal) with one. Creating a user through identify is unaffected. Fix:
+  bind the array as one parameter, e.g.
+  `- ${sql.param(metadataRemovals)}::text[]` or
+  `- ARRAY[${sql.join(metadataRemovals.map((k) => sql`${k}`), sql`, `)}]::text[]`
+  with a guard for the empty case. owner: unassigned, review by: 2026-12-03.
