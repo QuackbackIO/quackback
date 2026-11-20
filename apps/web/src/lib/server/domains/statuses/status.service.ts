@@ -312,7 +312,7 @@ export async function getDefaultStatus(): Promise<Status | null> {
  */
 export async function getStatusBySlug(slug: string): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.slug, slug),
+    where: and(eq(postStatuses.slug, slug), isNull(postStatuses.deletedAt)),
   })
   if (!status) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with slug '${slug}' not found`)

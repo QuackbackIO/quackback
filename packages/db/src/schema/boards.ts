@@ -27,7 +27,7 @@ export const boards = pgTable(
   'boards',
   {
     id: typeIdWithDefault('board')('id').primaryKey(),
-    slug: text('slug').notNull().unique(),
+    slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
     // v1 access controls — per-action tier matrix. Replaces the legacy
@@ -43,7 +43,10 @@ export const boards = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    // Note: boards_slug_unique constraint already provides uniqueness; no separate index needed
+    // Unique among live boards only: a deleted board frees its slug.
+    uniqueIndex('boards_slug_unique')
+      .on(table.slug)
+      .where(sql`deleted_at IS NULL`),
     index('boards_deleted_at_idx').on(table.deletedAt),
   ]
 )
@@ -129,7 +132,7 @@ export const postTags = pgTable(
   'post_tags',
   {
     id: typeIdWithDefault('post_tag')('id').primaryKey(),
-    name: text('name').notNull().unique(),
+    name: text('name').notNull(),
     color: text('color').default('#6b7280').notNull(),
     description: text('description'),
     // Matching rule for AI auto-tagging: new posts are evaluated against every
@@ -142,7 +145,13 @@ export const postTags = pgTable(
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  (table) => [index('post_tags_deleted_at_idx').on(table.deletedAt)]
+  (table) => [
+    // Unique among live tags only: a deleted tag frees its name.
+    uniqueIndex('post_tags_name_unique')
+      .on(table.name)
+      .where(sql`deleted_at IS NULL`),
+    index('post_tags_deleted_at_idx').on(table.deletedAt),
+  ]
 )
 
 // Relations - defined after posts import to avoid circular dependency
