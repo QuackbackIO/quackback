@@ -53,6 +53,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         boards: {
           findFirst: vi.fn().mockResolvedValue({ id: 'board_mock', slug: 'feedback' }),
         },
+        principal: {
+          findFirst: vi.fn().mockResolvedValue({
+            userId: 'user_admin',
+            displayName: null,
+            user: { name: 'Ada Admin', email: 'ada@example.com' },
+          }),
+        },
       },
       update: vi.fn(() => createChainMock()),
       execute: vi.fn().mockResolvedValue([{ unique_voters: 0, visible_comments: 0 }]),
@@ -261,7 +268,11 @@ describe('post.permissions', () => {
       await softDeletePost(POST_ID, TEAM_ACTOR)
 
       expect(dispatchPostDeleted).toHaveBeenCalledWith(
-        expect.objectContaining({ principalId: TEAM_ACTOR.principalId }),
+        expect.objectContaining({
+          principalId: TEAM_ACTOR.principalId,
+          email: 'ada@example.com',
+          displayName: 'Ada Admin',
+        }),
         expect.objectContaining({ id: POST_ID, title: 'Test Post', boardSlug: 'feedback' })
       )
     })

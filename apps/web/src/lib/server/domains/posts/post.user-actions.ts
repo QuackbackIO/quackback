@@ -11,6 +11,7 @@ import {
   boards,
   postComments,
   postEditHistory,
+  principal,
   eq,
   and,
   sql,
@@ -323,13 +324,28 @@ export async function softDeletePost(
     type: 'post.deleted',
   })
 
-  // Dispatch post.deleted event for webhooks and integrations
-  const board = await db.query.boards.findFirst({
-    where: eq(boards.id, existingPost.boardId),
-    columns: { slug: true },
-  })
+  // Dispatch post.deleted event for webhooks and integrations. The deleter is
+  // read from their principal, since REST and MCP callers pass only its id,
+  // so the event can say who deleted the post (deletedBy).
+  const [board, deleter] = await Promise.all([
+    db.query.boards.findFirst({
+      where: eq(boards.id, existingPost.boardId),
+      columns: { slug: true },
+    }),
+    db.query.principal.findFirst({
+      where: eq(principal.id, actor.principalId),
+      columns: { userId: true, displayName: true },
+      with: { user: { columns: { name: true, email: true } } },
+    }),
+  ])
   if (board) {
-    dispatchPostDeleted(buildEventActor({ principalId: actor.principalId, userId: actor.userId }), {
+    const eventActor = buildEventActor({
+      principalId: actor.principalId,
+      userId: actor.userId ?? deleter?.userId ?? undefined,
+      email: deleter?.user?.email ?? undefined,
+      displayName: deleter?.displayName ?? deleter?.user?.name ?? undefined,
+    })
+    dispatchPostDeleted(eventActor, {
       id: postId,
       title: existingPost.title,
       boardId: existingPost.boardId,
