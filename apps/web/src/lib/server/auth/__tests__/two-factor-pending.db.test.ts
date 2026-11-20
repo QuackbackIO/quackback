@@ -96,11 +96,12 @@ async function getAuth() {
 async function call(
   method: 'GET' | 'POST',
   path: string,
-  opts: { token?: string; body?: unknown } = {}
+  opts: { token?: string; cookie?: string; body?: unknown } = {}
 ): Promise<Response> {
   const auth = await getAuth()
   const headers: Record<string, string> = { host: HOST, origin: ORIGIN }
   if (opts.token) headers.authorization = `Bearer ${opts.token}`
+  if (opts.cookie) headers.cookie = opts.cookie
   if (opts.body !== undefined) headers['content-type'] = 'application/json'
   return auth.handler(
     new Request(`${ORIGIN}/api/auth${path}`, {
@@ -215,6 +216,27 @@ describe.skipIf(!fixture.available)('required two-factor, on the server', () => 
       body: { email, password: PASSWORD },
     })
     expect(again.status).toBe(200)
+  })
+
+  // A browser holds the session as a cookie, named `__Secure-…` on https. The
+  // gate has to read it under that name too, or a cookie walks past it.
+  it('refuses the pending session sent as the browser sends it, a secure cookie', async () => {
+    await setRequired(true)
+    const res = await call('POST', '/sign-in/email', { body: { email, password: PASSWORD } })
+    expect(res.status).toBe(200)
+    const set = res.headers
+      .getSetCookie()
+      .find((c) => /^__Secure-better-auth\.session_token=/.test(c))
+    expect(set, 'an https sign-in sets the secure session cookie').toBeTruthy()
+    const cookie = set!.split(';')[0]!
+
+    const read = await call('GET', '/get-session', { cookie })
+    expect(await read.json()).toBeNull()
+    expect((await call('GET', '/one-time-token/generate', { cookie })).status).toBe(403)
+    expect((await call('GET', '/list-sessions', { cookie })).status).toBe(403)
+    expect(
+      (await call('POST', '/update-user', { cookie, body: { name: 'Someone else' } })).status
+    ).toBe(403)
   })
 
   it('becomes an ordinary session once the person enrols, as the dialog does', async () => {

@@ -486,6 +486,9 @@ const SESSION_TRADING_PATHS = new Set(['/one-time-token/generate'])
 
 type HeaderBag = { get(name: string): string | null }
 
+/** The session cookie, under either name the library gives it. */
+const SESSION_COOKIE_NAME = /^(?:__Secure-)?better-auth\.session_token$/
+
 function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
   if (!headers) return null
   const authHeader = headers.get('authorization') ?? headers.get('Authorization')
@@ -496,7 +499,8 @@ function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | n
   const cookie = headers.get('cookie') ?? ''
   for (const part of cookie.split(';')) {
     const [name, ...rest] = part.trim().split('=')
-    if (name?.trim() !== 'better-auth.session_token') continue
+    // `__Secure-` on https: missing it let a cookie session past every gate here.
+    if (!SESSION_COOKIE_NAME.test(name?.trim() ?? '')) continue
     const raw = rest.join('=')
     if (!raw) return null
     let value = raw

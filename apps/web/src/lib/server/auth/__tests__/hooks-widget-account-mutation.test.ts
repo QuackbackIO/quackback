@@ -218,6 +218,30 @@ describe('handleWidgetAccountMutationGate', () => {
     }
   })
 
+  // On https the library names the cookie `__Secure-better-auth.session_token`.
+  it('reads the session from the secure cookie name too', async () => {
+    const pending = ctx({
+      path: '/update-user',
+      cookie: '__Secure-better-auth.session_token=pend-tok.sig',
+      scope: 'portal',
+    })
+    pending.context.internalAdapter.findSession.mockResolvedValue({
+      session: { scope: 'portal', twoFactorPending: true },
+    })
+    await expect(handleWidgetAccountMutationGate(pending)).rejects.toThrow(/two-factor/)
+    expect(pending.context.internalAdapter.findSession).toHaveBeenCalledWith('pend-tok')
+
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({
+          path: '/update-user',
+          cookie: '__Secure-better-auth.session_token=widget-tok.sig',
+          scope: 'widget',
+        })
+      )
+    ).rejects.toThrow(/Widget sessions/)
+  })
+
   it('no-ops when there is no session token', async () => {
     await expect(
       handleWidgetAccountMutationGate(ctx({ path: '/change-email' }))
