@@ -20,6 +20,7 @@ import {
   segmentIdInputSchema,
 } from '@/lib/shared/roadmap-config'
 import { postStatusIdSchema, roadmapColumnIdSchema } from '@quackback/ids/zod'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const roadmapColumnSchema = z.object({
   id: roadmapColumnIdSchema.optional(),
@@ -101,7 +102,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
 
           const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateRoadmapSchema.safeParse(body)
 
           if (!parsed.success) {

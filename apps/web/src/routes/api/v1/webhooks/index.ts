@@ -12,6 +12,7 @@ import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { toWebhookListResponse } from '@/lib/server/domains/api/webhooks'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const createWebhookSchema = z.object({
@@ -50,7 +51,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
             permission: PERMISSIONS.WEBHOOK_MANAGE,
           })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createWebhookSchema.safeParse(body)
 
           if (!parsed.success) {

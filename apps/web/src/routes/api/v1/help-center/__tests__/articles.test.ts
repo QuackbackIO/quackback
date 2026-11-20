@@ -165,6 +165,7 @@ describe('GET /api/v1/help-center/articles', () => {
       nextCursor: null,
       hasMore: false,
     })
+    vi.mocked(parseOptionalTypeId).mockImplementation((value) => value ?? undefined)
 
     const request = createRequest(
       'GET',
@@ -386,7 +387,8 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
       author: { id: 'principal_2' as PrincipalId, name: 'Other', avatarUrl: null },
     }
     vi.mocked(updateArticle).mockResolvedValue(updatedArticle)
-    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as PrincipalId)
+    // Echo each id back, so the absent categoryId stays absent.
+    vi.mocked(parseOptionalTypeId).mockImplementation((value) => value ?? undefined)
 
     const body = { authorId: 'principal_2' }
     const request = createRequest(

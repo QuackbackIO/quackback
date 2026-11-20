@@ -6,6 +6,7 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostId } from '@quackback/ids'
 import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const linkSchema = z.object({
   postId: z.string().min(1),
@@ -33,7 +34,7 @@ export const Route = createFileRoute('/api/v1/apps/link')({
             permission: PERMISSIONS.POST_VOTE_ON_BEHALF,
           })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = linkSchema.safeParse(body)
 
           if (!parsed.success) {

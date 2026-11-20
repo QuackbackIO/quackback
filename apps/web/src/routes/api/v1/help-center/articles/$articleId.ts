@@ -20,7 +20,8 @@ import {
 } from '@/lib/server/domains/help-center/help-center.service'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
-import type { KbArticleId, PrincipalId } from '@quackback/ids'
+import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const updateArticleBody = z.object({
   categoryId: z.string().optional(),
@@ -93,7 +94,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateArticleBody.safeParse(body)
 
           if (!parsed.success) {
@@ -108,7 +109,15 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
             'author ID'
           )
 
-          const { publishedAt: _, authorId: __, ...updateData } = parsed.data
+          const { publishedAt: _, authorId: __, ...fields } = parsed.data
+          const updateData = {
+            ...fields,
+            categoryId: parseOptionalTypeId<KbCategoryId>(
+              fields.categoryId,
+              'kb_category',
+              'category ID'
+            ),
+          }
           // authorPrincipalId is included because reassigning the author requires
           // the same updateArticle call even when no other fields change.
           const hasUpdates =

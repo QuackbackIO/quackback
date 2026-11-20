@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const updateColumnSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -30,7 +31,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/columns/$colum
             'roadmap_col',
             'roadmap column ID'
           )
-          const parsed = updateColumnSchema.safeParse(await request.json())
+          const parsed = updateColumnSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

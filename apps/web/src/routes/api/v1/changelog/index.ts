@@ -10,11 +10,12 @@ import {
 import { createChangelog } from '@/lib/server/domains/changelog/changelog.service'
 import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
 import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
-import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
+import { parseOptionalTypeId, parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { db, principal, eq } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { PostId } from '@quackback/ids'
+import type { ChangelogId, PostId } from '@quackback/ids'
 import { formatChangelogResponse } from './-serialize'
+import { parseLimit, readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const createChangelogSchema = z.object({
@@ -38,8 +39,12 @@ export const Route = createFileRoute('/api/v1/changelog/')({
           // Parse query params
           const url = new URL(request.url)
           const published = url.searchParams.get('published')
-          const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100)
+          const cursor = parseOptionalTypeId<ChangelogId>(
+            url.searchParams.get('cursor'),
+            'changelog',
+            'cursor'
+          )
+          const limit = parseLimit(url)
 
           // Map published filter to service status param
           let status: 'draft' | 'published' | 'all' = 'all'
@@ -75,7 +80,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             permission: PERMISSIONS.CHANGELOG_MANAGE,
           })
           // Parse and validate body
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createChangelogSchema.safeParse(body)
 
           if (!parsed.success) {

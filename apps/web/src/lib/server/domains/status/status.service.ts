@@ -136,6 +136,20 @@ function assertWindowOrder(start: Date | null | undefined, end: Date | null | un
  *  Worded for the dashboard and API callers alike. */
 const DELETED_SERVICE_MESSAGE = 'An affected service has been deleted. Choose the services again.'
 
+/** Refuses ids that never named a service: a caller's mistake, not a
+ *  service deleted since the editor loaded. */
+async function assertKnownComponents(ids: StatusComponentId[], executor: Executor): Promise<void> {
+  if (ids.length === 0) return
+  const rows = await executor
+    .select({ id: statusComponents.id })
+    .from(statusComponents)
+    .where(inArray(statusComponents.id, ids))
+  const known = new Set(rows.map((r) => r.id))
+  if (ids.some((id) => !known.has(id))) {
+    throw new ValidationError('VALIDATION_ERROR', 'An affected service does not exist.')
+  }
+}
+
 /** The subset of `ids` that are live (not soft-deleted) services. */
 async function liveComponentIds(
   ids: StatusComponentId[],
@@ -248,7 +262,9 @@ export async function createIncident(
   const incident = await db.transaction(async (tx) => {
     const requested = input.affectedComponents.map((c) => c.componentId)
     const live = await liveComponentIds(requested, tx)
-    if (requested.some((id) => !live.has(id))) {
+    const notLive = requested.filter((id) => !live.has(id))
+    if (notLive.length > 0) {
+      await assertKnownComponents(notLive, tx)
       throw new ValidationError('VALIDATION_ERROR', DELETED_SERVICE_MESSAGE)
     }
 
@@ -432,6 +448,10 @@ export async function updateIncident(
             ...input.affectedComponents.map((c) => c.componentId),
           ]),
         ],
+        tx
+      )
+      await assertKnownComponents(
+        input.affectedComponents.map((c) => c.componentId).filter((id) => !live.has(id)),
         tx
       )
       nextComponents = input.affectedComponents.filter((c) => live.has(c.componentId))

@@ -202,6 +202,15 @@ const findArticleSlugConflict = (slug: string) =>
     columns: { id: true },
   })
 
+/** An article can only be filed in a category that exists and is not deleted. */
+async function assertLiveCategory(categoryId: KbCategoryId): Promise<void> {
+  const category = await db.query.helpCenterCategories.findFirst({
+    where: and(eq(helpCenterCategories.id, categoryId), isNull(helpCenterCategories.deletedAt)),
+    columns: { id: true },
+  })
+  if (!category) throw new ValidationError('VALIDATION_ERROR', 'Category not found')
+}
+
 export async function createArticle(
   input: CreateArticleInput,
   principalId: PrincipalId,
@@ -250,8 +259,9 @@ export async function createArticle(
   })
   // No category picked (a first article in an empty help center): file it
   // under General rather than refusing the save.
-  const categoryId =
-    (input.categoryId?.trim() as KbCategoryId) || (await ensureDefaultHelpCategory())
+  const chosen = input.categoryId?.trim() as KbCategoryId | undefined
+  if (chosen) await assertLiveCategory(chosen)
+  const categoryId = chosen || (await ensureDefaultHelpCategory())
 
   const [article] = await db
     .insert(helpCenterArticles)
@@ -295,7 +305,10 @@ export async function updateArticle(
     updateData.contentJson = contentJson
     updateData.content = projectContentJsonToMarkdown(contentJson, input.content?.trim() ?? '')
   }
-  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId as KbCategoryId
+  if (input.categoryId !== undefined) {
+    await assertLiveCategory(input.categoryId as KbCategoryId)
+    updateData.categoryId = input.categoryId as KbCategoryId
+  }
   if (input.slug !== undefined)
     updateData.slug = await uniqueHelpCenterSlug(
       input.slug.trim(),

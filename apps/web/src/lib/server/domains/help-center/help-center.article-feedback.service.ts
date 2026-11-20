@@ -11,7 +11,7 @@ import {
 } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import type { KbArticleFeedbackId, KbArticleId, PrincipalId } from '@quackback/ids'
-import { ValidationError } from '@/lib/shared/errors'
+import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { ARTICLE_FEEDBACK_REASON_MAX_LENGTH } from '@/lib/shared/schemas/help-center'
 import { logger } from '@/lib/server/logger'
 
@@ -30,6 +30,12 @@ export async function recordArticleFeedback(
   principalId?: PrincipalId | null
 ): Promise<KbArticleFeedbackId> {
   return db.transaction(async (tx) => {
+    const article = await tx.query.helpCenterArticles.findFirst({
+      where: eq(helpCenterArticles.id, articleId),
+      columns: { id: true },
+    })
+    if (!article) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${articleId} not found`)
+
     if (principalId) {
       const existing = await tx.query.helpCenterArticleFeedback.findFirst({
         where: and(

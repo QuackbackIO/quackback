@@ -11,6 +11,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const createColumnSchema = z.object({
   statusId: postStatusIdSchema,
@@ -37,7 +38,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/columns')({
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.ROADMAP_MANAGE })
           const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
-          const parsed = createColumnSchema.safeParse(await request.json())
+          const parsed = createColumnSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

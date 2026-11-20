@@ -14,6 +14,7 @@ import {
   listCategories,
   createCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const createCategoryBody = z.object({
   name: z.string().min(1, 'Name is required').max(200),
@@ -78,7 +79,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.HELP_CENTER_MANAGE })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createCategoryBody.safeParse(body)
 
           if (!parsed.success) {

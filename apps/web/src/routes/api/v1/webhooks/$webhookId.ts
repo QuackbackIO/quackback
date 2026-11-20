@@ -12,6 +12,7 @@ import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constan
 import { toWebhookResponse } from '@/lib/server/domains/api/webhooks'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId, WebhookId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const updateWebhookSchema = z.object({
@@ -53,7 +54,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
 
           const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateWebhookSchema.safeParse(body)
 
           if (!parsed.success) {

@@ -17,6 +17,7 @@ import {
   deleteCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
 import type { KbCategoryId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const updateCategoryBody = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -88,7 +89,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
             'category ID'
           )
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateCategoryBody.safeParse(body)
 
           if (!parsed.success) {

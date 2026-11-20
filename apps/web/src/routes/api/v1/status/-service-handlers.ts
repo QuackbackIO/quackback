@@ -21,11 +21,13 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId, parseTypeIdArray } from '@/lib/server/domains/api/validation'
+import { NotFoundError } from '@/lib/shared/errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeStatusComponent } from './-serialize'
 import { STATUS_COMPONENT_STATUSES, parseNullableTypeId } from './-validation'
 import type { StatusComponentId, StatusComponentGroupId, SegmentId } from '@quackback/ids'
 import type { StatusComponentRow } from '@/lib/server/domains/status'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const createComponentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
@@ -101,7 +103,7 @@ export async function createStatusComponentHandler({ request }: { request: Reque
   try {
     await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_PAGE_MANAGE })
 
-    const body = await request.json()
+    const body = await readJsonBody(request)
     const parsed = createComponentSchema.safeParse(body)
     if (!parsed.success) {
       return badRequestResponse('Invalid request body', {
@@ -137,22 +139,48 @@ export async function createStatusComponentHandler({ request }: { request: Reque
   }
 }
 
+/** What the caller's path calls the thing: the services path says "service",
+ *  the legacy components path keeps "component". */
+export type ServiceNoun = 'service' | 'component'
+
+interface ServiceRequest {
+  request: Request
+  id: string
+  noun: ServiceNoun
+}
+
+function parseServiceId(id: string, noun: ServiceNoun): StatusComponentId {
+  return parseTypeId<StatusComponentId>(id, 'status_component', `${noun} ID`)
+}
+
+function serviceNotFound(noun: ServiceNoun): Response {
+  return notFoundResponse(`Status ${noun}`)
+}
+
+/** handleDomainError, with a missing service named the way the path names it. */
+function serviceError(error: unknown, noun: ServiceNoun): Response {
+  if (error instanceof NotFoundError && error.code === 'STATUS_COMPONENT_NOT_FOUND') {
+    return serviceNotFound(noun)
+  }
+  return handleDomainError(error)
+}
+
 /**
  * GET /api/v1/status/components/:componentId (aliased at
  * /api/v1/status/services/:serviceId)
  */
-export async function getStatusComponentHandler({ request, id }: { request: Request; id: string }) {
+export async function getStatusComponentHandler({ request, id, noun }: ServiceRequest) {
   try {
     await withApiKeyAuth(request)
 
-    const componentId = parseTypeId<StatusComponentId>(id, 'status_component', 'component ID')
+    const componentId = parseServiceId(id, noun)
 
     const row = await findComponentRow(componentId)
-    if (!row) return notFoundResponse('Status component')
+    if (!row) return serviceNotFound(noun)
 
     return successResponse(serializeStatusComponent(row))
   } catch (error) {
-    return handleDomainError(error)
+    return serviceError(error, noun)
   }
 }
 
@@ -163,19 +191,13 @@ export async function getStatusComponentHandler({ request, id }: { request: Requ
  * status in one call. A `{ status }`-only body is the primary
  * automation hook — see the schema comment above.
  */
-export async function patchStatusComponentHandler({
-  request,
-  id,
-}: {
-  request: Request
-  id: string
-}) {
+export async function patchStatusComponentHandler({ request, id, noun }: ServiceRequest) {
   try {
     await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_PAGE_MANAGE })
 
-    const componentId = parseTypeId<StatusComponentId>(id, 'status_component', 'component ID')
+    const componentId = parseServiceId(id, noun)
 
-    const body = await request.json()
+    const body = await readJsonBody(request)
     const parsed = patchComponentSchema.safeParse(body)
     if (!parsed.success) {
       return badRequestResponse('Invalid request body', {
@@ -213,10 +235,10 @@ export async function patchStatusComponentHandler({
     }
 
     const row = await findComponentRow(componentId)
-    if (!row) return notFoundResponse('Status component')
+    if (!row) return serviceNotFound(noun)
 
     return successResponse(serializeStatusComponent(row))
   } catch (error) {
-    return handleDomainError(error)
+    return serviceError(error, noun)
   }
 }

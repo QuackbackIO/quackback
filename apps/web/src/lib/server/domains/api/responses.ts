@@ -7,6 +7,7 @@
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
 import { getLogContext } from '@/lib/server/log-context'
+import { parseLimit } from './request'
 
 const log = logger.child({ component: 'api' })
 
@@ -291,11 +292,7 @@ export function parsePaginationParams(url: URL): {
   cursor?: string
   limit: number
 } {
-  const cursor = url.searchParams.get('cursor') ?? undefined
-  const limitParam = url.searchParams.get('limit')
-  const limit = Math.min(Math.max(parseInt(limitParam || '20', 10) || 20, 1), 100)
-
-  return { cursor, limit }
+  return { cursor: url.searchParams.get('cursor') ?? undefined, limit: parseLimit(url) }
 }
 
 /**

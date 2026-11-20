@@ -12,6 +12,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeTicket } from './-serialize'
 import type { AssignTicketInput } from '@/lib/server/domains/tickets/ticket.types'
 import type { TicketId, PrincipalId, TeamId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Both keys are optional AND nullable: an absent key leaves that side untouched,
 // an explicit null clears it (mirrors `functions/tickets.ts`, minus the 'me'
@@ -30,7 +31,7 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/assign')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_ASSIGN })
           const ticketId = parseTypeId<TicketId>(params.ticketId, 'ticket', 'ticket ID')
 
-          const parsed = assignSchema.safeParse(await request.json().catch(() => null))
+          const parsed = assignSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

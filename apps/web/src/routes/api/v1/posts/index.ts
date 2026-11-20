@@ -15,8 +15,9 @@ import {
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { BoardId, PrincipalId, PostStatusId, PostTagId } from '@quackback/ids'
+import type { BoardId, PostId, PrincipalId, PostStatusId, PostTagId } from '@quackback/ids'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
+import { parseLimit, readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schemas
 const createPostSchema = z.object({
@@ -42,11 +43,12 @@ export const Route = createFileRoute('/api/v1/posts/')({
 
           const url = new URL(request.url)
 
-          const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(
-            100,
-            Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
+          const cursor = parseOptionalTypeId<PostId>(
+            url.searchParams.get('cursor'),
+            'post',
+            'cursor'
           )
+          const limit = parseLimit(url)
 
           const boardIdParam = url.searchParams.get('boardId') ?? undefined
           const statusSlug = url.searchParams.get('status') ?? undefined
@@ -134,7 +136,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
         try {
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_CREATE })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createPostSchema.safeParse(body)
 
           if (!parsed.success) {
