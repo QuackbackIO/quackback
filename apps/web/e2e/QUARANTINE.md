@@ -802,3 +802,15 @@ no such part beyond the wrong notification).
   "Connect an integration" never completes. Fix: filter on `'active'`. The
   test passes against a row seeded as `'connected'`. owner: unassigned, review
   by: 2026-12-03.
+
+### Product suite: platform settings, search and analytics (INT)
+
+- `platform/admin-search.spec.ts` › INT-SR-02 the results page ignores a
+  short query, an unknown kind and a page out of range. Product bug:
+  `validateSearch` in `apps/web/src/routes/admin/search.tsx:23` drops an
+  invalid `kind` or `page` by leaving the key out of its result, but the raw
+  value still reaches `Route.useSearch()`, so `?kind=nope` presses no chip and
+  sends an invalid kind, and `?page=99` or `?page=abc` sit on "Searching…"
+  with Previous/Next and no results. Fix: return the keys explicitly
+  (`kind: undefined`, `page: undefined`), as `routes/admin/analytics.tsx`
+  does for `section`. owner: unassigned, review by: 2026-12-03.

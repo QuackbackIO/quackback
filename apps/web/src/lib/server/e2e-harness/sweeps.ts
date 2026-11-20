@@ -89,6 +89,16 @@ const SWEEPS: Record<string, SweepEntry> = {
       return {}
     },
   },
+  // The hourly analytics refresh: the materialized daily stats and the
+  // visitor rollup the Analytics page reads.
+  'analytics-refresh': {
+    asOf: false,
+    run: async () => {
+      const { runAnalyticsRefresh } = await import('@/lib/server/domains/analytics/analytics-queue')
+      await runAnalyticsRefresh()
+      return {}
+    },
+  },
   'anon-sweep': {
     asOf: false,
     run: async () => {
