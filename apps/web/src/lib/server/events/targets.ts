@@ -4,6 +4,7 @@
  */
 
 import type {
+  ChangelogId,
   ConversationId,
   ConversationMessageId,
   PostId,
@@ -2114,6 +2115,68 @@ export async function getSlaEmailTargets(
 // ============================================================================
 
 /**
+ * The subscribers who could read the entry on the changelog itself: the
+ * portal lets them in, the changelog audience allows them, and every
+ * segment-gated label on the entry includes one of their segments. Anyone
+ * else would be emailed what the page then hides from them.
+ */
+async function filterChangelogReaders(
+  changelogId: ChangelogId,
+  subscribers: Subscriber[]
+): Promise<Subscriber[]> {
+  if (subscribers.length === 0) return subscribers
+  const [{ principalsWithPortalAccess }, { isChangelogAudienceGranted }, categoryService] =
+    await Promise.all([
+      import('@/lib/server/domains/settings/portal-access.recipients'),
+      import('@/lib/server/domains/changelog/changelog.audience'),
+      import('@/lib/server/domains/changelog/changelog-category.service'),
+    ])
+
+  const admitted = await principalsWithPortalAccess(
+    subscribers.map((s) => s.principalId as PrincipalId)
+  )
+  const candidates = subscribers.filter((s) => admitted.has(s.principalId as PrincipalId))
+  if (candidates.length === 0) return []
+
+  const principalIds = candidates.map((s) => s.principalId as PrincipalId)
+  const [principals, segmentRows, categoriesByEntry] = await Promise.all([
+    db
+      .select({ id: principal.id, role: principal.role, type: principal.type })
+      .from(principal)
+      .where(inArray(principal.id, principalIds)),
+    db
+      .select({ principalId: userSegments.principalId, segmentId: userSegments.segmentId })
+      .from(userSegments)
+      .where(inArray(userSegments.principalId, principalIds)),
+    categoryService.getCategoriesForEntries([changelogId]),
+  ])
+  const categories = categoriesByEntry.get(changelogId) ?? []
+  const segmentsByPrincipal = new Map<string, Set<SegmentId>>()
+  for (const row of segmentRows) {
+    const set = segmentsByPrincipal.get(String(row.principalId)) ?? new Set<SegmentId>()
+    set.add(row.segmentId as SegmentId)
+    segmentsByPrincipal.set(String(row.principalId), set)
+  }
+
+  const readers = new Set<string>()
+  for (const p of principals) {
+    const actor: Actor = {
+      principalId: p.id,
+      role: (p.role ?? null) as Actor['role'],
+      principalType: p.type as Actor['principalType'],
+      segmentIds: segmentsByPrincipal.get(String(p.id)) ?? new Set(),
+    }
+    if (
+      (await isChangelogAudienceGranted(actor)) &&
+      categoryService.categoryGateAllows(categories, actor)
+    ) {
+      readers.add(String(p.id))
+    }
+  }
+  return candidates.filter((s) => readers.has(s.principalId))
+}
+
+/**
  * Get subscriber targets for changelog.published events: the UNION of the
  * dedicated `changelog_subscriptions` table (primary, opt-out source) and
  * the legacy linked-post subscribers (additive — "subscribers of a feature
@@ -2129,6 +2192,10 @@ export async function getChangelogSubscriberTargets(
 
   const changelogId = event.data.changelog.id
   if (!changelogId) return []
+
+  // With the Changelog product off the entry has nowhere to be read.
+  const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+  if (!(await isFeatureEnabled('changelog'))) return []
 
   const {
     changelogEntries,
@@ -2228,7 +2295,9 @@ export async function getChangelogSubscriberTargets(
     }
   }
 
-  const subscribers = [...allSubscribers.values()]
+  const subscribers = await filterChangelogReaders(changelogId as ChangelogId, [
+    ...allSubscribers.values(),
+  ])
   log.debug(
     {
       count: subscribers.length,

@@ -24,6 +24,7 @@ import {
   categoryGateAllows,
   categoryGateCondition,
 } from './changelog-category.service'
+import { isChangelogOpenTo } from './changelog.audience'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
@@ -46,18 +47,38 @@ export function publicChangelogConditions(now: Date) {
 }
 
 /**
+ * What a reader with no session (a crawler, the customer assistant) may see:
+ * published entries whose labels do not gate an anonymous visitor out. Only
+ * meaningful once `isChangelogOpenToAnonymous()` has said the changelog is
+ * open to them at all.
+ */
+export function anonymousChangelogConditions(now: Date) {
+  return [
+    ...publicChangelogConditions(now),
+    categoryGateCondition(ANONYMOUS_ACTOR, changelogEntries.id),
+  ]
+}
+
+/**
  * Slim public lookup for link embeds: title + published date only, under the
- * same published-only visibility filter, but WITHOUT the view-count increment
- * or linked-post joins of {@link getPublicChangelogById}. An embed resolves on
- * every page render, so it must neither inflate analytics nor over-fetch.
- * Returns null (no throw) when the entry isn't publicly visible.
+ * same visibility the changelog page applies for `actor` (product on, the
+ * changelog audience, the entry's label gate), but WITHOUT the view-count
+ * increment or linked-post joins of {@link getPublicChangelogById}. An embed
+ * resolves on every page render, so it must neither inflate analytics nor
+ * over-fetch. Returns null (no throw) when `actor` could not read the entry.
  */
 export async function getPublicChangelogMetaById(
-  id: ChangelogId
+  id: ChangelogId,
+  actor: Actor
 ): Promise<{ id: ChangelogId; title: string; publishedAt: Date } | null> {
+  if (!(await isChangelogOpenTo(actor))) return null
   const now = new Date()
   const entry = await db.query.changelogEntries.findFirst({
-    where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now)),
+    where: and(
+      eq(changelogEntries.id, id),
+      ...publicChangelogConditions(now),
+      categoryGateCondition(actor, changelogEntries.id)
+    ),
     columns: { id: true, title: true, publishedAt: true, displayDate: true },
   })
   if (!entry || !entry.publishedAt) return null

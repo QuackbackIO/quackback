@@ -61,6 +61,7 @@ const hoisted = vi.hoisted(() => {
     unwatchMyTicket: vi.fn(),
     getPublicChangelog: vi.fn(),
     listPublicChangelogs: vi.fn(),
+    listChangelogCategories: vi.fn(),
     getUserStats: vi.fn(),
     listPublicCategoriesForLocale: vi.fn(),
     listPublicArticlesForCategoryLocale: vi.fn(),
@@ -127,10 +128,14 @@ vi.mock('@/lib/server/functions/changelog', () => ({
   runGetPublicChangelog: hoisted.run.getPublicChangelog,
   runListPublicChangelogs: hoisted.run.listPublicChangelogs,
 }))
+vi.mock('@/lib/server/functions/changelog-categories', () => ({
+  runListChangelogCategories: hoisted.run.listChangelogCategories,
+}))
 vi.mock('@/lib/server/functions/user', () => ({
   runGetUserStats: hoisted.run.getUserStats,
 }))
 vi.mock('@/lib/server/functions/help-center', () => ({
+  assertHelpCenterOpenToRequest: vi.fn(async () => undefined),
   resolveHelpPublicViewer: hoisted.run.resolveHelpPublicViewer,
   serializeCategory: hoisted.run.serializeCategory,
   serializeArticle: hoisted.run.serializeArticle,
@@ -198,7 +203,11 @@ import {
   widgetWatchMyTicketFn,
   widgetUnwatchMyTicketFn,
 } from '../tickets'
-import { widgetGetPublicChangelogFn, widgetListPublicChangelogsFn } from '../changelog'
+import {
+  widgetGetPublicChangelogFn,
+  widgetListChangelogCategoriesFn,
+  widgetListPublicChangelogsFn,
+} from '../changelog'
 import { widgetGetUserStatsFn } from '../user'
 import {
   widgetListPublicCategoriesFn,
@@ -407,6 +416,10 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
     {
       name: 'widgetListPublicChangelogsFn',
       call: () => widgetListPublicChangelogsFn({ data: {} }),
+    },
+    {
+      name: 'widgetListChangelogCategoriesFn',
+      call: () => widgetListChangelogCategoriesFn(),
     },
     {
       name: 'widgetListPublicCategoriesFn',
