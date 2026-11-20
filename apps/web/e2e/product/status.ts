@@ -152,7 +152,23 @@ export async function createIncident(
   api: APIRequestContext,
   input: IncidentInput
 ): Promise<AdminIncident> {
-  return must<AdminIncident>(api, 'createStatusIncidentFn', incidentPayload(input))
+  const incident = await must<AdminIncident>(api, 'createStatusIncidentFn', incidentPayload(input))
+  made.add(incident.id)
+  return incident
+}
+
+/** Incidents and windows made by createIncident in this worker since the last cleanup. */
+const made = new Set<string>()
+
+/**
+ * Delete what this test's helpers created. The feed keeps every open
+ * incident's newest entry within its 50-item cap, so open incidents left
+ * behind would crowd later tests' items out of it. Call in afterEach.
+ */
+export async function deleteMadeIncidents(api: APIRequestContext): Promise<void> {
+  const ids = [...made]
+  made.clear()
+  for (const id of ids) await callServerFn(api, 'deleteStatusIncidentFn', { id })
 }
 
 /** The same call, without failing: for refusals. */

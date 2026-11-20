@@ -590,3 +590,12 @@ no such part beyond the wrong notification).
   visitors see "All systems operational". Fix: derive it from the anonymous
   projection (`getStatusPageSnapshot(ANONYMOUS_ACTOR, …).topLevel`), or relabel
   the banner. owner: unassigned, review by: 2026-12-03.
+- `status/public-page.spec.ts` › STA-P-15 uptime follows a status that has no
+  history row. `createStatusComponent`
+  (`apps/web/src/lib/server/domains/status/status.components.ts:176`) stores a
+  non-operational initial status (REST and the server fn accept one) without a
+  `status_component_events` row or a `status.component_changed` event, and the
+  uptime derivation starts from operational when a service has no event
+  (`status.public.ts:291`), so a service created "Major outage" shows a 100%
+  operational bar. Fix: write the initial event (and the webhook event) when the
+  create status is not operational. owner: unassigned, review by: 2026-12-03.

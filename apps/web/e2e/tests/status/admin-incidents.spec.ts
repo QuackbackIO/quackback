@@ -36,6 +36,7 @@ import {
   serviceRow,
   setServiceStatus,
   tryCreateIncident,
+  deleteMadeIncidents,
 } from '../../product/status'
 
 // Browser journeys share the machine with the app under load: allow a minute.
@@ -47,6 +48,7 @@ test.beforeEach(async ({ playwright }) => {
   admin = await personApi(playwright, 'admin')
 })
 test.afterEach(async () => {
+  await deleteMadeIncidents(admin)
   await admin.dispose()
 })
 
