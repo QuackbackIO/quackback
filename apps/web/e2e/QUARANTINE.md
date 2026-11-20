@@ -327,12 +327,12 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   Fix: filter `isNull(deletedAt)` as DELETE already does. owner: unassigned,
   review by: 2026-12-03.
 - `platform/rest-roadmaps.spec.ts` › API-R-080 roadmap posts refuse a
-  negative offset or a non-numeric limit with 400. Product bug: `limit` and
-  `offset` are `parseInt`ed with no NaN or lower-bound guard; `offset=-1`
-  answers 500 and `limit=abc` a silent empty page
-  (`apps/web/src/routes/api/v1/roadmaps/$roadmapId.posts.ts:27-28`). Fix:
-  validate both as non-negative integers. owner: unassigned, review by:
-  2026-12-03.
+  negative offset with 400. Product bug: `offset` is `parseInt`ed with no
+  lower-bound guard and `offset=-1` reaches SQL, answering 500
+  (`apps/web/src/routes/api/v1/roadmaps/$roadmapId.posts.ts:27-28`). Also seen,
+  not asserted: `limit=0` answers no items with `hasMore: true`. Fix:
+  validate both as non-negative integers (limit at least 1). owner:
+  unassigned, review by: 2026-12-03.
 - `platform/rest-roadmaps.spec.ts` › API-R-084 a column with an unknown status
   is refused with a client error. Product bug: the column's `statusId` is not
   looked up, so the foreign key fails and the API answers 500

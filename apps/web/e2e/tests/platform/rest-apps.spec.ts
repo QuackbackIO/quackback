@@ -3,8 +3,8 @@
  * suggest, ticket links and posts created from a ticket. Journeys
  * API-R-091, 092, 094 and 096..100.
  *
- * Not covered here: API-R-093 (similar-post suggest: seeding a post vector the
- * fake AI's query vector matches did not hold; left for a follow-up) and API-R-095 (owner question: should apps/link and
+ * Not covered here: API-R-093 (similar-post suggest: not completed; the
+ * vector-seeding approach was not finished) and API-R-095 (owner question: should apps/link and
  * apps/posts create and rename people without people.manage?).
  */
 import { generateId } from '@quackback/ids'

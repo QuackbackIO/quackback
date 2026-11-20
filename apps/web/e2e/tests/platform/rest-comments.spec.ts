@@ -143,7 +143,7 @@ test.describe('REST comments: create', () => {
   )
 
   test(
-    'API-R-047 a Contributor key (holds comment.moderate) comments over REST; a key without it is refused',
+    'API-R-047 a Contributor key (holds comment.moderate) comments over REST; a read:feedback-only key is refused',
     { tag: '@core' },
     async ({ playwright, baseURL, people, marker }) => {
       const owner = await keyApi(playwright, baseURL, people)
