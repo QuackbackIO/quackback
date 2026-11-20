@@ -25,6 +25,11 @@ vi.mock('@/lib/server/domains/workflows/workflow-sweep-queue', () => ({
     calls.push({ job: 'workflow-sweep', at })
   }),
 }))
+vi.mock('@/lib/server/domains/analytics/analytics-queue', () => ({
+  runAnalyticsRefresh: vi.fn(async () => {
+    calls.push({ job: 'analytics-refresh' })
+  }),
+}))
 vi.mock('@/lib/server/email/email-log.retention', () => ({
   runEmailLogRetention: vi.fn(async () => {
     calls.push({ job: 'email-log-retention' })
@@ -127,6 +132,17 @@ describe('runE2eSweep', () => {
     const query = JSON.stringify(vi.mocked(db.execute).mock.calls.at(-1)?.[0])
     expect(query).toContain('onboarding-email')
     expect(query).toContain('2030-05-03T10:00:00.000Z')
+  })
+
+  it('runs the analytics refresh at the wall clock and refuses asOf for it', async () => {
+    expect(await runE2eSweep({ job: 'analytics-refresh' })).toMatchObject({
+      ok: true,
+      job: 'analytics-refresh',
+    })
+    expect(calls).toEqual([{ job: 'analytics-refresh' }])
+    const refused = await runE2eSweep({ job: 'analytics-refresh', asOf: '2030-01-01T00:00:00Z' })
+    expect(refused).toMatchObject({ ok: false, status: 400 })
+    expect(calls).toHaveLength(1)
   })
 
   it('lists the sweeps it accepts and never the one-shot queues', () => {
