@@ -326,3 +326,22 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   `status.service.ts:103-105,204-207`, `post-tag.service.ts:93-95,165-169`).
   Fix: filter `isNull(deletedAt)` as DELETE already does. owner: unassigned,
   review by: 2026-12-03.
+- `platform/rest-roadmaps.spec.ts` › API-R-080 roadmap posts refuse a
+  negative offset or a non-numeric limit with 400. Product bug: `limit` and
+  `offset` are `parseInt`ed with no NaN or lower-bound guard; `offset=-1`
+  answers 500 and `limit=abc` a silent empty page
+  (`apps/web/src/routes/api/v1/roadmaps/$roadmapId.posts.ts:27-28`). Fix:
+  validate both as non-negative integers. owner: unassigned, review by:
+  2026-12-03.
+- `platform/rest-roadmaps.spec.ts` › API-R-084 a column with an unknown status
+  is refused with a client error. Product bug: the column's `statusId` is not
+  looked up, so the foreign key fails and the API answers 500
+  (`apps/web/src/lib/server/domains/roadmaps/roadmap.service.ts:339-356`).
+  Fix: check the status exists (404 or 400). owner: unassigned, review by:
+  2026-12-03.
+- `platform/rest-roadmaps.spec.ts` › API-R-085 a column of another roadmap
+  cannot be edited or removed through a roadmap's URL. Product bug: column
+  PATCH and DELETE validate the roadmap id's format and then ignore it
+  (`apps/web/src/routes/api/v1/roadmaps/$roadmapId.columns.$columnId.ts:27-41`).
+  Fix: scope the update and delete to `roadmapId`, 404 otherwise. owner:
+  unassigned, review by: 2026-12-03.
