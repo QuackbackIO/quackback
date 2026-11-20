@@ -207,3 +207,10 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   decides "external" by `!startsWith('/')`, rendering it as an in-tab internal
   link to another host. Fix: require `startsWith('/') && !startsWith('//')`
   in the schema (and treat `//` as external in the header).
+- `help-center/translations.spec.ts` › HC-A-53 Save draft on a published
+  translation does not change the live page (HC-B9; `@isolated`). The
+  dialog's Save draft (`components/admin/help-center/article-translations-dialog.tsx`)
+  calls `upsertArticleTranslationFn`, which never touches `status`, so a
+  published translation's live text changes at once. Fix: either set
+  `status: 'draft'` on that save, or label the button "Save" when the
+  translation is published.
