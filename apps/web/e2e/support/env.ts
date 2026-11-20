@@ -21,6 +21,9 @@ export const SUPPORT_RUN_DIR = resolve(here, '../.auth/support')
 /** The name the webhook sink answers on. Must be a `*.localhost` name. */
 export const WEBHOOK_SINK_HOSTNAME = 'webhook-sink.localhost'
 
+/** The name the OIDC provider fake answers on. Must be a `*.localhost` name. */
+export const OIDC_FAKE_HOSTNAME = 'oidc-fake.localhost'
+
 function parseEnvFile(text: string): Record<string, string> {
   const out: Record<string, string> = {}
   for (const raw of text.split('\n')) {
@@ -46,8 +49,17 @@ export interface SupportEnv {
   sinkControlUrl: string
   /** The https origin webhooks are pointed at, e.g. https://webhook-sink.localhost:4011 */
   sinkOrigin: string
+  /** The stand-ins' certificate (webhook sink and OIDC provider fake). */
   sinkCertPath: string
   sinkKeyPath: string
+  /** The provider fake (Slack, Discord, Linear, GitHub, Jira): http on loopback. */
+  providerFakePort: number
+  providerFakeUrl: string
+  /** The OIDC provider fake's https origin, e.g. https://oidc-fake.localhost:4014 */
+  oidcFakePort: number
+  oidcFakeOrigin: string
+  oidcFakeControlPort: number
+  oidcFakeControlUrl: string
   mailpitApiUrl: string
 }
 
@@ -62,15 +74,24 @@ export function supportEnv(shell: NodeJS.ProcessEnv = process.env): SupportEnv {
   const fakeAiPort = Number(values.E2E_FAKE_AI_PORT)
   const sinkPort = Number(values.E2E_WEBHOOK_SINK_PORT)
   const sinkControlPort = Number(values.E2E_WEBHOOK_SINK_CONTROL_PORT)
+  const providerFakePort = Number(values.E2E_PROVIDER_FAKE_PORT)
+  const oidcFakePort = Number(values.E2E_OIDC_FAKE_PORT)
+  const oidcFakeControlPort = Number(values.E2E_OIDC_FAKE_CONTROL_PORT)
+  const providerFakeUrl = `http://127.0.0.1:${providerFakePort}`
   const baseUrl = `http://acme.localhost:${port}`
-  const sinkCertPath = resolve(SUPPORT_RUN_DIR, 'webhook-sink-cert.pem')
-  const sinkKeyPath = resolve(SUPPORT_RUN_DIR, 'webhook-sink-key.pem')
+  // One certificate for every https stand-in (it names each of them).
+  const sinkCertPath = resolve(SUPPORT_RUN_DIR, 'stand-ins-cert.pem')
+  const sinkKeyPath = resolve(SUPPORT_RUN_DIR, 'stand-ins-key.pem')
 
   const app: Record<string, string> = {
     ...values,
     BASE_URL: baseUrl,
     OPENAI_BASE_URL: `http://127.0.0.1:${fakeAiPort}/v1`,
     E2E_WEBHOOK_SINK_HOST: `${WEBHOOK_SINK_HOSTNAME}:${sinkPort}`,
+    // Provider requests (integrations) go to the provider fake, and identity
+    // providers may live on the OIDC fake; both only behind the harness gate.
+    E2E_PROVIDER_FAKE_URL: providerFakeUrl,
+    E2E_OIDC_FAKE_HOST: `${OIDC_FAKE_HOSTNAME}:${oidcFakePort}`,
     // The app trusts the sink's self-signed certificate this way and no other:
     // certificate checks stay on.
     NODE_EXTRA_CA_CERTS: sinkCertPath,
@@ -89,6 +110,12 @@ export function supportEnv(shell: NodeJS.ProcessEnv = process.env): SupportEnv {
     sinkOrigin: `https://${WEBHOOK_SINK_HOSTNAME}:${sinkPort}`,
     sinkCertPath,
     sinkKeyPath,
+    providerFakePort,
+    providerFakeUrl,
+    oidcFakePort,
+    oidcFakeOrigin: `https://${OIDC_FAKE_HOSTNAME}:${oidcFakePort}`,
+    oidcFakeControlPort,
+    oidcFakeControlUrl: `http://127.0.0.1:${oidcFakeControlPort}`,
     mailpitApiUrl: values.MAILPIT_API_URL,
   }
 }

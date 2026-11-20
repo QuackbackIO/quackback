@@ -1,4 +1,5 @@
 import { ServiceUnavailableError } from '@/lib/shared/errors'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 /**
  * Jira project and issue type listing via REST API.
  */
@@ -12,7 +13,7 @@ export async function listJiraProjects(
   accessToken: string,
   cloudId: string
 ): Promise<Array<{ id: string; name: string; key: string }>> {
-  const response = await fetch(`${JIRA_API_BASE}/${cloudId}/rest/api/3/project/search`, {
+  const response = await providerFetch(`${JIRA_API_BASE}/${cloudId}/rest/api/3/project/search`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -46,7 +47,7 @@ export async function listJiraIssueTypes(
   projectId: string
 ): Promise<Array<{ id: string; name: string; subtask: boolean }>> {
   const params = new URLSearchParams({ projectId })
-  const response = await fetch(
+  const response = await providerFetch(
     `${JIRA_API_BASE}/${cloudId}/rest/api/3/issuetype/project?${params}`,
     {
       headers: {

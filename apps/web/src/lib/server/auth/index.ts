@@ -255,7 +255,11 @@ async function createAuth() {
   const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
   const fetchJson = async (url: string, headers?: Record<string, string>) => {
     try {
-      const res = await safeFetch(url, { ...(headers ? { headers } : {}), timeoutMs: 5000 })
+      const res = await safeFetch(url, {
+        ...(headers ? { headers } : {}),
+        timeoutMs: 5000,
+        allowE2eOidcFake: true,
+      })
       if (!res.ok) return null
       const body: unknown = await res.json()
       return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null

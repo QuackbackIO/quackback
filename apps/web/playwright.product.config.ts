@@ -8,7 +8,8 @@ import { ensureSinkCertificate } from './e2e/support/stand-ins/tls'
  * Tests live under e2e/tests/<module>/ and run against a PRODUCTION build
  * (`bun run build` first) with the same environment and stand-ins as the
  * support suite (e2e/support/support.env: Mailpit, fake AI, webhook sink,
- * object storage, sweep runner). See e2e/tests/product/README.md.
+ * object storage, sweep runner) plus the provider fake and the OIDC fake. See
+ * e2e/tests/product/README.md.
  *
  * Tags: `@smoke` (every PR), `@core` (product changes, main, nightly),
  * `@nightly` (nightly only), `@isolated` (workspace-wide switches, own job),
@@ -124,6 +125,20 @@ export default defineConfig({
     {
       command: 'bun e2e/support/stand-ins/webhook-sink.ts',
       url: `${env.sinkControlUrl}/__sink/health`,
+      reuseExistingServer,
+      timeout: 30_000,
+    },
+    // Product-only stand-ins: the integrations' providers and a single sign-on
+    // provider (e2e/tests/product/README.md, "Stand-ins").
+    {
+      command: 'bun e2e/support/stand-ins/fake-provider.ts',
+      url: `${env.providerFakeUrl}/__fake/health`,
+      reuseExistingServer,
+      timeout: 30_000,
+    },
+    {
+      command: 'bun e2e/support/stand-ins/fake-oidc.ts',
+      url: `${env.oidcFakeControlUrl}/__oidc/health`,
       reuseExistingServer,
       timeout: 30_000,
     },

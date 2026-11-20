@@ -7,7 +7,8 @@ them (REST API, MCP, webhooks, integrations, settings). Config:
 
 The suite runs on the support suite's harness: the same **production build**,
 the same environment (`e2e/support/support.env`), the same stand-ins (Mailpit,
-fake AI, https webhook sink, object storage, sweep runner) and the same people.
+fake AI, https webhook sink, object storage, sweep runner) plus a provider fake
+and an OIDC fake (see "Stand-ins and seams"), and the same people.
 Read `e2e/tests/support/README.md` first; everything there applies here. This
 file only lists what differs.
 
@@ -70,6 +71,26 @@ bun run test:e2e:product --project product --grep @smoke
 - **The seed is not data.** Never rely on the random seed's boards, posts or
   users. Create what you need with the `marker` fixture in its name and find it
   by that name.
+
+## Stand-ins and seams
+
+On top of the support suite's stand-ins (Mailpit, fake AI, webhook sink, object
+storage, sweep runner), the product config starts two more. Every seam the app
+has for them is behind the e2e harness gate (see the support README, "The
+test-only seams and their gate"): a real deployment finds them all closed, and
+unit tests pin each refusal. Each seam has a self-test here
+(`seam-*.spec.ts`).
+
+| Need                                                             | Stand-in or seam                                                                                                                                                                                                                                                                                                      | Helper                                                                                                                         | Self-test                                |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| An integration's provider (Slack, Discord, Linear, GitHub, Jira) | `stand-ins/fake-provider.ts` on `E2E_PROVIDER_FAKE_PORT` (http, loopback). The app's `providerFetch` and `slackClient()` send `https://<provider host>/<path>` there as `/<provider host>/<path>`. Unscripted requests get a plausible success; script a status, body, headers (`retry-after`) or delay per marker    | `fakeProvider.script / requests / waitForRequests` (`support/fake-provider-client.ts`)                                         | `seam-provider-fake.spec.ts`             |
+| A connected integration without OAuth                            | `POST /api/e2e/integrations/connect`: the app's own install path (encrypted token, service principal, config, `onConnect`). One row per provider per workspace, reused by default: a reconnect cancels other tests' queued work for that provider                                                                     | `connectIntegration(request, { type })` (`support/fake-provider-client.ts`)                                                    | `seam-integration-connect.spec.ts`       |
+| A single sign-on provider                                        | `stand-ins/fake-oidc.ts` on `https://oidc-fake.localhost:<E2E_OIDC_FAKE_PORT>/<tenant>` (discovery, authorize, token, userinfo, JWKS; RS256 ID tokens), control on `E2E_OIDC_FAKE_CONTROL_PORT`. Each test is its own tenant; script claims, a client secret, an authorize `error`, a token status or a bad signature | `fakeOidc.tenant / script / requests` (`support/fake-oidc-client.ts`). Open the browser context with `ignoreHTTPSErrors: true` | `seam-oidc-fake.spec.ts` (`@isolated`)   |
+| Plan limits (caps, features)                                     | `settings.tier_limits` written whole, `auth_config_version` moved, cached row dropped; the app reads it on the next request (`QUACKBACK_SETTINGS_CACHE_MS=0`, so no app-side cache bust)                                                                                                                              | `withTierLimits({ maxBoards: n }, body)` (`support/isolated-settings.ts`, `@isolated` only)                                    | `seam-tier-limits.spec.ts` (`@isolated`) |
+
+Event mappings for a connected integration go through `addNotificationChannelFn`
+(it drops the mappings cache); give each test its own board (`boardIds`) and a
+destination id carrying its marker, since the integration row is shared.
 
 ## CI
 
