@@ -2,13 +2,14 @@
  * Email channel accounts (support platform §4.8 Layer 2). `channelAccounts` holds
  * two row roles for email — one `inbound` route per workspace (the front door,
  * config in JSONB) that a conversation's `channel_account_id` points at, and N
- * `sending` addresses (the verified From identities per module). `emailSendingDomains`
+ * `sending` addresses (the From identities `email_senders` chooses between). `emailSendingDomains`
  * are the SPF/DKIM-verified domains a sending address belongs to. Per-workspace DB
  * connection, so no workspace column. Inert until the cold-inbound/outbound slices.
  */
 import {
   pgTable,
   text,
+  uuid,
   jsonb,
   timestamp,
   index,
@@ -152,6 +153,12 @@ export type SendingDomainDkimMode = 'easy' | 'byo' | 'shared'
 export interface SendingDomainPreflight {
   /** The DNS host the domain's nameservers belong to, matched by suffix. */
   dnsHost?: 'cloudflare' | 'route53' | 'godaddy' | 'namecheap' | 'google' | 'other'
+  /**
+   * The zone the domain's records go in: the domain itself, or the parent that
+   * holds it when it is a name inside that parent's zone. A DNS form appends
+   * this, not the domain, to the names typed into it.
+   */
+  zone?: string
   /** Whether nothing resolved at the MAIL FROM subdomain before we used it. */
   mailFromFree?: boolean
   /** The domain's DMARC record, read and never required. */
@@ -227,8 +234,9 @@ export const emailSendingDomains = pgTable(
   ]
 )
 
-/** JSONB config, role-shaped: inbound routes carry the transport + poll cursor;
- *  sending addresses carry their optional per-address SMTP override. */
+/** JSONB config, role-shaped: inbound routes carry the transport + poll cursor.
+ *  Some sending rows still hold a `smtp` key from a per-address override that
+ *  was saved but never used for sending; nothing reads or writes it now. */
 export interface ChannelAccountConfig {
   // inbound role
   forwardingTarget?: string
@@ -240,8 +248,6 @@ export interface ChannelAccountConfig {
   provider?: 'imap' | 'resend' | 'cloudflare'
   imap?: { host: string; port: number; secure: boolean; user: string }
   cursor?: { uidValidity: number; lastUid: number }
-  // sending role
-  smtp?: { host: string; port: number; secure: boolean; user: string }
   // connection role: reference to an integration-framework credential.
   // Secrets stay on the integration row, never in this JSONB.
   integrationId?: string
@@ -255,7 +261,13 @@ export const channelAccounts = pgTable(
     channel: text('channel').notNull().default('email'),
     role: text('role', { enum: ['inbound', 'sending', 'connection'] }).notNull(),
     address: text('address'),
+    /**
+     * No longer read: which surface sends from an address is `email_senders`.
+     * Kept, unused, until a later release can drop it under the contract rules.
+     */
     module: text('module', { enum: ['support', 'feedback', 'changelog'] }),
+    /** The name mail from this address is sent under. Null: the workspace name. */
+    senderName: text('sender_name'),
     sendingDomainId: typeIdColumnNullable('sending_domain')('sending_domain_id'),
     config: jsonb('config')
       .$type<ChannelAccountConfig>()
@@ -298,5 +310,54 @@ export const channelAccounts = pgTable(
   ]
 )
 
+/**
+ * Which identity each kind of customer email is sent from. `default` is the
+ * workspace's default sender; the other surfaces override it. A surface with no
+ * row sends from the default, and no default row means the platform address.
+ * Only the workspace scope (`scopeId` null) is written today; the scope columns
+ * are there for per-team or per-site overrides later.
+ */
+export const EMAIL_SENDER_SURFACES = [
+  'default',
+  'support',
+  'feedback',
+  'changelog',
+  'status',
+] as const
+export type EmailSenderSurface = (typeof EMAIL_SENDER_SURFACES)[number]
+export type EmailSenderMode = 'address' | 'inbox'
+
+export const emailSenders = pgTable(
+  'email_senders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surface: text('surface').$type<EmailSenderSurface>().notNull(),
+    scopeType: text('scope_type').notNull().default('workspace'),
+    scopeId: text('scope_id'),
+    /** `address`: send as `channelAccountId`. `inbox` (support only): reply from
+     *  the address the customer wrote to; `channelAccountId`, when set, is the
+     *  address other support email leaves from, before the default. */
+    mode: text('mode').$type<EmailSenderMode>().notNull().default('address'),
+    channelAccountId: typeIdColumnNullable('channel_account')('channel_account_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'email_senders_channel_account_id_fkey',
+      columns: [table.channelAccountId],
+      foreignColumns: [channelAccounts.id],
+    }).onDelete('cascade'),
+    uniqueIndex('email_senders_surface_workspace_uq')
+      .on(table.surface, table.scopeType)
+      .where(sql`scope_id IS NULL`),
+    uniqueIndex('email_senders_surface_scope_uq')
+      .on(table.surface, table.scopeType, table.scopeId)
+      .where(sql`scope_id IS NOT NULL`),
+    index('email_senders_channel_account_idx').on(table.channelAccountId),
+  ]
+)
+
+export type EmailSender = typeof emailSenders.$inferSelect
 export type ChannelAccount = typeof channelAccounts.$inferSelect
 export type EmailSendingDomain = typeof emailSendingDomains.$inferSelect

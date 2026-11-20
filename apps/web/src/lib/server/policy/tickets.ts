@@ -11,6 +11,7 @@ import { tickets, teamMembers } from '@/lib/server/db'
 import type { TeamId } from '@quackback/ids'
 import { can } from './authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { rowInScope } from './row-scope'
 import {
   allowDecision,
   denyDecision,
@@ -22,15 +23,18 @@ import {
 
 /**
  * Scalar subquery of the team ids an actor belongs to, over `team_members`.
- * Teams resolve membership team -> principals (teams.service
- * `listTeamMemberPrincipalIds`); there is no reverse principal -> teams lookup,
- * so this is the small correlated-free subquery the §4.11 filters use to stay a
- * pure predicate (no extra round trip). Shared by conversationFilter.
+ * The SQL filters use this correlated-free subquery to stay a pure predicate
+ * (no extra round trip). An in-memory check reads the same membership once
+ * with teams.service `teamIdsForPrincipal` and hands it to `rowInScope`.
+ * Shared by conversationFilter.
  */
 export function teamsForActor(principalId: string): SQL {
-  // The WHERE uses drizzle `eq` (not a raw `= ${id}`) so the principal TypeID is
-  // run through the column's driver mapping to its stored uuid form.
-  return sql`SELECT ${teamMembers.teamId} FROM ${teamMembers} WHERE ${eq(teamMembers.principalId, principalId as never)}`
+  // The inner table's columns are written raw. The relational query builder
+  // (`db.query.x.findFirst/findMany`) remaps every column object in a where
+  // onto its root table, which turned `team_members.team_id` into
+  // `conversations.team_id`. The id goes in as a param encoded by the column,
+  // so the principal TypeID still reaches Postgres as its stored uuid.
+  return sql`SELECT "team_members"."team_id" FROM "team_members" WHERE "team_members"."principal_id" = ${sql.param(principalId, teamMembers.principalId)}`
 }
 
 /**
@@ -81,11 +85,10 @@ export interface TicketVisibilityFacts {
 }
 
 /**
- * Single-ticket form of `ticketFilter`, in memory, for deciding whether
- * SOMEONE ELSE can see a ticket without a query per person: the watcher picker
- * and the watcher fan-out ask it for every teammate at once. Same branches in
- * the same order; `actorTeamIds` stands in for the `team_members` subquery the
- * SQL form runs. tickets.test.ts holds the two forms to the same answers.
+ * Single-ticket form of `ticketFilter`, in memory: a deleted ticket is hidden,
+ * and otherwise the scope rule decides (`rowInScope`, row-scope.ts).
+ * `actorTeamIds` stands in for the `team_members` subquery the SQL form runs.
+ * row-scope-parity.test.ts holds the two forms to the same answers.
  */
 export function canViewTicket(
   actor: Actor,
@@ -93,15 +96,11 @@ export function canViewTicket(
   actorTeamIds: ReadonlySet<TeamId | string>
 ): Decision {
   if (ticket.deletedAt) return denyDecision('ticket is deleted')
-  if (isUnscopedService(actor)) return allowDecision()
-  if (can(actor, PERMISSIONS.TICKET_VIEW_ALL)) return allowDecision()
-  const principalId = rowScopePrincipalId(actor)
-  if (!can(actor, PERMISSIONS.TICKET_VIEW) || principalId === null) {
-    return denyDecision('no ticket view permission')
-  }
-  if (ticket.assigneePrincipalId === principalId) return allowDecision()
-  if (ticket.assigneeTeamId !== null && actorTeamIds.has(ticket.assigneeTeamId)) {
-    return allowDecision()
-  }
-  return denyDecision('ticket is assigned to someone else')
+  const inScope = rowInScope(
+    actor,
+    'ticket',
+    { assigneePrincipalId: ticket.assigneePrincipalId, teamId: ticket.assigneeTeamId },
+    actorTeamIds
+  )
+  return inScope ? allowDecision() : denyDecision('ticket is outside your scope')
 }

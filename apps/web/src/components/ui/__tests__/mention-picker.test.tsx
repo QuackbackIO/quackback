@@ -201,4 +201,89 @@ describe('MentionPicker', () => {
     expect(marks.length).toBeGreaterThanOrEqual(1)
     expect(marks[0]).toHaveAttribute('data-query-match')
   })
+
+  describe('a teammate who cannot see the item', () => {
+    const marked: MentionItem[] = [
+      {
+        principalId: 'principal_sam',
+        displayName: 'Sam Cole',
+        avatarUrl: null,
+        role: 'member',
+        noAccess: true,
+      },
+      { principalId: 'principal_jane', displayName: 'Jane Doe', avatarUrl: null, role: 'member' },
+      {
+        principalId: 'principal_ravi',
+        displayName: 'Ravi Mehta',
+        avatarUrl: null,
+        role: 'member',
+        noAccess: true,
+      },
+      { principalId: 'principal_jake', displayName: 'Jake Smith', avatarUrl: null, role: 'admin' },
+    ]
+
+    it('shows a muted row with a lock and "No access"', () => {
+      render(<MentionPicker items={marked} command={() => {}} />)
+      const row = screen.getByText('Sam Cole').closest('[role="option"]')!
+      expect(row).toHaveAttribute('aria-disabled', 'true')
+      expect(row.className).toContain('is-disabled')
+      expect(row).toHaveTextContent('No access')
+      expect(row.querySelector('.mention-picker__lock')).not.toBeNull()
+      const open = screen.getByText('Jane Doe').closest('[role="option"]')!
+      expect(open).not.toHaveAttribute('aria-disabled')
+      expect(open).not.toHaveTextContent('No access')
+    })
+
+    it('cannot be picked with the mouse', () => {
+      const command = vi.fn()
+      render(<MentionPicker items={marked} command={command} />)
+      fireEvent.click(screen.getByText('Sam Cole'))
+      expect(command).not.toHaveBeenCalled()
+    })
+
+    it('starts on the first row that can be picked', () => {
+      const command = vi.fn()
+      const ref = createRef<MentionPickerHandle>()
+      render(<MentionPicker ref={ref} items={marked} command={command} />)
+      expect(fireKey(ref, 'Enter')).toBe(true)
+      expect(command).toHaveBeenCalledWith({ id: 'principal_jane', label: 'Jane Doe' })
+    })
+
+    it('arrow keys skip it, both ways and around the ends', () => {
+      const command = vi.fn()
+      const ref = createRef<MentionPickerHandle>()
+      render(<MentionPicker ref={ref} items={marked} command={command} />)
+      fireKey(ref, 'ArrowDown')
+      fireKey(ref, 'Enter')
+      expect(command).toHaveBeenLastCalledWith({ id: 'principal_jake', label: 'Jake Smith' })
+      fireKey(ref, 'ArrowDown')
+      fireKey(ref, 'Enter')
+      expect(command).toHaveBeenLastCalledWith({ id: 'principal_jane', label: 'Jane Doe' })
+      fireKey(ref, 'ArrowUp')
+      fireKey(ref, 'Enter')
+      expect(command).toHaveBeenLastCalledWith({ id: 'principal_jake', label: 'Jake Smith' })
+    })
+
+    it('Home and End land on rows that can be picked', () => {
+      const command = vi.fn()
+      const ref = createRef<MentionPickerHandle>()
+      const edges: MentionItem[] = [marked[0], marked[1], marked[3], marked[2]]
+      render(<MentionPicker ref={ref} items={edges} command={command} />)
+      fireKey(ref, 'End')
+      fireKey(ref, 'Enter')
+      expect(command).toHaveBeenLastCalledWith({ id: 'principal_jake', label: 'Jake Smith' })
+      fireKey(ref, 'Home')
+      fireKey(ref, 'Enter')
+      expect(command).toHaveBeenLastCalledWith({ id: 'principal_jane', label: 'Jane Doe' })
+    })
+
+    it('when nobody can be picked, Enter and Tab pick nothing and fall through to the editor', () => {
+      const command = vi.fn()
+      const ref = createRef<MentionPickerHandle>()
+      render(<MentionPicker ref={ref} items={[marked[0], marked[2]]} command={command} />)
+      expect(fireKey(ref, 'Enter')).toBe(false)
+      expect(fireKey(ref, 'Tab')).toBe(false)
+      expect(command).not.toHaveBeenCalled()
+    })
+  })
 })

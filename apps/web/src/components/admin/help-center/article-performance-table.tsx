@@ -117,13 +117,11 @@ export function ArticlePerformanceTable() {
           type="button"
           data-testid="article-performance-worst"
           onClick={() => handleOpen(summary.worst!.article.id as KbArticleId)}
-          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-left transition-colors hover:bg-amber-500/10"
+          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-left transition-colors hover:bg-warning/20"
         >
-          <ExclamationTriangleIcon className="size-5 shrink-0 text-amber-600 dark:text-amber-500" />
+          <ExclamationTriangleIcon className="size-5 shrink-0 text-warning" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-500">
-              Needs attention
-            </p>
+            <p className="text-xs font-semibold text-warning">Needs attention</p>
             <p className="truncate text-[13px] text-foreground">
               <span className="font-medium">{summary.worst.article.title}</span>
               <span className="text-muted-foreground">
@@ -138,9 +136,7 @@ export function ArticlePerformanceTable() {
 
       <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Ranked by views
-          </span>
+          <span className="text-[11px] font-semibold text-muted-foreground">Ranked by views</span>
           {!isLoading && rows && rows.length > 0 && (
             <span className="text-xs text-muted-foreground ml-auto shrink-0">
               {rows.length} article{rows.length === 1 ? '' : 's'}
@@ -190,7 +186,7 @@ export function ArticlePerformanceTable() {
                           variant={article.status === 'published' ? 'default' : 'secondary'}
                           className={
                             article.status === 'published'
-                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                              ? 'bg-success/10 text-success'
                               : undefined
                           }
                         >

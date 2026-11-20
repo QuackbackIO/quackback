@@ -20,8 +20,8 @@ import {
   lt,
   isNull,
   sql,
-  conversations,
   conversationParticipants,
+  conversations,
   principal,
   user,
 } from '@/lib/server/db'
@@ -30,10 +30,11 @@ import {
   participantWatchesPairTicketSql,
 } from '@/lib/server/messages/pair-link'
 import { resolvePrincipalIdByEmail } from './conversation.email-store'
+import { assertConversationVisible } from './conversation-visibility'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
-import type { Actor } from '@/lib/server/policy/types'
-import { realEmail } from '@/lib/shared/anonymous-email'
+import type { Actor, SystemCascadeOptions } from '@/lib/server/policy/types'
 import { NotFoundError } from '@/lib/shared/errors'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   ensurePrincipalForUser,
   createPrincipal,
@@ -92,9 +93,9 @@ export async function addConversationParticipantByEmail(
   conversationId: ConversationId,
   email: string,
   actor: Actor,
-  opts?: { actorDisplayName?: string | null; threadAccess?: boolean }
+  opts?: { actorDisplayName?: string | null; threadAccess?: boolean } & SystemCascadeOptions
 ): Promise<{ principalId: PrincipalId; added: boolean }> {
-  const visitorPrincipalId = await conversationVisitorOr404(conversationId)
+  const visitorPrincipalId = await conversationVisitorOr404(conversationId, actor, opts)
   const principalId = await resolveCustomerPrincipalByEmail(email)
   const { added } = await recordParticipant(
     conversationId,
@@ -122,11 +123,25 @@ export async function addConversationParticipant(
   actor: Actor,
   opts: { actorDisplayName?: string | null; threadAccess?: boolean; label: string }
 ): Promise<{ added: boolean }> {
-  const visitorPrincipalId = await conversationVisitorOr404(conversationId)
+  const visitorPrincipalId = await conversationVisitorOr404(conversationId, actor)
   return recordParticipant(conversationId, visitorPrincipalId, principalId, actor, opts)
 }
 
-async function conversationVisitorOr404(conversationId: ConversationId): Promise<PrincipalId> {
+/**
+ * The conversation's visitor, once the actor may change who is on it: a
+ * conversation the actor cannot see is NotFound, like a missing one. Under
+ * `systemCascade` the caller has checked the item already (ticket sharing
+ * checks the paired ticket, and the customer rules, first), so the row is
+ * read as it is.
+ */
+async function conversationVisitorOr404(
+  conversationId: ConversationId,
+  actor: Actor,
+  opts?: SystemCascadeOptions
+): Promise<PrincipalId> {
+  if (!opts?.systemCascade) {
+    return (await assertConversationVisible(conversationId, actor)).visitorPrincipalId
+  }
   const [conversation] = await db
     .select({ visitorPrincipalId: conversations.visitorPrincipalId })
     .from(conversations)
@@ -251,8 +266,9 @@ export async function removeConversationParticipant(
   conversationId: ConversationId,
   participantPrincipalId: PrincipalId,
   actor: Actor,
-  opts?: { actorDisplayName?: string | null }
+  opts?: { actorDisplayName?: string | null } & SystemCascadeOptions
 ): Promise<{ removed: boolean }> {
+  if (!opts?.systemCascade) await assertConversationVisible(conversationId, actor)
   // Read the participant's label first so the notice can name who was removed.
   const [participant] = await db
     .select({
@@ -301,7 +317,7 @@ export async function removeConversationParticipant(
 /**
  * The customers an agent has added to a conversation, oldest first, for the
  * agent-side display. `email` is realEmail-sanitized so a synthetic anonymous
- * address never renders.
+ * address never renders. A conversation the actor cannot see is NotFound.
  */
 export interface ConversationParticipant {
   principalId: PrincipalId
@@ -314,6 +330,20 @@ export interface ConversationParticipant {
 }
 
 export async function listConversationParticipants(
+  conversationId: ConversationId,
+  actor: Actor,
+  opts?: SystemCascadeOptions
+): Promise<ConversationParticipant[]> {
+  if (!opts?.systemCascade) await assertConversationVisible(conversationId, actor)
+  return listConversationParticipantRows(conversationId)
+}
+
+/**
+ * Every participant row of a conversation, with no visibility check: for
+ * callers that authorized the item first (ticket sharing reads it after its
+ * own ticket and customer checks).
+ */
+export async function listConversationParticipantRows(
   conversationId: ConversationId
 ): Promise<ConversationParticipant[]> {
   const rows = await db

@@ -19,17 +19,23 @@ export function hasBackAtTime(at: string | null | undefined): at is string {
 }
 
 /**
- * The shared online/offline cue — a status dot plus "We're online" / "We'll
- * reply by email". Used by the conversation thread's presence strip and the support
- * surface's message CTA so the two never drift. Pass the precomputed `available`
- * verdict (see conversationAvailable); the caller owns the surrounding layout.
+ * The shared online/offline cue — a status dot plus "We're online", or while
+ * away "We'll reply by email" / "We'll reply here". Used by the conversation
+ * thread's presence strip and the widget's messenger header so the two never
+ * drift. Pass the precomputed `available` verdict (see conversationAvailable);
+ * the caller owns the surrounding layout.
  */
 export function ConversationPresenceBadge({
   available,
+  canReplyByEmail,
   nextOpenAt,
   className,
 }: {
   available: boolean
+  /** Whether a reply can reach this visitor by email (the server's
+   *  `canEmailVisitor`). Only then does the away copy promise email: an
+   *  anonymous visitor has no real address, so it never does. */
+  canReplyByEmail: boolean
   /** When the team is back (ISO), shown after the away copy when office hours
    *  are configured: it sets an honest expectation up front. */
   nextOpenAt?: string | null
@@ -52,7 +58,14 @@ export function ConversationPresenceBadge({
         <FormattedMessage id="widget.messenger.online" defaultMessage="We're online" />
       ) : (
         <span className="min-w-0 truncate">
-          <FormattedMessage id="widget.messenger.offline" defaultMessage="We'll reply by email" />
+          {canReplyByEmail ? (
+            <FormattedMessage id="widget.messenger.offline" defaultMessage="We'll reply by email" />
+          ) : (
+            <FormattedMessage
+              id="widget.messenger.offline.replyHere"
+              defaultMessage="We'll reply here"
+            />
+          )}
           {hasBackAtTime(nextOpenAt) && (
             <span className="text-muted-foreground/70">
               {' · '}

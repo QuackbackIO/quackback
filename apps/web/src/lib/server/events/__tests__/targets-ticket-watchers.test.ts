@@ -45,6 +45,15 @@ vi.mock('@/lib/server/domains/settings/settings.tickets', () => ({
 
 const getTicketNotifiableWatchers = vi.fn<() => Promise<string[]>>()
 const getTicketAgentWatchersForEvent = vi.fn<() => Promise<string[]>>()
+// The author as the requester's thread names it, which runs over real rows in
+// domains/tickets/__tests__/personal-key-author.db.test.ts. Default: the
+// event's name.
+const replyAuthorNameForRequester =
+  vi.fn<(messageId: unknown, fallback: string | null) => Promise<string | undefined>>()
+vi.mock('@/lib/server/domains/tickets/ticket-reply-email', () => ({
+  replyAuthorNameForRequester: (messageId: unknown, fallback: string | null) =>
+    replyAuthorNameForRequester(messageId, fallback),
+}))
 vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
   getTicketNotifiableWatchers: () => getTicketNotifiableWatchers(),
   getTicketAgentWatchersForEvent: () => getTicketAgentWatchersForEvent(),
@@ -58,6 +67,9 @@ const {
 } = await import('../targets')
 
 beforeEach(() => {
+  replyAuthorNameForRequester
+    .mockReset()
+    .mockImplementation(async (_id, fallback) => fallback ?? undefined)
   getStageLabels.mockReset()
   getStageLabels.mockResolvedValue({ received: 'Received', resolved: 'Resolved' })
   getTicketNotifiableWatchers.mockReset()
@@ -203,6 +215,16 @@ describe('getTicketRepliedTargets', () => {
         // The customers among the recipients open the portal thread.
         portalPrincipalIds: ['principal_requester'],
       },
+    })
+  })
+
+  it("names the author on the requester's row as their thread does", async () => {
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    replyAuthorNameForRequester.mockResolvedValueOnce('Acme Support')
+    const target = await getTicketRepliedTargets(repliedEvent({ authorName: 'ops-bot' }))
+    expect(target?.config).toMatchObject({
+      authorName: 'ops-bot',
+      requesterAuthorName: 'Acme Support',
     })
   })
 

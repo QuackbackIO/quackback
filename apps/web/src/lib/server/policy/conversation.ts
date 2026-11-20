@@ -3,10 +3,11 @@
  *
  * Mirrors the policy module contract (see policy/types.ts): pure functions
  * returning an explicit Decision so every deny carries a machine-readable
- * reason. Conversations are owned by a single visitor principal; the support
- * team sees and acts on all of them.
+ * reason. Conversations are owned by a single visitor principal; which
+ * teammates see one is the row scope of `conversationFilter`
+ * (policy/conversations.ts), checked per item by `assertConversationVisible`.
  */
-import { allowDecision, denyDecision, type Actor, type Decision } from './types'
+import { allowDecision, denyDecision, isUnscopedService, type Actor, type Decision } from './types'
 import { can, authorize } from './authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { writePermissionFor } from '@/lib/shared/conversation/message-permissions'
@@ -30,17 +31,18 @@ export interface ConversationAccess {
 }
 
 /**
- * Who may read a conversation and its messages: the owning visitor, any team
- * member, or a customer the paired ticket was shared with. Any other visitor
- * is denied (existence is hidden at the access chokepoint, which throws
- * NotFound rather than Forbidden).
+ * Whether a refused visitor send may say why instead of NotFound: the actor
+ * owns the conversation, is a customer its paired ticket was shared with, or
+ * is a workspace-wide service principal. This is not a visibility check: a
+ * teammate sees a conversation through `assertConversationVisible`, the SQL
+ * check that follows their team scope.
  */
-export function canViewConversation(
+export function mayExplainVisitorRefusal(
   actor: Actor,
   conv: ConversationShape,
   access?: ConversationAccess
 ): Decision {
-  if (can(actor, PERMISSIONS.CONVERSATION_VIEW)) return allowDecision()
+  if (isUnscopedService(actor)) return allowDecision()
   if (actor.principalId && actor.principalId === conv.visitorPrincipalId) return allowDecision()
   if (actor.principalId && actor.principalType !== 'service' && access?.participant) {
     return allowDecision()

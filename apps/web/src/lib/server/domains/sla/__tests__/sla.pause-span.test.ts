@@ -84,7 +84,7 @@ async function statusEventRow(
 
 // --- conversations -----------------------------------------------------------
 
-type ConversationStatus = 'open' | 'snoozed'
+type ConversationStatus = 'open' | 'snoozed' | 'closed'
 
 /**
  * A conversation under a policy that pauses on snooze, applied at 10:00: by
@@ -285,6 +285,25 @@ const SPAN_EXCLUDED = { dueAt: iso('16:00'), pausedAt: null, breaches: [] }
 describe.skipIf(!fixture.available)('SLA pauses reacted to after the paused state ended', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
+
+  it('a close straight from snoozed settles time to close against the pause-shifted deadline', async () => {
+    const { conversationId } = await seedConversation()
+    // Due 14:00; snoozed 10:30 and closed from snoozed at 15:00 (past the
+    // original deadline). The 4.5h snooze moves the deadline to 18:30: met.
+    const snooze = await conversationMoves(conversationId, 'open', 'snoozed', '10:30')
+    const close = await conversationMoves(conversationId, 'snoozed', 'closed', '15:00')
+
+    await recordSlaFromEvent(snooze)
+    await recordSlaFromEvent(close)
+
+    const settled = (
+      await testDb.select().from(slaEvents).where(eq(slaEvents.conversationId, conversationId))
+    ).filter((event) => event.kind.startsWith('resolution'))
+    expect(settled.map((event) => event.kind)).toEqual(['resolution_met'])
+    expect(settled[0].meta.dueAt).toBe(iso('18:30'))
+    expect(settled[0].meta.overdueSecs).toBe(0)
+    expect((await stampOf(conversationId)).resolvedAt).toBe(iso('15:00'))
+  })
 
   it('a snooze and its wake reacted to in order, both after the wake, exclude the snooze', async () => {
     const { conversationId } = await seedConversation()

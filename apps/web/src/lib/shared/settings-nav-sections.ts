@@ -1,6 +1,10 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
-import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
+import {
+  SETTINGS_PAGE_ACCESS,
+  holdsPageGate,
+  type GatedSettingsPage,
+  type PageGate,
+} from '@/lib/shared/settings-page-access'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 import {
   AUTOMATION_PAGES,
@@ -22,10 +26,11 @@ export interface NavItem {
   to: string
   /** Highlight only on this path, not nested child pages. */
   exact?: boolean
-  /** The permission the page checks when it opens; the nav offers it only to holders. */
-  permission?: PermissionKey
-  /** Pages that open to a holder of any one of these, instead of a single permission. */
-  anyOf?: readonly PermissionKey[]
+  /**
+   * Who the page opens to (SETTINGS_PAGE_ACCESS); the nav offers it only to
+   * them. Absent for a page open to every teammate (Notifications).
+   */
+  gate?: PageGate
   /**
    * A page that summarises others (Domains). It is offered in the nav, but chosen
    * as the page Settings opens on only for a holder of `owner`, the one permission
@@ -55,8 +60,8 @@ export interface NavSection {
 export interface SettingsModuleRowPage {
   label: string
   to: SettingsPagePath
-  /** The permission the page's route checks; the nav and module landing offer it only to holders. */
-  permission: PermissionKey
+  /** Who the page's route opens to; the nav and module landing offer it only to them. */
+  gate: PageGate
 }
 
 export interface SettingsModuleRow {
@@ -67,31 +72,12 @@ export interface SettingsModuleRow {
   pages: SettingsModuleRowPage[]
 }
 
-/** The permission each module page's route checks when it opens. */
-const MODULE_PAGE_PERMISSIONS = {
-  '/admin/settings/boards': PERMISSIONS.BOARD_MANAGE,
-  '/admin/settings/statuses': PERMISSIONS.STATUS_MANAGE,
-  '/admin/settings/tags': PERMISSIONS.TAG_MANAGE,
-  '/admin/settings/moderation': PERMISSIONS.SETTINGS_MODERATION,
-  '/admin/settings/channels': PERMISSIONS.SETTINGS_MANAGE,
-  '/admin/settings/channels/email': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  '/admin/settings/channels/github': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  '/admin/settings/macros': PERMISSIONS.CONVERSATION_MANAGE,
-  '/admin/settings/office-hours': PERMISSIONS.OFFICE_HOURS_MANAGE,
-  '/admin/settings/sla': PERMISSIONS.SLA_MANAGE,
-  '/admin/settings/ticket-types': PERMISSIONS.TICKET_MANAGE_TYPES,
-  '/admin/settings/ticket-statuses': PERMISSIONS.TICKET_MANAGE_TYPES,
-  '/admin/settings/help-center': PERMISSIONS.HELP_CENTER_MANAGE,
-  '/admin/settings/changelog': PERMISSIONS.CHANGELOG_MANAGE,
-  '/admin/settings/status': PERMISSIONS.STATUS_PAGE_MANAGE,
-} as const satisfies Partial<Record<SettingsPagePath, PermissionKey>>
-
-type ModulePagePath = keyof typeof MODULE_PAGE_PERMISSIONS
+type ModulePagePath = SettingsPagePath & GatedSettingsPage
 
 /** A module page whose label comes from the page registry. */
 function modulePage(to: ModulePagePath): SettingsModuleRowPage {
   const { label } = SETTINGS_PAGES[to]
-  return { label, to, permission: MODULE_PAGE_PERMISSIONS[to] }
+  return { label, to, gate: SETTINGS_PAGE_ACCESS[to] }
 }
 
 function moduleHead(to: SettingsPagePath) {
@@ -180,17 +166,13 @@ export function buildSettingsModuleRows(flags?: Partial<FeatureFlags>): Settings
 }
 
 /** A nav row for a workspace or data page; its label comes from the page registry. */
-function navPage(to: SettingsPagePath): NavItem {
-  return { label: SETTINGS_PAGES[to].label, to }
+function navPage(to: SettingsPagePath & GatedSettingsPage): NavItem {
+  return { label: SETTINGS_PAGES[to].label, to, gate: SETTINGS_PAGE_ACCESS[to] }
 }
 
 /** A nav row for an AI & Automation page; its label is the message's default text. */
-function navAutomationPage(to: AutomationPagePath, permission: PermissionKey): NavItem {
-  return { label: AUTOMATION_PAGES[to].defaultMessage, to, permission }
-}
-
-function navSharedAiPage(to: AutomationPagePath): NavItem {
-  return { label: AUTOMATION_PAGES[to].defaultMessage, to, anyOf: AI_ANY_PERMISSIONS }
+function navAutomationPage(to: AutomationPagePath): NavItem {
+  return { label: AUTOMATION_PAGES[to].defaultMessage, to, gate: SETTINGS_PAGE_ACCESS[to] }
 }
 
 export function isNavModule(entry: NavEntry): entry is NavModule {
@@ -215,12 +197,12 @@ export function buildNavSections(
   const products: NavEntry[] = buildSettingsModuleRows(flags).map((module): NavEntry => {
     const [only, ...rest] = module.pages
     if (only && rest.length === 0) {
-      return { label: only.label, to: only.to, permission: only.permission }
+      return { label: only.label, to: only.to, gate: only.gate }
     }
     return {
       label: module.label,
       id: module.to,
-      pages: module.pages.map(({ label, to, permission }) => ({ label, to, permission })),
+      pages: module.pages.map(({ label, to, gate }) => ({ label, to, gate })),
     }
   })
 
@@ -229,85 +211,47 @@ export function buildNavSections(
     {
       label: 'AI & Automation',
       items: [
-        navAutomationPage('/admin/settings/agent', PERMISSIONS.AI_CUSTOMER_MANAGE),
-        navAutomationPage('/admin/settings/copilot', PERMISSIONS.AI_TEAMMATE_MANAGE),
-        navSharedAiPage('/admin/settings/skills'),
-        navSharedAiPage('/admin/settings/connectors'),
-        ...(flags?.supportInbox
-          ? [navAutomationPage('/admin/settings/workflows', PERMISSIONS.WORKFLOW_MANAGE)]
-          : []),
+        navAutomationPage('/admin/settings/agent'),
+        navAutomationPage('/admin/settings/copilot'),
+        navAutomationPage('/admin/settings/skills'),
+        navAutomationPage('/admin/settings/connectors'),
+        ...(flags?.supportInbox ? [navAutomationPage('/admin/settings/workflows')] : []),
       ],
     },
     {
       label: 'Workspace',
       items: [
+        navPage('/admin/settings/general'),
         {
-          ...navPage('/admin/settings/general'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
+          ...navPage('/admin/settings/domains'),
+          // Adding a domain is the setup on the page itself; custom domains are on Portal.
+          overview: { owner: PERMISSIONS.SETTINGS_MANAGE },
         },
-        { ...navPage('/admin/settings/domains'), anyOf: DOMAINS_PAGE_PERMISSIONS, overview: { owner: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN } },
-        { ...navPage('/admin/settings/notifications') },
+        navPage('/admin/settings/email'),
         {
-          ...navPage('/admin/settings/portal'),
-          permission: PERMISSIONS.SETTINGS_BRANDING,
+          label: SETTINGS_PAGES['/admin/settings/notifications'].label,
+          to: '/admin/settings/notifications',
         },
-        {
-          ...navPage('/admin/settings/widget'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/members'),
-          permission: PERMISSIONS.MEMBER_VIEW,
-        },
-        {
-          ...navPage('/admin/settings/security/authentication'),
-          permission: PERMISSIONS.AUTH_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/developers'),
-          permission: PERMISSIONS.API_KEY_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/labs'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/integrations'),
-          permission: PERMISSIONS.INTEGRATION_VIEW,
-        },
-        ...(billingEnabled
-          ? [
-              {
-                ...navPage('/admin/settings/billing'),
-                permission: PERMISSIONS.BILLING_MANAGE,
-              },
-            ]
-          : []),
+        // Its Design tab opens to settings.branding, its Custom domains tab to settings.custom_domain.
+        navPage('/admin/settings/portal'),
+        navPage('/admin/settings/widget'),
+        navPage('/admin/settings/members'),
+        navPage('/admin/settings/security/authentication'),
+        navPage('/admin/settings/developers'),
+        navPage('/admin/settings/labs'),
+        navPage('/admin/settings/integrations'),
+        ...(billingEnabled ? [navPage('/admin/settings/billing')] : []),
       ],
     },
     {
       label: 'Data',
       items: [
-        {
-          ...navPage('/admin/settings/people'),
-          permission: PERMISSIONS.USER_ATTRIBUTE_VIEW,
-        },
-        {
-          ...navPage('/admin/settings/companies'),
-          permission: PERMISSIONS.COMPANY_VIEW,
-        },
+        navPage('/admin/settings/people'),
+        navPage('/admin/settings/companies'),
         ...(isProductEnabled(flags, 'support')
-          ? [
-              {
-                ...navPage('/admin/settings/conversation-data'),
-                permission: PERMISSIONS.CONVERSATION_MANAGE,
-              },
-            ]
+          ? [navPage('/admin/settings/conversation-data')]
           : []),
-        {
-          ...navPage('/admin/settings/imports'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
+        navPage('/admin/settings/imports'),
       ],
     },
   ]
@@ -322,10 +266,7 @@ export function navSectionsFor(
   sections: NavSection[],
   permissions: ReadonlySet<PermissionKey>
 ): NavSection[] {
-  const canOpen = (item: NavItem) =>
-    item.anyOf
-      ? item.anyOf.some((permission) => permissions.has(permission))
-      : !item.permission || permissions.has(item.permission)
+  const canOpen = (item: NavItem) => !item.gate || holdsPageGate(permissions, item.gate)
   const visible = (entry: NavEntry): NavEntry | null => {
     if (!isNavModule(entry)) return canOpen(entry) ? entry : null
     const pages = entry.pages.filter(canOpen)
@@ -348,7 +289,7 @@ export function canOpenSettings(
   sections: NavSection[],
   permissions: ReadonlySet<PermissionKey>
 ): boolean {
-  const gated = (item: NavItem) => item.permission !== undefined || item.anyOf !== undefined
+  const gated = (item: NavItem) => item.gate !== undefined
   const anyGated = (entry: NavEntry) =>
     isNavModule(entry) ? entry.pages.some(gated) : gated(entry)
   return navSectionsFor(sections, permissions).some((section) => section.items.some(anyGated))
@@ -372,7 +313,7 @@ export function firstSettingsPath(
     .flatMap((section) => section.items)
     .flatMap((entry) => (isNavModule(entry) ? entry.pages : [entry]))
     .filter((item) => !item.overview || permissions.has(item.overview.owner))
-    .filter((item) => item.permission !== undefined || item.anyOf !== undefined)
+    .filter((item) => item.gate !== undefined)
     .map((item) => item.to)
   if (gatedPaths.includes(GENERAL_PATH)) return GENERAL_PATH
   return gatedPaths[0] ?? NOTIFICATIONS_PATH

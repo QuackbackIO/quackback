@@ -22,6 +22,7 @@ vi.mock('@/lib/server/cache', () => ({
     WORKSPACE_SETTINGS: 'settings:workspace',
     PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
     REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
+    PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
   },
 }))
 
@@ -106,7 +107,8 @@ describe('platform credential cache invalidation', () => {
     expect(mockCacheDel).toHaveBeenCalledWith(
       'settings:workspace',
       'platform-cred:configured-types',
-      'auth:registered-providers'
+      'auth:registered-providers',
+      'plan-limits:inputs'
     )
   })
 
@@ -116,7 +118,8 @@ describe('platform credential cache invalidation', () => {
     expect(mockCacheDel).toHaveBeenCalledWith(
       'settings:workspace',
       'platform-cred:configured-types',
-      'auth:registered-providers'
+      'auth:registered-providers',
+      'plan-limits:inputs'
     )
   })
 })

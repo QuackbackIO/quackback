@@ -109,7 +109,7 @@ export function InvitationsView({ status }: InvitationsViewProps) {
       {(portal.lastSentSummary || portal.actionError || portal.resendConfirm) && (
         <div className="px-4 pt-3 space-y-1 sm:px-6">
           {portal.lastSentSummary && (
-            <p className="text-xs text-emerald-700 dark:text-emerald-400" role="status">
+            <p className="text-xs text-success" role="status">
               {portal.lastSentSummary}
             </p>
           )}

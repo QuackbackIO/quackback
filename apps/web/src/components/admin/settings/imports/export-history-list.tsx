@@ -76,7 +76,7 @@ export function ExportHistoryList() {
   })
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading export history...</p>
+    return <p className="text-sm text-muted-foreground">Loading export history…</p>
   }
 
   if (!runs || runs.length === 0) {

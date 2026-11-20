@@ -1,6 +1,6 @@
 /**
  * Unit tests for POST /api/export/workspace: starts the async workspace
- * export. Admin-only, tier-gated, one active run per deployment.
+ * export. Admin-only, never plan-gated, one active run per deployment.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -53,6 +53,12 @@ vi.mock('@/lib/server/audit/log', () => ({
 }))
 
 import { handleStartWorkspaceExport } from '../workspace'
+import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+
+/** A plan with every tier feature off: the workspace export must not depend on any of them. */
+const NO_FEATURES = {
+  features: Object.fromEntries(Object.keys(OSS_TIER_LIMITS.features).map((key) => [key, false])),
+}
 
 function makeRequest(): Request {
   return { url: 'https://app.test/api/export/workspace', headers: new Headers() } as Request
@@ -88,11 +94,12 @@ describe('POST /api/export/workspace', () => {
     expect(hoisted.mockCreateExportRun).not.toHaveBeenCalled()
   })
 
-  it('rejects when the tier gate is off', async () => {
-    hoisted.mockGetTierLimits.mockResolvedValue({ features: { analyticsExports: false } })
+  it('starts the export on a plan with every feature off', async () => {
+    hoisted.mockGetTierLimits.mockResolvedValue(NO_FEATURES)
     const res = await handleStartWorkspaceExport(makeRequest())
-    expect(res.status).toBe(402)
-    expect(hoisted.mockCreateExportRun).not.toHaveBeenCalled()
+    expect(res.status).toBe(202)
+    expect(hoisted.mockCreateExportRun).toHaveBeenCalledTimes(1)
+    expect(hoisted.mockEnqueue).toHaveBeenCalledTimes(1)
   })
 
   it('returns 409 while another export is in flight', async () => {

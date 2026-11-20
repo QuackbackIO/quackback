@@ -53,9 +53,11 @@ export type EmailAddress = string | { address: string; name?: string }
  *
  * The parse half of {@link formatAddress}, and what {@link addressDomain} reads
  * a domain out of. Quoted display names (`"Doe, Jane" <j@x>`) lose their quotes
- * here, which is right for a name treated as data; a value going back onto the
- * wire is re-rendered by `formatAddress` rather than reassembled by hand from
- * these parts, because the quoting rules are the whole point of that function.
+ * and their escapes here, which is right for a name treated as data, and is
+ * what lets a value be formatted twice without the second pass escaping the
+ * first's escapes. A value going back onto the wire is re-rendered by
+ * `formatAddress` rather than reassembled by hand from these parts, because the
+ * quoting rules are the whole point of that function.
  */
 export function parseAddress(value: string): EmailAddress {
   // Split imperatively rather than with one regex: the obvious
@@ -66,11 +68,9 @@ export function parseAddress(value: string): EmailAddress {
   if (open === -1 || !trimmed.endsWith('>')) return trimmed
   const address = trimmed.slice(open + 1, -1).trim()
   if (!address) return trimmed
-  const name = trimmed
-    .slice(0, open)
-    .trim()
-    .replace(/^"(.*)"$/, '$1')
-    .trim()
+  const phrase = trimmed.slice(0, open).trim()
+  const quoted = /^"(.*)"$/.exec(phrase)
+  const name = (quoted ? quoted[1].replace(/\\(.)/g, '$1') : phrase).trim()
   return name ? { address, name } : address
 }
 
@@ -116,18 +116,36 @@ export function formatAddress(value: string): string {
   return `${encodeDisplayName(parsed.name)} <${parsed.address}>`
 }
 
+/**
+ * An address with its display name as plain text: for a transport that encodes
+ * headers itself (SMTP), and for showing a From to a person. Undoes the quoting
+ * or the RFC 2047 word {@link formatAddress} gives a name, since a transport
+ * handed the encoded word would quote it and recipients would see it raw.
+ */
+export function plainAddress(value: string): string | { name: string; address: string } {
+  const parsed = parseAddress(value)
+  if (typeof parsed === 'string') return parsed
+  const written = parsed.name ?? ''
+  const encoded = /^=\?UTF-8\?B\?([A-Za-z0-9+/=]*)\?=$/i.exec(written)
+  const name = encoded ? Buffer.from(encoded[1], 'base64').toString('utf8') : written
+  return { name, address: parsed.address }
+}
+
+/** The bare addr-spec of an `addr` or `Name <addr>` value, without any display name. */
+export function bareAddress(value: string): string {
+  const parsed = parseAddress(value)
+  return typeof parsed === 'string' ? parsed : parsed.address
+}
+
 /** Replace (or add) the display name on an addr-spec or `Name <addr>` value. */
 export function applyDisplayName(from: string, displayName: string): string {
-  const parsed = parseAddress(from)
-  const address = typeof parsed === 'string' ? parsed : parsed.address
-  return formatAddress(`${displayName} <${address}>`)
+  return formatAddress(`${displayName} <${bareAddress(from)}>`)
 }
 
 /** The domain of an `addr` or `Name <addr>` value, lower-cased, or null. */
 export function addressDomain(value: string | undefined): string | null {
   if (!value) return null
-  const parsed = parseAddress(value)
-  const bare = typeof parsed === 'string' ? parsed : parsed.address
+  const bare = bareAddress(value)
   const at = bare.lastIndexOf('@')
   if (at === -1) return null
   const domain = bare

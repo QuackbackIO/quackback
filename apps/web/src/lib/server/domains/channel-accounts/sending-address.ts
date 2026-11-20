@@ -1,16 +1,19 @@
 /**
- * Sending addresses and the domains they bring with them.
+ * Sending addresses and the sending domains they bring with them.
  *
- * A person adds an address, not a domain. When the address is on a domain this
- * workspace has not verified, adding it sets that domain up (or reuses the one
- * already being set up) and links the two, and the address sends from the
- * default until its domain is live: the send guard reads the domain's status,
- * not the address row, so nothing here widens what may be sent.
+ * A person adds an address, not a domain. On a shared server the address has
+ * to be on a Verified domain (Settings > Domains): one whose ownership record
+ * this workspace published, or one under a zone it proved another way. That
+ * says who owns the domain, not that the provider can sign for it, so adding
+ * the address still sets up its sending domain (or reuses the one already
+ * being set up) and links the two, and the address sends from the default
+ * until that is live: the send guard reads the sending domain's status, not
+ * the address row, so nothing here widens what may be sent.
  *
  * A domain lives while an address uses it. Removing the last address on one
  * says so, and the person decides whether the domain goes too.
  */
-import { getEmailFrom, sendRawEmail } from '@quackback/email'
+import { sendRawEmail } from '@quackback/email'
 import { addressDomain } from '@quackback/email/ses'
 import { getSesDomainIdentity } from '@quackback/email/ses-identity'
 import type { ChannelAccountId, SendingDomainId, TeamId, UserId } from '@quackback/ids'
@@ -34,6 +37,7 @@ import {
   permittedSendingIdentity,
   sendingIdentityContext,
   toAsciiDomain,
+  withSendingDisplayName,
   type SendingIdentityContext,
 } from './outbound-identity'
 import {
@@ -42,10 +46,14 @@ import {
   customSendingDomainsAvailable,
   provisionSendingDomain,
 } from './sending-identity'
+import { clearEmailSendersFor } from './email-senders'
+import {
+  discardUnusedDomain,
+  ensureDomain,
+} from '@/lib/server/domains/domain-proof/domains.service'
+import { listAddedDomainSummaries } from '@/lib/server/domains/domain-proof/domains-overview'
 
 const log = logger.child({ component: 'sending-address' })
-
-type SendingModule = 'support' | 'feedback' | 'changelog'
 
 /**
  * Which addresses this server lets a workspace add.
@@ -53,21 +61,17 @@ type SendingModule = 'support' | 'feedback' | 'changelog'
  * - `any`: one workspace, so the send guard permits any From. Every address is
  *   accepted, and an unverified domain is still offered setup when this server
  *   can set domains up.
- * - `verified-domains`: shared, and domains can be set up. An address on an
- *   unverified domain brings its domain with it.
+ * - `verified-domains`: shared, and domains can be set up. An address has to
+ *   be at or under a Verified domain, and brings its sending domain with it.
  * - `unavailable`: shared, and domains cannot be set up. Only addresses the
  *   guard already permits.
  */
 export type SendingAddressMode = 'any' | 'verified-domains' | 'unavailable'
 
 /** The mode for a guard context: the same answer the guard gives for an unknown From. */
-function addressModeFor(ctx: SendingIdentityContext): SendingAddressMode {
+export function addressModeFor(ctx: SendingIdentityContext): SendingAddressMode {
   if (!ctx.pooled) return 'any'
   return customSendingDomainsAvailable() ? 'verified-domains' : 'unavailable'
-}
-
-export async function sendingAddressMode(): Promise<SendingAddressMode> {
-  return addressModeFor(await sendingIdentityContext())
 }
 
 /** The A-label domain of an address, or null when it has none. */
@@ -84,14 +88,37 @@ function verifiedCovering(domains: EmailSendingDomain[], domain: string) {
 }
 
 /**
- * Add a sending address for an area, setting up its domain when it needs one.
+ * The Verified domain on Settings > Domains an address's domain is at or
+ * under, or null. Verified as that page shows it: the domain's own record was
+ * found, or a zone this workspace proved covers it.
+ */
+async function verifiedDomainCovering(domain: string): Promise<string | null> {
+  const added = await listAddedDomainSummaries()
+  return added.find((d) => d.verified && isAtOrUnder(domain, toAsciiDomain(d.name)))?.name ?? null
+}
+
+/** An address refused because its domain is not one the workspace has verified. */
+export interface SendingAddressRefusal {
+  ok: false
+  code: 'DOMAIN_NOT_VERIFIED'
+  domain: string
+  message: string
+}
+
+export type AddSendingAddressResult = { ok: true; account: ChannelAccount } | SendingAddressRefusal
+
+/**
+ * Add a sending address, setting up its domain when it needs one.
  *
  * - An address the workspace may already send as (a verified domain covers
  *   it, or it is the platform's own or this workspace's minted address) is
  *   added as it always was, linked to the verified domain when there is one.
+ * - On a shared server, an address on no Verified domain is refused, as a
+ *   value, before anything is written.
  * - Otherwise, where this server can set up domains, the address brings its
  *   domain: this workspace's row for it in whatever state, or a new one under
- *   the usual rules (plan cap, pre-flight, refusals).
+ *   the usual rules (plan cap, pre-flight, refusals). A domain under a
+ *   Verified one is not added to Settings > Domains again: it belongs there.
  * - In `any` mode the address is accepted regardless: a setup that cannot
  *   happen leaves it unlinked, as it always was there, and a domain the
  *   provider already reports verified is left as it is. In `unavailable` mode
@@ -101,8 +128,9 @@ function verifiedCovering(domains: EmailSendingDomain[], domain: string) {
 export async function addSendingAddress(input: {
   owningTeamId: TeamId
   address: string
-  module: SendingModule
-}): Promise<ChannelAccount> {
+  /** The name mail is sent under. Null or absent: the workspace name. */
+  senderName?: string | null
+}): Promise<AddSendingAddressResult> {
   const address = input.address.trim().toLowerCase()
   const domain = domainOfAddress(address)
   const ctx = await sendingIdentityContext()
@@ -110,16 +138,59 @@ export async function addSendingAddress(input: {
   const domains = await listSendingDomains(input.owningTeamId)
 
   // Asked as if the server were shared, so "may send" means a real reason to,
-  // not the single-workspace allowance that permits everything.
-  if (isSendingIdentityPermitted(address, { ...ctx, pooled: true })) {
+  // not the single-workspace allowance that permits everything. A domain the
+  // plan holds back still counts as this workspace's own here, as on every
+  // create path: the address is added on it, and mail from it goes from the
+  // default sender until the plan allows it again.
+  if (isSendingIdentityPermitted(address, { ...ctx, pooled: true, pausedDomains: [] })) {
     const covering = domain ? verifiedCovering(domains, domain) : undefined
-    return createSendingAddress({ ...input, address, sendingDomainId: covering?.id })
+    if (covering) await ensureDomain(covering.domain)
+    return added(createSendingAddress({ ...input, address, sendingDomainId: covering?.id }))
   }
   if (mode === 'unavailable') {
     throw new SendingDomainRefusedError(CUSTOM_DOMAINS_UNAVAILABLE_MESSAGE)
   }
-  if (!customSendingDomainsAvailable()) return createSendingAddress({ ...input, address })
+  if (!customSendingDomainsAvailable()) return added(createSendingAddress({ ...input, address }))
 
+  const owned = domain ? await verifiedDomainCovering(domain) : null
+  if (mode === 'verified-domains' && !owned) {
+    const name = domain ?? address
+    return {
+      ok: false,
+      code: 'DOMAIN_NOT_VERIFIED',
+      domain: name,
+      message: `Verify ${name} in Settings > Domains first.`,
+    }
+  }
+
+  // The domain goes on Settings > Domains first, so a sending row issued a
+  // token later takes the domain's and one record proves both. One this add
+  // created goes again if the address ends up on no sending row. A domain
+  // under a Verified one is already covered there, as a custom domain is.
+  const ensured = domain && (!owned || owned === domain) ? await ensureDomain(domain) : null
+  try {
+    const account = await addOnItsDomain(input, address, domain, mode, domains)
+    if (ensured?.created && !account.sendingDomainId) await discardUnusedDomain(ensured.domain)
+    return { ok: true, account }
+  } catch (err) {
+    if (ensured?.created) await discardUnusedDomain(ensured.domain)
+    throw err
+  }
+}
+
+const added = async (account: Promise<ChannelAccount>): Promise<AddSendingAddressResult> => ({
+  ok: true,
+  account: await account,
+})
+
+/** The address on its domain's sending row: this workspace's, or a new one set up for it. */
+async function addOnItsDomain(
+  input: { owningTeamId: TeamId; senderName?: string | null },
+  address: string,
+  domain: string | null,
+  mode: SendingAddressMode,
+  domains: EmailSendingDomain[]
+): Promise<ChannelAccount> {
   const sameDomain = (d: EmailSendingDomain) => toAsciiDomain(d.domain) === domain
   let row = domains.find(sameDomain)
   let created = false
@@ -179,8 +250,17 @@ export async function removeSendingAddress(
   id: ChannelAccountId
 ): Promise<{ lastOnDomain: { id: SendingDomainId; domain: string } | null }> {
   const account = await getChannelAccount(id)
-  await softDeleteChannelAccount(id)
+  // Already gone: removing it again changes nothing.
   if (!account) return { lastOnDomain: null }
+  // Only ever a sending address. The inbox a customer writes to and a
+  // connected channel share this table and are managed elsewhere, under their
+  // own permission, so an id of one of those is refused here.
+  if (account.role !== 'sending') {
+    throw new SendingDomainRefusedError('That sending address no longer exists.')
+  }
+  // Whatever sent from it sends from the default again (or the platform).
+  await clearEmailSendersFor(id)
+  await softDeleteChannelAccount(id)
 
   const domain = account.sendingDomainId
     ? await getSendingDomain(account.sendingDomainId)
@@ -199,8 +279,16 @@ export async function removeSendingAddress(
 }
 
 /**
- * Send a short test from an address to the person asking, through the same
- * guard and provider path a reply takes, and report the From that went out.
+ * Send a short test from an address to the person asking, the way a real send
+ * from it would go out, and report the From that did.
+ *
+ * The send guard alone decides whether the address may be used, as it does for
+ * every real send: on a shared server that means its domain is verified, and on
+ * a single-workspace server it permits any address, so a domain still being set
+ * up is tested there too, since replies already leave from it. A refused
+ * address is refused here rather than swapped for the default, because a test
+ * that arrived from somewhere else would say nothing about this one. The From
+ * is named `senderName ?? workspaceName`, as real sends name it.
  *
  * The recipient is always the caller's own account address, never an input,
  * so this cannot be used to mail anyone else.
@@ -208,17 +296,28 @@ export async function removeSendingAddress(
 export async function sendTestEmail(input: {
   addressId: ChannelAccountId
   userId: UserId
+  /** Names the From when the address has no sender name of its own. */
+  workspaceName: string
 }): Promise<{ from: string; to: string }> {
   const account = await getChannelAccount(input.addressId)
   if (!account || account.role !== 'sending' || !account.address) {
     throw new SendingDomainRefusedError('That address no longer exists.')
   }
   const address = account.address
-  const domain = domainOfAddress(address)
-  const domains = await listSendingDomains(account.owningTeamId)
-  if (!domain || !verifiedCovering(domains, domain)) {
+
+  const ctx = await sendingIdentityContext()
+  const permitted = await permittedSendingIdentity(address, ctx)
+  if (!permitted) {
+    const domain = domainOfAddress(address) ?? address
+    if (isSendingIdentityPermitted(address, { ...ctx, pausedDomains: [] })) {
+      const { currentPlanName, onThePlan } =
+        await import('@/lib/server/domains/plan-limits/plan-limits.copy')
+      throw new SendingDomainRefusedError(
+        `${domain} is paused${onThePlan(await currentPlanName())}. Email goes from your default address.`
+      )
+    }
     throw new SendingDomainRefusedError(
-      `${domain ?? address} isn't live yet. Send a test once its records are found.`
+      `${domain} isn't verified yet. You can send a test once it is.`
     )
   }
 
@@ -227,11 +326,10 @@ export async function sendTestEmail(input: {
     throw new SendingDomainRefusedError('Your account has no email address to send the test to.')
   }
 
-  const from =
-    (await permittedSendingIdentity(address)) ?? (await permittedSendingIdentity(getEmailFrom()))
-  if (!from) throw new SendingDomainRefusedError("The test email couldn't be sent.")
+  const name = (account.senderName ?? input.workspaceName).trim()
+  const from = name ? withSendingDisplayName(permitted, name) : permitted
 
-  const text = `This is a test from ${address}. If it arrived, replies can be sent from this address.`
+  const text = `This is a test from ${address}. If you're reading it, email can be sent from this address.`
   const result = await sendRawEmail({
     from,
     to,

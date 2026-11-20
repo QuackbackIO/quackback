@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -6,6 +7,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { Link } from '@tanstack/react-router'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -304,7 +306,7 @@ function AddPeopleForm({
           Cancel
         </Button>
         <Button type="submit" disabled={chips.length === 0 || over || submitting}>
-          {submitting ? 'Adding...' : primaryLabel(chips)}
+          {submitting ? 'Adding…' : primaryLabel(chips)}
         </Button>
       </DialogFooter>
     </form>
@@ -453,6 +455,7 @@ function PeopleField({
   const panelRef = useRef<HTMLDivElement>(null)
   const [focused, setFocused] = useState(false)
   const [active, setActive] = useState(0)
+  const closeResults = useCloseAfterPress(inputRef, () => setFocused(false))
 
   const trimmed = query.trim()
   const debounced = useDebouncedValue(trimmed, SEARCH_DEBOUNCE_MS)
@@ -629,7 +632,7 @@ function PeopleField({
           onFocus={() => setFocused(true)}
           onBlur={(e) => {
             if (panelRef.current?.contains(e.relatedTarget as Node | null)) return
-            setFocused(false)
+            closeResults()
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
@@ -667,6 +670,56 @@ function PeopleField({
       </div>
     </div>
   )
+}
+
+/**
+ * Close the results when the field loses focus, but not in the middle of a
+ * press. The results sit in the dialog's flow, so closing them moves
+ * everything below. A press on Cancel (or any other control below) blurs the
+ * field on its way down; closing the results right then moves that control
+ * before the press ends, and it never gets its click. So a blur that comes
+ * from a press closes the results once the press is over, unless the field
+ * has its focus back by then. Any other blur (Tab, say) closes them at once.
+ */
+function useCloseAfterPress(
+  inputRef: RefObject<HTMLInputElement | null>,
+  close: () => void
+): () => void {
+  const pressing = useRef(false)
+  const closeRef = useRef(close)
+  closeRef.current = close
+  useEffect(() => {
+    const down = () => {
+      pressing.current = true
+    }
+    const up = () => {
+      pressing.current = false
+    }
+    window.addEventListener('pointerdown', down, true)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
+    return () => {
+      window.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
+    }
+  }, [])
+  return () => {
+    if (!pressing.current) {
+      closeRef.current()
+      return
+    }
+    const afterPress = () => {
+      window.removeEventListener('pointerup', afterPress, true)
+      window.removeEventListener('pointercancel', afterPress, true)
+      // After the click this press makes, which the browser sends next.
+      setTimeout(() => {
+        if (document.activeElement !== inputRef.current) closeRef.current()
+      }, 0)
+    }
+    window.addEventListener('pointerup', afterPress, true)
+    window.addEventListener('pointercancel', afterPress, true)
+  }
 }
 
 function ResultRow({

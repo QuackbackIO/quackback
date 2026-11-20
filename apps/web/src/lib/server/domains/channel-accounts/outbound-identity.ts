@@ -65,7 +65,7 @@
  * `domains/conversation` entirely, which is a move across modules this change
  * does not otherwise touch. The cycle is the deliberate choice until then.
  */
-import { addressDomain, applyDisplayName, parseAddress } from '@quackback/email/ses'
+import { addressDomain, applyDisplayName, bareAddress } from '@quackback/email/ses'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { logger } from '@/lib/server/logger'
 import { db, eq, emailSendingDomains } from '@/lib/server/db'
@@ -78,6 +78,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { activeSendingDomainIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 const log = logger.child({
   component: 'outbound-identity',
@@ -87,11 +88,8 @@ const EMAIL_FROM_ENV = 'EMAIL_FROM'
 
 type EnvLike = Record<string, string | undefined>
 
-/** The bare addr-spec of an `addr` or `Name <addr>` value, lower-cased. */
-function bareAddress(value: string): string {
-  const parsed = parseAddress(value)
-  return (typeof parsed === 'string' ? parsed : parsed.address).trim().toLowerCase()
-}
+/** The bare addr-spec of an `addr` or `Name <addr>` value, lower-cased: how this module compares them. */
+const comparedAddress = (value: string): string => bareAddress(value).toLowerCase()
 
 /**
  * The one spelling every domain comparison in this module is made in.
@@ -178,6 +176,12 @@ export interface SendingIdentityContext {
   mailSlug: string | null
   /** Whether this process serves more than one workspace. */
   pooled: boolean
+  /**
+   * Verified domains held back by the plan: past its sending-domain cap after
+   * the plan limits grace, mail from them goes from the default sender
+   * instead. Their records and proofs stay. Absent means none.
+   */
+  pausedDomains?: Iterable<string>
 }
 
 /**
@@ -187,19 +191,27 @@ export interface SendingIdentityContext {
  * environment or a provider. Every caller that produces a From goes through it.
  */
 export function isSendingIdentityPermitted(from: string, ctx: SendingIdentityContext): boolean {
-  const address = bareAddress(from)
+  const address = comparedAddress(from)
   const rawDomain = addressDomain(from)
   if (!rawDomain) return false
   const domain = toAsciiDomain(rawDomain)
+  const paused = new Set([...(ctx.pausedDomains ?? [])].map(toAsciiDomain))
 
   // A verified domain covers its subdomains, matching what the provider itself
   // does with a verified parent domain. Both sides of that are this workspace's
   // own zone, proved by a token published inside it.
   for (const verified of ctx.verifiedDomains) {
-    if (isAtOrUnder(domain, toAsciiDomain(verified))) return true
+    const zone = toAsciiDomain(verified)
+    if (!paused.has(zone) && isAtOrUnder(domain, zone)) return true
   }
 
-  if (ctx.platformFrom && address === bareAddress(ctx.platformFrom)) return true
+  if (ctx.platformFrom && address === comparedAddress(ctx.platformFrom)) return true
+
+  // A domain the plan holds back sends from the default sender instead, on a
+  // single-workspace install too.
+  for (const zone of paused) {
+    if (isAtOrUnder(domain, zone)) return false
+  }
 
   // The slug is the whole of what separates two workspaces on the shared
   // minting domain. Only that domain: widening this to every domain the fleet
@@ -224,7 +236,7 @@ export async function sendingIdentityContext(
   // over as stored: the rule normalises every domain it compares, so doing it
   // here too would be a second spelling authority that could disagree with it.
   const verified = await db
-    .select({ domain: emailSendingDomains.domain })
+    .select({ id: emailSendingDomains.id, domain: emailSendingDomains.domain })
     .from(emailSendingDomains)
     .where(eq(emailSendingDomains.status, 'verified'))
   return {
@@ -233,6 +245,23 @@ export async function sendingIdentityContext(
     inboundDomain: inboundMintDomain(env),
     mailSlug: currentMailSlug(),
     pooled: isPooledTenancy(env),
+    pausedDomains: await pausedSendingDomains(verified),
+  }
+}
+
+/**
+ * The verified domains the plan holds back now. Never throws: a failed read
+ * holds nothing back, so a send is never lost to it.
+ */
+async function pausedSendingDomains(verified: { id: string; domain: string }[]): Promise<string[]> {
+  if (verified.length === 0) return []
+  try {
+    const active = await activeSendingDomainIds()
+    if (active === null) return []
+    return verified.filter((row) => !active.includes(row.id)).map((row) => row.domain)
+  } catch (err) {
+    log.warn({ err }, 'sending domain plan check failed; holding nothing back')
+    return []
   }
 }
 
@@ -258,13 +287,25 @@ export function withSendingDisplayName(
 }
 
 export async function permittedSendingIdentity(
-  from: string | null
+  from: string | null,
+  /**
+   * A context the caller already gathered, so a caller checking several
+   * candidates for one send reads the verified domains once, not per candidate.
+   */
+  given?: SendingIdentityContext,
+  /**
+   * `quiet` for a read that only asks what a send would do (a settings page
+   * showing the From): a refusal there is not a refused send, so it is not
+   * logged as one.
+   */
+  options: { quiet?: boolean } = {}
 ): Promise<SendingIdentity | null> {
   if (!from) return null
-  const ctx = await sendingIdentityContext()
+  const ctx = given ?? (await sendingIdentityContext())
   // The one cast to the brand, alongside its twin below. Reached only after the
   // rule above has said yes, which is the whole meaning of the type.
   if (isSendingIdentityPermitted(from, ctx)) return from as SendingIdentity
+  if (options.quiet) return null
   // The domain, never the local part: the domain is the configuration that is
   // wrong and the local part beside it is a person.
   log.warn(
@@ -288,7 +329,9 @@ export class SendingIdentityRefusedError extends Error {
 
 /** The create-path counterpart: refuse out loud, where someone is reading. */
 export async function assertSendingIdentityPermitted(from: string): Promise<SendingIdentity> {
-  const ctx = await sendingIdentityContext()
+  // Choosing an address on a domain the plan holds back is allowed: the send
+  // path falls back for as long as it is held, and the address is ready after.
+  const ctx = { ...(await sendingIdentityContext()), pausedDomains: [] }
   if (!isSendingIdentityPermitted(from, ctx)) throw new SendingIdentityRefusedError(from)
   return from as SendingIdentity
 }

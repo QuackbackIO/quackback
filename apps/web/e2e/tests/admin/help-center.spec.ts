@@ -39,7 +39,11 @@ async function selectFirstCategoryIfAvailable(
   const trigger = container.locator('[role="combobox"]').first()
   if ((await trigger.count()) === 0) return
   await trigger.click()
+  // Wait for the list to open. An Escape sent before it opens reaches the
+  // article dialog instead and closes it.
+  await expect(page.getByRole('listbox')).toBeVisible({ timeout: 5000 })
   const firstOption = page.getByRole('option').first()
+  await firstOption.waitFor({ timeout: 2000 }).catch(() => {})
   if ((await firstOption.count()) > 0) {
     await firstOption.click()
   } else {
@@ -48,8 +52,24 @@ async function selectFirstCategoryIfAvailable(
 }
 
 /**
- * Create a fresh article via the dialog and navigate to the editor page.
- * Returns the editor URL, or null if the creation flow was unavailable.
+ * The article editor. Since #563 an article opens in place: a modal over the
+ * list at `/admin/help-center?article=<id>`, not a page of its own.
+ */
+function articleModal(page: import('@playwright/test').Page) {
+  return page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('button', { name: 'Save changes' }) })
+}
+
+/** The article ID from an `/admin/help-center?article=<id>` URL. */
+function articleIdFromUrl(url: string): string | null {
+  return new URL(url).searchParams.get('article')
+}
+
+/**
+ * Create a fresh article via the dialog. Saving the draft opens the new
+ * article in the editor modal. Returns the URL that opens that modal, or null
+ * if the creation flow was unavailable.
  */
 async function createAndOpenArticle(
   page: import('@playwright/test').Page,
@@ -73,8 +93,10 @@ async function createAndOpenArticle(
   await page.keyboard.type('Test article content for e2e test.')
 
   await dialog.getByRole('button', { name: /save draft/i }).click()
-  await expect(dialog).toBeHidden({ timeout: 15000 })
-  await expect(page).toHaveURL(/\/admin\/help-center\/articles\//, { timeout: 15000 })
+  await expect(page).toHaveURL(/\/admin\/help-center\?(.*&)?article=/, { timeout: 15000 })
+  const modal = articleModal(page)
+  await expect(modal).toBeVisible({ timeout: 15000 })
+  await expect(modal.getByPlaceholder('Article title')).toHaveValue(title)
 
   return page.url()
 }
@@ -105,9 +127,9 @@ test.describe('Help Center admin navigation', () => {
     const content = page
       .getByText('Write your first article')
       .or(page.getByText(/\d+ articles?/))
-      .or(page.getByText(/article/i).first())
+      .or(page.getByText(/article/i))
 
-    await expect(content).toBeVisible({ timeout: 10000 })
+    await expect(content.first()).toBeVisible({ timeout: 10000 })
   })
 })
 
@@ -173,7 +195,7 @@ test.describe('Help Center article creation', () => {
     page,
   }) => {
     const url = await createAndOpenArticle(page, `E2E Test Article ${Date.now()}`)
-    expect(url).toMatch(/\/admin\/help-center\/articles\//)
+    expect(url && articleIdFromUrl(url)).toBeTruthy()
   })
 
   test('create article dialog can be dismissed with Escape', async ({ page }) => {
@@ -198,99 +220,98 @@ test.describe('Help Center article editor', () => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    await expect(page.getByPlaceholder('Untitled')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByPlaceholder('Page description (optional)')).toBeVisible()
-    await expect(page.locator('.ProseMirror[contenteditable="true"]')).toBeVisible()
+    const modal = articleModal(page)
+    await expect(modal.getByPlaceholder('Article title')).toBeVisible({ timeout: 10000 })
+    await expect(modal.getByPlaceholder('Page description (optional)')).toBeVisible()
+    await expect(modal.locator('.ProseMirror[contenteditable="true"]')).toBeVisible()
   })
 
-  test('editor has category select, Publish button and Save changes button', async ({ page }) => {
+  test('editor has category select, status toggle and Save changes button', async ({ page }) => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    const categorySelect = page.locator('button[role="combobox"]')
-    await expect(categorySelect.first()).toBeVisible({ timeout: 10000 })
-
-    const publishOrView = page
-      .getByRole('button', { name: /publish/i })
-      .or(page.getByRole('link', { name: /view article/i }))
-    await expect(publishOrView.first()).toBeVisible()
-
-    await expect(page.getByRole('button', { name: /save changes/i })).toBeVisible()
+    const modal = articleModal(page)
+    await expect(modal.locator('button[role="combobox"]').first()).toBeVisible({ timeout: 10000 })
+    // A new article is a draft; the Status row's button publishes it.
+    await expect(modal.getByRole('button', { name: 'Draft', exact: true })).toBeVisible()
+    // Nothing has changed yet, so there is nothing to save.
+    await expect(modal.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
   test('can edit the article title and save', async ({ page }) => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    const titleInput = page.getByPlaceholder('Untitled')
+    const modal = articleModal(page)
+    const titleInput = modal.getByPlaceholder('Article title')
     await expect(titleInput).toBeVisible({ timeout: 10000 })
 
-    await titleInput.fill(`Updated Title ${Date.now()}`)
-    await page.getByRole('button', { name: /save changes/i }).click()
+    const newTitle = `Updated Title ${Date.now()}`
+    await titleInput.fill(newTitle)
+    await modal.getByRole('button', { name: 'Save changes' }).click()
 
-    await expect(
-      page
-        .getByRole('button', { name: /saving/i })
-        .or(page.getByRole('button', { name: /save changes/i }))
-    ).toBeVisible({ timeout: 5000 })
-
-    await expect(page).toHaveURL(/\/admin\/help-center\/articles\//)
+    // A successful save closes the modal and the list shows the new title.
+    await expect(modal).toBeHidden({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: newTitle })).toBeVisible({ timeout: 10000 })
   })
 
   test('can edit article description', async ({ page }) => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    const descInput = page.getByPlaceholder('Page description (optional)')
+    const modal = articleModal(page)
+    const descInput = modal.getByPlaceholder('Page description (optional)')
     await expect(descInput).toBeVisible({ timeout: 10000 })
 
-    await descInput.fill('A helpful description set by Playwright.')
-    await page.getByRole('button', { name: /save changes/i }).click()
+    const description = `A helpful description set by Playwright ${Date.now()}`
+    await descInput.fill(description)
+    await modal.getByRole('button', { name: 'Save changes' }).click()
 
-    await expect(page).toHaveURL(/\/admin\/help-center\/articles\//)
+    // The list row previews the description.
+    await expect(modal).toBeHidden({ timeout: 10000 })
+    await expect(page.getByText(description)).toBeVisible({ timeout: 10000 })
   })
 
-  test('can publish an article and see "View article" link', async ({ page }) => {
+  test('can publish an article and see the View button', async ({ page }) => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    const publishButton = page.getByRole('button', { name: /^publish$/i })
-    if ((await publishButton.count()) === 0) return
+    const modal = articleModal(page)
+    await modal.getByRole('button', { name: 'Draft', exact: true }).click()
 
-    await publishButton.click()
-
-    await expect(page.getByRole('link', { name: /view article/i })).toBeVisible({ timeout: 10000 })
+    await expect(modal.getByRole('button', { name: 'Published', exact: true })).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(modal.getByRole('button', { name: 'View', exact: true })).toBeVisible()
   })
 
-  test('can unpublish a published article via ellipsis menu', async ({ page }) => {
+  test('can unpublish a published article from the status toggle', async ({ page }) => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    const publishButton = page.getByRole('button', { name: /^publish$/i })
-    if ((await publishButton.count()) === 0) return
+    const modal = articleModal(page)
+    await modal.getByRole('button', { name: 'Draft', exact: true }).click()
+    const published = modal.getByRole('button', { name: 'Published', exact: true })
+    await expect(published).toBeVisible({ timeout: 10000 })
 
-    await publishButton.click()
-    await expect(page.getByRole('link', { name: /view article/i })).toBeVisible({ timeout: 10000 })
+    await published.click()
 
-    const actionsButton = page.getByRole('button', { name: /article actions/i })
-    await expect(actionsButton).toBeVisible({ timeout: 5000 })
-    await actionsButton.click()
-
-    await page.getByRole('menuitem', { name: /unpublish/i }).click()
-
-    await expect(page.getByRole('button', { name: /^publish$/i })).toBeVisible({ timeout: 10000 })
+    await expect(modal.getByRole('button', { name: 'Draft', exact: true })).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(modal.getByRole('button', { name: 'View', exact: true })).toBeHidden()
   })
 
-  test('back button navigates to help center list', async ({ page }) => {
+  test('Cancel closes the editor and returns to the help center list', async ({ page }) => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    const breadcrumbLink = page.getByRole('link', { name: 'Help Center' }).first()
-    await expect(breadcrumbLink).toBeVisible({ timeout: 10000 })
-    await breadcrumbLink.click()
+    const modal = articleModal(page)
+    await modal.getByRole('button', { name: 'Cancel' }).click()
 
-    await expect(page).toHaveURL(/\/admin\/help-center/, { timeout: 10000 })
-    expect(page.url()).not.toMatch(/\/articles\//)
+    await expect(modal).toBeHidden({ timeout: 10000 })
+    await expect(page).toHaveURL(/\/admin\/help-center/)
+    expect(articleIdFromUrl(page.url())).toBeNull()
   })
 })
 
@@ -320,9 +341,8 @@ test.describe('Help Center article author', () => {
     const url = await createAndOpenArticle(page)
     if (!url) return
 
-    const urlMatch = url.match(/\/articles\/([^/?#]+)/)
-    if (!urlMatch) return
-    const articleId = urlMatch[1]
+    const articleId = articleIdFromUrl(url)
+    if (!articleId) return
 
     const patchResponse = await request.patch(`/api/v1/help-center/articles/${articleId}`, {
       data: { authorId: 'self' },
@@ -335,10 +355,9 @@ test.describe('Help Center article author', () => {
     await page.reload()
     await page.waitForLoadState('networkidle')
 
-    // TODO: When the editor gains a metadata sidebar with an author picker,
-    // assert `await expect(page.getByText('Author')).toBeVisible()` here.
-    await expect(page).toHaveURL(/\/admin\/help-center\/articles\//)
-    await expect(page.getByPlaceholder('Untitled')).toBeVisible()
+    await expect(page).toHaveURL(/[?&]article=/)
+    await expect(articleModal(page).getByText('Author')).toBeVisible()
+    await expect(articleModal(page).getByPlaceholder('Article title')).toBeVisible()
   })
 })
 
@@ -382,7 +401,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Toolbar Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     // Type some text to select
@@ -404,7 +423,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Bold Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     await editor.click()
@@ -421,7 +440,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Italic Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     await editor.click()
@@ -437,7 +456,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Slash Menu Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     // Click at end of editor to position cursor, then press Enter for new line
@@ -471,49 +490,40 @@ test.describe('Help Center article SEO description', () => {
     const url = await createAndOpenArticle(page, `SEO Test ${Date.now()}`)
     if (!url) return
 
-    const descInput = page.getByPlaceholder('Page description (optional)')
+    const modal = articleModal(page)
+    const descInput = modal.getByPlaceholder('Page description (optional)')
     await expect(descInput).toBeVisible({ timeout: 10000 })
 
     const description = `SEO description set at ${Date.now()}`
     await descInput.fill(description)
+    await modal.getByRole('button', { name: 'Save changes' }).click()
+    await expect(modal).toBeHidden({ timeout: 10000 })
 
-    await page.getByRole('button', { name: /save changes/i }).click()
-    // Wait for save
-    await expect(
-      page
-        .getByRole('button', { name: /saving/i })
-        .or(page.getByRole('button', { name: /save changes/i }))
-    ).toBeVisible({ timeout: 5000 })
-    await expect(page.getByRole('button', { name: /save changes/i })).toBeVisible({
-      timeout: 10000,
-    })
-
-    // Reload and verify the description was persisted
-    await page.reload()
-    await page.waitForLoadState('networkidle')
-
-    const reloadedDesc = page.getByPlaceholder('Page description (optional)')
-    await expect(reloadedDesc).toHaveValue(description, { timeout: 10000 })
+    // Open the same article again from its URL and check the saved value.
+    await page.goto(url)
+    await expect(articleModal(page).getByPlaceholder('Page description (optional)')).toHaveValue(
+      description,
+      { timeout: 10000 }
+    )
   })
 
   test('description field is trimmed on save (leading/trailing whitespace)', async ({ page }) => {
     const url = await createAndOpenArticle(page, `Trim Test ${Date.now()}`)
     if (!url) return
 
-    const descInput = page.getByPlaceholder('Page description (optional)')
+    const modal = articleModal(page)
+    const descInput = modal.getByPlaceholder('Page description (optional)')
     await expect(descInput).toBeVisible({ timeout: 10000 })
 
     await descInput.fill('  trimmed description  ')
-    await page.getByRole('button', { name: /save changes/i }).click()
-    await page.waitForLoadState('networkidle')
+    await modal.getByRole('button', { name: 'Save changes' }).click()
+    await expect(modal).toBeHidden({ timeout: 10000 })
 
-    // After reload the value should be trimmed (the server trims on save)
-    await page.reload()
-    await page.waitForLoadState('networkidle')
-
-    const reloaded = page.getByPlaceholder('Page description (optional)')
-    const savedValue = await reloaded.inputValue()
-    expect(savedValue.trim()).toBe('trimmed description')
+    await page.goto(url)
+    await expect(articleModal(page).getByPlaceholder('Page description (optional)')).toHaveValue(
+      'trimmed description',
+      { timeout: 10000 }
+    )
   })
 })
 
@@ -655,49 +665,37 @@ test.describe('Help Center article list filtering - status', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Help Center article preview link', () => {
-  test('"View article" link uses the correct /hc/articles/{cat}/{slug} path', async ({ page }) => {
-    const url = await createAndOpenArticle(page, `Preview Test ${Date.now()}`)
+  test('the View button opens the public /hc/articles/{cat}/{slug} page in a new tab', async ({
+    page,
+  }) => {
+    const title = `Preview Test ${Date.now()}`
+    const url = await createAndOpenArticle(page, title)
     if (!url) return
 
-    // The article must be published to show the "View article" link
-    const publishButton = page.getByRole('button', { name: /^publish$/i })
-    if ((await publishButton.count()) === 0) return
-    await publishButton.click()
+    // The article must be published to show the View button
+    const modal = articleModal(page)
+    await modal.getByRole('button', { name: 'Draft', exact: true }).click()
+    const viewButton = modal.getByRole('button', { name: 'View', exact: true })
+    await expect(viewButton).toBeVisible({ timeout: 10000 })
 
-    // Wait for "View article" link to appear
-    const viewLink = page.locator('a').filter({ hasText: /view article/i })
-    await expect(viewLink).toBeVisible({ timeout: 10000 })
-
-    // Verify the href follows /hc/articles/{category-slug}/{article-slug}
-    const href = await viewLink.getAttribute('href')
-    expect(href).toMatch(/\/hc\/articles\//)
+    const popupPromise = page.waitForEvent('popup')
+    await viewButton.click()
+    const popup = await popupPromise
+    // The public route then moves to its canonical, localised form
+    // (/hc/<locale>/articles/<id>-<slug>), so check the page, not the path.
+    await popup.waitForURL(/\/hc\/(.+\/)?articles\//, { timeout: 15000 })
+    await expect(popup.getByRole('heading', { name: title })).toBeVisible({ timeout: 15000 })
+    await popup.close()
   })
 
-  test('"View article" link opens in a new tab (target=_blank)', async ({ page }) => {
-    const url = await createAndOpenArticle(page, `NewTab Test ${Date.now()}`)
-    if (!url) return
-
-    const publishButton = page.getByRole('button', { name: /^publish$/i })
-    if ((await publishButton.count()) === 0) return
-    await publishButton.click()
-
-    const viewLink = page.locator('a').filter({ hasText: /view article/i })
-    await expect(viewLink).toBeVisible({ timeout: 10000 })
-
-    const target = await viewLink.getAttribute('target')
-    expect(target).toBe('_blank')
-  })
-
-  test('"View article" link is not shown for draft articles', async ({ page }) => {
+  test('the View button is not shown for draft articles', async ({ page }) => {
     const url = await createAndOpenArticle(page, `Draft Link Test ${Date.now()}`)
     if (!url) return
 
-    // Article is in draft state after creation — "View article" should not be present
-    const viewLink = page.locator('a').filter({ hasText: /view article/i })
-    await expect(viewLink).toBeHidden({ timeout: 5000 })
-
-    // Publish button should be visible instead
-    await expect(page.getByRole('button', { name: /^publish$/i })).toBeVisible()
+    // Article is in draft state after creation, so there is no public page to view
+    const modal = articleModal(page)
+    await expect(modal.getByRole('button', { name: 'Draft', exact: true })).toBeVisible()
+    await expect(modal.getByRole('button', { name: 'View', exact: true })).toBeHidden()
   })
 })
 
@@ -719,7 +717,10 @@ test.describe('Help Center article list item actions', () => {
     const articleRows = page.locator('h3')
     if ((await articleRows.count()) === 0) return
 
-    const firstRow = page.locator('div.group').first()
+    // The row is the hover group around the article title.
+    const firstRow = articleRows
+      .first()
+      .locator('xpath=ancestor::div[contains(@class, "group")][1]')
     if ((await firstRow.count()) === 0) return
 
     // Hover to reveal the ellipsis button

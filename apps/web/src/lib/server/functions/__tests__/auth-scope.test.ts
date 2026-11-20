@@ -90,6 +90,20 @@ describe('requireAuth permission gates are dashboard-only', () => {
     )
   })
 
+  // The portal shows a teammate on a section host an Admin link to the primary
+  // domain. Their session there stays portal scope, so it still opens nothing.
+  it("refuses a teammate's section host session at an admin gate", async () => {
+    mockGetSession.mockResolvedValue(sessionWithScope('portal'))
+
+    await expect(requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })).rejects.toThrow(
+      /dashboard session/
+    )
+    const auth = await requireAuth()
+    expect(auth.principal.role).toBe('user')
+    expect(auth.permissions).toEqual([])
+    expect(() => assertDashboardScope(auth)).toThrow(/dashboard session/)
+  })
+
   it('allows the same principal on a dashboard session', async () => {
     mockGetSession.mockResolvedValue(sessionWithScope('dashboard'))
 

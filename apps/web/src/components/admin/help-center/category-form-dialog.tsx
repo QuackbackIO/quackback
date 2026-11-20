@@ -315,6 +315,9 @@ export function CategoryFormDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // This dialog portals out of the article form, but React still bubbles the
+    // submit through the component tree to that outer form.
+    e.stopPropagation()
     const trimmedName = name.trim()
     const trimmedDesc = description.trim()
     if (!trimmedName) return
@@ -477,7 +480,7 @@ export function CategoryFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || !name.trim()}>
-              {isPending ? (isEdit ? 'Saving...' : 'Creating...') : isEdit ? 'Save' : 'Create'}
+              {isPending ? (isEdit ? 'Saving…' : 'Creating…') : isEdit ? 'Save' : 'Create'}
             </Button>
           </DialogFooter>
         </form>

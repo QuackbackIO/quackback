@@ -4,6 +4,7 @@ import { DocumentLocaleContext } from '@/components/shared/document-locale-conte
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
+import { isSeatPausedError } from '@/lib/shared/billing/seat-paused'
 import { errorReferenceOf } from '@/lib/shared/error-reference'
 import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
 import { cn } from '@/lib/shared/utils'
@@ -123,9 +124,10 @@ export function isEntitlementError(error: unknown): boolean {
 }
 
 export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
-  // Teammates who bounce off an admin-only page get a path back to their work
-  // surfaces; portal visitors get the public exit (for them "Back to Feedback"
-  // would just be denied again). Error boundaries can render outside router
+  // Teammates who bounce off an admin page get a path back to Home, which
+  // every teammate can open (Feedback may be the page they were refused);
+  // portal visitors get the public exit (for them Home would just be denied
+  // again). Error boundaries can render outside router
   // context, so read the path from the window rather than a router hook.
   const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
 
@@ -141,7 +143,7 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
         {isAdminArea ? (
           <>
             <Button asChild>
-              <a href="/admin/feedback">Back to Feedback</a>
+              <a href="/admin">Back to Home</a>
             </Button>
             <Button variant="outline" asChild>
               <a href="/">View public board</a>
@@ -156,6 +158,8 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
     </FriendlyShell>
   )
 }
+
+const SeatPausedPage = lazy(() => import('./seat-paused-page'))
 
 export function EntitlementRequiredPage({
   error,
@@ -196,6 +200,13 @@ export function EntitlementRequiredPage({
 }
 
 export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
+  if (isSeatPausedError(error)) {
+    return (
+      <Suspense fallback={null}>
+        <SeatPausedPage fullPage={fullPage} />
+      </Suspense>
+    )
+  }
   if (isAuthorizationError(error)) {
     return <PermissionDeniedPage fullPage={fullPage} />
   }

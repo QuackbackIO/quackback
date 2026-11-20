@@ -1,7 +1,6 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { CheckoutBuilder } from '@/components/admin/settings/billing/checkout-builder'
 import { billingQueries } from '@/lib/client/queries/billing'
@@ -17,7 +16,7 @@ export const Route = createFileRoute('/admin/settings/billing_/checkout')({
   head: adminPageHead('Checkout'),
   validateSearch: (search: Record<string, unknown>): CheckoutSearch => parseCheckoutSearch(search),
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.BILLING_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/billing/checkout')
     await Promise.all([
       context.queryClient.ensureQueryData(billingQueries.overview()),
       context.queryClient.ensureQueryData(billingQueries.catalogue()).catch(() => null),

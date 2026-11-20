@@ -9,7 +9,7 @@
  * @see https://tools.ietf.org/html/rfc5869
  */
 
-import { hkdfSync, randomBytes, createCipheriv, createDecipheriv } from 'crypto'
+import { hkdfSync, randomBytes, createCipheriv, createDecipheriv, createHmac } from 'crypto'
 import { activeSecretKey } from './secret-key'
 import {
   currentWorkspaceNamespace,
@@ -99,6 +99,19 @@ function deriveKey(purpose: string): Buffer {
 // =============================================================================
 // Public API
 // =============================================================================
+
+/**
+ * A stable secret for `label` under a purpose, derived rather than stored:
+ * HMAC-SHA256 of the label, keyed by the purpose's derived key. The same label
+ * yields the same secret for as long as the workspace's master secret stands;
+ * different labels, purposes or workspaces never share one.
+ */
+export function deriveLabelledSecret(purpose: string, label: string): Buffer {
+  if (!purpose || typeof purpose !== 'string') {
+    throw new Error('Derivation purpose is required')
+  }
+  return createHmac('sha256', deriveKey(purpose)).update(label, 'utf8').digest()
+}
 
 /**
  * Encrypt a plaintext string for a specific purpose.

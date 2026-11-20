@@ -1,0 +1,113 @@
+/**
+ * Where links to each portal section point, read from the workspace settings.
+ * The decision is `sectionOrigins` (lib/shared/section-links.ts); this reads
+ * the settings once (they are memoised per request) and applies the same
+ * routable map the request middleware routes by, so a link never points at a
+ * host that would send the visitor elsewhere.
+ */
+import { getBaseUrl } from '@/lib/server/config'
+import { getWorkspaceSettings } from './settings.service'
+import { hostingOf, routableSectionDomains, withoutPausedHosts } from './section-domains.hosting'
+import type { WorkspaceSettings } from './settings.types'
+import {
+  confirmedSectionDomains,
+  effectiveSectionDomains,
+  hostOfOrigin,
+  normalizeHost,
+  portalSectionsEnabled,
+  sectionOfHost,
+} from '@/lib/shared/section-domains'
+import {
+  allOnPrimary,
+  sectionOrigins,
+  sectionServedAt,
+  type SectionOrigins,
+} from '@/lib/shared/section-links'
+
+/** The origins from settings already read, as the bootstrap and middleware have them. */
+export function sectionOriginsOf(
+  settings: Pick<
+    WorkspaceSettings,
+    'settings' | 'portalConfig' | 'helpCenterConfig' | 'featureFlags' | 'statusConfig'
+  > | null,
+  primaryOrigin: string,
+  { forSignIn = false, asServed = false }: { forSignIn?: boolean; asServed?: boolean } = {}
+): SectionOrigins {
+  if (!settings) return allOnPrimary(primaryOrigin)
+  const routed = routableSectionDomains(
+    effectiveSectionDomains({
+      sectionDomains: settings.portalConfig?.sectionDomains,
+      legacyHelpDomain: settings.helpCenterConfig?.domain,
+      primaryHost: hostOfOrigin(primaryOrigin),
+    }),
+    hostingOf(settings.settings as { cloud?: unknown; cloudIdentity?: unknown })
+  )
+  // A host paused with the custom domain still serves, so sign-in and the
+  // hosts still served (`asServed`) keep it; links and routing do not.
+  const routable = forSignIn || asServed ? routed : withoutPausedHosts(routed)
+  const map = forSignIn ? confirmedSectionDomains(routable) : routable
+  return sectionOrigins({
+    map,
+    sectionEnabled: portalSectionsEnabled(settings),
+    primaryOrigin,
+  })
+}
+
+/** The origins for this request or job. Call it once and pass the result down. */
+export async function getSectionOrigins(): Promise<SectionOrigins> {
+  return sectionOriginsOf(await getWorkspaceSettings(), getBaseUrl())
+}
+
+/**
+ * The origins of every section host still served, a host whose custom domain
+ * the plan has paused included: the hosts sign-out is trusted from. Links use
+ * `getSectionOrigins`, which never names a paused host.
+ */
+export async function getServedSectionOrigins(): Promise<SectionOrigins> {
+  return sectionOriginsOf(await getWorkspaceSettings(), getBaseUrl(), { asServed: true })
+}
+
+/**
+ * The origins sign-in may use: trusted origins, the hosts a session is
+ * carried to, and the host a sign-in link or provider sign-in comes back to.
+ * As `getSectionOrigins`, less any hostname whose verification is only kept
+ * after re-checks found it may no longer be ours (`confirmedSectionDomains`).
+ * A hostname with only a reach warning (`reachWarning`) stays.
+ */
+export async function getSignInSectionOrigins(): Promise<SectionOrigins> {
+  return sectionOriginsOf(await getWorkspaceSettings(), getBaseUrl(), { forSignIn: true })
+}
+
+/**
+ * The origin of the routable section host `host` (https://help.acme.com), or
+ * null for the primary domain and for any host this workspace does not route
+ * a section to. `host` must be the one the edge vouches for
+ * (`requestWorkspaceHost`), never a forwarded header.
+ */
+export async function sectionHostOrigin(host: string | null): Promise<string | null> {
+  const origins = await getSignInSectionOrigins()
+  const section = sectionServedAt(host, origins)
+  return section ? origins[section] : null
+}
+
+/**
+ * Whether `host` is one of this workspace's section hosts: any hostname a
+ * section names, verified or not, on or off, routable or not. Never the
+ * primary domain, even if a section names it (`effectiveSectionDomains`).
+ * Sessions made on such a host are portal scope (session-audience.ts), so the
+ * widest reading is the safe one. `host` must be the one the edge vouches
+ * for, never a forwarded header.
+ */
+export async function isSectionHost(host: string | null): Promise<boolean> {
+  const clean = normalizeHost(host)
+  const primaryHost = hostOfOrigin(getBaseUrl())
+  if (!clean || clean === primaryHost) return false
+  const settings = await getWorkspaceSettings()
+  if (!settings) return false
+  const map = effectiveSectionDomains({
+    sectionDomains: settings.portalConfig?.sectionDomains,
+    legacyHelpDomain: settings.helpCenterConfig?.domain,
+    primaryHost,
+  })
+  return sectionOfHost(clean, map) !== null
+}

@@ -109,7 +109,12 @@ import type {
   AgentConversationMessageDTO,
   ConversationDTO,
 } from '@/lib/shared/conversation/types'
-import type { InboxItemRef, LinkedTicketSummary } from '@/lib/shared/inbox/items'
+import {
+  isHiddenTicketLink,
+  type InboxItemRef,
+  type LinkedTicketSummary,
+} from '@/lib/shared/inbox/items'
+import { isNotFoundError } from '@/lib/shared/errors'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import {
   formatTicketNumber,
@@ -175,6 +180,7 @@ import { EndConversationDialog } from '@/components/admin/conversation/end-conve
 import { AddParticipantDialog } from '@/components/conversation/add-participant-dialog'
 import { SharePostDialog } from '@/components/admin/conversation/share-post-dialog'
 import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
+import { BLOCK_PERSON_DESCRIPTION } from '@/components/admin/users/block-person-copy'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { RequiredAttributesDialog } from '@/components/admin/conversation/required-attributes-dialog'
 import { downloadTranscriptFile } from '@/components/admin/conversation/export-transcript-button'
@@ -272,6 +278,11 @@ const MAX_JUMP_PAGES = 20
 // server; they only exist to satisfy the branded-id parameter types.
 const INACTIVE_CONVERSATION_ID = '' as ConversationId
 const INACTIVE_TICKET_ID = '' as TicketId
+
+/** Why a tracker's Reply all takes no files. */
+const REPLY_ALL_NO_FILES = "Reply all can't include files."
+/** A tracker has no requester of its own: Reply all reaches each linked ticket's. */
+const REPLY_ALL_PLACEHOLDER = "Reply to every linked ticket's requester…"
 
 /**
  * The thread's imperative seam for the inbox's keyboard-first actions
@@ -578,34 +589,16 @@ export function AgentConversationThread({
     uploading,
   } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // Same as the visitor messenger: paste/drop stages the tray. The editor has
-  // no onImageUpload, so it never inlines a resizableImage into the draft.
-  // Paste still works for an image from the clipboard; drop/paste now accept
-  // any file, same as the paperclip picker.
-  const handleComposerPaste = useCallback(
-    (e: ClipboardEvent<HTMLDivElement>) => {
-      const files = Array.from(e.clipboardData?.files ?? [])
-      if (files.length === 0) return
-      e.preventDefault()
-      void addFiles(files)
-    },
-    [addFiles]
-  )
-  const handleComposerDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>) => {
-      const files = Array.from(e.dataTransfer?.files ?? [])
-      if (files.length === 0) return
-      e.preventDefault()
-      void addFiles(files)
-    },
-    [addFiles]
-  )
 
   // Both kind's thread queries are always called (rules of hooks) but only one
   // is ever `enabled` — the conversation adapter is unchanged from before the
   // fold (same key/query the route loader's SSR prefetch warms); the ticket
   // adapter reads the sibling factory in queries/inbox.ts.
-  const { data: convThread, isLoading: convLoading } = useQuery({
+  const {
+    data: convThread,
+    isLoading: convLoading,
+    error: convError,
+  } = useQuery({
     ...conversationInboxQueries.thread(conversationId ?? INACTIVE_CONVERSATION_ID),
     enabled: !isTicket,
   })
@@ -640,7 +633,11 @@ export function AgentConversationThread({
     ...inboxQueries.conversationTicketLink(conversationId ?? INACTIVE_CONVERSATION_ID),
     enabled: !isTicket && !!conversationId && !!convThread,
   })
-  const linkedTicketId = linkedTicketSummary?.id ?? null
+  // A pair the viewer cannot open reads as `{ hidden: true }`: there is a
+  // ticket, so no Create ticket is offered, and nothing about it is shown.
+  const pairHidden = isHiddenTicketLink(linkedTicketSummary)
+  const linkedTicketId =
+    linkedTicketSummary && !isHiddenTicketLink(linkedTicketSummary) ? linkedTicketSummary.id : null
   const { data: linkedTicketFull } = useQuery({
     ...inboxQueries.ticketDetail(linkedTicketId ?? INACTIVE_TICKET_ID),
     // No `ticket.view` → the detail fn can only 403 (B24): skip the fetch and
@@ -686,15 +683,79 @@ export function AgentConversationThread({
 
   // Derived once the ticket's type is known; a plain-object default while it's
   // still loading (never rendered — the isLoading guard below returns first).
+  // A tracker has no requester, so it has no plain reply. A teammate who may
+  // reply to tickets gets Reply all instead: the reply goes to every customer
+  // ticket the tracker tracks. Note stays the default.
+  const isTracker = isTicket && ticket?.type === 'tracker'
+  const trackerReplyAll = isTracker && permissions.has(PERMISSIONS.TICKET_REPLY)
   const capabilities: ThreadCapabilities = isTicket
-    ? ticketCapabilities(ticket?.type ?? 'customer')
+    ? {
+        ...ticketCapabilities(ticket?.type ?? 'customer'),
+        ...(trackerReplyAll ? { reply: true } : {}),
+      }
     : CONVERSATION_CAPABILITIES
+  const replyAllMode = trackerReplyAll && !noteMode
 
   // back_office/tracker tickets are note-only (§2.5) — force the mode once the
-  // ticket's type resolves (it may not be known yet on first render).
+  // ticket's type resolves (it may not be known yet on first render). A
+  // tracker also opens on Note where Reply all is offered.
   useEffect(() => {
-    if (!capabilities.reply) setNoteMode(true)
-  }, [capabilities.reply])
+    if (!capabilities.reply || isTracker) setNoteMode(true)
+  }, [capabilities.reply, isTracker, ticketId])
+
+  // Every switch of the composer mode (the menu, the shortcuts, the copilot
+  // insert). A tracker's Reply all carries text only, so files already staged
+  // keep the composer in Note until they are removed, and the teammate is told
+  // why.
+  // Returns whether it switched, so a caller holding text for the reply
+  // composer (the copilot insert) can drop it instead of landing it later.
+  const switchNoteMode = useStableCallback((note: boolean): boolean => {
+    if (!note && trackerReplyAll && attachmentItems.length > 0) {
+      toast.error(`${REPLY_ALL_NO_FILES} Remove them to switch.`)
+      return false
+    }
+    setNoteMode(note)
+    return true
+  })
+
+  // Every way into the attachment tray (paperclip, paste, drop). A tracker's
+  // Reply all carries text only, so it stages nothing and says why.
+  const stageFiles = useStableCallback((files: File[] | FileList) => {
+    if (replyAllMode) {
+      toast.error(REPLY_ALL_NO_FILES)
+      return
+    }
+    void addFiles(files)
+  })
+  // Same as the visitor messenger: paste/drop stages the tray. The editor has
+  // no onImageUpload, so it never inlines a resizableImage into the draft.
+  // Paste still works for an image from the clipboard; drop/paste now accept
+  // any file, same as the paperclip picker.
+  const handleComposerPaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
+      e.preventDefault()
+      stageFiles(files)
+    },
+    [stageFiles]
+  )
+  const handleComposerDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
+      e.preventDefault()
+      stageFiles(files)
+    },
+    [stageFiles]
+  )
+  // How many tickets a Reply all reaches, and how many of them are hidden.
+  const { data: trackerLinks } = useQuery({
+    ...ticketQueries.links(ticketId ?? INACTIVE_TICKET_ID),
+    enabled: trackerReplyAll,
+  })
+  const trackerHiddenCount = trackerLinks?.hiddenCount ?? 0
+  const trackerLinkedCount = (trackerLinks?.linked.length ?? 0) + trackerHiddenCount
 
   const linkPreviewsEnabled = capabilities.linkPreviews && supportInbox
 
@@ -1014,6 +1075,11 @@ export function AgentConversationThread({
   }
 
   const sendMutation = useMutation({
+    // Keyed by conversation so the inbox can hold this send's own echo until
+    // the response lands (thread-echo.ts). A ticket send has no key.
+    mutationKey: isTicket
+      ? undefined
+      : conversationKeys.agentSend(conversationId ?? INACTIVE_CONVERSATION_ID),
     mutationFn: (vars: {
       content: string
       contentJson: JSONContent | null
@@ -1035,6 +1101,8 @@ export function AgentConversationThread({
               content: vars.content,
               contentJson: vars.contentJson,
               attachments: vars.attachments,
+              // A tracker's only reply is Reply all.
+              ...(isTracker ? { replyAll: true } : {}),
             },
           })
         : sendAgentMessageFn({
@@ -1346,9 +1414,9 @@ export function AgentConversationThread({
   useEffect(() => {
     if (createTicketToken !== undefined && createTicketToken !== createTicketTokenRef.current) {
       createTicketTokenRef.current = createTicketToken
-      if (!isTicket) setCreateTicketOpen(true)
+      if (!isTicket && !pairHidden) setCreateTicketOpen(true)
     }
-  }, [createTicketToken, isTicket])
+  }, [createTicketToken, isTicket, pairHidden])
 
   // Save for later (star/bookmark icon, both kinds): the pragmatic thread-
   // level affordance — flags the LATEST message, reusing the same per-message
@@ -1494,7 +1562,8 @@ export function AgentConversationThread({
         staleTime: 0,
       })
       .then((linked) => {
-        if (linked && linked.statusCategory !== 'closed') setCloseConfirmTicket(linked)
+        if (linked && !isHiddenTicketLink(linked) && linked.statusCategory !== 'closed')
+          setCloseConfirmTicket(linked)
         else closeConversationMutation.mutate('closed')
       })
       // A failed freshness check must not block the close — fall back to the
@@ -1584,7 +1653,7 @@ export function AgentConversationThread({
   replyInsertRef.current = { insertText: (text: string) => insertAnswer('reply', text) }
   const insertFromCopilot = useCopilotInsert({
     noteMode,
-    setNoteMode,
+    setNoteMode: switchNoteMode,
     replyComposerRef: replyInsertRef,
   })
 
@@ -1601,7 +1670,7 @@ export function AgentConversationThread({
   }
   const focusComposerMode = useComposerFocus({
     noteMode,
-    setNoteMode,
+    setNoteMode: switchNoteMode,
     composerRef: activeEditorRef,
   })
   // A note-only thread has no reply composer to focus, so every request lands
@@ -1615,7 +1684,7 @@ export function AgentConversationThread({
         // The picker renders only on a reply-capable conversation out of note
         // mode; where it doesn't render there is nothing to open.
         if (!capabilities.macros) return
-        setNoteMode(false)
+        switchNoteMode(false)
         setMacroPickerOpen(true)
       },
     }),
@@ -1804,7 +1873,7 @@ export function AgentConversationThread({
   const selectEmoji = useStableCallback((emoji: string) =>
     insertText(noteMode ? 'note' : 'reply', emoji)
   )
-  const setComposerMode = useCallback((mode: string) => setNoteMode(mode === 'note'), [])
+  const setComposerMode = useStableCallback((mode: string) => switchNoteMode(mode === 'note'))
 
   const activeMode: ComposerMode = noteMode || !capabilities.reply ? 'note' : 'reply'
   // Re-renders the thread only when the active draft turns empty or not.
@@ -1844,6 +1913,7 @@ export function AgentConversationThread({
             canEdit={canEditAgentMessage(m, myPrincipalId, permissions)}
             canDelete={canDeleteAgentMessage(m, myPrincipalId, permissions)}
             onEdit={handleEditMessage}
+            mentionItem={item}
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}
             onMarkUnread={markUnreadMutation.mutate}
@@ -1861,9 +1931,12 @@ export function AgentConversationThread({
       case 'empty':
         return (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {isTicket
-              ? 'No replies yet. Send the first message to the requester.'
-              : 'No messages yet'}
+            {!isTicket
+              ? 'No messages yet'
+              : capabilities.reply && !isTracker
+                ? 'No replies yet. Send the first message to the requester.'
+                : // A back-office or tracker ticket has no requester to write to.
+                  'No notes yet'}
           </p>
         )
       case 'seen':
@@ -1911,14 +1984,22 @@ export function AgentConversationThread({
     )
   }
 
-  // A ticket may 404 (deleted, or no longer visible) — mirrors the old
-  // ticket-detail.tsx's guard, which this component's ticket path replaces.
-  if (isTicket && !ticket) {
+  // An item may 404 (deleted, or outside the viewer's scope): one not-found
+  // state, with nothing to close or reply to. A conversation shows it only for
+  // a NotFound answer; any other failure keeps the thread as it is.
+  const notFoundTitle = isTicket
+    ? ticket
+      ? null
+      : 'Ticket not found'
+    : isNotFoundError(convError)
+      ? 'Conversation not found'
+      : null
+  if (notFoundTitle) {
     return (
       <div className="flex h-full flex-1 min-w-0 items-center justify-center">
         <EmptyState
           icon={ChatBubbleLeftRightIcon}
-          title="Ticket not found"
+          title={notFoundTitle}
           description="It may have been deleted or you no longer have access."
         />
       </div>
@@ -1970,7 +2051,7 @@ export function AgentConversationThread({
             <TicketStatusChip status={panelTicket.status} />
           </span>
         ))}
-      {!isTicket && showTickets && !panelTicket && (
+      {!isTicket && showTickets && !panelTicket && !pairHidden && (
         <button
           type="button"
           title="Create ticket"
@@ -2126,6 +2207,7 @@ export function AgentConversationThread({
             assignedAgent={conversation.assignedAgent}
             status={conversation.status}
             snoozedUntil={conversation.snoozedUntil}
+            endReason={conversation.endReason}
             onChanged={refreshThread}
           />
         )}
@@ -2229,8 +2311,18 @@ export function AgentConversationThread({
                 switcher and force note mode (styled as today's note mode,
                 per §2.5). */}
             {capabilities.reply && (
-              <div className="mb-1.5 flex items-center">
-                <ComposerModeMenu noteMode={noteMode} onModeChange={setComposerMode} />
+              <div className="mb-1.5 flex items-center gap-2">
+                <ComposerModeMenu
+                  noteMode={noteMode}
+                  onModeChange={setComposerMode}
+                  replyLabel={trackerReplyAll ? 'Reply all' : 'Reply'}
+                />
+                {replyAllMode && trackerHiddenCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {trackerLinkedCount} linked tickets · includes {trackerHiddenCount} you can't
+                    access
+                  </span>
+                )}
               </div>
             )}
             <input
@@ -2242,7 +2334,7 @@ export function AgentConversationThread({
                 const files = e.target.files
                 // Reply and note both attach via the shared tray — uploaded and
                 // sent as `attachments`, then rendered below the bubble.
-                if (files && files.length > 0) void addFiles(files)
+                if (files && files.length > 0) stageFiles(files)
                 e.target.value = ''
               }}
             />
@@ -2260,6 +2352,7 @@ export function AgentConversationThread({
                 editorRef={activeEditorRef}
                 value={drafts.get('note').json ?? ''}
                 features={CONVERSATION_NOTE_FEATURES}
+                mentionItem={item}
                 borderless
                 minHeight="4.5rem"
                 autofocus={noteKey > 0 ? 'end' : false}
@@ -2277,10 +2370,14 @@ export function AgentConversationThread({
                 borderless
                 minHeight="4.5rem"
                 autofocus={replyKey > 0 ? 'end' : false}
-                placeholder={channelReplyPlaceholder(conversation?.channel, {
-                  closed: isClosedConversation,
-                  isTicket,
-                })}
+                placeholder={
+                  replyAllMode
+                    ? REPLY_ALL_PLACEHOLDER
+                    : channelReplyPlaceholder(conversation?.channel, {
+                        closed: isClosedConversation,
+                        isTicket,
+                      })
+                }
                 className="max-h-64 overflow-y-auto"
                 onDocumentChange={onReplyChange}
                 onSubmit={onSend}
@@ -2297,15 +2394,18 @@ export function AgentConversationThread({
               <ComposerLinkPreviews drafts={drafts} mode={noteMode ? 'note' : 'reply'} />
             )}
             <div className="flex flex-wrap items-center gap-0.5 pt-1">
-              {/* Attach is available in both reply and note mode, for both kinds. */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                aria-label="Attach files"
-              >
-                <PaperClipIcon className="h-4 w-4" />
-              </button>
+              {/* Attach is available in reply and note mode, for both kinds.
+                  A tracker's Reply all carries text only. */}
+              {!replyAllMode && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                  aria-label="Attach files"
+                >
+                  <PaperClipIcon className="h-4 w-4" />
+                </button>
+              )}
               {capabilities.emojiPicker && (
                 <EmojiPicker className="size-8" onSelect={selectEmoji} />
               )}
@@ -2415,7 +2515,11 @@ export function AgentConversationThread({
             open={addParticipantOpen}
             onOpenChange={setAddParticipantOpen}
             conversationId={conversationId}
-            sharedTicketNumber={!isTicket ? (linkedTicketSummary?.number ?? null) : null}
+            sharedTicketNumber={
+              !isTicket && linkedTicketSummary && !isHiddenTicketLink(linkedTicketSummary)
+                ? linkedTicketSummary.number
+                : null
+            }
           />
           <CreateTicketDialog
             open={createTicketOpen}
@@ -2430,7 +2534,7 @@ export function AgentConversationThread({
             open={blockConfirmOpen}
             onOpenChange={setBlockConfirmOpen}
             title={`Block ${conversation?.visitor.displayName || 'this person'}?`}
-            description="They will not be able to send new messages or sign in again. Their existing activity stays, and you can unblock them at any time."
+            description={BLOCK_PERSON_DESCRIPTION}
             confirmLabel="Block"
             variant="destructive"
             isPending={blockMutation.isPending}
@@ -2467,6 +2571,7 @@ export function AgentConversationThread({
           item={item}
           conversation={conversation}
           ticket={panelTicket}
+          pairHidden={pairHidden}
           onChanged={refreshThread}
           onSelectItem={onSelectItem}
           onTrackAsFeedback={handleTrackAsFeedback}
@@ -2484,6 +2589,7 @@ export function AgentConversationThread({
           item={item}
           conversation={conversation}
           ticket={panelTicket}
+          pairHidden={pairHidden}
           onChanged={refreshThread}
           onSelectItem={selectFromSheet}
           onTrackAsFeedback={handleTrackAsFeedback}
@@ -2639,9 +2745,12 @@ const ThreadOverflowMenu = memo(function ThreadOverflowMenu({
 const ComposerModeMenu = memo(function ComposerModeMenu({
   noteMode,
   onModeChange,
+  replyLabel = 'Reply',
 }: {
   noteMode: boolean
   onModeChange: (mode: string) => void
+  /** The customer-facing mode's name: Reply, or Reply all on a tracker. */
+  replyLabel?: string
 }) {
   return (
     <DropdownMenu>
@@ -2655,13 +2764,13 @@ const ComposerModeMenu = memo(function ComposerModeMenu({
               : 'bg-muted text-foreground hover:bg-muted/80'
           )}
         >
-          {noteMode ? 'Note' : 'Reply'}
+          {noteMode ? 'Note' : replyLabel}
           <ChevronDownIcon className="h-3 w-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuRadioGroup value={noteMode ? 'note' : 'reply'} onValueChange={onModeChange}>
-          <DropdownMenuRadioItem value="reply">Reply</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="reply">{replyLabel}</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="note">Note</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
@@ -2787,6 +2896,7 @@ const ConversationTriageFallback = memo(function ConversationTriageFallback({
   assignedAgent,
   status,
   snoozedUntil,
+  endReason,
   onChanged,
 }: {
   conversationId: ConversationId
@@ -2794,6 +2904,7 @@ const ConversationTriageFallback = memo(function ConversationTriageFallback({
   assignedAgent: ConversationDTO['assignedAgent']
   status: ConversationDTO['status']
   snoozedUntil: ConversationDTO['snoozedUntil']
+  endReason: ConversationDTO['endReason']
   onChanged: () => void
 }) {
   return (
@@ -2808,6 +2919,7 @@ const ConversationTriageFallback = memo(function ConversationTriageFallback({
         conversationId={conversationId}
         status={status}
         snoozedUntil={snoozedUntil}
+        endReason={endReason}
         onChanged={onChanged}
       />
     </div>

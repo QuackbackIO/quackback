@@ -1,0 +1,140 @@
+/**
+ * The write guard for read-only boards.
+ *
+ * After the grace, boards over the plan's cap that are not kept open take no
+ * new posts, votes or comments from anyone. Every create path reaches one of
+ * these two functions through the service that writes the row, so a caller
+ * (portal, widget, admin, REST, MCP, assistant, import) is covered by
+ * construction. The refusal is neutral on purpose: end users see it, and it
+ * never mentions plans or billing.
+ *
+ * Like the other runtime helpers it fails open: without plan billing, or when
+ * the plan limits cannot be read, every board is open.
+ */
+import { toUuid } from '@quackback/ids'
+import type { SQL } from 'drizzle-orm'
+import { db, and, boards, eq, isNull, posts, sql } from '@/lib/server/db'
+import { ForbiddenError } from '@/lib/shared/errors'
+import { BOARD_READ_ONLY_MESSAGE } from '@/lib/shared/board-read-only'
+import type { BoardId, PostId } from '@quackback/ids'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { getPlanLimits, openBoardIds } from './plan-limits.service'
+
+export const BOARD_READ_ONLY_CODE = 'BOARD_READ_ONLY'
+export { BOARD_READ_ONLY_MESSAGE }
+
+export class BoardReadOnlyError extends ForbiddenError {
+  constructor() {
+    super(BOARD_READ_ONLY_CODE, BOARD_READ_ONLY_MESSAGE)
+  }
+}
+
+export type BoardClosedReason = 'manual' | 'plan'
+
+/** Whether an admin has set the board read-only (a column on the board). */
+async function isManuallyReadOnly(boardId: BoardId): Promise<boolean> {
+  const [row] = await db
+    .select({ readOnly: boards.readOnly })
+    .from(boards)
+    .where(eq(boards.id, boardId))
+    .limit(1)
+  return row?.readOnly ?? false
+}
+
+/**
+ * Why a board takes no new posts, votes or comments, or null when it does. An
+ * admin's setting counts on every plan; the plan reason applies only to a board
+ * over the plan's board limit that is not kept open. Pass `readOnly` when the
+ * board row is already loaded to skip a read.
+ */
+export async function boardClosedReason(
+  boardId: BoardId,
+  readOnly?: boolean
+): Promise<BoardClosedReason | null> {
+  if (readOnly ?? (await isManuallyReadOnly(boardId))) return 'manual'
+  const open = await openBoardIds()
+  return open !== null && !open.includes(boardId) ? 'plan' : null
+}
+
+/**
+ * Whether a board takes new feedback, for callers that already hold its row's
+ * `readOnly` column (so no board read is needed with the plan limits off).
+ */
+export async function isBoardOpenFor(boardId: BoardId, readOnly: boolean): Promise<boolean> {
+  return (await boardClosedReason(boardId, readOnly)) === null
+}
+
+/** Refuses a write to a board that is read-only now, for either reason. */
+export async function assertBoardOpen(boardId: BoardId, readOnly?: boolean): Promise<void> {
+  if (await boardClosedReason(boardId, readOnly)) throw new BoardReadOnlyError()
+}
+
+/** The board that decides a post (a merged post counts on its canonical post's board). */
+async function deciderBoard(postId: PostId): Promise<{ id: BoardId; readOnly: boolean } | null> {
+  const board = (id: PostId) =>
+    db
+      .select({
+        postBoardId: posts.boardId,
+        canonicalPostId: posts.canonicalPostId,
+        readOnly: boards.readOnly,
+      })
+      .from(posts)
+      .innerJoin(boards, eq(boards.id, posts.boardId))
+      .where(and(eq(posts.id, id), isNull(posts.deletedAt)))
+      .limit(1)
+  const [row] = await board(postId)
+  if (!row) return null
+  if (!row.canonicalPostId) return { id: row.postBoardId, readOnly: row.readOnly }
+  const [canonical] = await board(row.canonicalPostId)
+  return canonical
+    ? { id: canonical.postBoardId, readOnly: canonical.readOnly }
+    : { id: row.postBoardId, readOnly: row.readOnly }
+}
+
+/** False when the post's board is read-only now. A missing post is left to the caller. */
+export async function isPostBoardOpen(postId: PostId): Promise<boolean> {
+  const decider = await deciderBoard(postId)
+  return decider === null || (await boardClosedReason(decider.id, decider.readOnly)) === null
+}
+
+/**
+ * The boards the plan keeps open as a uuid array for a vote query, or a null
+ * array when it keeps all of them (no plan billing, or nothing is over).
+ */
+export async function planOpenBoardsSql(): Promise<SQL> {
+  const open = await openBoardIds()
+  if (open === null) return sql`NULL::uuid[]`
+  return sql`ARRAY[${sql.join(
+    open.map((id) => sql`${toUuid(id)}::uuid`),
+    sql`, `
+  )}]::uuid[]`
+}
+
+/** Refuses a vote on a post whose board is read-only. */
+export async function assertPostBoardOpen(postId: PostId): Promise<void> {
+  if (!(await isPostBoardOpen(postId))) throw new BoardReadOnlyError()
+}
+
+/**
+ * Runs a post create for a portal or widget visitor. A refusal at the posts
+ * cap reads as the neutral line instead of the upgrade wording, which is for
+ * admins. Without plan billing the refusal is left as it is.
+ */
+export async function withVisitorPostCapCopy<T>(create: () => Promise<T>): Promise<T> {
+  try {
+    return await create()
+  } catch (error) {
+    if (error instanceof TierLimitError && error.limit === 'maxPosts' && (await limitsEnabled())) {
+      throw new BoardReadOnlyError()
+    }
+    throw error
+  }
+}
+
+async function limitsEnabled(): Promise<boolean> {
+  try {
+    return (await getPlanLimits()).enabled
+  } catch {
+    return false
+  }
+}

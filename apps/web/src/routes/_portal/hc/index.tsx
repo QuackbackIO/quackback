@@ -8,7 +8,6 @@ import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-cat
 import { HelpCenterPopularArticles } from '@/components/help-center/help-center-popular-articles'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import {
-  helpCenterAbsoluteUrl,
   helpCenterHeadMessages,
   helpCenterHeadPortal,
 } from '@/components/help-center/help-center-head'
@@ -125,8 +124,8 @@ export const Route = createFileRoute('/_portal/hc/')({
     )
 
     const pageTitle = `${title} - ${workspaceName}`
-    const { baseUrl } = helpCenterHeadPortal(matches)
-    const canonicalUrl = helpCenterAbsoluteUrl(baseUrl, '/hc')
+    const { helpUrl } = helpCenterHeadPortal(matches)
+    const canonicalUrl = helpUrl('/hc')
 
     return {
       meta: [

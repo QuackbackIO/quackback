@@ -22,15 +22,19 @@ import type { SQL } from 'drizzle-orm'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TicketId } from '@quackback/ids'
 import { ticketFilter } from '@/lib/server/policy/tickets'
+import { customerVisibleMessageSql } from '@/lib/server/messages/customer-audience'
 import { buildTicketContext, ticketToDTO } from './ticket.dto'
-import type { TicketDTO } from './ticket.types'
+import { buildRequesterTicketContext, toRequesterTicketDTO } from './requester-ticket.dto'
+import type { RequesterTicketDTO, TicketDTO } from './ticket.types'
 
 const DEFAULT_LIMIT = 25
 const MAX_LIMIT = 50
 const HEADLINE_OPTS = 'StartSel=<mark>, StopSel=</mark>, MaxWords=24, MinWords=6'
 
-export interface TicketSearchResult {
-  ticket: TicketDTO
+export interface TicketSearchResult<T extends TicketDTO | RequesterTicketDTO = TicketDTO> {
+  /** The agent DTO, or the requester's allow-listed DTO on the requester
+   *  audience. */
+  ticket: T
   /** A ts_headline snippet of the best-matching message (or the title), with the
    *  matched terms wrapped in <mark>…</mark>. Safe to render as highlighted text. */
   snippet: string
@@ -44,12 +48,21 @@ export interface SearchTicketsOptions {
   limit?: number
 }
 
+/** The customer audience rule against the `cm` alias used below. */
+const CM_CUSTOMER_VISIBLE = customerVisibleMessageSql({
+  isInternal: sql`cm.is_internal`,
+  senderType: sql`cm.sender_type`,
+  content: sql`cm.content`,
+  metadata: sql`cm.metadata`,
+})
+
 /**
  * A message's pair-parent match predicate (CONVERGENCE PHASE 0): the message
  * belongs to the ticket when it hangs off the ticket directly OR off the
  * conversation the ticket is paired with (1:1 on the customer side, 0150 +
- * 0214) — the FTS twin of the pair-thread union read. The internal-note strip
- * applies to both parents alike (one table, one is_internal column). Shared
+ * 0214) — the FTS twin of the pair-thread union read. The customer strip
+ * (internal rows and team-only system notices, see customer-audience.ts)
+ * applies to both parents alike. Shared
  * by `ticketFtsMatch`'s EXISTS and `searchTickets`' best-message-rank
  * subquery so the two can't drift.
  */
@@ -59,7 +72,7 @@ function pairMessageParentSql(tsq: SQL, stripInternal: boolean): SQL {
         SELECT tc.conversation_id FROM ticket_conversations tc
         WHERE tc.ticket_id = ${tickets.id} AND tc.ticket_type = 'customer'
       ))
-      AND cm.search_vector @@ ${tsq} ${stripInternal ? sql`AND cm.is_internal = false` : sql``}`
+      AND cm.search_vector @@ ${tsq} ${stripInternal ? sql`AND ${CM_CUSTOMER_VISIBLE}` : sql``}`
 }
 
 /**
@@ -88,8 +101,16 @@ export function ticketFtsMatch(
 
 export async function searchTickets(
   actor: Actor,
+  opts: SearchTicketsOptions & { audience: 'agent' }
+): Promise<TicketSearchResult[]>
+export async function searchTickets(
+  actor: Actor,
+  opts: SearchTicketsOptions & { audience: 'requester' }
+): Promise<TicketSearchResult<RequesterTicketDTO>[]>
+export async function searchTickets(
+  actor: Actor,
   opts: SearchTicketsOptions
-): Promise<TicketSearchResult[]> {
+): Promise<TicketSearchResult<TicketDTO | RequesterTicketDTO>[]> {
   const q = opts.query.trim()
   if (!q) return []
   const limit = Math.min(opts.limit ?? DEFAULT_LIMIT, MAX_LIMIT)
@@ -154,16 +175,21 @@ export async function searchTickets(
         inArray(tickets.id, ids),
         isNull(conversationMessages.deletedAt),
         sql`${conversationMessages.searchVector} @@ ${tsq}`,
-        requester ? eq(conversationMessages.isInternal, false) : undefined
+        requester ? customerVisibleMessageSql() : undefined
       )
     )
     .orderBy(tickets.id, sql`ts_rank(${conversationMessages.searchVector}, ${tsq}) DESC`)
   const snippetByTicket = new Map(snippetRows.map((s) => [s.ticketId, s.snippet]))
 
+  // Fall back to the title for a title-only match (no message matched).
+  const snippetFor = (row: Ticket) => snippetByTicket.get(row.id) ?? row.title
+  if (requester) {
+    const ctx = await buildRequesterTicketContext(ticketRows)
+    return ticketRows.map((row) => ({
+      ticket: toRequesterTicketDTO(row, ctx),
+      snippet: snippetFor(row),
+    }))
+  }
   const ctx = await buildTicketContext(ticketRows)
-  return ticketRows.map((row) => ({
-    ticket: ticketToDTO(row, ctx),
-    // Fall back to the title for a title-only match (no message matched).
-    snippet: snippetByTicket.get(row.id) ?? row.title,
-  }))
+  return ticketRows.map((row) => ({ ticket: ticketToDTO(row, ctx), snippet: snippetFor(row) }))
 }

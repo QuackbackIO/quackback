@@ -5,6 +5,7 @@ import { encryptSecrets } from '@/lib/server/integrations/encryption'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { shouldEnqueueSlackEvent } from './agent/addressing'
 import { abortSlackTurnFromPayload } from './agent/turns'
+import { isSlackLifecycleEvent } from './agent/revocation'
 
 export function parseSlackPayload(kind: string, raw: string): Record<string, any> {
   if (kind === 'events') return JSON.parse(raw)
@@ -63,6 +64,7 @@ export const slackAppHooks: NonNullable<IntegrationDefinition['appHooks']> = {
       this.deliveryId(kind, rawBody, _contentType)!,
       {
         kind,
+        ...(kind === 'events' && isSlackLifecycleEvent(event) ? { lifecycle: true } : {}),
         encryptedPayload: encryptSecrets(payload),
         ...(typeof payload.event_time === 'number' && Number.isFinite(payload.event_time)
           ? { occurredAt: new Date(payload.event_time * 1000).toISOString() }

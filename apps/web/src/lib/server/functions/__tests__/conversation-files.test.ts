@@ -27,7 +27,7 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   policyActorFromAuth: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   assertTicketVisible: vi.fn(),
   listConversationFiles: vi.fn(),
 }))
@@ -36,8 +36,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.requireAuth,
   policyActorFromAuth: hoisted.policyActorFromAuth,
 }))
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: hoisted.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assertTicketVisible: hoisted.assertTicketVisible,
@@ -55,7 +56,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue({ principal: { id: 'principal_agent', role: 'admin' } })
   hoisted.policyActorFromAuth.mockResolvedValue({ principalId: 'principal_agent', role: 'admin' })
-  hoisted.assertConversationViewable.mockResolvedValue({ id: CONVERSATION_ID })
+  hoisted.assertConversationVisible.mockResolvedValue({ id: CONVERSATION_ID })
   hoisted.assertTicketVisible.mockResolvedValue({ id: TICKET_ID })
   hoisted.listConversationFiles.mockResolvedValue([])
 })
@@ -66,7 +67,7 @@ describe('listConversationFilesFn', () => {
     expect(hoisted.requireAuth).toHaveBeenCalledWith(
       expect.objectContaining({ permission: expect.stringContaining('conversation') })
     )
-    expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(CONVERSATION_ID, {
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith(CONVERSATION_ID, {
       principalId: 'principal_agent',
       role: 'admin',
     })
@@ -78,7 +79,7 @@ describe('listConversationFilesFn', () => {
     await expect(
       listConversationFilesFn({ data: { conversationId: CONVERSATION_ID } })
     ).rejects.toThrow(/team members/i)
-    expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+    expect(hoisted.assertConversationVisible).not.toHaveBeenCalled()
     expect(hoisted.listConversationFiles).not.toHaveBeenCalled()
   })
 
@@ -100,6 +101,6 @@ describe('listConversationFilesFn', () => {
     await expect(
       listConversationFilesFn({ data: { conversationId: "x' OR 1=1" } })
     ).rejects.toThrow()
-    expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+    expect(hoisted.assertConversationVisible).not.toHaveBeenCalled()
   })
 })

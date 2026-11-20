@@ -10,17 +10,20 @@ import {
 
 describe('shownProofSource', () => {
   it('names the source only to a viewer who may see what proved it', () => {
-    expect(shownProofSource('email-sending', [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])).toBe(
-      'email-sending'
-    )
+    expect(shownProofSource('email-sending', [PERMISSIONS.SETTINGS_MANAGE])).toBe('email-sending')
     expect(shownProofSource('web-address', [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toBe(
       'web-address'
     )
     expect(shownProofSource('sso', [PERMISSIONS.AUTH_MANAGE])).toBe('sso')
+    expect(shownProofSource('domain', [PERMISSIONS.SETTINGS_MANAGE])).toBe('domain')
   })
 
   it('says only that this workspace proved it to anyone else', () => {
     expect(shownProofSource('email-sending', [PERMISSIONS.AUTH_MANAGE])).toBe('workspace')
+    // Sending is a workspace setting now; the support permission alone does not show it.
+    expect(shownProofSource('email-sending', [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])).toBe(
+      'workspace'
+    )
     expect(
       shownProofSource('web-address', [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])
     ).toBe('workspace')
@@ -28,6 +31,10 @@ describe('shownProofSource', () => {
       'workspace'
     )
     expect(shownProofSource('sso', [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toBe('workspace')
+    // A domain added by name is shown to whoever may add or remove one.
+    expect(
+      shownProofSource('domain', [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])
+    ).toBe('workspace')
   })
 })
 
@@ -38,6 +45,9 @@ describe('labels', () => {
     expect(pendingProvenLabel('email-sending')).toBe('Already verified through email sending')
     expect(pendingProvenLabel('workspace')).toBe('Already verified by this workspace')
     expect(pendingProvenLabel('sso')).toBe('Already verified through single sign-on')
+    expect(verifiedThroughLabel('domain')).toBe('Verified through domain verification')
+    // The product's word for a hostname the portal is served at.
+    expect(verifiedThroughLabel('web-address')).toBe('Verified through a custom domain')
   })
 })
 

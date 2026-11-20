@@ -23,7 +23,7 @@ import { WorkflowBuilderCanvas } from '../canvas'
 // provider's own data hooks trivial so this test doesn't have to pull in the
 // full inbox nav sidebar / server functions those hooks normally call.
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
-  useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
   useInboxTeams: () => ({ data: [] }),

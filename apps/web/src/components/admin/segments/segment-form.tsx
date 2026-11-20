@@ -218,9 +218,7 @@ function RuleConditionRow({
               <React.Fragment key={group}>
                 {i > 0 && <SelectSeparator />}
                 <SelectGroup>
-                  <SelectLabel className="uppercase tracking-wider px-2 py-1.5">
-                    {label}
-                  </SelectLabel>
+                  <SelectLabel className="px-2 py-1.5">{label}</SelectLabel>
                   {fields.map((field) => (
                     <SelectItem key={field.key} value={field.key}>
                       {field.label}
@@ -237,9 +235,7 @@ function RuleConditionRow({
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel className="uppercase tracking-wider px-2 py-1.5">
-                  Custom attributes
-                </SelectLabel>
+                <SelectLabel className="px-2 py-1.5">Custom attributes</SelectLabel>
                 {customAttributes.map((attr) => (
                   <SelectItem
                     key={`${CUSTOM_ATTR_PREFIX}${attr.key}`}
@@ -255,9 +251,7 @@ function RuleConditionRow({
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel className="uppercase tracking-wider px-2 py-1.5">
-                  Company attributes
-                </SelectLabel>
+                <SelectLabel className="px-2 py-1.5">Company attributes</SelectLabel>
                 {companyAttributes.map((attr) => (
                   <SelectItem
                     key={`${COMPANY_ATTR_PREFIX}${attr.key}`}
@@ -603,7 +597,7 @@ export function SegmentFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!canSubmit || isPending}>
-              {isPending ? 'Saving...' : isEditing ? 'Save changes' : 'Create segment'}
+              {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create segment'}
             </Button>
           </DialogFooter>
         </form>
