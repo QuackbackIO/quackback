@@ -84,15 +84,17 @@ describe('channels settings loaders', () => {
     )
   })
 
-  it('GitHub: warms the connection status with settings.manage only', async () => {
+  it('GitHub: warms the connection status, and opens only with the settings.manage it needs', async () => {
     const withManage = await warmedKeys(GitHubRoute, [
       PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
       PERMISSIONS.SETTINGS_MANAGE,
     ])
     expect(withManage).toContain(key('settings', 'github-channel-status'))
 
-    const without = await warmedKeys(GitHubRoute, [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])
-    expect(without).not.toContain(key('settings', 'github-channel-status'))
+    // Without settings.manage the page does not open, so nothing is read.
+    await expect(
+      warmedKeys(GitHubRoute, [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])
+    ).rejects.toMatchObject({ options: { search: { error: 'not_team_member' } } })
   })
 
   it('GitHub: the warmed status stays fresh for its row', () => {
