@@ -62,7 +62,7 @@ test.beforeAll(async () => {
   const name = `import-csv-${new Date().toISOString().slice(0, 10)}`
   await sql()`INSERT INTO post_tags (id, name, color)
     VALUES (${toUuid(generateId('post_tag'))}, ${name}, '#6b7280')
-    ON CONFLICT (name) DO NOTHING`
+    ON CONFLICT (name) WHERE deleted_at IS NULL DO NOTHING`
 })
 
 test.describe('import route', () => {
