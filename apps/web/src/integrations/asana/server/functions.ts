@@ -71,7 +71,7 @@ export const fetchAsanaProjectsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Asana not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Asana not connected')
     }
 
     const { accessToken, config: currentConfig } = await getIntegrationAuth(integration.id)

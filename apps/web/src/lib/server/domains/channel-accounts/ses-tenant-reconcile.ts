@@ -60,8 +60,7 @@ export interface ReconcileDeps {
 }
 
 export type ReconcileResult =
-  | { skipped: true }
-  | { skipped: false; ready: boolean; errors: string[] }
+  { skipped: true } | { skipped: false; ready: boolean; errors: string[] }
 
 class OutOfTime extends Error {}
 
@@ -206,7 +205,8 @@ export async function reconcileSesTenant(deps: ReconcileDeps = {}): Promise<Reco
     })
     .where(eq(emailSesTenants.tenantName, name))
 
-  if (errors.length > 0) log.warn({ tenant: name, ready, errors }, 'ses tenant reconcile incomplete')
+  if (errors.length > 0)
+    log.warn({ tenant: name, ready, errors }, 'ses tenant reconcile incomplete')
   else log.info({ tenant: name, ready, from_domains: fromDomains.size }, 'ses tenant reconciled')
   return { skipped: false, ready, errors }
 }

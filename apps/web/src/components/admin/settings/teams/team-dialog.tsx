@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toastError } from '@/lib/client/error-notice'
 
 const METHOD_LABELS: Record<TeamAssignmentMethod, string> = {
   manual: 'Manual (assign the team only)',
@@ -129,7 +130,7 @@ export function TeamDialog({
       toast.success(isEdit ? 'Team updated' : 'Team created')
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save team')
+      toastError(err, 'Failed to save team')
     } finally {
       setSaving(false)
     }
@@ -246,7 +247,7 @@ export function TeamDialog({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Create team'}
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create team'}
           </Button>
         </DialogFooter>
       </DialogContent>

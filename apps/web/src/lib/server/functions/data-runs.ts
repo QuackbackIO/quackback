@@ -4,6 +4,7 @@
  * can warm them into the document. The gates are those of the REST reads they
  * stand beside (`GET /api/export/runs`, `GET /api/import/runs`).
  */
+import { ForbiddenError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import type { ExportRunEntityCounts, ImportRunErrorEntry, ImportRunTotals } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -58,7 +59,10 @@ export const listImportRunsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<ImportRunListItem[]> => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     if (!isAdmin(auth.principal.role)) {
-      throw new Error('Access denied: Only admins can view import history')
+      throw new ForbiddenError(
+        'ADMIN_REQUIRED',
+        'Access denied: Only admins can view import history'
+      )
     }
     const { listImportRuns } = await import('@/lib/server/domains/import/import-run.service')
     return (await listImportRuns()).map((run) => ({

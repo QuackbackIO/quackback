@@ -32,15 +32,19 @@ const teamAuth: AuthConfig = {
   openSignup: false,
 }
 
-function renderTab(emailConfigured: boolean) {
+function renderTab(
+  emailConfigured: boolean,
+  sso: { providers: unknown[]; live: boolean } = { providers: [], live: false }
+) {
   const qc = new QueryClient()
-  qc.setQueryData(['settings', 'identityProviders'], [])
+  qc.setQueryData(['settings', 'identityProviders'], sso.providers)
   return render(
     <QueryClientProvider client={qc}>
       <SignInProvidersTab
         initialTeamAuthConfig={teamAuth}
         credentialStatus={{ _emailConfigured: emailConfigured }}
         customOidcProviderTier={false}
+        ssoLive={sso.live}
       />
     </QueryClientProvider>
   )
@@ -57,5 +61,24 @@ describe('Email magic link hint', () => {
   it('describes the method when email is configured', () => {
     renderTab(true)
     expect(screen.getByText('One-click link or 6-digit code by email.')).toBeInTheDocument()
+  })
+
+  describe('while single sign-on is paused', () => {
+    const provider = { id: 'idp_1', enabled: true, configured: true }
+
+    it('says email links are on whatever the switch says', () => {
+      renderTab(true, { providers: [provider], live: false })
+      expect(
+        screen.getByText(
+          'One-click link or 6-digit code by email. On while single sign-on is paused.'
+        )
+      ).toBeInTheDocument()
+      expect(screen.getByRole('switch', { name: 'Email magic link' })).not.toBeChecked()
+    })
+
+    it('says nothing extra while single sign-on still works', () => {
+      renderTab(true, { providers: [provider], live: true })
+      expect(screen.getByText('One-click link or 6-digit code by email.')).toBeInTheDocument()
+    })
   })
 })

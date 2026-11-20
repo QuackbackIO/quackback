@@ -19,6 +19,7 @@ import {
   connectorCreateInputSchema,
   type ConnectorAuthMode,
 } from '@/lib/shared/assistant/connectors'
+import { errorText } from '@/lib/client/error-text'
 
 export function AddConnectorDialog({
   open,
@@ -78,7 +79,7 @@ export function AddConnectorDialog({
         })
       },
       onError: (err) => {
-        setError(err instanceof Error ? err.message : 'Could not connect')
+        setError(errorText(err, 'Could not connect'))
       },
     })
   }

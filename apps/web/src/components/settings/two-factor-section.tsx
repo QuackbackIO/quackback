@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { authClient } from '@/lib/client/auth-client'
 import { TwoFactorEnrollSteps } from '@/components/auth/two-factor-enroll-steps'
+import { errorText } from '@/lib/client/error-text'
 
 interface Props {
   enrolled: boolean
@@ -112,7 +113,7 @@ function PasswordConfirmForm({
     try {
       await onSubmit(password)
     } catch (err) {
-      setError(err instanceof Error ? err.message : fallbackError)
+      setError(errorText(err, fallbackError))
     } finally {
       setPending(false)
     }

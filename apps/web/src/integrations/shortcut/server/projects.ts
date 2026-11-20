@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Shortcut group (team) listing via REST API.
  *
@@ -23,7 +24,10 @@ export async function listShortcutProjects(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Shortcut groups: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Shortcut groups: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as Array<{ id: string; name: string }>

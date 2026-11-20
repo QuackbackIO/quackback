@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, afterEach } from 'vitest'
+import { describe, expect, it, afterEach, vi } from 'vitest'
 import { act, render, screen, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import pl from '@/locales/pl.json'
@@ -60,6 +60,28 @@ describe('isEntitlementError', () => {
   })
 })
 
+describe('the paused-seat page', () => {
+  afterEach(cleanup)
+
+  it('shows the paused seat, with a way to sign out, for the paused-seat denial', async () => {
+    render(<DefaultErrorPage error={{ message: 'Your admin access is paused.' }} />)
+    // The page loads lazily, off the entry chunk.
+    expect(await screen.findByRole('heading', { name: 'Your admin access is paused' })).toBeTruthy()
+    expect(
+      screen.getByText(
+        "This workspace's plan includes fewer team members than it has. Someone who manages billing can give you access again or upgrade."
+      )
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
+  })
+
+  it('keeps the plain access page for every other denial', () => {
+    render(<DefaultErrorPage error={new Error('Access denied: Not a team member')} />)
+    expect(screen.queryByText('Your admin access is paused')).toBeNull()
+    expect(screen.getByText("You don't have access")).toBeTruthy()
+  })
+})
+
 describe('DefaultErrorPage', () => {
   afterEach(() => cleanup())
 
@@ -78,6 +100,33 @@ describe('DefaultErrorPage', () => {
 
     expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument()
     expect(screen.getByText(/Technical details/i)).toBeInTheDocument()
+  })
+
+  it('shows a reference code in place of the detail when the server hid the failure', () => {
+    render(
+      <DefaultErrorPage
+        error={{
+          message: 'Something went wrong on our side. Try again in a moment. (Ref D264-C488)',
+        }}
+      />
+    )
+
+    expect(screen.getByText('D264-C488')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy reference' })).toBeInTheDocument()
+    expect(screen.queryByText(/Technical details/i)).toBeNull()
+  })
+
+  it('never prints the raw message in a production build', () => {
+    vi.stubEnv('PROD', true)
+    try {
+      render(<DefaultErrorPage error={new Error('connect ECONNREFUSED 10.0.4.17:5432')} />)
+
+      expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument()
+      expect(screen.queryByText(/Technical details/i)).toBeNull()
+      expect(screen.queryByText(/ECONNREFUSED/)).toBeNull()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('renders the message of an object-shaped boundary error', () => {

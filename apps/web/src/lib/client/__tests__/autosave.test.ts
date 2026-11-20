@@ -30,9 +30,13 @@ describe('autosave mutation errors', () => {
   })
 
   it('loads sonner lazily so it stays out of the entry chunk', () => {
-    const source = readFileSync(new URL('../autosave.ts', import.meta.url), 'utf8')
-    expect(source).not.toMatch(/^import .* from 'sonner'/m)
-    expect(source).toContain("import('sonner')")
+    // The entry loads autosave.ts and, through it, the toast helper.
+    for (const file of ['../autosave.ts', '../error-notice.tsx', '../error-text.ts']) {
+      const source = readFileSync(new URL(file, import.meta.url), 'utf8')
+      expect(source).not.toMatch(/^import .* from 'sonner'/m)
+    }
+    const helper = readFileSync(new URL('../error-notice.tsx', import.meta.url), 'utf8')
+    expect(helper).toContain("import('sonner')")
   })
 
   it('shows nothing for a failing mutation that is not an autosave', async () => {
@@ -158,6 +162,18 @@ describe('autosave error ownership', () => {
     await expect(mutation.execute(undefined)).rejects.toThrow()
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
     expect(toastError).toHaveBeenCalledWith("Couldn't save. Resume the channel before enabling it.")
+  })
+
+  it('never prints a failure nobody worded, even when the mutation shows server reasons', async () => {
+    const client = clientWithHandler()
+    const mutation = client.getMutationCache().build(client, {
+      meta: { ...AUTOSAVE, showServerMessage: true },
+      mutationFn: async () =>
+        Promise.reject(new TypeError("Cannot read properties of undefined (reading 'settings')")),
+    })
+    await expect(mutation.execute(undefined)).rejects.toThrow()
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
+    expect(toastError).toHaveBeenCalledWith("Couldn't save. Try again.")
   })
 
   it('keeps the generic message for other autosave failures', async () => {

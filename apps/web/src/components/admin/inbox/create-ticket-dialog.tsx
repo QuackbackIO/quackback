@@ -16,7 +16,7 @@ import type { JSONContent } from '@tiptap/react'
 import type { ConversationId, PrincipalId, TicketId, TicketTypeId } from '@quackback/ids'
 import type { TicketType, TiptapContent } from '@/lib/shared/db-types'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
-import type { TicketTypeDTO } from '@/lib/shared/tickets'
+import { isTestDataLinkConflict, type TicketTypeDTO } from '@/lib/shared/tickets'
 import { useCreateTicket } from '@/lib/client/mutations/inbox'
 import { ticketQueries } from '@/lib/client/queries/inbox'
 import {
@@ -54,6 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toastError } from '@/lib/client/error-notice'
 
 // Native `<textarea maxLength>` used to silently cap this field; a rich doc
 // can't be truncated mid-node without corrupting it, so the cap is now
@@ -386,12 +387,8 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
               // The ticket itself was created successfully — a link failure
               // (e.g. this conversation already has one) is a secondary,
               // recoverable problem, not a reason to hide the new ticket.
-              const testLinkConflict =
-                (error as { code?: string } | null)?.code === 'TEST_DATA_LINK_CONFLICT' ||
-                (error instanceof Error &&
-                  error.message === 'Test and real conversations need separate tickets.')
               toast.warning(
-                testLinkConflict
+                isTestDataLinkConflict(error)
                   ? intl.formatMessage({
                       id: 'support.ticket.createDialog.testDataLinkConflict',
                       defaultMessage: 'Test and real conversations need separate tickets.',
@@ -410,8 +407,7 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
           onCreated(ticket.id)
           onChanged?.()
         },
-        onError: (error) =>
-          toast.error(error instanceof Error ? error.message : 'Failed to create ticket'),
+        onError: (error) => toastError(error, 'Failed to create ticket'),
       }
     )
   }

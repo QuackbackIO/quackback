@@ -6,6 +6,7 @@ import { updateThemeSchema } from '@/lib/shared/schemas/settings'
 import {
   DEFAULT_PORTAL_CONFIG,
   type BrandingConfig,
+  type PortalPageConfig,
   type UpdatePortalConfigInput,
 } from '@/lib/server/domains/settings'
 import { userIdSchema, type UserId } from '@quackback/ids'
@@ -34,12 +35,18 @@ import {
 } from '@/lib/server/domains/settings/settings.media'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
-import { requireAuth } from './auth-helpers'
+import { assertAnyPermission, requireAuth } from './auth-helpers'
 import { teamMemberWhere } from '@/lib/server/domains/principals/principal.service'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, and } from '@/lib/server/db'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import {
+  PORTAL_DESIGN_READ_PERMISSIONS,
+  PORTAL_DESIGN_WRITE_PERMISSIONS,
+  PORTAL_MODERATION_READ_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+} from '@/lib/shared/settings-read-permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
 import { workflowAbandonedAutoCloseSchema } from '@/lib/shared/workflows/abandoned-auto-close'
@@ -47,6 +54,7 @@ import { workflowCloseSpamSchema } from '@/lib/shared/workflows/close-spam'
 import { defaultSlaPolicySchema } from '@/lib/shared/sla/default-policy'
 import { MAX_TRUSTED_SENDERS } from '@/lib/shared/trusted-senders'
 import { logger } from '@/lib/server/logger'
+import { ForbiddenError, UnauthorizedError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'settings' })
 
@@ -65,6 +73,34 @@ export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async
   const config = await getPortalConfig()
   return config ?? DEFAULT_PORTAL_CONFIG
 })
+
+/**
+ * The parts of the portal config Settings > Moderation and the Design tab of
+ * Settings > Portal show, for the narrower permissions that own those pages:
+ * the moderation default to settings.moderation, the portal's tabs and welcome
+ * message to settings.branding (settings.manage reads both). Everything else in
+ * the portal config (who may open the portal, signup, section domains) stays
+ * behind settings.manage in `fetchPortalConfig`.
+ */
+export const fetchPortalPageConfigFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<PortalPageConfig> => {
+    log.debug('fetch portal page config')
+    const auth = await requireAuth()
+    assertAnyPermission(auth, PORTAL_PAGE_CONFIG_READ_PERMISSIONS)
+    const config = (await getPortalConfig()) ?? DEFAULT_PORTAL_CONFIG
+    const reads = (permissions: readonly PermissionKey[]) =>
+      permissions.some((permission) => auth.permissions.includes(permission))
+    return {
+      ...(reads(PORTAL_MODERATION_READ_PERMISSIONS) && {
+        moderationDefault: config.moderationDefault,
+      }),
+      ...(reads(PORTAL_DESIGN_READ_PERMISSIONS) && {
+        welcomeCard: config.welcomeCard,
+        nav: config.nav,
+      }),
+    }
+  }
+)
 
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public portal config')
@@ -261,12 +297,12 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
     log.debug({ user_id: data }, 'fetch user profile')
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
 
     const userId = data as UserId
     if (session.user.id !== userId) {
-      throw new Error("Access denied: Cannot view other users' profiles")
+      throw new ForbiddenError('FORBIDDEN', "Access denied: Cannot view other users' profiles")
     }
 
     // Profile-page sections (Password, 2FA) depend on the user's auth
@@ -405,6 +441,46 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
     log.info('update portal config')
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return await updatePortalConfig(data as UpdatePortalConfigInput)
+  })
+
+/**
+ * The two parts of the portal config the Design tab of Settings > Portal
+ * edits: the portal's top tabs and its welcome message. Strict, so a save that
+ * names anything else (who may open the portal, signup, section domains) is
+ * refused rather than quietly dropped.
+ */
+export const updatePortalDesignSchema = updatePortalConfigSchema
+  .pick({ nav: true, welcomeCard: true })
+  .strict()
+
+const PORTAL_DESIGN_FIELDS: ReadonlySet<string> = new Set(['nav', 'welcomeCard'])
+
+/**
+ * Saves the portal's tabs and welcome message for settings.manage or
+ * settings.branding. Every other part of the portal config saves through
+ * `updatePortalConfigFn`, under settings.manage alone; this write takes only
+ * these two fields and hands back only them.
+ */
+export const updatePortalDesignFn = createServerFn({ method: 'POST' })
+  .validator(updatePortalDesignSchema)
+  .handler(async ({ data }): Promise<PortalPageConfig> => {
+    log.info('update portal design')
+    const auth = await requireAuth()
+    assertAnyPermission(auth, PORTAL_DESIGN_WRITE_PERMISSIONS)
+    // The schema refuses other fields at the boundary; this holds the line for
+    // any caller that reaches the handler past it.
+    const other = Object.keys(data).filter((key) => !PORTAL_DESIGN_FIELDS.has(key))
+    if (other.length > 0) {
+      throw new ForbiddenError(
+        'FORBIDDEN',
+        `Access denied: The portal design save takes only nav and welcomeCard, not ${other.join(', ')}`
+      )
+    }
+    const updated = await updatePortalConfig({
+      ...(data.nav && { nav: data.nav }),
+      ...(data.welcomeCard && { welcomeCard: data.welcomeCard }),
+    } as UpdatePortalConfigInput)
+    return { nav: updated.nav, welcomeCard: updated.welcomeCard }
   })
 
 export const updateAuthConfigSchema = z.object({
@@ -919,6 +995,8 @@ export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(asyn
   return await getOfficeHoursSchedule()
 })
 
+// The routing switch is the routing rule, so it follows routing.manage (the
+// Support lead preset holds it), not settings.manage.
 const conversationRoutingSchema = z.object({
   enabled: z.boolean(),
   strategy: z.literal('auto_assign_active'),
@@ -926,7 +1004,7 @@ const conversationRoutingSchema = z.object({
 
 export const fetchConversationRoutingFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch conversation routing')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
   const { getConversationRouting } =
     await import('@/lib/server/domains/settings/settings.conversation-routing')
   return await getConversationRouting()
@@ -936,7 +1014,7 @@ export const updateConversationRoutingFn = createServerFn({ method: 'POST' })
   .validator(conversationRoutingSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled }, 'update conversation routing')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
     const { updateConversationRouting } =
       await import('@/lib/server/domains/settings/settings.conversation-routing')
     return await updateConversationRouting(data)
@@ -1115,6 +1193,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { customSendingDomainsAvailable } =
     await import('@/lib/server/domains/channel-accounts/sending-identity')
+  const { isPooledTenancy } = await import('@/lib/server/workspaces/mode')
   let fromAddress: string | null = null
   try {
     fromAddress = getEmailFrom()
@@ -1132,6 +1211,9 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
     customDomains: customSendingDomainsAvailable()
       ? ('available' as const)
       : ('unavailable' as const),
+    // Whether the server is this workspace's own to read about. On one shared
+    // by many workspaces the page leaves the transport out.
+    ownServer: !isPooledTenancy(),
   }
 })
 

@@ -7,7 +7,6 @@ import {
   TagIcon,
 } from '@heroicons/react/24/solid'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { FilterAddButton, FilterChip } from '@/components/shared/filter-chip'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -40,6 +39,7 @@ import { Spinner } from '@/components/shared/spinner'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import { buildCompaniesExportUrl } from '@/lib/shared/company-filters'
 import { createCompanyFn, type CompanyWithMemberCountDTO } from '@/lib/server/functions/companies'
+import { toastError } from '@/lib/client/error-notice'
 
 /** Render mrrCents as a whole-dollar currency amount, or a dash when unset. */
 export function formatMonthlySpend(mrrCents: number | null): string {
@@ -266,7 +266,7 @@ function AddCompanyFilterButton({
             {availableCustom.length > 0 && (
               <>
                 <div className="border-b border-border/30 my-1" />
-                <div className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="px-2.5 py-1 text-xs font-semibold text-muted-foreground">
                   Custom attributes
                 </div>
                 {availableCustom.map((attr) => (
@@ -398,7 +398,7 @@ function NewCompanyDialog({
       onCreated(company.id)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to create company')
+      toastError(error, 'Failed to create company')
     },
   })
 
@@ -446,7 +446,7 @@ function NewCompanyDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!name.trim() || create.isPending}>
-              {create.isPending ? 'Creating...' : 'Create company'}
+              {create.isPending ? 'Creating…' : 'Create company'}
             </Button>
           </DialogFooter>
         </form>
@@ -511,7 +511,7 @@ export function CompaniesView({
       <AdminListHeader
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Search companies..."
+        searchPlaceholder="Search companies…"
         filters={
           <AddCompanyFilterButton companyAttrs={companyAttrs} onChange={onCompanyAttrsChange} />
         }

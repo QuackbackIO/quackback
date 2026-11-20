@@ -5,6 +5,7 @@ import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { lookupChannelThreadByConversation } from '@/lib/server/domains/conversation/conversation.inbound-resolve'
 import { persistChannelDelivery } from '@/lib/server/domains/conversation/conversation.channel-delivery'
 import { logger } from '@/lib/server/logger'
+import { ConflictError } from '@/lib/shared/errors'
 import { parseGitHubThreadKey } from './github-thread'
 import type { AgentMessageDeliveryCtx, LifecycleDeliveryCtx, LifecycleKind } from './types'
 
@@ -249,7 +250,7 @@ export async function updateGitHubIssueComment(
   body: string
 ): Promise<void> {
   const target = await resolveIssueTarget(conversationId)
-  if (!target.ok) throw new Error(target.error)
+  if (!target.ok) throw new ConflictError('GITHUB_ISSUE_UNREACHABLE', target.error)
   const response = await fetch(
     `${GITHUB_API}/repos/${target.ownerRepo}/issues/comments/${githubCommentId}`,
     {
@@ -301,7 +302,7 @@ export async function retryGitHubAgentMessage(ctx: AgentMessageDeliveryCtx): Pro
   const target = await resolveIssueTarget(ctx.conversationId)
   if (!target.ok) {
     await markDelivery(ctx, { status: 'failed', error: target.error })
-    throw new Error(target.error)
+    throw new ConflictError('GITHUB_ISSUE_UNREACHABLE', target.error)
   }
   await deliverGitHubAgentMessage(ctx)
 }

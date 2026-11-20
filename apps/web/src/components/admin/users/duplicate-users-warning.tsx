@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { listDuplicateUsersFn, type DuplicatePrincipalMatch } from '@/lib/server/functions/admin'
 import { useMergeLeadIntoUser } from '@/lib/client/mutations'
 import type { PrincipalId } from '@quackback/ids'
+import { toastError } from '@/lib/client/error-notice'
 
 interface DuplicateUsersWarningProps {
   /** The profile being viewed (the merge target for lead matches). */
@@ -62,17 +63,17 @@ export function DuplicateUsersWarning({
           void queryClient.invalidateQueries({ queryKey: ['admin', 'user-duplicates'] })
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : 'Failed to merge')
+          toastError(error, 'Failed to merge')
         },
       }
     )
   }
 
   return (
-    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+    <div className="rounded-lg border border-warning/40 bg-warning/10 p-3">
       <div className="flex items-center gap-2">
-        <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <h3 className="text-sm font-medium text-amber-700 dark:text-amber-300">
+        <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
+        <h3 className="text-sm font-medium text-warning">
           Possible duplicate{matches.length > 1 ? 's' : ''}
         </h3>
       </div>
@@ -105,7 +106,7 @@ export function DuplicateUsersWarning({
                   key={reason}
                   size="sm"
                   variant="outline"
-                  className="border-amber-500/40 text-amber-700 dark:text-amber-400"
+                  className="border-warning/40 text-warning"
                 >
                   {REASON_LABEL[reason]}
                 </Badge>

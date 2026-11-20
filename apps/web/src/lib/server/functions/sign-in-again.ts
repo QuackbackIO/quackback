@@ -8,6 +8,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { SignInAgainOptions } from '@/lib/shared/sign-in-again'
 import { requireAuth } from './auth-helpers'
 import { logger } from '@/lib/server/logger'
+import { UnauthorizedError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'sign-in-again' })
 
@@ -16,7 +17,7 @@ export const getSignInAgainOptionsFn = createServerFn({ method: 'GET' }).handler
     log.debug('get sign-in-again options')
     const auth = await requireAuth()
     // An anonymous visitor has no sign-in of their own to repeat.
-    if (auth.principal.type === 'anonymous') throw new Error('Authentication required')
+    if (auth.principal.type === 'anonymous') throw new UnauthorizedError('Authentication required')
     const { signInAgainOptionsFor } = await import('@/lib/server/auth/sign-in-again')
     return signInAgainOptionsFor(auth)
   }

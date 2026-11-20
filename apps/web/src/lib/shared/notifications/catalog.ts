@@ -26,6 +26,19 @@ export interface NotificationTypeMeta {
   group: NotificationGroup
   /** Which settings surface(s) show this row. */
   surfaces: ('admin' | 'portal')[]
+  /**
+   * The channels this type is actually delivered on, when not every one.
+   * Settings render a switch only for these, so nobody toggles a channel that
+   * nothing sends. Omitted means in-app and email.
+   */
+  channels?: readonly NotificationChannel[]
+}
+
+const EMAIL_ONLY: readonly NotificationChannel[] = ['email']
+
+/** Whether a type is ever delivered on `channel`. */
+export function deliversOn(meta: NotificationTypeMeta, channel: NotificationChannel): boolean {
+  return meta.channels ? meta.channels.includes(channel) : true
 }
 
 export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
@@ -135,6 +148,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'Confirmation when we receive your ticket',
     group: 'support',
     surfaces: ['portal'],
+    channels: EMAIL_ONLY,
   },
   {
     type: 'ticket_due_soon',
@@ -156,6 +170,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'An SLA clock you own is approaching breach',
     group: 'support',
     surfaces: ['admin'],
+    channels: EMAIL_ONLY,
   },
   {
     type: 'sla_breach',
@@ -163,18 +178,26 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'An SLA clock you own has breached',
     group: 'support',
     surfaces: ['admin'],
+    channels: EMAIL_ONLY,
   },
   {
     type: 'sending_domain_live',
-    label: 'Sending domain live',
-    description: 'A sending domain is verified and mail sends from it',
+    label: 'Sending domain verified',
+    description: 'A sending domain is verified and ready to send',
     group: 'support',
     surfaces: ['admin'],
   },
   {
     type: 'sending_domain_needs_attention',
     label: 'Sending domain needs attention',
-    description: 'A sending domain stops verifying and replies use the default address',
+    description: 'A sending domain stops verifying, so its email comes from your default address',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
+    type: 'domain_needs_attention',
+    label: 'Domain needs attention',
+    description: "A domain's verification record is missing, or it stopped verifying",
     group: 'support',
     surfaces: ['admin'],
   },

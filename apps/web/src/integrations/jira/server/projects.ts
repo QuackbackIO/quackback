@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Jira project and issue type listing via REST API.
  */
@@ -19,7 +20,10 @@ export async function listJiraProjects(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Jira projects: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Jira projects: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as {
@@ -53,7 +57,10 @@ export async function listJiraIssueTypes(
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to list Jira issue types: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Jira issue types: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as Array<{

@@ -79,7 +79,7 @@ export const fetchJiraProjectsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Jira not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Jira not connected')
     }
 
     const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
@@ -111,7 +111,7 @@ export const fetchJiraIssueTypesFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Jira not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Jira not connected')
     }
 
     const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')

@@ -281,6 +281,44 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(await res.text()).not.toContain('deleted)')
   })
 
+  it.each(['fraud', 'spam', 'prohibited_content', 'legal'])(
+    '404s a workspace taken down for %s as if it were gone, with no retry hint and no reason',
+    async (reason) => {
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'suspended',
+        workspaceKey: 'inst_a',
+        hostname: 't1.localhost',
+        reason,
+      })
+      const res = (await serve('t1.localhost')) as Response
+      expect(res.status).toBe(404)
+      expect(res.headers.get('retry-after')).toBeNull()
+      const body = await res.text()
+      expect(body).not.toContain(reason)
+      // Not the deleted page: the team did not delete it and cannot restore it.
+      expect(body).not.toMatch(/deleted|restore/i)
+    }
+  )
+
+  it.each([
+    'security_hold',
+    'dispute',
+    'owner_request',
+    'admin',
+    'past_due',
+    'a_code_from_the_future',
+  ])('still reads a workspace suspended for %s as paused', async (reason) => {
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'suspended',
+      workspaceKey: 'inst_a',
+      hostname: 't1.localhost',
+      reason,
+    })
+    const res = (await serve('t1.localhost')) as Response
+    expect(res.status).toBe(503)
+    expect(res.headers.get('retry-after')).toBe('3600')
+  })
+
   it('serves a browser the branded page, with the host escaped and no reason', async () => {
     acquireScopeForHost.mockResolvedValue({
       kind: 'suspended',

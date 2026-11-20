@@ -20,6 +20,7 @@ const mockPortalAccess = vi.fn()
 const mockMarkPresent = vi.fn()
 const mockRefreshPresence = vi.fn()
 const mockClearPresence = vi.fn()
+const mockPermissionsForPrincipal = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
@@ -72,19 +73,25 @@ vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
 vi.mock('@/lib/server/realtime/pubsub', () => ({
   subscribe: (...a: unknown[]) => mockSubscribe(...a),
 }))
+// The inbox scope's team ids, read once at connect. Its filtering is covered
+// by stream-inbox-scope.db.test.ts.
+vi.mock('@/lib/server/domains/teams', () => ({
+  teamIdsForPrincipal: vi.fn(async () => new Set()),
+}))
 vi.mock('@/lib/server/realtime/presence', () => ({
   markPresent: (...a: unknown[]) => mockMarkPresent(...a),
   refreshPresence: (...a: unknown[]) => mockRefreshPresence(...a),
   clearPresence: (...a: unknown[]) => mockClearPresence(...a),
-}))
-vi.mock('@/lib/server/policy/conversation', () => ({
-  canViewConversation: (...a: unknown[]) => mockCanView(...a),
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   loadAuthors: vi.fn(async () => new Map()),
   toMessageDTO: vi.fn(),
   fallbackAuthor: vi.fn(),
   findBackfillCursor: vi.fn(),
+}))
+vi.mock('@/lib/server/policy/permissions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/policy/permissions')>()),
+  permissionsForPrincipal: (...a: unknown[]) => mockPermissionsForPrincipal(...a),
 }))
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
   normalizePrincipalType: (t: string) => t,
@@ -98,9 +105,25 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: (...a: unknown[]) => mockPortalAccess(...a),
 }))
+// The per-item check the stream runs: here the row comes from the
+// conversations lookup and the decision from mockCanView, so each test drives
+// existence and visibility separately. Real scope is covered by
+// stream-actor-permissions.db.test.ts.
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   requeueUnansweredOnAgentOffline: vi.fn(),
 }))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', async () => {
+  const { NotFoundError } = await import('@/lib/shared/errors')
+  return {
+    assertConversationVisible: async (_id: unknown, actor: unknown) => {
+      const row = await mockConversationFindFirst()
+      if (!row || !mockCanView(actor, row).allowed) {
+        throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+      }
+      return row
+    },
+  }
+})
 const mockAcquireSlot = vi.fn()
 vi.mock('@/lib/server/realtime/stream-connection-limit', () => ({
   streamLimiter: { acquire: (...a: unknown[]) => mockAcquireSlot(...a) },
@@ -144,6 +167,9 @@ async function drainUntil(res: Response, want: string, maxReads = 10): Promise<s
   return all
 }
 
+/** The assignment-derived set a dashboard principal resolves to in this suite. */
+const RESOLVED_PERMISSIONS: ReadonlySet<string> = new Set(['ticket.view'])
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockConversationsEnabled.mockResolvedValue(true)
@@ -162,6 +188,7 @@ beforeEach(() => {
   mockPortalAccess.mockResolvedValue({ granted: true })
   mockAcquireSlot.mockReturnValue({ ok: true, release: vi.fn() })
   mockReadActivitySnapshot.mockResolvedValue(null)
+  mockPermissionsForPrincipal.mockResolvedValue(RESOLVED_PERMISSIONS)
 })
 
 function tokenPrincipal(role: string, type = 'user', scope = 'dashboard') {
@@ -218,7 +245,11 @@ describe('GET /api/chat/stream - inbox scope', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('text/event-stream')
     await settleAndClose(res)
-    expect(mockSubscribe).toHaveBeenCalledWith(['conversation:inbox'], expect.any(Function))
+    // The principal's own channel carries scope changes for the inbox filter.
+    expect(mockSubscribe).toHaveBeenCalledWith(
+      ['conversation:inbox', expect.stringMatching(/^inbox-scope:/)],
+      expect.any(Function)
+    )
   })
 
   it('403s a promoted team role carried on a non-dashboard token', async () => {
@@ -319,6 +350,52 @@ describe('GET /api/chat/stream - conversationId scope', () => {
     expect(res.status).toBe(200)
     await settleAndClose(res)
     expect(mockPortalAccess).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/chat/stream - actor permissions', () => {
+  it('carries the assignment-derived set on a dashboard ticket stream', async () => {
+    sessionPrincipal('member')
+    mockTicketSelect.mockResolvedValue([{ id: 'ticket_1' }])
+    const res = await GET({ request: req('?ticketId=ticket_1') })
+    expect(res.status).toBe(200)
+    await settleAndClose(res)
+    expect(mockPermissionsForPrincipal).toHaveBeenCalledWith('principal_sess', 'member')
+    expect(mockTicketFilter).toHaveBeenCalledWith(
+      expect.objectContaining({ permissions: RESOLVED_PERMISSIONS })
+    )
+  })
+
+  it('carries the assignment-derived set on a dashboard conversation stream', async () => {
+    tokenPrincipal('member')
+    mockConversationFindFirst.mockResolvedValue({ id: 'conversation_1' })
+    const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
+    expect(res.status).toBe(200)
+    await settleAndClose(res)
+    expect(mockCanView.mock.calls[0][0].permissions).toBe(RESOLVED_PERMISSIONS)
+  })
+
+  it.each(['widget', 'portal'])(
+    'carries no permissions for a teammate on a %s token',
+    async (scope) => {
+      tokenPrincipal('admin', 'user', scope)
+      mockConversationFindFirst.mockResolvedValue({ id: 'conversation_1' })
+      mockCanView.mockReturnValue({ allowed: false })
+      const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
+      expect(res.status).toBe(404)
+      expect(mockPermissionsForPrincipal).not.toHaveBeenCalled()
+      expect([...mockCanView.mock.calls[0][0].permissions]).toEqual([])
+    }
+  )
+
+  it('carries no permissions for a teammate on a portal session', async () => {
+    sessionPrincipal('admin', 'user', 'portal')
+    mockConversationFindFirst.mockResolvedValue({ id: 'conversation_1' })
+    mockCanView.mockReturnValue({ allowed: false })
+    const res = await GET({ request: req('?conversationId=conversation_1') })
+    expect(res.status).toBe(404)
+    expect(mockPermissionsForPrincipal).not.toHaveBeenCalled()
+    expect([...mockCanView.mock.calls[0][0].permissions]).toEqual([])
   })
 })
 

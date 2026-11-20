@@ -25,6 +25,7 @@ import {
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { logger } from '@/lib/server/logger'
+import { NotFoundError, UnauthorizedError, ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'user' })
 
@@ -135,7 +136,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
     log.debug('get profile')
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
 
     const userRecord = await db.query.user.findFirst({
@@ -150,7 +151,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!userRecord) {
-      throw new Error('User not found')
+      throw new NotFoundError('USER_NOT_FOUND', 'User not found')
     }
 
     // Get principal record to determine userType
@@ -182,7 +183,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
 
 function requireNonWidgetSession(session: Awaited<ReturnType<typeof getSession>>) {
   if (!session?.user) {
-    throw new Error('Authentication required')
+    throw new UnauthorizedError('Authentication required')
   }
   assertNotWidgetScope(toSessionScope(session.session.scope))
   return session
@@ -271,7 +272,7 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
     log.debug('get user role')
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
 
     const role = await getCurrentUserRole()
@@ -332,7 +333,7 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
       }
 
       if (Object.keys(updates).length === 0) {
-        throw new Error('No fields to update')
+        throw new ValidationError('NO_FIELDS_TO_UPDATE', 'No fields to update')
       }
 
       const preferences = await updateNotificationPreferences(principalId, updates)

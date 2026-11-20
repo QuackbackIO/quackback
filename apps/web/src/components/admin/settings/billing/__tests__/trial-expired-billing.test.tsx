@@ -7,12 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 
 vi.mock('@/lib/client/queries/billing', () => ({
-  beginPlanDowngradeFn: vi.fn(() => new Promise(() => {})),
-  cancelPlanDowngradeFn: vi.fn(),
   billingQueries: { all: ['billing'] },
 }))
 
 const { TrialExpiredBilling } = await import('../trial-expired-billing')
+const { overLimits } = await import('./plan-limits-fixtures')
 
 const EXPIRED = '2026-11-19T12:00:00.000Z'
 
@@ -38,7 +37,7 @@ const overview: BillingProjectionOverview = {
 function renderPage(
   props: {
     overview?: BillingProjectionOverview
-    pending?: { planId: string; planName: string }
+    limits?: ReturnType<typeof overLimits>
   } = {}
 ) {
   render(
@@ -48,7 +47,7 @@ function renderPage(
           overview={props.overview ?? overview}
           catalogue={null}
           catalogueError={null}
-          pending={props.pending ?? null}
+          limits={props.limits}
         />
       </QueryClientProvider>
     </IntlProvider>
@@ -65,20 +64,12 @@ afterEach(() => {
 })
 
 describe('TrialExpiredBilling lead', () => {
-  it('says the trial ended, what to choose, and that admin stays open during the grace period', () => {
-    vi.setSystemTime(new Date(Date.parse(EXPIRED) + 3_600_000))
-    renderPage()
-    expect(screen.getByRole('heading', { name: 'Your Pro trial has ended' })).toBeInTheDocument()
-    expect(screen.getByText(/keep Pro, or switch to Free/)).toBeInTheDocument()
-    expect(screen.getByText(/The rest of admin stays open until/)).toBeInTheDocument()
-  })
-
-  it('says admin waits on the choice once the grace period is over', () => {
+  it('says the trial ended and what to choose, and holds no page back', () => {
     vi.setSystemTime(new Date(Date.parse(EXPIRED) + 72 * 3_600_000))
     renderPage()
-    expect(
-      screen.getByText('The rest of admin opens again as soon as you choose a plan.')
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Your Pro trial has ended' })).toBeInTheDocument()
+    expect(screen.getByText(/upgrade to Pro, or downgrade to Free/)).toBeInTheDocument()
+    expect(screen.queryByText(/rest of admin/)).not.toBeInTheDocument()
   })
 
   it('has honest copy when the trial plan is unknown', () => {
@@ -86,15 +77,28 @@ describe('TrialExpiredBilling lead', () => {
     renderPage({ overview: { ...overview, trialPlanName: null, trialPlanId: null } })
     expect(screen.getByRole('heading', { name: 'Your trial has ended' })).toBeInTheDocument()
     expect(screen.queryByText(/your plan/)).not.toBeInTheDocument()
-    expect(screen.getByText(/pick a paid plan, or switch to Free/)).toBeInTheDocument()
+    expect(screen.getByText(/upgrade to a paid plan, or downgrade to Free/)).toBeInTheDocument()
+  })
+})
+
+describe('TrialExpiredBilling with plan limits', () => {
+  it('lists the caps over the plan above the plan choice, linking to Plan limits', async () => {
+    renderPage({ limits: overLimits() })
+    expect(
+      await screen.findByRole('heading', { name: 'Over your limits' }, { timeout: 10_000 })
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector('[data-plan-limit-row="maxBoards"][data-status="over"]')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See plan limits' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing/limits'
+    )
   })
 
-  it('speaks to someone who already chose Free', () => {
-    vi.setSystemTime(new Date(Date.parse(EXPIRED) + 72 * 3_600_000))
-    renderPage({ pending: { planId: 'free', planName: 'Free' } })
-    expect(screen.getByText(/You chose Free/)).toBeInTheDocument()
-    expect(
-      screen.getByText(/only this page and the pages that fix those limits are open/)
-    ).toBeInTheDocument()
+  it('shows nothing extra without plan billing', () => {
+    renderPage({ limits: overLimits({ enabled: false }) })
+    expect(screen.queryByRole('heading', { name: 'Over your limits' })).toBeNull()
+    expect(document.querySelector('[data-plan-limit-issues]')).toBeNull()
   })
 })

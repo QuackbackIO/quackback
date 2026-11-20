@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { IntegrationDetail } from '@/components/admin/settings/integrations/integration-detail'
 import { getIntegrationSettingsEntry } from '@/components/admin/settings/integrations/integration-settings-registry'
 
@@ -12,11 +13,37 @@ function toIntegrationType(param: string): string {
   return param.replace(/-/g, '_')
 }
 
+/** What the OAuth callback appends on its way back here:
+ * `?<integration>=connected` or `?<integration>=error&reason=<code>`
+ * (oauth-handlers.ts buildSettingsUrl). The connection actions read them to
+ * confirm the connection or say why it failed, then strip them. */
+type OAuthResultSearch = { reason?: string; [key: string]: unknown }
+
+const OAUTH_RESULT_KEY = /^[a-z][a-z0-9_-]{0,40}$/
+const OAUTH_REASON = /^[a-z][a-z0-9_]{0,63}$/
+
+function oauthResultSearch(search: Record<string, unknown>): OAuthResultSearch {
+  const result: OAuthResultSearch = {}
+  for (const [key, value] of Object.entries(search)) {
+    if ((value === 'connected' || value === 'error') && OAUTH_RESULT_KEY.test(key)) {
+      result[key] = value
+    }
+  }
+  // A reason only means something next to a result key.
+  const hasResult = Object.keys(result).length > 0
+  if (hasResult && typeof search.reason === 'string' && OAUTH_REASON.test(search.reason)) {
+    result.reason = search.reason
+  }
+  return result
+}
+
 export const Route = createFileRoute('/admin/settings/integrations/$type')({
-  validateSearch: (search: Record<string, unknown>): { tab?: 'history' } => ({
+  validateSearch: (search: Record<string, unknown>): { tab?: 'history' } & OAuthResultSearch => ({
+    ...oauthResultSearch(search),
     tab: search.tab === 'history' ? 'history' : undefined,
   }),
   loader: async ({ context, params }) => {
+    assertSettingsPageAccess(context.permissions, '/admin/settings/integrations/$type')
     const type = toIntegrationType(params.type)
     // Loaded on demand: a static import would put every provider's settings
     // UI in the route module, which every page loads eagerly.

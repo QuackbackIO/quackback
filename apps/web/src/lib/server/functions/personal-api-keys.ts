@@ -21,6 +21,7 @@ import {
 import type { ApiKeyFilter, ApiKeyId } from '@/lib/server/domains/api-keys/api-key.service'
 import { toApiKeyRefusal } from '@/lib/server/domains/api-keys/api-key-refusal'
 import { logger } from '@/lib/server/logger'
+import { ForbiddenError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'personal-api-keys' })
 
@@ -56,7 +57,7 @@ function refusalOr(error: unknown): ApiKeyRefusal {
 /** My live personal keys, and whether I may make a new one. */
 export const fetchMyApiKeysFn = createServerFn({ method: 'GET' }).handler(async () => {
   const auth = await requireAuth()
-  if (!isTeamMember(auth.principal.role)) throw new Error(NOT_A_TEAMMATE)
+  if (!isTeamMember(auth.principal.role)) throw new ForbiddenError('FORBIDDEN', NOT_A_TEAMMATE)
   const { listPersonalApiKeys } = await import('@/lib/server/domains/api-keys/api-key.service')
   const [keys, canCreate] = await Promise.all([
     listPersonalApiKeys(auth.principal.id),
@@ -70,7 +71,7 @@ export const createMyApiKeyFn = createServerFn({ method: 'POST' })
   .validator(createSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth()
-    if (!isTeamMember(auth.principal.role)) throw new Error(NOT_A_TEAMMATE)
+    if (!isTeamMember(auth.principal.role)) throw new ForbiddenError('FORBIDDEN', NOT_A_TEAMMATE)
     if (!(await personalKeysAllowed())) {
       log.info('personal api key refused: policy off')
       return {
@@ -101,7 +102,7 @@ export const renameMyApiKeyFn = createServerFn({ method: 'POST' })
   .validator(renameSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth()
-    if (!isTeamMember(auth.principal.role)) throw new Error(NOT_A_TEAMMATE)
+    if (!isTeamMember(auth.principal.role)) throw new ForbiddenError('FORBIDDEN', NOT_A_TEAMMATE)
     const { updateApiKeyName } = await import('@/lib/server/domains/api-keys/api-key.service')
     try {
       const apiKey = await updateApiKeyName(data.id as ApiKeyId, data.name, own(auth.principal.id))
@@ -116,7 +117,7 @@ export const rotateMyApiKeyFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth()
-    if (!isTeamMember(auth.principal.role)) throw new Error(NOT_A_TEAMMATE)
+    if (!isTeamMember(auth.principal.role)) throw new ForbiddenError('FORBIDDEN', NOT_A_TEAMMATE)
     const { rotateApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
     try {
       const result = await rotateApiKey(data.id as ApiKeyId, own(auth.principal.id))
@@ -131,7 +132,7 @@ export const revokeMyApiKeyFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth()
-    if (!isTeamMember(auth.principal.role)) throw new Error(NOT_A_TEAMMATE)
+    if (!isTeamMember(auth.principal.role)) throw new ForbiddenError('FORBIDDEN', NOT_A_TEAMMATE)
     const { revokeApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
     try {
       await revokeApiKey(data.id as ApiKeyId, own(auth.principal.id))

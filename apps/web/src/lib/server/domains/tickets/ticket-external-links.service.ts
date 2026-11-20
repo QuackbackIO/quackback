@@ -39,9 +39,9 @@ import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
-import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { ValidationError, ForbiddenError, ConflictError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
-import { loadTicketOr404 } from './ticket.service'
+import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
 import { resolvePairConversationId } from './pair-thread.service'
 
@@ -160,7 +160,8 @@ async function insertLinkWithNote(
       .from(integrations)
       .where(eq(integrations.id, integrationId))
       .for('share')
-    if (!integration || integration.status !== 'active') throw new Error('Integration unavailable')
+    if (!integration || integration.status !== 'active')
+      throw new ConflictError('INTEGRATION_UNAVAILABLE', 'Integration unavailable')
     const { installationIdentity, syncDestination, syncHash, syncOperationKey } =
       await import('@/lib/server/integrations/sync/identity')
     const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')
@@ -248,7 +249,8 @@ export async function linkTicketToIssue(
   integrationType = 'github'
 ): Promise<TicketExternalLinkDTO> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'link this ticket')
-  await loadTicketOr404(ticketId)
+  await assertTicketVisible(ticketId, actor)
+  // A visible test-data ticket is still refused: it never syncs out.
   if (!(await syncSourceForActor({ sourceType: 'ticket', sourceId: ticketId }, actor)))
     throw new ForbiddenError('FORBIDDEN', 'Ticket unavailable')
 
@@ -306,6 +308,7 @@ export async function createIssueForTicket(
   actor: Actor
 ): Promise<{ operationId: string; state: string }> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'create an issue for this ticket')
+  await assertTicketVisible(ticketId, actor)
   if (
     !actor.principalId ||
     !(await syncSourceForActor({ sourceType: 'ticket', sourceId: ticketId }, actor))
@@ -319,6 +322,23 @@ export async function createIssueForTicket(
       'NOT_CONFIGURED',
       `Connect the ${providerName(integrationType)} integration first`
     )
+  // Refused up front while integrations are paused after the plan limits
+  // grace, so the ticket's create identity is not spent on a cancelled sync.
+  const { isFeaturePaused, getPlanLimits } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  if (await isFeaturePaused('integrations')) {
+    const [{ TierLimitError }, { PLAN_CATALOGUE }, { plan }] = await Promise.all([
+      import('@/lib/server/errors/tier-limit-error'),
+      import('@/lib/server/domains/settings/cloud/cloud.types'),
+      getPlanLimits(),
+    ])
+    const onPlan = plan ? ` on the ${PLAN_CATALOGUE[plan].name} plan` : ''
+    throw new TierLimitError({
+      limit: 'integrations',
+      code: 'INTEGRATIONS_PAUSED',
+      message: `Integrations are paused${onPlan}, so you can't create issues right now.`,
+    })
+  }
   const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')
   const { installationIdentity, syncDestination, syncOperationKey } =
     await import('@/lib/server/integrations/sync/identity')
@@ -405,6 +425,7 @@ export async function unlinkTicketIssue(
   actor: Actor
 ): Promise<void> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'unlink this ticket')
+  await assertTicketVisible(ticketId, actor)
   if (!(await syncSourceForActor({ sourceType: 'ticket', sourceId: ticketId }, actor)))
     throw new ForbiddenError('FORBIDDEN', 'Ticket unavailable')
 

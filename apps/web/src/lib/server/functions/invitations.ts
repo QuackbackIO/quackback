@@ -1,3 +1,10 @@
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
@@ -13,6 +20,7 @@ import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from '@/lib/server/auth/session'
 import { cacheDel } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
+import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
 
 const log = logger.child({ component: 'invitations' })
 
@@ -31,7 +39,7 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
     const session = await getSession()
     if (!session?.user) {
       log.warn('get invitation details: no session')
-      throw new Error('Not authenticated')
+      throw new UnauthorizedError('Not authenticated')
     }
 
     log.debug({ user_id: session.user.id }, 'get invitation details: session resolved')
@@ -47,7 +55,8 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
 
     if (!inv) {
       log.warn({ invitation_id: invitationId }, 'get invitation details: invitation not found')
-      throw new Error(
+      throw new NotFoundError(
+        'INVITATION_NOT_FOUND',
         'This invitation could not be found. It may have been cancelled. Please contact your administrator.'
       )
     }
@@ -62,7 +71,8 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
         { invitation_id: invitationId, status: inv.status },
         'get invitation details: invalid status'
       )
-      throw new Error(
+      throw new ConflictError(
+        'INVITATION_NOT_PENDING',
         inv.status === 'accepted'
           ? "This invitation has already been accepted. If you're having trouble accessing the dashboard, try signing in."
           : 'This invitation has been cancelled. Please ask your administrator to send a new one.'
@@ -71,7 +81,10 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
 
     if (new Date(inv.expiresAt) < new Date()) {
       log.warn({ invitation_id: invitationId }, 'get invitation details: invitation expired')
-      throw new Error('This invitation has expired. Please ask your administrator to resend it.')
+      throw new ConflictError(
+        'INVITATION_EXPIRED',
+        'This invitation has expired. Please ask your administrator to resend it.'
+      )
     }
 
     // Verify the authenticated user's email matches the invitation
@@ -80,7 +93,8 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
         { invitation_id: invitationId, user_id: session.user.id },
         'get invitation details: email mismatch'
       )
-      throw new Error(
+      throw new ForbiddenError(
+        'INVITATION_EMAIL_MISMATCH',
         'This invitation was sent to a different email address. Please sign in with the email address that received the invitation, or ask your administrator to send a new invitation to your current email.'
       )
     }
@@ -138,7 +152,9 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
     const session = await getSession()
     if (!session?.user) {
       log.warn('accept invitation: no session')
-      throw new Error('Your session has expired. Please sign in again using the invitation link.')
+      throw new UnauthorizedError(
+        'Your session has expired. Please sign in again using the invitation link.'
+      )
     }
 
     const userId = session.user.id as UserId
@@ -146,7 +162,8 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
     log.debug({ user_id: userId }, 'accept invitation: session resolved')
 
     if (!userEmail) {
-      throw new Error(
+      throw new ValidationError(
+        'ACCOUNT_EMAIL_MISSING',
         'Your account is missing an email address. Please contact your administrator.'
       )
     }
@@ -159,11 +176,17 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
 
     if (!inv) {
       log.warn({ invitation_id: invitationId }, 'accept invitation: not found')
-      throw new Error('This invitation could not be found. It may have been cancelled.')
+      throw new NotFoundError(
+        'INVITATION_NOT_FOUND',
+        'This invitation could not be found. It may have been cancelled.'
+      )
     }
 
     if (inv.status === 'accepted') {
-      throw new Error('This invitation has already been accepted')
+      throw new ConflictError(
+        'INVITATION_ALREADY_ACCEPTED',
+        'This invitation has already been accepted'
+      )
     }
 
     const isExpired = inv.status === 'expired' || new Date(inv.expiresAt) < new Date()
@@ -176,7 +199,10 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
           .set({ status: 'expired' })
           .where(and(eq(invitation.id, invitationId as InviteId), eq(invitation.status, 'pending')))
       }
-      throw new Error('This invitation has expired. Please ask your administrator to resend it.')
+      throw new ConflictError(
+        'INVITATION_EXPIRED',
+        'This invitation has expired. Please ask your administrator to resend it.'
+      )
     }
 
     if (inv.status !== 'pending') {
@@ -184,13 +210,15 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         { invitation_id: invitationId, status: inv.status },
         'accept invitation: invalid status'
       )
-      throw new Error(
+      throw new ConflictError(
+        'INVITATION_CANCELLED',
         'This invitation has been cancelled. Please ask your administrator to send a new one.'
       )
     }
 
     if (inv.email.toLowerCase() !== userEmail) {
-      throw new Error(
+      throw new ForbiddenError(
+        'INVITATION_EMAIL_MISMATCH',
         'This invitation was sent to a different email address. Please sign in with the correct email.'
       )
     }
@@ -211,6 +239,9 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
     // inside this transaction (settings row lock + member count) so two
     // racing accepts cannot both create a seat.
     const cacheKeysToBust: string[] = []
+    // A role write inside this transaction says whose inbox scope it moved;
+    // the signal goes out only after the commit, so a reload reads the new rows.
+    const scopeChangedFor: PrincipalId[] = []
     const claimed = await db.transaction(async (tx) => {
       if (!alreadySeated) {
         const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
@@ -239,7 +270,8 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
           { invitation_id: invitationId, status: fresh?.status },
           'accept invitation: claim failed'
         )
-        throw new Error(
+        throw new ConflictError(
+          'INVITATION_NOT_PENDING',
           fresh?.status === 'accepted'
             ? 'This invitation has already been accepted'
             : 'This invitation has been cancelled. Please ask your administrator to send a new one.'
@@ -256,8 +288,20 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       // plain legacy role.
       // Defense-in-depth: a roleId only ever rides a member invite (send
       // enforces it); drop it for any other stored role.
-      const assignRoleId =
+      let assignRoleId =
         role === 'member' ? ((row.roleId as RoleId | null) ?? undefined) : undefined
+      // Past the plan's custom-role cap (after the plan limits grace) the
+      // invite's custom role goes to nobody new: it lands as the plain member.
+      if (assignRoleId) {
+        const { isCustomRoleHeld } = await import('@/lib/server/domains/roles/role.plan-lock')
+        if (await isCustomRoleHeld(assignRoleId)) {
+          log.info(
+            { invitation_id: invitationId },
+            'accept invitation: custom role held by the plan'
+          )
+          assignRoleId = undefined
+        }
+      }
 
       if (existingPrincipal) {
         // Promote only when the invite grants a strictly higher role. An
@@ -269,12 +313,13 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         const grantsCustom =
           assignRoleId != null && role === 'member' && existingPrincipal.role !== 'admin'
         if (promotes || grantsCustom) {
-          const { cacheKeysToBust: keys } = await setPrincipalRole(
+          const result = await setPrincipalRole(
             { principalId: existingPrincipal.id as PrincipalId },
             promotes ? role : 'member',
             { executor: tx, assignRoleId }
           )
-          cacheKeysToBust.push(...keys)
+          cacheKeysToBust.push(...result.cacheKeysToBust)
+          if (result.scopeChangedFor) scopeChangedFor.push(result.scopeChangedFor)
         }
         if (displayName) {
           await syncPrincipalProfileById(existingPrincipal.id as PrincipalId, { displayName }, tx)
@@ -288,12 +333,13 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
           tx
         )
         if (assignRoleId) {
-          const { cacheKeysToBust: keys } = await setPrincipalRole(
-            { principalId: created.id as PrincipalId },
-            role,
-            { executor: tx, assignRoleId, knownUserId: userId }
-          )
-          cacheKeysToBust.push(...keys)
+          const result = await setPrincipalRole({ principalId: created.id as PrincipalId }, role, {
+            executor: tx,
+            assignRoleId,
+            knownUserId: userId,
+          })
+          cacheKeysToBust.push(...result.cacheKeysToBust)
+          if (result.scopeChangedFor) scopeChangedFor.push(result.scopeChangedFor)
         }
       }
 
@@ -307,6 +353,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
 
     // Bust the principal cache only after the role write is committed.
     await Promise.all(cacheKeysToBust.map((key) => cacheDel(key)))
+    publishInboxScopeChanged(scopeChangedFor)
 
     log.debug({ invitation_id: invitationId, role: claimed.role }, 'accept invitation: claimed')
 
@@ -347,7 +394,7 @@ export const setPasswordFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Not authenticated')
+      throw new UnauthorizedError('Not authenticated')
     }
     assertNotWidgetScope(toSessionScope(session.session.scope))
     const headers = getRequestHeaders()

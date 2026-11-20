@@ -24,6 +24,8 @@ import { useCallback, useMemo, useRef } from 'react'
 import { useChat, fetchServerSentEvents } from '@tanstack/ai-react'
 import { parsePartialJSON, type StreamChunk } from '@tanstack/ai'
 import { aguiFetchClient } from '@/lib/client/utils/agui-fetch'
+import { GENERIC_ERROR } from '@/lib/client/utils/http-error'
+import { unplannedErrorText } from '@/lib/client/error-text'
 import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 
 const ACTIVITY_STATUSES: ReadonlySet<AssistantActivityStatus> = new Set([
@@ -152,7 +154,8 @@ export function useAguiTurn(options: { url: string; textField?: string }) {
       if (runRef.current.terminal) return
       if (error.name === 'AbortError') return
       runRef.current.terminal = true
-      handlersRef.current?.onError(error.message)
+      // Its message is the browser's or the stream library's, never ours.
+      handlersRef.current?.onError(unplannedErrorText(error, GENERIC_ERROR))
     },
   })
 

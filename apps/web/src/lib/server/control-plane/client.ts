@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/workspaces/workspace-context'
 
 export class ControlPlaneUnavailableError extends Error {
+  readonly safeToShow = true
   constructor(
     message = 'Quackback Cloud is temporarily unavailable. Please try again.',
     public readonly status?: number

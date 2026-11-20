@@ -35,11 +35,18 @@ export const ALLOWLIST: Record<RuleName, string[]> = {
   palette: [
     // Avatar hues picked from the connector's name, so each connector keeps its own colour.
     'components/admin/automation/connectors/connector-mark.tsx',
-    // The step kind colours that colour-code the workflow builder (trigger, branch, action, wait).
-    'components/admin/automation/workflow-builder/step-visuals.tsx',
-    // One icon tint per template category.
-    'components/admin/automation/workflow-templates.ts',
     // Per-provider brand tints for integration badges.
     'components/admin/settings/integrations/integration-ui.tsx',
+  ],
+  ellipsis: [
+    // Also edited by the open portal builder stack; fixed after it merges.
+    'components/admin/conversation/copilot-panel.tsx',
+    'components/admin/feedback/voters-avatar-stack.tsx',
+    'components/admin/settings/boards/create-board-dialog.tsx',
+  ],
+  exclamation: [],
+  uppercase: [
+    // Also edited by the open portal builder stack; fixed after it merges.
+    'components/admin/settings/security/audit-log-page.tsx',
   ],
 }

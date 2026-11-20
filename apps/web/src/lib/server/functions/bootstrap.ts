@@ -1,6 +1,6 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { Role } from '@/lib/shared/roles'
-import { sessionRole, toSessionScope } from '@/lib/shared/roles'
+import { isTeamMember, sessionRole, toSessionScope } from '@/lib/shared/roles'
 import {
   colorSchemeHintHeaders,
   getThemeCookie,
@@ -26,11 +26,27 @@ import { runWithoutLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { analyticsWorkspaceKey } from '@/lib/shared/analytics-identity'
+import type { SectionLinks } from '@/lib/shared/section-links'
+import type { SectionDomainMap } from '@/lib/shared/section-domains'
 
 const log = logger.child({ component: 'bootstrap' })
 
 export interface BootstrapData {
   baseUrl: string
+  /**
+   * The page `/` shows when the request came to a portal section's own
+   * hostname (`/hc` on help.acme.com), else null. The root document carries
+   * it so the browser's router matches `/` as the server did.
+   */
+  sectionHome: string | null
+  /**
+   * Where portal sections are linked, when any is not on the primary domain
+   * (help.acme.com), and this page's own host when it is a section's. Only the
+   * exception is sent, since this goes into every document: absent, every
+   * section and this page are on the base URL. `expandSectionLinks` rebuilds
+   * the full table.
+   */
+  sectionLinks?: SectionLinks
   session: Session | null
   /**
    * The workspace settings as a browser may see them: redacted by
@@ -41,6 +57,15 @@ export interface BootstrapData {
   /** Onboarding progress, decided here so the raw setup state never leaves the server. */
   onboarding: { complete: boolean; needsSetupWizard: boolean }
   userRole: Role | null
+  /**
+   * The admin's address on the primary domain (https://acme.com/admin), sent
+   * only to a signed-in, unblocked teammate viewing a section host. The admin
+   * does not run there and the session there is portal scope, so `userRole`
+   * reads as a portal user's; the portal header links this instead. It is a
+   * plain link: it grants nothing, and the session stays portal scope. Absent
+   * everywhere else, so no other document changes.
+   */
+  primaryAdminUrl?: string
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
    *  hint, used by the root document to resolve a `system` theme during SSR.
@@ -85,6 +110,13 @@ export interface BootstrapData {
    */
   cloudEnabled: boolean
   /**
+   * Whether section domains are set up the Cloud way (custom domains on the
+   * control plane) rather than the self-hosted way (any hostname, verified by
+   * a probe): `hostingOf`, which also counts a pooled workspace whose
+   * projection has not landed. Not a billing signal; that is `cloudEnabled`.
+   */
+  sectionDomainsCloud: boolean
+  /**
    * Whether the one-time GitHub star prompt and the Help menu's GitHub link may
    * show: self-hosted only, never on the Cloud fleet, and not switched off.
    */
@@ -110,11 +142,37 @@ export interface BootstrapData {
   } | null
 }
 
+/** The session's role, `user` for a paused seat (the plan has fewer team seats than members). */
+async function roleFor(
+  principalRecord: { id: string; role: string; type: string },
+  scope: ReturnType<typeof toSessionScope>
+): Promise<Role> {
+  const role = sessionRole(principalRecord.role as Role, scope)
+  if (role === 'user') return role
+  const { roleUnlessPaused } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  return roleUnlessPaused(principalRecord, role)
+}
+
+/** Whether a teammate's seat is paused (the plan has fewer team seats than members). */
+async function isPausedSeat(principalRecord: {
+  id: string
+  role: string
+  type: string
+}): Promise<boolean> {
+  const { isPausedTeamSeat } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  return isPausedTeamSeat(principalRecord)
+}
+
 // Returns both the session (with principalType) AND the user role from one
 // principal read, both shared with every other identity read in the request.
+// `teammate` is the principal's own role, read past the session's scope: true
+// for an unblocked admin or member signed in on the site (never the widget)
+// whose seat the plan has not paused.
+// It decides only whether a link is shown, never what the session may do.
 async function getSessionAndRole(): Promise<{
   session: Session | null
   role: Role | null
+  teammate?: boolean
 }> {
   // Fast-path for unauthenticated requests: if there's no Cookie header at
   // all the request can't possibly carry a session token, so we can skip
@@ -165,7 +223,13 @@ async function getSessionAndRole(): Promise<{
           updatedAt: session.user.updatedAt.toISOString(),
         },
       },
-      role: principalRecord ? sessionRole(principalRecord.role as Role, scope) : null,
+      role: principalRecord ? await roleFor(principalRecord, scope) : null,
+      teammate:
+        scope !== 'widget' &&
+        principalRecord != null &&
+        isTeamMember(principalRecord.role) &&
+        principalRecord.blockedAt == null &&
+        !(await isPausedSeat(principalRecord)),
     }
   } catch (error) {
     // During SSR, auth might fail due to env var issues
@@ -181,9 +245,38 @@ async function getSessionAndRole(): Promise<{
  * client-side navigation as well as into the SSR document, so it is scrubbed
  * here rather than by the route that asked.
  */
-function clientSafeSettings(settings: WorkspaceSettings): WorkspaceSettings {
+/**
+ * The settings as the browser gets them. The section map is the one routing
+ * uses (`routableSectionDomains`), so every page shows a section's domain as
+ * live exactly when it is: on Cloud that is while the control plane reports
+ * its custom domain ready, which the raw settings row is not sent to say.
+ */
+function clientSafeSettings(
+  settings: WorkspaceSettings,
+  sectionDomains: SectionDomainMap
+): WorkspaceSettings {
   const redacted = redactSettingsForClient(settings)
-  return { ...redacted, settings: {} as WorkspaceSettings['settings'] }
+  return {
+    ...redacted,
+    ...(redacted.portalConfig
+      ? { portalConfig: { ...redacted.portalConfig, sectionDomains } }
+      : {}),
+    settings: {} as WorkspaceSettings['settings'],
+  }
+}
+
+/**
+ * Custom CSS paused after the plan limits grace is not rendered (portal, help
+ * center, widget, auth pages). Returns a copy; the stored settings and the
+ * cached object are unchanged. A custom domain paused with it is read through
+ * the section map (`withoutPausedHosts`).
+ */
+async function withPausedPresentationHidden(
+  settings: WorkspaceSettings
+): Promise<WorkspaceSettings> {
+  if (!settings.customCss) return settings
+  const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  return (await isFeaturePaused('customCss')) ? { ...settings, customCss: '' } : settings
 }
 
 let _initialized = false
@@ -193,23 +286,39 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { getWorkspaceSettings },
     { getRegisteredAuthProviders },
     { config },
-    { getRequestHeaders, setResponseHeader },
+    { getRequest, getRequestHeaders, setResponseHeader },
     { resolveHelpCenterBaseUrl },
+    {
+      effectiveSectionDomains,
+      helpDomainConfig,
+      hostOfOrigin,
+      normalizeHost,
+      portalSectionsEnabled,
+      sectionHomeForHost,
+      sectionOfHost,
+    },
+    { requestWorkspaceHost },
+    { sectionOriginsOf },
+    { compactSectionLinks },
+    { hostingOf, routableSectionDomains, withoutPausedHosts },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/auth/registered-providers'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
     import('@/lib/server/domains/help-center/help-center-domain.service'),
+    import('@/lib/shared/section-domains'),
+    import('@/lib/server/workspaces/saas-edge-host'),
+    import('@/lib/server/domains/settings/section-links'),
+    import('@/lib/shared/section-links'),
+    import('@/lib/server/domains/settings/section-domains.hosting'),
   ])
 
   // Single principal read returns both session.principalType + userRole;
   // run in parallel with the settings fetch.
-  const [{ session, role: userRole }, settings, registeredAuthProviders] = await Promise.all([
-    getSessionAndRole(),
-    getWorkspaceSettings(),
-    getRegisteredAuthProviders(),
-  ])
+  const [{ session, role: userRole, teammate }, storedSettings, registeredAuthProviders] =
+    await Promise.all([getSessionAndRole(), getWorkspaceSettings(), getRegisteredAuthProviders()])
+  const settings = storedSettings ? await withPausedPresentationHidden(storedSettings) : null
 
   // One-time initialization on first request.
   //
@@ -284,11 +393,39 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // Canonical URLs switch to the help center's custom domain when the
   // request actually arrived on it (domains/languages §1) -- everywhere else
   // (boards, changelog, etc.) this is a no-op and baseUrl is just BASE_URL.
+  // The host the edge vouches for, never a forwarded header.
+  const requestHost = requestWorkspaceHost(getRequest())
+  const sectionDomains = effectiveSectionDomains({
+    sectionDomains: settings?.portalConfig?.sectionDomains,
+    legacyHelpDomain: settings?.helpCenterConfig?.domain,
+    // BASE_URL's host; `baseUrl` below is the help host on the help host.
+    primaryHost: hostOfOrigin(config.baseUrl),
+  })
+  // Verified as routing reads it: on Cloud, while the custom domain is ready.
+  const hosting = hostingOf(
+    (settings?.settings as { cloud?: unknown; cloudIdentity?: unknown }) ?? null
+  )
+  // A host paused with the custom domain is not linked or moved to (withoutPausedHosts).
+  const routableDomains = withoutPausedHosts(routableSectionDomains(sectionDomains, hosting))
   const baseUrl = resolveHelpCenterBaseUrl({
-    domainConfig: settings?.helpCenterConfig?.domain,
-    currentHost: headers.get('host'),
+    domainConfig: helpDomainConfig(routableDomains),
+    currentHost: requestHost,
     fallback: config.baseUrl,
   })
+  const sectionEnabled = settings ? portalSectionsEnabled(settings) : null
+  const sectionHome = sectionEnabled
+    ? sectionHomeForHost({ host: requestHost, map: sectionDomains, sectionEnabled })
+    : null
+  const sectionOrigins = sectionOriginsOf(settings, config.baseUrl)
+  // A section's host as the router treats it: mapped and on (as for sectionHome).
+  const hostSection = sectionOfHost(requestHost, sectionDomains)
+  const onSectionHost = hostSection !== null && sectionEnabled?.[hostSection] === true
+  const hostOrigin = onSectionHost
+    ? `https://${normalizeHost(requestHost)}`
+    : sectionOrigins.primary
+  const sectionLinks = compactSectionLinks({ origins: sectionOrigins, hostOrigin, baseUrl })
+  // The admin runs on the primary domain only (see BootstrapData.primaryAdminUrl).
+  const primaryAdminUrl = onSectionHost && teammate ? `${sectionOrigins.primary}/admin` : null
   const cloud = resolveCloudConfig(
     (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
   )
@@ -296,13 +433,16 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   return {
     baseUrl,
+    sectionHome,
+    ...(sectionLinks ? { sectionLinks } : {}),
     session,
-    settings: settings ? clientSafeSettings(settings) : null,
+    settings: settings ? clientSafeSettings(settings, routableDomains) : null,
     onboarding: {
       complete: isOnboardingComplete(setupState),
       needsSetupWizard: needsCloudOnboardingWizard(setupState),
     },
     userRole,
+    ...(primaryAdminUrl ? { primaryAdminUrl } : {}),
     themeCookie,
     prefersColorScheme,
     managedFieldPaths: settings?.managedFieldPaths ?? [],
@@ -311,6 +451,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     updateBannerDismissedVersion,
     billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
     cloudEnabled: cloud.enabled,
+    sectionDomainsCloud: hosting.cloud,
     githubStarPrompt: starPromptAllowedHere(cloud.enabled),
     productAnalytics: config.productAnalytics
       ? {

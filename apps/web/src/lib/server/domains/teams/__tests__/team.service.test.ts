@@ -25,6 +25,7 @@ import {
   setDefaultTeam,
   listTeams,
   listTeamMembers,
+  listTeamMemberPrincipalIds,
   setTeamMembers,
   addPrincipalToDefaultTeam,
 } from '../team.service'
@@ -112,6 +113,22 @@ describe.skipIf(!fixture.available)('team.service (real DB, rolled back)', () =>
     const stillDefault = (await listTeams()).filter((t) => t.isDefault)
     expect(stillDefault).toHaveLength(1)
     expect(stillDefault[0].id).toBe(other.id)
+  })
+
+  it('listTeamMemberPrincipalIds returns current teammates only', async () => {
+    const team = await createTeam({ name: 'Roster' })
+    const admin = await seedTeammate('admin')
+    const member = await seedTeammate('member')
+    const former = await seedEndUser()
+    await testDb.insert(teamMembers).values([
+      { teamId: team.id as TeamId, principalId: admin },
+      { teamId: team.id as TeamId, principalId: member },
+      { teamId: team.id as TeamId, principalId: former },
+    ])
+
+    expect([...(await listTeamMemberPrincipalIds(team.id as TeamId))].sort()).toEqual(
+      [admin, member].sort()
+    )
   })
 
   it('replaces the membership set with setTeamMembers, rejecting non-teammates', async () => {

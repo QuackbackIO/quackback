@@ -6,7 +6,7 @@ import type { AssistantPendingActionId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { can } from '@/lib/server/policy/authorize'
 import { NotFoundError, ForbiddenError, ConflictError, DomainException } from '@/lib/shared/errors'
-import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import {
   getPendingActionById,
@@ -101,7 +101,7 @@ export async function decideAssistantAction(
   // outside the approver's visibility reads exactly like one that doesn't
   // exist, matching every other conversation/ticket read in the app.
   if (pending.conversationId) {
-    await assertConversationViewable(pending.conversationId, actor)
+    await assertConversationVisible(pending.conversationId, actor)
   } else if (pending.ticketId) {
     await assertTicketVisible(pending.ticketId, actor)
   }

@@ -32,6 +32,7 @@ import { track } from '@/lib/client/analytics'
 import { cn } from '@/lib/shared/utils'
 import { ReadyStep } from './-ready-step'
 import { SignOutButton } from './-sign-out-button'
+import { errorText } from '@/lib/client/error-text'
 
 const DRAFT_KEY = 'quackback:onboarding:workspace-name'
 
@@ -174,7 +175,7 @@ export function CloudWorkspaceDetailsForm(props: {
     try {
       await action()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : fallback)
+      setError(errorText(cause, fallback))
       setIsSaving(false)
     }
   }
@@ -400,12 +401,13 @@ function WorkspaceNameStep({
       setReady({ name: result.name ?? workspaceName.trim(), goals })
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'onboarding.error.generic',
-              defaultMessage: 'Something went wrong. Try again.',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'onboarding.error.generic',
+            defaultMessage: 'Something went wrong. Try again.',
+          })
+        )
       )
     } finally {
       setIsLoading(false)

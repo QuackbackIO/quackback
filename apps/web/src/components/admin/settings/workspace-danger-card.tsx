@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { wipeCloudWorkspaceFn } from '@/lib/server/functions/workspace-wipe'
+import { errorText } from '@/lib/client/error-text'
 
 /** How long Quackback Cloud keeps a deleted workspace restorable. Set by the control plane. */
 const RESTORE_WINDOW_DAYS = 30
@@ -36,7 +37,7 @@ export function WorkspaceDangerCard({
       const result = await wipeCloudWorkspaceFn({ data: { confirm: 'wipe' } })
       window.location.assign(result.dashboardUrl)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete this workspace')
+      setError(errorText(err, 'Could not delete this workspace'))
       setBusy(false)
       setWipeOpen(false)
     }

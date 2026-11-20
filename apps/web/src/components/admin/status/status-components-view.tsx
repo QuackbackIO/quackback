@@ -89,6 +89,7 @@ import {
 } from './status-admin-colors'
 import { FormattedMessage, useIntl } from 'react-intl'
 import type { StatusUptimeDay } from '@/lib/client/queries/status'
+import { toastError } from '@/lib/client/error-notice'
 
 interface ComponentFormValues {
   name: string
@@ -106,6 +107,14 @@ const EMPTY_FORM: ComponentFormValues = {
   segmentIds: [],
 }
 
+/** The one quiet line over the list when the plan hides some services. */
+export function hiddenLine(count: number, planName: string | null): string {
+  const onPlan = planName ? ` on the ${planName} plan` : ''
+  return count === 1
+    ? `1 service is hidden from your status page${onPlan}. It comes back when you upgrade.`
+    : `${count} services are hidden from your status page${onPlan}. They come back when you upgrade.`
+}
+
 export function StatusComponentsView() {
   const intl = useIntl()
   const { data, isLoading } = useQuery(statusComponentQueries.list())
@@ -120,6 +129,14 @@ export function StatusComponentsView() {
     .map((c) => c.id)
   const uptimeQuery = useQuery(statusComponentQueries.uptimeAdmin(uptimeIds))
   const uptimeById = new Map((uptimeQuery.data ?? []).map((s) => [s.componentId, s.days]))
+  // Past the plan's service cap after the grace, these stay here but are
+  // hidden from the public page.
+  const planHidden = data?.planHidden ?? null
+  const hiddenLabel = planHidden?.planName
+    ? `Hidden on ${planHidden.planName}`
+    : 'Hidden from your status page'
+  const hiddenOf = (c: StatusComponentAdmin) =>
+    planHidden?.ids.includes(c.id) ? hiddenLabel : undefined
 
   const term = search.trim().toLowerCase()
   const matches = (c: StatusComponentAdmin) =>
@@ -377,7 +394,7 @@ export function StatusComponentsView() {
     try {
       await deleteComponentMutation.mutateAsync(deleteComponent.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete service')
+      toastError(error, 'Failed to delete service')
     } finally {
       setDeleteComponent(null)
     }
@@ -388,7 +405,7 @@ export function StatusComponentsView() {
     try {
       await deleteGroupMutation.mutateAsync(deleteGroup.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete group')
+      toastError(error, 'Failed to delete group')
     } finally {
       setDeleteGroup(null)
     }
@@ -399,7 +416,7 @@ export function StatusComponentsView() {
       <AdminListHeader
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search services..."
+        searchPlaceholder="Search services…"
         action={
           <>
             <Button variant="outline" size="sm" onClick={() => setCreateGroupDialogOpen(true)}>
@@ -426,6 +443,11 @@ export function StatusComponentsView() {
         </div>
       ) : (
         <div className="p-3 space-y-4">
+          {planHidden && (
+            <p className="px-3 text-xs text-muted-foreground">
+              {hiddenLine(planHidden.ids.length, planHidden.planName)}
+            </p>
+          )}
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
@@ -451,6 +473,7 @@ export function StatusComponentsView() {
                     key={component.id}
                     component={component}
                     uptimeDays={uptimeById.get(component.id)}
+                    hiddenLabel={hiddenOf(component)}
                     dragDisabled={dragDisabled}
                     onStatusChange={handleStatusChange}
                     onUptimeToggle={handleUptimeToggle}
@@ -481,6 +504,7 @@ export function StatusComponentsView() {
                           component={component}
                           indent
                           uptimeDays={uptimeById.get(component.id)}
+                          hiddenLabel={hiddenOf(component)}
                           dragDisabled={dragDisabled}
                           onStatusChange={handleStatusChange}
                           onUptimeToggle={handleUptimeToggle}
@@ -673,6 +697,7 @@ function SortableComponentRow({
   component,
   indent,
   uptimeDays,
+  hiddenLabel,
   dragDisabled,
   onStatusChange,
   onUptimeToggle,
@@ -682,6 +707,8 @@ function SortableComponentRow({
   component: StatusComponentAdmin
   indent?: boolean
   uptimeDays?: StatusUptimeDay[]
+  /** Set when the plan hides this service from the public page. */
+  hiddenLabel?: string
   dragDisabled?: boolean
   onStatusChange: (id: string, status: StatusComponentStatus) => void
   onUptimeToggle: (component: StatusComponentAdmin, checked: boolean) => void
@@ -716,9 +743,14 @@ function SortableComponentRow({
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-medium truncate">{component.name}</span>
           {component.segmentIds.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400 px-2 py-0.5 text-[11px] font-medium">
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted text-foreground px-2 py-0.5 text-[11px] font-medium">
               <UsersIcon className="h-2.5 w-2.5" />
               {component.segmentIds.length} segment{component.segmentIds.length === 1 ? '' : 's'}
+            </span>
+          )}
+          {hiddenLabel && (
+            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {hiddenLabel}
             </span>
           )}
         </div>
@@ -791,7 +823,7 @@ function CreateGroupDialog({
       await createGroup.mutateAsync({ name: name.trim() })
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create group')
+      toastError(error, 'Failed to create group')
     }
   }
 
@@ -890,7 +922,7 @@ function ComponentFormDialog({
       }
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save service')
+      toastError(error, 'Failed to save service')
     }
   }
 

@@ -153,3 +153,64 @@ export class RateLimitError extends DomainException {
     this.retryAfter = retryAfter
   }
 }
+
+/**
+ * A refusal below 500 whose own message was hidden in production because it
+ * looked technical (a provider's reply quoted in it, for example). It keeps
+ * the original `code` and `statusCode`, so the client can still act on them,
+ * and carries the plain sentence with its reference as its message.
+ */
+export class HiddenMessageRefusal extends DomainException {
+  readonly statusCode: number
+
+  constructor(code: string, statusCode: number, message: string) {
+    super(code, message)
+    this.statusCode = statusCode
+  }
+}
+
+/**
+ * HTTP 503 - something on our side or a provider's failed, and the message was
+ * written for the person who hit it ("Couldn't reach the mail provider. Try
+ * again in a minute.").
+ *
+ * In production every other 5xx reaches the browser as a plain sentence with a
+ * reference code (`server-fn-log.ts`). This class is the way to say "show this
+ * one as written", so never build its message from an upstream reply, a query
+ * or anything else that was not authored here. A status code may be included.
+ */
+export class ServiceUnavailableError extends DomainException {
+  readonly statusCode = 503
+  readonly safeToShow = true
+
+  constructor(code: string, message: string, cause?: unknown) {
+    super(code, message, cause)
+  }
+}
+
+/**
+ * Whether a failure on our side carries a message written for people. Read
+ * structurally so an error class outside this file can opt in with a
+ * `safeToShow = true` field.
+ */
+export function isSafeToShow(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    (error as { safeToShow?: unknown }).safeToShow === true
+  )
+}
+
+/**
+ * Whether an error is a NotFound answer (deleted, or outside the caller's
+ * view). Read from the typed status, never the message or the class: a typed
+ * error below 500 reaches the browser with its `code` and `statusCode` but
+ * not its class (typed-error-serialization.ts).
+ */
+export function isNotFoundError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    (error as { statusCode?: unknown }).statusCode === 404
+  )
+}

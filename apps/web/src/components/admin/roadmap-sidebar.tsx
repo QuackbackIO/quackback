@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import {
   MapIcon,
   EllipsisVerticalIcon,
@@ -34,9 +32,14 @@ import { cn } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
 import type { RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
-import { adminQueries } from '@/lib/client/queries/admin'
-import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import {
+  useAdminBoards,
+  useAdminStatuses,
+  useAdminTags,
+} from '@/lib/client/hooks/use-admin-catalogues'
+import { useAdminSegments } from '@/lib/client/hooks/use-segments-queries'
 import { RoadmapBuilderForm, type RoadmapBuilderValue } from './roadmap-builder-form'
+import { toastError } from '@/lib/client/error-notice'
 
 interface RoadmapSidebarProps {
   selectedRoadmapId: string | null
@@ -61,10 +64,10 @@ export function RoadmapSidebar({
   const [deletingRoadmap, setDeletingRoadmap] = useState<RoadmapView | null>(null)
 
   const { data: roadmaps, isLoading } = useRoadmaps()
-  const { data: statuses = [] } = useQuery(adminQueries.statuses())
-  const { data: boards = [] } = useQuery(adminQueries.boards())
-  const { data: tags = [] } = useQuery(adminQueries.tags())
-  const { data: segments = [] } = useSegments()
+  const { data: statuses = [] } = useAdminStatuses()
+  const { data: boards = [] } = useAdminBoards()
+  const { data: tags = [] } = useAdminTags()
+  const { data: segments = [] } = useAdminSegments()
   const createRoadmap = useCreateRoadmap()
   const updateRoadmap = useUpdateRoadmap()
   const deleteRoadmap = useDeleteRoadmap()
@@ -81,7 +84,7 @@ export function RoadmapSidebar({
       setIsCreateDialogOpen(false)
       onSelectRoadmap(newRoadmap.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't create roadmap. Try again.")
+      toastError(error, "Couldn't create roadmap. Try again.")
     }
   }
 
@@ -96,7 +99,7 @@ export function RoadmapSidebar({
       setIsEditDialogOpen(false)
       setEditingRoadmap(null)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't update roadmap. Try again.")
+      toastError(error, "Couldn't update roadmap. Try again.")
     }
   }
 
@@ -111,7 +114,7 @@ export function RoadmapSidebar({
         onSelectRoadmap(roadmaps?.[0]?.id ?? null)
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't delete roadmap. Try again.")
+      toastError(error, "Couldn't delete roadmap. Try again.")
     }
   }
 

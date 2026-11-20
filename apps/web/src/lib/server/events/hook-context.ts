@@ -9,6 +9,8 @@ import { db } from '@/lib/server/db'
 import { getBaseUrl } from '@/lib/server/config'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'hook-context' })
 
@@ -19,8 +21,13 @@ const log = logger.child({ component: 'hook-context' })
 export interface HookContext {
   /** Workspace display name */
   workspaceName: string
-  /** Portal base URL for constructing post links */
+  /** The primary origin: admin, sign-in, settings and unsubscribe links. */
   portalBaseUrl: string
+  /**
+   * Where each portal section is linked (help.acme.com for the help center).
+   * Read with `hookOrigins` (hook-origins.ts), which falls back to the primary origin.
+   */
+  sectionOrigins?: SectionOrigins
   /** Brand logo URL (proxied through app), or null if not set */
   logoUrl: string | null
 }
@@ -43,6 +50,7 @@ export async function buildHookContext(): Promise<HookContext | null> {
   return {
     workspaceName: settings.name,
     portalBaseUrl: getBaseUrl(),
+    sectionOrigins: await getSectionOrigins(),
     logoUrl: getEmailSafeUrl(settings.logoKey),
   }
 }

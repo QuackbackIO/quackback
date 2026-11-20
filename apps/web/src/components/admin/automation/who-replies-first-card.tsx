@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
-import { usePermission } from '@/lib/client/hooks/use-permission'
+import { useCanOpenSettingsPage, usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { WHO_REPLIES_FIRST } from '@/lib/shared/assistant/who-replies-first'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -18,7 +18,7 @@ export function WhoRepliesFirstCard() {
   const intl = useIntl()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const canAgent = usePermission(PERMISSIONS.AI_CUSTOMER_MANAGE)
-  const canWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
+  const canWorkflows = useCanOpenSettingsPage('/admin/settings/workflows')
   const canOfficeHours = usePermission(PERMISSIONS.OFFICE_HOURS_MANAGE)
   const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined

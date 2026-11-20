@@ -7,6 +7,7 @@ import { ImageCropper } from '@/components/ui/image-cropper'
 import { cn } from '@/lib/shared/utils'
 import { useSettingsLogo } from '@/lib/client/hooks/use-settings-queries'
 import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
+import { toastError } from '@/lib/client/error-notice'
 
 const RASTER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
@@ -70,8 +71,7 @@ export function LogoUploader({ workspaceName, onLogoChange, focus }: LogoUploade
     }
     uploadMutation.mutate(croppedBlob, {
       onSuccess: () => toast.success('Logo updated'),
-      onError: (error) =>
-        toast.error(error instanceof Error ? error.message : 'Failed to upload logo'),
+      onError: (error) => toastError(error, 'Failed to upload logo'),
     })
   }
 
@@ -141,8 +141,7 @@ export function LogoUploader({ workspaceName, onLogoChange, focus }: LogoUploade
                 toast.success('Logo removed')
                 onLogoChange?.(null)
               },
-              onError: (error) =>
-                toast.error(error instanceof Error ? error.message : 'Failed to remove logo'),
+              onError: (error) => toastError(error, 'Failed to remove logo'),
             })
           }
           disabled={deleteMutation.isPending}

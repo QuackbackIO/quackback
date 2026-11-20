@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
@@ -7,6 +6,7 @@ import {
   setChangelogSubscriptionFn,
 } from '@/lib/server/functions/changelog-subscriptions'
 import type { PrincipalId } from '@quackback/ids'
+import { toastError } from '@/lib/client/error-notice'
 
 function statusKey(principalId: PrincipalId) {
   return ['admin', 'changelog-subscription', principalId] as const
@@ -31,7 +31,7 @@ export function ChangelogSubscriptionControl({ principalId }: { principalId: Pri
     onSuccess: (saved) => {
       queryClient.setQueryData(statusKey(principalId), saved)
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to update'),
+    onError: (err) => toastError(err, 'Failed to update'),
   })
 
   if (isLoading) return null

@@ -14,7 +14,12 @@ import {
   createRequestBodySchema,
   asSchema,
 } from '../openapi'
-import { UnauthorizedErrorSchema, NotFoundErrorSchema, ValidationErrorSchema } from './common'
+import {
+  UnauthorizedErrorSchema,
+  NotFoundErrorSchema,
+  ValidationErrorSchema,
+  AssignValidationErrorSchema,
+} from './common'
 import { CONVERSATION_STATUSES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import { ConversationSchema, MessageSchema, ConversationTagSchema } from './conversations'
 
@@ -165,7 +170,8 @@ registerPath('/conversations/{conversationId}/assign', {
   post: {
     tags: ['Conversations'],
     summary: 'Assign a conversation',
-    description: 'Assign to a teammate, or pass null to unassign.',
+    description:
+      'Assign to a teammate, or pass null to unassign. An assignee who is not a teammate is refused with 400 INVALID_ASSIGNEE.',
     parameters: [conversationIdParam],
     requestBody: {
       required: true,
@@ -181,6 +187,10 @@ registerPath('/conversations/{conversationId}/assign', {
         },
       },
       ...convWriteErrorResponses,
+      400: {
+        description: 'Validation error, or the assignee is not a teammate',
+        content: { 'application/json': { schema: AssignValidationErrorSchema } },
+      },
     },
   },
 })

@@ -13,6 +13,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
 import type { ConversationId, OfficeHoursId, SlaPolicyId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
 import type { SlaPolicy, Workflow } from '@/lib/server/db'
@@ -28,6 +29,7 @@ import {
 import { removeSlaFromConversation } from '@/lib/server/domains/sla/sla.service'
 import { listWorkflows } from '@/lib/server/domains/workflows/workflow.service'
 import { getOfficeHoursSchedule } from '@/lib/server/domains/settings/settings.office-hours'
+import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 
 /** A workflow that applies a policy, as listed on rows and in-use warnings. */
 export interface SlaWorkflowRef {
@@ -145,7 +147,8 @@ const idSchema = z.object({ id: z.string() })
 function parseScheduleId(v: string | null | undefined): OfficeHoursId | null | undefined {
   if (v === undefined) return undefined
   if (v === null) return null
-  if (!isValidTypeId(v, 'office_hours')) throw new Error('Invalid office-hours schedule id')
+  if (!isValidTypeId(v, 'office_hours'))
+    throw new ValidationError('INVALID_OFFICE_HOURS_ID', 'Invalid office-hours schedule id')
   return v as OfficeHoursId
 }
 
@@ -229,7 +232,7 @@ export const updateSlaPolicyFn = createServerFn({ method: 'POST' })
     const id = data.id as SlaPolicyId
     // getSlaPolicy is live-only, so an archived policy can't be edited.
     const existing = await getSlaPolicy(id)
-    if (!existing) throw new Error('SLA policy not found')
+    if (!existing) throw new NotFoundError('SLA_POLICY_NOT_FOUND', 'SLA policy not found')
     // Targets may be added or changed, never removed once set (matching the
     // "edits apply to new conversations only" contract).
     const removed = TARGET_KEYS.filter((k) => existing[k] != null && data[k] === null)
@@ -287,7 +290,9 @@ export const restoreSlaPolicyFn = createServerFn({ method: 'POST' })
 export const removeConversationSlaFn = createServerFn({ method: 'POST' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }): Promise<{ ok: true; removed: boolean }> => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
+    // A conversation outside the caller's view is NotFound, and keeps its SLA.
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     const row = await removeSlaFromConversation(data.conversationId as ConversationId)
     if (row) {
       // Broadcast the fresh agent DTO so other open inboxes drop the chip; the

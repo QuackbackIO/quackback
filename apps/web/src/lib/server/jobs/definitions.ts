@@ -13,6 +13,7 @@
  * the job worker actually runs.
  */
 import { HOOK_RETRY_ATTEMPTS, hookRetryDelayMs } from '@/lib/server/events/retry-schedule'
+import { logger } from '@/lib/server/logger'
 import type { ClaimedJob } from './job-queue'
 
 export type JobHandler = (job: ClaimedJob) => Promise<void>
@@ -355,6 +356,46 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // The daily check that each verified domain added by name still holds its
+    // ownership record: a miss starts a grace period with a warning, and a
+    // record still missing after it demotes the domain and the sign-in domains
+    // that rested on it. Returns after two reads (the verified domains and the
+    // marker of lapsed ones still to judge) in a workspace with neither, which
+    // is nearly all of them. Its own minute, away from
+    // the sending-domain re-check, and capped across the fleet because each
+    // domain costs DNS lookups.
+    name: 'domain-ownership-watch',
+    cron: '50 6 * * *',
+    fleetConcurrency: 4,
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/domain-proof/domain-ownership-watch-queue').then(
+        (m) => m.runDomainOwnershipWatch
+      ),
+  },
+  {
+    // The daily re-check that each verified section hostname on a self-hosted
+    // server still reaches it: misses on two runs in a row mark it unconfirmed,
+    // so sign-in stops there while routing keeps its grace, and one still failing
+    // after the grace stops being verified. The gate is shut on Cloud, where
+    // the control plane decides when a domain is ready, before the server is
+    // set up, and without a verified section hostname, so none of those
+    // writes a daily job row. Its own minute, and capped across the fleet
+    // because each hostname costs DNS lookups and a request.
+    name: 'section-domains-watch',
+    cron: '55 6 * * *',
+    cronEnabled: () =>
+      import('@/lib/server/domains/settings/section-domains-watch-queue').then((m) =>
+        m.isSectionDomainsWatchDue()
+      ),
+    fleetConcurrency: 4,
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/settings/section-domains-watch-queue').then(
+        (m) => m.runSectionDomainsWatch
+      ),
+  },
+  {
     // The workspace's mail provider tenant, when the operator isolates sending
     // reputation per workspace. Hourly, but each tick returns after one row
     // read unless the workspace has never been reconciled, is not ready, or
@@ -388,6 +429,57 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     retryBackoffMs: 60_000,
     handler: () =>
       import('@/lib/server/domains/analytics/analytics-queue').then((m) => m.runAnalyticsRefresh),
+  },
+
+  // ── Upgrade work (backfills/) ──────────────────────────────────────────────
+  //
+  // Heavy and fleet-wide: each walks a large table or builds an index in every
+  // workspace after an upgrade, so each is capped across the fleet and retried
+  // with backoff, like `analytics`. Every new heavy or fleet-wide job does the
+  // same (JOBS.md §10).
+  {
+    // Startup backfills over hot tables, walked in short batches after the
+    // server listens. A scheduled row runs the enqueue pass, so a workspace
+    // that slept through startup still gets its rows; the gate is shut once
+    // every backfill is done. Retries by failing, from the kv cursor.
+    name: 'startup-backfill',
+    cron: '15 * * * *',
+    cronEnabled: () =>
+      import('@/lib/server/backfills/startup-backfill-queue').then((m) => m.startupBackfillDue()),
+    fleetConcurrency: 2,
+    maxAttempts: 20,
+    retryBackoffMs: 5_000,
+    handler: () =>
+      import('@/lib/server/backfills/startup-backfill-queue').then((m) => m.runStartupBackfillJob),
+  },
+  {
+    // The follow-up step a startup backfill registers, enqueued when its walk
+    // finishes and due about an hour later. With no step registered for the
+    // backfill it names, a row fails and is retried.
+    name: 'ticket-frt-reconcile',
+    fleetConcurrency: 2,
+    maxAttempts: 20,
+    retryBackoffMs: 5_000,
+    handler: () =>
+      import('@/lib/server/backfills/follow-up-queue').then((m) => m.runBackfillFollowUpJob),
+  },
+  {
+    // Background indexes (DEFERRED_INDEX_SPECS), one row per missing index.
+    // A scheduled row runs the pass; a build row creates one index
+    // concurrently. See backfills/deferred-indexes.ts for the rounds.
+    name: 'deferred-index-build',
+    cron: '35 * * * *',
+    cronEnabled: () =>
+      import('@/lib/server/backfills/deferred-index-build-queue').then((m) =>
+        m.deferredIndexBuildDue()
+      ),
+    fleetConcurrency: 2,
+    maxAttempts: 5,
+    retryBackoffMs: 60_000,
+    handler: () =>
+      import('@/lib/server/backfills/deferred-index-build-queue').then(
+        (m) => m.runDeferredIndexJob
+      ),
   },
 
   // ── The eight moved off BullMQ (SAAS-HOSTING-STACK.md §7.1) ────────────────
@@ -702,6 +794,80 @@ export function jobDefinitions(): readonly JobDefinition[] {
  */
 export function __setJobDefinitionsForTests(defs: readonly JobDefinition[] | null): void {
   overrides = defs
+}
+
+/**
+ * Jobs an operator pauses with `QUACKBACK_DISABLED_JOBS=name,name`.
+ *
+ * A paused job is not cancelled. Its schedule writes no row (the same as a shut
+ * `cronEnabled` gate), its queued rows stay `pending` with no attempt spent, and
+ * neither its rows nor its schedule's deadline wake a parked workspace. Taking
+ * the name off the list resumes all of it, and the rows that waited run as if
+ * they had just been enqueued. A screen that reads a job row therefore shows
+ * `pending` as "Queued", never as running.
+ *
+ * Read from `process.env` directly, like the other job-loop settings in
+ * `runner.ts`, so it works in a worker that has not loaded the full config.
+ * This is the only place that reads it.
+ */
+const DISABLED_JOBS_ENV = 'QUACKBACK_DISABLED_JOBS'
+
+/** Split the comma list into known and unknown names. Blank entries are skipped. */
+export function parseDisabledJobs(
+  raw: string | undefined,
+  knownNames: readonly string[]
+): { paused: ReadonlySet<string>; unknown: string[] } {
+  const known = new Set(knownNames)
+  const paused = new Set<string>()
+  const unknown: string[] = []
+  for (const part of (raw ?? '').split(',')) {
+    const name = part.trim()
+    if (!name) continue
+    if (known.has(name)) paused.add(name)
+    else if (!unknown.includes(name)) unknown.push(name)
+  }
+  return { paused, unknown }
+}
+
+function disabledJobs(): { paused: ReadonlySet<string>; unknown: string[] } {
+  return parseDisabledJobs(
+    process.env[DISABLED_JOBS_ENV],
+    jobDefinitions().map((d) => d.name)
+  )
+}
+
+/** The definitions the job worker may claim and schedule: every one not paused. */
+export function runnableJobDefinitions(): readonly JobDefinition[] {
+  const { paused } = disabledJobs()
+  if (paused.size === 0) return jobDefinitions()
+  return jobDefinitions().filter((d) => !paused.has(d.name))
+}
+
+/** Names of the runnable definitions. */
+export function runnableQueues(): string[] {
+  return runnableJobDefinitions().map((d) => d.name)
+}
+
+/** Names of the definitions an operator paused. */
+export function pausedQueues(): string[] {
+  return [...disabledJobs().paused]
+}
+
+/**
+ * One `job paused` line per paused job, and one warning for names that match no
+ * job. The worker calls this at start, so a forgotten pause shows up in the boot
+ * log rather than only as work that never happens.
+ */
+export function logPausedJobs(): void {
+  const log = logger.child({ component: 'job-runner' })
+  const { paused, unknown } = disabledJobs()
+  for (const queue of paused) log.info({ event: 'job.paused', queue }, 'job paused')
+  if (unknown.length > 0) {
+    log.warn(
+      { event: 'job.paused_unknown', unknown, setting: DISABLED_JOBS_ENV },
+      'ignoring paused job names that match no job'
+    )
+  }
 }
 
 export function findJobDefinition(name: string): JobDefinition | undefined {

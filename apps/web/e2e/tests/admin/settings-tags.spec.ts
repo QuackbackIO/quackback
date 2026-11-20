@@ -36,10 +36,11 @@ test.describe('Admin Tags Settings', () => {
     if ((await dots.count()) > 0) {
       await expect(dots.first()).toBeVisible()
       // Portal is the default and is not labelled
-      // (scoped to the page content: the settings nav has a Portal link)
-      await expect(page.getByRole('main').last().getByText('Portal', { exact: true })).toHaveCount(
-        0
-      )
+      // (scoped to the tag rows: the settings nav, which has a Portal link, now
+      // sits inside the same main landmark)
+      await expect(
+        page.locator('[data-slot="settings-list-row"]').getByText('Portal', { exact: true })
+      ).toHaveCount(0)
     }
   })
 
@@ -178,8 +179,9 @@ test.describe('Admin Tags Settings', () => {
       // Confirm deletion
       await confirmDialog.getByRole('button', { name: 'Delete tag' }).click()
 
-      // PostTag should no longer appear
-      await expect(page.getByText(tagName)).toBeHidden({ timeout: 10000 })
+      // The dialog closes and the tag's row is gone
+      await expect(confirmDialog).toBeHidden({ timeout: 10000 })
+      await expect(tagRow).toHaveCount(0, { timeout: 10000 })
     }
   })
 

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 import { escapeCSV } from '@/lib/server/utils/csv'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'export' })
 
@@ -105,7 +106,7 @@ export const Route = createFileRoute('/api/export')({
             return Response.json(error.toResponseBody(), { status: error.statusCode })
           }
           log.error({ err: error }, 'csv export failed')
-          return Response.json({ error: 'Internal server error' }, { status: 500 })
+          return internalRouteErrorResponse()
         }
       },
     },

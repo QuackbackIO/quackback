@@ -16,7 +16,7 @@ import { Route as ConsentRoute } from '@/routes/oauth/consent'
 
 const client = { client_name: 'MCP test client', client_uri: 'https://example.com' }
 
-async function renderConsent(locale?: SupportedLocale) {
+async function renderConsent(locale?: SupportedLocale, email?: string) {
   const rootRoute = createRootRouteWithContext<RouterContext>()({
     component: () => <Outlet />,
   })
@@ -29,7 +29,11 @@ async function renderConsent(locale?: SupportedLocale) {
   })
   const router = createRouter({
     routeTree: rootRoute.addChildren([consentRoute]),
-    context: { queryClient: new QueryClient(), acceptLanguageLocale: locale },
+    context: {
+      queryClient: new QueryClient(),
+      acceptLanguageLocale: locale,
+      ...(email && { session: { user: { email } } as RouterContext['session'] }),
+    },
     history: createMemoryHistory({
       initialEntries: [
         '/oauth/consent?client_id=test-client&scope=openid%20read:feedback%20read:article%20read:chat',
@@ -84,6 +88,20 @@ function openDetail() {
 }
 
 describe('standalone MCP consent intl', () => {
+  it('names the person who is signed in', async () => {
+    mockRequests()
+    await renderConsent(undefined, 'sam@example.com')
+    expect(screen.getByText(/Signed in as sam@example\.com\./)).toBeInTheDocument()
+  })
+
+  it("never shows an anonymous session's placeholder address as a person", async () => {
+    mockRequests()
+    await renderConsent(undefined, 'temp-abc123@anon.quackback.io')
+    expect(screen.getByText(/Revoke any time in account settings/)).toBeInTheDocument()
+    expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/anon\.quackback\.io/)).not.toBeInTheDocument()
+  })
+
   it('opens on full access with the per-area picker tucked away', async () => {
     mockRequests()
     await renderConsent()

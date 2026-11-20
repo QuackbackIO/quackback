@@ -389,6 +389,28 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     expect(weakConv.spamReason).toBe('sender_auth_failure')
   })
 
+  it('marks a conversation whose mail failed sender authentication, and only that', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const marker = async (authenticationResults: string | null, from: string) => {
+      const res = await ingestParsedEmail(coldEmail({ authenticationResults, from }))
+      if (res.status !== 'ingested' && res.status !== 'quarantined') throw new Error(res.status)
+      const [conv] = await testDb
+        .select({ customAttributes: conversations.customAttributes })
+        .from(conversations)
+        .where(eq(conversations.id, res.conversationId))
+      return (conv.customAttributes as Record<string, unknown>).senderAuthFailed ?? null
+    }
+
+    expect(await marker('mx; dmarc=pass (p=reject) header.from=a.com', 'a@a.com')).toBeNull()
+    // No Authentication-Results at all: unknown, not failed.
+    expect(await marker(null, 'b@b.com')).toBeNull()
+    expect(await marker('mx; dmarc=fail (p=none) header.from=c.com', 'c@c.com')).toBe(true)
+    expect(await marker('mx; dmarc=fail (p=reject) header.from=d.com; arc=pass', 'd@d.com')).toBe(
+      true
+    )
+    expect(await marker('mx; dmarc=fail (p=reject) header.from=e.com', 'e@e.com')).toBe(true)
+  })
+
   // Requirement: retaining the message must not soften the verdict. A refused
   // message is attributed to a standalone unverified lead, badged, and raises
   // none of the signals an accepted message raises — a bell any stranger can
@@ -457,6 +479,8 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
       .where(eq(principal.id, conv.visitorPrincipalId))
     expect(visitor.userId).toBeNull()
     expect(conv.customAttributes).toMatchObject({ unverifiedSender: true })
+    // Released, still not trusted: its From is not matched by email conditions.
+    expect(conv.customAttributes).toMatchObject({ senderAuthFailed: true })
   })
 
   // Retention has to have a ceiling or an unauthenticated stranger decides how

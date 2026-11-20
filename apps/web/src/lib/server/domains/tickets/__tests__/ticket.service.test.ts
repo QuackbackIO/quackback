@@ -62,6 +62,11 @@ vi.mock('../ticket.webhooks', () => webhooks)
 // own test convention.
 const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
 vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
+const inboxRemoval = vi.hoisted(() => ({ publishInboxRemoval: vi.fn() }))
+vi.mock('@/lib/server/realtime/inbox-publish', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  ...inboxRemoval,
+}))
 
 // Neutralize the fire-and-forget activity log: this suite's actors are mostly
 // unbacked principal ids, and a real insert's FK failure would abort the
@@ -69,6 +74,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 // ticket-activity.service.test.ts with backed principals.
 vi.mock('../ticket-activity.service', () => ({
   recordTicketActivity: vi.fn(),
+  recordTicketActivityAwaited: vi.fn().mockResolvedValue(undefined),
   listTicketActivity: vi.fn().mockResolvedValue([]),
 }))
 
@@ -533,7 +539,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     expect(requesterPrincipalId).toBeNull()
   })
 
-  it('closing stamps resolvedAt + firstResponseAt; reopening clears resolvedAt and counts the reopen', async () => {
+  it('closing stamps resolvedAt; reopening clears resolvedAt and counts the reopen', async () => {
     await seedSettings()
     const { open, closed } = await seedStatuses()
     const actor = await messageAuthorActor()
@@ -545,17 +551,25 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     const afterClose = await readTicket(id)
     expect(afterClose.resolvedAt).not.toBeNull()
     expect(afterClose.reopenedCount).toBe(0)
-    // First agent action stamped the first response.
-    expect(afterClose.firstResponseAt).not.toBeNull()
-    const stampedAt = afterClose.firstResponseAt
 
     // Reopen: move back out to an open status.
     await setTicketStatus(id, open.id, actor)
     const afterReopen = await readTicket(id)
     expect(afterReopen.resolvedAt).toBeNull()
     expect(afterReopen.reopenedCount).toBe(1)
-    // The first-response stamp is once-only, never overwritten on later actions.
-    expect(afterReopen.firstResponseAt?.getTime()).toBe(stampedAt?.getTime())
+  })
+
+  it('status, assignee and priority changes never set the first response', async () => {
+    await seedSettings()
+    const { closed } = await seedStatuses()
+    const actor = await messageAuthorActor()
+    const created = await createTicket({ type: 'customer', title: 'Billing issue' }, actor)
+
+    await setTicketStatus(created.id, closed.id, actor)
+    await assignTicket(created.id, { assigneePrincipalId: actor.principalId }, actor)
+    await setTicketPriority(created.id, 'urgent', actor)
+
+    expect((await readTicket(created.id)).firstResponseAt).toBeNull()
   })
 
   it('assignment is independent: assigning a team never clears the teammate (no-clear)', async () => {
@@ -714,10 +728,14 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       await seedSettings()
       await seedStatuses()
       const created = await createTicket({ type: 'customer', title: 'Realtime me' }, adminActor())
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
-        kind: 'ticket_updated',
-        ticket: expect.objectContaining({ id: created.id }),
-      })
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+        created.id,
+        {
+          kind: 'ticket_updated',
+          ticket: expect.objectContaining({ id: created.id }),
+        },
+        expect.objectContaining({ teamId: null })
+      )
     })
 
     it('setTicketStatus publishes ticket_updated with the new status', async () => {
@@ -727,13 +745,17 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       const created = await createTicket({ type: 'customer', title: 'Move me' }, actor)
       realtime.publishTicketEvent.mockClear()
       await setTicketStatus(created.id, closed.id, actor)
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
-        kind: 'ticket_updated',
-        ticket: expect.objectContaining({
-          id: created.id,
-          status: expect.objectContaining({ id: closed.id }),
-        }),
-      })
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+        created.id,
+        {
+          kind: 'ticket_updated',
+          ticket: expect.objectContaining({
+            id: created.id,
+            status: expect.objectContaining({ id: closed.id }),
+          }),
+        },
+        expect.objectContaining({ teamId: null })
+      )
     })
 
     it('assignTicket publishes ticket_updated even on a no-op re-assign', async () => {
@@ -748,7 +770,14 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
       expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
         created.id,
-        expect.objectContaining({ kind: 'ticket_updated' })
+        expect.objectContaining({ kind: 'ticket_updated' }),
+        // An assign names the owner it replaced, so a teammate who loses the
+        // ticket gets its removal on the inbox stream.
+        {
+          assigneePrincipalId: teammate,
+          teamId: null,
+          prev: { assigneePrincipalId: teammate, teamId: null },
+        }
       )
     })
 
@@ -760,24 +789,30 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       realtime.publishTicketEvent.mockClear()
 
       await setTicketPriority(created.id, 'urgent', actor)
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
-        kind: 'ticket_updated',
-        ticket: expect.objectContaining({ id: created.id, priority: 'urgent' }),
-      })
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+        created.id,
+        {
+          kind: 'ticket_updated',
+          ticket: expect.objectContaining({ id: created.id, priority: 'urgent' }),
+        },
+        expect.objectContaining({ teamId: null })
+      )
     })
 
-    it('softDeleteTicket publishes ticket_updated so other viewers refetch the list', async () => {
+    it('softDeleteTicket publishes a removal with the owner and team it had, and no ticket_updated', async () => {
       await seedSettings()
       await seedStatuses()
       const actor = adminActor()
       const created = await createTicket({ type: 'customer', title: 'Delete me' }, actor)
       realtime.publishTicketEvent.mockClear()
+      inboxRemoval.publishInboxRemoval.mockClear()
 
       await softDeleteTicket(created.id, actor)
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
-        kind: 'ticket_updated',
-        ticket: expect.objectContaining({ id: created.id }),
-      })
+      expect(inboxRemoval.publishInboxRemoval).toHaveBeenCalledWith(
+        { kind: 'ticket', id: created.id },
+        { assigneePrincipalId: created.assignee.principalId, teamId: null }
+      )
+      expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
     })
   })
 
@@ -841,10 +876,14 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       expect(eventActor).toMatchObject({ principalId: requester, principalType: 'user' })
 
       // ...the realtime publish mirrors setTicketStatus...
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
-        kind: 'ticket_updated',
-        ticket: expect.objectContaining({ id: created.id }),
-      })
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+        created.id,
+        {
+          kind: 'ticket_updated',
+          ticket: expect.objectContaining({ id: created.id }),
+        },
+        expect.objectContaining({ teamId: null })
+      )
 
       // ...and the customer-facing thread stage notice posts on the crossing.
       const page = await listTicketMessages(created.id, { includeInternal: true })

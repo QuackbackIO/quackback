@@ -42,3 +42,30 @@ export function resolveSubmitState(
     noAccess: !boardCanSubmit && isRealUser,
   }
 }
+
+interface ComposerBoard {
+  id: string
+}
+
+export interface ComposerPlan<B extends ComposerBoard> {
+  /** The boards the composer may post to: read-only boards are left out. */
+  boards: B[]
+  /** Whether the composer stands down for the note (a read-only board, or nothing to post to). */
+  readOnly: boolean
+}
+
+/**
+ * What the portal composer does around read-only boards. On a board page
+ * (`lockedBoardId`) it stands down when that board is read-only; on the whole
+ * feed it stands down only when every board is.
+ */
+export function planComposer<B extends ComposerBoard>(
+  boards: B[],
+  permissions: Record<string, { readOnly?: boolean }> | undefined,
+  lockedBoardId: string | undefined
+): ComposerPlan<B> {
+  const open = boards.filter((board) => !permissions?.[board.id]?.readOnly)
+  const locked = lockedBoardId ? permissions?.[lockedBoardId] : undefined
+  const readOnly = (boards.length > 0 && open.length === 0) || !!locked?.readOnly
+  return { boards: open, readOnly }
+}

@@ -5,6 +5,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { shownName } from '@/lib/shared/greeting-name'
+import { errorText } from '@/lib/client/error-text'
 
 interface WidgetUser {
   id: string
@@ -57,12 +58,13 @@ export function WidgetCommentForm({
       })
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'widget.commentForm.errorPost',
-              defaultMessage: 'Could not post comment. Please try again.',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'widget.commentForm.errorPost',
+            defaultMessage: 'Could not post comment. Please try again.',
+          })
+        )
       )
     } finally {
       setIsSubmitting(false)

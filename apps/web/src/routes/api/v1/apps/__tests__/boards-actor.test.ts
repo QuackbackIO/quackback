@@ -72,3 +72,27 @@ describe('GET /api/v1/apps/boards — actor pass-through', () => {
     expect(actorArg.role).toBe('admin')
   })
 })
+
+describe('GET /api/v1/apps/boards — payload', () => {
+  it('lists only id, name and slug, never readOnly', async () => {
+    mockWithApiKeyAuth.mockResolvedValue({
+      apiKey: { id: 'key_1' },
+      principalId: 'prn_test' as PrincipalId,
+      role: 'member',
+      importMode: false,
+    })
+    mockListPublicBoardsWithStats.mockResolvedValue([
+      { id: 'board_1', name: 'Bugs', slug: 'bugs', readOnly: true, access: {}, postCount: 3 },
+    ])
+    const mod = await import('../boards')
+    const handler = (
+      mod.Route.options as unknown as {
+        server: {
+          handlers: { GET: (ctx: { request: Request }) => Promise<{ body: { boards: unknown[] } }> }
+        }
+      }
+    ).server.handlers.GET
+    const { body } = await handler({ request: new Request('http://test/api/v1/apps/boards') })
+    expect(body.boards).toEqual([{ id: 'board_1', name: 'Bugs', slug: 'bugs' }])
+  })
+})

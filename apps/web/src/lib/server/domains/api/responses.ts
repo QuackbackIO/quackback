@@ -6,6 +6,7 @@
  */
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
+import { getLogContext } from '@/lib/server/log-context'
 
 const log = logger.child({ component: 'api' })
 
@@ -49,6 +50,8 @@ export interface ApiErrorResponse {
     code: string
     message: string
     details?: Record<string, unknown>
+    /** On a 5xx: the id that finds this request in the server logs. */
+    requestId?: string
   }
 }
 
@@ -97,11 +100,15 @@ export function errorResponse(
   status: number,
   details?: Record<string, unknown>
 ): Response {
+  // A 5xx says nothing about what went wrong, so it carries the request id (also
+  // sent as the `x-request-id` header) for the caller to quote.
+  const requestId = status >= 500 ? getLogContext()?.request_id : undefined
   const body: ApiErrorResponse = {
     error: {
       code,
       message,
       ...(details && { details }),
+      ...(requestId && { requestId }),
     },
   }
 
@@ -144,6 +151,19 @@ export function internalErrorResponse(message = 'Internal server error'): Respon
   return errorResponse('INTERNAL_ERROR', message, 500)
 }
 
+/**
+ * 500 for the app's own routes (export, import, profile), whose pages read
+ * `error` as a plain string. Same request id as the public envelope carries,
+ * so a person quoting it can be matched to the log line.
+ */
+export function internalRouteErrorResponse(): Response {
+  const requestId = getLogContext()?.request_id
+  return Response.json(
+    { error: 'Internal server error', ...(requestId && { requestId }) },
+    { status: 500 }
+  )
+}
+
 export function rateLimitedResponse(retryAfter: number): Response {
   return jsonResponse(
     { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' } },
@@ -176,6 +196,14 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   APPROVAL_NOT_FOUND: 'Approval',
   SETTINGS_AREA_NOT_FOUND: 'Settings area',
   SETTINGS_RECEIPT_NOT_FOUND: 'Settings receipt',
+  TICKET_NOT_FOUND: 'Ticket',
+  CONVERSATION_NOT_FOUND: 'Conversation',
+}
+
+/** A 404 message from a domain error the map above does not name: its own
+ *  message, with "not found" added only when it does not already say so. */
+function unmappedNotFoundMessage(message: string): string {
+  return /\bnot found\b/i.test(message) ? message : `${message} not found`
 }
 
 /**
@@ -209,6 +237,10 @@ export function handleDomainError(error: unknown): Response {
         return validationErrorResponse(domainError.message, details)
       }
 
+      // Clients branch on this one: the assignee is not a teammate.
+      case 'INVALID_ASSIGNEE':
+        return errorResponse(domainError.code, domainError.message, 400)
+
       case 'DUPLICATE_SLUG':
       case 'DUPLICATE_KEY':
       case 'DUPLICATE_NAME':
@@ -229,7 +261,9 @@ export function handleDomainError(error: unknown): Response {
           const s = (domainError as { statusCode: number }).statusCode
           if (s === 400) return validationErrorResponse(domainError.message)
           if (s === 403) return forbiddenResponse(domainError.message)
-          if (s === 404) return notFoundResponse(domainError.message)
+          if (s === 404) {
+            return errorResponse('NOT_FOUND', unmappedNotFoundMessage(domainError.message), 404)
+          }
           if (s === 409) return conflictResponse(domainError.message)
           // Preconditions and locks keep their own codes: a client branches on them.
           if (s === 412 || s === 423 || s === 428) {

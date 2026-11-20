@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Monday.com board listing.
  */
@@ -22,7 +23,10 @@ export async function listMondayBoards(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Monday.com boards: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Monday.com boards: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as {

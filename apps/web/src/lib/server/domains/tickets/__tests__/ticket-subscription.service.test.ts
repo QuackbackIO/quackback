@@ -21,7 +21,7 @@ import {
   muteTicket,
   unmuteTicket,
   getTicketWatchStatus,
-  getTicketWatchersForEvent,
+  getTicketNotifiableWatchers,
   getTicketAgentWatchersForEvent,
   listTicketWatchers,
 } from '../ticket-subscription.service'
@@ -47,7 +47,7 @@ async function seedTicket(): Promise<TicketId> {
   return ticket.id
 }
 
-async function seedPrincipal(role: 'member' | 'user' = 'member'): Promise<PrincipalId> {
+async function seedPrincipal(role: 'admin' | 'member' | 'user' = 'member'): Promise<PrincipalId> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
   await testDb.insert(user).values({ id: userId, name: `Watcher-${suffix()}` })
@@ -121,23 +121,55 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     })
   })
 
-  it('getTicketWatchersForEvent excludes future mutes and includes expired ones', async () => {
+  it('getTicketNotifiableWatchers excludes future mutes and includes expired ones', async () => {
     const ticketId = await seedTicket()
     const active = await seedPrincipal()
     const mutedNow = await seedPrincipal()
     const muteExpired = await seedPrincipal()
 
-    await subscribeToTicket(active, ticketId, 'requester')
+    await subscribeToTicket(active, ticketId, 'replier')
     await subscribeToTicket(mutedNow, ticketId, 'manual')
     await subscribeToTicket(muteExpired, ticketId, 'assignee')
     await muteTicket(mutedNow, ticketId, new Date(Date.now() + 60 * 60 * 1000))
     await muteTicket(muteExpired, ticketId, new Date(Date.now() - 60 * 60 * 1000))
 
-    const watchers = await getTicketWatchersForEvent(ticketId)
+    const watchers = await getTicketNotifiableWatchers(ticketId, null)
     expect(watchers).toHaveLength(2)
     expect(watchers).toContain(active)
     expect(watchers).toContain(muteExpired)
     expect(watchers).not.toContain(mutedNow)
+  })
+
+  it('getTicketNotifiableWatchers keeps team members and the requester, drops other watchers', async () => {
+    const ticketId = await seedTicket()
+    const admin = await seedPrincipal('admin')
+    const member = await seedPrincipal('member')
+    const former = await seedPrincipal('user')
+    const requester = await seedPrincipal('user')
+    const stranger = await seedPrincipal('user')
+    const mutedRequester = await seedPrincipal('user')
+    const notWatching = await seedPrincipal('user')
+
+    await subscribeToTicket(admin, ticketId, 'manual')
+    await subscribeToTicket(member, ticketId, 'assignee')
+    await subscribeToTicket(former, ticketId, 'assignee')
+    await subscribeToTicket(requester, ticketId, 'requester')
+    await subscribeToTicket(stranger, ticketId, 'manual')
+    await subscribeToTicket(mutedRequester, ticketId, 'requester')
+    await muteTicket(mutedRequester, ticketId, new Date(Date.now() + 60 * 60 * 1000))
+
+    const withRequester = await getTicketNotifiableWatchers(ticketId, requester)
+    expect([...withRequester].sort()).toEqual([admin, member, requester].sort())
+
+    // The requester only counts while their own row exists and is unmuted.
+    expect(await getTicketNotifiableWatchers(ticketId, mutedRequester)).not.toContain(
+      mutedRequester
+    )
+    expect(await getTicketNotifiableWatchers(ticketId, notWatching)).not.toContain(notWatching)
+
+    // With no requester named, only team members remain.
+    const teamOnly = await getTicketNotifiableWatchers(ticketId, null)
+    expect([...teamOnly].sort()).toEqual([admin, member].sort())
   })
 
   it('getTicketAgentWatchersForEvent keeps team members only, mute-filtered', async () => {

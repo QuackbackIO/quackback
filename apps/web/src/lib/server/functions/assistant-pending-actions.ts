@@ -9,7 +9,7 @@ import { assertPendingWorkspaceParent } from '@/lib/server/domains/assistant/pen
  * instead of trusting that stale snapshot. Base gate is conversation.view
  * (any inbox teammate may open the approval queue); same as approve/reject
  * (assistant-actions.ts), the actual authority is per-row: the caller must be
- * able to VIEW the row's actual parent (`assertConversationViewable` /
+ * able to VIEW the row's actual parent (`assertConversationVisible` /
  * `assertTicketVisible`), not just hold the base permission somewhere.
  */
 import { z } from 'zod'
@@ -21,7 +21,7 @@ import {
   getPendingActionById,
   type AssistantPendingAction,
 } from '@/lib/server/domains/assistant/pending-actions.service'
-import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import type { AssistantPendingActionDTO } from './assistant-actions'
 
@@ -68,7 +68,7 @@ export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
     const actor = await policyActorFromAuth(auth)
     assertPendingWorkspaceParent(row)
     if (row.conversationId) {
-      await assertConversationViewable(row.conversationId, actor)
+      await assertConversationVisible(row.conversationId, actor)
     } else if (row.ticketId) {
       await assertTicketVisible(row.ticketId, actor)
     }

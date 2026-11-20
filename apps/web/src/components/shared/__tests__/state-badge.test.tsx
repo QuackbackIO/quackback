@@ -47,3 +47,10 @@ describe('Badge tones', () => {
     expect(screen.getByText('w').className).toMatch(/text-warning/)
   })
 })
+
+describe('StateBadge verified', () => {
+  it('reads Verified on the success tone', () => {
+    render(<StateBadge state="verified" />)
+    expect(screen.getByText('Verified').className).toContain('bg-success')
+  })
+})

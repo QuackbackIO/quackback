@@ -76,14 +76,17 @@ export const fetchClickUpSpacesFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('ClickUp not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'ClickUp not connected')
     }
 
     const auth = await getIntegrationAuth(integration.id)
     const secrets = { accessToken: auth.accessToken }
     const cfg = (auth.config ?? {}) as ClickUpIntegrationConfig
     if (!cfg.teamId) {
-      throw new Error('ClickUp team ID not found. Please reconnect ClickUp.')
+      throw new ValidationError(
+        'INTEGRATION_RECONNECT_REQUIRED',
+        'ClickUp team ID not found. Please reconnect ClickUp.'
+      )
     }
     return listClickUpSpaces(secrets.accessToken, cfg.teamId)
   }
@@ -104,7 +107,7 @@ export const fetchClickUpListsFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('ClickUp not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'ClickUp not connected')
     }
 
     const auth = await getIntegrationAuth(integration.id)

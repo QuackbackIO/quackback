@@ -104,7 +104,6 @@ import {
   and,
   asc,
   isNull,
-  sql,
   conversations,
   conversationMessages,
   INTERACTIVE_BLOCK_KINDS,
@@ -122,12 +121,17 @@ import { applySlaToConversation } from '@/lib/server/domains/sla/sla.service'
 import { applySlaToTicket } from '@/lib/server/domains/sla/ticket-sla.service'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
+import {
+  isConversationRated,
+  isCsatAlreadyRequested,
+  mayAskForCsat,
+} from '@/lib/server/domains/conversation/csat-request.service'
 import { resolveWorkflowVariables, type WorkflowVariables } from './workflow-variables'
 import { logRunEvent } from './workflow-run-events'
 import { interpolateTiptapContent } from '@/lib/shared/workflows/interpolate'
 import { tiptapJsonToText } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import * as ticketService from '@/lib/server/domains/tickets/ticket.service'
 import { setTicketDueAt } from '@/lib/server/domains/tickets/ticket-due.service'
 import {
@@ -146,6 +150,15 @@ function ticketActionActor(actor: Actor): Actor {
     actor.principalId
   )
 }
+
+/**
+ * The actor for finding a conversation's paired ticket: a workspace-wide
+ * service actor with no permissions. The lookup is a system read, so a macro
+ * run by a scoped teammate still finds a pair it cannot see. `convert_to_ticket`
+ * then reports "already a ticket" instead of filing a second one, and
+ * `set_ticket_status` reaches the writer, which checks the run's own actor.
+ */
+const LINKED_TICKET_LOOKUP_ACTOR: Actor = boundedServiceActor(new Set())
 
 /** send_block's own dependencies, pre-resolved once for an entire plan (SF8
  *  perf fix) rather than re-fetched per action: workflow.engine.ts's
@@ -195,6 +208,11 @@ export interface WorkflowContext {
    *  sendBlock falls back to resolving lazily itself in that case, exactly
    *  as it always has. */
   resolvedBlockDeps?: ResolvedBlockDeps
+  /** Set only by a macro run (`applyMacroActions`), which checked the item
+   *  once at its start: the conversation writers then skip their per-item
+   *  check, so a later action still applies after an earlier one moved the
+   *  item out of the actor's scope. A workflow run never sets it. */
+  systemCascade?: boolean
 }
 
 /** What `send_block` posts, per block kind — the unresolved template as
@@ -294,39 +312,13 @@ export interface ActionResult {
   /** Set by `let_assistant_answer` when Quinn will not run (greet-only,
    *  unconfigured, token budget, silence). The engine resumes escalated. */
   assistantDeclined?: boolean
+  /** Set by `send_block` when it posted nothing (a csat ask on a conversation
+   *  that is still open, or already asked or rated). There is no answer to
+   *  wait for, so the engine ends the step instead of parking on it. */
+  blockSkipped?: boolean
 }
 
 const label = (label: string | null): ActionResult => ({ label })
-
-/**
- * CSAT once per pair (converged Messages): whether this conversation already
- * carries a CSAT ask — answered (a rating on file) or pending (an earlier
- * csat block in the thread). `conversation.status_changed` and
- * `ticket.status_changed` are independent workflow triggers with no
- * cross-dedup, so a workspace authoring "closed → request CSAT" on both axes
- * would otherwise ask the same customer twice on one pair; the send_block
- * case below skips the second ask instead.
- */
-async function conversationAlreadyAskedCsat(conversationId: ConversationId): Promise<boolean> {
-  const [conversation] = await db
-    .select({ csatRating: conversations.csatRating })
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-  if (conversation?.csatRating != null) return true
-  const [asked] = await db
-    .select({ id: conversationMessages.id })
-    .from(conversationMessages)
-    .where(
-      and(
-        eq(conversationMessages.conversationId, conversationId),
-        isNull(conversationMessages.deletedAt),
-        sql`${conversationMessages.metadata} -> 'block' ->> 'kind' = 'csat'`
-      )
-    )
-    .limit(1)
-  return asked !== undefined
-}
 
 /** The honest plain-text fallback for a resolved block body, per kind — what
  *  `content` stores (transcript/email/notifications/FTS read this, never the
@@ -402,6 +394,12 @@ function buildBlockPayload(
  * (appendAssistantReply). Resolves variables server-side (a raw `{token}`
  * never reaches storage) and derives the honest content fallback. Returns the
  * posted message's id for the caller to stamp onto an InputWaitCursor.
+ *
+ * A csat block asks once per conversation (csat-request.service): it posts
+ * only when the conversation has no rating, csat block or rating email yet,
+ * checked under the conversation row lock, and returns null otherwise. The
+ * conversation and ticket status triggers are independent, so a workspace
+ * asking on both would otherwise ask the same customer twice on one pair.
  */
 async function sendBlock(
   conversationId: ConversationId,
@@ -409,7 +407,10 @@ async function sendBlock(
   nodeId: string,
   block: BlockSendSpec,
   resolvedDeps?: ResolvedBlockDeps
-): Promise<ConversationMessageId> {
+): Promise<ConversationMessageId | null> {
+  // Cheap early decline before any setup. The locked check inside the post
+  // stays the guard against two asks racing.
+  if (block.kind === 'csat' && (await isCsatAlreadyRequested(conversationId))) return null
   // Per-plan-resolved when the caller (applyPlanAndSettle) hoisted it — see
   // ResolvedBlockDeps — else resolved lazily here exactly as before (a macro
   // calling applyAction directly, or a standalone applyAction call in tests).
@@ -436,23 +437,32 @@ async function sendBlock(
     content = blockFallbackContent(resolvedBody, block)
   }
 
-  const messageDTO = await conversationService.appendAssistantReply(
-    conversationId,
-    content,
-    {
-      principalId: assistant.id,
-      displayName: assistantConfig.config.identity.name,
-      avatarUrl: assistantConfig.config.identity.avatarUrl,
-    },
-    {
-      // Our own turn just spoke; nobody is "waiting on us" until the customer
-      // replies again (which sets waitingSince through the ordinary visitor
-      // send path) — same as Quinn's normal (non-handover) answer.
-      waiting: false,
-      contentJson: block.kind === 'replyTime' ? null : resolvedBody,
-      metadata: { block: buildBlockPayload(block, { runId, nodeId }, replyTimeStatus) },
-    }
-  )
+  const blockAuthor = {
+    principalId: assistant.id,
+    displayName: assistantConfig.config.identity.name,
+    avatarUrl: assistantConfig.config.identity.avatarUrl,
+  }
+  const blockOpts = {
+    // Our own turn just spoke; nobody is "waiting on us" until the customer
+    // replies again (which sets waitingSince through the ordinary visitor
+    // send path) — same as Quinn's normal (non-handover) answer.
+    waiting: false,
+    contentJson: block.kind === 'replyTime' ? null : resolvedBody,
+    metadata: { block: buildBlockPayload(block, { runId, nodeId }, replyTimeStatus) },
+  }
+  const messageDTO =
+    block.kind === 'csat'
+      ? await conversationService.appendAssistantReply(conversationId, content, blockAuthor, {
+          ...blockOpts,
+          onlyIf: mayAskForCsat(conversationId),
+        })
+      : await conversationService.appendAssistantReply(
+          conversationId,
+          content,
+          blockAuthor,
+          blockOpts
+        )
+  if (!messageDTO) return null
 
   // CSAT-over-email (support platform's CSAT-over-email extension): best-effort,
   // must never fail the block send itself — notifyCsatRequestEmail swallows
@@ -490,17 +500,26 @@ export async function applyAction(
   // Attribution threaded into every service call whose write posts a system
   // notice, so the thread names the firing workflow on that notice.
   const attribution = ctx.workflowName ? { workflowName: ctx.workflowName } : undefined
+  // Forwarded as given: only a macro run sets it (see WorkflowContext).
+  const writeOpts = { systemCascade: ctx.systemCascade }
   switch (action.type) {
     case 'assign_agent':
       await conversationService.assignConversation(
         conversationId,
         action.principalId,
         actor,
-        attribution
+        attribution,
+        writeOpts
       )
       return label('assigned')
     case 'assign_team':
-      await conversationService.assignTeam(conversationId, action.teamId, actor, attribution)
+      await conversationService.assignTeam(
+        conversationId,
+        action.teamId,
+        actor,
+        attribution,
+        writeOpts
+      )
       return label('assigned to team')
     case 'add_tag':
       await tagService.attachTag(conversationId, action.tagId)
@@ -509,7 +528,12 @@ export async function applyAction(
       await tagService.detachTag(conversationId, action.tagId)
       return label('untagged')
     case 'set_priority':
-      await conversationService.setConversationPriority(conversationId, action.priority, actor)
+      await conversationService.setConversationPriority(
+        conversationId,
+        action.priority,
+        actor,
+        writeOpts
+      )
       return label(`priority ${action.priority}`)
     case 'snooze': {
       const until =
@@ -518,7 +542,7 @@ export async function applyAction(
           : action.untilIso
             ? new Date(action.untilIso)
             : null
-      await conversationService.snoozeConversation(conversationId, until, actor)
+      await conversationService.snoozeConversation(conversationId, until, actor, writeOpts)
       return label('snoozed')
     }
     case 'close':
@@ -527,7 +551,8 @@ export async function applyAction(
         'closed',
         actor,
         attribution,
-        action.lifecycle === 'auto_closed' ? 'auto_closed' : 'closed'
+        action.lifecycle === 'auto_closed' ? 'auto_closed' : 'closed',
+        writeOpts
       )
       return label('closed')
     case 'reopen':
@@ -537,7 +562,14 @@ export async function applyAction(
       // event), so an already-open conversation is a no-op in every
       // OBSERVABLE way — no duplicate transcript notice, no re-fired event —
       // without this case needing its own pre-check.
-      await conversationService.setConversationStatus(conversationId, 'open', actor, attribution)
+      await conversationService.setConversationStatus(
+        conversationId,
+        'open',
+        actor,
+        attribution,
+        undefined,
+        writeOpts
+      )
       return label('reopened')
     case 'apply_sla': {
       if (action.target === 'ticket') {
@@ -546,7 +578,7 @@ export async function applyAction(
         // no-op success (see WorkflowAction's doc) — and a policy without a
         // TTR target no-ops inside applySlaToTicket, so both "nothing to
         // anchor to" cases degrade quietly instead of failing the run.
-        const linked = await getLinkedCustomerTicket(conversationId)
+        const linked = await getLinkedCustomerTicket(conversationId, LINKED_TICKET_LOOKUP_ACTOR)
         if (!linked) return label(null)
         await applySlaToTicket(linked.id, action.policyId)
         return label('SLA applied to ticket')
@@ -575,26 +607,35 @@ export async function applyAction(
       }
       const deliveryId = `workflow:${ctx.runId}:${action.nodeId}`
       const createdAt = new Date().toISOString()
-      const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+      const [{ safeFetch }, { webhookSignatureHeaders, workflowWebhookSecret }] = await Promise.all(
+        [import('@/lib/server/content/ssrf-guard'), import('@/lib/server/domains/webhooks/signing')]
+      )
+      const body = JSON.stringify({
+        id: deliveryId,
+        type: 'workflow.send_webhook',
+        createdAt,
+        data: {
+          conversationId,
+          workflowId: ctx.workflowId,
+          runId: ctx.runId,
+          actionId: action.nodeId,
+        },
+      })
       const res = await safeFetch(action.url, {
+        // Only takes effect for the e2e suite's own sink, behind the harness
+        // gate (same allowance as events/handlers/webhook.ts).
+        allowE2eWebhookSink: true,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Signed like every other webhook, with the secret for this URL
+          // (see domains/webhooks/signing.ts), so the receiver can verify it.
+          ...webhookSignatureHeaders(workflowWebhookSecret(action.url), body),
           'X-Quackback-Event': 'workflow.send_webhook',
           'X-Quackback-Delivery-Id': deliveryId,
           'Idempotency-Key': deliveryId,
         },
-        body: JSON.stringify({
-          id: deliveryId,
-          type: 'workflow.send_webhook',
-          createdAt,
-          data: {
-            conversationId,
-            workflowId: ctx.workflowId,
-            runId: ctx.runId,
-            actionId: action.nodeId,
-          },
-        }),
+        body,
         timeoutMs: 5000,
       })
       if (!res.ok) throw new Error(`send_webhook HTTP ${res.status}`)
@@ -606,12 +647,6 @@ export async function applyAction(
         // produces this action) — defensive rather than a silent no-op.
         throw new Error('send_block requires a workflow run context')
       }
-      // CSAT once per pair: skip (don't park) when this conversation was
-      // already asked — the conversation- and ticket-axis triggers carry no
-      // cross-dedup, so both firing on one pair reaches here twice.
-      if (action.block.kind === 'csat' && (await conversationAlreadyAskedCsat(conversationId))) {
-        return label('csat skipped — already asked on this thread')
-      }
       const messageId = await sendBlock(
         conversationId,
         ctx.runId,
@@ -619,6 +654,14 @@ export async function applyAction(
         action.block,
         ctx.resolvedBlockDeps
       )
+      // A csat ask on a conversation already asked or rated, or still open,
+      // posts nothing: skip, and tell the engine not to park on it.
+      if (!messageId) {
+        return {
+          label: 'csat skipped — already asked, or the conversation is open',
+          blockSkipped: true,
+        }
+      }
       // Funnel: one `block_sent` event per successful post — never suffixed
       // with the block kind (keeps cardinality low; the funnel counts
       // distinct runs, not kinds). Macros never reach this branch (ctx.runId
@@ -657,10 +700,25 @@ export async function applyAction(
       return label('handed to assistant')
     }
     case 'record_csat':
+      // A rating given in the thread is recorded when it is sent, so a run
+      // resuming on it finds the conversation already rated: nothing to do.
+      if (await isConversationRated(conversationId)) return label('csat already recorded')
       // recordCsat requires the caller to BE the visitor (amendment 1); the
       // engine passes a visitor-scoped actor for this action specifically,
       // never its own service actor.
-      await conversationService.recordCsat(conversationId, action.rating, action.comment, actor)
+      try {
+        await conversationService.recordCsat(conversationId, action.rating, action.comment, actor)
+      } catch (err) {
+        // A rating is only taken once the conversation is closed; a run that
+        // reaches this step on an open one moves on without it.
+        if (
+          err instanceof ConflictError &&
+          err.code === conversationService.CSAT_CONVERSATION_OPEN
+        ) {
+          return label('csat not recorded — conversation is open')
+        }
+        throw err
+      }
       return label('csat recorded')
     case 'add_note': {
       // Authored by the assistant's service principal (see the module doc) —
@@ -677,7 +735,7 @@ export async function applyAction(
       return label('note added')
     }
     case 'set_ticket_status': {
-      const linked = await getLinkedCustomerTicket(conversationId)
+      const linked = await getLinkedCustomerTicket(conversationId, LINKED_TICKET_LOOKUP_ACTOR)
       if (!linked) {
         throw new NotFoundError('NOT_FOUND', 'This conversation has no linked ticket')
       }
@@ -685,7 +743,7 @@ export async function applyAction(
       return label('ticket status updated')
     }
     case 'set_ticket_due_date': {
-      const linked = await getLinkedCustomerTicket(conversationId)
+      const linked = await getLinkedCustomerTicket(conversationId, LINKED_TICKET_LOOKUP_ACTOR)
       if (!linked) {
         throw new NotFoundError('NOT_FOUND', 'This conversation has no linked ticket')
       }
@@ -699,7 +757,7 @@ export async function applyAction(
       return label(dueAt ? 'ticket due date set' : 'ticket due date cleared')
     }
     case 'convert_to_ticket': {
-      const existing = await getLinkedCustomerTicket(conversationId)
+      const existing = await getLinkedCustomerTicket(conversationId, LINKED_TICKET_LOOKUP_ACTOR)
       if (existing) return label('already a ticket')
 
       const linkActor = ticketActionActor(actor)

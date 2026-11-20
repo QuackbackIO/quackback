@@ -5,19 +5,23 @@
  */
 import type { PrincipalId } from '@quackback/ids'
 import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/rate-bucket'
+import { DomainException } from '@/lib/shared/errors'
 
 // Generous enough for fast back-and-forth typing, tight enough to stop a script
 // from flooding writes, conversation creation, and offline-notification fanout.
 const SEND_WINDOW_SECONDS = 30
 const SEND_MAX = 20
 
-/** Thrown when a visitor exceeds the conversation send rate. Carries a retry hint. */
-export class ConversationRateLimitError extends Error {
-  readonly code = 'RATE_LIMITED'
+/**
+ * Thrown when a visitor exceeds the conversation send rate. A typed refusal, so
+ * its `RATE_LIMITED` code and the `retryAfter` seconds reach the widget and the
+ * portal, which tell the customer to wait.
+ */
+export class ConversationRateLimitError extends DomainException {
+  readonly statusCode = 429
   readonly retryAfter: number
   constructor(retryAfter: number) {
-    super('You are sending messages too quickly. Please wait a moment.')
-    this.name = 'ConversationRateLimitError'
+    super('RATE_LIMITED', 'You are sending messages too quickly. Please wait a moment.')
     this.retryAfter = retryAfter
   }
 }
@@ -69,7 +73,8 @@ export async function assertColdInboundRate(senderEmail: string): Promise<void> 
 // above. Three new threads in ten minutes is already past what a person
 // types, but well under the drop threshold — so instead of rejecting the
 // message, the caller files the thread to Spam. Runs on every new-conversation
-// ingest path (email cold inbound and messenger), keyed by sender address.
+// ingest path (email cold inbound and messenger), keyed by sender address, or
+// by `principal:<id>` for a messenger visitor with no address.
 const BURST_WINDOW_SECONDS = 600
 const BURST_MAX = 3
 
@@ -78,9 +83,9 @@ const BURST_MAX = 3
  * store errors (count === null) — a throttle outage never files a real
  * customer's thread as spam.
  */
-export async function isColdInboundBurst(senderEmail: string): Promise<boolean> {
+export async function isColdInboundBurst(senderKey: string): Promise<boolean> {
   const spec = {
-    key: `conversation:cold:burst:${senderEmail}`,
+    key: `conversation:cold:burst:${senderKey}`,
     windowSeconds: BURST_WINDOW_SECONDS,
   }
   const { count } = await incrementBucket(spec)

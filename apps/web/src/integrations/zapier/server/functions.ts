@@ -6,6 +6,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 /**
  * Save a Zapier webhook URL as the integration connection.
@@ -19,7 +20,7 @@ export const saveZapierWebhookFn = createServerFn({ method: 'POST' })
     const auth = await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
     if (new URL(data.webhookUrl).hostname !== 'hooks.zapier.com') {
-      throw new Error('Webhook URL must be a hooks.zapier.com URL')
+      throw new ValidationError('INVALID_WEBHOOK_URL', 'Webhook URL must be a hooks.zapier.com URL')
     }
 
     // Test the webhook with a ping
@@ -34,7 +35,10 @@ export const saveZapierWebhookFn = createServerFn({ method: 'POST' })
     })
 
     if (!testResponse.ok) {
-      throw new Error(`Webhook test failed: HTTP ${testResponse.status}`)
+      throw new ValidationError(
+        'CONNECTION_TEST_FAILED',
+        `Webhook test failed: HTTP ${testResponse.status}`
+      )
     }
 
     await saveIntegration('zapier', {

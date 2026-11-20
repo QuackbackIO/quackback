@@ -28,6 +28,7 @@ import { withSyncTransport } from './transport'
 import { canDispatchSync } from './eligibility'
 import { refreshSyncActor } from './sources'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
 
 export function hookSource(data: HookJobData) {
   const content = data.event.data as {
@@ -244,6 +245,7 @@ export async function executeHookSync(
         ...(accessToken ? { accessToken } : {}),
         integrationId: integration.id,
         rootUrl: getBaseUrl(),
+        links: await getSectionOrigins(),
       },
       { jobId: claim.operation.operationKey }
     )

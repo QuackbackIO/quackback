@@ -1,3 +1,4 @@
+import { ForbiddenError, UnauthorizedError } from '@/lib/shared/errors'
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { UserId, PrincipalId } from '@quackback/ids'
@@ -283,10 +284,10 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
     log.debug('save user name: entry')
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
     if (toSessionScope(session.session?.scope) !== 'dashboard') {
-      throw new Error('Only admin can change setup')
+      throw new ForbiddenError('DASHBOARD_SESSION_REQUIRED', 'Only admin can change setup')
     }
 
     await db

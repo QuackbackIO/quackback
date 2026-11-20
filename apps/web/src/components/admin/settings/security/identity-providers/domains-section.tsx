@@ -41,6 +41,7 @@ import {
   type ShownProofSource,
 } from '@/lib/shared/domain-proof'
 import { IDENTITY_PROVIDERS_KEY, getConnectionTestState } from './provider-shared'
+import { errorText } from '@/lib/client/error-text'
 
 const VERIFY_REASON_MESSAGES: Record<
   Exclude<VerifyDomainResult, { verified: true }>['reason'],
@@ -62,7 +63,7 @@ export function ssoTxtRecord(
   result: VerifyDomainResult | null
 ): DnsRecordRow {
   const record = {
-    label: 'Ownership',
+    label: 'Verification',
     type: 'TXT',
     name: SSO_VERIFY_RECORD_HOST,
     value: ssoVerifyRecordValue(domain.verificationToken),
@@ -113,7 +114,7 @@ export function DomainsSection({
       await refresh()
       setDraftName('')
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'Could not add domain.')
+      setAddError(errorText(err, 'Could not add domain.'))
     } finally {
       setAdding(false)
     }
@@ -225,7 +226,7 @@ function DomainRow({
       await remove({ data: { id: domain.id } })
       await onChanged()
     } catch (err) {
-      setEnforceError(err instanceof Error ? err.message : 'Could not remove domain.')
+      setEnforceError(errorText(err, 'Could not remove domain.'))
     } finally {
       setPending(false)
       setRemoveOpen(false)

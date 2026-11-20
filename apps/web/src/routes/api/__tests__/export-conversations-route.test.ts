@@ -62,6 +62,13 @@ describe('GET /api/export/conversations', () => {
     expect(hoisted.mockListConversationsForExport).not.toHaveBeenCalled()
   })
 
+  it('refuses the export on a plan without analytics exports', async () => {
+    hoisted.mockGetTierLimits.mockResolvedValue({ features: { analyticsExports: false } })
+    const res = await handleExportConversations(makeRequest())
+    expect(res.status).toBe(402)
+    expect(hoisted.mockListConversationsForExport).not.toHaveBeenCalled()
+  })
+
   it('streams NDJSON and records an audit event', async () => {
     hoisted.mockListConversationsForExport.mockResolvedValue([
       { id: 'conversation_1', status: 'open', channel: 'widget' },

@@ -17,6 +17,7 @@ import {
 } from '../storage/s3'
 import { logger } from '@/lib/server/logger'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { UnauthorizedError, ValidationError, ServiceUnavailableError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'uploads' })
 
@@ -63,11 +64,17 @@ async function presignedImageUpload(
   )
 
   if (!isS3Usable()) {
-    throw new Error('File storage is not configured. Contact your administrator.')
+    throw new ServiceUnavailableError(
+      'STORAGE_NOT_CONFIGURED',
+      'File storage is not configured. Contact your administrator.'
+    )
   }
 
   if (!isAllowedImageType(data.contentType)) {
-    throw new Error(`Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`)
+    throw new ValidationError(
+      'INVALID_FILE_TYPE',
+      `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+    )
   }
 
   const key = generateStorageKey(opts.prefix, data.filename)
@@ -109,12 +116,16 @@ export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
 
     // Check S3 is configured
     if (!isS3Usable()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      throw new ServiceUnavailableError(
+        'STORAGE_NOT_CONFIGURED',
+        'File storage is not configured. Contact your administrator.'
+      )
     }
 
     // Validate content type for images
     if (data.prefix.includes('image') && !isAllowedImageType(data.contentType)) {
-      throw new Error(
+      throw new ValidationError(
+        'INVALID_FILE_TYPE',
         `Invalid file type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
       )
     }
@@ -163,18 +174,22 @@ export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
     )
     const session = await getWidgetSession()
     if (!session) {
-      throw new Error('Authentication required to upload images.')
+      throw new UnauthorizedError('Authentication required to upload images.')
     }
     if (session.principal.type === 'anonymous') {
-      throw new Error('Authentication required to upload images.')
+      throw new UnauthorizedError('Authentication required to upload images.')
     }
 
     if (!isS3Usable()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      throw new ServiceUnavailableError(
+        'STORAGE_NOT_CONFIGURED',
+        'File storage is not configured. Contact your administrator.'
+      )
     }
 
     if (!isAllowedImageType(data.contentType)) {
-      throw new Error(
+      throw new ValidationError(
+        'INVALID_FILE_TYPE',
         `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
       )
     }

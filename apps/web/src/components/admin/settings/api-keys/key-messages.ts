@@ -57,7 +57,7 @@ export const ADMIN_KEY_MESSAGES: KeyDialogMessages = defineMessages({
       'Any applications using the current key will lose access until you update them with the new key. The key name and settings will be preserved.',
   },
   rotateConfirm: { id: 'apiKeys.rotate.confirm', defaultMessage: 'Rotate key' },
-  rotatePending: { id: 'apiKeys.rotate.pending', defaultMessage: 'Rotating...' },
+  rotatePending: { id: 'apiKeys.rotate.pending', defaultMessage: 'Rotating…' },
   revokeTitle: { id: 'apiKeys.revoke.title', defaultMessage: 'Revoke API key' },
   revokeDescription: {
     id: 'apiKeys.revoke.description',
@@ -73,7 +73,7 @@ export const ADMIN_KEY_MESSAGES: KeyDialogMessages = defineMessages({
       'Any applications using this key will immediately lose access to the API. You will need to create a new key and update your integrations.',
   },
   revokeConfirm: { id: 'apiKeys.revoke.confirm', defaultMessage: 'Revoke key' },
-  revokePending: { id: 'apiKeys.revoke.pending', defaultMessage: 'Revoking...' },
+  revokePending: { id: 'apiKeys.revoke.pending', defaultMessage: 'Revoking…' },
   revealTitle: { id: 'apiKeys.reveal.title', defaultMessage: 'API key created' },
   revealDescription: {
     id: 'apiKeys.reveal.description',

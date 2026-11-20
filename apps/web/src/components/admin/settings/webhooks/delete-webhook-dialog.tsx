@@ -6,6 +6,7 @@ import { useRouter } from '@tanstack/react-router'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { deleteWebhookFn } from '@/lib/server/functions/webhooks'
 import type { Webhook } from '@/lib/shared/types'
+import { errorText } from '@/lib/client/error-text'
 
 interface DeleteWebhookDialogProps {
   webhook: Webhook
@@ -32,7 +33,7 @@ export function DeleteWebhookDialog({ webhook, open, onOpenChange }: DeleteWebho
 
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete webhook')
+      setError(errorText(err, 'Failed to delete webhook'))
     }
   }
 
@@ -52,7 +53,7 @@ export function DeleteWebhookDialog({ webhook, open, onOpenChange }: DeleteWebho
         ),
       }}
       variant="destructive"
-      confirmLabel={isPending ? 'Deleting...' : 'Delete webhook'}
+      confirmLabel={isPending ? 'Deleting…' : 'Delete webhook'}
       isPending={isPending}
       onConfirm={handleDelete}
     >

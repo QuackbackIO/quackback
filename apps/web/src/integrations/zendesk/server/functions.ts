@@ -76,7 +76,7 @@ export const searchZendeskUserFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Zendesk not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Zendesk not connected')
     }
 
     const auth = await getIntegrationAuth(integration.id)

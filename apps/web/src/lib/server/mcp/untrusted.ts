@@ -37,7 +37,7 @@
  * activity's actor is on the team today) attaches it with withItemFacts.
  */
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import type { ActivityType } from '@/lib/shared/types/activity'
 
 type JsonObject = Record<string, unknown>

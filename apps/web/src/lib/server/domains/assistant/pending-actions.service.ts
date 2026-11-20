@@ -302,7 +302,8 @@ export async function markPendingActionFailed(
  * actually calls, so the customer notice stays a separate, best-effort step.
  */
 export async function expireStalePendingActions(
-  exec: Executor = db
+  exec: Executor = db,
+  now: Date = new Date()
 ): Promise<AssistantPendingAction[]> {
   return exec
     .update(assistantPendingActions)
@@ -310,7 +311,7 @@ export async function expireStalePendingActions(
     .where(
       and(
         eq(assistantPendingActions.status, 'proposed'),
-        lt(assistantPendingActions.expiresAt, new Date())
+        lt(assistantPendingActions.expiresAt, now)
       )
     )
     .returning()
@@ -333,9 +334,10 @@ export async function expireStalePendingActions(
  * own best-effort contract.
  */
 export async function sweepAndNotifyExpiredPendingActions(
-  exec: Executor = db
+  exec: Executor = db,
+  now: Date = new Date()
 ): Promise<AssistantPendingAction[]> {
-  const expired = await expireStalePendingActions(exec)
+  const expired = await expireStalePendingActions(exec, now)
   if (expired.length === 0) return expired
 
   const conversationExpired = expired.filter(

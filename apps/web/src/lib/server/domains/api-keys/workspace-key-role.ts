@@ -33,10 +33,15 @@ export interface WorkspaceKeyRole {
   roleName: string
 }
 
-/** Check that `granter` may give a key `roleId`, and resolve how the role is stored. */
+/**
+ * Check that `granter` may give a key `roleId`, and resolve how the role is
+ * stored. `newGrant` is set when the key is being given the role now (create,
+ * re-role), which a custom role past the plan's cap refuses.
+ */
 export async function resolveGrantableKeyRole(
   roleId: RoleId,
-  granter: ApiKeyGranter
+  granter: ApiKeyGranter,
+  options: { newGrant?: boolean } = {}
 ): Promise<WorkspaceKeyRole> {
   const { loadRole } = await import('@/lib/server/domains/roles/role.service')
   const { assertCanGrantTeamRole, assertGrantableRole } =
@@ -48,6 +53,10 @@ export async function resolveGrantableKeyRole(
   }
   const target = await assertGrantableRole(role.id, granter.permissions)
   if (role.key === SYSTEM_ROLES.MANAGER) return { legacyRole: 'member', roleName: target.name }
+  if (options.newGrant) {
+    const { assertCustomRoleAssignable } = await import('@/lib/server/domains/roles/role.plan-lock')
+    await assertCustomRoleAssignable(target)
+  }
   return { legacyRole: 'member', assignRoleId: target.id, roleName: target.name }
 }
 

@@ -49,7 +49,9 @@ test.describe('Admin Team Settings', () => {
     await page.waitForTimeout(300)
 
     // Should show "No results found" when nothing matches
-    const noResults = page.getByText(/no results found|no team members/i)
+    // The list renders twice (a table for wide screens, cards for phones);
+    // check the table.
+    const noResults = page.getByRole('table').getByText(/no results found|no team members/i)
     await expect(noResults).toBeVisible({ timeout: 5000 })
 
     // Clear search
@@ -87,6 +89,21 @@ test.describe('Admin Team Settings', () => {
     await expect(dialog).toBeHidden({ timeout: 5000 })
   })
 
+  test('one Cancel click closes the dialog while the results are open', async ({ page }) => {
+    // The results sit in the dialog above Cancel. The press on Cancel blurs
+    // the field; closing the results right then moved Cancel up before the
+    // press ended, so the first click was lost.
+    await page.getByRole('button', { name: /add people/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+    const address = `e2e-cancel-${Date.now()}@example.com`
+    await dialog.getByRole('combobox', { name: 'People' }).fill(address)
+    await expect(dialog.getByRole('option', { name: `Invite ${address}` })).toBeVisible()
+
+    await dialog.getByRole('button', { name: /cancel/i }).click()
+    await expect(dialog).toBeHidden({ timeout: 5000 })
+  })
+
   test('typing a new full email offers to invite it', async ({ page }) => {
     await page.getByRole('button', { name: /add people/i }).click()
 
@@ -104,7 +121,11 @@ test.describe('Admin Team Settings', () => {
 
   test('shows "you" label next to the current user', async ({ page }) => {
     // The current admin user row renders "(you)" next to their name
-    const youLabel = page.locator('span').filter({ hasText: /\(you\)/ })
+    // (in the wide-screen table; the phone card list repeats it)
+    const youLabel = page
+      .getByRole('table')
+      .locator('span')
+      .filter({ hasText: /\(you\)/ })
     await expect(youLabel).toBeVisible({ timeout: 10000 })
   })
 

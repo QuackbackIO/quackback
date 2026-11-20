@@ -8,9 +8,11 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BoardsList } from '@/components/admin/settings/boards/boards-list'
 import { boardTabSearch } from '@/components/admin/settings/boards/board-tabs'
+import { NewButton } from '@/components/shared/new-button'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { FeedbackEmailCard } from '@/components/admin/settings/boards/feedback-email-card'
+import { warmQuery } from '@/lib/client/queries/warm-query'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
 
@@ -35,8 +37,14 @@ export const Route = createFileRoute('/admin/settings/boards/')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.BOARD_MANAGE)
-    await context.queryClient.ensureQueryData(adminQueries.boardsWithCounts())
+    assertSettingsPageAccess(context.permissions, '/admin/settings/boards')
+    // Loaded here, not imported above, so it stays out of every page's script.
+    const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
+    await Promise.all([
+      context.queryClient.ensureQueryData(adminQueries.boardsWithCounts()),
+      // The Email card's "Sent from" line, so it renders from the document.
+      warmQuery(context.queryClient, surfaceSenderQuery('feedback')),
+    ])
     return {}
   },
   component: BoardsSettingsPage,
@@ -44,12 +52,26 @@ export const Route = createFileRoute('/admin/settings/boards/')({
 
 function BoardsSettingsPage() {
   const { data: boards } = useSuspenseQuery(adminQueries.boardsWithCounts())
+  const planFrozen = boards.some((board) => board.planReadOnly !== undefined)
+  const openBoards = boards.filter((board) => !board.readOnly && board.planReadOnly === undefined)
+  // At the plan's cap a new board is refused, so the action says so up front.
+  const atCap = boards.find((board) => board.atCap)?.atCap
+  const newBoard = atCap ? (
+    <NewButton
+      noun="board"
+      disabled
+      title={
+        atCap.planName
+          ? `The ${atCap.planName} plan allows ${atCap.cap} boards.`
+          : `Your workspace allows ${atCap.cap} boards.`
+      }
+    />
+  ) : (
+    <CreateBoardDialog />
+  )
 
   return (
-    <SettingsPage
-      page="/admin/settings/boards"
-      actions={boards.length > 0 ? <CreateBoardDialog /> : undefined}
-    >
+    <SettingsPage page="/admin/settings/boards" actions={boards.length > 0 ? newBoard : undefined}>
       <SettingsCard flush>
         {boards.length === 0 ? (
           <EmptyState
@@ -57,12 +79,30 @@ function BoardsSettingsPage() {
             icon={ChatBubbleLeftIcon}
             title="No boards yet"
             description="Create a board to start collecting feedback."
-            action={<CreateBoardDialog />}
+            action={newBoard}
           />
         ) : (
           <BoardsList boards={boards} />
         )}
       </SettingsCard>
+      {planFrozen && boards.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Read-only boards keep their posts visible. Nobody can post, vote or comment on them. You
+          can still change statuses, merge, export, or move posts into{' '}
+          {openBoards.length > 0
+            ? openBoards.map((board) => board.name).join(', ')
+            : 'an open board'}
+          . To open another board instead,{' '}
+          <a
+            href="/admin/settings/billing/limits"
+            className="font-medium text-foreground hover:underline"
+          >
+            change the open board
+          </a>
+          .
+        </p>
+      )}
+      <FeedbackEmailCard />
     </SettingsPage>
   )
 }

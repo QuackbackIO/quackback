@@ -57,6 +57,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 // --- Other mocks ---
+// No mentioner here is an API key (the API key case runs on Postgres in
+// api-key-feedback-author.db.test.ts), so its lookup reads nothing.
+vi.mock('@/lib/server/domains/principals/principal-display', () => ({
+  loadApiKeyFeedbackAuthors: vi.fn(async () => new Map()),
+}))
 vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
 }))
@@ -93,11 +98,21 @@ vi.mock('../hook-utils', () => ({
   truncate: vi.fn((s: string) => s),
 }))
 
+// The feedback surface's sender; which address it is is pinned in
+// sender-resolver.db.test.ts.
+const resolveSender = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({ resolveSender }))
+
 // Import after mocks
 const { getHookTargets } = await import('../targets')
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resolveSender.mockResolvedValue({
+    from: 'ideas@acme.example',
+    source: 'default',
+    senderName: 'Acme Ideas',
+  })
   mockCacheGet.mockResolvedValue(null)
   mockCacheSet.mockResolvedValue(undefined)
   // Default: no integration mappings, no webhooks
@@ -115,7 +130,11 @@ beforeEach(() => {
  * row second so the fast-path triggers and the mentioned principal
  * passes the audience filter.
  */
-function setupMentionDbChain(rows: unknown[]) {
+function setupMentionDbChain(
+  rows: unknown[],
+  // The mentioning principal, read third for the mentioner's name.
+  mentioner: unknown[] = [{ displayName: 'Bea' }]
+) {
   // mockReset (vs clearAllMocks in beforeEach) so leftover
   // mockResolvedValueOnce queues from prior tests don't carry over.
   mockLimit.mockReset()
@@ -133,10 +152,11 @@ function setupMentionDbChain(rows: unknown[]) {
       },
     },
   ])
+  mockLimit.mockResolvedValueOnce(mentioner)
   mockDbWhere.mockReturnValue({ limit: mockLimit })
   mockLeftJoin.mockReturnValue({ where: mockDbWhere })
   mockInnerJoin.mockReturnValue({ where: mockDbWhere })
-  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin, innerJoin: mockInnerJoin })
+  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin, innerJoin: mockInnerJoin, where: mockDbWhere })
   mockSelect.mockReturnValue({ from: mockFrom })
 }
 
@@ -190,7 +210,13 @@ describe('post.mentioned target resolution', () => {
       postTitle: 'A test post',
       postUrl: 'https://test.quackback.io/b/bugs/posts/post_1',
       workspaceName: 'Test Workspace',
+      mentionerName: 'Bea',
+      from: 'ideas@acme.example',
+      fromDisplayName: 'Acme Ideas',
     })
+    // The relayed event carries no actor name; both name the mentioner.
+    expect(notificationTargets[0].config).toMatchObject({ mentionerName: 'Bea' })
+    expect(resolveSender).toHaveBeenCalledWith({ surface: 'feedback' })
     // Token was issued with action=unsubscribe_all (global mute) since the
     // user didn't subscribe to the post — they were tagged.
     expect(mockBatchGenerateUnsubscribeTokens).toHaveBeenCalledWith([
@@ -200,6 +226,40 @@ describe('post.mentioned target resolution', () => {
         action: 'unsubscribe_all',
       },
     ])
+  })
+
+  it("falls back to the mentioner's account name when their principal has none", async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: 'Bea Account' }]
+    )
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: 'Bea Account' })
+  })
+
+  it("never names a service actor by its event source ('api', 'mcp')", async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: null }]
+    )
+    const event = {
+      ...makePostMentionedEvent(),
+      actor: { type: 'service' as const, principalId: 'principal_actor', displayName: 'api' },
+    }
+    const targets = await getHookTargets(event)
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: null })
+  })
+
+  it('leaves the mentioner unnamed when their principal has no name', async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: null }]
+    )
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: null })
   })
 
   it('notifies nobody when the principal mentioned themselves', async () => {

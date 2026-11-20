@@ -1,3 +1,4 @@
+import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
@@ -55,7 +56,7 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration) {
-      throw new Error('Integration not found')
+      throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
     }
 
     const updates: Partial<typeof integrations.$inferInsert> = {
@@ -121,7 +122,7 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration) {
-      throw new Error('Integration not found')
+      throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
     }
 
     // Resolve platform credentials before acquiring the provider transaction: DB
@@ -146,7 +147,10 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
         current.secrets !== integration.secrets ||
         current.connectedAt?.getTime() !== integration.connectedAt?.getTime()
       )
-        throw new Error('Integration was reconnected. Reload before disconnecting.')
+        throw new ConflictError(
+          'INTEGRATION_RECONNECTED',
+          'Integration was reconnected. Reload before disconnecting.'
+        )
       if (current.secrets && definition?.onDisconnect) {
         try {
           await definition.onDisconnect(
@@ -168,6 +172,10 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
 
     const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
+    // A disconnected integration may be the fix for an integrations plan limit.
+    const { invalidatePlanLimits } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.cache')
+    await invalidatePlanLimits()
     log.info({ integration_id: data.id }, 'integration deleted')
     return { id: data.id }
   })

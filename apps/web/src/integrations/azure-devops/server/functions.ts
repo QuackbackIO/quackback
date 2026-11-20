@@ -10,6 +10,7 @@ import type {
   AzureDevOpsWorkItemType,
 } from '@/integrations/azure-devops/server/api'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 const connectSchema = z.object({
   organizationUrl: z.string().url('Must be a valid URL'),
@@ -24,13 +25,15 @@ function parseOrganizationName(organizationUrl: string): string {
   const url = new URL(organizationUrl)
   if (url.hostname === 'dev.azure.com') {
     const segments = url.pathname.split('/').filter(Boolean)
-    if (segments.length === 0) throw new Error('Organization name not found in URL')
+    if (segments.length === 0)
+      throw new ValidationError('INVALID_ORGANIZATION_URL', 'Organization name not found in URL')
     return segments[0]
   }
   if (url.hostname.endsWith('.visualstudio.com')) {
     return url.hostname.replace('.visualstudio.com', '')
   }
-  throw new Error(
+  throw new ValidationError(
+    'INVALID_ORGANIZATION_URL',
     'Invalid Azure DevOps URL. Use https://dev.azure.com/{org} or https://{org}.visualstudio.com'
   )
 }
@@ -72,7 +75,7 @@ export const fetchAzureDevOpsProjectsFn = createServerFn({ method: 'GET' }).hand
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Azure DevOps not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Azure DevOps not connected')
     }
 
     const auth = await getIntegrationAuth(integration.id)
@@ -104,7 +107,7 @@ export const fetchAzureDevOpsWorkItemTypesFn = createServerFn({ method: 'POST' }
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Azure DevOps not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Azure DevOps not connected')
     }
 
     const auth = await getIntegrationAuth(integration.id)
