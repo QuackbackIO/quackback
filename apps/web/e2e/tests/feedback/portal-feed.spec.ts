@@ -640,9 +640,13 @@ test.describe('portal feed', () => {
       expect(res.searchMode).toBe('most')
       expect(ids(res)).toEqual([most.id])
       await anon.page.goto(`/?board=${board.slug}&search=${encodeURIComponent(w.join(' '))}`)
-      await expect(
-        anon.page.getByText('No post has all your words. Showing posts with most of them.')
-      ).toBeVisible()
+      // The banner has been seen twice on the page for a moment (a strict-mode
+      // failure under load); wait for one, then for exactly one to remain.
+      const banner = anon.page.getByText(
+        'No post has all your words. Showing posts with most of them.'
+      )
+      await expect(banner.first()).toBeVisible()
+      await expect(banner).toHaveCount(1)
       await expect(cardFor(anon.page, most.title)).toBeVisible()
     }
   )

@@ -148,8 +148,13 @@ test.describe('email link and code', () => {
       expect(otp?.value.split(':')[0]).toBe(mail.code)
 
       // The app logged the send; no account exists until the link or code is used.
-      const [log] = await supportDb()<{ status: string; direction: string }[]>`
-        SELECT status, direction FROM email_log WHERE lower(address) = ${customerEmail}`
+      // The log row is written after the mail goes out, so it can trail the
+      // mailbox: wait for it.
+      const log = await pollFor('the sign-in email log row', async () => {
+        const [row] = await supportDb()<{ status: string; direction: string }[]>`
+          SELECT status, direction FROM email_log WHERE lower(address) = ${customerEmail}`
+        return row ?? null
+      })
       expect(log).toMatchObject({ status: 'sent', direction: 'outbound' })
       expect(await userRow(customerEmail)).toBeNull()
     }

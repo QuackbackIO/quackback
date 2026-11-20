@@ -805,9 +805,16 @@ test(
     })
 
     // The title field is still offered; saving it ends in the permission error.
-    await page.getByRole('dialog').getByPlaceholder("What's the feedback about?").fill('x')
-    await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    // The status picker is a dialog too (and can still be closing), so name the
+    // post modal by its title field rather than by role alone.
+    const modal = page
+      .getByRole('dialog')
+      .filter({ has: page.getByPlaceholder("What's the feedback about?") })
+    await modal.getByPlaceholder("What's the feedback about?").fill('x')
+    await modal.getByRole('button', { name: 'Save changes' }).click()
+    // Wait for the refusal to come back before reading the row.
+    await expect(page.locator('[data-sonner-toast][data-type="error"]').first()).toBeVisible()
+    await expect(modal).toBeVisible()
     expect((await postRow(post.id))?.title).toBe(post.title)
   }
 )
