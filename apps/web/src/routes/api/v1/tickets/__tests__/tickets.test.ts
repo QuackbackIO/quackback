@@ -102,6 +102,41 @@ describe('GET /api/v1/tickets', () => {
     expect(mockListTickets.mock.calls[0][0].ticketTypeId).toBeUndefined()
   })
 
+  it('passes a known due filter and the due sort through', async () => {
+    mockListTickets.mockResolvedValue({ tickets: [], hasMore: false })
+    for (const due of ['overdue', 'due_soon', 'none']) {
+      mockListTickets.mockClear()
+      const res = await getHandler(ListRoute)({
+        request: new Request(`https://x.test/api/v1/tickets?due=${due}&sort=due`),
+        params: {},
+      })
+      expect(res.status).toBe(200)
+      expect(mockListTickets.mock.calls[0][0]).toMatchObject({ due, sort: 'due' })
+    }
+  })
+
+  it('400s an unknown due filter without listing', async () => {
+    const res = await getHandler(ListRoute)({
+      request: new Request('https://x.test/api/v1/tickets?due=later'),
+      params: {},
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error.message).toBe('Invalid due filter')
+    expect(mockListTickets).not.toHaveBeenCalled()
+  })
+
+  it('omits the due filter when absent and drops a junk sort to the default', async () => {
+    mockListTickets.mockResolvedValue({ tickets: [], hasMore: false })
+    const res = await getHandler(ListRoute)({
+      request: new Request('https://x.test/api/v1/tickets?sort=sideways'),
+      params: {},
+    })
+    expect(res.status).toBe(200)
+    const [filter] = mockListTickets.mock.calls[0]
+    expect(filter.due).toBeUndefined()
+    expect(filter.sort).toBeUndefined()
+  })
+
   it('propagates an auth failure as an error response', async () => {
     mockAuth.mockRejectedValue(Object.assign(new Error('nope'), { status: 401 }))
     const res = await getHandler(ListRoute)({

@@ -8,6 +8,7 @@ const mockAssign = vi.fn()
 const mockSetPriority = vi.fn()
 const mockSendMessage = vi.fn()
 const mockAddNote = vi.fn()
+const mockSetDueAt = vi.fn()
 
 const mockAssertVisible = vi.fn(async (..._args: unknown[]) => ({}))
 vi.mock('@tanstack/react-router', () => ({
@@ -22,6 +23,9 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assignTicket: (...a: unknown[]) => mockAssign(...a),
   setTicketPriority: (...a: unknown[]) => mockSetPriority(...a),
   assertTicketVisible: (...a: unknown[]) => mockAssertVisible(...a),
+}))
+vi.mock('@/lib/server/domains/tickets/ticket-due.service', () => ({
+  setTicketDueAt: (...a: unknown[]) => mockSetDueAt(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   sendTicketMessage: (...a: unknown[]) => mockSendMessage(...a),
@@ -42,6 +46,7 @@ import { Route as NoteRoute } from '../$ticketId.note'
 import { Route as StatusRoute } from '../$ticketId.status'
 import { Route as AssignRoute } from '../$ticketId.assign'
 import { Route as PriorityRoute } from '../$ticketId.priority'
+import { Route as DueRoute } from '../$ticketId.due'
 
 type Handler = (a: { request: Request; params: Record<string, string> }) => Promise<Response>
 const post = (route: unknown): Handler =>
@@ -122,13 +127,12 @@ describe('POST /api/v1/tickets (create)', () => {
     expect(actor.principalType).toBe('service')
   })
 
-  it('never passes a due date through: dueAt is the SLA target, not a user field (TKT-78)', async () => {
+  it('takes the due date only as dueAt, the shared due date, never as due_at (TKT-78)', async () => {
     mockCreateTicket.mockResolvedValue(ticketDTO)
     const res = await post(ListRoute)({
       request: jsonReq('https://x.test/api/v1/tickets', {
         type: 'customer',
         title: 'Due tomorrow',
-        dueAt: '2030-01-01T00:00:00.000Z',
         due_at: '2030-01-01T00:00:00.000Z',
       }),
       params: {},
@@ -136,7 +140,7 @@ describe('POST /api/v1/tickets (create)', () => {
     expect(res.status).toBe(201)
     const [input] = mockCreateTicket.mock.calls[0]
     expect(input).toMatchObject({ title: 'Due tomorrow' })
-    expect(input).not.toHaveProperty('dueAt')
+    expect(input.dueAt).toBeUndefined()
     expect(input).not.toHaveProperty('due_at')
   })
 
@@ -195,6 +199,44 @@ describe('POST /api/v1/tickets (create)', () => {
       params: {},
     })
     expect(bad.status).toBe(400)
+    expect(mockCreateTicket).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/v1/tickets (create) with a due date', () => {
+  it('passes dueAt to the service as a Date', async () => {
+    mockCreateTicket.mockResolvedValue({ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' })
+    const res = await post(ListRoute)({
+      request: jsonReq('https://x.test/api/v1/tickets', {
+        title: 'Cannot log in',
+        dueAt: '2026-11-03T18:00:00+01:00',
+      }),
+      params: {},
+    })
+    expect(res.status).toBe(201)
+    const [input] = mockCreateTicket.mock.calls[0]
+    expect(input.dueAt).toBeInstanceOf(Date)
+    expect(input.dueAt.toISOString()).toBe('2026-11-03T17:00:00.000Z')
+    expect((await res.json()).data.dueAt).toBe('2026-11-03T17:00:00.000Z')
+  })
+
+  it('leaves dueAt unset when the body has none', async () => {
+    mockCreateTicket.mockResolvedValue(ticketDTO)
+    await post(ListRoute)({
+      request: jsonReq('https://x.test/api/v1/tickets', { title: 'Cannot log in' }),
+      params: {},
+    })
+    expect(mockCreateTicket.mock.calls[0][0].dueAt).toBeUndefined()
+  })
+
+  it('400s a date-only or malformed dueAt without calling the service', async () => {
+    for (const dueAt of ['2026-11-03', 'next tuesday', 42]) {
+      const res = await post(ListRoute)({
+        request: jsonReq('https://x.test/api/v1/tickets', { title: 'x', dueAt }),
+        params: {},
+      })
+      expect(res.status).toBe(400)
+    }
     expect(mockCreateTicket).not.toHaveBeenCalled()
   })
 })
@@ -348,6 +390,83 @@ describe('POST /api/v1/tickets/:id/priority', () => {
     })
     expect(res.status).toBe(400)
     expect(mockSetPriority).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/v1/tickets/:id/due', () => {
+  const dueReq = (body: unknown) => jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/due`, body)
+
+  it('sets the due date gated ticket.set_status, as a Date with a service actor', async () => {
+    mockSetDueAt.mockResolvedValue({ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' })
+    const res = await post(DueRoute)({
+      request: dueReq({ dueAt: '2026-11-03T17:00:00Z' }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(200)
+    expect(mockAuth).toHaveBeenCalledWith(expect.anything(), { permission: 'ticket.set_status' })
+    const [id, dueAt, actor] = mockSetDueAt.mock.calls[0]
+    expect(id).toBe(TICKET_ID)
+    expect(dueAt).toBeInstanceOf(Date)
+    expect(dueAt.toISOString()).toBe('2026-11-03T17:00:00.000Z')
+    expect(actor.principalType).toBe('service')
+    expect((await res.json()).data).toMatchObject({
+      id: TICKET_ID,
+      dueAt: '2026-11-03T17:00:00.000Z',
+    })
+  })
+
+  it('clears the due date with an explicit null', async () => {
+    mockSetDueAt.mockResolvedValue(ticketDTO)
+    const res = await post(DueRoute)({
+      request: dueReq({ dueAt: null }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(200)
+    expect(mockSetDueAt).toHaveBeenCalledWith(TICKET_ID, null, expect.anything())
+    expect((await res.json()).data.dueAt).toBeNull()
+  })
+
+  it('400s a body without the dueAt key, so a forgotten field never clears the date', async () => {
+    const res = await post(DueRoute)({ request: dueReq({}), params: { ticketId: TICKET_ID } })
+    expect(res.status).toBe(400)
+    expect(mockSetDueAt).not.toHaveBeenCalled()
+  })
+
+  it('400s a malformed or date-only dueAt and a non-JSON body', async () => {
+    for (const body of [{ dueAt: '2026-11-03' }, { dueAt: 'soon' }, { dueAt: 1 }]) {
+      const res = await post(DueRoute)({ request: dueReq(body), params: { ticketId: TICKET_ID } })
+      expect(res.status).toBe(400)
+    }
+    const junk = await post(DueRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}/due`, {
+        method: 'POST',
+        body: 'not json',
+      }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(junk.status).toBe(400)
+    expect(mockSetDueAt).not.toHaveBeenCalled()
+  })
+
+  it('400s an out-of-window date the service rejects', async () => {
+    mockSetDueAt.mockRejectedValue(
+      new ValidationError('INVALID_DUE_DATE', 'Due date is too far in the future')
+    )
+    const res = await post(DueRoute)({
+      request: dueReq({ dueAt: '2099-01-01T00:00:00Z' }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error.message).toBe('Due date is too far in the future')
+  })
+
+  it('400s a malformed ticket id', async () => {
+    const res = await post(DueRoute)({
+      request: jsonReq('https://x.test/api/v1/tickets/nope/due', { dueAt: null }),
+      params: { ticketId: 'nope' },
+    })
+    expect(res.status).toBe(400)
+    expect(mockSetDueAt).not.toHaveBeenCalled()
   })
 })
 

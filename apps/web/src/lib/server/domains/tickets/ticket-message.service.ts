@@ -462,7 +462,9 @@ async function sendViaPairConversation(
  * the conversation view. Does what a reply from the ticket view does: bumps
  * `tickets.updatedAt` (listMyTickets orders by it), makes a teammate who
  * replied a watcher (reason 'replier'; never a service principal such as an
- * API key), then signals `ticket.replied`. Called by the conversation send
+ * API key), makes the requester who replied a watcher again (reason
+ * 'requester', as appendRequesterReply does; an existing row and its mute
+ * are left alone), then signals `ticket.replied`. Called by the conversation send
  * after its own `message.created`; a conversation with no customer ticket
  * does nothing. Messages the ticket side writes onto the pair never come
  * through here: their callers do all of this for themselves.
@@ -479,6 +481,12 @@ export async function emitPairTicketReplied(
   const ticket = { ...(await loadTicketOr404(ticketId)), updatedAt }
   if (message.senderType === 'agent' && actor.principalType === 'user' && actor.principalId) {
     await safeSubscribeToTicket(actor.principalId, ticketId, 'replier')
+  } else if (
+    message.senderType === 'visitor' &&
+    ticket.requesterPrincipalId &&
+    actor.principalId === ticket.requesterPrincipalId
+  ) {
+    await safeSubscribeToTicket(ticket.requesterPrincipalId, ticketId, 'requester')
   }
   await emitTicketReplied(actor, ticket, message)
 }

@@ -1199,6 +1199,7 @@ export function VisitorConversationThread({
                 <LazyBlockTicketForm
                   getAuthHeaders={getAuthHeaders}
                   askEmail={ticketFormAsksEmail}
+                  askDueDate={block.askDueDate === true}
                 />
               </Suspense>
             </div>

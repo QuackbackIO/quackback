@@ -30,7 +30,11 @@ import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
-import { emitTicketReplied } from './ticket.webhooks'
+import {
+  emitTicketReplied,
+  emitTicketSubscriberAdded,
+  emitTicketSubscriberRemoved,
+} from './ticket.webhooks'
 import {
   buildRequesterTicketContext,
   loadCustomerVisibleStatusIds,
@@ -162,6 +166,8 @@ export interface ConversationTicketSummary {
   reference: string
   title: string
   stage: TicketStageRef
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
 }
 
 /**
@@ -184,6 +190,7 @@ export async function getRequesterTicketSummaries(
       number: tickets.number,
       title: tickets.title,
       statusId: tickets.statusId,
+      dueAt: tickets.dueAt,
     })
     .from(ticketConversations)
     .innerJoin(tickets, eq(ticketConversations.ticketId, tickets.id))
@@ -214,6 +221,7 @@ export async function getRequesterTicketSummaries(
         label: slot ? stageLabels[slot] : null,
         closed: status?.category === 'closed',
       },
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     })
   }
   return map
@@ -235,6 +243,8 @@ export interface MyTicketSummary {
   conversationId: ConversationId | null
   /** The last change the customer can see (see `requesterUpdatedAtSql`). */
   updatedAt: string
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
 }
 
 /**
@@ -259,6 +269,7 @@ export async function listMyTicketSummaries(
       statusId: tickets.statusId,
       conversationId: ticketConversations.conversationId,
       updatedAt,
+      dueAt: tickets.dueAt,
     })
     .from(tickets)
     .leftJoin(
@@ -298,6 +309,7 @@ export async function listMyTicketSummaries(
       },
       conversationId: r.conversationId,
       updatedAt: r.updatedAt.toISOString(),
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     }
   })
 }
@@ -327,6 +339,9 @@ export async function createMyTicket(
     ticketTypeId?: TicketTypeId | null
     /** Validated intake-form answers, stored on the ticket's customAttributes. */
     customAttributes?: Record<string, unknown>
+    /** The requester's proposed "Needed by" date; createTicketCore holds it to
+     *  the customer window (the requester files for themselves). */
+    dueAt?: Date | null
   }
 ): Promise<RequesterTicketDTO> {
   const principalId = requireRequester(actor)
@@ -349,6 +364,7 @@ export async function createMyTicket(
       descriptionJson: input.descriptionJson,
       attachments: input.attachments,
       customAttributes: input.customAttributes,
+      dueAt: input.dueAt ?? null,
       requesterPrincipalId: principalId,
       withBackingConversation: true,
     },
@@ -453,9 +469,11 @@ export async function getMyTicketWatchStatus(actor: Actor, ticketId: TicketId) {
 /** Re-watch the requester's own ticket (reason 'manual' — an explicit opt-in). */
 export async function watchMyTicket(actor: Actor, ticketId: TicketId): Promise<void> {
   const principalId = requireRequester(actor)
-  await loadOwnedTicketOr404(ticketId, principalId)
+  const ticket = await loadOwnedTicketOr404(ticketId, principalId)
   const { subscribeToTicket } = await import('./ticket-subscription.service')
-  await subscribeToTicket(principalId, ticketId, 'manual')
+  if (await subscribeToTicket(principalId, ticketId, 'manual')) {
+    void emitTicketSubscriberAdded(actor, ticket, principalId, 'manual')
+  }
 }
 
 /**
@@ -468,7 +486,8 @@ export async function watchMyTicket(actor: Actor, ticketId: TicketId): Promise<v
  */
 export async function unwatchMyTicket(actor: Actor, ticketId: TicketId): Promise<void> {
   const principalId = requireRequester(actor)
-  await loadOwnedTicketOr404(ticketId, principalId)
+  const ticket = await loadOwnedTicketOr404(ticketId, principalId)
   const { unsubscribeFromTicket } = await import('./ticket-subscription.service')
-  await unsubscribeFromTicket(principalId, ticketId)
+  const reason = await unsubscribeFromTicket(principalId, ticketId)
+  if (reason) void emitTicketSubscriberRemoved(actor, ticket, principalId, reason)
 }

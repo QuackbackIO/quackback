@@ -30,6 +30,9 @@ import {
   dispatchTicketReplied,
   dispatchTicketNoteAdded,
   dispatchTicketExternalStatusChanged,
+  dispatchTicketDueChanged,
+  dispatchTicketSubscriberAdded,
+  dispatchTicketSubscriberRemoved,
 } from '@/lib/server/events/dispatch'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
@@ -49,7 +52,9 @@ function toEventActor(actor: Actor): EventActor {
   return { type: 'user', principalId }
 }
 
-function ticketRef(t: Ticket): EventTicketRef {
+/** The minimal ticket ref every ticket event embeds. Exported for the
+ *  ticket-due sweep, which builds the same ref for its timer events. */
+export function ticketRef(t: Ticket): EventTicketRef {
   return {
     id: t.id,
     number: t.number,
@@ -58,6 +63,7 @@ function ticketRef(t: Ticket): EventTicketRef {
     priority: t.priority,
     assignedPrincipalId: t.assigneePrincipalId ?? null,
     assignedTeamId: t.assigneeTeamId ?? null,
+    dueAt: t.dueAt ? t.dueAt.toISOString() : null,
   }
 }
 
@@ -216,6 +222,63 @@ export async function emitTicketNoteAdded(
       'agent',
       ticket.title,
       message.author?.displayName ?? null
+    )
+  )
+}
+
+/** The due date was set, moved or cleared. Called only when the value actually
+ *  changed; a due date given at creation rides ticket.created's ticket ref. */
+export async function emitTicketDueChanged(
+  actor: Actor,
+  ticket: Ticket,
+  previousDueAt: Date | null
+): Promise<void> {
+  await safe('ticket.due_changed', () =>
+    dispatchTicketDueChanged(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      ticket.dueAt ? ticket.dueAt.toISOString() : null,
+      previousDueAt ? previousDueAt.toISOString() : null
+    )
+  )
+}
+
+/**
+ * A watch changed by hand: `actor` is whoever changed it, `subscriberPrincipalId`
+ * whose watch it is (the same person for a self watch or unwatch). Automatic
+ * watches never come through here.
+ */
+export async function emitTicketSubscriberAdded(
+  actor: Actor,
+  ticket: Ticket,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await safe('ticket.subscriber_added', () =>
+    dispatchTicketSubscriberAdded(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      subscriberPrincipalId,
+      reason
+    )
+  )
+}
+
+export async function emitTicketSubscriberRemoved(
+  actor: Actor,
+  ticket: Ticket,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await safe('ticket.subscriber_removed', () =>
+    dispatchTicketSubscriberRemoved(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      subscriberPrincipalId,
+      reason
     )
   )
 }
