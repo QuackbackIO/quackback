@@ -11,6 +11,7 @@
  * status-maintenance, status-notify.
  * email-log-retention, workflow-retention, spam-retention, anon-sweep,
  * segment-evaluation (every scheduled dynamic segment, once).
+ * summary-sweep (feedback post summaries), merge-sweep (duplicate checks).
  */
 import { expect, type APIRequestContext } from '@playwright/test'
 
@@ -26,6 +27,8 @@ export type SweepName =
   | 'status-maintenance'
   | 'status-notify'
   | 'segment-evaluation'
+  | 'summary-sweep'
+  | 'merge-sweep'
 
 export interface SweepRun {
   ok: true

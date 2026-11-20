@@ -153,6 +153,17 @@ const SWEEPS: Record<string, SweepEntry> = {
       return { evaluated, failed }
     },
   },
+  // Feedback: refresh missing and stale post summaries (the hourly cron's pass).
+  'summary-sweep': {
+      const { refreshStaleSummaries } = await import('@/lib/server/domains/summary/summary.service')
+      await refreshStaleSummaries()
+      return {}
+  // Feedback: check posts with an embedding and no recent duplicate check.
+  'merge-sweep': {
+      const { sweepMergeSuggestions } =
+        await import('@/lib/server/domains/merge-suggestions/merge-check.service')
+      await sweepMergeSuggestions()
+      return {}
 }
 
 /** The sweeps the runner accepts, for the refusal message and the tests. */
