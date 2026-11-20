@@ -404,10 +404,13 @@ export interface PortalUser extends MintedCustomer {
 export async function mintPortalUser(
   playwright: PlaywrightWorkerArgs['playwright'],
   marker: string,
-  label = 'sub'
+  label = 'sub',
+  opts: { anonymous?: boolean } = {}
 ): Promise<PortalUser> {
   const email = `${marker}-${label}-${Math.random().toString(36).slice(2, 7)}@customers.example`
-  const customer = await mintCustomer({ email, name: `Sub ${label} ${marker.slice(-6)}` })
+  const customer = opts.anonymous
+    ? await mintCustomer({ anonymous: true })
+    : await mintCustomer({ email, name: `Sub ${label} ${marker.slice(-6)}` })
   const env = supportEnv()
   const token = await mintSessionToken(customer.userUuid)
   const signature = createHmac('sha256', env.app.SECRET_KEY).update(token).digest('base64')
