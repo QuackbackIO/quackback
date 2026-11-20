@@ -419,3 +419,39 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   JSON is refused as bad input. Categories POST/PATCH answer 500 on an
   unparsable body (`categories/index.ts:81`, `$categoryId.ts:91`). owner:
   unassigned, review by: 2026-12-03.
+
+### Product suite: API REST (people and keys)
+
+Each test asserts the right behaviour; the working part of each journey is
+proved by a separate test that is not quarantined. Every entry has owner:
+unassigned, review by: 2026-12-03.
+
+- `platform/rest-people.spec.ts` › API-R-140 a malformed segmentIds filter is
+  a clean 4xx. `segmentIds` is not validated and reaches `inArray` on a typeid
+  column: 500 (`routes/api/v1/users/index.ts:41-44`,
+  `domains/users/user.service.ts:306-313`).
+- `platform/rest-people.spec.ts` › API-R-141 a missing portal user says
+  "Portal user not found". `notFoundResponse('Portal user not found')` appends
+  " not found" again (`routes/api/v1/users/$principalId.ts:46`).
+- `platform/rest-people.spec.ts` › API-R-144 API-R-146 metadata writes on an
+  existing user. Every metadata write on an existing user (PATCH `attributes`
+  or `externalId`, identify with `attributes`) interpolates the removals array
+  into SQL as a parameter list instead of an array: 500 "malformed array
+  literal" (`domains/users/user.identify.ts:81`, `:257`).
+- `platform/rest-people.spec.ts` › API-R-148 deleting a portal user clears the
+  visitor email. `removePortalUser` re-attributes conversations to the
+  deleted-user placeholder before it clears `visitor_email` by the old
+  principal id, so the email is never cleared
+  (`domains/users/user.service.ts:494-499`).
+- `platform/rest-people.spec.ts` › API-R-150 a malformed id on the principal
+  card. The raw id is queried against a typeid column outside any try: 500
+  (`routes/api/v1/users/$principalId.card.ts:53`).
+- `platform/rest-people.spec.ts` › API-R-155 a malformed id is listed in
+  failed and a non-JSON body is a 400. Both are 500
+  (`routes/api/v1/segments/$slug.members.ts:38-41`, `:71`).
+- `platform/keys.spec.ts` › API-K-34 a garbage cursor never answers 500.
+  Posts, changelog, status incidents and help center articles hand an
+  undecodable cursor to their service, which throws: 500.
+- `platform/keys.spec.ts` › API-K-35 a users cursor replayed with a different
+  limit. The users route turns the offset cursor into a page number, so a new
+  limit repeats or skips rows (`routes/api/v1/users/index.ts:47-48`).
