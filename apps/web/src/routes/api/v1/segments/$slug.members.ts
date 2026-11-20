@@ -10,7 +10,7 @@ import {
 import { db, segments, principal, eq, and, isNull, inArray } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { addMember, removeMember } from '@/lib/server/domains/segments/segment-membership.service'
-import type { PrincipalId } from '@quackback/ids'
+import { isValidTypeId, type PrincipalId } from '@quackback/ids'
 
 const MutateBody = z.object({
   principalIds: z.array(z.string()).min(1).max(1000),
@@ -30,6 +30,8 @@ async function validatePrincipals(
   // Dedupe so a duplicate id in the body doesn't double-add or
   // double-remove (REST callers occasionally include dupes when paging).
   const unique = Array.from(new Set(requested))
+  // A malformed id cannot name a principal; querying it would fail the batch.
+  const wellFormed = unique.filter((id) => isValidTypeId(id, 'principal'))
   // Only human `type='user'` principals are eligible for segment
   // membership: anonymous visitors have no stable identity for SSO
   // reconcile, and service principals (API keys, integrations) would
@@ -38,7 +40,7 @@ async function validatePrincipals(
   const rows = await db
     .select({ id: principal.id })
     .from(principal)
-    .where(and(inArray(principal.id, unique as PrincipalId[]), eq(principal.type, 'user')))
+    .where(and(inArray(principal.id, wellFormed as PrincipalId[]), eq(principal.type, 'user')))
   const found = new Set(rows.map((r) => String(r.id)))
   const valid: PrincipalId[] = []
   const missing: string[] = []

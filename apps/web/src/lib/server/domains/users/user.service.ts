@@ -177,6 +177,7 @@ export async function listPortalUsers(
       sort = 'newest',
       page = 1,
       limit = 20,
+      offset = (page - 1) * limit,
       segmentIds,
       tagIds,
       lifecycle = 'users',
@@ -385,7 +386,7 @@ export async function listPortalUsers(
         .where(whereClause)
         .orderBy(orderBy)
         .limit(limit)
-        .offset((page - 1) * limit),
+        .offset(offset),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(principal)
@@ -422,7 +423,7 @@ export async function listPortalUsers(
     return {
       items,
       total,
-      hasMore: page * limit < total,
+      hasMore: offset + items.length < total,
     }
   } catch (error) {
     log.error({ err: error }, 'failed to list portal users')
@@ -491,11 +492,13 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
       const { revokeApiKeysCreatedBy } =
         await import('@/lib/server/domains/principals/principal.factory')
       await revokeApiKeysCreatedBy(tx, principalId)
-      await reattributeAuthoredContent(tx, principalId)
+      // Clear the visitor email while the conversations still name this
+      // person: re-attribution moves them to the placeholder.
       await tx
         .update(conversations)
         .set({ visitorEmail: null })
         .where(eq(conversations.visitorPrincipalId, principalId))
+      await reattributeAuthoredContent(tx, principalId)
       if (userId) {
         await tx.delete(session).where(eq(session.userId, userId))
         // Release widget identity keys so a later ssoToken with this `sub`

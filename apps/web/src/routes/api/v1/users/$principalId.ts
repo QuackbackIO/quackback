@@ -43,7 +43,7 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
           const user = await getPortalUserDetail(principalId)
 
           if (!user) {
-            return notFoundResponse('Portal user not found')
+            return notFoundResponse('Portal user')
           }
 
           return successResponse({
