@@ -396,6 +396,7 @@ describe('replayGateVerdict', () => {
       '0319_outbound_email_sent_message_id',
       '0320_roadmap_slug_live_only',
       '0321_live_taxonomy_unique',
+      '0322_session_two_factor_pending',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

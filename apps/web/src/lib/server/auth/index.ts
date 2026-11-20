@@ -25,6 +25,7 @@ import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { guardBetterAuthUserCreation } from './signup-policy'
 import { assignSessionScope } from './session-audience'
+import { shouldIssuePendingSession } from './two-factor-pending'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { accountDisplayName } from '@/lib/shared/greeting-name'
 import { CONSENT_START_PATH } from '@/lib/shared/oauth-consent-query'
@@ -573,6 +574,10 @@ async function createAuth() {
       updateAge: 60 * 60 * 24, // Update session every 24 hours
       additionalFields: {
         scope: { type: 'string', required: false, input: false, defaultValue: 'dashboard' },
+        // A password session issued while two-factor is required and the
+        // person has not enrolled (two-factor-pending.ts). Defaults to false,
+        // so the session enrolment creates is an ordinary one.
+        twoFactorPending: { type: 'boolean', required: false, input: false, defaultValue: false },
       },
     },
 
@@ -661,7 +666,11 @@ async function createAuth() {
       },
       session: {
         create: {
-          before: assignSessionScope,
+          before: async (sessionData, context) => {
+            const scoped = await assignSessionScope(sessionData, context)
+            if (!(await shouldIssuePendingSession(sessionData, context))) return scoped
+            return { data: { ...(scoped?.data ?? sessionData), twoFactorPending: true } }
+          },
         },
         update: {
           // A carried session's family rows move with its expiry

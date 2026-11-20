@@ -401,6 +401,13 @@ export async function setPrincipalRole(
   if (reconcilable && target?.type === 'user' && !isTeamMember(target.role) && isTeamMember(role)) {
     await clearBlockOnJoiningTeam(exec, target.id, opts.assignGrantedBy ?? null)
   }
+  // Recovery codes are break-glass for the people who manage sign-in, so a
+  // role change that leaves someone unable to manage it takes their codes.
+  if (reconcilable && target?.type === 'user' && userId && (reassign || target.role !== role)) {
+    const { invalidateRecoveryCodesOfFormerHolder } =
+      await import('@/lib/server/auth/recovery-codes-status')
+    await invalidateRecoveryCodesOfFormerHolder(exec, userId)
+  }
   const type = target?.type ?? current?.type
   const fromRole = target?.role ?? current?.role
   if (roleMoved && shouldSyncMembership({ type, fromRole, toRole: role })) {

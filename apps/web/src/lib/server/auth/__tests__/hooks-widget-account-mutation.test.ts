@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { APIError } from 'better-auth/api'
+import { TEST_CUSTOMER_SESSION_PREFIX } from '@/lib/shared/test-customer'
 
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers(),
@@ -61,7 +62,7 @@ function ctx(opts: { path: string; token?: string; cookie?: string; scope?: stri
     headers,
     context: {
       internalAdapter: {
-        findSession: vi.fn(async (token: string) => {
+        findSession: vi.fn(async (token: string): Promise<{ session: object } | null> => {
           if (opts.scope === null) return null
           if (opts.token && token !== opts.token.split('.')[0]) return null
           return { session: { scope: opts.scope } }
@@ -189,6 +190,135 @@ describe('handleWidgetAccountMutationGate', () => {
         ctx({ path: '/sign-out', token: 'widget-tok', scope: 'widget' })
       )
     ).rejects.toThrow(/Widget sessions/)
+  })
+
+  // A session pending two-factor enrolment may finish enrolment or sign out;
+  // a one-time token would trade it for an ordinary session.
+  it('holds a session pending two-factor enrolment to enrolment and sign-out', async () => {
+    const pending = (path: string) => {
+      const c = ctx({ path, cookie: 'better-auth.session_token=pend-tok.sig', scope: 'portal' })
+      c.context.internalAdapter.findSession.mockResolvedValue({
+        session: { scope: 'portal', twoFactorPending: true },
+      })
+      return c
+    }
+    for (const path of ['/one-time-token/generate', '/update-user', '/list-sessions']) {
+      await expect(handleWidgetAccountMutationGate(pending(path))).rejects.toThrow(/two-factor/)
+    }
+    // Enrolment, sign-out, and starting over: signing in again, or resetting
+    // the password, never act on the session already held.
+    for (const path of [
+      '/two-factor/enable',
+      '/two-factor/verify-totp',
+      '/sign-out',
+      '/sign-in/email',
+      '/sign-in/email-otp',
+      '/request-password-reset',
+    ]) {
+      await expect(handleWidgetAccountMutationGate(pending(path))).resolves.toBeUndefined()
+    }
+  })
+
+  // On https the library names the cookie `__Secure-better-auth.session_token`.
+  it('reads the session from the secure cookie name too', async () => {
+    const pending = ctx({
+      path: '/update-user',
+      cookie: '__Secure-better-auth.session_token=pend-tok.sig',
+      scope: 'portal',
+    })
+    pending.context.internalAdapter.findSession.mockResolvedValue({
+      session: { scope: 'portal', twoFactorPending: true },
+    })
+    await expect(handleWidgetAccountMutationGate(pending)).rejects.toThrow(/two-factor/)
+    expect(pending.context.internalAdapter.findSession).toHaveBeenCalledWith('pend-tok')
+
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({
+          path: '/update-user',
+          cookie: '__Secure-better-auth.session_token=widget-tok.sig',
+          scope: 'widget',
+        })
+      )
+    ).rejects.toThrow(/Widget sessions/)
+  })
+
+  // The gate cannot know which credential the library will use, so every
+  // one sent must pass: a decoy in front of the real session is no way past.
+  describe('with more than one credential on the request', () => {
+    const sessions: Record<string, { session: { scope: string; twoFactorPending?: boolean } }> = {
+      'pend-tok': { session: { scope: 'portal', twoFactorPending: true } },
+      'widget-tok': { session: { scope: 'widget' } },
+      'dash-tok': { session: { scope: 'dashboard' } },
+    }
+    function many(headers: Record<string, string>) {
+      return {
+        path: '/update-user',
+        headers: new Headers(headers),
+        context: {
+          internalAdapter: {
+            findSession: vi.fn(async (token: string) => sessions[token] ?? null),
+          },
+        },
+      }
+    }
+
+    it.each([
+      [
+        'a junk Bearer in front of a secure pending cookie',
+        {
+          authorization: 'Bearer junk.x',
+          cookie: '__Secure-better-auth.session_token=pend-tok.sig',
+        },
+      ],
+      [
+        'a plain decoy cookie in front of a secure pending cookie',
+        {
+          cookie:
+            'better-auth.session_token=x.sig; __Secure-better-auth.session_token=pend-tok.sig',
+        },
+      ],
+      [
+        'an ordinary Bearer in front of a pending cookie',
+        { authorization: 'Bearer dash-tok.sig', cookie: 'better-auth.session_token=pend-tok.sig' },
+      ],
+    ])('refuses %s', async (_label, headers) => {
+      await expect(handleWidgetAccountMutationGate(many(headers))).rejects.toThrow(/two-factor/)
+    })
+
+    // The bearer plugin decodes a signed token that carries '%'.
+    it('refuses a percent-encoded Bearer naming a pending session', async () => {
+      await expect(
+        handleWidgetAccountMutationGate(many({ authorization: 'Bearer %70end-tok.sig' }))
+      ).rejects.toThrow(/two-factor/)
+    })
+
+    it('refuses a percent-encoded test-customer Bearer', async () => {
+      const prefix = TEST_CUSTOMER_SESSION_PREFIX
+      const encoded = `%${prefix.charCodeAt(0).toString(16)}${prefix.slice(1)}x.sig`
+      await expect(
+        handleWidgetAccountMutationGate(many({ authorization: `Bearer ${encoded}` }))
+      ).rejects.toThrow(/test session/)
+    })
+
+    it('refuses a widget session behind a decoy cookie', async () => {
+      await expect(
+        handleWidgetAccountMutationGate(
+          many({
+            cookie:
+              'better-auth.session_token=x.sig; __Secure-better-auth.session_token=widget-tok.sig',
+          })
+        )
+      ).rejects.toThrow(/Widget sessions/)
+    })
+
+    it('lets an ordinary session through with a decoy beside it (the control)', async () => {
+      await expect(
+        handleWidgetAccountMutationGate(
+          many({ authorization: 'Bearer junk.x', cookie: 'better-auth.session_token=dash-tok.sig' })
+        )
+      ).resolves.toBeUndefined()
+    })
   })
 
   it('no-ops when there is no session token', async () => {
