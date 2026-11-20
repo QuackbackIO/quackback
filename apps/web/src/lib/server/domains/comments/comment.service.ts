@@ -32,6 +32,8 @@ import { contentHoldReason } from '@/lib/server/content/content-holds'
 import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from './comment.types'
 import { canCreateComment } from '@/lib/server/policy/posts'
 import type { Actor } from '@/lib/server/policy/types'
+import { can } from '@/lib/server/policy/authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -144,6 +146,14 @@ export async function createComment(
   // Determine if a status change should be applied
   // Only for team members, root-level comments, with a valid statusId
   const shouldChangeStatus = !!(input.statusId && authorIsTeamMember && !input.parentId)
+  // Changing status through a comment is still changing status: it needs
+  // post.set_status, checked before anything is written.
+  if (shouldChangeStatus && !can(actor, PERMISSIONS.POST_SET_STATUS)) {
+    throw new ForbiddenError(
+      'STATUS_CHANGE_FORBIDDEN',
+      'You do not have permission to change the status of this post'
+    )
+  }
 
   const trimmedContent = input.content.trim()
   const { content: storedContent, contentJson } = await prepareCommentContent({
