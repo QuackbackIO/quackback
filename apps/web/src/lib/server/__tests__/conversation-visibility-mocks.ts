@@ -38,6 +38,10 @@ export function ticketWebhookMocks() {
     emitTicketReplied: resolved(),
     emitTicketNoteAdded: resolved(),
     emitTicketExternalStatusChanged: resolved(),
+    emitTicketUpdated: resolved(),
+    emitTicketPriorityChanged: resolved(),
+    emitTicketReplyUpdated: resolved(),
+    emitTicketReplyDeleted: resolved(),
   }
 }
 
