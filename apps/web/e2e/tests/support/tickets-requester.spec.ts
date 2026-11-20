@@ -435,14 +435,7 @@ test.describe('requester watching', () => {
 test.describe('the ticket embed card', () => {
   test(
     'TKT-65 a ticket card shows its stage to the requester and is unavailable to another visitor',
-    {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: generateContentHTML emits a quackbackEmbed placeholder only for post and changelog (lib/shared/content-html.ts:223), so a ticket card (shareTicket) renders nothing in a thread. See QUARANTINE.md.',
-      },
-    },
+    { tag: '@nightly' },
     async ({ playwright, baseURL, browser, people, marker, customerEmail }) => {
       test.setTimeout(90_000)
       const api = await ticketApi(playwright, baseURL)
