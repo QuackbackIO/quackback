@@ -97,3 +97,70 @@ by a separate test that is not quarantined.
     checks on both single-column paths.
 
   owner: unassigned, review by: 2026-12-03.
+### Product suite: people (users and companies)
+- `people/users.spec.ts` › removing a person › PPL-U-43 removing a voter
+  withdraws their vote from the post count. Product bug: `removePortalUser`
+  deletes the principal and lets `post_votes` cascade
+  (`apps/web/src/lib/server/domains/users/user.service.ts:514`), but nothing
+  decrements `posts.vote_count`, so every post the person voted on keeps a
+  count one too high on the portal and the admin, although the remove dialog
+  promises "their votes are withdrawn". Fix: in the same transaction, before
+  the delete, `UPDATE posts SET vote_count = greatest(vote_count - 1, 0) WHERE
+id IN (SELECT post_id FROM post_votes WHERE principal_id = $1)`. owner:
+  unassigned, review by: 2026-12-03.
+- `people/users-api.spec.ts` › REST /api/v1/users › PPL-U-59 a teammate id
+  answers a plain "Portal user not found". Product bug: the route passes a
+  full sentence to `notFoundResponse`, which appends " not found" again, so
+  the answer reads "Portal user not found not found"
+  (`apps/web/src/routes/api/v1/users/$principalId.ts:46`). Fix: pass
+  `'Portal user'`. owner: unassigned, review by: 2026-12-03.
+- `people/users-api.spec.ts` › REST /api/v1/users › PPL-U-64 an unknown or
+  teammate id is refused as a missing user, not a "Member". Product bug:
+  `removePortalUser` throws `MEMBER_NOT_FOUND`, which `handleDomainError` maps
+  to "Member not found" (`apps/web/src/lib/server/domains/api/responses.ts:182`),
+  so DELETE /api/v1/users/:id on an unknown portal user talks about a member.
+  Fix: throw a `USER_NOT_FOUND` (or a portal-user code) from
+  `removePortalUser` (`user.service.ts:476`), or map the error in the route.
+  owner: unassigned, review by: 2026-12-03.
+- `people/users.spec.ts` › merging a lead › PPL-U-31 merging a lead that
+  voted the same post as the user leaves one vote counted. Product bug: the
+  `post_votes` step of the re-point registry is a `collisionRepoint` that
+  drops the lead's colliding vote (the user's vote wins)
+  (`apps/web/src/lib/server/domains/principals/principal-repoint.ts:220`)
+  without decrementing `posts.vote_count`, so the post keeps one vote too
+  many. Fix: in that step, decrement `posts.vote_count` for every dropped
+  vote row (or recompute the count for the affected posts). owner:
+  unassigned, review by: 2026-12-03.
+- `people/users-api.spec.ts` › REST /api/v1/users › PPL-U-60 PATCH merges
+  coerced attributes, unsets null keys and sets the external id; PPL-U-61
+  boolean and date attributes accept their valid spellings; PPL-U-66
+  identify merges an attribute into an existing user, keeping the others.
+  Product bug: every attribute or `externalId` write on an EXISTING user over
+  REST (PATCH /api/v1/users/:id and identify of a known email) answers 500.
+  `user.identify.ts:81` and `:257` build
+  `... ::jsonb - ${metadataRemovals}::text[]`; drizzle expands a JS array in
+  a `sql` template into a parameter list, so the SQL is `- ()::text[]`
+  (syntax error) with no removals and `- ($4)::text[]` (malformed array
+  literal) with one. Creating a user through identify is unaffected. Fix:
+  bind the array as one parameter, e.g.
+  `- ${sql.param(metadataRemovals)}::text[]` or
+  `- ARRAY[${sql.join(metadataRemovals.map((k) => sql`${k}`), sql`, `)}]::text[]`
+  with a guard for the empty case. owner: unassigned, review by: 2026-12-03.
+- `people/companies.spec.ts` › PPL-C-03 a company the admin creates is not
+  labelled as API-sourced. Product bug: `createCompanyFn`'s schema has no
+  `source` and the admin UI sends none, so `createCompany` falls back to
+  `source: input.source ?? 'api'`
+  (`apps/web/src/lib/server/domains/companies/company.service.ts:94`) and
+  every company made in the admin (directory "New company", a person's
+  Company card "Create") shows the "API" badge. Fix: have `createCompanyFn`
+  (`apps/web/src/lib/server/functions/companies.ts`) pass `source: 'manual'`.
+  owner: unassigned, review by: 2026-12-03.
+- `people/companies.spec.ts` › PPL-C-31 a duplicate company attribute key is
+  refused and the dialog says so. Product bug: `handleCreate` awaits
+  `onCreate` with no catch
+  (`apps/web/src/components/admin/settings/scalar-attribute-list.tsx:299`) and
+  the mutation hook has no `onError`, so the server's 409 `DUPLICATE_KEY`
+  "An attribute with that key already exists" never surfaces: the dialog
+  just stays open. Same component backs user attributes (PPL-U-51). Fix:
+  catch in `handleCreate` (and the edit/delete handlers) and toast the
+  error message. owner: unassigned, review by: 2026-12-03.
