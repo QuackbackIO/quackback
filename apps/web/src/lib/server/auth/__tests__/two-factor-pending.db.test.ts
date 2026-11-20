@@ -242,6 +242,21 @@ describe.skipIf(!fixture.available)('required two-factor, on the server', () => 
 
   // Which credential the library reads is not the gate's to guess: a decoy
   // the library ignores must not be the one the gate checks.
+  // The bearer plugin percent-decodes a signed token before it uses it, so an
+  // encoded spelling of the pending token is the same session to the library.
+  it('refuses the pending session as a percent-encoded Bearer', async () => {
+    await setRequired(true)
+    const token = await signIn()
+    expect(token).toContain('.')
+    const encoded = `%${token.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}${token.slice(1)}`
+
+    const res = await call('POST', '/update-user', {
+      authorization: `Bearer ${encoded}`,
+      body: { name: 'Someone else' },
+    })
+    expect(res.status).toBe(403)
+  })
+
   it('refuses the pending cookie behind a decoy credential', async () => {
     await setRequired(true)
     const res = await call('POST', '/sign-in/email', { body: { email, password: PASSWORD } })

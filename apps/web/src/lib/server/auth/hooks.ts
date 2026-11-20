@@ -510,7 +510,18 @@ function sessionTokensFromAuthHeaders(headers: HeaderBag | undefined): string[] 
   const authHeader = headers.get('authorization') ?? headers.get('Authorization')
   if (authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ') {
     const token = authHeader.slice(7).trim()
-    if (token) tokens.add(rawToken(token))
+    if (token) {
+      tokens.add(rawToken(token))
+      // The bearer plugin percent-decodes a signed token carrying '%' before it
+      // uses it, so the decoded spelling is checked too.
+      if (token.includes('.') && token.includes('%')) {
+        try {
+          tokens.add(rawToken(decodeURIComponent(token)))
+        } catch {
+          /* not decodable: the plugin keeps it as sent, which is checked above */
+        }
+      }
+    }
   }
   // Separate Cookie headers arrive joined with ", ".
   const cookie = headers.get('cookie') ?? ''

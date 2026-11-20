@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { APIError } from 'better-auth/api'
+import { TEST_CUSTOMER_SESSION_PREFIX } from '@/lib/shared/test-customer'
 
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers(),
@@ -283,6 +284,21 @@ describe('handleWidgetAccountMutationGate', () => {
       ],
     ])('refuses %s', async (_label, headers) => {
       await expect(handleWidgetAccountMutationGate(many(headers))).rejects.toThrow(/two-factor/)
+    })
+
+    // The bearer plugin decodes a signed token that carries '%'.
+    it('refuses a percent-encoded Bearer naming a pending session', async () => {
+      await expect(
+        handleWidgetAccountMutationGate(many({ authorization: 'Bearer %70end-tok.sig' }))
+      ).rejects.toThrow(/two-factor/)
+    })
+
+    it('refuses a percent-encoded test-customer Bearer', async () => {
+      const prefix = TEST_CUSTOMER_SESSION_PREFIX
+      const encoded = `%${prefix.charCodeAt(0).toString(16)}${prefix.slice(1)}x.sig`
+      await expect(
+        handleWidgetAccountMutationGate(many({ authorization: `Bearer ${encoded}` }))
+      ).rejects.toThrow(/test session/)
     })
 
     it('refuses a widget session behind a decoy cookie', async () => {
