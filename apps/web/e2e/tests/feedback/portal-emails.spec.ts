@@ -172,7 +172,7 @@ test.describe('portal emails', () => {
       })
       expect(res.error).toBeUndefined()
       await mailFor(cass.email, `New comment on "${post.title}"`)
-      await mailFor(cass.email, 'Your feedback is now Planned!')
+      await mailFor(cass.email, 'A post you follow is now Planned')
       await expect
         .poll(async () =>
           (await notificationsOf(cass.principalUuid, post.uuid)).map((n) => n.type).sort()
@@ -225,9 +225,9 @@ test.describe('portal emails', () => {
       await setStatus(await adminRest(playwright, marker), post, 'planned')
       await eventHandled(post.id, 'post.status_changed')
       expect(await mailsFor(all.email, 'New comment on')).toHaveLength(1)
-      expect(await mailsFor(all.email, 'Your feedback is now Planned')).toHaveLength(1)
+      expect(await mailsFor(all.email, 'A post you follow is now Planned')).toHaveLength(1)
       expect(await mailsFor(statusOnly.email, 'New comment on')).toHaveLength(0)
-      expect(await mailsFor(statusOnly.email, 'Your feedback is now Planned')).toHaveLength(1)
+      expect(await mailsFor(statusOnly.email, 'A post you follow is now Planned')).toHaveLength(1)
       expect(
         (await notificationsOf(statusOnly.principalUuid, post.uuid)).map((n) => n.type)
       ).toEqual(['post_status_changed'])
@@ -268,12 +268,12 @@ test.describe('portal emails', () => {
         (await notificationsOf(paused.principalUuid, post.uuid)).map((n) => n.type).sort()
       ).toEqual(['comment_created', 'post_status_changed'])
       expect(await mailsFor(noComments.email, 'New comment on')).toHaveLength(0)
-      expect(await mailsFor(noComments.email, 'Your feedback is now Planned')).toHaveLength(1)
+      expect(await mailsFor(noComments.email, 'A post you follow is now Planned')).toHaveLength(1)
     }
   )
 
   test(
-    'FBP-N-17 opening the unsubscribe link changes nothing; confirming unsubscribes; the link then reads as expired',
+    'FBP-N-17 opening the unsubscribe link changes nothing; confirming unsubscribes; the link then reads as used',
     { tag: '@core' },
     async ({ browser, playwright, marker }) => {
       const board = await createBoard(marker)
@@ -282,7 +282,7 @@ test.describe('portal emails', () => {
       await subscribe(post.uuid, cass.principalUuid)
       await setStatus(await adminRest(playwright, marker), post, 'planned')
       const url = await listUnsubscribeUrl(
-        await mailFor(cass.email, 'Your feedback is now Planned')
+        await mailFor(cass.email, 'A post you follow is now Planned')
       )
       const token = tokenOf(url)
       const path = `/unsubscribe?token=${token}`
@@ -300,7 +300,7 @@ test.describe('portal emails', () => {
       await v.page.getByRole('button', { name: 'Unsubscribe', exact: true }).click()
       await expect(v.page.getByText('Done')).toBeVisible()
       await expect(
-        v.page.getByText('You will not get more email updates about this post.')
+        v.page.getByText('You will not get more notifications about this post.')
       ).toBeVisible()
       await expect(v.page.getByRole('link', { name: 'View post' })).toBeVisible()
       expect(await subscriptionOf(post.uuid, cass.principalUuid)).toBeNull()
@@ -309,7 +309,7 @@ test.describe('portal emails', () => {
       expect(after.used_at).not.toBeNull()
 
       await v.page.reload()
-      await expect(v.page.getByText('This link has expired')).toBeVisible()
+      await expect(v.page.getByText('This link was already used')).toBeVisible()
       await v.page.goto('/unsubscribe?token=not-a-token')
       await expect(v.page.getByText('This link is not valid')).toBeVisible()
       await v.page.goto('/unsubscribe')
@@ -345,7 +345,7 @@ test.describe('portal emails', () => {
       await subscribe(post.uuid, cass.principalUuid)
       await setStatus(await adminRest(playwright, marker), post, 'planned')
       const token = tokenOf(
-        await listUnsubscribeUrl(await mailFor(cass.email, 'Your feedback is now Planned'))
+        await listUnsubscribeUrl(await mailFor(cass.email, 'A post you follow is now Planned'))
       )
       const v = await visitor(browser, marker)
       const oneClick = (t: string, form?: Record<string, string>) =>
@@ -407,7 +407,7 @@ test.describe('portal emails', () => {
       expect(await bellsOfType(cass.principalUuid, post.uuid, 'post_status_changed')).toHaveLength(
         1
       )
-      expect(await mailsFor(cass.email, 'Your feedback is now')).toHaveLength(0)
+      expect(await mailsFor(cass.email, 'A post you follow is now')).toHaveLength(0)
     }
   )
 
@@ -452,7 +452,7 @@ test.describe('portal emails', () => {
       await subscribe(post.uuid, other.principalUuid)
       await setStatus(await adminRest(playwright, marker), post, 'planned')
       const token = tokenOf(
-        await listUnsubscribeUrl(await mailFor(cass.email, 'Your feedback is now Planned'))
+        await listUnsubscribeUrl(await mailFor(cass.email, 'A post you follow is now Planned'))
       )
       const v = await visitor(browser, marker)
       await v.page.goto(`/unsubscribe?token=${token}`)
@@ -482,7 +482,7 @@ test.describe('portal emails', () => {
       await subscribe(post.uuid, cass.principalUuid)
       await setStatus(await adminRest(playwright, marker), post, 'planned')
       const token = tokenOf(
-        await listUnsubscribeUrl(await mailFor(cass.email, 'Your feedback is now Planned'))
+        await listUnsubscribeUrl(await mailFor(cass.email, 'A post you follow is now Planned'))
       )
       const v = await visitor(browser, marker)
       await v.page.goto(`/unsubscribe?token=${token}`)
@@ -503,7 +503,7 @@ test.describe('portal emails', () => {
       await subscribe(post.uuid, fine.principalUuid)
       await blockPrincipal(blocked.principalUuid)
       await setStatus(await adminRest(playwright, marker), post, 'planned')
-      await mailFor(fine.email, 'Your feedback is now Planned')
+      await mailFor(fine.email, 'A post you follow is now Planned')
       await eventHandled(post.id, 'post.status_changed')
       expect(await mailsFor(blocked.email)).toHaveLength(0)
       expect(
@@ -573,7 +573,7 @@ test.describe('portal emails', () => {
         expect(await notificationsOf(cass.principalUuid)).toHaveLength(0)
 
         await setStatus(api, a, 'planned')
-        await mailFor(cass.email, 'Your feedback is now Planned')
+        await mailFor(cass.email, 'A post you follow is now Planned')
         await eventHandled(a.id, 'post.status_changed')
         expect(await mailsFor(cass.email)).toHaveLength(1)
         expect(await notificationsOf(cass.principalUuid)).toHaveLength(1)

@@ -549,7 +549,7 @@ test.describe('REST posts: update, delete, merge', () => {
           toSlug: 'in_progress',
         })
         const mail = await waitForMail({ to: email, subject: 'In Progress' })
-        expect(mail.Subject).toBe('Your feedback is now In Progress!')
+        expect(mail.Subject).toBe('A post you follow is now In Progress')
         await pollFor('status bell', async () =>
           (await bellsFor(customer.principalId, post.id)).includes('post_status_changed')
             ? true

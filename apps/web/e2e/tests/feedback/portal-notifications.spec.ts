@@ -199,7 +199,7 @@ test.describe('portal notifications', () => {
       })
       expect(set.error).toBeUndefined()
       await setStatus(await adminRest(playwright, marker), post, 'planned')
-      await mailFor(cass.email, 'Your feedback is now Planned')
+      await mailFor(cass.email, 'A post you follow is now Planned')
       await eventHandled(post.id, 'post.status_changed')
       expect(await notificationsOf(cass.principalUuid, post.uuid)).toHaveLength(0)
       expect((await list(cass.request)).value?.unreadCount).toBe(0)
