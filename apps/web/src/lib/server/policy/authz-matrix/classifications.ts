@@ -624,7 +624,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
 
   // MCP transport entry: a valid key authenticates; per-tool scopes authorize
-  // (see MCP_TOOLS). Not a permission gate on its own.
+  // (see MCP_TOOL_NAMES). Not a permission gate on its own.
   'lib/server/mcp/handler.ts::resolveAuthContext': {
     intent: 'MCP_ENTRY',
     why: 'MCP transport entry — a valid key authenticates; per-tool scopes provide authorization',
