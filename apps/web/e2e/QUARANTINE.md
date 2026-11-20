@@ -611,3 +611,15 @@ no such part beyond the wrong notification).
   `PinnedCommentSection` (or prepend `pinnedComment`) on the portal page when
   the pinned comment is not in the loaded page. owner: unassigned, review by:
   2026-12-03.
+- `feedback/portal-author-actions.spec.ts` › FBP-S-17 the author edit of an
+  unvoted, uncommented post succeeds instead of erroring (new). With default
+  settings, every author edit that passes the earlier checks reaches
+  `hasCommentsFromOthers`, which compares `post_comments.principal_id` to the
+  principal TypeID inside a raw `sql` template
+  (`apps/web/src/lib/server/domains/posts/post.user-actions.ts:77-83`, and the
+  same copy in `post.permissions.ts:303-309`); the TypeID is not converted to
+  a uuid, Postgres answers `invalid input syntax for type uuid`, and the
+  customer gets "Something went wrong on our side" (HTTP 500). So a customer
+  can never edit their own post by default. Smallest fix: use
+  `ne(postComments.principalId, authorPrincipalId)` in both copies. owner:
+  unassigned, review by: 2026-12-03.
