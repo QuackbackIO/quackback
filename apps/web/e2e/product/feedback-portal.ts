@@ -21,7 +21,9 @@ import {
   type BrowserContext,
   type Locator,
   type Page,
+  type PlaywrightWorkerArgs,
 } from '@playwright/test'
+import { createSupportApiKey } from '../utils/db-helpers'
 import { supportDb } from '../support/db'
 import { supportEnv } from '../support/env'
 import { CLIENT_IP_HEADER } from '../support/webhooks'
@@ -418,6 +420,48 @@ export function uuid(typeId: string): string {
 export { randomUUID }
 
 // ---------------------------------------------------------------------------
+// Team actions (REST, as the suite admin) and audit/event reads
+// ---------------------------------------------------------------------------
+
+let adminKey: string | null = null
+/** A REST context with the suite admin's personal key and its own client address. */
+export async function adminRest(
+  playwright: PlaywrightWorkerArgs['playwright'],
+  marker: string
+): Promise<APIRequestContext> {
+  adminKey ??= createSupportApiKey('e2e-support-admin@example.com', 'personal')
+  return playwright.request.newContext({
+    baseURL: supportEnv().baseUrl,
+    extraHTTPHeaders: {
+      authorization: `Bearer ${adminKey}`,
+      [CLIENT_IP_HEADER]: ipFor(marker, 'admin-rest'),
+      connection: 'close',
+    },
+  })
+}
+
+/** POST to the REST API and return the JSON body (throws on a non-2xx). */
+export async function restPost<T = Record<string, unknown>>(
+  api: APIRequestContext,
+  path: string,
+  data: unknown = {},
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST'
+): Promise<T> {
+  const res = await api.fetch(`/api/v1${path}`, { method, data })
+  const text = await res.text()
+  if (!res.ok())
+    throw new Error(`${method} ${path} answered ${res.status()}: ${text.slice(0, 300)}`)
+  return (text ? JSON.parse(text) : {}) as T
+}
+
+/** Audit rows (`events`-style activity) for a post: post_activity types. */
+export async function postActivityTypes(postUuid: string): Promise<string[]> {
+  const rows = await supportDb()`SELECT type FROM post_activity WHERE post_id = ${postUuid}
+    ORDER BY created_at`
+  return rows.map((r) => r.type as string)
+}
+
+// ---------------------------------------------------------------------------
 // Portal UI
 // ---------------------------------------------------------------------------
 
@@ -434,6 +478,8 @@ export function titleBox(page: Page) {
 export async function startPost(page: Page, title: string): Promise<void> {
   const box = titleBox(page)
   await expect(async () => {
+    // A box that kept focus after Escape needs a fresh focus to expand.
+    await box.blur()
     await box.click()
     await expect(page.getByLabel(/^Posting to/)).toBeVisible({ timeout: 1_000 })
   }).toPass({ timeout: 20_000 })
