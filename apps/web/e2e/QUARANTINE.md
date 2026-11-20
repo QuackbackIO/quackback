@@ -884,3 +884,13 @@ admin)` to the update; refuse when no row matched. owner: unassigned, review
   board's posts download. Fix: refuse a deleted board with `Board not found`
   and filter `deleted_at` in the all-boards list. owner: unassigned, review
   by: 2026-12-03.
+- `feedback/admin-notifications.spec.ts` › FBA-N-15 the unread badge leaves out
+  bells redacted because the post was deleted. Product bug: once a post is
+  deleted, `getNotificationsForMember` redacts its bells (`Notification` /
+  `This activity is no longer visible to you.`), but `getUnreadCount`
+  (`apps/web/src/lib/server/domains/notifications/notification.service.ts:243`)
+  counts every unread, unarchived row with no post visibility check, so the
+  badge shows an unread count made of rows the person cannot open. Fix: apply
+  the same post/board/moderation join (or the list's denial rule) in
+  `getUnreadCount`, or exclude rows whose post is deleted or no longer visible.
+  owner: unassigned, review by: 2026-12-03.
