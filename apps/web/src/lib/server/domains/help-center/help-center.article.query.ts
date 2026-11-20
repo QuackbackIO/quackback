@@ -30,6 +30,7 @@ import {
   publicCategoryExistsCondition,
   RANKED_SEARCH_POOL,
 } from './help-center-search.service'
+import { AUTHOR_IS_API_KEY, withPublicArticleAuthors } from './help-center.article-authors'
 import {
   loadAuthors,
   resolveUserAvatarUrl,
@@ -181,7 +182,7 @@ export async function listArticles(
 
   const hasMore = articles.length > limit
   const items = hasMore ? articles.slice(0, limit) : articles
-  const resolved = await resolveArticleRelations(items)
+  const resolved = await resolveArticleRelations(items, audience)
 
   return {
     items: resolved,
@@ -235,7 +236,7 @@ async function listArticlesRanked(
     const row = rowById.get(id)
     return row ? [row] : []
   })
-  const resolved = await resolveArticleRelations(ordered)
+  const resolved = await resolveArticleRelations(ordered, opts.audience)
 
   return {
     items: resolved,
@@ -246,9 +247,15 @@ async function listArticlesRanked(
 
 type ArticleListRow = Omit<HelpCenterArticleWithCategory, 'contentJson' | 'category' | 'author'>
 
-/** Batch resolve categories and authors for a page of article rows. */
+/**
+ * Batch resolve categories and authors for a page of article rows. For the
+ * public help center an article an API key wrote shows the support team, or a
+ * personal key's creator, never the key's own name (the customer view of
+ * loadAuthors, from the same read); the team's lists keep the key's name.
+ */
 async function resolveArticleRelations(
-  items: ArticleListRow[]
+  items: ArticleListRow[],
+  audience: 'team' | 'public'
 ): Promise<HelpCenterArticleWithCategory[]> {
   const categoryIds = [...new Set(items.map((a) => a.categoryId))]
   const principalIds = [
@@ -262,7 +269,7 @@ async function resolveArticleRelations(
           columns: { id: true, urlId: true, slug: true, name: true },
         })
       : [],
-    loadAuthors(principalIds),
+    loadAuthors(principalIds, { forCustomer: audience === 'public' }),
   ])
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]))
@@ -324,6 +331,8 @@ export async function listPublicArticlesForCategory(
       authorAvatarKey: principal.avatarKey,
       authorUserImage: user.image,
       authorUserImageKey: user.imageKey,
+      authorPrincipalId: helpCenterArticles.principalId,
+      authorIsApiKey: AUTHOR_IS_API_KEY,
     })
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
@@ -337,16 +346,18 @@ export async function listPublicArticlesForCategory(
     )
     .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
 
-  return rows.map(
-    ({ authorAvatarKey, authorUserImage, authorUserImageKey, authorAvatarUrl, ...rest }) => ({
-      ...rest,
-      authorAvatarUrl: resolveUserAvatarUrl({
-        userImage: authorUserImage,
-        userImageKey: authorUserImageKey,
-        principalAvatarUrl: authorAvatarUrl,
-        principalAvatarKey: authorAvatarKey,
-      }),
-    })
+  return withPublicArticleAuthors(
+    rows.map(
+      ({ authorAvatarKey, authorUserImage, authorUserImageKey, authorAvatarUrl, ...rest }) => ({
+        ...rest,
+        authorAvatarUrl: resolveUserAvatarUrl({
+          userImage: authorUserImage,
+          userImageKey: authorUserImageKey,
+          principalAvatarUrl: authorAvatarUrl,
+          principalAvatarKey: authorAvatarKey,
+        }),
+      })
+    )
   )
 }
 
@@ -397,6 +408,8 @@ export async function listPublicArticlesForCategories(
       authorAvatarKey: principal.avatarKey,
       authorUserImage: user.image,
       authorUserImageKey: user.imageKey,
+      authorPrincipalId: helpCenterArticles.principalId,
+      authorIsApiKey: AUTHOR_IS_API_KEY.as('author_is_api_key'),
       rn: sql<number>`ROW_NUMBER() OVER (
         PARTITION BY ${helpCenterArticles.categoryId}
         ORDER BY ${helpCenterArticles.position} ASC, ${helpCenterArticles.publishedAt} ASC
@@ -430,16 +443,15 @@ export async function listPublicArticlesForCategories(
       authorAvatarKey: ranked.authorAvatarKey,
       authorUserImage: ranked.authorUserImage,
       authorUserImageKey: ranked.authorUserImageKey,
+      authorPrincipalId: ranked.authorPrincipalId,
+      authorIsApiKey: ranked.authorIsApiKey,
     })
     .from(ranked)
     .where(sql`${ranked.rn} <= ${CATEGORY_ARTICLES_CAP}`)
     .orderBy(asc(ranked.categoryId), asc(ranked.position), asc(ranked.publishedAt))
 
-  for (const row of rows) {
-    const { categoryId, authorAvatarKey, authorUserImage, authorUserImageKey, ...article } = row
-    if (!categoryId) continue
-    const list = grouped.get(categoryId) ?? []
-    list.push({
+  const shown = await withPublicArticleAuthors(
+    rows.map(({ authorAvatarKey, authorUserImage, authorUserImageKey, ...article }) => ({
       ...article,
       authorAvatarUrl: resolveUserAvatarUrl({
         userImage: authorUserImage,
@@ -447,7 +459,12 @@ export async function listPublicArticlesForCategories(
         principalAvatarUrl: article.authorAvatarUrl,
         principalAvatarKey: authorAvatarKey,
       }),
-    } as PublicCategoryArticle)
+    }))
+  )
+  for (const { categoryId, ...article } of shown) {
+    if (!categoryId) continue
+    const list = grouped.get(categoryId) ?? []
+    list.push(article as PublicCategoryArticle)
     grouped.set(categoryId, list)
   }
   return grouped
