@@ -398,3 +398,24 @@ owner: unassigned, review by: 2026-12-03 for every entry.
   answer 500 on an unparsable body (`-service-handlers.ts:94`,
   `status/incidents/index.ts:104`): `request.json()` throws outside
   `handleDomainError`. owner: unassigned, review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-165 a malformed categoryId filter
+  is refused as bad input. `GET /api/v1/help-center/articles?categoryId=garbage`
+  answers 500: the value reaches a typeid column unvalidated
+  (`apps/web/src/routes/api/v1/help-center/articles/index.ts:76`). Fix:
+  `parseOptionalTypeId(categoryId, 'kb_category', 'category ID')`. owner: unassigned,
+  review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-166 an article in a malformed or
+  unknown category is refused, not a server error. `POST
+/api/v1/help-center/articles` with `categoryId` "garbage" or a well-formed
+  unknown id answers 500 (`articles/index.ts:21`, no TypeID check; the FK then
+  fails). Fix: validate the id and answer 404 "Help center category not found".
+  owner: unassigned, review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-171 feedback for an unknown article
+  is not found, not a server error. The insert violates the
+  `kb_article_feedback.article_id` FK: 500
+  (`domains/help-center/help-center.article-feedback.service.ts:63`). Fix: check
+  the article exists first (404). owner: unassigned, review by: 2026-12-03.
+- `platform/rest-help-center.spec.ts` › API-R-163 a help center body that is not
+  JSON is refused as bad input. Categories POST/PATCH answer 500 on an
+  unparsable body (`categories/index.ts:81`, `$categoryId.ts:91`). owner:
+  unassigned, review by: 2026-12-03.
