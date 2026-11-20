@@ -40,13 +40,20 @@ function suffix(): string {
 
 /** A public board only this test uses. */
 export async function seedBoard(
-  marker: string
+  marker: string,
+  opts: { teamOnly?: boolean } = {}
 ): Promise<{ id: string; slug: string; name: string }> {
   const uuid = toUuid(generateId('board'))
   const slug = `${marker}-${suffix()}`.slice(0, 60)
   const name = `Board ${marker}`.slice(0, 90)
-  await supportDb()`INSERT INTO boards (id, slug, name, description)
-                    VALUES (${uuid}, ${slug}, ${name}, 'people e2e board')`
+  const sql = supportDb()
+  await sql`INSERT INTO boards (id, slug, name, description)
+            VALUES (${uuid}, ${slug}, ${name}, 'people e2e board')`
+  if (opts.teamOnly) {
+    // A private board: every action limited to the team.
+    await sql`UPDATE boards SET access = access || '{"view":"team","vote":"team","comment":"team","submit":"team"}'::jsonb
+              WHERE id = ${uuid}`
+  }
   return { id: fromUuid('board', uuid), slug, name }
 }
 
@@ -289,9 +296,7 @@ export function usersUrl(opts: {
 }
 
 /** A teammate's or portal user's name/email/verified straight from the rows. */
-export async function userRow(
-  userUuid: string
-): Promise<{
+export async function userRow(userUuid: string): Promise<{
   name: string
   email: string | null
   email_verified: boolean

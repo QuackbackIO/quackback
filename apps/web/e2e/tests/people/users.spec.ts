@@ -2,11 +2,12 @@
  * People directory and profiles in the admin (/admin/users), and the portal
  * users' own rows they change.
  *
- * Journeys: PPL-U-02, PPL-U-11, PPL-U-20, PPL-U-21, PPL-U-23, PPL-U-31,
- * PPL-U-32, PPL-U-41, PPL-U-42 (smoke), PPL-U-43
+ * Journeys: PPL-U-01, PPL-U-02, PPL-U-11, PPL-U-14, PPL-U-19, PPL-U-20,
+ * PPL-U-21, PPL-U-23, PPL-U-24, PPL-U-26, PPL-U-29, PPL-U-31, PPL-U-32,
+ * PPL-U-36, PPL-U-41, PPL-U-42 (smoke), PPL-U-43, PPL-U-75
  */
 import type { APIRequestContext } from '@playwright/test'
-import { generateId } from '@quackback/ids'
+import { fromUuid, generateId } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
 import { emailLogFor, waitForEmailLog } from '../../support/mailpit'
@@ -296,6 +297,270 @@ test.describe('blocking', () => {
       // moment more before reading its absence.
       await new Promise((r) => setTimeout(r, 3_000))
       expect(await emailLogFor(blocked.email)).toEqual([])
+    }
+  )
+})
+
+test.describe('directory and profile in the admin', () => {
+  test(
+    'PPL-U-01 the Users tab lists identified portal users only, with a matching count',
+    { tag: '@core' },
+    async ({ asPerson, people, marker, newTeammate }) => {
+      const a = await portalUserRow(marker, { name: `Alpha ${marker}` })
+      const b = await portalUserRow(marker, { name: `Bravo ${marker}`, verified: false })
+      await newTeammate({ roleKey: 'contributor', name: `Mate ${marker}` })
+      const lead = await seedLead(marker, { name: `Lead ${marker}` })
+      await supportDb()`UPDATE principal SET contact_email = ${`${marker}-l@customers.example`}
+                        WHERE id = ${lead.principalUuid}`
+      const testCustomer = await portalUserRow(marker, { name: `Tester ${marker}` })
+      await supportDb()`UPDATE principal SET test_owner_principal_id = ${uuid(people.people.admin.principalId)}
+                        WHERE id = ${testCustomer.principalUuid}`
+
+      const admin = await asPerson('admin')
+      await admin.goto(usersUrl({ search: marker }))
+      const rows = admin.getByRole('heading', { level: 3 })
+      await expect(rows).toHaveText([`Alpha ${marker}`, `Bravo ${marker}`].reverse(), {
+        timeout: 15_000,
+      })
+      await expect(admin.getByText('2 users', { exact: true })).toBeVisible()
+      await expect(admin.getByText(a.email)).toBeVisible()
+      await expect(admin.getByText(b.email)).toBeVisible()
+    }
+  )
+
+  test(
+    'PPL-U-14 a profile shows its header, badges, email and fact strip',
+    { tag: '@core' },
+    async ({ asPerson, browser, marker }) => {
+      const board = await seedBoard(marker)
+      const person = await portalUser(browser, marker)
+      const post = await postAs(person.api, board.id, `Idea ${marker}`)
+      await commentAs(person.api, post.id, `Comment ${marker}`)
+      const admin = await asPerson('admin')
+      await admin.goto(usersUrl({ search: marker, selected: person.principalId }))
+
+      await expect(admin.getByRole('heading', { name: person.name, exact: true })).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(admin.getByText('User', { exact: true })).toBeVisible()
+      await expect(admin.getByText(person.email, { exact: true })).toBeVisible()
+      for (const [value, label] of [
+        ['1', 'Posts'],
+        ['1', 'Comments'],
+        ['1', 'Votes'],
+      ]) {
+        const cell = admin.getByText(label, { exact: true }).locator('..')
+        await expect(cell, label).toHaveText(`${value}${label}`)
+      }
+      await expect(admin.getByText('Joined', { exact: true })).toBeVisible()
+      await expect(admin.getByText('Country', { exact: true })).toBeVisible()
+      await expect(admin.getByRole('link', { name: 'View public profile' })).toHaveAttribute(
+        'href',
+        `/u/${person.principalId}`
+      )
+      await admin.getByText('Back to users').click()
+      await expect(admin.getByText('Back to users')).toHaveCount(0)
+      await expect(admin.getByRole('heading', { level: 3, name: person.name })).toBeVisible()
+    }
+  )
+
+  test(
+    'PPL-U-19 the admin renames a person from the profile',
+    { tag: '@core' },
+    async ({ asPerson, browser, marker }) => {
+      const board = await seedBoard(marker)
+      const person = await portalUser(browser, marker)
+      const post = await postAs(person.api, board.id, `Idea ${marker}`)
+      const admin = await asPerson('admin')
+      await admin.goto(usersUrl({ search: marker, selected: person.principalId }))
+      await admin.getByTitle('Edit user details').click()
+      const nameBox = admin.getByPlaceholder('Name')
+      await nameBox.fill(`  Renamed ${marker}  `)
+      await admin.getByRole('button', { name: 'Save' }).click()
+      await expect(admin.getByText('User updated')).toBeVisible()
+      await expect(
+        admin.getByRole('heading', { name: `Renamed ${marker}`, exact: true })
+      ).toBeVisible()
+
+      expect((await userRow(person.userUuid)).name).toBe(`Renamed ${marker}`)
+      const [principal] = await supportDb()`SELECT display_name FROM principal
+        WHERE id = ${person.principalUuid}`
+      expect(principal.display_name).toBe(`Renamed ${marker}`)
+
+      const visitor = await browser.newPage()
+      await visitor.goto(`/b/${board.slug}/posts/${post.id}`)
+      await expect(visitor.getByText(`Renamed ${marker}`).first()).toBeVisible()
+      await visitor.close()
+    }
+  )
+
+  test(
+    'PPL-U-24 a new user with an email is created verified and audited',
+    { tag: '@core' },
+    async ({ asPerson, people, marker }) => {
+      const admin = await asPerson('admin')
+      await admin.goto(usersUrl({ search: marker }))
+      await admin.getByRole('button', { name: 'New user', exact: true }).click()
+      const dialog = admin.getByRole('dialog')
+      await dialog.getByLabel('Name').fill(`Created ${marker}`)
+      const email = `${marker}-Created@Customers.Example`
+      await dialog.getByRole('textbox', { name: 'Email (optional)' }).fill(email)
+      await expect(dialog.getByRole('checkbox', { name: 'Email is verified' })).toBeChecked()
+      await dialog.getByRole('button', { name: 'Create user' }).click()
+
+      await expect(
+        admin.getByRole('heading', { name: `Created ${marker}`, exact: true })
+      ).toBeVisible({ timeout: 15_000 })
+      const [row] = await supportDb()`SELECT u.id, u.email, u.email_verified, p.role FROM "user" u
+        JOIN principal p ON p.user_id = u.id WHERE u.email = ${email.toLowerCase()}`
+      expect(row).toMatchObject({ email_verified: true, role: 'user' })
+      const userId = fromUuid('user', row.id as string)
+      const [audit] = await supportDb()`SELECT actor_email, after_value, metadata FROM audit_log
+        WHERE event_type = 'user.email_verified.asserted' AND target_id = ${userId}`
+      expect(audit.after_value).toEqual({ emailVerified: true })
+      expect(audit.metadata).toMatchObject({ source: 'admin.create_portal_user' })
+      expect(audit.actor_email).toBe(people.people.admin.email)
+    }
+  )
+
+  test(
+    'PPL-U-26 new user dedup: an existing user blocks; leads offer Create anyway',
+    { tag: '@core' },
+    async ({ asPerson, marker }) => {
+      const existing = await portalUserRow(marker)
+      const shared = `${marker}-shared@customers.example`
+      await seedLead(marker, { contactEmail: shared })
+      await seedLead(marker, { contactEmail: shared })
+
+      const admin = await asPerson('admin')
+      await admin.goto(usersUrl({ search: marker }))
+      await admin.getByRole('button', { name: 'New user', exact: true }).click()
+      const dialog = admin.getByRole('dialog')
+      await dialog.getByLabel('Name').fill(`Dup ${marker}`)
+      await dialog
+        .getByRole('textbox', { name: 'Email (optional)' })
+        .fill(existing.email.toUpperCase())
+      await dialog.getByRole('button', { name: 'Create user' }).click()
+      await expect(dialog.getByText('A user with this email already exists.')).toBeVisible()
+      await expect(dialog.getByRole('button', { name: 'View user' })).toBeVisible()
+      await expect(dialog.getByRole('button', { name: 'Create user' })).toBeDisabled()
+
+      await dialog.getByRole('textbox', { name: 'Email (optional)' }).fill(shared)
+      await dialog.getByRole('button', { name: 'Create user' }).click()
+      await expect(dialog.getByText('Possible existing matches')).toBeVisible()
+      await expect(dialog.getByText('Lead', { exact: true })).toHaveCount(2)
+      await dialog.getByRole('button', { name: 'Create anyway' }).click()
+      await expect(admin.getByRole('heading', { name: `Dup ${marker}`, exact: true })).toBeVisible({
+        timeout: 15_000,
+      })
+      const made = await supportDb()`SELECT id FROM "user" WHERE email = ${shared}`
+      expect(made).toHaveLength(1)
+    }
+  )
+
+  test(
+    'PPL-U-29 merging a lead into a user from the lead profile moves its activity',
+    { tag: '@core' },
+    async ({ asPerson, browser, marker }) => {
+      const board = await seedBoard(marker)
+      const author = await portalUser(browser, `${marker}-a`)
+      const post = await postAs(author.api, board.id, `Idea ${marker}`)
+      const user = await portalUserRow(marker, { name: `Target ${marker}` })
+      const lead = await seedLead(marker, {
+        name: `Lead ${marker}`,
+        contactEmail: `${marker}-l@customers.example`,
+      })
+      await seedLeadActivity(lead.principalUuid, { vote: post.id })
+      const comment = await seedLeadActivity(lead.principalUuid, {
+        comment: { postId: post.id, content: `Lead said ${marker}` },
+      })
+
+      const admin = await asPerson('admin')
+      await admin.goto(usersUrl({ lifecycle: 'leads', search: marker, selected: lead.principalId }))
+      await expect(admin.getByRole('heading', { name: `Lead ${marker}`, exact: true })).toBeVisible(
+        { timeout: 15_000 }
+      )
+      await admin.getByRole('button', { name: 'More actions' }).click()
+      await admin.getByRole('menuitem', { name: 'Merge' }).click()
+      const dialog = admin.getByRole('dialog')
+      await dialog.getByPlaceholder('Search users by name or email…').fill(`Target ${marker}`)
+      await dialog.getByText(`Target ${marker}`).click()
+      await dialog.getByRole('button', { name: 'Merge', exact: true }).click()
+      await expect(admin.getByText('Lead merged into user')).toBeVisible()
+
+      const sql = supportDb()
+      expect(await sql`SELECT id FROM principal WHERE id = ${lead.principalUuid}`).toHaveLength(0)
+      expect(await sql`SELECT id FROM "user" WHERE id = ${lead.userUuid}`).toHaveLength(0)
+      const [vote] = await sql`SELECT principal_id FROM post_votes
+        WHERE post_id = ${uuid(post.id)} AND principal_id = ${user.principalUuid}`
+      expect(vote, 'the vote moved to the user').toBeDefined()
+      const [moved] = await sql`SELECT principal_id FROM post_comments WHERE id = ${uuid(comment)}`
+      expect(moved.principal_id).toBe(user.principalUuid)
+      const [target] =
+        await sql`SELECT contact_email FROM principal WHERE id = ${user.principalUuid}`
+      expect(target.contact_email).toBe(`${marker}-l@customers.example`)
+
+      await admin.goto(usersUrl({ search: marker, selected: user.principalId }))
+      await expect(admin.getByRole('heading', { name: `Idea ${marker}` })).toBeVisible({
+        timeout: 15_000,
+      })
+    }
+  )
+
+  test(
+    'PPL-U-36 blocking a portal user from the profile',
+    { tag: '@core' },
+    async ({ asPerson, people, marker }) => {
+      const person = await portalUserRow(marker)
+      const admin = await asPerson('admin')
+      await admin.goto(usersUrl({ search: marker, selected: person.principalId }))
+      await admin.getByRole('button', { name: 'More actions' }).click()
+      await admin.getByRole('menuitem', { name: 'Block' }).click()
+      const dialog = admin.getByRole('alertdialog')
+      await expect(dialog.getByText(`Block ${person.name}?`)).toBeVisible()
+      await expect(dialog).toContainText(
+        'They will not be able to send new messages or sign in again, and automatic emails to them stop.'
+      )
+      await dialog.getByRole('button', { name: 'Block', exact: true }).click()
+      await expect(admin.getByText('User blocked')).toBeVisible()
+      await expect(admin.getByText('Blocked', { exact: true })).toBeVisible()
+      await admin.getByRole('button', { name: 'More actions' }).click()
+      await expect(admin.getByRole('menuitem', { name: 'Unblock' })).toBeVisible()
+      await admin.keyboard.press('Escape')
+
+      const [row] = await supportDb()`SELECT blocked_at, blocked_by_principal_id FROM principal
+        WHERE id = ${person.principalUuid}`
+      expect(row.blocked_at).not.toBeNull()
+      expect(row.blocked_by_principal_id).toBe(uuid(people.people.admin.principalId))
+    }
+  )
+
+  test(
+    'PPL-U-75 the public profile shows only what the viewer can see; misses are not found',
+    { tag: '@core' },
+    async ({ browser, marker }) => {
+      const open = await seedBoard(marker)
+      const closed = await seedBoard(`${marker}-p`, { teamOnly: true })
+      const person = await portalUser(browser, marker)
+      await postAs(person.api, open.id, `Public ${marker}`)
+      await seedLeadActivity(person.principalUuid, {
+        post: { boardId: closed.id, title: `Private ${marker}` },
+      })
+      const lead = await seedLead(marker)
+
+      const visitor = await browser.newPage()
+      const res = await visitor.goto(`/u/${person.principalId}`)
+      expect(res?.status()).toBe(200)
+      await expect(visitor.getByText(person.name).first()).toBeVisible()
+      await expect(visitor.getByText(`Public ${marker}`)).toBeVisible()
+      await expect(visitor.getByText(`Private ${marker}`)).toHaveCount(0)
+      await expect(visitor.getByText(person.email)).toHaveCount(0)
+
+      for (const id of [lead.principalId, generateId('principal'), 'not-an-id']) {
+        await visitor.goto(`/u/${id}`)
+        await expect(visitor.getByText('Profile not found'), id).toBeVisible()
+      }
+      await visitor.close()
     }
   )
 })
