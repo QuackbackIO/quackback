@@ -58,3 +58,42 @@ Known bugs (fixes in flight) and bugs found while writing these journeys. Each
 test asserts the right behaviour; the working part of each journey is proved
 by a separate test that is not quarantined.
 
+### Product suite: roadmap
+- `roadmap/admin-roadmap.spec.ts` › RMP-A-16 deleting the selected first
+  roadmap moves the board to another roadmap. Product bug:
+  `handleDelete` in `apps/web/src/components/admin/roadmap-sidebar.tsx:114`
+  re-selects `roadmaps?.[0]?.id` from the list captured before the delete,
+  which is the deleted roadmap itself, so the board shows "No roadmap
+  selected". Fix: pick the first roadmap whose id is not the deleted one.
+  owner: unassigned, review by: 2026-12-03.
+- `roadmap/portal-roadmap.spec.ts` › RMP-P-05 a ?roadmap= id the visitor cannot
+  see falls back to a roadmap they can. Product bug:
+  `apps/web/src/components/public/roadmap-board.tsx:51` keeps
+  `effectiveSelectedId` from the URL even when no visible roadmap has it, so a
+  hidden or deleted id renders no tab, no columns and no message. Fix: when
+  `selectedRoadmap` is undefined, fall back to `availableRoadmaps[0]` (and
+  rewrite the param). owner: unassigned, review by: 2026-12-03.
+- `roadmap/roadmap-membership.spec.ts` › RMP-E-16 deleting a status takes its
+  column off every roadmap that used it. Product bug: `deleteStatus`
+  (`apps/web/src/lib/server/domains/statuses/status.service.ts:157`)
+  soft-deletes the status but never touches `roadmap_columns`, so every
+  roadmap keeps a permanently empty column the builder cannot show or untick.
+  Fix: delete the status's `roadmap_columns` rows in the same transaction (or
+  refuse while a roadmap uses it). owner: unassigned, review by: 2026-12-03.
+- Vitest `it.fails` (fails today, passes once fixed, then flip it to `it`),
+  under `apps/web/src/lib/server/domains/roadmaps/__tests__/`:
+  - `roadmap-slug-reuse.test.ts` › RMP-A-05 a deleted roadmap frees its slug
+    for a new one. The slug check in `createRoadmap` ignores `deletedAt`
+    (`roadmap.service.ts:143`), and `roadmaps_slug_unique` is not partial
+    (`packages/db/src/schema/boards.ts:71`), so a deleted roadmap keeps its
+    name and slug forever. Fix: filter `isNull(deletedAt)` and make the
+    unique index partial (`WHERE deleted_at IS NULL`), as segments do.
+  - `roadmap-columns.test.ts` › RMP-A-12 refuses a second column for a status
+    the roadmap already has / refuses renaming a column to whitespace.
+    `createRoadmapColumn` (`roadmap.service.ts:339`) skips the duplicate-status
+    check that the bulk path's `validateColumns` does, so only the DB unique
+    index stops it, as a raw error. `updateRoadmapColumn` (`:358`) trims the
+    name but never rejects an empty result. Fix: reuse `validateColumns`'
+    checks on both single-column paths.
+
+  owner: unassigned, review by: 2026-12-03.
