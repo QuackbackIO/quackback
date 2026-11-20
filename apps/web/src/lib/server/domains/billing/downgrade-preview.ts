@@ -1,16 +1,24 @@
 import type { BillingProjectionOverview } from './projection-overview'
-import { pendingPlanName } from './pending-downgrade'
 import {
   featuresDisabledOnDowngrade,
+  planDowngradeInfo,
   planDowngradeIssues,
+  type PlanCapInfo,
   type PlanDowngradeIssue,
 } from '@/lib/shared/billing/plan-downgrade'
-import type { PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+
+function planNameFor(planId: PlanId, catalogueName?: string | null): string {
+  return catalogueName && catalogueName.length > 0 ? catalogueName : PLAN_CATALOGUE[planId].name
+}
 
 export type DowngradePreview = {
   planId: PlanId
   planName: string
+  /** What must be removed before the switch. */
   issues: PlanDowngradeIssue[]
+  /** Over a cap that never blocks the switch (posts): shown only. */
+  info: PlanCapInfo[]
   featuresDisabled: string[]
 }
 
@@ -24,8 +32,9 @@ export async function loadDowngradePreview(input: {
   const catalogueName = catalogue?.plans.find((plan) => plan.id === input.planId)?.name
   return {
     planId: input.planId,
-    planName: pendingPlanName(input.planId, catalogueName),
+    planName: planNameFor(input.planId, catalogueName),
     issues: planDowngradeIssues(input.used, input.planId),
+    info: planDowngradeInfo(input.used, input.planId),
     featuresDisabled: featuresDisabledOnDowngrade(
       input.overview?.trialPlanId ?? input.overview?.plan,
       input.planId

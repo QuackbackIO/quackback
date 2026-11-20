@@ -37,6 +37,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 
 vi.mock('../ticket-activity.service', () => ({
   recordTicketActivity: vi.fn(),
+  recordTicketActivityAwaited: vi.fn().mockResolvedValue(undefined),
   listTicketActivity: vi.fn().mockResolvedValue([]),
 }))
 

@@ -185,7 +185,7 @@ export function EditPostDialog({
 
             <ModalFooter
               onCancel={() => onOpenChange(false)}
-              submitLabel={form.formState.isSubmitting ? 'Saving...' : 'Save changes'}
+              submitLabel={form.formState.isSubmitting ? 'Saving…' : 'Save changes'}
               isPending={form.formState.isSubmitting}
             />
           </form>

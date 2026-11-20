@@ -89,6 +89,24 @@ describe('AuthSettings audit tab', () => {
     expect(screen.getByRole('tab', { name: /Audit log/i })).toBeDefined()
   })
 
+  it('shows only the tabs the viewer has', () => {
+    // auth.manage alone: no settings.manage for Portal access, no audit.view for Audit log.
+    render(
+      <AuthSettings
+        tab="sign-in"
+        tabs={['sign-in']}
+        teamAuthConfig={TEAM_AUTH}
+        credentialStatus={{}}
+        customOidcProviderTier={false}
+        auditEntitled
+      />
+    )
+    expect(screen.getByRole('tab', { name: /Sign-in/i })).toBeDefined()
+    expect(screen.queryByRole('tab', { name: /Portal access/i })).toBeNull()
+    expect(screen.queryByRole('tab', { name: /Audit log/i })).toBeNull()
+    expect(screen.queryByText('portal-access-body')).toBeNull()
+  })
+
   it('keeps the tab bar at form width on every tab', () => {
     for (const tab of ['portal-access', 'sign-in', 'audit-log'] as const) {
       const { unmount } = render(

@@ -5,7 +5,7 @@
  * Resources are inlined here (one service call each).
  */
 
-import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/server'
 import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { RESOURCE_SCOPES } from './required-scope'
 import { registerTools } from './tools'
@@ -14,13 +14,44 @@ import { MCP_SERVER_INSTRUCTIONS } from './untrusted'
 
 type ResourceUri = keyof typeof RESOURCE_SCOPES
 
+/**
+ * How long a 2026-07-28 client may reuse a cacheable result (`ttlMs`). The
+ * tool and resource lists and the discover result only change when a new
+ * version is deployed, and every caller gets the same list, so five minutes
+ * costs at most a few minutes' lag after an upgrade while sparing clients a
+ * list fetch (57 KB of tools) per conversation. Resource reads return live
+ * workspace data (boards, statuses, members) that an admin can edit at any
+ * time, so they keep a short minute. Every hint is `private`: the endpoint is
+ * authenticated and each instance serves one workspace, so no shared cache
+ * should hold a result. 2025-era responses never carry these fields.
+ */
+const LIST_TTL_MS = 5 * 60 * 1000
+const READ_TTL_MS = 60 * 1000
+
+export const MCP_CACHE_HINTS = {
+  'server/discover': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'tools/list': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'resources/list': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'resources/templates/list': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'resources/read': { ttlMs: READ_TTL_MS, cacheScope: 'private' },
+} as const
+
+/** The app version, reported as `serverInfo.version`; `dev` outside a build. */
+export function mcpServerVersion(): string {
+  return typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'
+}
+
 export function createMcpServer(auth: McpAuthContext): McpServer {
   const server = new McpServer(
+    { name: 'quackback', version: mcpServerVersion() },
     {
-      name: 'quackback',
-      version: '1.0.0',
-    },
-    { instructions: MCP_SERVER_INSTRUCTIONS }
+      instructions: MCP_SERVER_INSTRUCTIONS,
+      cacheHints: MCP_CACHE_HINTS,
+      // The lists only change on deploy and every request is served stateless,
+      // so there is never a change to announce. Saying so keeps 2026 clients
+      // from holding a `subscriptions/listen` stream open for nothing.
+      capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
+    }
   )
 
   registerTools(server, auth)
@@ -40,7 +71,7 @@ function scopeGated(
   fn: ReadResourceCallback
 ): ReadResourceCallback {
   const scope: McpScope = RESOURCE_SCOPES[resourceUri]
-  return async (uri, extra) => {
+  return async (uri, ctx) => {
     if (!hasApiScope(auth.scopes, scope)) {
       return {
         contents: [
@@ -52,7 +83,7 @@ function scopeGated(
         ],
       }
     }
-    return fn(uri, extra)
+    return fn(uri, ctx)
   }
 }
 
@@ -70,7 +101,7 @@ function jsonResource(name: string, data: unknown): Awaited<ReturnType<ReadResou
 }
 
 export function registerResources(server: McpServer, auth: McpAuthContext) {
-  server.resource(
+  server.registerResource(
     'boards',
     'quackback://boards',
     { description: 'List all boards' },
@@ -84,7 +115,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'statuses',
     'quackback://statuses',
     { description: 'List all statuses' },
@@ -98,7 +129,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'tags',
     'quackback://tags',
     { description: 'List all tags' },
@@ -112,7 +143,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'roadmaps',
     'quackback://roadmaps',
     { description: 'List all roadmaps' },
@@ -126,7 +157,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'members',
     'quackback://members',
     { description: 'List all team members (emails stripped)' },
@@ -140,7 +171,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'help-center-categories',
     'quackback://help-center/categories',
     { description: 'List all help center categories with article counts' },

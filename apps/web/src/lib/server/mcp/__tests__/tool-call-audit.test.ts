@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { z } from 'zod'
 import type { PrincipalId, UserId } from '@quackback/ids'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { NotFoundError } from '@/lib/shared/errors'
 
 vi.mock('@/lib/server/config', () => ({ config: { trustedProxyHops: 1 } }))
@@ -66,7 +66,7 @@ function register(
 ) {
   let callback: Callback | undefined
   const server = {
-    tool: (_n: string, _d: string, _s: unknown, _a: unknown, cb: Callback) => {
+    registerTool: (_n: string, _c: unknown, cb: Callback) => {
       callback = cb
     },
   }

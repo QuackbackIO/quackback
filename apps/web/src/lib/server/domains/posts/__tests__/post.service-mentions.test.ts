@@ -181,6 +181,10 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
   subscribeToPost: (...args: unknown[]) => subscribeToPost(...args),
 }))
 
+vi.mock('@/lib/server/domains/settings/section-links', async () => {
+  const { allOnPrimary } = await import('@/lib/shared/section-links')
+  return { getSectionOrigins: async () => allOnPrimary('http://localhost:3000') }
+})
 vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchPostCreated: vi.fn(),
   dispatchPostUpdated: vi.fn(),

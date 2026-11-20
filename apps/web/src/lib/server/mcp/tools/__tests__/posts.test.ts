@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 
 const mockUpdatePost = vi.fn()
 vi.mock('@/lib/server/domains/posts/post.service', () => ({
@@ -44,7 +44,7 @@ type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 function collect(auth: McpAuthContext): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const fakeServer = {
-    tool: (name: string, _d: string, _s: unknown, _a: unknown, handler: Handler) => {
+    registerTool: (name: string, _c: unknown, handler: Handler) => {
       handlers.set(name, handler)
     },
   }

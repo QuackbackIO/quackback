@@ -10,9 +10,14 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { Route } from '../admin/inbox'
+import { ALL_PERMISSIONS, PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 type LoaderFn = (ctx: {
-  context: { settings: { featureFlags: Record<string, boolean> }; queryClient: unknown }
+  context: {
+    settings: { featureFlags: Record<string, boolean> }
+    queryClient: unknown
+    permissions: PermissionKey[]
+  }
   location: { search: Record<string, unknown> }
 }) => Promise<unknown>
 
@@ -33,11 +38,12 @@ function fakeQueryClient() {
 
 async function runLoader(
   featureFlags: Record<string, boolean>,
-  search: Record<string, unknown> = {}
+  search: Record<string, unknown> = {},
+  permissions: PermissionKey[] = [...ALL_PERMISSIONS]
 ) {
   const queryClient = fakeQueryClient()
   await loader({
-    context: { settings: { featureFlags }, queryClient },
+    context: { settings: { featureFlags }, queryClient, permissions },
     location: { search },
   })
   return queryClient.keys
@@ -68,5 +74,18 @@ describe('inbox route loader, nav/sidebar prefetch', () => {
   it('does nothing when neither support flag is on (the component redirects instead)', async () => {
     const keys = await runLoader({ supportInbox: false, supportTickets: false })
     expect(keys).toEqual([])
+  })
+
+  it('does not warm the team roster or company picker for a role that cannot read them', async () => {
+    // An inbox-only custom role: the server would refuse both reads.
+    const keys = await runLoader({ supportInbox: true, supportTickets: true }, {}, [
+      PERMISSIONS.CONVERSATION_VIEW,
+      PERMISSIONS.CONVERSATION_REPLY,
+      PERMISSIONS.TICKET_VIEW,
+    ])
+    expect(keys).not.toContain(JSON.stringify(['admin', 'inbox', 'teams']))
+    expect(keys).not.toContain(JSON.stringify(['admin', 'companies']))
+    // The reads it may make are still warmed.
+    expect(keys).toContain(JSON.stringify(['admin', 'inbox', 'unified', 'counts']))
   })
 })

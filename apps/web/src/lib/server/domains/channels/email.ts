@@ -1,4 +1,3 @@
-import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import { deliverAgentMessageOnChannel } from './deliver-agent-message'
 import type { ChannelAdapter } from './types'
 
@@ -22,17 +21,27 @@ export const emailAdapter: ChannelAdapter = {
     })
   },
 
+  // The same envelope as the closing notice (conversation.notify-closed.ts): the
+  // thread's From under the workspace name, the conversation's Reply-To, the
+  // threading headers, and the outbound id recorded so a reply routes home. A
+  // rating request that arrived as a fresh message from another address would
+  // read as a different sender and land outside the thread being rated.
   async deliverCsatRequest(ctx) {
-    const from = (await resolveConversationFrom(ctx.conversationId)) ?? undefined
+    const { conversationEnvelope, recordSent } =
+      await import('@/lib/server/domains/conversation/conversation.email-envelope')
+    const envelope = await conversationEnvelope(ctx.conversationId, ctx.workspaceName)
+
     const { sendCsatRequestEmail } = await import('@quackback/email')
-    await sendCsatRequestEmail({
+    const result = await sendCsatRequestEmail({
       to: ctx.recipient,
       promptText: ctx.promptText,
       ratingUrls: ctx.ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl ?? undefined,
-      from,
+      conversationSubject: ctx.conversationSubject ?? undefined,
+      ...envelope,
       conversationId: ctx.conversationId,
     })
+    await recordSent(ctx.conversationId, envelope.messageId, result)
   },
 }

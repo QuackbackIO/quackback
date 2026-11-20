@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { generateId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
 
@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   listConversationsForAgent: vi.fn(),
   conversationToDTO: vi.fn(),
   listMessages: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   listTickets: vi.fn(),
   getTicket: vi.fn(),
   listTicketMessages: vi.fn(),
@@ -64,13 +64,16 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   conversationToDTO: mocks.conversationToDTO,
   listMessages: mocks.listMessages,
 }))
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: mocks.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: mocks.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: mocks.listTickets,
-  getTicket: mocks.getTicket,
-  assertTicketVisible: vi.fn().mockResolvedValue(undefined),
+  assertTicketVisible: vi.fn().mockResolvedValue({ id: 'ticket_1' }),
+}))
+vi.mock('@/lib/server/domains/tickets/ticket.dto', () => ({
+  ticketRowToDTO: () => mocks.getTicket(),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   listTicketMessages: mocks.listTicketMessages,
@@ -91,6 +94,7 @@ vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: async () => true,
+  getWorkspaceSettings: async () => null,
 }))
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: async () => new Set(),
@@ -715,7 +719,7 @@ describe('author names of teammates who have left the team', () => {
   }
 
   function stubConversation() {
-    mocks.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    mocks.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     mocks.conversationToDTO.mockResolvedValue({
       id: 'conversation_1',
       status: 'open',
@@ -991,7 +995,7 @@ describe('author names of teammates who have left the team', () => {
 
 describe('get_conversation', () => {
   it('marks the subject, the visitor email, and only the messages a teammate did not send', async () => {
-    mocks.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    mocks.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     mocks.conversationToDTO.mockResolvedValue({
       id: 'conversation_1',
       status: 'open',

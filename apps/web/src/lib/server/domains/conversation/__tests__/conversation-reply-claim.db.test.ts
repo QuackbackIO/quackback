@@ -155,7 +155,8 @@ describe('a service principal never claims by replying', () => {
     const actor = serviceActorFromApiAuth({
       principalId: apiKey,
       role: 'admin',
-      permissions: new Set([PERMISSIONS.CONVERSATION_REPLY]),
+      // The reply route asks for conversation.view too: a key sees what it answers.
+      permissions: new Set([PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.CONVERSATION_REPLY]),
     })
 
     await sendAgentMessage(conversation.id, 'On it', { principalId: apiKey }, actor)

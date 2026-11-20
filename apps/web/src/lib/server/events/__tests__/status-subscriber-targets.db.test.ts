@@ -40,6 +40,16 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
     .mockImplementation(async (ids: string[]) => new Map(ids.map((id) => [id, `tok-${id}`]))),
 }))
 
+// The components the plan lets the public page show: null (all of them)
+// unless a case hides some, as the real helper answers past the plan's cap.
+const planVisible = vi.hoisted(() => ({ ids: null as string[] | null }))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/plan-limits/plan-limits.service')
+  >()),
+  visibleStatusComponentIds: async () => planVisible.ids,
+}))
+
 import {
   principal,
   segments,
@@ -58,8 +68,14 @@ import {
   type StatusIncidentId,
 } from '@quackback/ids'
 import { getStatusSubscriberTargets } from '../targets'
+import {
+  createSendingAddress,
+  defaultTeamId,
+} from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { setEmailSender } from '@/lib/server/domains/channel-accounts/email-senders'
 import type { EventData } from '../types'
 import type { HookContext } from '../hook-context'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -188,8 +204,29 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
       { principalId: P_PICKER, scope: 'components', componentIds: [BILLING], source: 'self_serve' },
     ])
   })
-  afterEach(fixture.rollback)
+  afterEach(async () => {
+    planVisible.ids = null
+    await fixture.rollback()
+  })
   afterAll(fixture.close)
+
+  it('leaves a component the plan hides out of every email, and tells no one who followed only it', async () => {
+    planVisible.ids = [API]
+    const targets = await getStatusSubscriberTargets(incidentCreated, context)
+    expect(emailedComponents(targets)).toEqual({
+      [MEMBER_EMAIL]: [{ name: `API ${runSuffix}`, status: 'Degraded performance' }],
+      [OUTSIDER_EMAIL]: [{ name: `API ${runSuffix}`, status: 'Degraded performance' }],
+    })
+    const notified = targets
+      .filter((t) => t.type === 'notification')
+      .flatMap((t) => (t.target as { principalIds: string[] }).principalIds)
+    expect(notified).not.toContain(P_PICKER)
+  })
+
+  it('tells no one about an incident on hidden components alone', async () => {
+    planVisible.ids = []
+    expect(await getStatusSubscriberTargets(incidentCreated, context)).toEqual([])
+  })
 
   it('sends no subscriber email or bell for a publication made without emailing subscribers', async () => {
     const created = incidentCreated as unknown as { data: { incident: object } }
@@ -218,6 +255,57 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
       .filter((id) => id === P_MEMBER || id === P_OUTSIDER || id === P_PICKER)
       .sort()
     expect(notified).toEqual([P_MEMBER, P_OUTSIDER].sort())
+  })
+
+  it("sends from the status page's address under its sender name", async () => {
+    // One workspace, so the send guard permits these addresses unverified; the
+    // guard's own rules are pinned in sender-resolver.db.test.ts.
+    const team = await defaultTeamId()
+    expect(team).toBeTruthy()
+    await createSendingAddress({ owningTeamId: team!, address: 'hello@acme.example' })
+    const alerts = await createSendingAddress({
+      owningTeamId: team!,
+      address: 'alerts@acme.example',
+      senderName: 'Acme Status',
+    })
+    await setEmailSender('status', { mode: 'address', channelAccountId: alerts.id })
+
+    const emails = (await getStatusSubscriberTargets(incidentCreated, context)).filter(
+      (t) => t.type === 'email'
+    )
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) {
+      expect(t.config).toMatchObject({
+        from: 'alerts@acme.example',
+        fromDisplayName: 'Acme Status',
+      })
+    }
+  })
+
+  it("links the incident at the status page's own host when it has one", async () => {
+    const onStatusHost: HookContext = {
+      ...context,
+      sectionOrigins: {
+        ...allOnPrimary(context.portalBaseUrl),
+        status: 'https://status.acme.com',
+      },
+    }
+    const targets = await getStatusSubscriberTargets(incidentCreated, onStatusHost)
+    const emails = targets.filter((t) => t.type === 'email')
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) {
+      expect((t.config as { incidentUrl: string }).incidentUrl).toBe(
+        `https://status.acme.com/status/${INCIDENT}`
+      )
+    }
+  })
+
+  it('sends from the platform before any address is chosen', async () => {
+    const emails = (await getStatusSubscriberTargets(incidentCreated, context)).filter(
+      (t) => t.type === 'email'
+    )
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) expect((t.config as Record<string, unknown>).from).toBeUndefined()
   })
 
   it('tells each recipient the impact of the components they can see', async () => {

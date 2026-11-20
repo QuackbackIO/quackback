@@ -4,6 +4,7 @@
  * dependency-free leaf of the domain — so status.service.ts and
  * status.maintenance.ts can both import it without a cycle).
  */
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import {
   db,
   eq,
@@ -117,6 +118,7 @@ export async function deleteStatusComponentGroup(id: StatusComponentGroupId): Pr
   if (result.length === 0) {
     throw new NotFoundError('STATUS_GROUP_NOT_FOUND', `Status component group ${id} not found`)
   }
+  await invalidatePlanLimits()
 }
 
 export async function reorderStatusComponentGroups(ids: StatusComponentGroupId[]): Promise<void> {
@@ -127,6 +129,7 @@ export async function reorderStatusComponentGroups(ids: StatusComponentGroupId[]
     .update(statusComponentGroups)
     .set({ position: positionCaseSql(statusComponentGroups.id, ids) })
     .where(inArray(statusComponentGroups.id, ids))
+  await invalidatePlanLimits()
 }
 
 /** Admin (unfiltered) list — groups with their non-deleted components, ordered. */
@@ -187,6 +190,7 @@ export async function createStatusComponent(
     })
     .returning()
 
+  await invalidatePlanLimits()
   return toComponentRow(component)
 }
 
@@ -236,6 +240,7 @@ export async function deleteStatusComponent(id: StatusComponentId): Promise<void
   if (result.length === 0) {
     throw new NotFoundError('STATUS_COMPONENT_NOT_FOUND', `Status component ${id} not found`)
   }
+  await invalidatePlanLimits()
 }
 
 export async function reorderStatusComponents(ids: StatusComponentId[]): Promise<void> {
@@ -258,6 +263,8 @@ export async function reorderStatusComponents(ids: StatusComponentId[]): Promise
       .set({ position: positionCaseSql(statusComponents.id, ids) })
       .where(inArray(statusComponents.id, ids))
   })
+  // Display order picks which components stay public over the cap.
+  await invalidatePlanLimits()
 }
 
 /**

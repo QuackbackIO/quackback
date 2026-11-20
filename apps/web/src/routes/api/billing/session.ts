@@ -104,11 +104,6 @@ export const Route = createFileRoute('/api/billing/session')({
             parsed.data.action === 'checkout'
               ? await createCheckoutSession(parsed.data)
               : await createHostedBillingSession(parsed.data)
-          if (parsed.data.action === 'downgrade' || parsed.data.action === 'checkout') {
-            const { clearPendingDowngrade } =
-              await import('@/lib/server/domains/billing/pending-downgrade')
-            await clearPendingDowngrade()
-          }
           const flashSuccess =
             parsed.data.action === 'checkout' || parsed.data.action === 'branding'
           const location =

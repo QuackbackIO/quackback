@@ -5,6 +5,11 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   getCloudConfig: vi.fn(),
   createHostedBillingSession: vi.fn(),
+  assertFitsPlan: vi.fn(async (_planId: string) => {}),
+}))
+
+vi.mock('@/lib/server/domains/billing/usage-counts', () => ({
+  assertFitsPlan: (planId: string) => hoisted.assertFitsPlan(planId),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -226,5 +231,52 @@ describe('POST /api/billing/session refuses top-ups', () => {
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toContain('billing_error=invalid')
     expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/billing/session fit check', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    hoisted.requireAuth.mockResolvedValue({ user: { id: 'user_1' } })
+    hoisted.createHostedBillingSession.mockResolvedValue({
+      url: 'https://billing.example.com/checkout',
+    })
+  })
+
+  it('lets an ended trial buy a cheaper paid plan without checking it against the trial plan', async () => {
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'free',
+      trialActive: false,
+      trialExpiresAt: '2026-11-01T00:00:00.000Z',
+      canUpgrade: true,
+      canManageBilling: true,
+    })
+    const res = await POST({ request: checkoutRequest() })
+    expect(res.status).toBe(303)
+    expect(hoisted.assertFitsPlan).not.toHaveBeenCalled()
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalled()
+  })
+
+  it('still checks a paid plan moving to a cheaper one', async () => {
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'business',
+      canUpgrade: true,
+      canManageBilling: true,
+    })
+    await POST({ request: checkoutRequest() })
+    expect(hoisted.assertFitsPlan).toHaveBeenCalledWith('pro')
+  })
+
+  it('checks the switch to Free', async () => {
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'pro',
+      canUpgrade: true,
+      canManageBilling: true,
+    })
+    await POST({ request: formRequest({ action: 'downgrade', planId: 'free' }) })
+    expect(hoisted.assertFitsPlan).toHaveBeenCalledWith('free')
   })
 })

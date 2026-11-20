@@ -9,6 +9,18 @@ const hoisted = vi.hoisted(() => ({
   cancelJob: vi.fn(async (_opts?: unknown) => 0),
   postCount: 8,
   boardCount: 2,
+  detectPlanLimitsQuietly: vi.fn(async () => {}),
+  planLimitsView: { phase: 'grace', since: '2026-07-30T00:00:00.000Z' } as unknown,
+  getPlanLimits: vi.fn(async (): Promise<unknown> => hoisted.planLimitsView),
+  sendPlanLimitsEmailsQuietly: vi.fn(async (_view: unknown) => {}),
+}))
+
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  detectPlanLimitsQuietly: () => hoisted.detectPlanLimitsQuietly(),
+  getPlanLimits: () => hoisted.getPlanLimits(),
+}))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.emails', () => ({
+  sendPlanLimitsEmailsQuietly: (view: unknown) => hoisted.sendPlanLimitsEmailsQuietly(view),
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
@@ -75,6 +87,9 @@ describe('usage-report job', () => {
     hoisted.reportWorkspaceUsage.mockClear()
     hoisted.enqueueJob.mockClear()
     hoisted.cancelJob.mockClear()
+    hoisted.detectPlanLimitsQuietly.mockClear()
+    hoisted.getPlanLimits.mockClear()
+    hoisted.sendPlanLimitsEmailsQuietly.mockClear()
     vi.useRealTimers()
     if (previous === undefined) delete process.env.QUACKBACK_CONTROL_PLANE_URL
     else process.env.QUACKBACK_CONTROL_PLANE_URL = previous
@@ -133,6 +148,68 @@ describe('usage-report job', () => {
     )
     expect(hoisted.reportWorkspaceUsage).not.toHaveBeenCalled()
     expect(hoisted.cancelJob).not.toHaveBeenCalled()
+  })
+
+  it('detects plan limits from the hourly slot and from the monthly report', async () => {
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    vi.useFakeTimers({ now: new Date('2026-08-01T00:10:00.000Z') })
+    // The monthly report is the job the dormant catch-up queues for a parked
+    // workspace, which runs no hourly slot.
+    await runUsageReport(job({ month: '2026-07' }, 'usage-report:2026-07'))
+    expect(hoisted.detectPlanLimitsQuietly).toHaveBeenCalledTimes(1)
+    expect(hoisted.reportWorkspaceUsage).toHaveBeenCalledTimes(1)
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+    )
+    expect(hoisted.detectPlanLimitsQuietly).toHaveBeenCalledTimes(2)
+  })
+
+  it('detects nothing without a hosted billing URL', async () => {
+    delete process.env.QUACKBACK_CONTROL_PLANE_URL
+    await runUsageReport(job({ month: '2026-07' }, 'usage-report:2026-07'))
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+    )
+    expect(hoisted.detectPlanLimitsQuietly).not.toHaveBeenCalled()
+  })
+
+  it('sends the due plan limits email from the hourly slot, after detection', async () => {
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    vi.useFakeTimers({ now: new Date('2026-08-01T00:10:00.000Z') })
+    await runUsageReport(job({ month: '2026-07' }, 'usage-report:2026-07'))
+    expect(hoisted.sendPlanLimitsEmailsQuietly).not.toHaveBeenCalled()
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+    )
+    expect(hoisted.sendPlanLimitsEmailsQuietly).toHaveBeenCalledTimes(1)
+    expect(hoisted.sendPlanLimitsEmailsQuietly).toHaveBeenCalledWith(hoisted.planLimitsView)
+    expect(hoisted.detectPlanLimitsQuietly.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.getPlanLimits.mock.invocationCallOrder[0]!
+    )
+  })
+
+  it('keeps the hourly slot going when reading plan limits for the emails fails', async () => {
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    vi.useFakeTimers({ now: new Date('2026-08-01T00:10:00.000Z') })
+    hoisted.getPlanLimits.mockRejectedValueOnce(new Error('db down'))
+    await expect(
+      runUsageReport(
+        job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+      )
+    ).resolves.toBeUndefined()
+    expect(hoisted.sendPlanLimitsEmailsQuietly).not.toHaveBeenCalled()
+    expect(hoisted.enqueueJob).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupeKey: 'usage-report:2026-07' })
+    )
+  })
+
+  it('sends no plan limits email without hosted billing', async () => {
+    delete process.env.QUACKBACK_CONTROL_PLANE_URL
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+    )
+    expect(hoisted.getPlanLimits).not.toHaveBeenCalled()
+    expect(hoisted.sendPlanLimitsEmailsQuietly).not.toHaveBeenCalled()
   })
 
   it('skips the post when the month is already recorded', async () => {

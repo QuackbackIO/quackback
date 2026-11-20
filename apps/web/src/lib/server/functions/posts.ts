@@ -360,8 +360,18 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         )
       : null
 
+    // Set only while the post's board is read-only (set by an admin or kept so by
+    // the plan), so the admin modal can close its comment box. Absent otherwise,
+    // which keeps the payload unchanged.
+    const { isBoardOpenFor } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.board-guard')
+    const boardReadOnly = (await isBoardOpenFor(result.board.id, result.board.readOnly ?? false))
+      ? undefined
+      : true
+
     return {
       ...serializePostDates(result),
+      boardReadOnly,
       summaryUpdatedAt: toIsoStringOrNull(result.summaryUpdatedAt),
       hasVoted: voted,
       comments: comments.map(serializeComment),

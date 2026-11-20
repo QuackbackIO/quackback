@@ -144,7 +144,7 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
         <p role="status" className="text-sm text-muted-foreground">
           {intl.formatMessage({
             id: 'automation.agent.guidance.loading',
-            defaultMessage: 'Loading guidance...',
+            defaultMessage: 'Loading guidance…',
           })}
         </p>
       </SettingsCard>
@@ -297,7 +297,7 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
               onChange={setQuery}
               placeholder={intl.formatMessage({
                 id: 'automation.agent.guidance.search',
-                defaultMessage: 'Search guidance...',
+                defaultMessage: 'Search guidance…',
               })}
             />
           </div>
@@ -940,7 +940,7 @@ function GuidanceRuleDialog({
               {saving
                 ? intl.formatMessage({
                     id: 'automation.agent.save.savingButton',
-                    defaultMessage: 'Saving...',
+                    defaultMessage: 'Saving…',
                   })
                 : rule
                   ? intl.formatMessage({

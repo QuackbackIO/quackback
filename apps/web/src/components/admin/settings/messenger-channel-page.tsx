@@ -140,7 +140,7 @@ export function MessengerChannelPage() {
               value={welcomeMessage}
               maxLength={500}
               rows={2}
-              placeholder="Hi! How can we help you today?"
+              placeholder="Hi, how can we help you today?"
               onChange={(e) => setWelcomeMessage(e.target.value)}
               onBlur={() =>
                 persist('welcomeMessage', { messenger: { welcomeMessage: welcomeMessage.trim() } })
@@ -295,7 +295,7 @@ function MessengerTranslations({
               key={`${selectedLocale}-welcome`}
               maxLength={500}
               rows={2}
-              placeholder="Hi! How can we help you today?"
+              placeholder="Hi, how can we help you today?"
               disabled={disabled}
               onBlur={(e) => commitField('welcomeMessage', e.target.value)}
             />

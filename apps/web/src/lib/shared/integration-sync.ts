@@ -32,6 +32,7 @@ export const SYNC_ERRORS = {
   local_persistence: 'The remote change succeeded; local confirmation still needs to be saved.',
   unlinked_remote:
     'This platform item names this ticket but is not linked to it. Inspect it and link it, or cancel.',
+  plan_paused: 'Paused. Nothing is deleted.',
 } as const
 export type SyncErrorCode = keyof typeof SYNC_ERRORS
 export const SYNC_ATTENTION: readonly SyncState[] = [

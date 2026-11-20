@@ -139,7 +139,7 @@ describe('POST /api/widget/upload', () => {
   it('429s when the workspace bucket is over the limit, even from a fresh session/IP', async () => {
     authAs()
     mockIncrementBucket.mockImplementation(async (spec: { key: string }) => ({
-      count: spec.key.includes(':workspace:') ? 21 : 1,
+      count: spec.key.includes(':workspace:') ? 201 : 1,
     }))
     const file = mockImageFile('shot.webp', 'image/webp')
     const res = await handleWidgetUpload({

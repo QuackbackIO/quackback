@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { isSignInMethodEnabled, normalizeMethodKey } from '../signin-methods'
+import {
+  effectiveSignInMethods,
+  isSignInMethodEnabled,
+  normalizeMethodKey,
+} from '../signin-methods'
 
 describe('isSignInMethodEnabled', () => {
   it('password defaults on (missing or undefined → enabled)', () => {
@@ -25,5 +29,48 @@ describe('normalizeMethodKey', () => {
     expect(normalizeMethodKey('magic-link')).toBe('magicLink')
     expect(normalizeMethodKey('email')).toBe('magicLink')
     expect(normalizeMethodKey('google')).toBe('google')
+  })
+})
+
+describe('effectiveSignInMethods', () => {
+  const ssoOnly = { password: false, magicLink: false }
+
+  it('offers email links when providers are set up but single sign-on is not live', () => {
+    const effective = effectiveSignInMethods({
+      stored: ssoOnly,
+      ssoLive: false,
+      providersConfigured: true,
+    })
+    expect(isSignInMethodEnabled(effective, 'magicLink')).toBe(true)
+    // Everything else is exactly as stored.
+    expect(isSignInMethodEnabled(effective, 'password')).toBe(false)
+  })
+
+  it('returns the stored methods unchanged while single sign-on is live', () => {
+    expect(
+      effectiveSignInMethods({ stored: ssoOnly, ssoLive: true, providersConfigured: true })
+    ).toEqual(ssoOnly)
+  })
+
+  it('returns the stored methods unchanged when no provider is set up', () => {
+    expect(
+      effectiveSignInMethods({ stored: ssoOnly, ssoLive: false, providersConfigured: false })
+    ).toEqual(ssoOnly)
+  })
+
+  it('never changes the stored object it was given', () => {
+    const stored = { ...ssoOnly }
+    effectiveSignInMethods({ stored, ssoLive: false, providersConfigured: true })
+    expect(stored).toEqual(ssoOnly)
+  })
+
+  it('treats a missing stored map as the defaults', () => {
+    const effective = effectiveSignInMethods({
+      stored: undefined,
+      ssoLive: false,
+      providersConfigured: true,
+    })
+    expect(isSignInMethodEnabled(effective, 'magicLink')).toBe(true)
+    expect(isSignInMethodEnabled(effective, 'password')).toBe(true)
   })
 })

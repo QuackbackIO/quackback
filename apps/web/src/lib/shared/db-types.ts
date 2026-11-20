@@ -107,6 +107,7 @@ export type {
   StoredProjectedLimits,
   StoredCloudIdentityProjection,
   StoredCloudCustomDomain,
+  StoredPlanLimitsState,
 } from '@quackback/db/schema'
 
 // Runtime exports used in client components.

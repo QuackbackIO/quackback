@@ -27,6 +27,9 @@ const domain = (over: Partial<SendingDomainDTO>): SendingDomainDTO => ({
 })
 
 const config = (domains: SendingDomainDTO[]): EmailChannelConfigDTO => ({
+  workspaceName: 'Acme',
+  senders: { default: null, support: null, feedback: null, changelog: null, status: null },
+  forwardingTargetPermitted: null,
   inboundRoute: null,
   sendingAddresses: [],
   domains,

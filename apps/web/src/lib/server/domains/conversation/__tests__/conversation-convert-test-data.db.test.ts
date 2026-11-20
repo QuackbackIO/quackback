@@ -271,7 +271,10 @@ it.each(['create', 'upvote'] as const)(
       expect.objectContaining({ principalId: owner }),
       actor,
       undefined,
-      expect.any(Object)
+      expect.any(Object),
+      undefined,
+      // The confirmation card is not a reply on a ticket.
+      { card: true }
     )
   }
 )

@@ -12,6 +12,10 @@ const hoisted = vi.hoisted(() => ({
   capturedSet: null as Record<string, unknown> | null,
   deleteObject: vi.fn(),
   invalidateSettingsCache: vi.fn(),
+  bump: vi.fn(),
+  // What happened, in order: the key write, the version bump, the commit and
+  // the cache drop.
+  events: [] as string[],
 }))
 
 vi.mock('@/lib/server/db', () => ({
@@ -21,18 +25,33 @@ vi.mock('@/lib/server/db', () => ({
         where: () => Promise.resolve(hoisted.existingRow ? [hoisted.existingRow] : []),
       }),
     }),
-    update: () => ({
-      set: (patch: Record<string, unknown>) => {
-        hoisted.capturedSet = patch
-        return { where: () => Promise.resolve(undefined) }
-      },
-    }),
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        update: () => ({
+          set: (patch: Record<string, unknown>) => {
+            hoisted.capturedSet = patch
+            hoisted.events.push('write')
+            return { where: () => Promise.resolve(undefined) }
+          },
+        }),
+      }
+      const result = await fn(tx)
+      hoisted.events.push('commit')
+      return result
+    },
   },
   identityProvider: {},
   account: {},
   ssoVerifiedDomain: {},
   count: vi.fn(),
   eq: vi.fn(),
+}))
+
+vi.mock('@/lib/server/auth/config-version', () => ({
+  bumpAuthConfigVersionInTx: async (tx: unknown) => {
+    hoisted.bump(tx)
+    hoisted.events.push('bump')
+  },
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -63,6 +82,9 @@ beforeEach(() => {
   hoisted.capturedSet = null
   hoisted.deleteObject.mockReset()
   hoisted.invalidateSettingsCache.mockReset()
+  hoisted.invalidateSettingsCache.mockImplementation(() => void hoisted.events.push('invalidate'))
+  hoisted.bump.mockReset()
+  hoisted.events = []
 })
 
 describe('saveIdentityProviderLogoKey', () => {
@@ -72,6 +94,13 @@ describe('saveIdentityProviderLogoKey', () => {
     expect(hoisted.capturedSet).toEqual({ logoKey: 'idp-logos/2026/09/new.png' })
     expect(hoisted.invalidateSettingsCache).toHaveBeenCalledOnce()
     expect(hoisted.deleteObject).not.toHaveBeenCalled()
+  })
+
+  it('bumps the settings row with the key, and drops the cache after the commit', async () => {
+    // The bump changes the settings row's version, so a settings read that
+    // overlapped the write refuses to cache the old sign-in button.
+    await saveIdentityProviderLogoKey(ID, 'idp-logos/2026/09/new.png')
+    expect(hoisted.events).toEqual(['write', 'bump', 'commit', 'invalidate'])
   })
 
   it('deletes the previous object when replacing an existing logo', async () => {
@@ -109,6 +138,7 @@ describe('deleteIdentityProviderLogoKey', () => {
     expect(hoisted.deleteObject).toHaveBeenCalledWith('idp-logos/2026/09/x.png')
     expect(hoisted.capturedSet).toEqual({ logoKey: null })
     expect(hoisted.invalidateSettingsCache).toHaveBeenCalledOnce()
+    expect(hoisted.events).toEqual(['write', 'bump', 'commit', 'invalidate'])
   })
 
   it('is a no-op delete when there is no stored key, but still clears + invalidates', async () => {
