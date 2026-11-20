@@ -57,6 +57,12 @@ const SWEEPS: Record<string, SweepEntry> = {
     asOf: true,
     run: (at) => promoteDueJobs('workflow-wait', at),
   },
+  // The welcome and day-two setup emails are queued rows (the nudge 48 hours
+  // out), promoted like workflow-wait so the worker sends them now.
+  'onboarding-email': {
+    asOf: true,
+    run: (at) => promoteDueJobs('onboarding-email', at),
+  },
   'email-log-retention': {
     asOf: false,
     run: async () => {
