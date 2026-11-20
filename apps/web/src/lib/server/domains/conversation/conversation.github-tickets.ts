@@ -67,8 +67,13 @@ export const GITHUB_ISSUE_NOT_PLANNED = 'Closed (not planned)'
 export type GitHubIssueState =
   typeof GITHUB_ISSUE_OPEN | typeof GITHUB_ISSUE_CLOSED | typeof GITHUB_ISSUE_NOT_PLANNED
 
-/** What the integration may do to the tickets it opens: create, assign, rename and move them. */
+/**
+ * What the integration may do to the tickets it opens: create, assign, rename
+ * and move them. It also reads the issue's conversation, which it pairs the
+ * ticket with: a service principal without conversation.view sees none.
+ */
 const GITHUB_TICKET_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PERMISSIONS.CONVERSATION_VIEW,
   PERMISSIONS.TICKET_CREATE,
   PERMISSIONS.TICKET_ASSIGN,
   PERMISSIONS.TICKET_SET_STATUS,
