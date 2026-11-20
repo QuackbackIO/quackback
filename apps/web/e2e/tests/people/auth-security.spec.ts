@@ -147,6 +147,8 @@ test.describe('recovery codes', () => {
       const context = await visitorContext(browser)
       const page = await context.newPage()
       await page.goto('/auth/recovery')
+      // A server-rendered form: let it hydrate before submitting.
+      await page.waitForLoadState('networkidle')
       await expect(page.getByText('Use a recovery code')).toBeVisible()
       await page.locator('#email').fill(email.toUpperCase())
       await page.locator('#code').fill(code.replace(/-/g, '').toLowerCase())
@@ -197,6 +199,8 @@ test.describe('recovery codes', () => {
       for (const [email, reason] of cases) {
         const page = await visitor()
         await page.goto('/auth/recovery')
+        // A server-rendered form: let it hydrate before submitting.
+        await page.waitForLoadState('networkidle')
         await page.locator('#email').fill(email)
         await page.locator('#code').fill('ABCD-EFGH-JKMN')
         await page.getByRole('button', { name: 'Sign in' }).click()
