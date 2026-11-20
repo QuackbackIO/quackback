@@ -34,6 +34,7 @@ import {
   serviceRow,
   toggleService,
   tryCreateIncident,
+  deleteMadeIncidents,
 } from '../../product/status'
 
 test.describe.configure({ timeout: 60_000 })
@@ -44,6 +45,7 @@ test.beforeEach(async ({ playwright }) => {
   admin = await personApi(playwright, 'admin')
 })
 test.afterEach(async () => {
+  await deleteMadeIncidents(admin)
   await admin.dispose()
 })
 

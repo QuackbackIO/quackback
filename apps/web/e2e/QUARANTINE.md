@@ -488,3 +488,32 @@ no such part beyond the wrong notification).
   visitors see "All systems operational". Fix: derive it from the anonymous
   projection (`getStatusPageSnapshot(ANONYMOUS_ACTOR, …).topLevel`), or relabel
   the banner. owner: unassigned, review by: 2026-12-03.
+- `status/public-page.spec.ts` › STA-P-15 uptime follows a status that has no
+  history row. `createStatusComponent`
+  (`apps/web/src/lib/server/domains/status/status.components.ts:176`) stores a
+  non-operational initial status (REST and the server fn accept one) without a
+  `status_component_events` row or a `status.component_changed` event, and the
+  uptime derivation starts from operational when a service has no event
+  (`status.public.ts:291`), so a service created "Major outage" shows a 100%
+  operational bar. Fix: write the initial event (and the webhook event) when the
+  create status is not operational. owner: unassigned, review by: 2026-12-03.
+- `status/subscribe.spec.ts` › STA-S-09 a component subscription with no or
+  unknown services is refused. `subscribeStatusFn`
+  (`apps/web/src/lib/server/functions/status-subscriptions.ts:25`) takes
+  `scope: 'components'` with an empty or non-existent `componentIds` and stores
+  an active subscription that can never match an incident (it still counts as
+  a subscriber and takes a plan slot). The portal UI prevents both. Fix: refuse
+  an empty list and ids that are not live, visible services. owner:
+  unassigned, review by: 2026-12-03.
+- `status/emails.spec.ts` › STA-S-23 nothing is emailed for an incident or
+  window created already over. Same cause as STA-A-30
+  (`status.service.ts:242`, `:317`): subscribers get "New incident reported …
+  Resolved". owner: unassigned, review by: 2026-12-03.
+- `status/emails.spec.ts` › STA-S-30 an incident cannot be pinned to the
+  "maintenance" impact. The REST validator
+  (`apps/web/src/routes/api/v1/status/-validation.ts:33`) and the server fn
+  accept `impact: 'maintenance'` on `kind: 'incident'`, and the incident email
+  (`packages/email/src/templates/status-incident-published.tsx:29`) has no
+  colour or label for it, so its impact bar reads " · Investigating". Fix:
+  refuse it for incidents (or give the template a Maintenance label). owner:
+  unassigned, review by: 2026-12-03.
