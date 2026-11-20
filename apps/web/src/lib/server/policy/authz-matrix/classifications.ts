@@ -19,6 +19,11 @@
  * expectation" gate from the feature request.
  */
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import {
+  GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+  PORTAL_DESIGN_WRITE_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+} from '@/lib/shared/settings-read-permissions'
 
 export type SurfaceIntent =
   /** Bare `requireAuth()`: any authenticated principal (team, portal, or widget). */
@@ -53,6 +58,16 @@ export function gateKey(file: string, surface: string): string {
 /** Stable key for an inline role check: gate surface + the predicate called. */
 export function inlineKey(file: string, surface: string, callee: string): string {
   return `${file}::${surface}::${callee}`
+}
+
+/**
+ * Reach a permission has beyond the surfaces it gates: settings that decide
+ * where sign-in may go. Rendered into MATRIX.md, so a change is reviewed as
+ * an access-control change.
+ */
+export const SESSION_REACH: Partial<Record<PermissionKey, string>> = {
+  [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]:
+    'Maps section hostnames. Each verified section host (on Cloud a ready custom domain; self-hosted, one whose lookups still answer) becomes a trusted sign-in origin and a host a signed-in session can be carried to through the section handoff. A carried session is a new portal-scope session for the same person: it never holds team permissions, so it cannot open /admin or pass a permission gate.',
 }
 
 /** `requireTeamAuth()` wraps `requireAuth({ permission: POST_APPROVE })`. */
@@ -97,6 +112,59 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/personal-api-keys.ts::revokeMyApiKeyFn': END_USER(
     'self-service: revokes one of personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
   ),
+  // Plan limits: every teammate sees what is over the plan; each chooser takes
+  // billing rights or the permission that manages what it picks.
+  'lib/server/functions/plan-notice.ts::getPlanNotice': END_USER(
+    'team-any read for the admin plan strip: dashboard session and team members only (inline isTeamMember); returns plan name, dates and copy, a billing link only for billing.manage, and the operator notice only for member.view'
+  ),
+  'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn': END_USER(
+    'team-any read for the admin banner without member.view: dashboard session and team members only (inline isTeamMember); returns no member ids, seat counts or team links'
+  ),
+  'lib/server/functions/plan-limits.ts::setKeptBoardFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.SETTINGS_MANAGE],
+    'choose the board that stays open: billing rights or whoever manages boards'
+  ),
+  'lib/server/functions/plan-limits.ts::setSeatHoldersFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.MEMBER_MANAGE],
+    'choose who keeps a seat: billing rights or whoever manages members'
+  ),
+  'lib/server/functions/plan-limits.ts::setVisibleStatusComponentsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE],
+    'choose the status components that stay public: billing rights or whoever manages the status page'
+  ),
+  'lib/server/functions/plan-limits.ts::setKeptSendingDomainsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'choose the sending domains that keep sending: billing rights or whoever manages channel accounts'
+  ),
+  // Email senders: sending is a workspace setting (settings.manage), and whoever
+  // runs the support inbox may still choose where support replies come from.
+  // Domains added by name: every Domains page permission reads them, so each
+  // viewer sees a domain's ownership whichever of its uses they manage.
+  'lib/server/functions/domains.ts::getDomainFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.AUTH_MANAGE],
+    'read by the Domains page, which any one of its use permissions opens'
+  ),
+  'lib/server/functions/domains.ts::listDomainsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.AUTH_MANAGE],
+    'read by the Domains page, which any one of its use permissions opens'
+  ),
+  'lib/server/functions/channel-accounts.ts::getEmailChannelConfigFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'read by the workspace Email page and the support inbox page; either permission opens it'
+  ),
+  'lib/server/functions/channel-accounts.ts::setEmailSenderFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'the support sender takes either permission; every other sender requires settings.manage'
+  ),
+  'lib/server/functions/channel-accounts.ts::getSurfaceSenderFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.BOARD_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
+      PERMISSIONS.STATUS_PAGE_MANAGE,
+    ],
+    'read-only From line: an admin, or the manager of the product that sends that kind of email'
+  ),
   'lib/server/functions/assistant-connectors.ts::createConnectorFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'either AI permission opens it, and assigning to an agent also requires that agent AI permission'
@@ -136,6 +204,19 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/assistant-documents.ts::uploadAssistantDocumentFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'shared AI settings: a holder of either AI permission may use them'
+  ),
+  // Settings pages owned by a narrower permission read what they show with it.
+  'lib/server/functions/settings.ts::fetchPortalPageConfigFn': DYNAMIC_PERMISSION(
+    PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+    'any one of these reads; the moderation default goes only to settings.manage or settings.moderation, the portal tabs and welcome message only to settings.manage or settings.branding, and nothing else of the portal config'
+  ),
+  'lib/server/functions/settings.ts::updatePortalDesignFn': DYNAMIC_PERMISSION(
+    PORTAL_DESIGN_WRITE_PERMISSIONS,
+    "saves only the portal's tabs and welcome message (Settings > Portal > Design); any other portal config field is refused and saves through updatePortalConfigFn under settings.manage"
+  ),
+  'integrations/github/server/functions.ts::getGitHubChannelStatusFn': DYNAMIC_PERMISSION(
+    GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+    'the GitHub channel page (channel_account.manage) and the Channels hub (settings.manage) read the connection status; never the token'
   ),
   'lib/server/functions/assistant-guidance-stats.ts::getGuidanceRuleStatsFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
@@ -541,9 +622,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/teammate-preferences.ts::setMyLanguagePreferenceFn': END_USER(
     'teammate sets their own language preference'
   ),
-  'lib/server/functions/billing.ts::getAdminBillingLockFn': END_USER(
-    'admin layout lock inputs: any teammate may ask; only billing.manage gets an answer'
-  ),
 
   // MCP transport entry: a valid key authenticates; per-tool scopes authorize
   // (see MCP_TOOLS). Not a permission gate on its own.
@@ -732,13 +810,29 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     why: 'personal API keys are for team members only; a portal user is refused',
   },
+  'lib/server/functions/plan-notice.ts::getPlanNotice::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'the plan strip is for teammates only; a portal user is refused',
+  },
+  'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'the plan limits banner is for teammates only; a portal user is refused',
+  },
   // Real access decisions the requireAuth/withApiKeyAuth scan does NOT cover —
   // surfaced precisely because a stray change here would widen access silently.
   'routes/api/chat/stream.ts::GET::isTeamMember': {
     intent: 'SECONDARY_GATE',
     roleBar: 'team',
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
-    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by canViewConversation',
+    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by assertConversationVisible',
+  },
+  'routes/api/chat/stream.ts::loadInboxScope::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
+    why: 'SSE inbox scope reload: re-asks the connect-time team gate, and closes the stream of a principal who has left the team',
   },
   'lib/server/functions/portal-permissions.ts::getMyPortalPermissionsFn::isTeamMember': {
     intent: 'SECONDARY_GATE',
@@ -767,6 +861,9 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'routes/api/widget/identify.ts::POST::isTeamMember': NOT_A_GATE(
     'skips overwriting a teammate dashboard profile from the host-app JWT; identify still mints a widget-scoped customer session'
+  ),
+  'lib/server/functions/bootstrap.ts::getSessionAndRole::isTeamMember': NOT_A_GATE(
+    'sends a teammate on a section host the primary admin address for a plain link; the presented role stays portal-tier'
   ),
   'lib/server/functions/widget-auth.ts::getWidgetSession::isTeamMember': NOT_A_GATE(
     'sets canPortalHandoff from the stored role; presented session role stays portal-tier'
@@ -802,10 +899,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     why: 'the Files sidebar lists attachments off internal notes too; team-only on top of the CONVERSATION_VIEW permission gate (the conversation-target branch only — the ticket-target branch gates on TICKET_VIEW + assertTicketVisible, mirroring getTicketActivityFn)',
   },
   'lib/server/functions/embeds.ts::scopeTicketEmbed::isTeamMember': NOT_A_GATE(
-    'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
-  ),
-  'lib/server/functions/tickets.ts::listTicketMessagesFn::isTeamMember': NOT_A_GATE(
-    'internal notes are agent-only; requesters never see them'
+    'getEmbedPreviewFn already gates on portal access; team resolves a ticket embed only when its ticket filter admits the ticket (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
   ),
   'lib/server/functions/tickets.ts::exportTicketTranscriptFn::isTeamMember': {
     intent: 'SECONDARY_GATE',

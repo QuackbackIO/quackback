@@ -23,6 +23,8 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   sendRecoveryCodeUsedEmail: 'account',
   // An operational alert to a teammate's own account address.
   sendSendingDomainAttentionEmail: 'account',
+  sendPlanLimitsEmail: 'account',
+  sendDomainAttentionEmail: 'account',
 
   // Capability over whoever holds the address: mail exactly what was minted.
   sendMagicLinkEmail: 'sealed',
@@ -58,10 +60,7 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   // public script tag every visitor's browser already loads; it grants nothing.
   sendMessengerInstallEmail: 'contact',
 
-  // Exported with no production caller. Classified rather than deleted so the
-  // decision to remove them is a separate, deliberate change.
-  sendWelcomeEmail: 'unused',
-  sendFeedbackLinkedEmail: 'unused',
+  // No template and no recipient of its own: the caller picks both.
   sendRawEmail: 'unused',
 }
 

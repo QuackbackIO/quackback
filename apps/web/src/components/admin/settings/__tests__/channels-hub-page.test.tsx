@@ -1,33 +1,49 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
-
-const updateRouting = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    search,
     children,
     className,
     ...rest
   }: {
     to: string
+    search?: Record<string, string>
     children: React.ReactNode
     className?: string
   }) => (
-    <a href={to} className={className} {...rest}>
+    <a
+      href={`${to}${search ? `?${new URLSearchParams(search)}` : ''}`}
+      className={className}
+      {...rest}
+    >
       {children}
     </a>
   ),
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
-  useWorkspaceSettings: () => ({ featureFlags: { supportInbox: true } }),
+  useWorkspaceSettings: () => ({
+    featureFlags: { supportInbox: true },
+    portalConfig: {
+      support: { enabled: true },
+      sectionDomains: {
+        support: { hostname: 'support.acme.com', verifiedAt: '2026-11-01T00:00:00.000Z' },
+      },
+    },
+  }),
+  useBaseUrl: () => 'https://acme.com',
+  // A viewer holding every permission, routing.manage included.
+  useHasPermission: () => true,
 }))
-vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
-  updateConversationRoutingFn: (...args: unknown[]) => updateRouting(...args),
+const canOpen = vi.hoisted(() => ({ github: true }))
+vi.mock('@/lib/client/hooks/use-permission', () => ({
+  useCanOpenSettingsPage: (path: string) =>
+    path === '/admin/settings/channels/github' ? canOpen.github : true,
 }))
 vi.mock('@/lib/server/functions/channel-accounts', () => ({ listRecentEmailLogFn: vi.fn() }))
 vi.mock('@/integrations/github/server/functions', () => ({ getGitHubChannelStatusFn: vi.fn() }))
@@ -53,7 +69,6 @@ function seed(github: Record<string, unknown>) {
     fromAddress: 'a@b.c',
   } as never)
   client.setQueryData(githubChannelStatusQuery().queryKey, github as never)
-  client.setQueryData(channelSettingsQueries.routing().queryKey, { enabled: false } as never)
 }
 
 function renderPage() {
@@ -67,11 +82,12 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  updateRouting.mockReset()
-  updateRouting.mockResolvedValue({})
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  canOpen.github = true
+})
 
 const WORKING_GITHUB = {
   connected: true,
@@ -83,6 +99,16 @@ const WORKING_GITHUB = {
 }
 
 describe('ChannelsHubPage', () => {
+  it("shows the portal Support section's custom domain read-only", () => {
+    seed(WORKING_GITHUB)
+    renderPage()
+    expect(screen.getByText('Custom domain')).toBeTruthy()
+    expect(screen.getByText('support.acme.com')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Custom domains' }).getAttribute('href')).toBe(
+      '/admin/settings/portal?tab=custom-domains'
+    )
+  })
+
   it('has no breadcrumb of its own, as a page of the Support module', () => {
     seed(WORKING_GITHUB)
     renderPage()
@@ -108,24 +134,25 @@ describe('ChannelsHubPage', () => {
     expect(screen.getByText('acme/inbox')).toBeTruthy()
   })
 
+  it('leaves out a channel row whose page the viewer cannot open', () => {
+    // The GitHub page needs channel_account.manage.
+    canOpen.github = false
+    seed(WORKING_GITHUB)
+    renderPage()
+    expect(screen.getByText('Email').closest('a')).toBeTruthy()
+    expect(screen.queryByText('GitHub')).toBeNull()
+  })
+
   it('badges a channel only when it needs attention', () => {
     seed({ ...WORKING_GITHUB, lastError: 'Bad credentials' })
     renderPage()
     expect(screen.getByText('Needs attention')).toBeTruthy()
   })
 
-  it('saves the routing switch as an autosave mutation', async () => {
+  it('has no routing switch: it lives on the Workflows page', () => {
     seed(WORKING_GITHUB)
     renderPage()
-    const toggle = screen.getByRole('switch', { name: 'Auto-assign new conversations' })
-    expect(toggle.getAttribute('aria-checked')).toBe('false')
-    fireEvent.click(toggle)
-    await waitFor(() =>
-      expect(updateRouting).toHaveBeenCalledWith({
-        data: { enabled: true, strategy: 'auto_assign_active' },
-      })
-    )
-    const mutation = client.getMutationCache().getAll()[0]
-    expect(mutation.meta).toEqual({ autosave: true })
+    expect(screen.queryByRole('switch', { name: 'Auto-assign new conversations' })).toBeNull()
+    expect(screen.queryByText('Conversation routing')).toBeNull()
   })
 })

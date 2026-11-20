@@ -40,6 +40,8 @@ vi.mock('@tanstack/react-start', () => ({
 
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
+  assertTicketVisible: vi.fn(),
+  assertConversationVisible: vi.fn(),
   setConversationAttribute: vi.fn(),
   log: {
     trace: vi.fn(),
@@ -63,6 +65,9 @@ vi.mock('@/lib/server/functions/auth-helpers', async () => {
   const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
   return {
     requireAuth: hoisted.requireAuth,
+    policyActorFromAuth: async (auth: { principal: { id: string } }) => ({
+      principalId: auth.principal.id,
+    }),
     assertPermission: (
       auth: { permissions?: PermissionKey[]; principal: { role: Role } },
       permission: PermissionKey
@@ -76,6 +81,17 @@ vi.mock('@/lib/server/functions/auth-helpers', async () => {
     },
   }
 })
+
+// The per-ticket visibility check (real-DB coverage lives in
+// ticket-visibility-reads.db.test.ts); here it only has to run first.
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  assertTicketVisible: hoisted.assertTicketVisible,
+}))
+
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
+}))
 
 const mockCreateConversationAttribute = vi.fn()
 const mockUpdateConversationAttribute = vi.fn()
@@ -141,6 +157,10 @@ describe('setConversationAttributeValueFn — conversation target', () => {
   it('writes through with a bare requireAuth + conversation.set_attributes', async () => {
     await call({ conversationId, key: 'plan', value: 'pro' })
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({ principalId: AUTH.principal.id })
+    )
     expect(hoisted.setConversationAttribute).toHaveBeenCalledWith(
       { conversationId },
       'plan',
@@ -167,6 +187,10 @@ describe('setConversationAttributeValueFn — ticket target', () => {
   it('writes through with a bare requireAuth + ticket.set_status', async () => {
     await call({ ticketId, key: 'plan', value: 'enterprise' })
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(hoisted.assertTicketVisible).toHaveBeenCalledWith(
+      ticketId,
+      expect.objectContaining({ principalId: AUTH.principal.id })
+    )
     expect(hoisted.setConversationAttribute).toHaveBeenCalledWith(
       { ticketId },
       'plan',
@@ -185,6 +209,17 @@ describe('setConversationAttributeValueFn — ticket target', () => {
     await expect(call({ ticketId, key: 'plan', value: 'enterprise' })).rejects.toThrow(
       /ticket\.set_status/
     )
+    expect(hoisted.setConversationAttribute).not.toHaveBeenCalled()
+  })
+
+  it("refuses a ticket outside the caller's view before writing", async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    hoisted.assertTicketVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
+    await expect(call({ ticketId, key: 'plan', value: 'enterprise' })).rejects.toMatchObject({
+      code: 'TICKET_NOT_FOUND',
+    })
     expect(hoisted.setConversationAttribute).not.toHaveBeenCalled()
   })
 

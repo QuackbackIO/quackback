@@ -115,6 +115,8 @@ export const PostModalContent = memo(function PostModalContent({
   })
 
   const post = postQuery.data as PostDetails
+  // A read-only board takes no comments, team notes included.
+  const boardReadOnly = !!(post as { boardReadOnly?: boolean }).boardReadOnly
 
   // "Show more comments" — appends the next keyset page into the same
   // ['inbox','detail',postId] cache the admin comment mutations patch.
@@ -437,7 +439,7 @@ export const PostModalContent = memo(function PostModalContent({
               <RichTextEditor
                 value={contentJson || ''}
                 onDocumentChange={handleContentChange}
-                placeholder="Add more details... Type / for commands"
+                placeholder="Add more details… Type / for commands"
                 minHeight="200px"
                 disabled={updatePost.isPending}
                 borderless
@@ -520,6 +522,7 @@ export const PostModalContent = memo(function PostModalContent({
                     onUnpinComment={() => unpinComment.mutate()}
                     isPinPending={pinComment.isPending || unpinComment.isPending}
                     adminUser={{ name: currentUser.name, email: currentUser.email }}
+                    boardReadOnly={boardReadOnly}
                     statuses={statuses}
                     currentStatusId={post.statusId}
                     isTeamMember
@@ -597,7 +600,7 @@ export const PostModalContent = memo(function PostModalContent({
       {/* Footer */}
       <ModalFooter
         onCancel={onClose}
-        submitLabel={updatePost.isPending ? 'Saving...' : 'Save changes'}
+        submitLabel={updatePost.isPending ? 'Saving…' : 'Save changes'}
         isPending={updatePost.isPending}
         submitType="button"
         onSubmit={handleSubmit}

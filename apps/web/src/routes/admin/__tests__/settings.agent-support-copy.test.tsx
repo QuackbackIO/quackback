@@ -38,6 +38,7 @@ vi.mock('@/lib/server/functions/feature-flags', () => ({
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useHasPermission: () => hoisted.canManage,
+  useCloudEnabled: () => false,
   useWorkspaceSettings: () => ({
     featureFlags: hoisted.flags,
     publicWidgetConfig: { messenger: { assistant: { enabled: true, respond: true } } },

@@ -857,6 +857,17 @@ export const fetchDiscoveryScopesFn = createServerFn({ method: 'POST' })
  * ordering problem. Append here; do not insert above.
  */
 /**
+ * Whether single sign-on works right now (`isSsoLive`): the plan includes it,
+ * or plan limits keep a provider set up before a drop signing in until the
+ * grace ends. The plan's entitlement alone says neither.
+ */
+export const getSsoLiveFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+  const { isSsoLive } = await import('@/lib/server/auth/registered-providers')
+  return isSsoLive()
+})
+
+/**
  * How many identities sign in through this provider. `deleteIdentityProviderFn`
  * refuses while any exist (removal would orphan them), so the Remove control
  * states the count up front instead of surfacing it as a failed delete.

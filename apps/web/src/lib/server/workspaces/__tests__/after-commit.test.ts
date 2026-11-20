@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   __resetAfterCommitForTests,
+  afterCommit,
   noteDurableWork,
   onDurableWorkCommitted,
   runInAfterCommitFrame,
@@ -145,5 +146,62 @@ describe('after-commit signaling', () => {
     })
 
     expect(seen).toEqual([{ workspaceKey: 'ws_a', jobIds: ['job_1', 'job_2'] }])
+  })
+
+  describe('afterCommit', () => {
+    it('runs at once outside a transaction', async () => {
+      const ran: string[] = []
+      await afterCommit(() => {
+        ran.push('now')
+      })
+      expect(ran).toEqual(['now'])
+    })
+
+    it('waits for the outer commit, even from a nested frame', async () => {
+      const ran: string[] = []
+      await runInAfterCommitFrame(async () => {
+        await runInAfterCommitFrame(async () => {
+          await afterCommit(() => {
+            ran.push('inner')
+          })
+        })
+        expect(ran).toEqual([])
+      })
+      expect(ran).toEqual(['inner'])
+    })
+
+    it('drops the callback when the transaction rolls back', async () => {
+      const ran: string[] = []
+      await expect(
+        runInAfterCommitFrame(async () => {
+          await afterCommit(() => {
+            ran.push('x')
+          })
+          throw new Error('rollback')
+        })
+      ).rejects.toThrow('rollback')
+      await runInAfterCommitFrame(async () => {
+        await expect(
+          runInAfterCommitFrame(async () => {
+            await afterCommit(() => {
+              ran.push('nested')
+            })
+            throw new Error('savepoint')
+          })
+        ).rejects.toThrow('savepoint')
+      })
+      expect(ran).toEqual([])
+    })
+
+    it('a failing callback does not fail the commit', async () => {
+      await expect(
+        runInAfterCommitFrame(async () => {
+          await afterCommit(() => {
+            throw new Error('boom')
+          })
+          return 'ok'
+        })
+      ).resolves.toBe('ok')
+    })
   })
 })

@@ -10,7 +10,9 @@
  *
  * The rule: for every key whose chokepoint is not prefixed "not wired:", every
  * source file the string names must exist and must call
- * `requireEntitlement('<that key>')`. Keys marked "not wired:" are the honest
+ * `requireEntitlement('<that key>')`, or `isFeatureLive('<that key>')` where
+ * the gate keeps a feature running through the plan limits grace. Keys marked
+ * "not wired:" are the honest
  * opposite — a verified seam with no gate yet — and are asserted to hold no
  * gate, so the marker cannot outlive the wiring either.
  */
@@ -34,6 +36,11 @@ function source(relative: string): string {
   return readFileSync(path.join(SRC, relative), 'utf8')
 }
 
+function holdsGate(relative: string, key: EntitlementKey): boolean {
+  const text = source(relative)
+  return text.includes(`requireEntitlement('${key}')`) || text.includes(`isFeatureLive('${key}')`)
+}
+
 const wired = ENTITLEMENT_KEYS.filter((key) => !ENTITLEMENTS[key].chokepoint.startsWith(NOT_WIRED))
 const unwired = ENTITLEMENT_KEYS.filter((key) => ENTITLEMENTS[key].chokepoint.startsWith(NOT_WIRED))
 
@@ -49,7 +56,7 @@ describe('a wired chokepoint names a file that holds its gate', () => {
         file,
         exists: true,
       })
-      expect({ key, file, gated: source(file).includes(`requireEntitlement('${key}')`) }).toEqual({
+      expect({ key, file, gated: holdsGate(file, key) }).toEqual({
         key,
         file,
         gated: true,
@@ -61,7 +68,7 @@ describe('a wired chokepoint names a file that holds its gate', () => {
 describe('an unwired chokepoint says so', () => {
   it.each(unwired)('%s holds no gate, so the marker is accurate', (key) => {
     for (const file of filesNamedBy(key)) {
-      expect({ key, file, gated: source(file).includes(`requireEntitlement('${key}')`) }).toEqual({
+      expect({ key, file, gated: holdsGate(file, key) }).toEqual({
         key,
         file,
         gated: false,

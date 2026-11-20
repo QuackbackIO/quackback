@@ -43,8 +43,8 @@ vi.mock('@/lib/server/domains/settings/settings.changelog', () => ({
     emailsDisabled: false,
   }),
 }))
-vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => ({
-  resolveSendingAddress: vi.fn().mockResolvedValue(null),
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
+  resolveSender: vi.fn().mockResolvedValue(null),
 }))
 
 import { getChangelogSubscriberTargets } from '../targets'

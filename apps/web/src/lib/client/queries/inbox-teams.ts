@@ -1,6 +1,8 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import type { TeamId } from '@quackback/ids'
 import { listTeamsFn } from '@/lib/server/functions/teams'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export type InboxTeam = {
   id: TeamId
@@ -25,4 +27,12 @@ export function inboxTeamsQueryOptions() {
     },
     staleTime: 60_000,
   })
+}
+
+/** The team roster, read only by a viewer holding member.view (what its server
+ *  function requires): for anyone else there are no teams, so the team rows
+ *  and pickers stay empty rather than asking to be refused. */
+export function useInboxTeams(): { data: InboxTeam[] | undefined } {
+  const canView = usePermission(PERMISSIONS.MEMBER_VIEW)
+  return useQuery({ ...inboxTeamsQueryOptions(), enabled: canView })
 }

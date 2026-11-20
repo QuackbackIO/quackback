@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useIntl } from 'react-intl'
 import { portalDetailQueries, type PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
+import { resolveSectionCommenting } from '@/components/public/comment-permission'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PostCommentId, PostId } from '@quackback/ids'
@@ -99,6 +100,8 @@ interface CommentsSectionProps {
   onImageUpload?: (file: File) => Promise<string>
   /** Team members with post.approve can approve/reject pending comments inline. */
   canModerate?: boolean
+  /** The post's board is read-only (the admin view knows it from the board limits). */
+  boardReadOnly?: boolean
 }
 
 export function CommentsSection({
@@ -125,6 +128,7 @@ export function CommentsSection({
   remainingCommentCount,
   onImageUpload,
   canModerate = false,
+  boardReadOnly,
 }: CommentsSectionProps) {
   const intl = useIntl()
   const commentCount = useMemo(() => countAllComments(comments), [comments])
@@ -136,15 +140,15 @@ export function CommentsSection({
     enabled: !adminUser,
   })
 
-  // Determine commenting permission: disabled overrides all, admin always allowed, portal uses server data
-  let allowCommenting: boolean | undefined
-  if (disableCommenting) {
-    allowCommenting = false
-  } else if (adminUser) {
-    allowCommenting = true
-  } else {
-    allowCommenting = data?.canComment
-  }
+  // A read-only board closes commenting for everyone: the server says so in the
+  // portal, and the admin view is told by its caller.
+  const readOnly = boardReadOnly ?? data?.boardReadOnly ?? false
+  const allowCommenting = resolveSectionCommenting({
+    disableCommenting,
+    isAdminView: !!adminUser,
+    serverCanComment: data?.canComment,
+    boardReadOnly: readOnly,
+  })
 
   // Use server-detected team membership when not in explicit admin mode
   const effectiveIsTeamMember = isTeamMember ?? data?.isTeamMember ?? false
@@ -175,7 +179,15 @@ export function CommentsSection({
         allowCommenting={allowCommenting}
         replyPolicy={replyPolicy}
         user={adminUser ?? data?.user}
-        lockedMessage={lockedMessage}
+        lockedMessage={
+          lockedMessage ??
+          (readOnly
+            ? intl.formatMessage({
+                id: 'portal.feedback.readOnly',
+                defaultMessage: "This board isn't taking new feedback right now.",
+              })
+            : undefined)
+        }
         pinnedCommentId={pinnedCommentId}
         canPinComments={canPinComments || effectiveIsTeamMember}
         onPinComment={onPinComment}

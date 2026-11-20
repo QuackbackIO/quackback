@@ -14,7 +14,12 @@ import {
   createRequestBodySchema,
   asSchema,
 } from '../openapi'
-import { UnauthorizedErrorSchema, NotFoundErrorSchema, ValidationErrorSchema } from './common'
+import {
+  UnauthorizedErrorSchema,
+  NotFoundErrorSchema,
+  ValidationErrorSchema,
+  AssignValidationErrorSchema,
+} from './common'
 import { TICKET_TYPES, TICKET_PRIORITIES, TicketSchema, TicketMessageSchema } from './tickets'
 
 // Attachment ref accepted on a write: a stored file by id (upload it first
@@ -155,8 +160,8 @@ registerPath('/tickets', {
         },
       },
       400: {
-        description: 'Validation error',
-        content: { 'application/json': { schema: ValidationErrorSchema } },
+        description: 'Validation error, or the assignee is not a teammate',
+        content: { 'application/json': { schema: AssignValidationErrorSchema } },
       },
       401: {
         description: 'Unauthorized',
@@ -244,7 +249,8 @@ registerPath('/tickets/{ticketId}/assign', {
   post: {
     tags: ['Tickets'],
     summary: 'Assign a ticket',
-    description: 'Assign a ticket to a teammate and/or a team. Pass null to clear a side.',
+    description:
+      'Assign a ticket to a teammate and/or a team. Pass null to clear a side. An assignee who is not a teammate is refused with 400 INVALID_ASSIGNEE.',
     parameters: [ticketIdParam],
     requestBody: {
       required: true,
@@ -258,6 +264,10 @@ registerPath('/tickets/{ticketId}/assign', {
         },
       },
       ...writeErrorResponses,
+      400: {
+        description: 'Validation error, or the assignee is not a teammate',
+        content: { 'application/json': { schema: AssignValidationErrorSchema } },
+      },
     },
   },
 })

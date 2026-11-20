@@ -14,7 +14,7 @@ import Link from '@tiptap/extension-link'
 import { ResizableImage } from 'tiptap-extension-resizable-image'
 import 'tiptap-extension-resizable-image/styles.css'
 import './rich-text-editor.css'
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { CodeBlockHighlight, lowlight } from './code-block-highlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Table } from '@tiptap/extension-table'
@@ -22,7 +22,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { MentionExtension } from './mention-extension'
+import { MentionExtension, teamMentionExtensionFor, type MentionItemRef } from './mention-extension'
 import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-popup'
 import { applySuggestionListKey } from './suggestion-list-keys'
 import { HighlightQuery, emojiSuggestionLabel } from './highlight-query'
@@ -32,25 +32,6 @@ import { Markdown } from '@tiptap/markdown'
 import { Extension, getHTMLFromFragment } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
-import { createLowlight } from 'lowlight'
-import langBash from 'highlight.js/lib/languages/bash'
-import langC from 'highlight.js/lib/languages/c'
-import langCss from 'highlight.js/lib/languages/css'
-import langDiff from 'highlight.js/lib/languages/diff'
-import langGo from 'highlight.js/lib/languages/go'
-import langJava from 'highlight.js/lib/languages/java'
-import langJavascript from 'highlight.js/lib/languages/javascript'
-import langJson from 'highlight.js/lib/languages/json'
-import langPhp from 'highlight.js/lib/languages/php'
-import langPlaintext from 'highlight.js/lib/languages/plaintext'
-import langPython from 'highlight.js/lib/languages/python'
-import langRuby from 'highlight.js/lib/languages/ruby'
-import langRust from 'highlight.js/lib/languages/rust'
-import langShell from 'highlight.js/lib/languages/shell'
-import langSql from 'highlight.js/lib/languages/sql'
-import langTypescript from 'highlight.js/lib/languages/typescript'
-import langXml from 'highlight.js/lib/languages/xml'
-import langYaml from 'highlight.js/lib/languages/yaml'
 import {
   useEffect,
   useCallback,
@@ -130,43 +111,6 @@ import {
 } from './context-menu'
 import { ScrollArea } from './scroll-area'
 
-// Curated grammar set instead of lowlight's `common` (~37 languages): the
-// bundle cost of every registered grammar is paid by all editor surfaces,
-// including the lazy-loaded visitor composer, so registration is limited to
-// languages that actually appear in support and product content. An
-// unregistered language renders as plain text inside the code block.
-const lowlight = createLowlight({
-  bash: langBash,
-  c: langC,
-  css: langCss,
-  diff: langDiff,
-  go: langGo,
-  java: langJava,
-  javascript: langJavascript,
-  json: langJson,
-  php: langPhp,
-  plaintext: langPlaintext,
-  python: langPython,
-  ruby: langRuby,
-  rust: langRust,
-  shell: langShell,
-  sql: langSql,
-  typescript: langTypescript,
-  xml: langXml,
-  yaml: langYaml,
-})
-// Fence aliases people actually type (```js, ```html, ```sh …) — without
-// these an aliased block silently falls back to plain text.
-lowlight.registerAlias({
-  bash: ['sh', 'zsh'],
-  javascript: ['js', 'jsx', 'node'],
-  python: ['py'],
-  ruby: ['rb'],
-  typescript: ['ts', 'tsx'],
-  xml: ['html', 'svg'],
-  yaml: ['yml'],
-})
-
 // ============================================================================
 // Extension builder (exported for testing)
 // ============================================================================
@@ -186,9 +130,11 @@ export function buildExtensions(
     onVideoUpload?: (file: File) => Promise<string>
     /** When set, Enter submits (chat-send) instead of splitting the block. */
     onSubmit?: () => void
+    /** Replaces the default `@` extension (see `RichTextEditorProps.mentionItem`). */
+    mentionExtension?: typeof MentionExtension
   }
 ) {
-  const { placeholder, onImageUpload, onVideoUpload, onSubmit } = options
+  const { placeholder, onImageUpload, onVideoUpload, onSubmit, mentionExtension } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -246,7 +192,7 @@ export function buildExtensions(
     UploadedVideo,
     ...(features.codeBlocks
       ? [
-          CodeBlockLowlight.configure({
+          CodeBlockHighlight.configure({
             lowlight,
             HTMLAttributes: {
               class: 'not-prose rounded-lg bg-muted p-4 overflow-x-auto',
@@ -317,7 +263,7 @@ export function buildExtensions(
     // every existing consumer keeps the `@` menu while visitor-facing composers can
     // drop it. Read-only surfaces render mention nodes via generateContentHTML,
     // which doesn't go through buildExtensions.
-    ...(features.mentions !== false ? [MentionExtension] : []),
+    ...(features.mentions !== false ? [mentionExtension ?? MentionExtension] : []),
     Markdown,
   ]
 }
@@ -1402,6 +1348,10 @@ interface RichTextEditorProps {
   /** Publishes the imperative focus seam. Mutually exclusive editors may share
    * one ref object: whichever instance is mounted owns it. */
   editorRef?: React.RefObject<RichTextEditorHandle | null>
+  /** The inbox item a note is written on. Mentions then suggest teammates
+   * only, and a teammate who cannot see the item shows muted with "No access"
+   * and cannot be picked. Changing it rebuilds the editor. */
+  mentionItem?: MentionItemRef
 }
 
 // ============================================================================
@@ -1424,14 +1374,34 @@ function RichTextEditorBase({
   onVideoUpload,
   onSubmit,
   editorRef,
+  mentionItem,
 }: RichTextEditorProps) {
+  // One extension per item, kept while the item is open, so the extensions
+  // memo below stays stable across renders. A new item remounts the editor
+  // (the `RichTextEditor` wrapper keys it on the item).
+  const mentionKind = mentionItem?.kind
+  const mentionId = mentionItem?.id
+  const mentionExtension = useMemo(
+    () =>
+      mentionKind && mentionId
+        ? teamMentionExtensionFor({ kind: mentionKind, id: mentionId })
+        : undefined,
+    [mentionKind, mentionId]
+  )
   // Memoize extensions keyed on individual feature flags.
   // TipTap v3's useEditor calls editor.setOptions() whenever the extensions
   // array reference changes (uses reference equality via compareOptions).
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload, onVideoUpload, onSubmit }),
+    () =>
+      buildExtensions(features, {
+        placeholder,
+        onImageUpload,
+        onVideoUpload,
+        onSubmit,
+        mentionExtension,
+      }),
 
     [
       features.headings,
@@ -1452,6 +1422,7 @@ function RichTextEditorBase({
       onVideoUpload,
       onSubmit,
       placeholder,
+      mentionExtension,
     ]
   )
 
@@ -1908,7 +1879,7 @@ function sameFeatures(prev: EditorFeatures = {}, next: EditorFeatures = {}): boo
 // Skip re-render when individual feature flags and all other props are unchanged.
 // Compares features by primitive values rather than object reference so callers
 // can safely pass inline objects without triggering unnecessary editor rebuilds.
-export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
+const MemoRichTextEditor = memo(RichTextEditorBase, (prev, next) => {
   if (
     prev.value !== next.value ||
     prev.onDocumentChange !== next.onDocumentChange ||
@@ -1927,6 +1898,19 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     return false
   return sameFeatures(prev.features, next.features)
 })
+
+/**
+ * The editor, remounted when its mention item changes. TipTap does not
+ * re-register an extension's plugins when only the extension list changes, so
+ * a host that moves one editor to another item without remounting it would
+ * keep the old item's typeahead. The new editor seeds from the current
+ * `value`, so the draft carries over. Without a mention item it is never
+ * re-keyed.
+ */
+export function RichTextEditor(props: RichTextEditorProps) {
+  const item = props.mentionItem
+  return <MemoRichTextEditor key={item ? `${item.kind}:${item.id}` : undefined} {...props} />
+}
 
 // ============================================================================
 // Uploaded media handling

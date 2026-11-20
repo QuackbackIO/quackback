@@ -311,7 +311,7 @@ export function NewPersonDialog({
               {create.isPending || isChecking
                 ? intl.formatMessage({
                     id: 'admin.people.new.creating',
-                    defaultMessage: 'Creating...',
+                    defaultMessage: 'Creating…',
                   })
                 : !userMatch && leadMatches.length > 0
                   ? intl.formatMessage({

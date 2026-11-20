@@ -1,4 +1,5 @@
 import type { BoardId } from '@quackback/ids'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -25,7 +26,7 @@ import { BoardCustomFields } from '@/components/public/feedback/board-custom-fie
 import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { BoardSettings } from '@/lib/shared/db-types'
-import { signOut } from '@/lib/client/auth-client'
+import { SIGN_OUT_FAILED, signOutChecked } from '@/lib/client/sign-out-checked'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/feedback-editor-features'
@@ -52,7 +53,7 @@ export interface FeedbackHeaderProps {
    * workspace anonymous switch). The submit CTA follows the selected board's
    * `canSubmit` instead of the workspace-wide flag.
    */
-  boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
+  boardPermissions?: Record<string, BoardPermission>
   onPostCreated?: (postId: string, boardSlug: string) => void
   /**
    * When true, posts go to this page's board and the form does not offer a
@@ -67,6 +68,11 @@ export interface FeedbackHeaderProps {
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
+// The server's refusal for a read-only board, matched by its message. Kept
+// local so this file shares no module with the lazy chunks.
+const isReadOnlyRefusal = (err: unknown): boolean =>
+  err instanceof Error && err.message === "This board isn't taking new feedback right now."
+
 const DETAILS_MAX_LENGTH = 10_000
 
 export function FeedbackHeaderAnimated({
@@ -150,6 +156,16 @@ export function FeedbackHeaderAnimated({
     titleInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     titleInputRef.current?.focus({ preventScroll: true })
   }, [draft, title])
+
+  // A click that lands before hydration focuses the title field but runs no
+  // handler, and a later click on an already focused field fires no focus
+  // event. Open the composer once React takes over if the field already has
+  // focus, so that early click is not lost.
+  useEffect(() => {
+    if (titleInputRef.current && document.activeElement === titleInputRef.current) {
+      setExpanded(true)
+    }
+  }, [])
 
   // Focus title input when form expands
   useEffect(() => {
@@ -277,14 +293,19 @@ export function FeedbackHeaderAnimated({
           },
         }
       )
-    } catch {
+    } catch (err) {
       // The server logs why it refused the post; its message is not written
-      // for the visitor.
+      // for the visitor, except the neutral line for a board that takes none.
       setError(
-        intl.formatMessage({
-          id: 'portal.feedback.header.errorSubmit',
-          defaultMessage: 'Could not submit your feedback. Please try again.',
-        })
+        isReadOnlyRefusal(err)
+          ? intl.formatMessage({
+              id: 'portal.feedback.readOnly',
+              defaultMessage: "This board isn't taking new feedback right now.",
+            })
+          : intl.formatMessage({
+              id: 'portal.feedback.header.errorSubmit',
+              defaultMessage: 'Could not submit your feedback. Please try again.',
+            })
       )
     }
   }
@@ -492,7 +513,10 @@ export function FeedbackHeaderAnimated({
                     type="button"
                     className="text-primary hover:underline"
                     onClick={async () => {
-                      await signOut()
+                      if (!(await signOutChecked())) {
+                        toast.error(intl.formatMessage(SIGN_OUT_FAILED))
+                        return
+                      }
                       removeViewerScopedPortalQueries(queryClient)
                       router.invalidate()
                     }}

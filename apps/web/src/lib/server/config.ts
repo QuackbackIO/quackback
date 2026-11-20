@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { baseUrlOverride } from '@/lib/server/base-url-override'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 
 const log = logger.child({ component: 'config' })
@@ -589,7 +590,7 @@ export const config = {
    * `BASE_URL` exactly as before.
    */
   get baseUrl() {
-    return getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
+    return baseUrlOverride() ?? configuredBaseUrl()
   },
   get port() {
     return loadConfig().port
@@ -903,6 +904,16 @@ export const config = {
 export function validateRuntimeConfig(): void {
   if (isBuildTime()) return
   loadConfig()
+}
+
+/**
+ * The workspace's own configured origin, ignoring a per-request override (a
+ * paused custom domain). For anything built once and cached past the request
+ * that built it, such as the auth instance, so an override never outlives the
+ * request that set it.
+ */
+export function configuredBaseUrl(): string {
+  return getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
 }
 
 /**

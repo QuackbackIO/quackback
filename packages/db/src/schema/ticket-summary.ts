@@ -25,7 +25,8 @@ const vector = customType<{ data: number[] }>({
  * team-ceiling source — see `tickets-retrieval.ts`), never surfaced to a
  * customer. `requester_principal_id` is denormalized from the parent ticket
  * for provenance / FK integrity, not as a scoping predicate — retrieval spans
- * every ticket within the recency window regardless of requester.
+ * every requester within the recency window, bounded only by the asking
+ * teammate's ticket scope (joined back to `tickets`).
  */
 export const ticketSummaries = pgTable(
   'ticket_summaries',

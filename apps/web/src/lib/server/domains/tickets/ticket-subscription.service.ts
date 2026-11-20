@@ -204,7 +204,7 @@ export async function getTicketNotifiableWatchers(
     inArray(principal.role, ['admin', 'member'])
   )
   const rows = await db
-    .select({ principalId: ticketSubscriptions.principalId })
+    .select({ id: principal.id, type: principal.type, role: principal.role })
     .from(ticketSubscriptions)
     .innerJoin(principal, eq(ticketSubscriptions.principalId, principal.id))
     .where(
@@ -216,10 +216,7 @@ export async function getTicketNotifiableWatchers(
           : isTeamWatcher
       )
     )
-  return withoutTeammatesWhoCannotSee(
-    ticketId,
-    rows.map((r) => r.principalId)
-  )
+  return withoutTeammatesWhoCannotSee(ticketId, rows, { requesterPrincipalId })
 }
 
 /**
@@ -230,7 +227,7 @@ export async function getTicketNotifiableWatchers(
  */
 export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promise<PrincipalId[]> {
   const rows = await db
-    .select({ principalId: ticketSubscriptions.principalId })
+    .select({ id: principal.id, type: principal.type, role: principal.role })
     .from(ticketSubscriptions)
     .innerJoin(principal, eq(ticketSubscriptions.principalId, principal.id))
     .where(
@@ -241,10 +238,7 @@ export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promis
         inArray(principal.role, ['admin', 'member'])
       )
     )
-  return withoutTeammatesWhoCannotSee(
-    ticketId,
-    rows.map((r) => r.principalId)
-  )
+  return withoutTeammatesWhoCannotSee(ticketId, rows)
 }
 
 /** Full watcher list (principal join) for the admin watch control. */

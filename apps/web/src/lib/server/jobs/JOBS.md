@@ -298,7 +298,25 @@ has not loaded the full application config.
 | `JOB_REAP_INTERVAL_MS`     | 15000   | How often expired leases are adjudicated                                                                                                                                                |
 | `JOB_PRUNE_INTERVAL_MS`    | 1 hour  | How often terminal rows past retention are dropped (a per-workspace table scan; keep it slow)                                                                                           |
 | `JOB_RETENTION_MS`         | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key                                                                                                                     |
+| `QUACKBACK_DISABLED_JOBS`  | unset   | Comma list of job names to pause, e.g. `spam-retention,file-retention`. See below                                                                                                       |
 | `QUACKBACK_JOB_WORKER_URL` | unset   | Cloud web only: origin of the worker (`http://worker.railway.internal:3000`). Publisher also requires `QUACKBACK_FLEET_INTERNAL_TOKEN`. Unset, rejected, or token-missing = poll floor. |
+
+### Pausing a job
+
+`QUACKBACK_DISABLED_JOBS=name,name` pauses the named jobs; the names are the
+queue names in §10. A paused schedule writes no row, as a shut `cronEnabled`
+gate does. A paused queue's rows stay `pending` with no attempt spent: no claim
+path takes them (the poll or start-by-id), and they never fail because of the
+pause. Neither its rows nor its schedule's deadline keep a parked workspace
+awake or wake it. Take the name off the list and restart, and the rows run.
+
+Each worker start logs one `job paused` line per paused job, and a warning for
+a name that matches no job (which is ignored), so a forgotten pause shows up in
+the boot log.
+
+**A screen that shows a job's status shows a `pending` row as "Queued", never as
+running.** A paused job's rows are `pending` with no end time; showing them as
+active would hide the pause from the person waiting on the work.
 
 ### Worker job logs
 
@@ -422,8 +440,13 @@ went stale the moment a queue moved.
 | `spam-retention`                | `0 5 * * *`    | 1           | 3        | 60s   |
 | `sending-domain-recheck`        | `20 6 * * *`   | 1           | 3        | 60s   |
 | `sending-domain-watch`          | `7/10 * * * *` | 1           | 1        | 60s   |
+| `domain-ownership-watch`        | `50 6 * * *`   | 1           | 3        | 60s   |
+| `section-domains-watch`         | `55 6 * * *`   | 1           | 3        | 60s   |
 | `ses-tenant-reconcile`          | `41 * * * *`   | 1           | 3        | 60s   |
 | `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |
+| `startup-backfill`              | `15 * * * *`   | 1           | 20       | 60s   |
+| `ticket-frt-reconcile`          | —              | 1           | 20       | 60s   |
+| `deferred-index-build`          | `35 * * * *`   | 1           | 5        | 60s   |
 | `events`                        | —              | 5           | 6        | 60s   |
 | `integration-sync`              | —              | 5           | 6        | 90s   |
 | `integration-sync-sweep`        | `* * * * *`    | 1           | 1        | 60s   |
@@ -522,6 +545,15 @@ heavy queue wants. Jobs over the cap stay `pending`, unclaimed, so no lease
 runs down while they wait. The cap is per process: two worker replicas allow
 twice as many.
 
+**The fleet cap rule.** Every new heavy or fleet-wide job sets `fleetConcurrency`
+(2 to 4) and `retryBackoffMs`, as `analytics` does. Heavy means it walks or
+scans a large table or builds an index; fleet-wide means a schedule that runs in
+every workspace. Without the cap, a fleet upgrade or a database restart starts
+the same work in every workspace at once, which is how the hourly `analytics`
+refresh took the database out of memory (§6). `startup-backfill`,
+`ticket-frt-reconcile` and `deferred-index-build` follow it; a guard test
+(`__tests__/upgrade-jobs-fleet-cap.test.ts`) holds them to it.
+
 ### What the move fixed rather than preserved
 
 - **`workflow-dispatch`'s dedupe never worked.** The comment promised that
@@ -618,7 +650,8 @@ summary's AI call. A database call that cannot be cancelled keeps running in
 the background, and its retry may overlap it, which the reactions tolerate
 because their writes are guarded on the state they read.
 
-`event-reactions` (SLA clocks, pair-ticket reopen, CSAT confirm) runs one job
+`event-reactions` (SLA clocks, pair-ticket reopen, ticket first response,
+CSAT confirm) runs one job
 at a time per worker process, claimed in enqueue order, so in the common case
 its reactions apply in event order. That is all it guarantees. The order is
 not global:
@@ -654,6 +687,10 @@ relying on it:
   the SLA was applied, read from the status changes. A settle judges its clock
   as it stood at the settle's own time and stores that deadline, so a pause
   excluded before the settle ran leaves no trace on it.
+- A customer ticket's first response is recomputed from the message rows of
+  the ticket and its paired conversation (`domains/tickets/ticket-first-response.ts`)
+  on every `message.created` and `message.deleted` of that conversation, so a
+  late, repeated or reordered reaction writes the same value.
 - The pair-ticket reopen leaves the ticket alone when its status moved after
   the message (a close, read from the row, or any move its activity log
   records; a status move and its record are written in one transaction), and
@@ -698,11 +735,6 @@ remove it. The known remaining effects:
   rollback, both would outlive it and, after a later roll-forward, exclude
   spans twice or make a newer cycle look older than its opener; step 5 of the
   runbook below strips them.
-- **A reply through an older API key reads as a person's.** Its row is stored
-  like the person's inbox reply, so the response clocks count it as a human
-  reply although its own event does not (see `sla.messages.ts`). Its own
-  reaction settles an armed next-response cycle at its time, and a later human
-  reply's reaction settles the first response at it.
 - **The history follows the order events were written.** Status changes on the
   older emit path are written to the event log without waiting, so two moves
   in quick succession can be written in the opposite order to the moves

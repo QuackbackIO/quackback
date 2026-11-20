@@ -3,6 +3,7 @@ import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import type { JSONContent } from '@tiptap/core'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
+import { cn } from '@/lib/shared/utils'
 import {
   buildConversationRows,
   computeBlockStates,
@@ -11,14 +12,15 @@ import {
   hasCsatBlockMessage,
   type ConversationRow,
 } from './conversation-rows'
+import { BlockTicketFormLoading } from './block-ticket-form-loading'
 import { AssistantWorkingTrace, AssistantStreamingBubble } from './assistant-turn'
 import {
   BlockButtonsRow,
   BlockCollectField,
   BlockCsatRow,
+  type CsatSubmitOutcome,
   BlockReplyTimeCaption,
 } from './block-affordance'
-import { BlockTicketForm } from './block-ticket-form'
 import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
 import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
@@ -68,7 +70,10 @@ import { refreshVisitorUnreadCounts } from '@/lib/client/conversation/visitor-re
 import { conversationKeys } from '@/components/conversation/query-keys'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
-import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type {
+  ConversationMessageDTO,
+  ConversationStreamEvent,
+} from '@/lib/shared/conversation/types'
 import { CSAT_FACES } from '@/lib/shared/db-types'
 import type { BlockReplyMetadata } from '@/lib/shared/db-types'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
@@ -83,6 +88,20 @@ const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-dig
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
 const EMPTY_MESSAGES: ConversationMessageDTO[] = []
+
+/**
+ * Whether a send was refused because the conversation is closed and the
+ * workspace does not let a reply reopen it. Reads the refusal's code: in the
+ * browser a typed server error is a plain Error carrying `code`
+ * (typed-error-serialization.ts).
+ */
+function isClosedConversationRefusal(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === 'object' &&
+    (error as { code?: unknown }).code === 'CONVERSATION_CLOSED'
+  )
+}
 const NO_HELP_RESULTS: Array<{ slug: string; title: string }> = []
 
 // The full rich-text editor pulls in lowlight's syntax-highlighting grammars
@@ -93,6 +112,14 @@ const NO_HELP_RESULTS: Array<{ slug: string; title: string }> = []
 // composer's layout stable while that chunk loads.
 const LazyRichTextEditor = lazy(() =>
   import('@/components/ui/rich-text-editor').then((m) => ({ default: m.RichTextEditor }))
+)
+
+// The ticket form a workflow's send_ticket_form block posts renders only in a
+// thread that has one, and it brings the ticket field renderer, its form hook
+// and the shared validator. Deferred to its own chunk so none of that is on the
+// widget's or portal's first load; the fallback is the form's own loading row.
+const LazyBlockTicketForm = lazy(() =>
+  import('./block-ticket-form').then((m) => ({ default: m.BlockTicketForm }))
 )
 
 // Cheap plain-text extraction from a TipTap JSON doc — drives the send-gate,
@@ -167,6 +194,11 @@ export interface VisitorConversationThreadProps {
   showHeader?: boolean
   /** Notified when the first send creates the conversation. */
   onConversationStarted?: (id: ConversationId) => void
+  /** Notified with whether a reply can reach this visitor by email: false
+   *  until the thread loads, then the server's verdict. A surface that draws
+   *  its own presence badge (the widget's header, with `showHeader` false)
+   *  words its away copy from it. */
+  onReplyByEmailChange?: (canReplyByEmail: boolean) => void
   /**
    * Focus the composer as soon as it mounts. The surface decides: a "new
    * conversation" landing on a desktop host wants the cursor in the box; a
@@ -181,6 +213,64 @@ export interface VisitorConversationThreadProps {
   /** Text the composer starts with on its first mount; a send clears it as usual. */
   initialDraft?: string
 }
+
+/** How long the "sending too quickly" notice stays when the refusal names no wait. */
+const DEFAULT_SEND_WAIT_SECONDS = 30
+const MAX_SEND_WAIT_SECONDS = 300
+
+/**
+ * The seconds to wait when a send was refused for going too fast, or null for
+ * any other failure. Reads the refusal's code: in the browser a typed server
+ * error is a plain Error carrying `code` and `retryAfter`
+ * (typed-error-serialization.ts).
+ */
+function sendWaitSeconds(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null
+  const { code, retryAfter } = error as { code?: unknown; retryAfter?: unknown }
+  if (code !== 'RATE_LIMITED') return null
+  const seconds =
+    typeof retryAfter === 'number' && retryAfter > 0 ? retryAfter : DEFAULT_SEND_WAIT_SECONDS
+  return Math.min(Math.ceil(seconds), MAX_SEND_WAIT_SECONDS)
+}
+
+/**
+ * The notice a visitor sees after sending too fast. It shows for the wait the
+ * server named, and a send that goes through clears it early.
+ */
+function useSendThrottleNotice() {
+  const [active, setActive] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
+  const clear = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setActive(false)
+  }, [])
+  const noteFailure = useCallback((error: unknown) => {
+    const seconds = sendWaitSeconds(error)
+    if (seconds === null) return
+    if (timer.current) clearTimeout(timer.current)
+    setActive(true)
+    timer.current = setTimeout(() => {
+      timer.current = null
+      setActive(false)
+    }, seconds * 1000)
+  }, [])
+  return useMemo(() => ({ active, clear, noteFailure }), [active, clear, noteFailure])
+}
+
+/** Stream events whose effect a thread refetch's snapshot could undo. */
+const SNAPSHOT_EVENT_KINDS: ReadonlySet<ConversationStreamEvent['kind']> = new Set([
+  'message',
+  'message_edited',
+  'message_deleted',
+  'conversation',
+])
 
 /**
  * The visitor side of a conversation: virtualized thread, live SSE updates,
@@ -207,6 +297,7 @@ export function VisitorConversationThread({
   embedOpenMode = 'newTab',
   showHeader = true,
   onConversationStarted,
+  onReplyByEmailChange,
   autofocusComposer = false,
   compact = false,
   initialDraft,
@@ -242,6 +333,21 @@ export function VisitorConversationThread({
   // Whether an offline reply could actually reach this visitor by email — drives
   // the offline copy so the surface never promises email it can't send.
   const [canEmailReply, setCanEmailReply] = useState(false)
+  // Whether the in-thread ticket form asks for an email: only an anonymous
+  // visitor with none on file. Asks until the thread load says otherwise.
+  const [ticketFormAsksEmail, setTicketFormAsksEmail] = useState(true)
+  useEffect(() => {
+    onReplyByEmailChange?.(canEmailReply)
+  }, [canEmailReply, onReplyByEmailChange])
+  // Whether a reply reopens a closed conversation. False when the workspace
+  // prevents replies to closed conversations, or once a send was refused
+  // because the conversation is closed: the closed notice then says to start
+  // a new conversation instead of "reply to reopen".
+  const [reopensOnReply, setReopensOnReply] = useState(true)
+  // A send was just refused for that reason: the notice is raised (an alert,
+  // in the foreground colour) so the refusal shows even when it was already
+  // on screen. The next send that goes through lowers it.
+  const [closedRefusal, setClosedRefusal] = useState(false)
   // Whether the visitor rated in THIS session — enables the optional comment
   // follow-up. A returning, already-rated visitor goes straight to "thanks".
   const [csatJustRated, setCsatJustRated] = useState(false)
@@ -263,6 +369,7 @@ export function VisitorConversationThread({
     return doc
   })
   const [sending, setSending] = useState(false)
+  const sendThrottle = useSendThrottleNotice()
   // Phase C conversational block layer: the block message currently awaiting
   // its structured-send response — the optimistic tap-disable (contract
   // idempotency: a losing double-tap must never fire a second send). Cleared
@@ -395,6 +502,8 @@ export function VisitorConversationThread({
         setTeamName(res.teamName)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
+        setTicketFormAsksEmail(res.ticketFormAsksEmail)
+        setReopensOnReply(res.reopensOnReply !== false)
         setLinkedTicket(res.linkedTicket ?? null)
         const conv = res.conversation
         if (conv) {
@@ -422,30 +531,45 @@ export function VisitorConversationThread({
     // getAuthHeaders is identity-stable per surface; sessionVersion is the reload key.
   }, [sessionVersion, conversationTarget])
 
-  // Refetch the authoritative thread after a reconnect to catch anything missed.
+  // Counts the live stream events a refetch's snapshot could undo (messages
+  // and the conversation's status), so a refetch can tell whether one landed
+  // while it was in flight. Typing and assistant-progress frames don't count:
+  // they arrive constantly while the assistant writes, and the snapshot
+  // carries nothing of theirs.
+  const streamEventCountRef = useRef(0)
+
+  // Refetch the authoritative thread (messages, status and rating) to catch up
+  // on anything the stream did not deliver: when it opens or reopens, on a
+  // poll, or when a hidden message is shown again. A refetch that a stream
+  // event overtook is thrown away and read again, so it never undoes that
+  // event (bounded, so a busy thread still settles on the stream).
   const refreshMessages = useCallback(async () => {
     if (!conversationId) return
-    try {
-      const page = await rpc.listConversationMessages({
-        data: { conversationId },
-        headers: getAuthHeaders(),
-      })
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const eventsBefore = streamEventCountRef.current
+      let page: Awaited<ReturnType<typeof rpc.listConversationMessages>>
+      try {
+        page = await rpc.listConversationMessages({
+          data: { conversationId },
+          headers: getAuthHeaders(),
+        })
+      } catch {
+        return /* keep the current thread */
+      }
+      if (streamEventCountRef.current !== eventsBefore) continue
       queryClient.setQueryData(
         conversationKeys.visitorThread(conversationId),
-        (prev: VisitorThreadCache | undefined) =>
-          prev
-            ? { ...prev, messages: page.messages, hasMore: page.hasMore }
-            : {
-                messages: page.messages,
-                hasMore: page.hasMore,
-                agentLastReadAt: null,
-                visitorLastReadAt: null,
-                status: null,
-                csatRating: null,
-              }
+        (prev: VisitorThreadCache | undefined) => ({
+          agentLastReadAt: null,
+          visitorLastReadAt: null,
+          ...prev,
+          messages: page.messages,
+          hasMore: page.hasMore,
+          status: page.status ?? prev?.status ?? null,
+          csatRating: page.status ? (page.csatRating ?? null) : (prev?.csatRating ?? null),
+        })
       )
-    } catch {
-      /* keep current messages */
+      return
     }
   }, [conversationId, getAuthHeaders, queryClient])
 
@@ -498,6 +622,7 @@ export function VisitorConversationThread({
       }
     },
     onEvent: (evt) => {
+      if (SNAPSHOT_EVENT_KINDS.has(evt.kind)) streamEventCountRef.current++
       // Cache-shaped updates (message/read/deleted/conversation) route through
       // the pure reducer; typing + presence side effects stay here.
       if (conversationId) {
@@ -528,12 +653,23 @@ export function VisitorConversationThread({
         onAssistantDelta(evt.text)
       }
     },
-    onReconnect: () => void refreshMessages(),
+    onCatchUp: () => void refreshMessages(),
   })
 
   // Ephemeral turn state is component-local (not keyed by resetKey); drop it when
   // switching threads so it can't bleed across conversations.
   useEffect(() => clearAssistantTurn, [conversationId, clearAssistantTurn])
+
+  // A rating is only taken on a closed conversation. When the server refuses
+  // one because the thread was reopened before the live update arrived, show
+  // it as open so the rating prompt goes away instead of erroring.
+  const markReopened = useCallback(() => {
+    if (!conversationId) return
+    queryClient.setQueryData(
+      conversationKeys.visitorThread(conversationId),
+      (prev: VisitorThreadCache | undefined) => (prev ? { ...prev, status: 'open' } : prev)
+    )
+  }, [conversationId, queryClient])
 
   // A star click records the rating immediately (so it's never lost), then the
   // surface offers an optional comment as a follow-up.
@@ -546,6 +682,14 @@ export function VisitorConversationThread({
           conversationKeys.visitorThread(conversationId),
           (prev: VisitorThreadCache | undefined) => (prev ? { ...prev, csatRating: value } : prev)
         )
+      const rollBack = () => {
+        // Roll back so the stars reappear for a retry — unless a later CSAT
+        // submit (e.g. the comment) already superseded this request.
+        if (csatSubmitGenRef.current === gen) {
+          setRating(null)
+          setCsatJustRated(false)
+        }
+      }
       setRating(rating)
       setCsatJustRated(true)
       void rpc
@@ -553,16 +697,16 @@ export function VisitorConversationThread({
           data: { conversationId, rating },
           headers: getAuthHeaders(),
         })
-        .catch(() => {
-          // Roll back so the stars reappear for a retry — unless a later CSAT
-          // submit (e.g. the comment) already superseded this request.
-          if (csatSubmitGenRef.current === gen) {
-            setRating(null)
-            setCsatJustRated(false)
-          }
+        .then((result) => {
+          if (result.ok) return
+          // Refused: the conversation is open again (a reopen raced the
+          // click). Drop the optimistic rating and put the prompt away.
+          rollBack()
+          markReopened()
         })
+        .catch(rollBack)
     },
-    [conversationId, getAuthHeaders, queryClient]
+    [conversationId, getAuthHeaders, queryClient, markReopened]
   )
 
   // Optional follow-up: attach a comment to the rating already on file.
@@ -576,8 +720,12 @@ export function VisitorConversationThread({
         data: { conversationId, rating: csatRating, comment: trimmed || undefined },
         headers: getAuthHeaders(),
       })
+      .then((result) => {
+        // Refused because the conversation is open again: nothing to retry.
+        if (!result.ok) markReopened()
+      })
       .catch(() => setCsatCommentDone(false)) // reopen the box for a retry on failure
-  }, [conversationId, csatRating, csatComment, getAuthHeaders])
+  }, [conversationId, csatRating, csatComment, getAuthHeaders, markReopened])
 
   // Phase C conversational block layer: a structured reply (button tap /
   // collect submit / CSAT rating) rides the SAME send path as an ordinary
@@ -587,25 +735,35 @@ export function VisitorConversationThread({
   // the SSE echo (or refetch) is what actually flips the block's derived
   // state to 'chosen', collapsing the affordance — no local "chosen" flag.
   const sendBlockReply = useCallback(
-    async (blockReply: BlockReplyMetadata, displayText: string) => {
-      if (!conversationId || submittingBlockId) return
+    async (blockReply: BlockReplyMetadata, displayText: string): Promise<CsatSubmitOutcome> => {
+      if (!conversationId || submittingBlockId) return 'failed'
       setSubmittingBlockId(blockReply.inReplyToMessageId)
       try {
         const res = await rpc.sendConversationMessage({
           data: { conversationId, content: displayText, blockReply },
           headers: getAuthHeaders(),
         })
+        if ('ok' in res) {
+          // A rating tapped while the conversation is open: nothing was
+          // stored, so the block stays answerable once it is closed.
+          markReopened()
+          return 'refused'
+        }
         queryClient.setQueryData(
           conversationKeys.visitorThread(conversationId),
           (prev: VisitorThreadCache | undefined) => appendSentVisitorMessage(prev, res)
         )
-      } catch {
+        sendThrottle.clear()
+        return 'recorded'
+      } catch (error) {
         // Leave it tappable again for a retry.
+        sendThrottle.noteFailure(error)
+        return 'failed'
       } finally {
         setSubmittingBlockId(null)
       }
     },
-    [conversationId, submittingBlockId, getAuthHeaders, queryClient]
+    [conversationId, submittingBlockId, getAuthHeaders, queryClient, sendThrottle, markReopened]
   )
 
   const handleButtonTap = useCallback(
@@ -621,12 +779,11 @@ export function VisitorConversationThread({
     [sendBlockReply]
   )
   const handleCsatRate = useCallback(
-    (messageId: string, rating: number) => {
-      void sendBlockReply(
+    (messageId: string, rating: number) =>
+      sendBlockReply(
         { kind: 'csat', inReplyToMessageId: messageId, rating },
         CSAT_FACES[rating - 1]
-      )
-    },
+      ),
     [sendBlockReply]
   )
   // The optional comment (amendment 1: "updates the same record best-effort
@@ -637,14 +794,21 @@ export function VisitorConversationThread({
   // the post-conversation star prompt below uses) — amendment 1's "CSAT
   // writes through recordCsat, latest-wins" is exactly this reuse.
   const handleCsatComment = useCallback(
-    (rating: number, comment: string) => {
-      if (!conversationId) return
-      void rpc.submitCsat({
-        data: { conversationId, rating, comment: comment || undefined },
-        headers: getAuthHeaders(),
-      })
+    async (rating: number, comment: string): Promise<CsatSubmitOutcome> => {
+      if (!conversationId) return 'failed'
+      try {
+        const result = await rpc.submitCsat({
+          data: { conversationId, rating, comment: comment || undefined },
+          headers: getAuthHeaders(),
+        })
+        if (result.ok) return 'recorded'
+        markReopened()
+        return 'refused'
+      } catch {
+        return 'failed'
+      }
     },
-    [conversationId, getAuthHeaders]
+    [conversationId, getAuthHeaders, markReopened]
   )
 
   // A workflow `request_csat` block message already IS the CSAT ask for this
@@ -892,6 +1056,8 @@ export function VisitorConversationThread({
         },
         headers: getAuthHeaders(),
       })
+      // Only a rating can be refused this way, and the composer never sends one.
+      if ('ok' in res) throw new Error('The message was not sent')
       const isNewConversation = !conversationId
       const newId = res.conversation.id as ConversationId
       createdConversationIdRef.current = newId
@@ -909,8 +1075,21 @@ export function VisitorConversationThread({
       // Clear the composer only on success — the resetSignal bump empties the editor.
       clearComposer()
       clearAttachments()
-    } catch {
+      sendThrottle.clear()
+      setClosedRefusal(false)
+    } catch (error) {
       // Leave the composer content intact for a retry.
+      sendThrottle.noteFailure(error)
+      if (conversationId && isClosedConversationRefusal(error)) {
+        // Replies to closed conversations are refused here: show the thread
+        // as closed, with the notice that says to start a new one.
+        setReopensOnReply(false)
+        setClosedRefusal(true)
+        queryClient.setQueryData(
+          conversationKeys.visitorThread(conversationId),
+          (prev: VisitorThreadCache | undefined) => (prev ? { ...prev, status: 'closed' } : prev)
+        )
+      }
     } finally {
       setSending(false)
     }
@@ -930,6 +1109,7 @@ export function VisitorConversationThread({
     conversationStatus,
     blockStates,
     composerLock.disabled,
+    sendThrottle,
   ])
 
   // Enter-to-send routes through the editor's keymap, whose closure is baked in
@@ -1015,10 +1195,13 @@ export function VisitorConversationThread({
           return (
             <div className="flex flex-col items-start">
               {bubble}
-              <BlockTicketForm
-                getAuthHeaders={getAuthHeaders}
-                askDueDate={block.askDueDate === true}
-              />
+              <Suspense fallback={<BlockTicketFormLoading />}>
+                <LazyBlockTicketForm
+                  getAuthHeaders={getAuthHeaders}
+                  askEmail={ticketFormAsksEmail}
+                  askDueDate={block.askDueDate === true}
+                />
+              </Suspense>
             </div>
           )
         }
@@ -1055,6 +1238,7 @@ export function VisitorConversationThread({
                 block={block}
                 state={row.blockState}
                 submitting={submitting}
+                closed={conversationStatus === 'closed'}
                 onRate={(rating) => handleCsatRate(m.id as unknown as string, rating)}
                 onComment={(rating, comment) => handleCsatComment(rating, comment)}
               />
@@ -1207,7 +1391,7 @@ export function VisitorConversationThread({
         </div>
       ) : showHeader ? (
         <div className="flex items-center px-4 py-2 border-b border-border/40 shrink-0">
-          <ConversationPresenceBadge available={available} />
+          <ConversationPresenceBadge available={available} canReplyByEmail={canEmailReply} />
         </div>
       ) : null}
 
@@ -1316,19 +1500,44 @@ export function VisitorConversationThread({
         </div>
       )}
 
-      {/* Composer is always available. A closed thread reopens on the next send,
-          so we keep the composer and only hint at the state. */}
+      {/* Composer is always available. A closed thread reopens on the next send
+          unless the workspace prevents replies to closed conversations (a
+          rating or button tap still goes through), so we keep the composer and
+          only say what a reply will do. */}
       {conversationStatus === 'closed' && (
-        <div className="flex items-center gap-2 px-3 pt-2" role="status">
+        <div
+          className="flex items-center gap-2 px-3 pt-2"
+          role={closedRefusal ? 'alert' : 'status'}
+        >
           <span className="h-px flex-1 bg-border/50" />
-          <span className="text-center text-[11px] text-muted-foreground">
-            <FormattedMessage
-              id="widget.messenger.closedReopen"
-              defaultMessage="This conversation was closed. Reply to reopen it."
-            />
+          <span
+            className={cn(
+              'text-center text-[11px]',
+              closedRefusal ? 'font-medium text-foreground' : 'text-muted-foreground'
+            )}
+          >
+            {reopensOnReply ? (
+              <FormattedMessage
+                id="widget.messenger.closedReopen"
+                defaultMessage="This conversation was closed. Reply to reopen it."
+              />
+            ) : (
+              <FormattedMessage
+                id="widget.messenger.closedStartNew"
+                defaultMessage="This conversation is closed. Start a new one to message us."
+              />
+            )}
           </span>
           <span className="h-px flex-1 bg-border/50" />
         </div>
+      )}
+      {sendThrottle.active && (
+        <p className="px-4 pt-2 text-center text-[11px] text-muted-foreground" role="status">
+          <FormattedMessage
+            id="widget.messenger.sendTooFast"
+            defaultMessage="You're sending messages too quickly. Wait a moment, then try again."
+          />
+        </p>
       )}
       <div className="border-t border-border/40 p-2 shrink-0">
         {/* Composer: a rich editor on top (the / menu inserts code blocks etc.,

@@ -39,8 +39,32 @@ export function localCacheGet<T>(key: string): T | undefined {
   return undefined
 }
 
-export function localCacheSet(key: string, value: unknown, ttlMs: number): void {
+/**
+ * Per key, a stamp that changes each time `forgetCachedKeys` drops the key, so
+ * a copy read before a drop is not kept after it. Keyed like the copies, so a
+ * drop of one key (or in one workspace) leaves reads of the others alone.
+ */
+const dropStamps = new WorkspaceKeyedCache<number>(1_000)
+let lastStamp = 0
+
+/** Pass to {@link localCacheSet} as `readSince`, taken before reading `key`. */
+export function localCacheGeneration(key: string): number {
+  return dropStamps.get(key) ?? 0
+}
+
+/**
+ * Keep `value` for `ttlMs`. With `readSince` (a {@link localCacheGeneration}
+ * taken before the value was read), a value read before a write dropped the
+ * key is not kept: it may be what the write replaced.
+ */
+export function localCacheSet(
+  key: string,
+  value: unknown,
+  ttlMs: number,
+  readSince?: number
+): void {
   if (process.env.NODE_ENV !== 'production') return
+  if (readSince !== undefined && readSince !== localCacheGeneration(key)) return
   localCopies.set(key, { value, expiresAt: Date.now() + ttlMs })
 }
 
@@ -51,5 +75,8 @@ export function localCacheSet(key: string, value: unknown, ttlMs: number): void 
  */
 export function forgetCachedKeys(...keys: string[]): void {
   forgetPerRequest(...keys)
-  for (const key of keys) localCopies.delete(key)
+  for (const key of keys) {
+    localCopies.delete(key)
+    dropStamps.set(key, ++lastStamp)
+  }
 }

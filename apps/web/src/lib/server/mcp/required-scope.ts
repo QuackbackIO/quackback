@@ -94,6 +94,30 @@ export const MCP_ARGUMENT_DISPATCHED_TOOLS = [
   'navigate_workspace',
 ] as const
 
+/**
+ * Every scope an argument-dispatched tool can need, for the tool listing.
+ * Each call needs only one of them (see requiredScopeForOne); the listing
+ * names them all so a client planning its grant from the list can use every
+ * branch.
+ */
+export const ARGUMENT_DISPATCHED_TOOL_SCOPES: Readonly<
+  Record<(typeof MCP_ARGUMENT_DISPATCHED_TOOLS)[number], readonly McpScope[]>
+> = {
+  search: ['read:feedback', 'read:article'],
+  get_details: ['read:feedback', 'read:article'],
+  navigate_workspace: ['read:feedback', 'read:chat', 'read:article', 'read:settings'],
+}
+
+/**
+ * The scopes a tool declares in its listing (`securitySchemes`): its fixed
+ * scope from TOOL_SCOPES, or every scope an argument-dispatched tool can need.
+ */
+export function declaredToolScopes(name: string): readonly McpScope[] {
+  const fixed = TOOL_SCOPES[name]
+  if (fixed) return [fixed]
+  return (ARGUMENT_DISPATCHED_TOOL_SCOPES as Record<string, readonly McpScope[]>)[name] ?? []
+}
+
 function requiredScopeForOne(body: unknown): McpScope | null {
   if (!isRecord(body) || typeof body.method !== 'string') return null
   const params = isRecord(body.params) ? body.params : {}

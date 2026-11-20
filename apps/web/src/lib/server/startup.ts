@@ -198,12 +198,19 @@ export function logStartupBanner(): void {
   if (config.isPooledTenancy && !shouldRunWorkers()) {
     log.info('pooled tenancy on a web replica — startup backfills are left to the worker tier')
   } else {
+    // Backfills over hot tables and background indexes are jobs. Startup only
+    // enqueues them, after the one-time backfills above have committed, and
+    // each job's schedule pass enqueues for a workspace that slept through it.
     Promise.all([
       import('@/lib/server/auth/backfill-custom-oidc-provider'),
+      import('@/lib/server/backfills/upgrade-done'),
       import('@/lib/server/workspaces/fleet'),
     ])
-      .then(([{ runStartupBackfills }, { runFleetPass }]) =>
-        runFleetPass('sweep', () => runStartupBackfills())
+      .then(([{ runStartupBackfills }, { enqueueUpgradeWork }, { runFleetPass }]) =>
+        runFleetPass('sweep', async () => {
+          await runStartupBackfills()
+          await enqueueUpgradeWork()
+        })
       )
       .catch((err) => log.error({ err }, 'failed to run startup backfills'))
   }

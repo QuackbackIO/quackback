@@ -1,6 +1,7 @@
 import { buildNavSections, isNavModule, navSectionsFor } from './settings-nav-sections'
 import { SETTINGS_PAGES } from './settings-pages'
 import { PERMISSIONS, type PermissionKey } from './permissions'
+import { CUSTOM_DOMAINS_HREF, PORTAL_TAB_LABELS } from './portal-settings-tabs'
 import { isProductEnabled, type FeatureFlags, type ProductId } from './types/settings'
 import type { OnboardingOutcome } from './db-types'
 
@@ -38,7 +39,7 @@ const PRODUCTS: ProductDestination[] = [
     href: '/admin/roadmap',
     label: 'Roadmap',
     product: 'feedback',
-    permissions: [PERMISSIONS.POST_VIEW_PRIVATE],
+    permissions: [PERMISSIONS.ROADMAP_MANAGE],
   },
   {
     href: '/admin/changelog',
@@ -78,10 +79,28 @@ const KEYWORDS: Record<string, string[]> = {
   '/admin/settings/widget/install': ['install', 'snippet', 'website', 'embed'],
   '/admin/settings/portal': ['branding', 'logo', 'color', 'theme', 'header'],
   '/admin/settings/general': ['modules', 'workspace', 'name'],
+  '/admin/settings/email': ['sender', 'from address', 'sending domain', 'dkim', 'reply address'],
+  [CUSTOM_DOMAINS_HREF]: ['custom domain', 'hostname', 'cname', 'dns'],
 }
 
-function destination(href: string, label: string): AskDestination {
-  const id = href.replace(/^\/admin\/?/, '').replaceAll('/', '_') || 'home'
+/** Ids for destinations whose href is not a plain path (a tab of a page). */
+const DESTINATION_IDS: Record<string, string> = {
+  [CUSTOM_DOMAINS_HREF]: 'settings_portal_custom-domains',
+}
+
+/**
+ * A name of its own in the palette, where a page's nav label would repeat
+ * another's. A channel is called by its bare name beside its sibling channels,
+ * but in a flat list "Email" is also the workspace's sending settings.
+ */
+const PALETTE_LABELS: Record<string, string> = {
+  '/admin/settings/channels/email': 'Support email',
+}
+
+function destination(href: string, navLabel: string): AskDestination {
+  const id =
+    DESTINATION_IDS[href] ?? (href.replace(/^\/admin\/?/, '').replaceAll('/', '_') || 'home')
+  const label = PALETTE_LABELS[href] ?? navLabel
   return {
     id,
     href,
@@ -126,6 +145,10 @@ export function buildAskDestinations(options: AskDestinationOptions): AskDestina
         )
       )
     }
+  }
+  // A tab of Settings > Portal, offered on its own so a search for custom domains finds it.
+  if (permissions.has(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)) {
+    result.push(destination(CUSTOM_DOMAINS_HREF, PORTAL_TAB_LABELS['custom-domains']))
   }
   if (featureFlags?.supportInbox && permissions.has(PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)) {
     for (const path of [

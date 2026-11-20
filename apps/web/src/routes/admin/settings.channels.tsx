@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { ChannelsHubPage } from '@/components/admin/settings/channels-hub-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
@@ -15,15 +14,15 @@ export const Route = createFileRoute('/admin/settings/channels')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/channels')
     const { queryClient } = context
     const [{ channelSettingsQueries: channels }, { githubChannelStatusQuery: githubStatus }] =
       await Promise.all([
         import('@/lib/client/queries/channel-settings'),
         import('@/integrations/github/ui/github-channel-status-query'),
       ])
-    // The status rows and the routing switch are warmed with the configs so
-    // the hub renders complete from the document. A miss leaves a row to its
+    // The status rows are warmed with the configs so the hub renders
+    // complete from the document. A miss leaves a row to its
     // own fetch and its defaults, as before.
     const ensure = readBatch(queryClient)
     await Promise.all([
@@ -31,7 +30,6 @@ export const Route = createFileRoute('/admin/settings/channels')({
       ensure(settingsQueries.portalConfig()),
       warmQuery(ensure, channels.emailStatus()),
       warmQuery(ensure, githubStatus()),
-      warmQuery(ensure, channels.routing()),
     ])
     return {}
   },

@@ -76,6 +76,33 @@ describe('readDmarc', () => {
     expect(await readDmarc('acme.com', resolver)).toEqual({ found: false })
   })
 
+  it("finds the parent domain's record for a subdomain, as receivers do", async () => {
+    const resolver = zoneResolver({
+      '_dmarc.acme.com': { TXT: [['v=DMARC1; p=reject']] },
+    })
+    expect(await readDmarc('updates.mail.acme.com', resolver)).toEqual({
+      found: true,
+      policy: 'reject',
+    })
+  })
+
+  it("prefers the subdomain's own record to its parent's", async () => {
+    const resolver = zoneResolver({
+      '_dmarc.updates.acme.com': { TXT: [['v=DMARC1; p=none']] },
+      '_dmarc.acme.com': { TXT: [['v=DMARC1; p=reject']] },
+    })
+    expect(await readDmarc('updates.acme.com', resolver)).toEqual({ found: true, policy: 'none' })
+  })
+
+  it('reports not found for a subdomain when no parent has one either', async () => {
+    expect(await readDmarc('updates.acme.com', zoneResolver({}))).toEqual({ found: false })
+  })
+
+  it('does not claim none for a subdomain when a parent lookup fails', async () => {
+    const resolver = zoneResolver({}, new Set(['_dmarc.acme.com']))
+    expect(await readDmarc('updates.acme.com', resolver)).toBeUndefined()
+  })
+
   it('answers undefined when the lookup fails, rather than claiming none', async () => {
     const resolver = zoneResolver({}, new Set(['_dmarc.acme.com']))
     expect(await readDmarc('acme.com', resolver)).toBeUndefined()
@@ -90,6 +117,7 @@ describe('runPreflight', () => {
     })
     expect(await preflight(resolver)).toEqual({
       dnsHost: 'cloudflare',
+      zone: 'acme.com',
       mailFromFree: true,
       dmarc: { found: true, policy: 'none' },
       checkedAt: NOW.toISOString(),
@@ -169,9 +197,25 @@ describe('runPreflight', () => {
     expect((await preflight(resolver, 'acme.com', 'bounce')).mailFromFree).toBe(false)
   })
 
-  it('reads the nameservers of the zone a subdomain lives in', async () => {
+  it('reads the nameservers of the zone a subdomain lives in, and names that zone', async () => {
     const resolver = zoneResolver({ 'acme.com': { NS: ['ns01.domaincontrol.com'] } })
-    expect((await preflight(resolver, 'mail.acme.com')).dnsHost).toBe('godaddy')
+    const found = await preflight(resolver, 'mail.acme.com')
+    expect(found.dnsHost).toBe('godaddy')
+    expect(found.zone).toBe('acme.com')
+  })
+
+  it('names a subdomain as its own zone when it has nameservers of its own', async () => {
+    const resolver = zoneResolver({
+      'mail.acme.com': { NS: ['ada.ns.cloudflare.com'] },
+      'acme.com': { NS: ['ns01.domaincontrol.com'] },
+    })
+    const found = await preflight(resolver, 'mail.acme.com')
+    expect(found.zone).toBe('mail.acme.com')
+    expect(found.dnsHost).toBe('cloudflare')
+  })
+
+  it('names no zone when no nameservers answer', async () => {
+    expect((await preflight(zoneResolver({}))).zone).toBeUndefined()
   })
 
   it('leaves out what it could not read', async () => {

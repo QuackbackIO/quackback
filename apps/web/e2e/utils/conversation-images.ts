@@ -51,7 +51,12 @@ export const WIDGET_PNG = 'e2e-widget.png'
 export const CHANGELOG_PNG = 'e2e-changelog.png'
 export const POST_PNG = 'e2e-post.png'
 
-/** Serve fixture PNGs and stub upload endpoints so e2e never hits MinIO. */
+/**
+ * Serve fixture PNGs and stub the inline image upload endpoints so e2e never
+ * hits object storage. Conversation attachments no longer use these
+ * endpoints: since #629 they upload to /api/upload/file and /api/widget/files
+ * and become file records, so those flows need real storage.
+ */
 export async function stubConversationImageNetwork(page: Page): Promise<Buffer> {
   const png = landscapePng()
   const fulfillPng = async (route: Route) => {
@@ -125,9 +130,45 @@ export async function expectLandscapeContainThumb(button: Locator) {
   }
 }
 
+/**
+ * Two or more images on one message sit side by side as square, cropped tiles
+ * (`ImageRow` in attachment-list.tsx); only a lone image is shown whole with
+ * object-contain. The tile must hold a decoded image, not a file card.
+ */
+export async function expectSquareImageTile(button: Locator) {
+  const img = button.locator('img')
+  await expectLoadedImage(img)
+  const className = (await img.getAttribute('class')) ?? ''
+  if (!className.split(/\s+/).includes('object-cover')) {
+    throw new Error(`expected object-cover on a gallery tile, got "${className}"`)
+  }
+  const box = await button.boundingBox()
+  if (!box) throw new Error('tile has no box')
+  if (Math.abs(box.width - box.height) > 2) {
+    throw new Error(
+      `expected a square tile, got ${Math.round(box.width)}×${Math.round(box.height)}`
+    )
+  }
+}
+
 /** The displayed <img> decoded real bytes (not a broken-image / filename chip). */
 export async function expectLoadedImage(img: Locator) {
   await img.waitFor({ state: 'visible' })
+  // A real upload is fetched from storage after the element appears, so wait
+  // for the browser to finish loading it before judging the decode.
+  await img
+    .evaluate(
+      (el) =>
+        el instanceof HTMLImageElement && !el.complete
+          ? new Promise<void>((resolve) => {
+              el.addEventListener('load', () => resolve(), { once: true })
+              el.addEventListener('error', () => resolve(), { once: true })
+            })
+          : undefined,
+      undefined,
+      { timeout: 10_000 }
+    )
+    .catch(() => undefined)
   const loaded = await img.evaluate((el) => {
     if (!(el instanceof HTMLImageElement)) return { ok: false, reason: 'not an img' }
     return {

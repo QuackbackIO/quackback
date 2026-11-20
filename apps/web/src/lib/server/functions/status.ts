@@ -161,8 +161,33 @@ export const listStatusComponentsAdminFn = createServerFn({ method: 'GET' }).han
     listStatusComponentGroupsWithComponents(),
     listUngroupedStatusComponents(),
   ])
-  return { groups, ungrouped }
+  const planHidden = await planHiddenStatusComponents([
+    ...ungrouped,
+    ...groups.flatMap((g) => g.components),
+  ])
+  return { groups, ungrouped, planHidden }
 })
+
+/**
+ * The components the plan hides from the public page (past its cap, after the
+ * grace), with the plan's name, or null when it hides none. The admin keeps
+ * listing them, marked.
+ */
+async function planHiddenStatusComponents(
+  components: { id: StatusComponentId }[]
+): Promise<{ ids: StatusComponentId[]; planName: string | null } | null> {
+  const { getPlanLimits, visibleStatusComponentIds } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const visible = await visibleStatusComponentIds()
+  if (visible === null) return null
+  const ids = components.map((c) => c.id).filter((id) => !visible.includes(id))
+  if (ids.length === 0) return null
+  const [limits, { PLAN_CATALOGUE }] = await Promise.all([
+    getPlanLimits(),
+    import('@/lib/server/domains/settings/cloud/cloud.types'),
+  ])
+  return { ids, planName: limits.plan ? PLAN_CATALOGUE[limits.plan].name : null }
+}
 
 /** Read-only service list for the incident composers' affected-services
  *  picker. Gated on STATUS_PAGE_PUBLISH (not manage) so anyone who can report
@@ -510,7 +535,9 @@ export const getStatusUptimeAdminFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
     const actor = await policyActorFromAuth(auth)
-    return await getUptimeSeries(actor, data.componentIds as StatusComponentId[], data.windowDays)
+    return await getUptimeSeries(actor, data.componentIds as StatusComponentId[], data.windowDays, {
+      admin: true,
+    })
   })
 
 // ============================================================================
@@ -584,7 +611,8 @@ export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handle
       ? await getUptimeSeries(
           actor,
           allComponents.map((c) => c.id),
-          90
+          90,
+          { admin: true }
         )
       : []
   const allDays = uptime.flatMap((s) => s.days)

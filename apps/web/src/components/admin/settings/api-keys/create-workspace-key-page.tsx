@@ -40,7 +40,7 @@ const m = defineMessages({
   },
   cancel: { id: 'apiKeys.form.cancel', defaultMessage: 'Cancel' },
   create: { id: 'apiKeys.form.create', defaultMessage: 'Create key' },
-  creating: { id: 'apiKeys.form.creating', defaultMessage: 'Creating...' },
+  creating: { id: 'apiKeys.form.creating', defaultMessage: 'Creating…' },
   failed: { id: 'apiKeys.form.createFailed', defaultMessage: 'The key could not be created.' },
 })
 

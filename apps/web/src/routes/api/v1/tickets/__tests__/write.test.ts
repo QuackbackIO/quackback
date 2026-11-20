@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ValidationError } from '@/lib/shared/errors'
 
 const mockAuth = vi.fn()
 const mockCreateTicket = vi.fn()
@@ -46,7 +47,6 @@ import { Route as StatusRoute } from '../$ticketId.status'
 import { Route as AssignRoute } from '../$ticketId.assign'
 import { Route as PriorityRoute } from '../$ticketId.priority'
 import { Route as DueRoute } from '../$ticketId.due'
-import { ValidationError } from '@/lib/shared/errors'
 
 type Handler = (a: { request: Request; params: Record<string, string> }) => Promise<Response>
 const post = (route: unknown): Handler =>
@@ -125,6 +125,23 @@ describe('POST /api/v1/tickets (create)', () => {
     // markdown → sanitized doc (mocked to { doc: md })
     expect(input.descriptionJson).toEqual({ doc: 'Steps here' })
     expect(actor.principalType).toBe('service')
+  })
+
+  it('takes the due date only as dueAt, the shared due date, never as due_at (TKT-78)', async () => {
+    mockCreateTicket.mockResolvedValue(ticketDTO)
+    const res = await post(ListRoute)({
+      request: jsonReq('https://x.test/api/v1/tickets', {
+        type: 'customer',
+        title: 'Due tomorrow',
+        due_at: '2030-01-01T00:00:00.000Z',
+      }),
+      params: {},
+    })
+    expect(res.status).toBe(201)
+    const [input] = mockCreateTicket.mock.calls[0]
+    expect(input).toMatchObject({ title: 'Due tomorrow' })
+    expect(input.dueAt).toBeUndefined()
+    expect(input).not.toHaveProperty('due_at')
   })
 
   it('omits descriptionJson when no description is given', async () => {
@@ -287,11 +304,9 @@ describe('POST /api/v1/tickets/:id/status', () => {
     expect(mockSetStatus).toHaveBeenCalledWith(TICKET_ID, STATUS_ID, expect.anything())
   })
 
-  it("404s a ticket outside the key creator's scope without changing it", async () => {
+  it("answers the service's NotFound for a ticket outside the key creator's scope", async () => {
     const { NotFoundError } = await import('@/lib/shared/errors')
-    mockAssertVisible.mockRejectedValueOnce(
-      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
-    )
+    mockSetStatus.mockRejectedValueOnce(new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found'))
     const res = await post(StatusRoute)({
       request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/status`, {
         statusId: STATUS_ID,
@@ -299,7 +314,7 @@ describe('POST /api/v1/tickets/:id/status', () => {
       params: { ticketId: TICKET_ID },
     })
     expect(res.status).toBe(404)
-    expect(mockSetStatus).not.toHaveBeenCalled()
+    expect(mockSetStatus).toHaveBeenCalledTimes(1)
   })
 
   it('400s a malformed statusId without calling the service', async () => {
@@ -337,6 +352,22 @@ describe('POST /api/v1/tickets/:id/assign', () => {
       params: { ticketId: TICKET_ID },
     })
     expect(mockAssign.mock.calls[0][1]).toEqual({ assigneePrincipalId: PRINCIPAL_ID })
+  })
+
+  it('refuses a non-teammate with the INVALID_ASSIGNEE code', async () => {
+    mockAssign.mockRejectedValue(
+      new ValidationError('INVALID_ASSIGNEE', 'Can only assign to a team member')
+    )
+    const res = await post(AssignRoute)({
+      request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/assign`, {
+        assigneePrincipalId: PRINCIPAL_ID,
+      }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: { code: 'INVALID_ASSIGNEE', message: 'Can only assign to a team member' },
+    })
   })
 })
 

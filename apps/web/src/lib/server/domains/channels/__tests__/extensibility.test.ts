@@ -57,6 +57,12 @@ function fixtureAdapter(): ChannelAdapter {
 let visitorRows: Array<Record<string, unknown>> = []
 let limitQueue: Array<Record<string, unknown>[]> = []
 
+// Nobody here is blocked. Holding mail back from a blocked person runs over
+// real rows in events/__tests__/blocked-person-email.db.test.ts.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  getsAutomatedEmail: async () => true,
+}))
+
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: async () => false,
   isPrincipalOnline: async () => false,
@@ -72,6 +78,14 @@ vi.mock('@/lib/server/domains/conversation/conversation-participant.service', ()
 
 vi.mock('@/lib/server/domains/conversation/csat-email-token', () => ({
   mintCsatEmailToken: () => hoisted.mintCsatEmailToken(),
+}))
+
+// These conversations carry no customer ticket. The ticket gate on the reply
+// email runs over real rows in
+// domains/tickets/__tests__/ticket-reply-one-email.db.test.ts.
+vi.mock('@/lib/server/domains/tickets/ticket-reply-email', () => ({
+  requesterTicketForConversation: async () => null,
+  requesterWantsReplyEmail: async () => true,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({

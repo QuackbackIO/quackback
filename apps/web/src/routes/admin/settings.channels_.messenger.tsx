@@ -1,5 +1,4 @@
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { MessengerChannelPage } from '@/components/admin/settings/messenger-channel-page'
@@ -14,7 +13,7 @@ export const Route = createFileRoute('/admin/settings/channels_/messenger')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/channels/messenger')
     const ensure = readBatch(context.queryClient)
     await Promise.all([
       ensure(settingsQueries.widgetConfig()),

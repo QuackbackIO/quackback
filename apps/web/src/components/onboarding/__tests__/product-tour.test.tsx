@@ -129,7 +129,15 @@ beforeEach(() => {
     feedbackPrivate: false,
     empty: { feedback: true, support: true, helpCenter: true, status: true },
   }
-  hoisted.permissions = new Set([PERMISSIONS.MEMBER_VIEW, PERMISSIONS.CONVERSATION_VIEW])
+  hoisted.permissions = new Set([
+    PERMISSIONS.MEMBER_VIEW,
+    PERMISSIONS.CONVERSATION_VIEW,
+    PERMISSIONS.POST_VIEW_PRIVATE,
+    PERMISSIONS.ROADMAP_MANAGE,
+    PERMISSIONS.CHANGELOG_VIEW_DRAFT,
+    PERMISSIONS.HELP_CENTER_MANAGE,
+    PERMISSIONS.STATUS_PAGE_PUBLISH,
+  ])
   hoisted.narrow = false
   hoisted.seen = 0
   hoisted.flags = {
@@ -239,6 +247,15 @@ describe('guided tour', () => {
     expect(buttons[0]).toHaveFocus()
   })
 
+  it('skips the stop for a page the viewer cannot open, whose sidebar item is hidden', async () => {
+    hoisted.flags = { ...hoisted.flags, supportInbox: true }
+    hoisted.permissions = new Set([PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW])
+    mount()
+    await startTour()
+    expect(dialog()).toHaveTextContent('Support. Messages from Messenger and email arrive here.')
+    expect(dialog()).not.toHaveTextContent('Feedback.')
+  })
+
   it('includes a module switched on after setup, goal modules first', async () => {
     hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
     hoisted.flags = { ...hoisted.flags, supportInbox: true, changelog: true }
@@ -251,7 +268,8 @@ describe('guided tour', () => {
   it("runs a stop's Try it: the tour closes and the page that does it opens", async () => {
     hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
     hoisted.flags = { ...hoisted.flags, supportInbox: true }
-    hoisted.permissions = new Set([PERMISSIONS.SETTINGS_MANAGE])
+    // The Support stop is for someone who can open the inbox.
+    hoisted.permissions = new Set([PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CONVERSATION_VIEW])
     mount()
     await startTour()
     await act(async () => {

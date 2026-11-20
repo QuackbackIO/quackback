@@ -53,6 +53,7 @@ export const SETTINGS_SQL_COLUMNS = [
   'cloud_revision',
   'cloud_identity',
   'cloud_identity_revision',
+  'plan_limits_state',
   'managed_field_paths',
   'state',
   'auth_config_version',

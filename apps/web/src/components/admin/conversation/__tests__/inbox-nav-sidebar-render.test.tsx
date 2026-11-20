@@ -28,10 +28,10 @@ vi.mock('@/components/shared/page-header', () => ({
 const rootContext = vi.hoisted(() => {
   const listeners = new Set<() => void>()
   const store = {
-    value: { session: {}, settings: { featureFlags: { supportTickets: true } } } as Record<
-      string,
-      unknown
-    >,
+    value: {
+      session: {},
+      settings: { featureFlags: { supportInbox: true, supportTickets: true } },
+    } as Record<string, unknown>,
     subscribe(listener: () => void) {
       listeners.add(listener)
       return () => listeners.delete(listener)
