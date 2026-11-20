@@ -11,6 +11,8 @@
  * atomic (SQL, not JS-merge) metadata write.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SQL } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 
 const mockUserFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
@@ -358,10 +360,13 @@ describe('POST /api/widget/identify — atomic metadata write', () => {
     const setArgs = mockUpdateSet.mock.calls.map((c) => c[0] as Record<string, unknown>)
     const updateWithMetadata = setArgs.find((s) => 'metadata' in s)
     expect(updateWithMetadata).toBeDefined()
-    // The mocked `sql` tag returns only the literal text preceding the first
-    // interpolation — a plain JSON string (what a JS mergeMetadata call would
-    // produce) would never match this, so this pins the write to the atomic
-    // coalesce/jsonb SQL expression instead of a read-then-write.
-    expect(updateWithMetadata?.metadata).toBe('((coalesce(nullif(')
+    // A plain JSON string (what a JS mergeMetadata call would produce) would
+    // not render, so this pins the write to the atomic coalesce/jsonb SQL
+    // expression instead of a read-then-write, and the empty removal list to
+    // a real Postgres array rather than `()::text[]`.
+    const rendered = new PgDialect().sqlToQuery(updateWithMetadata?.metadata as SQL)
+    expect(rendered.sql).toContain('((coalesce(nullif(')
+    expect(rendered.sql).toContain('::jsonb - ARRAY[]::text[]) || ')
+    expect(rendered.params).toEqual([JSON.stringify({ plan: 'enterprise' })])
   })
 })
