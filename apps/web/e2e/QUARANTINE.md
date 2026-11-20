@@ -517,3 +517,109 @@ no such part beyond the wrong notification).
   colour or label for it, so its impact bar reads " · Investigating". Fix:
   refuse it for incidents (or give the template a Maintenance label). owner:
   unassigned, review by: 2026-12-03.
+
+### Product suite: FBP feed, submit and voting
+
+- `feedback/portal-voting.spec.ts` › FBP-V-14 after a vote collision the post
+  count equals its distinct voters (FBP-B15). When an anonymous visitor who
+  voted signs in to an account that also voted on the same post, the re-point
+  step drops the colliding anonymous vote
+  (`apps/web/src/lib/server/domains/principals/principal-repoint.ts:220-225`)
+  but `mergeAnonymousToIdentified`
+  (`apps/web/src/lib/server/auth/merge-anonymous.ts:40-62`) never recounts, so
+  `posts.vote_count` stays one above the number of voters (red run: expected
+  1, received 2). Smallest fix: inside the merge transaction recompute
+  `vote_count` from `post_votes` for every post the dropped votes touched.
+  Runs in product-isolated (needs the widget on). owner: unassigned, review
+  by: 2026-12-03.
+- `feedback/portal-feed.spec.ts` › FBP-L-24 the author's held post shows its
+  pending panel on the first server-rendered feed page (FBP-B03).
+  `fetchPortalData` maps the first feed page field by field and leaves out
+  `moderationState` (and `pinnedAt`)
+  (`apps/web/src/lib/server/functions/portal.ts:257-270`), while later pages
+  spread the whole row (`public-posts.ts:170-176`). The card reads
+  `post.moderationState` (`feedback-container.tsx:650`), so the author's own
+  held post has no "Pending review" panel until the feed refetches. Smallest
+  fix: add `moderationState: post.moderationState` (and `pinnedAt`) to that
+  map. owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-feed.spec.ts` › FBP-L-15 a hand-edited bad minVotes or
+  dateFrom is ignored like a bad sort (FBP-B02). `?minVotes=abc` answers HTTP
+  500 (red run: expected 200, received 500): the route's search schema gives
+  `minVotes` and `dateFrom` no `.catch`
+  (`apps/web/src/routes/_portal/index.tsx:32-37`) while `sort` and `view` have
+  one. Smallest fix: `.optional().catch(undefined)` on both. owner:
+  unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-14 the confirmation of a held post
+  tells the author it awaits review (FBP-B07). The composer shows the same
+  "Feedback submitted" toast for a held post as for a published one
+  (`apps/web/src/components/public/feedback/feedback-header-animated.tsx:281-297`);
+  `createPublicPostFn` does not return the moderation state, so the client
+  cannot tell. Smallest fix: return `moderationState` from
+  `runCreatePublicPost` and show a "waiting for review" toast when it is
+  `pending`. The right copy does not exist yet: the test only asks for the
+  word "review". owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-14 the held post's panel does not
+  tell its author that customers cannot see it (FBP-B06). The card renders
+  `InlineModerationActions` for any viewer of a pending post
+  (`apps/web/src/components/public/post-card.tsx:597-603`), and its hardcoded,
+  unlocalised moderator copy "Customers cannot see this post yet."
+  (`apps/web/src/components/shared/inline-moderation-actions.tsx:39-42`) is
+  shown to the customer who wrote it. Smallest fix: an author variant
+  ("Waiting for review: only you can see this") passed when the viewer is the
+  author, through the message catalogue. owner: unassigned, review by:
+  2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-22 an anonymous session cannot
+  upload while anonymous posting is off (FBP-B13). `handlePortalUpload`
+  (`apps/web/src/routes/api/portal/upload.ts:8-37`) accepts any session with
+  a principal; it never reads the workspace anonymous switch (red run:
+  expected 403, received 200). Smallest fix: for an anonymous principal,
+  refuse with 403 unless `workspaceAllowsAnonymous(settings.portalConfig)`.
+  owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-24 public post metadata is bounded
+  (FBP-B14). `createPublicPostSchema.metadata` is
+  `z.record(z.string(), z.string())` with no bound
+  (`apps/web/src/lib/shared/schemas/posts.ts:140`); 2,000 keys of 200
+  characters are stored as `widget_metadata`. Smallest fix: cap the key count
+  (e.g. 50), key length (100) and value length (1,000) in the schema. owner:
+  unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-06 an anonymous comment is refused
+  with the same code as an anonymous post or vote (FBP-B04). Comments throw
+  `ANONYMOUS_NOT_ENABLED` (`apps/web/src/lib/server/functions/comments.ts:84`)
+  where posts and votes throw `ANONYMOUS_NOT_ALLOWED`
+  (`public-posts.ts:373`, `:449`) for the same workspace switch. Smallest fix:
+  use `ANONYMOUS_NOT_ALLOWED` in comments.ts. Runs in product-isolated.
+  owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-submit.spec.ts` › FBP-S-07 the anonymous post cap answers
+  as a rate limit, and the composer says so (FBP-B04). `RATE_LIMITED` is
+  thrown as a `ValidationError` (status 400)
+  (`apps/web/src/lib/server/functions/public-posts.ts:379`, `:454`), and the
+  composer replaces every refusal with "Could not submit your feedback. Please
+  try again." (`feedback-header-animated.tsx:300-308`), wrong advice inside
+  the hour. Smallest fix: throw the app's rate-limit error (429) and map it to
+  a "too many posts, try again later" line in the composer. Runs in
+  product-isolated. owner: unassigned, review by: 2026-12-03.
+- `feedback/portal-post-detail.spec.ts` › FBP-L-31 a pinned comment outside
+  the first page still shows on the page (new). The detail query returns
+  `pinnedComment` whatever the paging
+  (`apps/web/src/lib/server/domains/posts/post.public.detail.ts:475-510`), but
+  the portal route (`apps/web/src/routes/_portal.b.$slug.posts.$postId.tsx:396`)
+  passes only `pinnedCommentId` to the thread, which floats the pinned
+  comment only if it is among the loaded 30 roots
+  (`apps/web/src/components/public/comment-thread.tsx:218`);
+  `PinnedCommentSection` is used only by the admin modal. An older pinned
+  answer is invisible until "Show more". Smallest fix: render
+  `PinnedCommentSection` (or prepend `pinnedComment`) on the portal page when
+  the pinned comment is not in the loaded page. owner: unassigned, review by:
+  2026-12-03.
+- `feedback/portal-author-actions.spec.ts` › FBP-S-17 the author edit of an
+  unvoted, uncommented post succeeds instead of erroring (new). With default
+  settings, every author edit that passes the earlier checks reaches
+  `hasCommentsFromOthers`, which compares `post_comments.principal_id` to the
+  principal TypeID inside a raw `sql` template
+  (`apps/web/src/lib/server/domains/posts/post.user-actions.ts:77-83`, and the
+  same copy in `post.permissions.ts:303-309`); the TypeID is not converted to
+  a uuid, Postgres answers `invalid input syntax for type uuid`, and the
+  customer gets "Something went wrong on our side" (HTTP 500). So a customer
+  can never edit their own post by default. Smallest fix: use
+  `ne(postComments.principalId, authorPrincipalId)` in both copies. owner:
+  unassigned, review by: 2026-12-03.
