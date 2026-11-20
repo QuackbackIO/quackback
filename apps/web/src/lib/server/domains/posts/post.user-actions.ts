@@ -5,7 +5,17 @@
  * Permission helpers (canEditPost, canDeletePost, getPostPermissions) live in post.permissions.ts.
  */
 
-import { db, posts, boards, postEditHistory, principal, eq, type Post } from '@/lib/server/db'
+import {
+  db,
+  posts,
+  boards,
+  postEditHistory,
+  postStatuses,
+  principal,
+  eq,
+  type Post,
+  type Transaction,
+} from '@/lib/server/db'
 import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
@@ -81,7 +91,19 @@ async function announceAuthorEdit(
       columns: { id: true, slug: true },
     })
     if (!board) return
-    const eventActor = buildEventActor({ principalId: actor.principalId })
+    // Named from the author's principal, as post.deleted names its deleter,
+    // so webhook and integration consumers see who edited.
+    const editor = await db.query.principal.findFirst({
+      where: eq(principal.id, actor.principalId),
+      columns: { userId: true, displayName: true },
+      with: { user: { columns: { name: true, email: true } } },
+    })
+    const eventActor = buildEventActor({
+      principalId: actor.principalId,
+      userId: editor?.userId ?? undefined,
+      email: editor?.user?.email ?? undefined,
+      displayName: editor?.displayName ?? editor?.user?.name ?? undefined,
+    })
     const changedFields: string[] = []
     if (updated.title !== before.title) changedFields.push('title')
     if (
@@ -111,28 +133,71 @@ async function announceAuthorEdit(
   }
 }
 
-/** The author's window on `post` (post.author-window.ts), refused as a typed error. */
-async function assertAuthorWindow(
+/**
+ * Who may `action` the post, refused as a typed error: not a deleted post, a
+ * team member always, otherwise only its author and only within the author's
+ * window (post.author-window.ts). `executor` runs the window's reads on the
+ * caller's transaction.
+ */
+async function assertMayChange(
   action: 'edit' | 'delete',
-  post: Post & { postStatus?: { isDefault: boolean } | null },
-  config: PortalConfig
+  post: Post,
+  onDefaultStatus: boolean,
+  actor: { principalId: PrincipalId; role: Role },
+  config: PortalConfig,
+  executor: Transaction | typeof db = db
 ): Promise<void> {
+  const code = action === 'edit' ? 'EDIT_NOT_ALLOWED' : 'DELETE_NOT_ALLOWED'
+  if (post.deletedAt) {
+    throw new ForbiddenError(
+      code,
+      action === 'edit' ? 'Cannot edit a deleted post' : 'Post has already been deleted'
+    )
+  }
+  if (isTeamMember(actor.role)) return
+  if (post.principalId !== actor.principalId) {
+    throw new ForbiddenError(code, `You can only ${action} your own posts`)
+  }
   const result = await authorWindow(
     action,
     {
       id: post.id as PostId,
       statusId: post.statusId,
-      onDefaultStatus: !post.statusId || post.postStatus?.isDefault === true,
+      onDefaultStatus,
       canonicalPostId: post.canonicalPostId as PostId | null,
     },
-    config
+    config,
+    executor
   )
-  if (!result.allowed) {
-    throw new ForbiddenError(
-      action === 'edit' ? 'EDIT_NOT_ALLOWED' : 'DELETE_NOT_ALLOWED',
-      result.reason ?? 'Not allowed'
-    )
+  if (!result.allowed) throw new ForbiddenError(code, result.reason ?? 'Not allowed')
+}
+
+/**
+ * Lock the post row for the rest of `tx` and check again, on what is now
+ * there, that `actor` may `action` it. Anything the team does to the post
+ * meanwhile (a status change, a reply, which bumps the comment count, a merge)
+ * writes this row, so it waits for the lock and the decision cannot go stale
+ * between the check and the write.
+ */
+async function lockAndCheck(
+  tx: Transaction,
+  postId: PostId,
+  action: 'edit' | 'delete',
+  actor: { principalId: PrincipalId; role: Role },
+  config: PortalConfig
+): Promise<Post> {
+  const [locked] = await tx.select().from(posts).where(eq(posts.id, postId)).for('update')
+  if (!locked) throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  let onDefaultStatus = !locked.statusId
+  if (locked.statusId) {
+    const [status] = await tx
+      .select({ isDefault: postStatuses.isDefault })
+      .from(postStatuses)
+      .where(eq(postStatuses.id, locked.statusId))
+    onDefaultStatus = status?.isDefault === true
   }
+  await assertMayChange(action, locked, onDefaultStatus, actor, config, tx)
+  return locked
 }
 
 // ============================================================================
@@ -178,32 +243,15 @@ export async function userEditPost(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Check if post is deleted
-  if (existingPost.deletedAt) {
-    throw new ForbiddenError('EDIT_NOT_ALLOWED', 'Cannot edit a deleted post')
-  }
-
-  // Team members (admin, member) can always edit - skip further checks
-  if (!isTeamMember(actor.role)) {
-    // Must be the author
-    if (existingPost.principalId !== actor.principalId) {
-      throw new ForbiddenError('EDIT_NOT_ALLOWED', 'You can only edit your own posts')
-    }
-
-    // Until the team acts on it (post.author-window.ts).
-    await assertAuthorWindow('edit', existingPost, config)
-  }
-
-  // Record edit history if enabled
-  if (config.features.showPublicEditHistory) {
-    await db.insert(postEditHistory).values({
-      postId: postId,
-      editorPrincipalId: actor.principalId,
-      previousTitle: existingPost.title,
-      previousContent: existingPost.content,
-      previousContentJson: existingPost.contentJson,
-    })
-  }
+  // A first check, so a refused edit copies no images. It is checked again
+  // under the row lock below, since copying images can take seconds.
+  await assertMayChange(
+    'edit',
+    existingPost,
+    !existingPost.statusId || existingPost.postStatus?.isDefault === true,
+    actor,
+    config
+  )
 
   const authorIsTeam = isTeamMember(actor.role)
   const nextJson = input.contentJson ?? markdownToTiptapJson(input.content.trim())
@@ -214,8 +262,6 @@ export async function userEditPost(
         nextJson,
         `${input.title.trim()}\n${input.content.trim()}`
       )
-  const wasPublished = existingPost.moderationState === 'published'
-  const rehold = Boolean(holdReason && wasPublished)
 
   // Store the document the edit describes, with external images copied in, as
   // creating a post does. The markdown follows the stored document.
@@ -224,22 +270,37 @@ export async function userEditPost(
     principalId: existingPost.principalId,
   })
 
-  // Update the post
-  const [updatedPost] = await db
-    .update(posts)
-    .set({
-      title: input.title.trim(),
-      content: projectContentJsonToMarkdown(contentJson, input.content.trim()),
-      contentJson,
-      updatedAt: new Date(),
-      ...(rehold ? { moderationState: 'pending' as const } : {}),
-    })
-    .where(eq(posts.id, postId))
-    .returning()
+  const { before, updatedPost, rehold } = await db.transaction(async (tx) => {
+    const locked = await lockAndCheck(tx, postId, 'edit', actor, config)
+    const rehold = Boolean(holdReason && locked.moderationState === 'published')
 
-  if (!updatedPost) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-  }
+    // Record edit history if enabled
+    if (config.features.showPublicEditHistory) {
+      await tx.insert(postEditHistory).values({
+        postId: postId,
+        editorPrincipalId: actor.principalId,
+        previousTitle: locked.title,
+        previousContent: locked.content,
+        previousContentJson: locked.contentJson,
+      })
+    }
+
+    const [updated] = await tx
+      .update(posts)
+      .set({
+        title: input.title.trim(),
+        content: projectContentJsonToMarkdown(contentJson, input.content.trim()),
+        contentJson,
+        updatedAt: new Date(),
+        ...(rehold ? { moderationState: 'pending' as const } : {}),
+      })
+      .where(eq(posts.id, postId))
+      .returning()
+    if (!updated) {
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+    }
+    return { before: locked, updatedPost: updated, rehold }
+  })
 
   if (rehold) {
     await recordAuditEvent({
@@ -255,7 +316,7 @@ export async function userEditPost(
   // only for a post others can see. A held post (new, or re-held by this
   // edit) announces itself when it is approved (announcePublishedPost).
   if (updatedPost.moderationState === 'published') {
-    await announceAuthorEdit(updatedPost, existingPost, actor)
+    await announceAuthorEdit(updatedPost, before, actor)
   }
 
   // Regenerate embedding (and cascade to merge check) after user edit
@@ -297,27 +358,13 @@ export async function softDeletePost(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Check if post is already deleted
-  if (existingPost.deletedAt) {
-    throw new ForbiddenError('DELETE_NOT_ALLOWED', 'Post has already been deleted')
-  }
-
-  // Team members (admin, member) can always delete - skip further checks
-  if (!isTeamMember(actor.role)) {
-    // Must be the author
-    if (existingPost.principalId !== actor.principalId) {
-      throw new ForbiddenError('DELETE_NOT_ALLOWED', 'You can only delete your own posts')
-    }
-
-    // Until the team acts on it (post.author-window.ts).
-    await assertAuthorWindow('delete', existingPost, config)
-  }
-
   // Capture selected syncs in the same commit as deletion. A deleted
   // canonical releases its merged duplicates in the same commit: the inbox
   // hides every merged post, so left merged into a deleted post they would
-  // vanish. Each released post gets back its own votes and comments.
+  // vanish. Each released post gets back its own votes and comments. Who may
+  // delete is decided under the post row lock, in the same transaction.
   const { updatedPost, released } = await db.transaction(async (tx) => {
+    await lockAndCheck(tx, postId, 'delete', actor, config)
     if (beforeDelete) await beforeDelete(tx)
     const [updated] = await tx
       .update(posts)

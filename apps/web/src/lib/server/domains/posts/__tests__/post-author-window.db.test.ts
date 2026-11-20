@@ -31,11 +31,22 @@ vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
   generatePostEmbedding: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Copying images in is where an edit can take seconds; a test can run
+// something while it is "in flight".
+const rehost = vi.hoisted(() => ({ during: null as null | (() => Promise<void>) }))
+vi.mock('@/lib/server/content/rehost-images', () => ({
+  rehostExternalImages: async (json: unknown) => {
+    if (rehost.during) await rehost.during()
+    return json
+  },
+}))
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   boards,
   eq,
   events,
+  postActivity,
   postMentions,
   postComments,
   postStatuses,
@@ -313,5 +324,122 @@ describe.skipIf(!fixture.available)('an author edit is announced like a team edi
     const [row] = await testDb.select().from(posts).where(eq(posts.id, postId))
     expect(JSON.stringify(row.contentJson)).toContain('Brand new body')
     expect(row.content).toBe('Brand new body')
+  })
+
+  it('names the author on post.updated', async () => {
+    const { author, postId } = await seedOwnPost()
+
+    await userEditPost(postId, { title: 'Dark mode', content: 'Reworded' }, asUser(author))
+
+    const [updated] = await eventsOf('post.updated', postId)
+    expect(updated.actorType).toBe('user')
+    expect(updated.actorId).toBe(author)
+  })
+})
+
+describe.skipIf(!fixture.available)('once the team acts, the window stays closed', () => {
+  beforeEach(() => {
+    rehost.during = null
+    return fixture.begin()
+  })
+  afterEach(() => fixture.rollback())
+
+  it('stays closed after the post is moved back to the default status', async () => {
+    const { author, postId } = await seedOwnPost()
+    const teammate = await seedPerson('admin')
+    // Planned, then back to Open: the status is the default again, the log remembers.
+    await testDb.insert(postActivity).values({
+      postId,
+      principalId: teammate,
+      type: 'status.changed',
+      metadata: { fromName: 'Open', toName: 'Planned' },
+    })
+    await testDb.insert(postActivity).values({
+      postId,
+      principalId: teammate,
+      type: 'status.changed',
+      metadata: { fromName: 'Planned', toName: 'Open' },
+    })
+
+    const w = await windowFor(postId, author)
+    expect(w.canEdit).toEqual({
+      allowed: false,
+      reason: 'Cannot edit posts that have been reviewed by the team',
+    })
+    expect(w.canDelete.allowed).toBe(false)
+  })
+
+  it('stays closed after the team reply is deleted', async () => {
+    const { author, postId } = await seedOwnPost()
+    const teammate = await seedPerson('admin')
+    await testDb.insert(postComments).values({
+      postId,
+      principalId: teammate,
+      content: 'Thanks!',
+      isTeamMember: true,
+      deletedAt: new Date(),
+    })
+
+    const w = await windowFor(postId, author)
+    expect(w.canEdit.allowed).toBe(false)
+    expect(w.canDelete.allowed).toBe(false)
+    await expect(softDeletePost(postId, asUser(author))).rejects.toMatchObject({
+      code: 'DELETE_NOT_ALLOWED',
+    })
+  })
+
+  it('stays closed after the post is unmerged', async () => {
+    const { author, postId } = await seedOwnPost()
+    const teammate = await seedPerson('admin')
+    await testDb.insert(postActivity).values({
+      postId,
+      principalId: teammate,
+      type: 'post.merged_away',
+      metadata: {},
+    })
+
+    const w = await windowFor(postId, author)
+    expect(w.canEdit).toEqual({ allowed: false, reason: 'Cannot edit posts that have been merged' })
+  })
+})
+
+describe.skipIf(!fixture.available)('the window is checked again when the edit is written', () => {
+  beforeEach(() => {
+    rehost.during = null
+    return fixture.begin()
+  })
+  afterEach(() => {
+    rehost.during = null
+    return fixture.rollback()
+  })
+
+  it('refuses an edit when the team acts while its images are being copied', async () => {
+    const { author, postId, planned } = await seedOwnPost()
+    rehost.during = async () => {
+      await testDb.update(posts).set({ statusId: planned.id }).where(eq(posts.id, postId))
+    }
+
+    await expect(
+      userEditPost(postId, { title: 'Sneaky', content: 'late edit' }, asUser(author))
+    ).rejects.toMatchObject({ code: 'EDIT_NOT_ALLOWED' })
+    const [row] = await testDb.select().from(posts).where(eq(posts.id, postId))
+    expect(row.title).toBe('Dark mode please')
+  })
+
+  it('refuses an edit when the team replies while its images are being copied', async () => {
+    const { author, postId } = await seedOwnPost()
+    const teammate = await seedPerson('admin')
+    rehost.during = async () => {
+      await testDb.insert(postComments).values({
+        postId,
+        principalId: teammate,
+        content: 'On it',
+        isTeamMember: true,
+      })
+    }
+
+    await expect(
+      userEditPost(postId, { title: 'Sneaky', content: 'late edit' }, asUser(author))
+    ).rejects.toMatchObject({ code: 'EDIT_NOT_ALLOWED' })
   })
 })

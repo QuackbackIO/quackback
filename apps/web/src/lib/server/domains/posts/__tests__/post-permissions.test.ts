@@ -34,6 +34,9 @@ function createChainMock() {
 
 // Track what findFirst returns per call
 const mockFindFirst = vi.fn()
+// The row the last findFirst returned: softDeletePost re-reads it under a row
+// lock inside its transaction (SELECT ... FOR UPDATE).
+let lastPost: unknown = null
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
@@ -52,10 +55,18 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
             if (updates++ > 0) chain.returning = vi.fn().mockResolvedValue([])
             return chain
           }),
+          // The delete re-reads the post under a row lock (SELECT ... FOR UPDATE).
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({ for: vi.fn(async () => (lastPost ? [lastPost] : [])) })),
+            })),
+          })),
         })
       }),
       query: {
-        posts: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+        posts: {
+          findFirst: async (...args: unknown[]) => (lastPost = await mockFindFirst(...args)),
+        },
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'post_status_mock', isDefault: true }),
         },

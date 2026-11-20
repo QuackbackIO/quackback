@@ -1,8 +1,9 @@
 /**
  * The author's window to edit or delete their own post.
  *
- * A customer may edit or delete a post they wrote until the team acts on it.
- * The team acts when it:
+ * A customer may edit or delete a post they wrote until the team acts on it,
+ * and once the team has acted the window stays closed for good (undoing the
+ * action does not reopen it). The team acts when it:
  *   - moves the post off the default status,
  *   - replies on it (a public comment from a teammate or an API key; a private
  *     team note does not count, and does not reveal itself here), or
@@ -16,10 +17,22 @@
  * Every entry point (the permission reads the portal menu shows, and the
  * writes) asks here, so the rule lives once.
  */
-import { db, posts, postComments, eq, and, isNull } from '@/lib/server/db'
+import {
+  db,
+  posts,
+  postComments,
+  postActivity,
+  eq,
+  and,
+  inArray,
+  type Database,
+  type Transaction,
+} from '@/lib/server/db'
 import type { PostId, PostStatusId } from '@quackback/ids'
 import type { PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult } from './post.types'
+
+type DbOrTx = Database | Transaction
 
 /** How the team acted on a post, which ends its author's window. */
 export type TeamAction = 'status' | 'reply' | 'merge'
@@ -33,25 +46,60 @@ export interface AuthorWindowPost {
   canonicalPostId: PostId | null
 }
 
-/** Whether the team has acted on the post, and how; null while it has not. */
-export async function teamActionOn(post: AuthorWindowPost): Promise<TeamAction | null> {
+/** Activity types that record the team acting on a post, and what each one means. */
+const TEAM_ACTIVITY: Record<string, TeamAction> = {
+  'status.changed': 'status',
+  'post.merged_in': 'merge',
+  'post.merged_away': 'merge',
+}
+
+/**
+ * Whether the team has ever acted on the post, and how; null while it never
+ * has. Once the team acts the window stays closed: moving the post back to the
+ * default status, deleting the team's reply, or unmerging does not reopen it.
+ * So this reads the history, not only the current state:
+ *   - the post's activity log (every status change and merge is recorded),
+ *   - every public team reply, soft-deleted ones included,
+ *   - and the current state, for anything older than the log.
+ *
+ * `executor` lets a write run the check on its own transaction, after it has
+ * locked the post row.
+ */
+export async function teamActionOn(
+  post: AuthorWindowPost,
+  executor: DbOrTx = db
+): Promise<TeamAction | null> {
   if (post.statusId && !post.onDefaultStatus) return 'status'
   if (post.canonicalPostId) return 'merge'
-  const [reply, mergedIn] = await Promise.all([
-    db
+  const [history, reply, mergedIn] = await Promise.all([
+    executor
+      .select({ type: postActivity.type })
+      .from(postActivity)
+      .where(
+        and(
+          eq(postActivity.postId, post.id),
+          inArray(postActivity.type, Object.keys(TEAM_ACTIVITY))
+        )
+      )
+      .limit(1),
+    executor
       .select({ id: postComments.id })
       .from(postComments)
       .where(
         and(
           eq(postComments.postId, post.id),
           eq(postComments.isTeamMember, true),
-          eq(postComments.isPrivate, false),
-          isNull(postComments.deletedAt)
+          eq(postComments.isPrivate, false)
         )
       )
       .limit(1),
-    db.select({ id: posts.id }).from(posts).where(eq(posts.canonicalPostId, post.id)).limit(1),
+    executor
+      .select({ id: posts.id })
+      .from(posts)
+      .where(eq(posts.canonicalPostId, post.id))
+      .limit(1),
   ])
+  if (history.length > 0) return TEAM_ACTIVITY[history[0].type] ?? 'status'
   if (reply.length > 0) return 'reply'
   if (mergedIn.length > 0) return 'merge'
   return null
@@ -94,8 +142,9 @@ export function authorWindowResult(
 export async function authorWindow(
   action: 'edit' | 'delete',
   post: AuthorWindowPost,
-  config: PortalConfig
+  config: PortalConfig,
+  executor: DbOrTx = db
 ): Promise<PermissionCheckResult> {
   if (alwaysOpen(action, config)) return { allowed: true }
-  return authorWindowResult(action, await teamActionOn(post), config)
+  return authorWindowResult(action, await teamActionOn(post, executor), config)
 }
