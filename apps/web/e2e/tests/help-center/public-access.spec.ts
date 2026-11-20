@@ -207,7 +207,10 @@ test(
     ).toBe(5)
 
     await page.goto('/hc')
-    const card = page.getByRole('link').filter({ hasText: parent.name })
+    const card = page
+      .getByRole('region', { name: 'Browse by topic' })
+      .getByRole('link')
+      .filter({ hasText: parent.name })
     await expect(card).toBeVisible()
     await expect(card).toContainText('1 article')
     await expect(card).not.toContainText(/[2-9] articles/)

@@ -60,7 +60,10 @@ test(
     await page.goto('/hc')
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await expect(page.getByRole('searchbox').or(page.getByRole('textbox')).first()).toBeVisible()
-    const card = page.getByRole('link').filter({ hasText: category.name })
+    const card = page
+      .getByRole('region', { name: 'Browse by topic' })
+      .getByRole('link')
+      .filter({ hasText: category.name })
     await expect(card).toHaveAttribute('href', collectionPath(category))
     await expect(card).toContainText(`About the topic ${marker}`)
     await expect(card).toContainText('2 articles')
@@ -97,7 +100,11 @@ test(
       WHERE id = ${later.uuid}`
 
     await page.goto('/hc')
-    const card = (name: string) => page.getByRole('link').filter({ hasText: name })
+    const card = (name: string) =>
+      page
+        .getByRole('region', { name: 'Browse by topic' })
+        .getByRole('link')
+        .filter({ hasText: name })
     await expect(card(shown.name)).toBeVisible()
     // A parent is a card because of its child's article; the child is not.
     await expect(card(parent.name)).toBeVisible()
