@@ -203,14 +203,6 @@ no such part beyond the wrong notification).
   (`status.public.ts:291`), so a service created "Major outage" shows a 100%
   operational bar. Fix: write the initial event (and the webhook event) when the
   create status is not operational. owner: unassigned, review by: 2026-12-03.
-- `status/subscribe.spec.ts` › STA-S-09 a component subscription with no or
-  unknown services is refused. `subscribeStatusFn`
-  (`apps/web/src/lib/server/functions/status-subscriptions.ts:25`) takes
-  `scope: 'components'` with an empty or non-existent `componentIds` and stores
-  an active subscription that can never match an incident (it still counts as
-  a subscriber and takes a plan slot). The portal UI prevents both. Fix: refuse
-  an empty list and ids that are not live, visible services. owner:
-  unassigned, review by: 2026-12-03.
 - `status/emails.spec.ts` › STA-S-23 nothing is emailed for an incident or
   window created already over. Same cause as STA-A-30
   (`status.service.ts:242`, `:317`): subscribers get "New incident reported …
@@ -421,21 +413,6 @@ no such part beyond the wrong notification).
   `hasMore: true` and no cursor, and a negative or non-numeric limit or a
   garbage cursor reaches the database. Fix: use `parsePaginationParams` and
   refuse a cursor that is not a status incident id. owner: unassigned, review
-  by: 2026-12-03.
-- `status/settings.isolated.spec.ts` › STA-S-08 subscribing honours the page
-  gate. `subscribeStatusFn`
-  (`apps/web/src/lib/server/functions/status-subscriptions.ts:40`) checks only
-  that the caller is not anonymous, so with the page unpublished (or the viewer
-  outside the audience) a subscription is stored and takes a plan slot. Fix:
-  run `resolveStatusPageGate` first and refuse when it is not available.
-  owner: unassigned, review by: 2026-12-03.
-- `status/settings.isolated.spec.ts` › STA-S-25 subscribers are not emailed
-  while the page is unpublished. The status subscriber fan-out
-  (`apps/web/src/lib/server/events/targets.ts:2132`) checks the audience and
-  service visibility but never `isStatusPagePublished` or portal privacy, so
-  people an admin added before launch get "New incident reported" with a
-  "View live status" link that 404s. Fix: return no recipients when the page
-  is not published or the portal is private to them. owner: unassigned, review
   by: 2026-12-03.
 - `status/settings.isolated.spec.ts` › STA-A-62 clear history keeps the events
   behind statuses still held. `clearStatusHistory`
