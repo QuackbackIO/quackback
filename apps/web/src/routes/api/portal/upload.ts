@@ -2,7 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, eq, principal } from '@/lib/server/db'
-import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
+import {
+  ANONYMOUS_UPLOAD_REFUSED,
+  mayUploadPostMedia,
+} from '@/lib/server/storage/anonymous-upload-gate'
 import { isS3Configured, uploadMediaFromFormData } from '@/lib/server/storage/s3'
 import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/rate-bucket'
 import { isBlockedCustomer } from '@/lib/server/domains/principals/blocking'
@@ -15,7 +18,7 @@ export async function handlePortalUpload({ request }: { request: Request }): Pro
   }
   const principalRecord = await db.query.principal.findFirst({
     where: eq(principal.userId, session.user.id as UserId),
-    columns: { type: true, role: true, blockedAt: true, testOwnerPrincipalId: true },
+    columns: { id: true, type: true, role: true, blockedAt: true },
   })
   if (!principalRecord) return Response.json({ error: 'Forbidden' }, { status: 403 })
   // Media here goes into posts and comments, which a blocked person cannot
@@ -26,15 +29,9 @@ export async function handlePortalUpload({ request }: { request: Request }): Pro
       { status: 403 }
     )
   }
-  // An anonymous session may only upload while the workspace takes anonymous
-  // posts and comments, the same switch that gates what the upload is for. A
-  // teammate's test customer is exempt, as it is when it posts.
-  if (
-    principalRecord.type === 'anonymous' &&
-    !principalRecord.testOwnerPrincipalId &&
-    !(await getPortalConfig()).features.allowAnonymous
-  ) {
-    return Response.json({ error: 'Anonymous interaction is not enabled' }, { status: 403 })
+  // An anonymous session uploads only while anonymous posting is on.
+  if (!(await mayUploadPostMedia(principalRecord))) {
+    return Response.json(ANONYMOUS_UPLOAD_REFUSED, { status: 403 })
   }
   const bucket = { key: `portal-upload:user:${session.user.id}`, windowSeconds: 60 }
   const { count } = await incrementBucket(bucket)

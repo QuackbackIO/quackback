@@ -1,7 +1,7 @@
 /**
- * The wait an address over the anonymous vote limit is told: until the oldest
- * anonymous session it minted in the last hour leaves the window. Real
- * Postgres in a rolled-back transaction.
+ * The wait an address over the anonymous vote limit is told: until enough of
+ * the anonymous sessions it minted in the last hour leave the window to bring
+ * it back under the limit. Real Postgres in a rolled-back transaction.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
@@ -47,11 +47,21 @@ describe.skipIf(!fixture.available)('anonymous vote retry-after (real DB)', () =
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it('waits until the oldest session of the last hour ages out', async () => {
-    await anonymousSession(ip, 40)
-    await anonymousSession(ip, 10)
+  it('waits until enough sessions age out to fall under the limit of 50', async () => {
+    // 80 sessions in the window, one every 30 seconds from 50 minutes ago.
+    // Voting opens again once only 49 are left, so 31 must age out: the 31st
+    // oldest was made 50 min - 30 x 30 s = 35 minutes ago, leaving 25 minutes.
+    for (let i = 0; i < 80; i++) await anonymousSession(ip, 50 - i * 0.5)
     // Older than the window: not counted, so it does not decide the wait.
     await anonymousSession(ip, 90)
+
+    const seconds = await anonVoteRetryAfter(ip)
+    expect(seconds).toBeGreaterThan(24 * 60)
+    expect(seconds).toBeLessThanOrEqual(25 * 60 + 1)
+  })
+
+  it('waits for the oldest when the address is exactly at the limit', async () => {
+    for (let i = 0; i < 50; i++) await anonymousSession(ip, 40 - i * 0.5)
 
     const seconds = await anonVoteRetryAfter(ip)
     expect(seconds).toBeGreaterThan(19 * 60)

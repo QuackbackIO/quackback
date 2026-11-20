@@ -87,26 +87,37 @@ describe('tiptapContentSchema', () => {
 
 describe('createPublicPostSchema metadata', () => {
   const post = (metadata: Record<string, string>) =>
-    createPublicPostSchema.safeParse({ boardId: 'board_x', title: 'T', metadata })
+    createPublicPostSchema.parse({ boardId: 'board_x', title: 'T', metadata }).metadata
 
-  it('accepts ordinary session context', () => {
-    expect(post({ plan: 'pro', page: 'https://example.com/settings' }).success).toBe(true)
+  it('keeps ordinary session context as sent', () => {
+    expect(post({ plan: 'pro', page: 'https://example.com/settings' })).toEqual({
+      plan: 'pro',
+      page: 'https://example.com/settings',
+    })
   })
 
-  it('refuses more than 50 keys', () => {
+  it('keeps the first 50 keys and drops the rest, without refusing the post', () => {
     const many = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, 'v']))
-    expect(post(many).success).toBe(false)
+    const kept = post(many)!
+    expect(Object.keys(kept)).toHaveLength(50)
+    expect(kept.k0).toBe('v')
+    expect(kept.k50).toBeUndefined()
   })
 
-  it('refuses a long key or a long value', () => {
-    expect(post({ ['k'.repeat(101)]: 'v' }).success).toBe(false)
-    expect(post({ k: 'v'.repeat(1001) }).success).toBe(false)
+  it('drops a key over 100 characters or a value over 1,000, keeping the others', () => {
+    expect(post({ ['k'.repeat(101)]: 'v', ok: 'yes' })).toEqual({ ok: 'yes' })
+    expect(post({ long: 'v'.repeat(1001), ok: 'yes' })).toEqual({ ok: 'yes' })
+    expect(post({ ['k'.repeat(100)]: 'v'.repeat(1000) })).toEqual({
+      ['k'.repeat(100)]: 'v'.repeat(1000),
+    })
   })
 
-  it('refuses the oversized payload a crafted request sends', () => {
+  it('stores nothing oversized from the crafted 400 KB payload', () => {
     const heavy = Object.fromEntries(
       Array.from({ length: 2000 }, (_, i) => [`k${i}`, 'v'.repeat(200)])
     )
-    expect(post(heavy).success).toBe(false)
+    const kept = post(heavy)!
+    expect(Object.keys(kept)).toHaveLength(50)
+    expect(JSON.stringify(kept).length).toBeLessThan(50 * (100 + 1000 + 10))
   })
 })

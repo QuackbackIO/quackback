@@ -694,16 +694,31 @@ test.describe('portal submit', () => {
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
       const cass = await portalCustomer(browser, marker)
-      const metadata: Record<string, string> = {}
+      const metadata: Record<string, string> = {
+        ['x'.repeat(101)]: 'long key',
+        long: 'v'.repeat(1001),
+      }
       for (let i = 0; i < 2000; i++) metadata[`k${i}`] = 'v'.repeat(200)
       const res = await fbFn(cass.request, 'publicPosts', 'createPublicPostFn', {
         boardId: board.id,
         title: `${marker} heavy metadata`,
         metadata,
       })
-      // 2,000 keys of 200 characters (400 KB) must be refused.
-      expect(res.error).toBeDefined()
-      expect(await postByTitle(board, `${marker} heavy metadata`)).toBeNull()
+      // 2,000 keys of 200 characters (400 KB): the post is taken, and only the
+      // first 50 entries within bounds are stored.
+      expect(res.error).toBeUndefined()
+      const row = await postByTitle(board, `${marker} heavy metadata`)
+      expect(row).not.toBeNull()
+      const stored = (
+        typeof row!.widget_metadata === 'string'
+          ? JSON.parse(row!.widget_metadata as string)
+          : row!.widget_metadata
+      ) as Record<string, string>
+      expect(Object.keys(stored)).toHaveLength(50)
+      expect(stored.k0).toBe('v'.repeat(200))
+      expect(stored.k50).toBeUndefined()
+      expect(stored.long).toBeUndefined()
+      expect(Object.keys(stored).every((k) => k.length <= 100)).toBe(true)
     }
   )
 

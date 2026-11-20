@@ -134,20 +134,29 @@ export type ListPublicPostsInput = z.infer<typeof listPublicPostsSchema>
 
 /**
  * Session context a host page attaches to feedback through the widget
- * (`Quackback.metadata`). Stored on the post, so it is bounded: a few dozen
- * short keys with short values.
+ * (`Quackback.metadata`). Stored on the post, so it is bounded: entries over
+ * the limits are dropped and the post is still taken, since a host page that
+ * sends too much should not lose its visitor's feedback.
  */
 export const POST_METADATA_MAX_KEYS = 50
 export const POST_METADATA_MAX_KEY_LENGTH = 100
 export const POST_METADATA_MAX_VALUE_LENGTH = 1000
-const postMetadataSchema = z
-  .record(
-    z.string().min(1).max(POST_METADATA_MAX_KEY_LENGTH),
-    z.string().max(POST_METADATA_MAX_VALUE_LENGTH)
-  )
-  .refine((m) => Object.keys(m).length <= POST_METADATA_MAX_KEYS, {
-    message: `At most ${POST_METADATA_MAX_KEYS} metadata keys`,
-  })
+
+/** The first POST_METADATA_MAX_KEYS entries whose key and value are within bounds. */
+export function boundPostMetadata(metadata: Record<string, string>): Record<string, string> {
+  const kept: Record<string, string> = {}
+  let count = 0
+  for (const [key, value] of Object.entries(metadata)) {
+    if (count >= POST_METADATA_MAX_KEYS) break
+    if (key.length === 0 || key.length > POST_METADATA_MAX_KEY_LENGTH) continue
+    if (value.length > POST_METADATA_MAX_VALUE_LENGTH) continue
+    kept[key] = value
+    count++
+  }
+  return kept
+}
+
+const postMetadataSchema = z.record(z.string(), z.string()).transform(boundPostMetadata)
 
 export const createPublicPostSchema = z.object({
   boardId: z.string(),

@@ -9,7 +9,7 @@
  * address when they are minted (see `assignSessionScope` in `auth/session-audience.ts`).
  */
 
-import { db, principal, session, eq, and, sql } from '@/lib/server/db'
+import { db, principal, session, eq, and, desc, sql } from '@/lib/server/db'
 import { bucketRetryAfter, incrementBucket, incrementBuckets } from '@/lib/server/utils/rate-bucket'
 
 const ANON_RATE_LIMIT = 50
@@ -37,14 +37,15 @@ export async function checkAnonVoteRateLimit(clientIp: string): Promise<boolean>
 }
 
 /**
- * Seconds until an address over the vote limit may vote again: when the
- * oldest anonymous session it minted in the last hour leaves the window.
+ * Seconds until an address over the vote limit may vote again: voting opens
+ * once fewer than ANON_RATE_LIMIT of its anonymous sessions are left in the
+ * hour, which is when the ANON_RATE_LIMIT-th newest one leaves the window.
  * Only called on the refused path.
  */
 export async function anonVoteRetryAfter(clientIp: string): Promise<number> {
   const [row] = await db
     .select({
-      seconds: sql<number>`ceil(extract(epoch from (min(${session.createdAt}) + interval '1 hour' - now())))::int`,
+      seconds: sql<number>`ceil(extract(epoch from (${session.createdAt} + interval '1 hour' - now())))::int`,
     })
     .from(session)
     .innerJoin(principal, eq(session.userId, principal.userId))
@@ -55,6 +56,9 @@ export async function anonVoteRetryAfter(clientIp: string): Promise<number> {
         sql`${session.createdAt} > now() - interval '1 hour'`
       )
     )
+    .orderBy(desc(session.createdAt))
+    .offset(ANON_RATE_LIMIT - 1)
+    .limit(1)
   const seconds = row?.seconds
   return typeof seconds === 'number' && seconds > 0 ? seconds : ANON_VOTE_WINDOW_S
 }
