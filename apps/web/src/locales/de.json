@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "Dieses Board nimmt gerade kein neues Feedback an.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# Stimme} other {# Stimmen}}, Abstimmung geschlossen",
   "widget.voteButton.ariaClosed": "{count, plural, one {# Stimme} other {# Stimmen}}, Abstimmung geschlossen",
-  "widget.readOnly": "Dieses Board nimmt gerade kein neues Feedback an."
+  "widget.readOnly": "Dieses Board nimmt gerade kein neues Feedback an.",
+  "portal.blocked": "Du kannst hier nichts posten, nicht abstimmen und nicht kommentieren.",
+  "widget.blocked": "Du kannst hier nichts posten, nicht abstimmen und nicht kommentieren."
 }

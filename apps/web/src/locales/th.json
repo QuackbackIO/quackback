@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "บอร์ดนี้ยังไม่รับความคิดเห็นใหม่ในขณะนี้",
   "portal.postCard.vote.ariaClosed": "{count, plural, other {# โหวต}}, ปิดการโหวตแล้ว",
   "widget.voteButton.ariaClosed": "{count, plural, other {# โหวต}}, ปิดการโหวตแล้ว",
-  "widget.readOnly": "บอร์ดนี้ยังไม่รับความคิดเห็นใหม่ในขณะนี้"
+  "widget.readOnly": "บอร์ดนี้ยังไม่รับความคิดเห็นใหม่ในขณะนี้",
+  "portal.blocked": "คุณไม่สามารถโพสต์ โหวต หรือแสดงความคิดเห็นที่นี่ได้",
+  "widget.blocked": "คุณไม่สามารถโพสต์ โหวต หรือแสดงความคิดเห็นที่นี่ได้"
 }

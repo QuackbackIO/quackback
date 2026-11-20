@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# głos} few {# głosy} many {# głosów} other {# głosu}}, głosowanie zamknięte",
   "widget.voteButton.ariaClosed": "{count, plural, one {# głos} few {# głosy} many {# głosów} other {# głosu}}, głosowanie zamknięte",
-  "widget.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii."
+  "widget.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii.",
+  "portal.blocked": "Nie możesz tutaj publikować, głosować ani komentować.",
+  "widget.blocked": "Nie możesz tutaj publikować, głosować ani komentować."
 }

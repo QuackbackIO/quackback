@@ -72,6 +72,9 @@ export interface FeedbackHeaderProps {
 // local so this file shares no module with the lazy chunks.
 const isReadOnlyRefusal = (err: unknown): boolean =>
   err instanceof Error && err.message === "This board isn't taking new feedback right now."
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+const isBlockedRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'BLOCKED'
 
 const DETAILS_MAX_LENGTH = 10_000
 
@@ -297,15 +300,20 @@ export function FeedbackHeaderAnimated({
       // The server logs why it refused the post; its message is not written
       // for the visitor, except the neutral line for a board that takes none.
       setError(
-        isReadOnlyRefusal(err)
+        isBlockedRefusal(err)
           ? intl.formatMessage({
-              id: 'portal.feedback.readOnly',
-              defaultMessage: "This board isn't taking new feedback right now.",
+              id: 'portal.blocked',
+              defaultMessage: "You can't post, vote or comment here.",
             })
-          : intl.formatMessage({
-              id: 'portal.feedback.header.errorSubmit',
-              defaultMessage: 'Could not submit your feedback. Please try again.',
-            })
+          : isReadOnlyRefusal(err)
+            ? intl.formatMessage({
+                id: 'portal.feedback.readOnly',
+                defaultMessage: "This board isn't taking new feedback right now.",
+              })
+            : intl.formatMessage({
+                id: 'portal.feedback.header.errorSubmit',
+                defaultMessage: 'Could not submit your feedback. Please try again.',
+              })
       )
     }
   }

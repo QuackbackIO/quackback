@@ -109,6 +109,11 @@ vi.mock('@/lib/server/domains/principals/principal.service', () => ({
   getMemberByUser: (...args: unknown[]) => mockGetMemberByUser(...args),
 }))
 
+// No one here is blocked; blocked-person-actions.db.test.ts drives the guard.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  assertNotBlocked: async () => undefined,
+}))
+
 vi.mock('@/lib/server/domains/statuses/status.service', () => ({
   getDefaultStatus: () => mockGetDefaultStatus(),
 }))

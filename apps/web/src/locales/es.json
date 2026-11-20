@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "Esta categoría no admite comentarios nuevos por ahora.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votación cerrada",
   "widget.voteButton.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votación cerrada",
-  "widget.readOnly": "Esta categoría no admite comentarios nuevos por ahora."
+  "widget.readOnly": "Esta categoría no admite comentarios nuevos por ahora.",
+  "portal.blocked": "No puedes publicar, votar ni comentar aquí.",
+  "widget.blocked": "No puedes publicar, votar ni comentar aquí."
 }

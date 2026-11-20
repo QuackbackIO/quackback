@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "這個看板目前不接受新的意見回饋。",
   "portal.postCard.vote.ariaClosed": "{count, plural, other {# 票}}, 投票已關閉",
   "widget.voteButton.ariaClosed": "{count, plural, other {# 票}}, 投票已關閉",
-  "widget.readOnly": "這個看板目前不接受新的意見回饋。"
+  "widget.readOnly": "這個看板目前不接受新的意見回饋。",
+  "portal.blocked": "你無法在這裡發文、投票或留言。",
+  "widget.blocked": "你無法在這裡發文、投票或留言。"
 }

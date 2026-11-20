@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "Este quadro não está recebendo novo feedback no momento.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votação encerrada",
   "widget.voteButton.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votação encerrada",
-  "widget.readOnly": "Este quadro não está recebendo novo feedback no momento."
+  "widget.readOnly": "Este quadro não está recebendo novo feedback no momento.",
+  "portal.blocked": "Você não pode publicar, votar nem comentar aqui.",
+  "widget.blocked": "Você não pode publicar, votar nem comentar aqui."
 }

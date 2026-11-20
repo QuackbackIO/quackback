@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useIntl } from 'react-intl'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
+import { useBlockedRefusalToast } from './use-blocked-refusal-toast'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
 
@@ -43,10 +44,12 @@ export function VoteButton({
   closed = false,
 }: VoteButtonProps): React.ReactElement {
   const intl = useIntl()
+  const sayIfBlocked = useBlockedRefusalToast()
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
     voteCount: initialVoteCount,
     enabled: !readonly && !closed,
+    onError: sayIfBlocked,
   })
 
   const displayCount = readonly || closed ? initialVoteCount : voteCount

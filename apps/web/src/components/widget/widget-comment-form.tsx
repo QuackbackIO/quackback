@@ -6,6 +6,7 @@ import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-feat
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { shownName } from '@/lib/shared/greeting-name'
 import { errorText } from '@/lib/client/error-text'
+import { isPersonBlockedRefusal } from '@/lib/shared/person-blocked'
 
 interface WidgetUser {
   id: string
@@ -58,13 +59,18 @@ export function WidgetCommentForm({
       })
     } catch (err) {
       setError(
-        errorText(
-          err,
-          intl.formatMessage({
-            id: 'widget.commentForm.errorPost',
-            defaultMessage: 'Could not post comment. Please try again.',
-          })
-        )
+        isPersonBlockedRefusal(err)
+          ? intl.formatMessage({
+              id: 'widget.blocked',
+              defaultMessage: "You can't post, vote or comment here.",
+            })
+          : errorText(
+              err,
+              intl.formatMessage({
+                id: 'widget.commentForm.errorPost',
+                defaultMessage: 'Could not post comment. Please try again.',
+              })
+            )
       )
     } finally {
       setIsSubmitting(false)

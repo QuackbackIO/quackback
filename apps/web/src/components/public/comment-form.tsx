@@ -30,6 +30,7 @@ import type { PostId, PostCommentId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
 import { errorText } from '@/lib/client/error-text'
+import { isPersonBlockedRefusal } from '@/lib/shared/person-blocked'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -199,13 +200,18 @@ export function CommentForm({
         },
         onError: (err) => {
           setError(
-            errorText(
-              err,
-              intl.formatMessage({
-                id: 'portal.commentForm.errorPost',
-                defaultMessage: 'Failed to post comment',
-              })
-            )
+            isPersonBlockedRefusal(err)
+              ? intl.formatMessage({
+                  id: 'portal.blocked',
+                  defaultMessage: "You can't post, vote or comment here.",
+                })
+              : errorText(
+                  err,
+                  intl.formatMessage({
+                    id: 'portal.commentForm.errorPost',
+                    defaultMessage: 'Failed to post comment',
+                  })
+                )
           )
         },
       }

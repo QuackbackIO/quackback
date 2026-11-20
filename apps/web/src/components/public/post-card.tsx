@@ -27,6 +27,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
+import { useBlockedRefusalToast } from './use-blocked-refusal-toast'
 import { cn } from '@/lib/shared/utils'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
@@ -166,12 +167,13 @@ export function PostCard({
   const createdAtDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
 
   // Vote handling - only used in portal mode
+  const sayIfBlocked = useBlockedRefusalToast()
   const {
     voteCount: currentVoteCount,
     hasVoted: currentHasVoted,
     isPending: isVotePending,
     handleVote,
-  } = usePostVote({ postId: id, voteCount })
+  } = usePostVote({ postId: id, voteCount, onError: sayIfBlocked })
 
   const [isAnonSigningIn, setIsAnonSigningIn] = useState(false)
   const ensureAnonSession = useEnsureAnonSession()

@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "Dit bord neemt op dit moment geen nieuwe feedback aan.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# stem} other {# stemmen}}, stemmen gesloten",
   "widget.voteButton.ariaClosed": "{count, plural, one {# stem} other {# stemmen}}, stemmen gesloten",
-  "widget.readOnly": "Dit bord neemt op dit moment geen nieuwe feedback aan."
+  "widget.readOnly": "Dit bord neemt op dit moment geen nieuwe feedback aan.",
+  "portal.blocked": "Je kunt hier niet posten, stemmen of reageren.",
+  "widget.blocked": "Je kunt hier niet posten, stemmen of reageren."
 }

@@ -73,6 +73,24 @@ describe('POST /api/portal/upload', () => {
     expect(await res.json()).toMatchObject({ error: 'Unauthorized' })
   })
 
+  it('refuses a blocked person with the typed BLOCKED refusal and stores nothing', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce({
+      ...identifiedPrincipal,
+      blockedAt: new Date('2026-11-01T00:00:00Z'),
+    })
+    const res = await handlePortalUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg')),
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({
+      error: "You can't post, vote or comment here.",
+      code: 'BLOCKED',
+    })
+    expect(uploadObject).not.toHaveBeenCalled()
+    expect(incrementBucket).not.toHaveBeenCalled()
+  })
+
   it('allows an anonymous portal session to upload media', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(anonymousSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(anonymousPrincipal)

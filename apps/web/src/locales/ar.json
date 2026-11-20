@@ -2288,5 +2288,7 @@
   "portal.feedback.readOnly": "هذه الفئة لا تستقبل ملاحظات جديدة حاليًا.",
   "portal.postCard.vote.ariaClosed": "{count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}}, التصويت مغلق",
   "widget.voteButton.ariaClosed": "{count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}}, التصويت مغلق",
-  "widget.readOnly": "هذه الفئة لا تستقبل ملاحظات جديدة حاليًا."
+  "widget.readOnly": "هذه الفئة لا تستقبل ملاحظات جديدة حاليًا.",
+  "portal.blocked": "لا يمكنك النشر أو التصويت أو التعليق هنا.",
+  "widget.blocked": "لا يمكنك النشر أو التصويت أو التعليق هنا."
 }

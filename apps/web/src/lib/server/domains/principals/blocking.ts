@@ -6,6 +6,11 @@
  * both consult {@link isBlocked}. The email-inbound transport enforces the
  * same check at its separate ingestion boundary.
  *
+ * Nor can a blocked person sign in again (`handleBlockedSignInAfter` in
+ * auth/hooks.ts revokes the new session), or post, vote, comment, react or
+ * upload on the portal or in the widget ({@link assertNotBlocked}, asked at
+ * each of those actions).
+ *
  * Only end users (portal users, leads, anonymous visitors) can be blocked.
  * Guards refuse to block team members (they manage the workspace) and service
  * principals (integrations / API keys / the AI assistant) — blocking either
@@ -21,6 +26,7 @@
 import { db, principal, eq, sql, type Principal } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { PERSON_BLOCKED_CODE, PERSON_BLOCKED_MESSAGE } from '@/lib/shared/person-blocked'
 import { isTeamMember } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
 
@@ -46,6 +52,20 @@ export async function isBlocked(principalId: PrincipalId): Promise<boolean> {
     where: eq(principal.id, principalId),
   })
   return row?.blockedAt != null
+}
+
+/**
+ * The one guard every portal and widget action a person takes in their own
+ * name asks first: posting, voting, commenting, reacting and uploading. The
+ * refusal is typed, so the portal and widget word it in the visitor's
+ * language.
+ *
+ * @throws ForbiddenError (`BLOCKED`) when the principal is blocked
+ */
+export async function assertNotBlocked(principalId: PrincipalId): Promise<void> {
+  if (await isBlocked(principalId)) {
+    throw new ForbiddenError(PERSON_BLOCKED_CODE, PERSON_BLOCKED_MESSAGE)
+  }
 }
 
 /**
