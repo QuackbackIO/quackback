@@ -3,8 +3,9 @@
  * Statuses and Tags. Shared seeding (boards, posts, tags) is in
  * feedback-admin.ts.
  */
-import { expect, type Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { supportDb, pollFor } from '../support/db'
+import { waitForHydration } from '../utils/helpers'
 import { uuid } from './feedback-admin'
 
 /** The boards settings list row (a link) for a board name. */
@@ -55,7 +56,13 @@ export async function openBoardSettings(
   tab?: 'general' | 'access' | 'moderation' | 'data'
 ): Promise<void> {
   await page.goto(`/admin/settings/boards/${slug}${tab && tab !== 'general' ? `?tab=${tab}` : ''}`)
-  await expect(page.getByRole('tab', { name: 'General' })).toBeVisible({ timeout: 15_000 })
+  await waitForHydration(page.getByRole('tab', { name: 'General' }))
+}
+
+/** Open a settings page and wait until `control` is hydrated (clicks before that are lost). */
+export async function openHydrated(page: Page, path: string, control: Locator): Promise<void> {
+  await page.goto(path)
+  await waitForHydration(control)
 }
 
 /** Status row (snake_case) by name, live or deleted. */

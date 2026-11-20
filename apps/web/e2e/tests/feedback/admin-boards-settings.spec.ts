@@ -11,6 +11,7 @@ import { fromUuid } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { pollFor, supportDb } from '../../support/db'
+import { waitForHydration } from '../../utils/helpers'
 import {
   customerPost,
   makeBoard,
@@ -25,6 +26,7 @@ import {
   boardRowDb,
   eventTypesFor,
   openBoardSettings,
+  openHydrated,
   waitForEventType,
 } from '../../product/feedback-admin-settings'
 
@@ -75,7 +77,11 @@ test(
   async ({ playwright, asPerson, marker }) => {
     const name = `${marker} Ideas`
     const admin = await asPerson('admin')
-    await admin.goto('/admin/settings/boards')
+    await openHydrated(
+      admin,
+      '/admin/settings/boards',
+      admin.getByRole('button', { name: 'New board' })
+    )
     await admin.getByRole('button', { name: 'New board' }).click()
     const dialog = admin.getByRole('dialog')
     // An empty name is refused in the form.
@@ -129,6 +135,7 @@ test(
     const admin = await asPerson('admin')
     await openBoardSettings(admin, board.slug)
     const nameInput = admin.getByLabel('Name', { exact: true })
+    await waitForHydration(nameInput)
     await nameInput.fill(`${marker} After`)
     await admin.getByLabel('Description').click()
     const newSlug = `${marker} After`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
@@ -158,6 +165,7 @@ test(
 
     const admin = await asPerson('admin')
     await openBoardSettings(admin, board.slug)
+    await waitForHydration(admin.getByLabel('Description'))
     await admin.getByLabel('Description').fill(`Wishes of ${marker}`)
     await admin.getByLabel('Name', { exact: true }).click()
     await expect
@@ -168,6 +176,7 @@ test(
 
     await openBoardSettings(admin, board.slug)
     const description = admin.getByLabel('Description')
+    await waitForHydration(description)
     await expect(description).toHaveValue(`Wishes of ${marker}`)
     await description.click()
     await admin.keyboard.press('ControlOrMeta+a')
@@ -192,6 +201,7 @@ test(
 
     const admin = await asPerson('admin')
     await openBoardSettings(admin, board.slug)
+    await waitForHydration(admin.getByRole('switch', { name: 'Read-only' }))
     await admin.getByRole('switch', { name: 'Read-only' }).click()
     await expect.poll(async () => (await boardRowDb(board.id)).read_only).toBe(true)
 
@@ -263,6 +273,7 @@ test(
 
     const admin = await asPerson('admin')
     await openBoardSettings(admin, board.slug)
+    await waitForHydration(admin.getByRole('button', { name: 'Delete board' }))
     await admin.getByRole('button', { name: 'Delete board' }).click()
     const dialog = admin.getByRole('alertdialog').or(admin.getByRole('dialog'))
     const confirm = dialog.getByRole('button', { name: 'Delete board' })
@@ -295,6 +306,7 @@ test(
 
     const admin = await asPerson('admin')
     await openBoardSettings(admin, board.slug, 'access')
+    await waitForHydration(admin.getByRole('button', { name: 'Team only', exact: true }))
     await admin.getByRole('button', { name: 'Team only', exact: true }).click()
     await expect
       .poll(async () => {
@@ -334,8 +346,11 @@ test(
       .poll(async () => ((await boardRowDb(board.id)).access as Record<string, string>).comment)
       .toBe('team')
     await expect(admin.getByRole('status', { name: 'Custom' })).toBeVisible()
+    // One audit row per save: Team only, Everyone, then the Custom change.
+    await expect
+      .poll(async () => (await auditRows('board.access.changed', board.id)).length)
+      .toBe(3)
     const rows = await auditRows('board.access.changed', board.id)
-    expect(rows.length).toBe(3)
     expect(JSON.stringify(rows[2].after_value)).toContain('"comment":"team"')
   }
 )
@@ -412,6 +427,7 @@ test(
     const admin = await asPerson('admin')
     await openBoardSettings(admin, board.slug, 'data')
     await expect(admin.getByText("Download this board's posts as a CSV file.")).toBeVisible()
+    await waitForHydration(admin.getByRole('button', { name: 'Export CSV' }))
     const download = admin.waitForEvent('download')
     await admin.getByRole('button', { name: 'Export CSV' }).click()
     const file = await download
