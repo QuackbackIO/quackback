@@ -3,8 +3,10 @@ import {
   attachmentDisposition,
   cleanDownloadName,
   downloadFileName,
+  forcesProxy,
   isInlineType,
   redirectPolicy,
+  servedFileHeaders,
 } from '../serve-policy'
 
 /**
@@ -105,5 +107,51 @@ describe('cleanDownloadName', () => {
     expect(cleanDownloadName('Invoice‮xcod.docm')).toBe('Invoicexcod.docm')
     expect(cleanDownloadName(' ​ ')).toBeNull()
     expect(cleanDownloadName(null)).toBeNull()
+  })
+})
+
+describe('servedFileHeaders: an SVG wide logo', () => {
+  // A wide logo may be an SVG. It is sanitised before it is stored, and only
+  // under header-logos/ is it shown inline, still sandboxed.
+  it('shows a header logo SVG inline, sandboxed', () => {
+    const headers = servedFileHeaders('header-logos/2026/11/abc-wordmark.svg', 'image/svg+xml')
+    expect(headers['Content-Disposition']).toBeUndefined()
+    expect(headers['Content-Security-Policy']).toBe("sandbox; default-src 'none'")
+  })
+
+  it('downloads an SVG anywhere else', () => {
+    for (const key of ['logos/x.svg', 'files/header-logos/x.svg', 'chat-files/x.svg']) {
+      const headers = servedFileHeaders(key, 'image/svg+xml')
+      expect(headers['Content-Disposition'], key).toMatch(/^attachment;/)
+      expect(headers['Content-Security-Policy'], key).toBe("sandbox; default-src 'none'")
+    }
+  })
+
+  it('leaves a raster header logo as it was', () => {
+    expect(servedFileHeaders('header-logos/x.png', 'image/png')).toEqual({})
+  })
+})
+
+describe('forcesProxy', () => {
+  // The redirect path cannot see the stored type, so it would make an SVG a
+  // download from the bucket. Header logos are always served from this origin.
+  it('proxies header logos', () => {
+    expect(forcesProxy('header-logos/2026/11/abc-wordmark.svg')).toBe(true)
+    expect(forcesProxy('header-logos/x.png')).toBe(true)
+  })
+
+  it('proxies portal fonts, which @font-face fetches in CORS mode', () => {
+    expect(forcesProxy('fonts/2026/11/abc-brand.woff2')).toBe(true)
+  })
+
+  it('leaves every other key to the redirect', () => {
+    for (const key of [
+      'logos/x.svg',
+      'files/header-logos/x.svg',
+      'header-logos-x/y.svg',
+      'files/fonts/x.woff2',
+    ]) {
+      expect(forcesProxy(key), key).toBe(false)
+    }
   })
 })

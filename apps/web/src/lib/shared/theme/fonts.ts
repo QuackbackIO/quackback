@@ -1,4 +1,4 @@
-import { DEFAULT_FONT_SANS } from './expand'
+import { DEFAULT_FONT_SANS, NO_HEADING_FONT } from './expand'
 import { normalizeFontSans } from './generator'
 
 /**
@@ -18,9 +18,9 @@ export const BRANDING_FONTS = [
   { id: 'roboto', value: '"Roboto", ui-sans-serif, system-ui, sans-serif' },
   { id: 'open-sans', value: '"Open Sans", ui-sans-serif, system-ui, sans-serif' },
   { id: 'lato', value: '"Lato", ui-sans-serif, system-ui, sans-serif' },
-  // Not directly selectable in the admin FONT_OPTIONS picker, but several
-  // theme presets in presets.ts (FONTS.nunito) set it as fontSans, so a
-  // preset pick alone must still resolve a font id here.
+  // Not directly selectable in the admin FONT_OPTIONS picker, but themes saved
+  // from an earlier preset carry it as fontSans, so it must still resolve a
+  // font id here.
   { id: 'nunito', value: '"Nunito", ui-sans-serif, system-ui, sans-serif' },
   { id: 'poppins', value: '"Poppins", ui-sans-serif, system-ui, sans-serif' },
   { id: 'dm-sans', value: '"DM Sans", ui-sans-serif, system-ui, sans-serif' },
@@ -65,15 +65,33 @@ export function resolveBrandingFontId(
   return fontIdForValue(normalizeFontSans(raw))
 }
 
+/**
+ * The listed font a rendered document should load for its headings, from the
+ * same two inputs: the stylesheet's `--font-heading` when it sets one, else
+ * the theme config's. Null when headings are set in the text font, or in a
+ * family that is not a listed one (an uploaded family has its own faces).
+ */
+export function resolveHeadingFontId(
+  customCss: string | null | undefined,
+  configFontHeading: string | null | undefined
+): BrandingFontId | null {
+  const fromCss = customCss ? extractFontVarFromCss(customCss, '--font-heading') : null
+  const raw = fromCss || configFontHeading
+  if (!raw || raw === NO_HEADING_FONT) return null
+  return fontIdForValue(normalizeFontSans(raw))
+}
+
 // The exact `:root { --font-sans: ...; }` shape emitted by generateReadableCSS
 // (see generator.ts) — a light regex match rather than the full
 // extractCssVariables parser since only this one variable is needed here.
-function extractFontSansFromCss(css: string): string | null {
+function extractFontVarFromCss(css: string, name: '--font-sans' | '--font-heading'): string | null {
   const rootMatch = css.match(/:root\s*\{([^}]+)\}/)
   if (!rootMatch) return null
-  const varMatch = rootMatch[1].match(/--font-sans\s*:\s*([^;]+);/)
+  const varMatch = rootMatch[1].match(new RegExp(`${name}\\s*:\\s*([^;]+);`))
   return varMatch ? varMatch[1].trim() : null
 }
+
+const extractFontSansFromCss = (css: string) => extractFontVarFromCss(css, '--font-sans')
 
 /**
  * Reads `fontSans` off a persisted BrandingConfig.light/dark blob.
@@ -82,4 +100,26 @@ function extractFontSansFromCss(css: string): string | null {
  */
 export function readFontSans(colors: object | null | undefined): string | null {
   return (colors as { fontSans?: string } | null | undefined)?.fontSans ?? null
+}
+
+/** Reads `fontHeading` off a persisted theme: the listed font its headings are set in, if any. */
+export function readConfigFontHeading(
+  config: { light?: object | null; dark?: object | null } | null | undefined
+): string | null {
+  const of = (side: object | null | undefined) =>
+    (side as { fontHeading?: string } | null | undefined)?.fontHeading
+  return of(config?.light) ?? of(config?.dark) ?? null
+}
+
+/**
+ * The font-sans value a surface asks the on-demand loader to resolve: the
+ * fallback family of an uploaded font (its files load from @font-face), else
+ * the theme's own.
+ */
+export function readConfigFontSans(
+  config: { customFont?: { fallback?: string }; light?: object | null } | null | undefined
+): string | null {
+  const fallback = config?.customFont?.fallback
+  const match = fallback ? BRANDING_FONTS.find((f) => f.id === fallback) : undefined
+  return match?.value ?? readFontSans(config?.light)
 }

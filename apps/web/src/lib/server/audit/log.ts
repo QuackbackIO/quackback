@@ -96,6 +96,9 @@ export type AuditEventType =
   | 'board.access.changed'
   | 'moderation.default.changed'
   | 'portal.visibility.changed'
+  // Customise: one atomic publish of the portal's look (metadata.parts names what changed;
+  // metadata.brandAssets the imported logo, icon or font the publisher confirmed as the brand's)
+  | 'portal.customise.published'
   | 'portal.allowed_domains.changed'
   | 'post.moderation.approved'
   | 'post.moderation.rejected'

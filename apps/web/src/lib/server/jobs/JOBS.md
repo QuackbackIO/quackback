@@ -457,6 +457,7 @@ went stale the moment a queue moved.
 | `segment-evaluation`            | dynamic        | 2           | 3        | 60s   |
 | `file-preview`                  | —              | 2           | 2        | 120s  |
 | `file-retention`                | `40 4 * * *`   | 1           | 3        | 60s   |
+| `staged-upload-sweep`           | `50 4 * * *`   | 1           | 3        | 60s   |
 | `help-center-translate`         | —              | 1           | 3        | 120s  |
 | `help-center-translate-resume`  | `25 * * * *`   | 1           | 1        | 60s   |
 | `email-imap`                    | `* * * * *`    | 1           | 1        | 60s   |

@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 777 surfaces
+### Server functions (`requireAuth`) — 769 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -552,6 +552,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::fetchPlatformCredentialsMaskedFn | integration.manage |
 | `lib/server/functions/portal-access.ts`::updatePortalAccessFn | settings.manage |
+| `lib/server/functions/portal-customise.ts`::publishPortalCustomisationFn | settings.branding |
+| `lib/server/functions/portal-customise.ts`::importBrandFn | settings.branding |
+| `lib/server/functions/portal-customise.ts`::askPortalCustomiseFn | settings.branding |
 | `lib/server/functions/portal-invites.ts`::sendPortalInviteFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::cancelPortalInviteFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::resendPortalInviteFn | settings.manage |
@@ -625,20 +628,13 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::fetchAuthConfigFn | auth.manage |
 | `lib/server/functions/settings.ts`::fetchDeveloperConfig | settings.manage |
 | `lib/server/functions/settings.ts`::fetchTeamMembersAndInvitations | member.view |
-| `lib/server/functions/settings.ts`::updateThemeFn | settings.branding |
 | `lib/server/functions/settings.ts`::updatePortalConfigFn | settings.manage |
-| `lib/server/functions/settings.ts`::updatePortalDesignFn | DYNAMIC (settings.manage | settings.branding) |
 | `lib/server/functions/settings.ts`::updateAuthConfigFn | auth.manage |
 | `lib/server/functions/settings.ts`::saveLogoKeyFn | settings.manage |
 | `lib/server/functions/settings.ts`::deleteLogoFn | settings.manage |
-| `lib/server/functions/settings.ts`::saveHeaderLogoKeyFn | settings.branding |
-| `lib/server/functions/settings.ts`::deleteHeaderLogoFn | settings.branding |
 | `lib/server/functions/settings.ts`::saveFaviconKeyFn | settings.manage |
 | `lib/server/functions/settings.ts`::deleteFaviconFn | settings.manage |
-| `lib/server/functions/settings.ts`::updateHeaderDisplayModeFn | settings.branding |
-| `lib/server/functions/settings.ts`::updateHeaderDisplayNameFn | settings.branding |
 | `lib/server/functions/settings.ts`::updateWorkspaceNameFn | settings.branding |
-| `lib/server/functions/settings.ts`::updateCustomCssFn | settings.branding |
 | `lib/server/functions/settings.ts`::updateDeveloperConfigFn | settings.manage |
 | `lib/server/functions/settings.ts`::fetchWidgetConfig | settings.manage |
 | `lib/server/functions/settings.ts`::fetchWidgetSecret | settings.manage |
@@ -824,12 +820,14 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/uploads.ts`::getChangelogImageUploadUrlFn | changelog.manage |
 | `lib/server/functions/uploads.ts`::getPostImageUploadUrlFn | post.create |
 | `lib/server/functions/uploads.ts`::getLogoUploadUrlFn | settings.manage |
+| `lib/server/functions/uploads.ts`::getIconUploadUrlsFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getFaviconUploadUrlFn | settings.manage |
-| `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.manage |
+| `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.branding |
 | `lib/server/functions/uploads.ts`::getIdentityProviderLogoUploadUrlFn | auth.manage |
 | `lib/server/functions/uploads.ts`::getWidgetHeroUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getAssistantAvatarUploadUrlFn | ai.customer.manage |
+| `lib/server/functions/uploads.ts`::getFontUploadUrlFn | settings.branding |
 | `lib/server/functions/user-attributes.ts`::listUserAttributesFn | user_attribute.view |
 | `lib/server/functions/user-attributes.ts`::createUserAttributeFn | user_attribute.manage |
 | `lib/server/functions/user-attributes.ts`::updateUserAttributeFn | user_attribute.manage |
@@ -842,12 +840,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/webhooks.ts`::updateWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::deleteWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::rotateWebhookSecretFn | webhook.manage |
-| `lib/server/functions/website-branding.ts`::startAutomaticWebsiteBrandingFn | DYNAMIC (settings.manage) |
-| `lib/server/functions/website-branding.ts`::getAutomaticWebsiteBrandingStatusFn | DYNAMIC (settings.manage) |
-| `lib/server/functions/website-branding.ts`::acceptWebsiteBrandingOfferFn | DYNAMIC (settings.manage) |
-| `lib/server/functions/website-branding.ts`::declineWebsiteBrandingOfferFn | DYNAMIC (settings.manage) |
-| `lib/server/functions/website-branding.ts`::undoAutomaticWebsiteBrandingFn | DYNAMIC (settings.manage) |
-| `lib/server/functions/website-branding.ts`::lookupWebsiteBrandingFn | DYNAMIC (settings.manage) |
 | `lib/server/functions/widget/comments.ts`::widgetCreateCommentFn | END_USER (any authenticated) |
 | `lib/server/functions/widget/comments.ts`::widgetAddReactionFn | END_USER (any authenticated) |
 | `lib/server/functions/widget/comments.ts`::widgetRemoveReactionFn | END_USER (any authenticated) |
@@ -1104,7 +1096,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-237 of 1121 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+237 of 1113 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

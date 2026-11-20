@@ -34,14 +34,36 @@ import { CURRENT_WIDGET_SDK_VERSION, widgetSdkNeedsUpdate } from '@/lib/shared/w
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
+import { parseJsonOrNull } from '@/lib/server/domains/settings/settings.helpers'
+import { brandImportSchema } from '@/lib/shared/schemas/portal-customise'
+import { brandWebsiteGuess, brandWebsiteOf } from './brand-website-guess'
 
 const log = logger.child({ component: 'launch-status' })
 
 export interface LaunchStatusCaller {
   principalId: PrincipalId
+  /**
+   * The caller's own email, which whoever resolved the caller already holds:
+   * the brand step guesses the company website from it.
+   */
+  email: string | null
   role: Role
-  /** The caller's effective permissions (gates the test-idea offer). */
+  /** The caller's effective permissions: the brand step acts only with the one Customise needs. */
   permissions: Iterable<PermissionKey>
+}
+
+/**
+ * The company website the brand step offers to import from: the one already
+ * looked up for the workspace, else the one behind the caller's own email.
+ * Null (a personal or academic address) shows the website field instead.
+ */
+function knownBrandDomain(metadata: Record<string, unknown> | null, email: string | null) {
+  const lookup = metadata?.brandingLookup
+  const recorded =
+    lookup && typeof lookup === 'object' && 'domain' in lookup && typeof lookup.domain === 'string'
+      ? brandWebsiteOf(lookup.domain)
+      : null
+  return recorded ?? (email ? brandWebsiteGuess(email) : null)
 }
 
 export async function loadLaunchStatus(caller: LaunchStatusCaller) {
@@ -100,7 +122,11 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
   const launchWindow = launchWindowFor({ setupState, workspaceCreatedAt: orgSettings?.createdAt })
   const flags = resolveFeatureFlags(orgSettings?.featureFlags)
   const permissions = permissionsForLegacyRole(caller.role)
-  const hasBranding = Boolean(orgSettings?.logoKey)
+  const effective = new Set(caller.permissions)
+  // The icon or the header logo: Import and Customise set either.
+  const hasBranding = Boolean(orgSettings?.logoKey || orgSettings?.headerLogoKey)
+  const metadata = parseJsonOrNull<Record<string, unknown>>(orgSettings?.metadata ?? null)
+  const brandImport = brandImportSchema.safeParse(metadata?.brandImport)
   const hasWidgetEnabled = widgetConfig.enabled === true
   // Messenger is "live" when the widget is on and the Messages tab is shown.
   const hasMessengerEnabled = hasWidgetEnabled && (widgetConfig.tabs?.messenger ?? true)
@@ -147,6 +173,8 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
     memberCount: humanMembers.length,
     hasTeamInvite: humanMembers.some((member) => member.teamInvited),
     hasBranding,
+    brandDomain: knownBrandDomain(metadata, caller.email),
+    brandImportedFrom: brandImport.success ? brandImport.data.host : null,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
     widgetLastDetectedAt: orgSettings?.widgetInstalledLastSeenAt
@@ -184,7 +212,8 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
       settingsManage: permissions.has(PERMISSIONS.SETTINGS_MANAGE),
       boardManage: permissions.has(PERMISSIONS.BOARD_MANAGE),
       memberManage: permissions.has(PERMISSIONS.MEMBER_MANAGE),
-      brandingManage: permissions.has(PERMISSIONS.SETTINGS_BRANDING),
+      // The Customise editor and Import check this on the caller's own permissions.
+      brandingManage: effective.has(PERMISSIONS.SETTINGS_BRANDING),
       integrationManage: permissions.has(PERMISSIONS.INTEGRATION_MANAGE),
       helpCenterManage: permissions.has(PERMISSIONS.HELP_CENTER_MANAGE),
       assistantManage: permissions.has(PERMISSIONS.AI_CUSTOMER_MANAGE),

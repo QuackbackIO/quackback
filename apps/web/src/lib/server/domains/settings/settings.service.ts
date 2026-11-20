@@ -75,6 +75,7 @@ import {
   mergeWelcomeCard,
   publicWelcomeCard,
   readSettingsRow,
+  writeLockedSettings,
   type SettingsFreshness,
   type SettingsRecord,
   type SettingsWriteOptions,
@@ -700,27 +701,30 @@ export async function getPortalConfig(
   }
 }
 
-export async function updatePortalConfig(input: UpdatePortalConfigInput): Promise<PortalConfig> {
+export async function updatePortalConfig(
+  input: UpdatePortalConfigInput,
+  options: SettingsWriteOptions = {}
+): Promise<PortalConfig> {
   log.info('update portal config')
   try {
     const normalizedWelcome = normalizeWelcomeCardInput(input.welcomeCard)
     const inputWithoutWelcome: UpdatePortalConfigInput = { ...input }
     delete inputWithoutWelcome.welcomeCard
-    const org = await requireSettings()
-    const existing = parsePortalConfig(org.portalConfig)
-    const updated = deepMerge(existing, inputWithoutWelcome as Partial<PortalConfig>)
-    // welcomeCard.body must replace, not deep-merge — see mergeWelcomeCard.
-    if (normalizedWelcome) {
-      updated.welcomeCard = mergeWelcomeCard(existing.welcomeCard, normalizedWelcome)
-    }
-    // The section map replaces too, or a section taken off it would come back.
-    if (input.sectionDomains) updated.sectionDomains = input.sectionDomains
-
-    await db
-      .update(settings)
-      .set({ portalConfig: JSON.stringify(updated) })
-      .where(eq(settings.id, org.id))
-    await invalidateSettingsCache()
+    const updated = await writeLockedSettings(options, async (tx, org) => {
+      const existing = parsePortalConfig(org.portalConfig)
+      const next = deepMerge(existing, inputWithoutWelcome as Partial<PortalConfig>)
+      // welcomeCard.body must replace, not deep-merge — see mergeWelcomeCard.
+      if (normalizedWelcome) {
+        next.welcomeCard = mergeWelcomeCard(existing.welcomeCard, normalizedWelcome)
+      }
+      // The section map replaces too, or a section taken off it would come back.
+      if (input.sectionDomains) next.sectionDomains = input.sectionDomains
+      await tx
+        .update(settings)
+        .set({ portalConfig: JSON.stringify(next) })
+        .where(eq(settings.id, org.id))
+      return next
+    })
     return updated
   } catch (error) {
     log.error({ err: error }, 'update portal config failed')
@@ -811,18 +815,20 @@ export type HelpCenterConfigUpdate = Omit<Partial<HelpCenterConfig>, 'seo' | 'au
 }
 
 export async function updateHelpCenterConfig(
-  input: HelpCenterConfigUpdate
+  input: HelpCenterConfigUpdate,
+  options: SettingsWriteOptions = {}
 ): Promise<HelpCenterConfig> {
   log.info('update help center config')
   try {
-    const org = await requireSettings()
-    const existing = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
-    const updated = deepMerge(existing, input as Partial<HelpCenterConfig>)
-    await db
-      .update(settings)
-      .set({ helpCenterConfig: JSON.stringify(updated) })
-      .where(eq(settings.id, org.id))
-    await invalidateSettingsCache()
+    const updated = await writeLockedSettings(options, async (tx, org) => {
+      const existing = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+      const next = deepMerge(existing, input as Partial<HelpCenterConfig>)
+      await tx
+        .update(settings)
+        .set({ helpCenterConfig: JSON.stringify(next) })
+        .where(eq(settings.id, org.id))
+      return next
+    })
     return updated
   } catch (error) {
     log.error({ err: error }, 'update help center config failed')
@@ -1199,6 +1205,9 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
       logoUrl: offHostPublicUrl(org.logoKey),
       faviconUrl: getPublicUrlOrNull(org.faviconKey),
       headerLogoUrl: getPublicUrlOrNull(org.headerLogoKey),
+      headerLogoDarkUrl: getPublicUrlOrNull(
+        parsePortalConfig(org.portalConfig).headerLogoDarkKey ?? null
+      ),
       ogImageUrl: null,
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,

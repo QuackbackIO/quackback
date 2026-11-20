@@ -613,6 +613,22 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/domains/files/files.retention').then((m) => m.runFileRetention),
   },
   {
+    // Removes editor uploads (wide logos, fonts) never published. Gated, so a
+    // workspace with nothing staged a day ago writes no row; offset from the
+    // other daily sweeps.
+    name: 'staged-upload-sweep',
+    cron: '50 4 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/settings/staged-upload-sweep-queue').then(
+        (m) => m.runStagedUploadSweep
+      ),
+    cronEnabled: () =>
+      import('@/lib/server/domains/settings/staged-upload-sweep-queue').then((m) =>
+        m.isStagedUploadSweepScheduled()
+      ),
+  },
+  {
     // Was `{help-center-translate}`. The 120s lease is the case §7.2 was built
     // for, and the reason this tier runs a bounded pool instead of one serial
     // drain — see runner.ts.

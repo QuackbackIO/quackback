@@ -37,6 +37,11 @@ vi.mock('../settings.helpers', async (importOriginal) => {
     ...real,
     requireSettings: hoisted.mockRequireSettings,
     requireSettingsCached: hoisted.mockRequireSettings,
+    // The locked read-modify-write sees the same row and writes through the db mock.
+    writeLockedSettings: async (
+      _options: unknown,
+      write: (tx: unknown, row: unknown) => Promise<unknown>
+    ) => write({ update: hoisted.mockDbUpdate }, await hoisted.mockRequireSettings()),
   }
 })
 

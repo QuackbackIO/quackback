@@ -105,7 +105,7 @@ export function VoteButton({
     isInteractive && 'group transition-colors duration-200 cursor-pointer',
     isInteractive &&
       (hasVoted
-        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
+        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-readable [--ink:var(--post-card-voted-color)]'
         : 'border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80'),
     (readonly || disabled) && 'border-border/50',
     isInteractive && isPending && 'opacity-70 cursor-wait',
@@ -130,7 +130,9 @@ export function VoteButton({
       className={cn(
         'font-semibold tabular-nums',
         compact || pill ? 'text-xs' : 'text-sm',
-        isInteractive && hasVoted ? 'text-post-card-voted' : 'text-foreground'
+        isInteractive && hasVoted
+          ? 'text-readable [--ink:var(--post-card-voted-color)]'
+          : 'text-foreground'
       )}
     >
       {displayCount}
