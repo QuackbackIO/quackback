@@ -1107,7 +1107,8 @@ export async function getTicketStatusChangedTargets(event: EventData): Promise<H
  */
 export async function getTicketRepliedTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'ticket.replied') return null
-  const { ticket, content, senderType, title, authorName, requesterPrincipalId } = event.data
+  const { ticket, content, senderType, title, authorName, requesterPrincipalId, messageId } =
+    event.data
 
   const recipients = await actorExcludedTicketWatchers(
     ticket.id as TicketId,
@@ -1115,6 +1116,16 @@ export async function getTicketRepliedTargets(event: EventData): Promise<HookTar
     { requesterPrincipalId }
   )
   if (recipients.length === 0) return null
+  // The event carries the name integrators see. The requester's bell names an
+  // agent reply's author as their thread does (an API key shows as the team).
+  const requesterAuthorName =
+    senderType === 'agent' &&
+    requesterPrincipalId &&
+    recipients.includes(requesterPrincipalId as PrincipalId)
+      ? await (
+          await import('@/lib/server/domains/tickets/ticket-reply-email')
+        ).replyAuthorNameForRequester(messageId as ConversationMessageId, authorName)
+      : undefined
 
   return {
     type: 'notification',
@@ -1126,6 +1137,7 @@ export async function getTicketRepliedTargets(event: EventData): Promise<HookTar
       conversationId: await pairConversationId(ticket.id as TicketId),
       title,
       authorName: authorName ?? (senderType === 'visitor' ? 'The requester' : 'A teammate'),
+      ...(requesterAuthorName && requesterAuthorName !== authorName ? { requesterAuthorName } : {}),
       preview: truncate(content, 140),
       requesterPrincipalId: requesterPrincipalId ?? null,
     },
