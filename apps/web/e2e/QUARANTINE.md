@@ -755,3 +755,37 @@ no such part beyond the wrong notification).
   `published`, `deleted_at IS NULL` and board-not-deleted filters the public
   profile uses (`user.public-profile.ts`). owner: unassigned, review by:
   2026-12-03.
+- `status/api.spec.ts` › STA-X-04 a service created with a non-operational
+  status records it. Same cause as STA-P-15 (`status.components.ts:176`): no
+  history row and no `status.component_changed` webhook. owner: unassigned,
+  review by: 2026-12-03.
+- `status/api.spec.ts` › STA-X-06 incident list paging answers bad limits and
+  cursors cleanly. `GET /api/v1/status/incidents` parses `limit` with
+  `parseInt` itself (`apps/web/src/routes/api/v1/status/incidents/index.ts:64`)
+  instead of the shared pagination guard: `limit=0` answers an empty page with
+  `hasMore: true` and no cursor, and a negative or non-numeric limit or a
+  garbage cursor reaches the database. Fix: use `parsePaginationParams` and
+  refuse a cursor that is not a status incident id. owner: unassigned, review
+  by: 2026-12-03.
+- `status/settings.isolated.spec.ts` › STA-S-08 subscribing honours the page
+  gate. `subscribeStatusFn`
+  (`apps/web/src/lib/server/functions/status-subscriptions.ts:40`) checks only
+  that the caller is not anonymous, so with the page unpublished (or the viewer
+  outside the audience) a subscription is stored and takes a plan slot. Fix:
+  run `resolveStatusPageGate` first and refuse when it is not available.
+  owner: unassigned, review by: 2026-12-03.
+- `status/settings.isolated.spec.ts` › STA-S-25 subscribers are not emailed
+  while the page is unpublished. The status subscriber fan-out
+  (`apps/web/src/lib/server/events/targets.ts:2132`) checks the audience and
+  service visibility but never `isStatusPagePublished` or portal privacy, so
+  people an admin added before launch get "New incident reported" with a
+  "View live status" link that 404s. Fix: return no recipients when the page
+  is not published or the portal is private to them. owner: unassigned, review
+  by: 2026-12-03.
+- `status/settings.isolated.spec.ts` › STA-A-62 clear history keeps the events
+  behind statuses still held. `clearStatusHistory`
+  (`apps/web/src/lib/server/domains/status/status.service.ts:792`) deletes every
+  `status_component_events` row, including those behind statuses an open
+  incident still holds, so those services' uptime reads operational while they
+  are down. Fix: keep (or re-write) the latest event of each service with a
+  live hold. owner: unassigned, review by: 2026-12-03.
