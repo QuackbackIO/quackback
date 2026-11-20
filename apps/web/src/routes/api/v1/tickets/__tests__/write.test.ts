@@ -50,7 +50,6 @@ import { Route as AssignRoute } from '../$ticketId.assign'
 import { Route as PriorityRoute } from '../$ticketId.priority'
 import { Route as DueRoute } from '../$ticketId.due'
 import { Route as TitleRoute } from '../$ticketId.title'
-import { ValidationError } from '@/lib/shared/errors'
 
 type Handler = (a: { request: Request; params: Record<string, string> }) => Promise<Response>
 const post = (route: unknown): Handler =>
