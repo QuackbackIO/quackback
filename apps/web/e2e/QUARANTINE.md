@@ -677,3 +677,27 @@ no such part beyond the wrong notification).
   object from storage. Fix: issue avatar keys per user (for example
   `avatars/<userId>/...` from `getAvatarUploadUrlFn`) and refuse a key outside
   the caller's prefix. owner: unassigned, review by: 2026-12-03.
+
+### Product suite: people sign-in and security (PPL-AUTH)
+
+- `people/auth-portal.spec.ts` › PPL-AUTH-09 a reused or expired sign-in link
+  says it expired. Product bug A-B1: the library redirects a spent or expired
+  link with `error=INVALID_TOKEN` (uppercase), and the toast map only knows the
+  lowercase `invalid_token` / `token_expired`
+  (`apps/web/src/lib/shared/auth-block-messages.ts:74`,
+  `apps/web/src/components/auth/use-auto-open-auth.ts:37`), so the person sees
+  the generic "Sign-in failed. Try again or contact your administrator..."
+  toast. Fix: map `INVALID_TOKEN` (and `EXPIRED_TOKEN`) to the expired-link
+  copy. owner: unassigned, review by: 2026-12-03.
+- `people/auth-portal.spec.ts` › PPL-AUTH-16 with the magic-link method off,
+  portal-signin mails no working link. Product bug A-B2: `requestEmailSignin`
+  (`apps/web/src/lib/server/auth/email-signin.ts:51`) and the route
+  (`apps/web/src/routes/api/auth/portal-signin.ts:130`) never read
+  `authConfig.oauth.magicLink`, and `/magic-link/verify` is never method-gated,
+  so with the method off (the default) the endpoint still mails a link and code
+  that sign anyone in. The settings row is called "Email magic link"; off means
+  the method is not offered. Fix: refuse (or silently skip) the send when the
+  method is off, keeping the uniform answer. Note: every other test that uses
+  `/api/auth/portal-signin` on the default settings passes only because of this
+  bug; once fixed, the suite baseline must turn the method on. owner:
+  unassigned, review by: 2026-12-03.
