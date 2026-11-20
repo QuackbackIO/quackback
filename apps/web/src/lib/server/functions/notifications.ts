@@ -5,7 +5,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { NotificationId } from '@quackback/ids'
-import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { requireAuth, policyActorFromAuth, teamActorFromAuth } from './auth-helpers'
 import {
   getNotificationsForMember,
   getUnreadCount,
@@ -116,8 +116,10 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'get unread count')
   const auth = await requireAuth()
-  // The same actor the list uses, so the badge leaves out the bells it redacts.
-  const count = await getUnreadCount(auth.principal.id, await policyActorFromAuth(auth))
+  // The same visibility rule the list uses, so the badge leaves out the bells
+  // it redacts. A teammate who sees private posts needs no segment lookup.
+  const actor = teamActorFromAuth(auth) ?? (await policyActorFromAuth(auth))
+  const count = await getUnreadCount(auth.principal.id, actor)
   return { count }
 })
 
