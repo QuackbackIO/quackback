@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeIncidentDetails } from '../-serialize'
 import {
@@ -16,8 +16,8 @@ import {
   STATUS_INCIDENT_LIFECYCLE_STATUSES,
   parseOptionalDate,
 } from '../-validation'
-import type { StatusComponentId, StatusIncidentId } from '@quackback/ids'
-import { parseLimit, readJsonBody } from '@/lib/server/domains/api/request'
+import type { StatusComponentId } from '@quackback/ids'
+import { parseCursor, parseLimit, readJsonBody } from '@/lib/server/domains/api/request'
 
 const affectedComponentSchema = z.object({
   componentId: z.string(),
@@ -61,11 +61,7 @@ export const Route = createFileRoute('/api/v1/status/incidents/')({
           const url = new URL(request.url)
           const kindParam = url.searchParams.get('kind')
           const stateParam = url.searchParams.get('state')
-          const cursor = parseOptionalTypeId<StatusIncidentId>(
-            url.searchParams.get('cursor'),
-            'status_incident',
-            'cursor'
-          )
+          const cursor = parseCursor(url)
           const limit = parseLimit(url)
 
           const kind =

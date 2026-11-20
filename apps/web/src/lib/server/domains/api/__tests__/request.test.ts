@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '@/lib/shared/errors'
-import { parseLimit, parseOffset, readJsonBody } from '../request'
+import { generateId } from '@quackback/ids'
+import { parseCursor, parseLimit, parseOffset, readJsonBody } from '../request'
 
 const post = (body: BodyInit | null) => new Request('http://t/', { method: 'POST', body })
 
@@ -53,5 +54,22 @@ describe('parseOffset', () => {
 
   it.each(['-1', 'abc', '1.5'])('refuses offset=%s', (offset) => {
     expect(() => parseOffset(url(`offset=${offset}`))).toThrow(ValidationError)
+  })
+})
+
+describe('parseCursor', () => {
+  const url = (query: string) => new URL(`http://t/?${query}`)
+
+  it('is undefined when absent and takes any TypeID', () => {
+    expect(parseCursor(url(''))).toBeUndefined()
+    expect(parseCursor(url('cursor='))).toBeUndefined()
+    const id = generateId('changelog')
+    expect(parseCursor(url(`cursor=${id}`))).toBe(id)
+    const other = generateId('post')
+    expect(parseCursor(url(`cursor=${other}`))).toBe(other)
+  })
+
+  it.each(['garbage', 'not-an-id', 'post_123'])('refuses cursor=%s', (cursor) => {
+    expect(() => parseCursor(url(`cursor=${cursor}`))).toThrow('Invalid cursor format')
   })
 })

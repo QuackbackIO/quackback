@@ -2,11 +2,11 @@ import { createFileRoute } from '@tanstack/react-router'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { parseLimit } from '@/lib/server/domains/api/request'
-import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
+import { parseCursor, parseLimit } from '@/lib/server/domains/api/request'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeMessage } from './-serialize'
-import type { ConversationId, ConversationMessageId } from '@quackback/ids'
+import type { ConversationId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/conversations/$conversationId/messages')({
   server: {
@@ -22,11 +22,7 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/mess
           )
 
           const url = new URL(request.url)
-          const cursor = parseOptionalTypeId<ConversationMessageId>(
-            url.searchParams.get('cursor'),
-            'conversation_msg',
-            'cursor'
-          )
+          const cursor = parseCursor(url)
           const limit = parseLimit(url, { fallback: 30 })
           const includeInternal = url.searchParams.get('includeInternal') === 'true'
 

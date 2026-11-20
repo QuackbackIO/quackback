@@ -15,8 +15,8 @@ import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service
 import { listArticles, createArticle } from '@/lib/server/domains/help-center/help-center.service'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
-import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
-import { readJsonBody } from '@/lib/server/domains/api/request'
+import type { KbCategoryId, PrincipalId } from '@quackback/ids'
+import { parseCursor, readJsonBody } from '@/lib/server/domains/api/request'
 
 const createArticleBody = z.object({
   categoryId: z.string().min(1, 'Category ID is required'),
@@ -73,8 +73,8 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
           await withApiKeyAuth(request)
 
           const url = new URL(request.url)
-          const { cursor: rawCursor, limit } = parsePaginationParams(url)
-          const cursor = parseOptionalTypeId<KbArticleId>(rawCursor, 'article', 'cursor')
+          const { limit } = parsePaginationParams(url)
+          const cursor = parseCursor(url)
           const categoryId = parseOptionalTypeId<KbCategoryId>(
             url.searchParams.get('categoryId'),
             'kb_category',

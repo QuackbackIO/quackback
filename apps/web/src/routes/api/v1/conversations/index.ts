@@ -2,12 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { parseLimit } from '@/lib/server/domains/api/request'
+import { parseCursor, parseLimit } from '@/lib/server/domains/api/request'
 import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeConversation } from './-serialize'
 import type { ConversationStatus, ConversationPriority } from '@/lib/server/db'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/conversations/')({
   server: {
@@ -18,11 +18,7 @@ export const Route = createFileRoute('/api/v1/conversations/')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.CONVERSATION_VIEW })
 
           const url = new URL(request.url)
-          const cursor = parseOptionalTypeId<ConversationId>(
-            url.searchParams.get('cursor'),
-            'conversation',
-            'cursor'
-          )
+          const cursor = parseCursor(url)
           const limit = parseLimit(url)
           const status = (url.searchParams.get('status') as ConversationStatus | null) ?? undefined
           const priority =

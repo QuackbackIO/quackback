@@ -3,6 +3,7 @@
  * Input the caller got wrong throws a ValidationError, which every route's
  * handleDomainError answers with a 400, never a 500.
  */
+import { isValidTypeId } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
 
 /**
@@ -17,6 +18,17 @@ export async function readJsonBody(request: Request): Promise<unknown> {
   } catch {
     throw new ValidationError('VALIDATION_ERROR', 'Request body must be valid JSON')
   }
+}
+
+/**
+ * `?cursor=`: the id of the last row on the previous page. Anything that is
+ * not a TypeID is a 400; a TypeID that names no row pages from the start.
+ */
+export function parseCursor(url: URL): string | undefined {
+  const cursor = url.searchParams.get('cursor')
+  if (!cursor) return undefined
+  if (!isValidTypeId(cursor)) throw new ValidationError('VALIDATION_ERROR', 'Invalid cursor format')
+  return cursor
 }
 
 /** A query parameter that must be a whole number of at least `min`, or absent. */

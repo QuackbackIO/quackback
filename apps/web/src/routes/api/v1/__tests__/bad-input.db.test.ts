@@ -7,7 +7,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { helpCenterCategories, principal, user } from '@/lib/server/db'
+import { changelogEntries, helpCenterCategories, principal, user } from '@/lib/server/db'
 import { SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
 import type { ApiAuthContext } from '@/lib/server/domains/api/auth'
 import type { ApiKeyId } from '@/lib/server/domains/api-keys'
@@ -30,6 +30,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (original) => ({
 }))
 vi.mock('@/lib/server/domains/help-center/help-center-embedding.service', () => ({
   generateArticleEmbedding: async () => undefined,
+  generateKbQueryEmbedding: async () => null,
 }))
 
 import { Route as changelogList } from '../changelog/index'
@@ -44,6 +45,8 @@ import { Route as articlesList } from '../help-center/articles/index'
 import { Route as articleOne } from '../help-center/articles/$articleId'
 import { Route as articleFeedback } from '../help-center/articles/$articleId.feedback'
 import { Route as conversationsList } from '../conversations/index'
+import { Route as conversationMessages } from '../conversations/$conversationId.messages'
+
 import { Route as ticketsList } from '../tickets/index'
 
 type Handler = (ctx: { request: Request; params: Record<string, string> }) => Promise<Response>
@@ -138,12 +141,44 @@ describe('a malformed cursor or id filter is a 400; a well-formed unknown one is
     ['posts', postsList, 'posts', 'post'],
     ['status incidents', incidentsList, 'status/incidents', 'status_incident'],
     ['help center articles', articlesList, 'help-center/articles', 'article'],
+    ['help center article search', articlesList, 'help-center/articles?search=setup', 'article'],
+    ['conversations', conversationsList, 'conversations', 'conversation'],
   ] as const)('%s cursor', async (_name, route, path, prefix) => {
-    const bad = await call(route, 'GET', `${path}?cursor=not-an-id&limit=2`)
+    const sep = path.includes('?') ? '&' : '?'
+    const bad = await call(route, 'GET', `${path}${sep}cursor=not-an-id&limit=2`)
     expect(bad.status, JSON.stringify(bad.body)).toBe(400)
-    expect(bad.body.error?.message).toMatch(/cursor/i)
-    const unknown = await call(route, 'GET', `${path}?cursor=${generateId(prefix)}`)
-    expect(unknown.status, JSON.stringify(unknown.body)).toBe(200)
+    expect(bad.body.error?.message).toBe('Invalid cursor format')
+    // An unknown id, even one of another type, pages from the start.
+    for (const cursor of [generateId(prefix), generateId('board')]) {
+      const unknown = await call(route, 'GET', `${path}${sep}cursor=${cursor}`)
+      expect(unknown.status, JSON.stringify(unknown.body)).toBe(200)
+    }
+  })
+
+  it('messages cursor', async () => {
+    const res = await call(conversationMessages, 'GET', 'conversations/x/messages?cursor=garbage', {
+      params: { conversationId: generateId('conversation') },
+    })
+    expect(res.status, JSON.stringify(res.body)).toBe(400)
+  })
+
+  it('a cursor the list handed out reads the next page', async () => {
+    await testDb.insert(changelogEntries).values(
+      [1, 2, 3].map((n) => ({
+        title: `Entry ${n}`,
+        content: 'x',
+        createdAt: new Date(Date.UTC(2026, 0, n)),
+      }))
+    )
+    type Page = { data: { id: string }[]; meta: { pagination: { cursor: string } } }
+    const first = (await call(changelogList, 'GET', 'changelog?limit=2')).body as unknown as Page
+    const next = await call(
+      changelogList,
+      'GET',
+      `changelog?limit=2&cursor=${first.meta.pagination.cursor}`
+    )
+    expect(next.status, JSON.stringify(next.body)).toBe(200)
+    expect((next.body as unknown as Page).data).toHaveLength(1)
   })
 
   it.each([
