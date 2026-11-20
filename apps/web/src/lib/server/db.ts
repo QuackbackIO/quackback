@@ -423,6 +423,7 @@ export {
   VISITOR_TOP_DIMENSIONS,
   ensurePageViewPartitions,
   dropExpiredPageViewPartitions,
+  insertPageView,
   refreshVisitorAnalytics,
   VISITOR_PERIODS,
   // Schema tables - help center
