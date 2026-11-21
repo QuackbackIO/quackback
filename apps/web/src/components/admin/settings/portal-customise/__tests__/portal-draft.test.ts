@@ -25,6 +25,8 @@ import {
   wideLogoUrl,
   publishedFromLoaded,
   publishInput,
+  brandAssetKey,
+  carriedAssets,
   iconUrl,
   redoHistory,
   startHistory,
@@ -175,6 +177,7 @@ describe('publishInput', () => {
   const published = publishedFromLoaded(loaded)
 
   describe('the brand assets confirmation', () => {
+    const ALL = ['logo', 'icon', 'font', 'headingFont'] as const
     const files = [
       { key: 'fonts/2026/11/r-staged-import.woff2', weight: 400, style: 'normal' as const },
     ]
@@ -196,7 +199,7 @@ describe('publishInput', () => {
 
     it('travels with a publish of the imported logo, icon and font', () => {
       const input = publishInput(base, imported, published, {
-        brandAssets: { brand, preTicked: ['logo', 'icon', 'font'] },
+        brandAssets: { brand, confirmed: ALL, preTicked: ['logo', 'icon', 'font'] },
       })!
       expect(input.brandAssets).toEqual({
         host: 'northwind.com',
@@ -207,10 +210,9 @@ describe('publishInput', () => {
     })
 
     it('marks as pre-ticked only the assets nobody clicked, among those it carries', () => {
-      // On the site's own domain all started in use; the person turned the icon off and on again.
       const { customFont: _font, ...noFont } = imported
       const input = publishInput(base, noFont, published, {
-        brandAssets: { brand, preTicked: ['logo', 'font'] },
+        brandAssets: { brand, confirmed: ALL, preTicked: ['logo', 'font'] },
       })!
       expect(input.brandAssets).toEqual({
         host: 'northwind.com',
@@ -222,7 +224,7 @@ describe('publishInput', () => {
     it('names the imported website on any publish after an import, and none without one', () => {
       const recoloured = { ...base, themeMode: 'dark' as const }
       const withImport = publishInput(base, recoloured, published, {
-        brandAssets: { brand, preTicked: [] },
+        brandAssets: { brand, confirmed: ALL, preTicked: [] },
       })!
       expect(withImport.importedFrom).toBe('northwind.com')
       expect(withImport.brandAssets).toBeUndefined()
@@ -234,29 +236,33 @@ describe('publishInput', () => {
       const mine = { ...imported, logo: { ...imported.logo, wideKey: 'header-logos/mine.svg' } }
       const { customFont: _font, ...noFont } = mine
       expect(
-        publishInput(base, noFont, published, { brandAssets: { brand, preTicked: [] } })!
-          .brandAssets
+        publishInput(base, noFont, published, {
+          brandAssets: { brand, confirmed: ALL, preTicked: [] },
+        })!.brandAssets
       ).toEqual({ host: 'northwind.com', assets: ['icon'], preTicked: [] })
     })
 
     it('leaves an open-licence font out: it needed no confirmation', () => {
       const open = { ...brand, siteFont: { ...brand.siteFont, licence: 'open' as const } }
       expect(
-        publishInput(base, imported, published, { brandAssets: { brand: open, preTicked: [] } })!
-          .brandAssets?.assets
+        publishInput(base, imported, published, {
+          brandAssets: { brand: open, confirmed: ALL, preTicked: [] },
+        })!.brandAssets?.assets
       ).toEqual(['logo', 'icon'])
     })
 
     it('is absent when nothing imported is published, when unticked, or already live', () => {
       const dark = { ...base, themeMode: 'dark' as const }
       expect(
-        publishInput(base, dark, published, { brandAssets: { brand, preTicked: [] } })!.brandAssets
+        publishInput(base, dark, published, {
+          brandAssets: { brand, confirmed: ALL, preTicked: [] },
+        })!.brandAssets
       ).toBeUndefined()
       expect(publishInput(base, imported, published)!.brandAssets).toBeUndefined()
       // Published once already: a later publish of something else does not confirm again.
       expect(
         publishInput(imported, { ...imported, themeMode: 'dark' }, published, {
-          brandAssets: { brand, preTicked: [] },
+          brandAssets: { brand, confirmed: ALL, preTicked: [] },
         })!.brandAssets
       ).toBeUndefined()
     })
@@ -278,7 +284,7 @@ describe('publishInput', () => {
         ...base,
         customHeadingFont: { family: 'Calibre Display', fallback: 'inter', files: headingFiles },
       }
-      const confirm = { brandAssets: { brand: withHeading, preTicked: [] } }
+      const confirm = { brandAssets: { brand: withHeading, confirmed: ALL, preTicked: [] } }
       expect(publishInput(base, draft, published, confirm)!.brandAssets?.assets).toEqual([
         'headingFont',
       ])
@@ -291,14 +297,42 @@ describe('publishInput', () => {
         siteHeadingFont: { ...withHeading.siteHeadingFont, licence: 'open' as const },
       }
       expect(
-        publishInput(base, draft, published, { brandAssets: { brand: open, preTicked: [] } })!
-          .brandAssets
+        publishInput(base, draft, published, {
+          brandAssets: { brand: open, confirmed: ALL, preTicked: [] },
+        })!.brandAssets
       ).toBeUndefined()
+    })
+
+    it('records only what was confirmed: carrying an asset is not confirming it', () => {
+      expect(
+        publishInput(base, imported, published, {
+          brandAssets: { brand, confirmed: [], preTicked: [] },
+        })!.brandAssets
+      ).toBeUndefined()
+      expect(
+        publishInput(base, imported, published, {
+          brandAssets: { brand, confirmed: ['icon'], preTicked: [] },
+        })!.brandAssets
+      ).toEqual({ host: 'northwind.com', assets: ['icon'], preTicked: [] })
+    })
+
+    it('lists what a publish carries, for Publish to ask about: never what is live already', () => {
+      const input = publishInput(base, imported, published)!
+      expect(carriedAssets(input, base, brand)).toEqual(['logo', 'icon', 'font'])
+      const later = publishInput(imported, { ...imported, themeMode: 'dark' }, published)!
+      expect(carriedAssets(later, imported, brand)).toEqual([])
+    })
+
+    it('knows each asset by its stored file, so a new import of new files asks again', () => {
+      expect(brandAssetKey(brand, 'logo')).toBe('header-logos/n.svg')
+      expect(brandAssetKey(brand, 'icon')).toBe('logos/n.png')
+      expect(brandAssetKey(brand, 'font')).toBe(files[0]!.key)
+      expect(brandAssetKey(brand, 'headingFont')).toBeUndefined()
     })
 
     it('is left out for a host the record cannot hold, rather than failing the publish', () => {
       const input = publishInput(base, imported, published, {
-        brandAssets: { brand: { ...brand, host: 'Not A Host' }, preTicked: [] },
+        brandAssets: { brand: { ...brand, host: 'Not A Host' }, confirmed: ALL, preTicked: [] },
       })!
       expect(input.brandAssets).toBeUndefined()
       expect(() => publishPortalCustomisationSchema.parse(input)).not.toThrow()

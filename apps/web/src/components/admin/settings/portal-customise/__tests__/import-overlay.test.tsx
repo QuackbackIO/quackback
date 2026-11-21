@@ -43,7 +43,6 @@ const done = (over: Partial<BrandImport> = {}): ImportState => ({
   brand: { ...brand, ...over },
   before,
   undone: [],
-  preTicked: [],
 })
 
 /** Time passing in small steps, so each timer's render schedules the next. */

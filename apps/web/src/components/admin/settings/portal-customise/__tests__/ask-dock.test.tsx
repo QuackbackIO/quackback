@@ -38,9 +38,7 @@ function setup(props: Partial<Parameters<typeof AskDock>[0]> = {}) {
     onImport: vi.fn(),
     onChanged: vi.fn(),
   }
-  const dock = () => (
-    <AskDock getDraft={() => draft} page="feedback" importDone={false} {...handlers} {...props} />
-  )
+  const dock = () => <AskDock getDraft={() => draft} page="feedback" {...handlers} {...props} />
   const { rerender } = render(dock())
   return {
     handlers,
@@ -205,38 +203,6 @@ describe('AskDock', () => {
     expect(screen.getByLabelText('Ask for a change')).toHaveAttribute('maxLength', '500')
   })
 
-  it('offers three short suggestions while the chat is empty, with no focus needed', async () => {
-    const { current } = setup()
-    const chips = () =>
-      screen.queryAllByRole('button').filter((b) => b.className.includes('rounded-full'))
-    expect(chips().map((chip) => chip.textContent)).toEqual([
-      'Import my website',
-      'Navy header',
-      'Softer buttons',
-    ])
-    // A chip sends the request it stands for, and the chips go once there are messages.
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Softer buttons' }))
-    })
-    expect(current().buttonShape).toBe('corners')
-    expect(screen.getByText('Make the buttons less rounded')).toBeInTheDocument()
-    expect(chips()).toHaveLength(0)
-  })
-
-  it('leaves Import out of the suggestions after an import', () => {
-    setup({ importDone: true })
-    expect(screen.queryByRole('button', { name: /^Import/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Roadmap first' })).toBeInTheDocument()
-  })
-
-  it('offers to import your own website, never a named brand', () => {
-    const { handlers } = setup()
-    const field = screen.getByLabelText('Ask for a change')
-    fireEvent.click(screen.getByRole('button', { name: 'Import my website' }))
-    expect(field).toHaveValue('Import ')
-    expect(handlers.onImport).not.toHaveBeenCalled()
-  })
-
   it('shows that it is working while a request is out, in the log', async () => {
     let answer!: (value: unknown) => void
     askFn.mockReturnValue(new Promise((resolve) => (answer = resolve)))
@@ -304,7 +270,7 @@ describe('AskDock', () => {
         update={vi.fn()}
         undo={vi.fn()}
         onImport={vi.fn()}
-        importDone={false}
+
         importBrief={importBrief}
         onOpenSection={onOpenSection}
       />
@@ -322,10 +288,10 @@ describe('AskDock', () => {
       dock({
         status: 'done',
         host: 'example.com',
-        line: 'From example.com · 4 applied · logo waiting',
+        line: 'From example.com · 6 applied',
       })
     )
-    expect(screen.getByRole('log')).toHaveTextContent('From example.com · 4 applied · logo waiting')
+    expect(screen.getByRole('log')).toHaveTextContent('From example.com · 6 applied')
     fireEvent.click(screen.getByRole('button', { name: 'See what was imported' }))
     expect(onOpenSection).toHaveBeenCalledWith('import')
   })
@@ -349,7 +315,6 @@ describe('a change made elsewhere (a suggestion used)', () => {
       <AskDock
         getDraft={() => steps.at(-1)!}
         page="feedback"
-        importDone
         notice={{ id: 1, before, after }}
         {...handlers}
       />
@@ -370,7 +335,6 @@ describe('a change made elsewhere (a suggestion used)', () => {
       <AskDock
         getDraft={current}
         page="feedback"
-        importDone
         notice={{ id: 1, before: current(), after: current() }}
         {...handlers}
       />

@@ -83,13 +83,7 @@ import type { PortalSection } from '@/lib/shared/custom-domains'
 import { AdvancedCssDrawer, AdvancedCssSection, advancedCssSummary } from './advanced-css-section'
 import { HelpCenterHomeSection, PageNote, WelcomeSection } from './page-sections'
 import { ImportOverlay } from './import-overlay'
-import {
-  confirmedImport,
-  importBrief,
-  ImportSection,
-  importSummary,
-  useBrandImport,
-} from './import-section'
+import { importBrief, ImportSection, importSummary, useBrandImport } from './import-section'
 import { AskDock } from './ask-dock'
 import { siteColoursOf } from './brand-apply'
 import { track } from '@/lib/client/analytics'
@@ -361,11 +355,11 @@ export function CustomiseEditor({
     []
   )
   const brandImport = useBrandImport({ update: updateNow, getDraft, onSuggestionUsed })
-  // A publish of the imported logo, icon or font records who confirmed them.
-  const { setConfirmedImport } = editor
+  // A publish of the imported logo, icon or font asks first, and records who confirmed them.
+  const { setImportedBrand } = editor
   useEffect(() => {
-    setConfirmedImport(confirmedImport(brandImport.state))
-  }, [brandImport.state, setConfirmedImport])
+    setImportedBrand(brandImport.state.status === 'done' ? brandImport.state.brand : null)
+  }, [brandImport.state, setImportedBrand])
   const [fontUploadRequest, setFontUploadRequest] = useState<{
     family: string
     at: number
@@ -392,22 +386,7 @@ export function CustomiseEditor({
     [brandImport.state]
   )
   // The chat's reply to an import it started follows the import in one line.
-  const {
-    logo: usingLogo,
-    icon: usingIcon,
-    font: usingFont,
-    headingFont: usingHeadingFont,
-  } = brandImport.confirmed
-  const brief = useMemo(
-    () =>
-      importBrief(brandImport.state, {
-        logo: usingLogo,
-        icon: usingIcon,
-        font: usingFont,
-        headingFont: usingHeadingFont,
-      }),
-    [brandImport.state, usingLogo, usingIcon, usingFont, usingHeadingFont]
-  )
+  const brief = useMemo(() => importBrief(brandImport.state), [brandImport.state])
   // A phone shows the portal as a phone does.
   useEffect(() => {
     if (window.matchMedia?.('(max-width: 767px)').matches) setDevice('mobile')
@@ -546,11 +525,9 @@ export function CustomiseEditor({
             >
               <ImportSection
                 state={brandImport.state}
-                confirmed={brandImport.confirmed}
                 onRun={(input) => void brandImport.run(input)}
                 onUndoRow={brandImport.undoRow}
                 onUndoAll={brandImport.undoAll}
-                onConfirmAssets={brandImport.confirmAssets}
                 onUploadWide={() => openSection('header')}
                 onUploadFont={(family) => {
                   setFontUploadRequest({ family, at: Date.now() })
@@ -693,7 +670,6 @@ export function CustomiseEditor({
             onImport={importFor}
             onChanged={flashNow}
             page={pageId}
-            importDone={brandImport.state.status === 'done'}
             importBrief={brief}
             notice={notice}
             chatOpen={chatOpen}
@@ -765,7 +741,16 @@ export function CustomiseEditor({
         </div>
       </div>
 
-      <PortalEditorDialogs editor={editor} />
+      <PortalEditorDialogs
+        editor={editor}
+        onPublishAssets={(keep, drop) => {
+          const check = editor.assetCheck
+          if (!check) return
+          // Dropped assets go back to what the draft had before the import, as one step.
+          const next = brandImport.dropAssets(drop)
+          void editor.publish({ parkCss: check.parkCss, draft: next, confirmed: keep })
+        }}
+      />
     </div>
   )
 }

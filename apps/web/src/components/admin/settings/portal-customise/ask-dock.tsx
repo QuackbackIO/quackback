@@ -28,18 +28,6 @@ import type { ImportBrief } from './import-section'
 import type { SectionId } from './pages'
 import type { PortalDraft } from './portal-draft'
 
-/** Starts a request for the person's own website: they type its address. */
-const IMPORT_SUGGESTION = 'Import my website'
-
-/** The empty chat's suggestions: a short label, and the request it sends. At most three. */
-const SUGGESTIONS: ReadonlyArray<{ label: string; request: string }> = [
-  { label: IMPORT_SUGGESTION, request: IMPORT_SUGGESTION },
-  { label: 'Navy header', request: 'Make the header navy' },
-  { label: 'Softer buttons', request: 'Make the buttons less rounded' },
-]
-/** In the Import suggestion's place once an import has run. */
-const AFTER_IMPORT = { label: 'Roadmap first', request: 'Put Roadmap first' }
-
 /** How many messages the chat keeps. */
 const KEEP = 60
 
@@ -67,8 +55,6 @@ interface AskDockProps {
   /** A request changed the draft: what changed, for the preview's outlines. */
   onChanged?: (summary: ChangeSummary) => void
   page?: AskPage
-  /** An import has run: the Import suggestion is no longer useful. */
-  importDone: boolean
   /** The last import in one line, for the reply to an import the chat started. */
   importBrief?: ImportBrief | null
   /**
@@ -104,7 +90,6 @@ export const AskDock = memo(function AskDock({
   onImport,
   onChanged,
   page,
-  importDone,
   importBrief = null,
   notice,
   chatOpen,
@@ -121,7 +106,6 @@ export const AskDock = memo(function AskDock({
     else setOwnOpen(next)
   }
   const nextId = useRef(0)
-  const field = useRef<HTMLInputElement>(null)
   const log = useRef<HTMLDivElement>(null)
 
   const say = (message: Omit<Message, 'id'>) =>
@@ -216,12 +200,6 @@ export const AskDock = memo(function AskDock({
 
   // One Undo: on the reply whose change is the last thing that happened to the draft.
   const current = getDraft()
-  const chips =
-    messages.length === 0
-      ? SUGGESTIONS.map((chip) =>
-          importDone && chip.request === IMPORT_SUGGESTION ? AFTER_IMPORT : chip
-        )
-      : []
 
   return (
     <div
@@ -302,33 +280,12 @@ export const AskDock = memo(function AskDock({
             <ChevronRightIcon className="ms-auto size-4" aria-hidden="true" />
           </button>
         ) : null}
-        {chips.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {chips.map((chip) => (
-              <button
-                key={chip.label}
-                type="button"
-                title={chip.request === chip.label ? undefined : chip.request}
-                onClick={() => {
-                  if (chip.request === IMPORT_SUGGESTION) {
-                    setValue('Import ')
-                    field.current?.focus()
-                  } else void ask(chip.request)
-                }}
-                className="rounded-full border border-border bg-card px-2 py-1 text-[11px] hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
         <form
           onSubmit={submit}
           className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 focus-within:border-ring focus-within:shadow-[0_0_0_1px_var(--ring)]"
         >
           <SparklesIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
-            ref={field}
             data-bare-field
             aria-label="Ask for a change"
             placeholder="Ask for a change"

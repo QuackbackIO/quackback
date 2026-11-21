@@ -532,28 +532,45 @@ export function brokenNavLink(draft: PortalDraft): PortalNavItemConfig | undefin
   return draft.nav.find((i) => i.type === 'link' && !!i.url && !isValidNavLinkUrl(i.url))
 }
 
+/** The last import, as a publish reads it: the brand assets it brought in, and the site they came from. */
+export type ImportedBrand = Pick<
+  BrandImport,
+  'host' | 'logo' | 'logoDark' | 'icon' | 'siteFont' | 'siteHeadingFont' | 'portalOnSite'
+>
+
+/** A commercial copied font's first file: what the draft holds while it is the imported one. */
+const commercialKey = (font: BrandImport['siteFont']) =>
+  font && 'licence' in font && font.licence === 'commercial' ? font.files[0]?.key : undefined
+
 /**
- * The last import, for the record a publish keeps of its brand assets. The
- * draft holds them only while the tick is on, so a publish that carries them
- * was confirmed. `preTicked` names the assets in use from the start, because
- * the portal is on the site's own domain, whose Use the person never moved.
+ * The stored file that stands for each of an import's brand assets: a
+ * confirmation holds for that file, so a later import of new files asks again.
  */
-export interface ConfirmedImport {
-  brand: Pick<BrandImport, 'host' | 'logo' | 'logoDark' | 'icon' | 'siteFont' | 'siteHeadingFont'>
-  preTicked: readonly BrandAsset[]
+export function brandAssetKey(brand: ImportedBrand, asset: BrandAsset): string | undefined {
+  switch (asset) {
+    case 'logo':
+      return brand.logo?.stagedKey
+    case 'icon':
+      return brand.icon?.key
+    case 'font':
+      return commercialKey(brand.siteFont)
+    case 'headingFont':
+      return commercialKey(brand.siteHeadingFont)
+  }
 }
 
-/** The confirmed brand assets this publish carries: those still the imported ones. */
-function confirmedAssets(
+/**
+ * The imported brand assets a publish would put live: still the imported
+ * ones in the draft, and not live already. Assets that are live and
+ * unchanged are never in a publish, so they are never asked about again.
+ */
+export function carriedAssets(
   input: Omit<PublishPortalCustomisationInput, 'before'>,
   baseline: PortalDraft,
-  { brand, preTicked }: ConfirmedImport
-): PublishPortalCustomisationInput['brandAssets'] {
-  /** A commercial copied font's first file: what the draft holds while it is the imported one. */
-  const commercialKey = (font: BrandImport['siteFont']) =>
-    font && 'licence' in font && font.licence === 'commercial' ? font.files[0]?.key : undefined
-  const fontKey = commercialKey(brand.siteFont)
-  const headingKey = commercialKey(brand.siteHeadingFont)
+  brand: ImportedBrand
+): BrandAsset[] {
+  const fontKey = brandAssetKey(brand, 'font')
+  const headingKey = brandAssetKey(brand, 'headingFont')
   // The theme is sent whole: a font counts only when it is new to what is live.
   const carriesFont =
     fontKey !== undefined &&
@@ -563,7 +580,7 @@ function confirmedAssets(
     headingKey !== undefined &&
     input.theme?.customHeadingFont?.files[0]?.key === headingKey &&
     baseline.customHeadingFont?.files[0]?.key !== headingKey
-  const assets: BrandAsset[] = [
+  return [
     ...((brand.logo && input.logo?.wideKey === brand.logo.stagedKey) ||
     (brand.logoDark && input.logo?.darkKey === brand.logoDark.stagedKey)
       ? ['logo' as const]
@@ -572,10 +589,29 @@ function confirmedAssets(
     ...(carriesFont ? ['font' as const] : []),
     ...(carriesHeadingFont ? ['headingFont' as const] : []),
   ]
+}
+
+/**
+ * The import a publish carries, and what the person said of its brand
+ * assets: `confirmed` names those they confirmed (or that the portal's own
+ * domain vouches for), `preTicked` those of them nobody clicked to confirm.
+ */
+export interface PublishedImport {
+  brand: ImportedBrand
+  confirmed: readonly BrandAsset[]
+  preTicked: readonly BrandAsset[]
+}
+
+/** The confirmation record for the brand assets this publish carries, when it carries any. */
+function confirmedAssets(
+  input: Omit<PublishPortalCustomisationInput, 'before'>,
+  baseline: PortalDraft,
+  { brand, confirmed, preTicked }: PublishedImport
+): PublishPortalCustomisationInput['brandAssets'] {
+  const assets = carriedAssets(input, baseline, brand).filter((asset) => confirmed.includes(asset))
   const confirmation = brandAssetsConfirmationSchema.safeParse({
     host: brand.host,
     assets,
-    // Only what this publish carries; an asset the person used themselves is confirmed by them.
     preTicked: assets.filter((asset) => preTicked.includes(asset)),
   })
   // The record is extra: one it cannot hold never stops the publish.
@@ -587,7 +623,8 @@ function confirmedAssets(
  * with what the editor loaded for it as `before`. Null when nothing changed.
  * `parkCss` leaves the Advanced CSS out (the plan does not include it): the
  * stored rules stay as they are and the draft keeps its own. `brandAssets` is
- * the confirmed import, sent along when the publish carries its logo, icon or font.
+ * the last import with what was confirmed of it, recorded when the publish
+ * carries its logo, icon or font.
  */
 export function publishInput(
   baseline: PortalDraft,
@@ -596,7 +633,7 @@ export function publishInput(
   {
     parkCss = false,
     brandAssets = null,
-  }: { parkCss?: boolean; brandAssets?: ConfirmedImport | null } = {}
+  }: { parkCss?: boolean; brandAssets?: PublishedImport | null } = {}
 ): PublishPortalCustomisationInput | null {
   const before: PublishPortalCustomisationInput['before'] = {}
   const input: Omit<PublishPortalCustomisationInput, 'before'> = {}

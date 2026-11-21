@@ -1,14 +1,13 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
   type FormEvent,
   type ReactNode,
 } from 'react'
-import { ArrowUturnLeftIcon, CheckIcon } from '@heroicons/react/20/solid'
+import { ArrowUturnLeftIcon } from '@heroicons/react/20/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/shared/utils'
@@ -20,26 +19,22 @@ import { BRANDING_FONTS } from '@/lib/shared/theme/fonts'
 import { BRAND_READER_NAME } from '@/lib/shared/theme/brand-import'
 import type { BrandAsset, BrandImport, SiteNotRead } from '@/lib/shared/theme/brand-import'
 import {
-  allAssets,
   applySuggestion,
-  assetsInDraft,
-  heldAssets,
-  heldRowKeys,
+  dropAsset,
   importSuggestions,
   replaceImport,
   importRows,
   revertImport,
-  revertImportRow,
   stillApplied,
   stillUndone,
-  setAssetsConfirmed,
-  type ConfirmedAssets,
+  takeBackRow,
+  ASSET_ROW,
   type ImportRow,
   type ImportRowKey,
   type ImportSuggestion,
   type SuggestionKey,
 } from './brand-apply'
-import type { ConfirmedImport, PortalDraft } from './portal-draft'
+import type { PortalDraft } from './portal-draft'
 
 export type ImportState =
   | { status: 'idle' }
@@ -63,25 +58,7 @@ export type ImportState =
        * against the draft, so one the editor's undo brought back is in again.
        */
       undone: ImportRowKey[]
-      /**
-       * The brand assets in use from the start (the portal is on the site's
-       * domain) whose Use the person never touched. Which are in use now is
-       * read from the draft (`assetsInDraft`), never kept here.
-       */
-      preTicked: BrandAsset[]
     }
-
-/** None of an import's brand assets in use. */
-const NONE = allAssets(false)
-
-/**
- * The last import, for the record a publish keeps of its brand assets. The
- * publish names only the assets it really carries, so an import whose assets
- * are held (or were taken back) records nothing.
- */
-export function confirmedImport(state: ImportState): ConfirmedImport | null {
-  return state.status === 'done' ? { brand: state.brand, preTicked: state.preTicked } : null
-}
 
 /** The host a typed address names, for the reading line. */
 function hostOf(input: string): string {
@@ -100,37 +77,13 @@ export function importSummary(state: ImportState): string {
   return 'From your website'
 }
 
-/** What the status line calls each brand asset waiting for the person. */
-const WAITING_NAME: Record<BrandAsset, string> = {
-  logo: 'logo',
-  icon: 'icon',
-  font: 'font',
-  headingFont: 'headings font',
-}
-
-/** Names joined for a sentence: `logo`, `logo and icon`, `logo, icon and font`. */
-const joinNames = (names: readonly string[]) =>
-  names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
-
 /**
- * A finished import in one line: where from, how much is in the draft, and
- * which brand assets wait for the person. The section's status says it, and
- * so does the chat's reply to an import it started.
+ * A finished import in one line: where from, and how much is in the draft.
+ * The section's status says it, and so does the chat's reply to an import it started.
  */
-export function importStatusLine(
-  state: Extract<ImportState, { status: 'done' }>,
-  confirmed: ConfirmedAssets
-): string {
-  const rows = importRows(state.brand, undefined, confirmed)
-  const applied = rows.filter((row) => stillApplied(row, state.undone)).length
-  const waiting = heldAssets(state.brand).filter((asset) => !confirmed[asset])
-  return [
-    `From ${state.host}`,
-    applied === 0 ? 'nothing applied' : `${applied} applied`,
-    ...(waiting.length > 0
-      ? [`${joinNames(waiting.map((asset) => WAITING_NAME[asset]))} waiting`]
-      : []),
-  ].join(' · ')
+export function importStatusLine(state: Extract<ImportState, { status: 'done' }>): string {
+  const applied = importRows(state.brand).filter((row) => stillApplied(row, state.undone)).length
+  return `From ${state.host} · ${applied === 0 ? 'nothing applied' : `${applied} applied`}`
 }
 
 /** The last import in one line, for the chat's reply to an import it started. */
@@ -140,12 +93,12 @@ export interface ImportBrief {
   line: string
 }
 
-export function importBrief(state: ImportState, confirmed: ConfirmedAssets): ImportBrief | null {
+export function importBrief(state: ImportState): ImportBrief | null {
   switch (state.status) {
     case 'reading':
       return { status: 'reading', host: state.host, line: `Reading ${state.host}…` }
     case 'done':
-      return { status: 'done', host: state.host, line: importStatusLine(state, confirmed) }
+      return { status: 'done', host: state.host, line: importStatusLine(state) }
     case 'refused':
       return {
         status: 'refused',
@@ -175,9 +128,7 @@ export function useBrandImport({
   onSuggestionUsed?: (before: PortalDraft, after: PortalDraft) => void
 }) {
   const [kept, setState] = useState<ImportState>({ status: 'idle' })
-  // Which assets are in use is what the draft holds: undo and redo move each with its asset.
-  const confirmed = kept.status === 'done' ? assetsInDraft(getDraft(), kept.brand) : NONE
-  // And which rows are taken back, likewise: an editor undo of a row's Undo brings it back.
+  // Which rows are taken back is read from the draft: an editor undo of a row's Undo brings it back.
   const undone = kept.status === 'done' ? stillUndone(getDraft(), kept.before, kept.undone) : []
   const undoneKey = undone.join(' ')
   // One identity while nothing it says changes: the chat's reply follows it.
@@ -210,19 +161,10 @@ export function useBrandImport({
           missing: brand.missing,
         })
         // It takes the place of the last import, never stacks on it.
-        const previous = state.status === 'done' ? { ...state, confirmed } : null
-        // A portal on the site's own domain is the brand itself: its assets start confirmed.
-        const onSite = brand.portalOnSite === true
-        const { before, next } = replaceImport(getDraft(), previous, brand, onSite)
+        const previous = state.status === 'done' ? state : null
+        const { before, next } = replaceImport(getDraft(), previous, brand)
         update(() => next)
-        setState({
-          status: 'done',
-          host: brand.host,
-          brand,
-          before,
-          undone: [],
-          preTicked: onSite ? heldAssets(brand) : [],
-        })
+        setState({ status: 'done', host: brand.host, brand, before, undone: [] })
       } catch (error) {
         void track('portal_brand_import', { ok: false, reader: null, missing: [] })
         setState({
@@ -231,55 +173,51 @@ export function useBrandImport({
         })
       }
     },
-    [update, getDraft, state, confirmed]
+    [update, getDraft, state]
   )
 
   const undoRow = useCallback(
     (key: ImportRowKey) => {
       if (state.status !== 'done') return
-      const { before } = state
-      // A held row changed nothing, and one taken back already has nothing left to take back.
-      const row = importRows(state.brand, undefined, confirmed).find((r) => r.key === key)
+      const { before, brand } = state
+      // A row taken back already has nothing left to take back.
+      const row = importRows(brand).find((r) => r.key === key)
       if (!row || !stillApplied(row, state.undone)) return
-      update((draft) => revertImportRow(draft, before, key))
+      update((draft) => takeBackRow(draft, before, brand, key))
       setState({ ...state, undone: [...state.undone, key] })
     },
-    [state, update, confirmed]
+    [state, update]
   )
 
   /** Everything the import put in the draft, taken back as one step. The results stay listed. */
   const undoAll = useCallback(() => {
     if (state.status !== 'done') return
-    const keys = importRows(state.brand, undefined, confirmed)
+    const keys = importRows(state.brand)
       .filter((row) => stillApplied(row, state.undone))
       .map((row) => row.key)
     if (keys.length === 0) return
-    update((draft) => revertImport(draft, { ...state, confirmed }))
+    update((draft) => revertImport(draft, state))
     setState({ ...state, undone: [...state.undone, ...keys] })
-  }, [state, update, confirmed])
+  }, [state, update])
 
   /**
-   * Use, or stop using, the brand assets (or `only` one of them): each
-   * applies, or is taken back, as one step. A switch the person moved is
-   * never a pre-tick again.
+   * Brand assets the person would not confirm at Publish, taken back as one
+   * step. Returns the draft without them, for the publish that follows at
+   * once, before the editor renders it.
    */
-  const confirmAssets = useCallback(
-    (next: boolean, only?: BrandAsset) => {
-      if (state.status !== 'done') return
+  const dropAssets = useCallback(
+    (assets: readonly BrandAsset[]): PortalDraft => {
+      const draft = getDraft()
+      if (state.status !== 'done' || assets.length === 0) return draft
       const { before, brand } = state
-      const assets = heldAssets(brand).filter((asset) => only === undefined || asset === only)
-      if (assets.every((asset) => confirmed[asset] === next)) return
-      update((draft) => setAssetsConfirmed(draft, before, brand, next, only))
-      const rows = heldRowKeys(brand, only)
-      setState({
-        ...state,
-        // Only the switch the person moved stops being a pre-tick; the others stay as they started.
-        preTicked: state.preTicked.filter((asset) => !assets.includes(asset)),
-        // Using one again brings back its rows taken back on their own.
-        undone: next ? state.undone.filter((key) => !rows.includes(key)) : state.undone,
-      })
+      const next = assets.reduce((d, asset) => dropAsset(d, before, brand, asset), draft)
+      if (next === draft) return draft
+      update(() => next)
+      const rows = assets.map((asset) => ASSET_ROW[asset])
+      setState({ ...state, undone: [...new Set([...state.undone, ...rows])] })
+      return next
     },
-    [state, update, confirmed]
+    [state, getDraft, update]
   )
 
   // The words the import suggests; which are in use is read from the draft, as the assets are.
@@ -299,13 +237,11 @@ export function useBrandImport({
     [state, getDraft, update, onSuggestionUsed]
   )
 
-  return { state, confirmed, run, undoRow, undoAll, confirmAssets, suggestions, useSuggestion }
+  return { state, run, undoRow, undoAll, dropAssets, suggestions, useSuggestion }
 }
 
 interface ImportSectionProps {
   state: ImportState
-  /** Which brand assets are in use: the draft holds them. */
-  confirmed?: ConfirmedAssets
   onRun: (input: string) => void
   onUndoRow: (key: ImportRowKey) => void
   /** Everything the import applied, taken back as one step. */
@@ -314,8 +250,6 @@ interface ImportSectionProps {
   onUploadWide: () => void
   /** A licensed font the site uses: upload its files. */
   onUploadFont: (family: string) => void
-  /** An asset's Use switch: that logo, icon or font applies, or is taken back. */
-  onConfirmAssets?: (confirmed: boolean, only?: BrandAsset) => void
   /** Words the import suggests (the name, a welcome line); none applies without its Use. */
   suggestions?: ImportSuggestion[]
   onUseSuggestion?: (key: SuggestionKey) => void
@@ -327,7 +261,6 @@ const STATE_NAME: Record<ImportRow['state'], string> = {
   matched: 'Matched',
   nearest: 'Nearest',
   missing: 'Not found',
-  held: 'Waiting for your OK',
   skipped: 'Left as it is',
 }
 
@@ -337,41 +270,21 @@ const USE_LABEL: Record<SuggestionKey, string> = {
   welcome: 'Use the suggested welcome line',
 }
 
-/** What each asset's Use switch is called. */
-function assetName(asset: BrandAsset, brand: BrandImport): string {
-  switch (asset) {
-    case 'logo':
-      return 'logo'
-    case 'icon':
-      return 'icon'
-    case 'font':
-      return `${brand.siteFont?.family ?? brand.font.site ?? 'the site’s font'} for text`
-    case 'headingFont':
-      return `${brand.siteHeadingFont?.family ?? brand.headings?.site ?? 'the site’s font'} for headings`
-  }
-}
-
-/** Said once beside the Use switches: the reason they exist. */
-const OWNERSHIP_NOTE = 'Use only what you own or have a licence for.'
-
 const fontValueOf = (id: string | null | undefined) =>
   id ? BRANDING_FONTS.find((font) => font.id === id)?.value : undefined
 
 /** The Import your brand section's body. */
 export function ImportSection({
   state,
-  confirmed = NONE,
   onRun,
   onUndoRow,
   onUndoAll,
   onUploadWide,
   onUploadFont,
-  onConfirmAssets,
   suggestions = [],
   onUseSuggestion,
   initialSite = '',
 }: ImportSectionProps) {
-  const noteId = useId()
   const [value, setValue] = useState(initialSite)
   // A status region that arrives already holding its words is not announced.
   // An import started from the chat opens this section mid-read, so the
@@ -407,14 +320,10 @@ export function ImportSection({
   }
 
   const rows = done
-    ? importRows(
-        done.brand,
-        {
-          logo: done.before.logo.wideKey !== null,
-          icon: done.before.logo.icon !== null,
-        },
-        confirmed
-      )
+    ? importRows(done.brand, {
+        logo: done.before.logo.wideKey !== null,
+        icon: done.before.logo.icon !== null,
+      })
     : []
   const logoRow = rows.find((row) => row.key === 'logo')
   const iconRow = rows.find((row) => row.key === 'icon')
@@ -423,17 +332,11 @@ export function ImportSection({
   const isUndone = (row: ImportRow) =>
     done !== null && row.applied && !stillApplied(row, done.undone)
   const anyApplied = rows.some((row) => row.applied && !isUndone(row))
-  const anyHeld = done ? heldAssets(done.brand).length > 0 : false
   const showForm = !done || another
 
-  const useSwitch = (row: ImportRow) =>
-    row.asset ? (
-      <UseToggle
-        name={assetName(row.asset, done!.brand)}
-        using={row.applied && !isUndone(row)}
-        describedBy={noteId}
-        onChange={(next) => onConfirmAssets?.(next, row.asset)}
-      />
+  const rowUndo = (row: ImportRow) =>
+    row.applied && !isUndone(row) ? (
+      <QuietUndo label={row.label} onClick={() => onUndoRow(row.key)} />
     ) : null
 
   return (
@@ -482,7 +385,7 @@ export function ImportSection({
           ) : done ? (
             <>
               <span className="sr-only">Found. </span>
-              {importStatusLine(done, confirmed)}
+              {importStatusLine(done)}
             </>
           ) : null}
         </p>
@@ -515,33 +418,33 @@ export function ImportSection({
       ) : null}
 
       {done && logoRow && iconRow ? (
-        <div className="space-y-1.5">
-          <div className="grid grid-cols-2 gap-2">
-            <AssetTile
-              row={logoRow}
-              url={done.brand.logo?.url}
-              wide
-              toggle={useSwitch(logoRow)}
-              action={
-                logoRow.state === 'missing' ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                    onClick={onUploadWide}
-                  >
-                    Upload
-                  </Button>
-                ) : null
-              }
-            />
-            <AssetTile row={iconRow} url={done.brand.icon?.url} toggle={useSwitch(iconRow)} />
-          </div>
-          {anyHeld ? (
-            <p id={noteId} className="text-[11px] text-muted-foreground">
-              {OWNERSHIP_NOTE}
-            </p>
-          ) : null}
+        <div className="grid grid-cols-2 gap-2">
+          <AssetTile
+            row={logoRow}
+            url={done.brand.logo?.url}
+            wide
+            undone={isUndone(logoRow)}
+            action={
+              logoRow.state === 'missing' ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={onUploadWide}
+                >
+                  Upload
+                </Button>
+              ) : (
+                rowUndo(logoRow)
+              )
+            }
+          />
+          <AssetTile
+            row={iconRow}
+            url={done.brand.icon?.url}
+            undone={isUndone(iconRow)}
+            action={rowUndo(iconRow)}
+          />
         </div>
       ) : null}
 
@@ -553,8 +456,7 @@ export function ImportSection({
               <div
                 className={cn(
                   'min-w-0 flex-1',
-                  (row.state === 'missing' || row.state === 'held' || isUndone(row)) &&
-                    'text-muted-foreground'
+                  (row.state === 'missing' || isUndone(row)) && 'text-muted-foreground'
                 )}
               >
                 <p className="text-xs font-medium">
@@ -578,11 +480,7 @@ export function ImportSection({
                   </Button>
                 ) : null}
               </div>
-              {row.asset ? (
-                useSwitch(row)
-              ) : row.applied && !isUndone(row) ? (
-                <QuietUndo label={row.label} onClick={() => onUndoRow(row.key)} />
-              ) : null}
+              {rowUndo(row)}
             </li>
           ))}
         </ul>
@@ -641,7 +539,7 @@ export function ImportSection({
 
 /** The font a font row's words are set in: the face it names, where the portal has it. */
 function rowFont(row: ImportRow, brand: BrandImport): string | undefined {
-  if (row.state === 'missing' || row.state === 'held' || row.state === 'skipped') return undefined
+  if (row.state === 'missing' || row.state === 'skipped') return undefined
   if (row.key === 'font') return fontValueOf(brand.font.id)
   if (row.key === 'headings') return fontValueOf(brand.headings?.id) ?? fontValueOf(brand.font.id)
   return undefined
@@ -726,23 +624,23 @@ function RowVisual({ row, brand }: { row: ImportRow; brand: BrandImport }) {
   }
 }
 
-/** The logo or the icon as found: a real thumbnail, its one line, and its Use switch. */
+/** The logo or the icon as found: a real thumbnail, its one line, and its Undo. */
 function AssetTile({
   row,
   url,
   wide = false,
-  toggle,
+  undone,
   action,
 }: {
   row: ImportRow
   url: string | undefined
   wide?: boolean
-  toggle: ReactNode
+  undone: boolean
   action?: ReactNode
 }) {
   const found = row.state !== 'missing' && url
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-border p-2">
+    <div className="group flex min-w-0 flex-col gap-1.5 rounded-lg border border-border p-2">
       <div
         className={cn(
           'flex h-12 items-center justify-center rounded-md',
@@ -763,42 +661,15 @@ function AssetTile({
             {row.label}
             <span className="sr-only">: {STATE_NAME[row.state]}</span>
           </p>
-          {row.state === 'missing' ? (
-            <p className="text-[11px] leading-tight text-muted-foreground">{row.text}</p>
+          {row.state === 'missing' || undone ? (
+            <p className="text-[11px] leading-tight text-muted-foreground">
+              {undone ? 'Undone' : row.text}
+            </p>
           ) : null}
         </div>
-        {toggle}
         {action}
       </div>
     </div>
-  )
-}
-
-/** A brand asset's Use switch: one click uses it, and says so; another takes it back. */
-function UseToggle({
-  name,
-  using,
-  describedBy,
-  onChange,
-}: {
-  name: string
-  using: boolean
-  describedBy: string
-  onChange: (next: boolean) => void
-}) {
-  return (
-    <Button
-      variant={using ? 'secondary' : 'outline'}
-      size="sm"
-      aria-pressed={using}
-      aria-label={`Use ${name}`}
-      aria-describedby={describedBy}
-      onClick={() => onChange(!using)}
-      className="h-6 shrink-0 gap-1 px-2 text-xs"
-    >
-      {using ? <CheckIcon className="size-3.5" aria-hidden="true" /> : null}
-      {using ? 'Using' : 'Use'}
-    </Button>
   )
 }
 

@@ -219,6 +219,110 @@ describe('usePortalEditor', () => {
     expect(mutateAsync.mock.calls[2]![0].before.logo).toEqual({ wideKey: 'header-logos/w.svg' })
   })
 
+  describe('imported brand assets at Publish', () => {
+    const brand = {
+      host: 'northwind.com',
+      logo: { kind: 'wide' as const, stagedKey: 'header-logos/n.svg', url: '/n.svg' },
+      icon: { key: 'logos/n.png', faviconKey: 'favicons/n.png', url: '/n.png' },
+    }
+    const withImport = (portalOnSite = false) => {
+      const hook = renderHook(() => usePortalEditor(loaded))
+      act(() => hook.result.current.setImportedBrand({ ...brand, portalOnSite }))
+      act(() =>
+        hook.result.current.update((d) =>
+          editLogo.setUploadedIcon(editLogo.setUploadedWide(d, brand.logo.stagedKey), {
+            key: brand.icon.key,
+            faviconKey: brand.icon.faviconKey,
+          })
+        )
+      )
+      return hook
+    }
+    const ok = (parts: string[]) => ({ ok: true, parts, published: {} })
+
+    it('asks before putting them live, and publishes nothing until confirmed', async () => {
+      const { result } = withImport()
+      await act(() => result.current.publish())
+      expect(mutateAsync).not.toHaveBeenCalled()
+      expect(result.current.assetCheck).toMatchObject({ assets: ['logo', 'icon'], parkCss: false })
+      // Cancel publishes nothing and keeps the draft.
+      act(() => result.current.dismissAssetCheck())
+      expect(result.current.assetCheck).toBeNull()
+      expect(result.current.dirty).toBe(true)
+    })
+
+    it('records the confirmation as clicked, never pre-ticked, and does not ask again', async () => {
+      const { result } = withImport()
+      await act(() => result.current.publish())
+      mutateAsync.mockResolvedValue(ok(['logo.wideKey', 'logo.icon']))
+      await act(() => result.current.publish({ confirmed: ['logo', 'icon'] }))
+      expect(mutateAsync).toHaveBeenCalledTimes(1)
+      expect(mutateAsync.mock.calls[0]![0].brandAssets).toEqual({
+        host: 'northwind.com',
+        assets: ['logo', 'icon'],
+        preTicked: [],
+      })
+      expect(result.current.assetCheck).toBeNull()
+      // Live now: a later publish of something else asks nothing and records nothing.
+      act(() => result.current.update((d) => ({ ...d, buttonShape: 'corners' })))
+      await act(() => result.current.publish())
+      expect(mutateAsync).toHaveBeenCalledTimes(2)
+      expect(result.current.assetCheck).toBeNull()
+      expect(mutateAsync.mock.calls[1]![0].brandAssets).toBeUndefined()
+    })
+
+    it('asks only about what is not confirmed yet, for a retry after someone else’s change', async () => {
+      const { result } = withImport()
+      await act(() => result.current.publish())
+      mutateAsync.mockRejectedValueOnce(
+        Object.assign(new Error('changed'), {
+          conflict: {
+            ok: false,
+            code: 'SETTINGS_CHANGED',
+            message: 'changed',
+            parts: ['portal.nav'],
+            current: {},
+          },
+        })
+      )
+      await act(() => result.current.publish({ confirmed: ['logo', 'icon'] }))
+      expect(result.current.conflict).not.toBeNull()
+      mutateAsync.mockResolvedValueOnce(ok(['logo.wideKey', 'logo.icon']))
+      await act(() => result.current.keepMine())
+      expect(result.current.assetCheck).toBeNull()
+      expect(mutateAsync).toHaveBeenCalledTimes(2)
+      expect(mutateAsync.mock.calls[1]![0].brandAssets?.assets).toEqual(['logo', 'icon'])
+    })
+
+    it('publishes the draft it is given, with dropped assets left out', async () => {
+      const { result } = withImport()
+      await act(() => result.current.publish())
+      const dropped = {
+        ...result.current.draft,
+        logo: { ...result.current.draft.logo, icon: null },
+      }
+      act(() => result.current.update(() => dropped))
+      mutateAsync.mockResolvedValue(ok(['logo.wideKey']))
+      await act(() => result.current.publish({ draft: dropped, confirmed: ['logo'] }))
+      const input = mutateAsync.mock.calls[0]![0]
+      expect(input.logo.icon).toBeUndefined()
+      expect(input.brandAssets).toEqual({ host: 'northwind.com', assets: ['logo'], preTicked: [] })
+      expect(result.current.dirty).toBe(false)
+    })
+
+    it('asks nothing on the site’s own domain, and records the assets as pre-ticked', async () => {
+      const { result } = withImport(true)
+      mutateAsync.mockResolvedValue(ok(['logo.wideKey', 'logo.icon']))
+      await act(() => result.current.publish())
+      expect(result.current.assetCheck).toBeNull()
+      expect(mutateAsync.mock.calls[0]![0].brandAssets).toEqual({
+        host: 'northwind.com',
+        assets: ['logo', 'icon'],
+        preTicked: ['logo', 'icon'],
+      })
+    })
+  })
+
   describe('Before, After and Live', () => {
     it('shows the draft, with nothing to compare, while nothing has changed', () => {
       const { result } = renderHook(() => usePortalEditor(loaded))
