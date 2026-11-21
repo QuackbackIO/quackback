@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/shared/utils'
+import { isBoardScopedEvent } from '@/lib/shared/board-scoped-events'
 import {
   useAddNotificationChannel,
   useUpdateNotificationChannel,
@@ -156,11 +157,6 @@ export function NotificationChannelRouter<TChannel extends Channel>(
 // ============================================
 // Helpers
 // ============================================
-
-/** Only post and comment events carry boards, so only they obey a board filter. */
-function isBoardScoped(eventType: string): boolean {
-  return eventType.startsWith('post.') || eventType.startsWith('comment.')
-}
 
 /** Consecutive runs of events sharing a group, or null when nothing is grouped. */
 function eventGroups(events: EventConfig[]): { name: string; events: EventConfig[] }[] | null {
@@ -522,7 +518,7 @@ function ChannelRow<TChannel extends Channel>({
   }
 
   const starts = groupStarts(events)
-  const showBoardFilter = channel.events.some((e) => e.enabled && isBoardScoped(e.eventType))
+  const showBoardFilter = channel.events.some((e) => e.enabled && isBoardScopedEvent(e.eventType))
 
   const handleRemove = () => {
     removeMutation.mutate(
@@ -791,7 +787,7 @@ function AddChannelDialog<TChannel extends Channel>({
     : ''
   const allEventsSelected = events.every((e) => selectedEvents[e.id])
   const noEventsSelected = events.every((e) => !selectedEvents[e.id])
-  const showBoardFilter = events.some((e) => selectedEvents[e.id] && isBoardScoped(e.id))
+  const showBoardFilter = events.some((e) => selectedEvents[e.id] && isBoardScopedEvent(e.id))
 
   const handleSave = () => {
     if (!channelId) return
