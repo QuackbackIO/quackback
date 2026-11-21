@@ -152,14 +152,17 @@ export function generateContentHTML(content: JSONContent): string {
         const imgWidth = node.attrs?.width !== undefined ? safePositiveInt(node.attrs.width, 0) : 0
         // Both width AND height present (and valid, non-zero) → emit numeric
         // width/height attributes plus an aspect-ratio hint so the browser can
-        // reserve the correct box before the image loads (avoids CLS). Falls
+        // reserve the correct box before the image loads (avoids CLS). The
+        // `auto` keyword makes the stored ratio a pre-load placeholder only:
+        // once the image loads its natural ratio wins, so stale/default dims
+        // (the resizable-image extension's 500×500) can never stretch it. Falls
         // back to the width-only behavior below for nodes that only carry a
         // legacy width (or no dimensions at all), which is still the common
         // case for historical content authored before dimensions were tracked.
         const imgHeight =
           node.attrs?.height !== undefined ? safePositiveInt(node.attrs.height, 0) : 0
         if (imgWidth && imgHeight) {
-          const style = `style="aspect-ratio: ${imgWidth} / ${imgHeight};"`
+          const style = `style="aspect-ratio: auto ${imgWidth} / ${imgHeight};"`
           return `<img src="${src}" alt="${alt}" width="${imgWidth}" height="${imgHeight}" loading="lazy" decoding="async" class="max-w-full h-auto rounded-lg" ${style} />`
         }
         // Only apply width (not height) so h-auto preserves aspect ratio

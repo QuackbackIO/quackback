@@ -171,6 +171,21 @@ describe('generateContentHTML', () => {
     expect(html).not.toContain('aspect-ratio')
   })
 
+  it('keeps the natural aspect ratio when stored width/height disagree with the image', () => {
+    // Pre-#539 pastes stored the extension default 500×500 for any screenshot.
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [
+        {
+          type: 'resizableImage',
+          attrs: { src: 'https://cdn.example.com/wide.png', width: 500, height: 500 },
+        },
+      ],
+    })
+    expect(html).toContain('aspect-ratio: auto 500 / 500')
+    expect(html).not.toMatch(/aspect-ratio:\s*500/)
+  })
+
   it('drops an image with an unsafe (javascript:) src', () => {
     const html = generateContentHTML({
       type: 'doc',
