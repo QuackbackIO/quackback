@@ -33,17 +33,17 @@ export const CustomiseTopBar = memo(function CustomiseTopBar({
   onPublish,
 }: CustomiseTopBarProps) {
   return (
-    <div className="flex h-[52px] shrink-0 items-center gap-3 border-b border-border px-3">
+    <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3">
       <Button variant="ghost" size="sm" asChild className="gap-1 text-muted-foreground">
         <Link to="/admin/settings/portal">
           <ChevronLeftIcon className="size-4" aria-hidden="true" />
           Portal
         </Link>
       </Button>
-      <span className="h-5 w-px bg-border" aria-hidden="true" />
-      <h2 className="text-sm font-semibold">Customise</h2>
+      <span className="h-5 w-px bg-border max-sm:hidden" aria-hidden="true" />
+      <h2 className="text-sm font-semibold max-sm:sr-only">Customise</h2>
 
-      <div className="ms-auto flex items-center gap-1.5">
+      <div className="ms-auto flex items-center gap-1 sm:gap-1.5">
         <HistoryButton label="Undo" shortcut="Ctrl Z" disabled={!canUndo} onClick={onUndo}>
           <ArrowUturnLeftIcon className="size-4" aria-hidden="true" />
         </HistoryButton>
@@ -52,7 +52,7 @@ export const CustomiseTopBar = memo(function CustomiseTopBar({
         </HistoryButton>
         {changes > 0 ? (
           <>
-            <span className="ms-2 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+            <span className="ms-2 flex items-center gap-1.5 text-[13px] text-muted-foreground max-sm:hidden">
               <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
               {changes === 1 ? '1 change' : `${changes} changes`}
             </span>

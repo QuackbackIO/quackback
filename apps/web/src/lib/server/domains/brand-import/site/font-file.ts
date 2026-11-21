@@ -20,8 +20,10 @@ export interface FontFileFacts {
   weightRange: [number, number] | null
   /** The embedding permissions, or null when the file has no OS/2 table. */
   fsType: number | null
-  /** The licence description and URL, one after the other. */
+  /** The licence description (name ID 13). */
   licence: string
+  /** The licence URL (name ID 14). */
+  licenceUrl: string
   /** Whether it maps the Latin letters and digits; null when its character map is not one we read. */
   latin: boolean | null
   glyphs: number | null
@@ -36,8 +38,18 @@ const MAX_TABLES = 200
 /** `fsType` bit 1: restricted-licence embedding, so the font may not be embedded or shared. */
 const RESTRICTED = 0x0002
 
-const OPEN_LICENCE =
-  /SIL Open Font Licen[sc]e|scripts\.sil\.org\/OFL|openfontlicense\.org|\bOFL\b|Apache Licen[sc]e|apache\.org\/licenses/i
+/**
+ * An open licence, as its own files name it: the licence URL is one of the
+ * licences' own addresses, or the description says the font is licensed under
+ * one, by its full name and version. A bare "OFL" or "Apache" is not enough.
+ */
+const OPEN_LICENCE_URL =
+  /^https?:\/\/(?:www\.)?(?:scripts\.sil\.org\/OFL|openfontlicense\.org|apache\.org\/licenses\/LICENSE-2\.0(?:\.txt|\.html)?)\/?$/i
+const OPEN_LICENCE_TEXT =
+  /\blicensed under the (?:SIL Open Font Licen[sc]e(?:,? Version 1\.1)?|Apache Licen[sc]e,? Version 2\.0)\b|\bSIL Open Font Licen[sc]e,? Version 1\.1\b/i
+/** Words that make any mention of an open licence doubtful: such a font is held. */
+const NOT_OPEN =
+  /\b(?:not|never|no longer)\b[^.;]{0,60}\b(?:open font|ofl|apache)|\bcommercial\b|\bproprietary\b|\ball rights reserved\b|\bend[- ]user licen[sc]e\b|\beula\b|\bpurchas|\bpaid\b|\btrial\b|\bpersonal use\b|\bdesktop licen[sc]e\b|\bweb ?font licen[sc]e\b/i
 
 /** The WOFF2 directory's known tags, by index. */
 const WOFF2_TAGS = [
@@ -353,7 +365,8 @@ export function readFontFile(bytes: Uint8Array): FontFileFacts | null {
       italic: !!os2 && os2.length >= 64 && (os2.readUInt16BE(62) & 0x01) !== 0,
       weightRange: weightAxis(tables.get('fvar')),
       fsType: os2 && os2.length >= 10 ? os2.readUInt16BE(8) : null,
-      licence: [names.get(13), names.get(14)].filter(Boolean).join(' '),
+      licence: names.get(13) ?? '',
+      licenceUrl: names.get(14) ?? '',
       latin: mapsAll(tables.get('cmap'), LATIN),
       glyphs: maxp && maxp.length >= 6 ? maxp.readUInt16BE(4) : null,
     }
@@ -365,9 +378,15 @@ export function readFontFile(bytes: Uint8Array): FontFileFacts | null {
 /**
  * How the file says it may be used. Restricted comes first: a maker's own
  * "do not embed" outranks any licence text. A licence that is not plainly an
- * open one is a commercial font's.
+ * open one (named in full or by its own URL, with nothing that doubts it) is
+ * a commercial font's, held until the person confirms it.
  */
-export function fontLicence(facts: Pick<FontFileFacts, 'fsType' | 'licence'>): FontLicence {
+export function fontLicence(
+  facts: Pick<FontFileFacts, 'fsType' | 'licence' | 'licenceUrl'>
+): FontLicence {
   if (facts.fsType !== null && (facts.fsType & RESTRICTED) !== 0) return 'restricted'
-  return OPEN_LICENCE.test(facts.licence) ? 'open' : 'commercial'
+  if (NOT_OPEN.test(facts.licence) || NOT_OPEN.test(facts.licenceUrl)) return 'commercial'
+  return OPEN_LICENCE_URL.test(facts.licenceUrl.trim()) || OPEN_LICENCE_TEXT.test(facts.licence)
+    ? 'open'
+    : 'commercial'
 }

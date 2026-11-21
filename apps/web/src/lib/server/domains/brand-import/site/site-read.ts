@@ -24,6 +24,7 @@ import { isBotChallenge } from './challenge'
 import { pageKind, signsFromHtml } from './page-kind'
 import { isConsentStylesheet } from './consent'
 import { siteHost } from './host'
+import { readPageFonts } from './site-font-files'
 import {
   inlineStyles,
   manifestIcons,
@@ -230,6 +231,10 @@ function budgeted(
       bytesLeft += reserved - used
     }
     if (!res) return null
+    // A font cut short by what was left of the budget is no font: a parser that
+    // reads only the tables it needs would take it as whole. Too little budget
+    // to hold the whole file is no file at all.
+    if (kind === 'font' && reserved < maxBytes && res.body.byteLength >= reserved) return null
     return res.body.byteLength > reserved ? { ...res, body: res.body.subarray(0, reserved) } : res
   }
   return {
@@ -382,6 +387,14 @@ export async function readSite(
       : Promise.resolve(null),
   ])
 
+  // The words' own font files, read as the browser reader reads them, so a
+  // site read without a browser still brings an open-licence font along.
+  const fonts = await readPageFonts(
+    facts.fonts,
+    inline ? [...sheets, { url: `${page.url}#inline`, css: inline }] : sheets,
+    (address, kind, max) => budget.get(address, kind, max)
+  )
+
   log.info(
     {
       host,
@@ -396,7 +409,15 @@ export async function readSite(
     },
     'site read'
   )
-  return { facts, favicon, icon, logo, shareImage, failed: null }
+  return {
+    facts,
+    favicon,
+    icon,
+    logo,
+    shareImage,
+    failed: null,
+    ...(fonts ? { fonts } : {}),
+  }
 }
 
 /**
@@ -408,6 +429,7 @@ const READER_USER_AGENT = `${READER_TOKEN}/1.0 (+https://quackback.io)`
 const ACCEPT: Record<SiteFetchKind, string> = {
   page: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   css: 'text/css,*/*;q=0.1',
+  font: 'font/woff2,font/woff;q=0.9,font/ttf;q=0.8,font/otf;q=0.8,*/*;q=0.1',
   // What a logo or icon can be stored as, and emails show: never AVIF first,
   // which a CDN would otherwise send for an icon.
   image: 'image/png,image/webp;q=0.9,image/svg+xml;q=0.9,image/jpeg;q=0.8,image/*;q=0.5,*/*;q=0.3',

@@ -5,6 +5,7 @@
  * them into a `BrandRead` (../static-reader.ts).
  */
 import type { PageStyle } from './site-style'
+import type { SiteFontInput } from './site-font'
 
 /** Where a font family was named. */
 export interface FontFact {
@@ -137,6 +138,12 @@ export interface SiteRead {
     | null
   /** A picker's links, for the addresses to offer instead. */
   links?: { href: string; text: string }[]
+  /**
+   * The files the text's and the headings' own fonts are served as, from the
+   * stylesheets' `@font-face` rules, for site-font.ts to classify. Absent when
+   * the page has none for either.
+   */
+  fonts?: { text?: SiteFontInput; headings?: SiteFontInput }
 }
 
 /** One fetch the reader makes; live, recorded or replayed from a snapshot. */
@@ -147,7 +154,7 @@ export interface FetchedBody {
   contentType: string
   body: Uint8Array
 }
-export type SiteFetchKind = 'page' | 'css' | 'image' | 'manifest' | 'robots'
+export type SiteFetchKind = 'page' | 'css' | 'image' | 'font' | 'manifest' | 'robots'
 export type SiteFetcher = (
   url: string,
   kind: SiteFetchKind,

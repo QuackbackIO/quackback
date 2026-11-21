@@ -59,4 +59,16 @@ describe('AdminWorkspaceFrame', () => {
     expect(slot.className.split(/\s+/)).not.toContain('sm:invisible')
     expect(main.className).toContain('sm:ps-0')
   })
+
+  it('keeps room for the phone top bar on every route, a full-page one included', () => {
+    const canvas = (collapsed: boolean) => {
+      frame(collapsed)
+      const el = document.querySelector('[data-admin-canvas]') as HTMLElement
+      const classes = el.className.split(/\s+/)
+      cleanup()
+      return classes
+    }
+    expect(canvas(true)).toContain('pt-14')
+    expect(canvas(false)).toContain('pt-14')
+  })
 })

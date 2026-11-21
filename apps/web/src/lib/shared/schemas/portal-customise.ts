@@ -156,21 +156,21 @@ const beforeSchema = z
 /**
  * The person's confirmation that the brand assets Import brought in (the
  * site's logo, icon or font files) are the brand's own or licensed to it:
- * the site they came from, which of them this publish carries, and whether
- * the tick was already there because the portal is on the site's domain. It
- * changes no setting; the publish records it with who published and when.
+ * the site they came from, which of them this publish carries (the text's
+ * font and the headings' are two), and which of those were in use from the
+ * start because the portal is on the site's domain, never confirmed by a
+ * click. It changes no setting; the publish records it with who published
+ * and when.
  */
+const brandAssetSchema = z.enum(['logo', 'icon', 'font', 'headingFont'])
 export const brandAssetsConfirmationSchema = z
   .object({
     host: z
       .string()
       .max(253)
       .regex(/^(?!-)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/, 'The imported site must be a host name.'),
-    assets: z
-      .array(z.enum(['logo', 'icon', 'font']))
-      .min(1)
-      .max(3),
-    preTicked: z.boolean(),
+    assets: z.array(brandAssetSchema).min(1).max(4),
+    preTicked: z.array(brandAssetSchema).max(4),
   })
   .strict()
 
@@ -254,6 +254,17 @@ export type PublishPortalCustomisationResult =
       parts: PortalCustomisePart[]
       /** The stored value of every part sent, as the read path returns it: the next `before`. */
       published: PortalCustomiseValues
+    }
+  | {
+      ok: false
+      /**
+       * The publish would put live a logo, icon or commercial font Import
+       * brought in, and nobody confirmed the brand owns or licenses it.
+       * Nothing is written; the editor asks, then publishes again.
+       */
+      code: 'BRAND_ASSETS_UNCONFIRMED'
+      message: string
+      assets: z.infer<typeof brandAssetSchema>[]
     }
   | {
       ok: false

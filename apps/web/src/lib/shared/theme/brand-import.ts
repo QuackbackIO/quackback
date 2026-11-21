@@ -232,7 +232,7 @@ export interface BrandImport extends Omit<BrandDraft, 'logo'> {
 }
 
 /** The brand assets an import holds until the person confirms them. */
-export type BrandAsset = 'logo' | 'icon' | 'font'
+export type BrandAsset = 'logo' | 'icon' | 'font' | 'headingFont'
 
 /** Why an import read nothing. Each comes with a message written for the person. */
 export type ImportBrandRefusalCode =

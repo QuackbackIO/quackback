@@ -11,6 +11,7 @@ import type { PortalNavItemConfig } from '@/lib/shared/types/settings'
 import { tabDisplayName } from '@/lib/shared/portal-customise/ask'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { colourName } from './colour-name'
+import type { SectionId } from './pages'
 import {
   draftFontName,
   draftHeadingName,
@@ -30,6 +31,8 @@ export interface ChangeLine {
   swatchShape?: 'square' | 'round' | 'pill'
   /** The part of the preview the change shows on; none for a change that is everywhere. */
   target?: PreviewEditTarget
+  /** The panel section that makes this change, which the reply's line opens. */
+  section: SectionId
 }
 
 export interface ChangeSummary {
@@ -80,6 +83,7 @@ function colourLines(before: PortalDraft, after: PortalDraft): ChangeLine[] {
           : `${label} matches the page again${where}`,
         ...(hex ? { swatch: hex } : {}),
         ...(target ? { target } : {}),
+        section: 'colours',
       })
     }
   }
@@ -151,36 +155,45 @@ function tabLines(before: PortalNavItemConfig[], after: PortalNavItemConfig[]): 
  */
 function headerAdjustments(before: PortalDraft, after: PortalDraft): string[] {
   if (before.cssText === after.cssText) return []
-  const out = new Set<string>()
+  // One line per adjustment and shade, however many sides made it: the text
+  // and tabs once (named on the first side's header), the button once, with
+  // "too" when the text changed to the same shade on any side.
+  const text = new Map<'dark' | 'white', string>()
+  const button = new Map<'dark' | 'white', boolean>()
   for (const side of sidesOf(after)) {
     const now = expandTheme(draftPalette(after, side), { mode: side })
     const header = hexOf(now.header)
     if (!header) continue
     const was = expandTheme(draftPalette(before, side), { mode: side })
-    const text = hexOf(now.headerForeground)
-    const textChanged = text !== hexOf(was.headerForeground ?? was.foreground)
-    const word = text && luminance(text) < 0.2 ? 'dark' : 'white'
-    if (textChanged) {
-      out.add(`The header's text and tabs are now ${word} so they read on ${nameOf(header)}.`)
-    }
+    const fore = hexOf(now.headerForeground)
+    const textChanged = fore !== hexOf(was.headerForeground ?? was.foreground)
+    const word = fore && luminance(fore) < 0.2 ? 'dark' : 'white'
+    if (textChanged && !text.has(word)) text.set(word, nameOf(header))
     // Turned over: the bar's text is the button's fill, in place of the main colour.
     const turned = hexOf(now.headerPrimary) !== hexOf(now.primary)
     const wasTurned = !!hexOf(was.header) && hexOf(was.headerPrimary) !== hexOf(was.primary)
-    if (turned && !wasTurned) {
-      out.add(`The header's button is now ${word}${textChanged ? ' too,' : ''} so it stands out.`)
-    }
+    if (turned && !wasTurned) button.set(word, button.get(word) === true || textChanged)
   }
-  return [...out]
+  return [
+    ...[...text].map(
+      ([word, header]) => `The header's text and tabs are now ${word} so they read on ${header}.`
+    ),
+    ...[...button].map(
+      ([word, withText]) =>
+        `The header's button is now ${word}${withText && text.has(word) ? ' too,' : ''} so it stands out.`
+    ),
+  ]
 }
 
 /** What changed between two drafts, and what the editor adjusted because of it. */
 export function summariseChange(before: PortalDraft, after: PortalDraft): ChangeSummary {
   if (before === after) return { lines: [], adjustments: [] }
   const lines: ChangeLine[] = []
-  if (before.themeMode !== after.themeMode) lines.push({ text: THEME_MODE_LINES[after.themeMode] })
+  if (before.themeMode !== after.themeMode)
+    lines.push({ text: THEME_MODE_LINES[after.themeMode], section: 'colours' })
   lines.push(...colourLines(before, after))
   if (draftFontName(before) !== draftFontName(after)) {
-    lines.push({ text: `Font is now ${draftFontName(after)}` })
+    lines.push({ text: `Font is now ${draftFontName(after)}`, section: 'font' })
   }
   // A font is everywhere: the reply says it, and no one part is outlined.
   const headings = draftHeadingName(after)
@@ -190,10 +203,11 @@ export function summariseChange(before: PortalDraft, after: PortalDraft): Change
         headings === SAME_AS_TEXT
           ? 'Headings match the text font again'
           : `Headings are now set in ${headings}`,
+      section: 'font',
     })
   }
   if (before.cardStyle !== after.cardStyle) {
-    lines.push({ text: CARD_STYLE_LINES[after.cardStyle], target: 'type' })
+    lines.push({ text: CARD_STYLE_LINES[after.cardStyle], target: 'type', section: 'font' })
   }
 
   const radius = draftRadius(after)
@@ -208,49 +222,68 @@ export function summariseChange(before: PortalDraft, after: PortalDraft): Change
       text: `Corners and buttons are now ${corners}`,
       swatchShape: shape,
       target: 'colours',
+      section: 'font',
     })
   } else {
     if (cornersMoved)
-      lines.push({ text: `Corners are now ${corners}`, swatchShape: shape, target: 'colours' })
+      lines.push({
+        text: `Corners are now ${corners}`,
+        swatchShape: shape,
+        target: 'colours',
+        section: 'font',
+      })
     if (buttonsMoved)
       lines.push({
         text: pill ? 'Buttons are now pill shaped' : `Buttons have ${corners} corners`,
         swatchShape: pill ? 'pill' : shape,
         target: 'colours',
+        section: 'font',
       })
   }
 
   if (shownName(before) !== shownName(after)) {
-    lines.push({ text: `Portal name is now ${shownName(after)}`, target: 'logo' })
+    lines.push({
+      text: `Portal name is now ${shownName(after)}`,
+      target: 'logo',
+      section: 'header',
+    })
   }
   if (before.logo.wideKey !== after.logo.wideKey || before.logo.mode !== after.logo.mode) {
-    lines.push({ text: 'Logo updated', target: 'logo' })
+    lines.push({ text: 'Logo updated', target: 'logo', section: 'header' })
   } else if (darkKeyOf(before) !== darkKeyOf(after)) {
     lines.push({
       text: darkKeyOf(after) ? 'Dark mode logo added' : 'Dark mode logo removed',
       target: 'logo',
+      section: 'header',
     })
   }
-  if (!same(before.logo.icon, after.logo.icon)) lines.push({ text: 'Icon updated', target: 'logo' })
-  for (const text of tabLines(before.nav, after.nav)) lines.push({ text, target: 'nav' })
+  if (!same(before.logo.icon, after.logo.icon))
+    lines.push({ text: 'Icon updated', target: 'logo', section: 'header' })
+  for (const text of tabLines(before.nav, after.nav))
+    lines.push({ text, target: 'nav', section: 'header' })
   if (!same(before.welcomeBody, after.welcomeBody)) {
     lines.push({
       text: isEmptyTiptapDoc(after.welcomeBody)
         ? 'Welcome message is now hidden'
         : 'Welcome message updated',
       target: 'welcome',
+      section: 'welcome',
     })
   }
   const [a, b] = [before.helpCenter, after.helpCenter]
   if (a && b) {
     if (a.homepageTitle !== b.homepageTitle) {
-      lines.push({ text: `Help Center title is now “${b.homepageTitle}”`, target: 'hc-home' })
+      lines.push({
+        text: `Help Center title is now “${b.homepageTitle}”`,
+        target: 'hc-home',
+        section: 'hc-home',
+      })
     }
     if (a.homepageDescription !== b.homepageDescription) {
-      lines.push({ text: 'Help Center description updated', target: 'hc-home' })
+      lines.push({ text: 'Help Center description updated', target: 'hc-home', section: 'hc-home' })
     }
     if (!same(a.headerLinks, b.headerLinks)) {
-      lines.push({ text: 'Help Center links updated', target: 'hc-home' })
+      lines.push({ text: 'Help Center links updated', target: 'hc-home', section: 'hc-home' })
     }
   }
   return { lines, adjustments: headerAdjustments(before, after) }
