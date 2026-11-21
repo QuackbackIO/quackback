@@ -38,7 +38,9 @@ import {
   waitForMails,
 } from '../../product/feedback-admin-notify'
 
+/** The status email's subject to the post's author, and to everyone else who follows it. */
 const STATUS_SUBJECT = 'Your feedback is now'
+const FOLLOWER_STATUS_SUBJECT = 'A post you follow is now'
 
 /** email_log rows of one type to an address. */
 async function logged(address: string, type: string) {
@@ -85,22 +87,34 @@ test(
       ).toBeVisible()
       await eventHandled(fp.postId, 'post.status_changed')
 
-      for (const follower of [fp.author, fp.voter]) {
-        const mails = await waitForMails(follower.email, STATUS_SUBJECT)
+      // Only the author is told it is "your feedback"; the voter follows the post.
+      for (const [follower, subject, prefix, reason] of [
+        [
+          fp.author,
+          'Your feedback is now In Progress!',
+          STATUS_SUBJECT,
+          'You received this email because you submitted this feedback.',
+        ],
+        [
+          fp.voter,
+          'A post you follow is now In Progress',
+          FOLLOWER_STATUS_SUBJECT,
+          'You received this email because you follow this post.',
+        ],
+      ] as const) {
+        const mails = await waitForMails(follower.email, prefix)
         expect(mails).toHaveLength(1)
         const [mail] = mails
-        expect(mail.Subject).toBe('Your feedback is now In Progress!')
+        expect(mail.Subject).toBe(subject)
         expect(mail.Text).toContain(fp.title)
         expect(mail.Text).toContain('Open → In Progress')
         expect(mail.Text).toContain(`/b/${fp.board.slug}/posts/${fp.postId}`)
-        expect(mail.Text).toContain(
-          'You received this email because you submitted or subscribed to this feedback.'
-        )
+        expect(mail.Text).toContain(reason)
         expect(unsubscribeLink(mail)).toMatch(/\/unsubscribe\?token=[0-9a-f-]{36}$/)
         const headers = await getMailHeaders(mail.ID)
         expect(headers['List-Unsubscribe']?.[0]).toContain('/unsubscribe?token=')
         expect(await logged(follower.email, 'StatusChangeEmail')).toMatchObject([
-          { status: 'sent', subject: 'Your feedback is now In Progress!' },
+          { status: 'sent', subject },
         ])
       }
       expect(await logged(actor.email, 'StatusChangeEmail')).toEqual([])
@@ -720,7 +734,7 @@ test(
         statusId: await statusIdBySlug('planned'),
       })
       const [authorMail] = await waitForMails(fp.author.email, STATUS_SUBJECT)
-      const [voterMail] = await waitForMails(fp.voter.email, STATUS_SUBJECT)
+      const [voterMail] = await waitForMails(fp.voter.email, FOLLOWER_STATUS_SUBJECT)
       const tokenOf = (link: string) => new URL(link).searchParams.get('token')!
       const authorToken = tokenOf(unsubscribeLink(authorMail))
       expect(authorToken).not.toBe(tokenOf(unsubscribeLink(voterMail)))
@@ -755,7 +769,7 @@ test(
         'processUnsubscribeTokenFn',
         { token: authorToken }
       )
-      expect(again).toMatchObject({ success: false, error: 'invalid' })
+      expect(again).toMatchObject({ success: false, error: 'used' })
       const [spent] =
         await supportDb()`SELECT used_at FROM unsubscribe_tokens WHERE token = ${authorToken}`
       expect(spent.used_at).not.toBeNull()
@@ -766,7 +780,7 @@ test(
         statusId: await statusIdBySlug('in_progress'),
       })
       await eventHandled(fp.postId, 'post.status_changed')
-      await waitForMails(fp.voter.email, STATUS_SUBJECT, 2)
+      await waitForMails(fp.voter.email, FOLLOWER_STATUS_SUBJECT, 2)
       expect(await logged(fp.author.email, 'StatusChangeEmail')).toHaveLength(1)
     } finally {
       await fp.close()
@@ -835,7 +849,7 @@ test(
         id: fp.postId,
         statusId: await statusIdBySlug('planned'),
       })
-      await waitForMails(fp.voter.email, STATUS_SUBJECT)
+      await waitForMails(fp.voter.email, FOLLOWER_STATUS_SUBJECT)
       await waitForBells(fp.voter.principalId, fp.postId, (r) => r.length === 1)
     } finally {
       await fp.close()
@@ -912,7 +926,7 @@ test(
         statusId: await statusIdBySlug('planned'),
       })
       await waitForBells(fp.voter.principalId, control.id, (r) => r.length === 1)
-      await waitForMails(fp.voter.email, STATUS_SUBJECT)
+      await waitForMails(fp.voter.email, FOLLOWER_STATUS_SUBJECT)
       await allEventsHandled(control.id)
       // The only status mail the voter got is the control's.
       expect(await logged(fp.voter.email, 'StatusChangeEmail')).toHaveLength(1)

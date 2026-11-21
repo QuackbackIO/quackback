@@ -567,6 +567,26 @@ async function findLiveUnsubscribeToken(token: string) {
   return tokenRecord
 }
 
+/** Why a token is not live: never issued, already spent, or past its date. */
+export type UnsubscribeTokenProblem = 'unknown' | 'used' | 'expired'
+
+/**
+ * Why a token that preview or process answered null for cannot be used, so the
+ * page can say so honestly. Read-only. A spent token reads as used even once
+ * it is also past its date.
+ */
+export async function unsubscribeTokenProblem(token: string): Promise<UnsubscribeTokenProblem> {
+  const tokenRecord = await db.query.unsubscribeTokens.findFirst({
+    where: eq(unsubscribeTokens.token, token),
+    columns: { usedAt: true, expiresAt: true },
+  })
+  if (!tokenRecord) return 'unknown'
+  if (tokenRecord.usedAt) return 'used'
+  if (new Date() > tokenRecord.expiresAt) return 'expired'
+  // Live now but refused a moment ago (its principal is gone, say): not a link to retry.
+  return 'unknown'
+}
+
 /**
  * What an unsubscribe token would do, without doing it or spending the token.
  *

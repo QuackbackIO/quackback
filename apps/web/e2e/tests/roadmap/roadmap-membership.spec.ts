@@ -339,7 +339,7 @@ test(
             ).length
         )
         .toBe(1)
-      const mail = await waitForMail({ to: voter.email, subject: 'Your feedback is now' })
+      const mail = await waitForMail({ to: voter.email, subject: 'A post you follow is now' })
       expect(mail.HTML).toContain(post.title)
       const [delivery] = await deliveriesOf(marker, 'post.status_changed', post.id)
       expect(bodyOf(delivery).type).toBe('post.status_changed')

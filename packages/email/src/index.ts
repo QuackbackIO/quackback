@@ -1146,6 +1146,8 @@ interface SendStatusChangeParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The reader wrote the post. Absent or false: they follow it, and are not told "your feedback". */
+  isPostAuthor?: boolean
   /** Send from the workspace's address for this kind of email, once verified.
    *  Absent = the platform default (EMAIL_FROM). */
   from?: SendingIdentity
@@ -1164,6 +1166,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    isPostAuthor = false,
     from,
     fromDisplayName,
   } = params
@@ -1172,7 +1175,9 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
 
   return sendEmail({
     to,
-    subject: `Your feedback is now ${formattedNewStatus}!`,
+    subject: isPostAuthor
+      ? `Your feedback is now ${formattedNewStatus}!`
+      : `A post you follow is now ${formattedNewStatus}`,
     react: StatusChangeEmail({
       postTitle,
       postUrl,
@@ -1182,6 +1187,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       unsubscribeUrl,
       preferencesUrl,
       logoUrl,
+      isPostAuthor,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     from,
@@ -1207,6 +1213,8 @@ interface SendNewCommentParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The reader wrote the post. Absent or false: they follow it, and are not told "your feedback". */
+  isPostAuthor?: boolean
   /** Send from the workspace's address for this kind of email, once verified.
    *  Absent = the platform default (EMAIL_FROM). */
   from?: SendingIdentity
@@ -1226,6 +1234,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    isPostAuthor = false,
     from,
     fromDisplayName,
   } = params
@@ -1243,6 +1252,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       unsubscribeUrl,
       preferencesUrl,
       logoUrl,
+      isPostAuthor,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     from,

@@ -382,7 +382,7 @@ test(
       await supportDb()`SELECT unsubscribed_at FROM status_subscriptions WHERE principal_id = ${sub.principalUuid}`
     expect(after.unsubscribed_at).not.toBeNull()
     await page.goto(url.pathname + url.search)
-    await expect(page.getByText('This link has expired')).toBeVisible()
+    await expect(page.getByText('This link was already used')).toBeVisible()
   }
 )
 

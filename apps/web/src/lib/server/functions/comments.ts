@@ -133,6 +133,16 @@ export const runAddReaction = createServerOnlyFn(async function runAddReaction(
 ) {
   log.info({ comment_id: data.commentId, emoji: data.emoji }, 'add reaction')
   await assertNotBlocked(auth.principal.id)
+  // The workspace anonymous switch is the ceiling for reactions as it is for
+  // comments, votes and posts. Fail closed on a missing flag.
+  if (auth.principal.type === 'anonymous') {
+    const { getSettings } = await import('./workspace')
+    const { workspaceAllowsAnonymous } =
+      await import('@/lib/server/domains/settings/settings.types')
+    if (!workspaceAllowsAnonymous((await getSettings())?.portalConfig)) {
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
+    }
+  }
   // The reaction service now runs canViewPost + isPrivate using
   // the actor; without that, an authenticated user could probe
   // commentIds on team-only / private comments.

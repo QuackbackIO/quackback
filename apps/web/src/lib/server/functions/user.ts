@@ -370,16 +370,34 @@ export const runGetUserStats = createServerOnlyFn(async function runGetUserStats
   principalId: PrincipalId
 ): Promise<UserEngagementStats> {
   log.debug('get user stats')
+  // Live activity only, as on the public profile: a held or deleted idea, and
+  // votes and comments on one, are not counted, and a comment counts only
+  // when it is published, public and undeleted. Comments are counted one by
+  // one (the profile counts the ideas commented on).
+  const livePost = and(isNull(posts.deletedAt), eq(posts.moderationState, 'published'))
   const [ideasResult, votesResult, commentsResult] = await Promise.all([
     db
       .select({ count: count() })
       .from(posts)
-      .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
-    db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
+      .where(and(eq(posts.principalId, principalId), livePost)),
+    db
+      .select({ count: count() })
+      .from(postVotes)
+      .innerJoin(posts, eq(posts.id, postVotes.postId))
+      .where(and(eq(postVotes.principalId, principalId), livePost)),
     db
       .select({ count: count() })
       .from(postComments)
-      .where(and(eq(postComments.principalId, principalId), isNull(postComments.deletedAt))),
+      .innerJoin(posts, eq(posts.id, postComments.postId))
+      .where(
+        and(
+          eq(postComments.principalId, principalId),
+          eq(postComments.isPrivate, false),
+          eq(postComments.moderationState, 'published'),
+          isNull(postComments.deletedAt),
+          livePost
+        )
+      ),
   ])
 
   return {

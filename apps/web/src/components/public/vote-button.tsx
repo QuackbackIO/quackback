@@ -194,11 +194,11 @@ export function VoteButton({
             )
       }
       aria-pressed={hasVoted}
-      aria-disabled={noAccessReason ? true : undefined}
+      aria-disabled={disabled || noAccessReason ? true : undefined}
       title={noAccessReason}
       className={sharedClassName}
       onClick={handleClick}
-      disabled={isPending}
+      disabled={isPending || disabled}
     >
       {chevron}
       {count}

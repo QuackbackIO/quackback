@@ -285,7 +285,7 @@ describe.skipIf(!fixture.available)('an author edit is announced like a team edi
     return rows.filter((r) => JSON.stringify(r.payload).includes(postId))
   }
 
-  it('records post.updated and the new mention for a published post', async () => {
+  it('records post.updated for a published post, but a customer mention notifies nobody', async () => {
     const { author, postId } = await seedOwnPost()
     const mentioned = await seedPerson('user')
 
@@ -295,9 +295,14 @@ describe.skipIf(!fixture.available)('an author edit is announced like a team edi
       asUser(author)
     )
 
-    expect(await eventsOf('post.updated', postId)).toHaveLength(1)
+    // post.updated is dispatched without waiting on it, so wait for its row.
+    await expect
+      .poll(async () => (await eventsOf('post.updated', postId)).length, { timeout: 15_000 })
+      .toBe(1)
+    // Customers get no mention picker: a mention node they send is crafted
+    // and records no mention (FBP-B22, sync-post-mentions.ts).
     const mentions = await testDb.select().from(postMentions).where(eq(postMentions.postId, postId))
-    expect(mentions.map((m) => m.principalId)).toEqual([mentioned])
+    expect(mentions).toEqual([])
   })
 
   it('stays quiet for a held post until it is approved', async () => {
@@ -331,6 +336,9 @@ describe.skipIf(!fixture.available)('an author edit is announced like a team edi
 
     await userEditPost(postId, { title: 'Dark mode', content: 'Reworded' }, asUser(author))
 
+    await expect
+      .poll(async () => (await eventsOf('post.updated', postId)).length, { timeout: 15_000 })
+      .toBe(1)
     const [updated] = await eventsOf('post.updated', postId)
     expect(updated.actorType).toBe('user')
     expect(updated.actorId).toBe(author)

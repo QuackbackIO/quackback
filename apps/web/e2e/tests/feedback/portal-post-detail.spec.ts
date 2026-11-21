@@ -284,12 +284,7 @@ test.describe('portal post detail', () => {
   test(
     'FBP-L-31 a pinned comment outside the first page still shows on the page',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'new: the portal route never renders the pinnedComment the detail query returns; the thread only floats a pinned comment it has loaded',
-      },
+      tag: '@nightly',
     },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)

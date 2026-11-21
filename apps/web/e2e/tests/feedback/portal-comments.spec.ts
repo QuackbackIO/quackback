@@ -572,12 +572,7 @@ test.describe('portal comments', () => {
   test(
     'FBP-C-11 after a teammate replies, the author is no longer offered Edit or Delete',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B17: comment-thread.tsx:436-437 shows Edit/Delete to the author regardless of the team-reply lock',
-      },
+      tag: '@core',
     },
     async ({ browser, people, marker }) => {
       const board = await createBoard(marker)

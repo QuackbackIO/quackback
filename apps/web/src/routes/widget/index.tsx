@@ -263,6 +263,9 @@ export const Route = createFileRoute('/widget/')({
         id: b.id as string,
         name: b.name,
         slug: b.slug,
+        // The fields the composer asks for on this board (same as the live
+        // capabilities list), sent only when the board declares some.
+        ...(b.settings.customFields?.length ? { customFields: b.settings.customFields } : {}),
       })),
       orgSlug: settings?.slug ?? '',
       // Per-board submit/vote capability for the request actor, server-computed

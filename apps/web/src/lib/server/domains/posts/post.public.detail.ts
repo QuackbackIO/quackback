@@ -327,10 +327,28 @@ export async function getPublicPostDetail(
   const commentsHasMore = rootRowsRaw.length > rootLimit
   const pageRootRows = commentsHasMore ? rootRowsRaw.slice(0, rootLimit) : rootRowsRaw
 
+  // The pinned comment belongs at the top of the thread whichever page it
+  // falls on. When the first page does not hold it, add it as one more root,
+  // with its replies and reactions, so the thread shows it whole and replies
+  // and reactions on it work. A later page that also holds it is de-duplicated
+  // by id when the client appends it. The cursor stays on the page's own roots.
+  let pinnedExtraRoot: CommentRow | null = null
+  if (!cursor && postResult.pinnedCommentId) {
+    const pinnedUuid = toUuid(postResult.pinnedCommentId)
+    if (!pageRootRows.some((r) => r.id === pinnedUuid)) {
+      const pinnedRootResult = await commentSelect(
+        sql`AND c.parent_id IS NULL AND c.id = ${pinnedUuid}::uuid`,
+        sql``
+      )
+      pinnedExtraRoot = getExecuteRows<CommentRow>(pinnedRootResult)[0] ?? null
+    }
+  }
+  const threadRootRows = pinnedExtraRoot ? [...pageRootRows, pinnedExtraRoot] : pageRootRows
+
   // Replies for exactly the roots on this page. Reply chains are shallow, so a
   // single descendants-of-these-roots pass (recursive CTE) is bounded by the
   // page's fan-out and keeps arbitrarily-deep chains attached.
-  const rootUuids = pageRootRows.map((r) => r.id)
+  const rootUuids = threadRootRows.map((r) => r.id)
   let replyRowsRaw: CommentRow[] = []
   if (rootUuids.length > 0) {
     const rootIdInList = sql.join(
@@ -377,7 +395,7 @@ export async function getPublicPostDetail(
 
   // Roots for this page + their descendants, ordered chronologically so
   // buildCommentTree nests them correctly.
-  const commentsRaw = [...pageRootRows, ...replyRowsRaw].sort((a, b) => {
+  const commentsRaw = [...threadRootRows, ...replyRowsRaw].sort((a, b) => {
     const at = a.created_at instanceof Date ? a.created_at : new Date(a.created_at)
     const bt = b.created_at instanceof Date ? b.created_at : new Date(b.created_at)
     return at.getTime() - bt.getTime()
