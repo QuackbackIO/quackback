@@ -60,7 +60,7 @@ describe('AdminWorkspaceFrame', () => {
     expect(main.className).toContain('sm:ps-0')
   })
 
-  it('leaves no room for the phone top bar on a full-page route, which has its own', () => {
+  it('keeps room for the phone top bar on every route, a full-page one included', () => {
     const canvas = (collapsed: boolean) => {
       frame(collapsed)
       const el = document.querySelector('[data-admin-canvas]') as HTMLElement
@@ -68,7 +68,7 @@ describe('AdminWorkspaceFrame', () => {
       cleanup()
       return classes
     }
-    expect(canvas(true)).not.toContain('pt-14')
+    expect(canvas(true)).toContain('pt-14')
     expect(canvas(false)).toContain('pt-14')
   })
 })
