@@ -35,30 +35,36 @@ const DISCORD_EVENT_CONFIG: EventConfig[] = [
     label: 'New post submitted',
     shortLabel: 'New post',
     description: 'When someone submits a new post',
+    group: 'Feedback',
   },
   {
     id: 'post.status_changed',
     label: 'Post status changed',
     shortLabel: 'Status',
     description: "When a post's status is updated",
+    group: 'Feedback',
   },
   {
     id: 'comment.created',
     label: 'New comment posted',
     shortLabel: 'Comment',
     description: 'When someone comments on a post',
+    group: 'Feedback',
   },
   {
     id: 'conversation.created',
-    label: 'New support conversation',
-    shortLabel: 'Conversation',
-    description: 'When a visitor starts a support conversation',
+    label: 'New conversation',
+    shortLabel: 'New chat',
+    description: 'When a customer starts a conversation. Quotes their first message.',
+    group: 'Support',
   },
   {
     id: 'message.created',
-    label: 'New support message',
-    shortLabel: 'Support msg',
-    description: 'When a visitor sends a support message (agent replies are not sent)',
+    label: 'Customer message',
+    shortLabel: 'Message',
+    description:
+      'When a customer sends a message. Skipped while their assigned teammate is online.',
+    group: 'Support',
   },
 ]
 
