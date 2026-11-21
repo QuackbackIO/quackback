@@ -54,6 +54,8 @@ export interface NightlySummary {
 const IGNORED_JOBS = new Set(['e2e-quarantine'])
 /** Most tests listed per report; the rest are counted. */
 const MAX_LISTED = 40
+/** GitHub refuses a comment over 65,536 characters. */
+const MAX_BODY = 60_000
 const JOURNEY_ID = /^(?:[A-Z]+(?:-[A-Z]+)*-\d+\s+)+/
 
 export function failedTests(report: PlaywrightReport): FailedTest[] {
@@ -143,5 +145,9 @@ export function summarizeNightly(input: {
         'The job failed before or outside its tests (setup, build, timeout); see the run log.'
     )
   }
-  return { status: 'failed', body: lines.join('\n') }
+  let body = lines.join('\n')
+  if (body.length > MAX_BODY) {
+    body = `${body.slice(0, MAX_BODY)}\n\n(Truncated: see the run for the rest.)`
+  }
+  return { status: 'failed', body }
 }

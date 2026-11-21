@@ -1396,11 +1396,12 @@ jobs:
           pattern: '*-results-json'
           path: apps/web/nightly-reports
           merge-multiple: true
-      # Blob reports the smoke and isolated jobs upload when they fail.
+      # Blob reports the smoke and isolated jobs upload when they fail. The
+      # HTML *-report folders come too; only blob zips (report*.zip) are read.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: true
         with:
-          pattern: '{e2e-smoke,support-smoke,product-smoke,support-isolated,product-isolated}-report'
+          pattern: '*-report'
           path: apps/web/nightly-blobs
       - name: Turn the blob reports into JSON
         working-directory: apps/web
@@ -1411,7 +1412,7 @@ jobs:
             label=$(basename "$dir")
             label=${label%-report}
             mkdir -p "nightly-zips/$label"
-            find "$dir" -name '*.zip' -exec cp {} "nightly-zips/$label/" \;
+            find "$dir" -maxdepth 2 -name 'report*.zip' -exec cp {} "nightly-zips/$label/" \;
             if ls "nightly-zips/$label"/*.zip > /dev/null 2>&1; then
               PLAYWRIGHT_JSON_OUTPUT_NAME="nightly-reports/$label.json" \
                 ./node_modules/.bin/playwright merge-reports --reporter json "nightly-zips/$label" \

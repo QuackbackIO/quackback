@@ -31,7 +31,8 @@ describe('e2e quarantine ledger', () => {
     )
     const ledger = parseLedger(readFileSync(join(E2E_ROOT, 'QUARANTINE.md'), 'utf8'))
 
-    expect(ledger.entries.length + scans.flatMap((s) => s.tests).length).toBeGreaterThan(0)
+    // The scan read the suites (an empty ledger with nothing quarantined is fine).
+    expect(scans.length).toBeGreaterThan(50)
     expect(describeLedgerReport(checkLedger(scans, ledger))).toBeNull()
   })
 })
@@ -56,6 +57,11 @@ test.describe('group', () => {
       ['AB-C-06'],
     ])
     expect(scan.unattributed).toEqual([])
+  })
+
+  it('counts a @quarantine tag written in the title', () => {
+    const scan = scanSpec('t.spec.ts', "test('AB-T-01 title tagged @quarantine', async () => {})")
+    expect(scan.tests.map((t) => t.ids)).toEqual([['AB-T-01']])
   })
 
   it('reports a tag it cannot tie to a test, a test with no id and a tagged describe', () => {
@@ -126,6 +132,14 @@ test('AB-C-09 d', { tag: '@quarantine' }, async () => {})
 test('AB-C-02 b', { tag: '@quarantine' }, async () => {})`
     )
     expect(describeLedgerReport(checkLedger([ok], ledger))).toBeNull()
+  })
+
+  it('holds with an empty ledger and nothing quarantined', () => {
+    const report = checkLedger(
+      [scanSpec('x.spec.ts', "test('AB-C-01 a', { tag: '@core' }, async () => {})")],
+      parseLedger('## Quarantined tests\n\nNone right now.\n')
+    )
+    expect(describeLedgerReport(report)).toBeNull()
   })
 
   it('fails when entries exist but no quarantined test is found', () => {

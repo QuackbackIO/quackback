@@ -144,7 +144,8 @@ export function scanSpec(file: string, source: string): ScanResult {
     i++
     while (/\s/.test(source[i] ?? '')) i++
 
-    let tagged = false
+    // A title tag (`test('X-1 title @quarantine', ...)`) counts too: --grep reads titles.
+    let tagged = /(^|\s)@quarantine\b/.test(title)
     if (source[i] === '{') {
       const end = skipBalanced(source, i)
       const options = source.slice(i, end)

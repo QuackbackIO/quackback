@@ -88,6 +88,23 @@ describe('summarizeNightly', () => {
     expect(summary.body).not.toContain('FBA-I-18')
   })
 
+  it('keeps the comment under the GitHub limit on a very bad night', () => {
+    const spec = {
+      title: `AB-C-01 ${'x'.repeat(2000)}`,
+      file: 'a.spec.ts',
+      line: 1,
+      tests: [{ projectName: 'product', status: 'unexpected' as const }],
+    }
+    const big: PlaywrightReport = { suites: [{ title: 'a.spec.ts', specs: Array(40).fill(spec) }] }
+    const summary = summarizeNightly({
+      ...base,
+      jobs: { 'product-core': { result: 'failure' } },
+      reports: ['a', 'b'].map((label) => ({ label, report: big })),
+    })
+    expect(summary.body.length).toBeLessThan(65_536)
+    expect(summary.body).toContain('(Truncated: see the run for the rest.)')
+  })
+
   it('is green when every watched job passed or was skipped', () => {
     const summary = summarizeNightly({
       ...base,
