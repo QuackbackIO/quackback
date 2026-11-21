@@ -15,6 +15,7 @@ vi.mock('@/lib/server/functions/portal-customise', () => ({
 vi.mock('@/lib/client/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))
 
 const { AskDock } = await import('../ask-dock')
+type ImportBrief = NonNullable<Parameters<typeof AskDock>[0]['importBrief']>
 
 function setup(props: Partial<Parameters<typeof AskDock>[0]> = {}) {
   let draft: PortalDraft = draftFromLoaded({
@@ -204,23 +205,129 @@ describe('AskDock', () => {
     expect(screen.getByLabelText('Ask for a change')).toHaveAttribute('maxLength', '500')
   })
 
-  it('offers suggestions on focus, leaving Import out after an import', () => {
+  it('offers three short suggestions while the chat is empty, with no focus needed', async () => {
+    const { current } = setup()
+    const chips = () =>
+      screen.queryAllByRole('button').filter((b) => b.className.includes('rounded-full'))
+    expect(chips().map((chip) => chip.textContent)).toEqual([
+      'Import my website',
+      'Navy header',
+      'Softer buttons',
+    ])
+    // A chip sends the request it stands for, and the chips go once there are messages.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Softer buttons' }))
+    })
+    expect(current().buttonShape).toBe('corners')
+    expect(screen.getByText('Make the buttons less rounded')).toBeInTheDocument()
+    expect(chips()).toHaveLength(0)
+  })
+
+  it('leaves Import out of the suggestions after an import', () => {
     setup({ importDone: true })
-    fireEvent.focus(screen.getByLabelText('Ask for a change'))
-    expect(
-      screen.getByRole('button', { name: 'Make the buttons less rounded' })
-    ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Import/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Make the header navy' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Roadmap first' })).toBeInTheDocument()
   })
 
   it('offers to import your own website, never a named brand', () => {
     const { handlers } = setup()
     const field = screen.getByLabelText('Ask for a change')
-    fireEvent.focus(field)
     fireEvent.click(screen.getByRole('button', { name: 'Import my website' }))
     expect(field).toHaveValue('Import ')
     expect(handlers.onImport).not.toHaveBeenCalled()
+  })
+
+  it('shows that it is working while a request is out, in the log', async () => {
+    let answer!: (value: unknown) => void
+    askFn.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    setup()
+    fireEvent.change(screen.getByLabelText('Ask for a change'), {
+      target: { value: 'make it feel more playful' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    })
+    expect(screen.getByRole('log')).toHaveTextContent('Working on it…')
+    await act(async () => {
+      answer({ outcome: 'patch', handled: 'model', patch: { buttonShape: 'corners' }, reply: '' })
+    })
+    expect(screen.queryByText('Working on it…')).toBeNull()
+    expect(screen.getByText('Buttons have softly rounded corners')).toBeInTheDocument()
+  })
+
+  it('takes the panel once a conversation starts, with a way back, and keeps the conversation', async () => {
+    setup()
+    expect(screen.queryByRole('log')).toBeNull()
+    await ask('make the buttons less rounded')
+    expect(screen.getByRole('log')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Sections' }))
+    expect(screen.queryByRole('log')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Show chat/ }))
+    expect(screen.getByText('Buttons have softly rounded corners')).toBeInTheDocument()
+    // Escape goes back to the sections too.
+    fireEvent.keyDown(screen.getByRole('log'), { key: 'Escape' })
+    expect(screen.queryByRole('log')).toBeNull()
+  })
+
+  it('keeps more than a handful of messages', async () => {
+    setup()
+    for (const request of ['make the buttons less rounded', 'make the corners less rounded'])
+      await ask(request)
+    for (let i = 0; i < 4; i++) await ask('undo')
+    // Twelve messages: six requests, six replies, the first still there.
+    expect(screen.getByText('make the buttons less rounded')).toBeInTheDocument()
+    expect(screen.getAllByText('Undone.').length).toBeGreaterThan(0)
+  })
+
+  it('opens the section a reply’s line is about, leaving the chat', async () => {
+    const onOpenSection = vi.fn()
+    setup({ onOpenSection })
+    await ask('make the buttons less rounded')
+    // Each line is a button to its section, with one mark slot before every line.
+    fireEvent.click(screen.getByRole('button', { name: 'Buttons have softly rounded corners' }))
+    expect(onOpenSection).toHaveBeenCalledWith('font')
+    expect(screen.queryByRole('log')).toBeNull()
+  })
+
+  it('follows an import it started, in one line, with a way to see it', async () => {
+    const onOpenSection = vi.fn()
+    const draft = draftFromLoaded({
+      theme: {},
+      customCss: '',
+      portal: {} as never,
+      helpCenter: null,
+    })
+    // The editor hands the import's state back down as it runs.
+    const dock = (importBrief: ImportBrief) => (
+      <AskDock
+        getDraft={() => draft}
+        update={vi.fn()}
+        undo={vi.fn()}
+        onImport={vi.fn()}
+        importDone={false}
+        importBrief={importBrief}
+        onOpenSection={onOpenSection}
+      />
+    )
+    const view = render(dock({ status: 'reading', host: 'example.com', line: '' }))
+    askFn.mockResolvedValue({
+      outcome: 'import',
+      handled: 'model',
+      host: 'example.com',
+      reply: 'Matching example.com.',
+    })
+    await ask('look like our site please')
+    expect(screen.getByRole('log')).toHaveTextContent('Reading example.com…')
+    view.rerender(
+      dock({
+        status: 'done',
+        host: 'example.com',
+        line: 'From example.com · 4 applied · logo waiting',
+      })
+    )
+    expect(screen.getByRole('log')).toHaveTextContent('From example.com · 4 applied · logo waiting')
+    fireEvent.click(screen.getByRole('button', { name: 'See what was imported' }))
+    expect(onOpenSection).toHaveBeenCalledWith('import')
   })
 
   it('draws focus on the box, not on the field inside it', () => {
@@ -247,6 +354,9 @@ describe('a change made elsewhere (a suggestion used)', () => {
         {...handlers}
       />
     )
+    // It waits under the sections, without taking the panel from them.
+    expect(screen.queryByRole('log')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Show chat/ }))
     expect(screen.getByText('Portal name is now Northwind')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(handlers.undo).toHaveBeenCalledTimes(1)
