@@ -226,6 +226,13 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/domains/principals/anon-sweep-queue').then((m) => m.runAnonSweep),
   },
   {
+    // Unconsented CIMD client rows (auth/cimd-sweep.ts). Off the 03:00 sweeps.
+    name: 'cimd-client-sweep',
+    cron: '45 3 * * *',
+    maxAttempts: 3,
+    handler: () => import('@/lib/server/auth/cimd-sweep').then((m) => m.runCimdSweep),
+  },
+  {
     name: 'page-view-partitions',
     cron: '30 2 * * *',
     // A parked workspace has no loop, so its partition window can run out

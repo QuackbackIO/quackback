@@ -436,6 +436,7 @@ went stale the moment a queue moved.
 | `integration-install-cleanup`   | —              | 1           | 1        | 60s   |
 | `integration-installs-backfill` | —              | 1           | 1        | 60s   |
 | `anon-sweep`                    | `0 3 * * *`    | 1           | 3        | 60s   |
+| `cimd-client-sweep`             | `45 3 * * *`   | 1           | 3        | 60s   |
 | `page-view-partitions`          | `30 2 * * *`   | 1           | 3        | 60s   |
 | `sla-breach-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
 | `snooze-sweep`                  | `* * * * *`    | 1           | 3        | 60s   |
