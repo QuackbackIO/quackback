@@ -34,6 +34,10 @@ export const discordHook: IntegrationHook = {
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing event')
 
     const message = buildDiscordMessage(event, hookLinks({ rootUrl, links }))
+    if (!message) {
+      log.debug({ event_type: event.type }, 'event produces no discord message, skipping')
+      return { state: 'succeeded' }
+    }
 
     try {
       const response = await integrationFetch(`${DISCORD_API}/channels/${channelId}/messages`, {
