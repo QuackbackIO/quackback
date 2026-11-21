@@ -430,6 +430,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'when taken, so nothing outlives the response.',
   },
   {
+    file: 'apps/web/src/lib/server/middleware/stale-build.ts',
+    name: 'loggedStaleIds',
+    category: 'fleet-wide',
+    reason:
+      'Holds server function ids a page from an older build asked for, only so each is logged once ' +
+      'per process. An id names code in a build, not workspace data, and the set never changes an ' +
+      'answer: a cross-workspace hit only skips a repeat warn line. It is capped and resets when full.',
+  },
+  {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',
     name: 'pools',
     category: 'workspace-scoped-key',
