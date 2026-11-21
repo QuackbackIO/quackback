@@ -77,6 +77,14 @@ describe('buildSlackMessage — conversation.created', () => {
     expect(flat).toContain('Cannot log in &lt;on&gt; my tablet')
   })
 
+  it('quotes the opening message', () => {
+    const msg = buildSlackMessage(
+      conversationCreatedEvent({ openingMessage: 'My login fails & more' }),
+      allOnPrimary(ROOT_URL)
+    )
+    expect(JSON.stringify(msg)).toContain('My login fails &amp; more')
+  })
+
   it('falls back for anonymous visitors and missing subjects', () => {
     const msg = buildSlackMessage(
       conversationCreatedEvent({ subject: null, visitorEmail: null }),
