@@ -247,12 +247,7 @@ test(
 test(
   'FBA-Q-04 a test customer held post is left out of the queue, as it is of the counts',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'listPendingPosts/listPendingComments do not exclude test customers while getModerationStatus does (moderation.service.ts:126 vs functions/moderation.ts:133)',
-    },
+    tag: '@core',
   },
   async ({ playwright, browser, newTeammate, asPerson, marker }) => {
     const api = await personApi(playwright, 'admin')

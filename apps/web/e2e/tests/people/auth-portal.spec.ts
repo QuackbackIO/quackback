@@ -205,12 +205,7 @@ test.describe('email link and code', () => {
   test(
     'PPL-AUTH-09 a reused or expired sign-in link says it expired',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A-B1: the library redirects with error=INVALID_TOKEN (uppercase); the toast map only knows lowercase codes, so the generic "Sign-in failed" toast shows (lib/shared/auth-block-messages.ts:74)',
-      },
+      tag: '@core',
     },
     async ({ anon, visitor, customerEmail }) => {
       expect((await portalSignin(anon, customerEmail, '/roadmap')).status()).toBe(200)

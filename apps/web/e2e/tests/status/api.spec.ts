@@ -230,12 +230,7 @@ test(
 test(
   'STA-X-06 incident list paging answers bad limits and cursors cleanly',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'GET /api/v1/status/incidents parses limit itself (incidents/index.ts:64) without the shared pagination guard: limit=0 reports hasMore with no cursor and a negative or non-numeric limit, or a garbage cursor, fails with 500; see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ playwright, people }) => {
     const api = await keyApi(playwright, people, 'admin')

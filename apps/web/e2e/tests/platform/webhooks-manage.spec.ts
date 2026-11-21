@@ -586,9 +586,30 @@ function rowOf(page: Page, url: string) {
     .filter({ has: page.getByText(url, { exact: true }) })
 }
 
+/*
+ * A press that lands before the tab has hydrated does nothing, so the two
+ * openers below press again until the menu or dialog is there.
+ */
 async function openRowAction(page: Page, url: string, action: 'Edit' | 'Delete') {
-  await page.getByRole('button', { name: `Actions for ${url}`, exact: true }).click()
-  await page.getByRole('menuitem', { name: action }).click()
+  const item = page.getByRole('menuitem', { name: action })
+  await expect(async () => {
+    if (!(await item.isVisible())) {
+      await page.getByRole('button', { name: `Actions for ${url}`, exact: true }).click()
+    }
+    await expect(item).toBeVisible({ timeout: 3_000 })
+  }).toPass({ timeout: 20_000 })
+  await item.click()
+}
+
+async function openNewWebhook(page: Page) {
+  const dialog = page.getByRole('dialog')
+  await expect(async () => {
+    if (!(await dialog.isVisible())) {
+      await page.getByRole('button', { name: 'New webhook' }).click()
+    }
+    await expect(dialog.getByLabel('Endpoint URL')).toBeVisible({ timeout: 3_000 })
+  }).toPass({ timeout: 20_000 })
+  return dialog
 }
 
 /** A role holding exactly `permissions`; returns its key for the newTeammate fixture. */
@@ -608,8 +629,7 @@ test.describe('webhooks in Settings > Developers', () => {
       const page = await asPerson('admin')
       try {
         await page.goto(WEBHOOKS_TAB)
-        await page.getByRole('button', { name: 'New webhook' }).click()
-        const dialog = page.getByRole('dialog')
+        const dialog = await openNewWebhook(page)
         const submit = dialog.getByRole('button', { name: 'Create webhook' })
         await expect(submit).toBeDisabled()
         await dialog.getByLabel('Endpoint URL').fill(url)
@@ -657,8 +677,7 @@ test.describe('webhooks in Settings > Developers', () => {
     async ({ asPerson, marker }) => {
       const page = await asPerson('admin')
       await page.goto(WEBHOOKS_TAB)
-      await page.getByRole('button', { name: 'New webhook' }).click()
-      const dialog = page.getByRole('dialog')
+      const dialog = await openNewWebhook(page)
       await dialog.getByRole('checkbox', { name: 'Subscribe to New Post Created events' }).click()
       for (const url of [
         sink.url(marker).replace('https://', 'http://'),
@@ -715,24 +734,33 @@ test.describe('webhooks in Settings > Developers', () => {
     },
     async ({ asPerson, playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)
+      // Scoped to a board nobody posts on: a delivery of another test's post
+      // would succeed and reset the counters this test asserts on.
+      const board = await newBoard(api, marker)
       const page = await asPerson('admin')
       try {
-        await withHook(api, marker, ['post.created'], async (hook) => {
-          await setHookCounters(hook.id, { failureCount: 12, lastError: 'HTTP 500' })
-          await page.goto(WEBHOOKS_TAB)
-          await openRowAction(page, hook.url as string, 'Edit')
-          const dialog = page.getByRole('dialog')
-          await dialog.getByRole('checkbox', { name: 'Subscribe to New Comment events' }).click()
-          await dialog.getByRole('button', { name: 'Save changes' }).click()
-          await expect(dialog).toBeHidden()
-          await expect
-            .poll(async () => (await getHook(api, hook.id)).events)
-            .toEqual(['post.created', 'comment.created'])
-          expect(await getHook(api, hook.id)).toMatchObject({
-            failureCount: 12,
-            lastError: 'HTTP 500',
-          })
-        })
+        await withHook(
+          api,
+          marker,
+          ['post.created'],
+          async (hook) => {
+            await setHookCounters(hook.id, { failureCount: 12, lastError: 'HTTP 500' })
+            await page.goto(WEBHOOKS_TAB)
+            await openRowAction(page, hook.url as string, 'Edit')
+            const dialog = page.getByRole('dialog')
+            await dialog.getByRole('checkbox', { name: 'Subscribe to New Comment events' }).click()
+            await dialog.getByRole('button', { name: 'Save changes' }).click()
+            await expect(dialog).toBeHidden()
+            await expect
+              .poll(async () => (await getHook(api, hook.id)).events)
+              .toEqual(['post.created', 'comment.created'])
+            expect(await getHook(api, hook.id)).toMatchObject({
+              failureCount: 12,
+              lastError: 'HTTP 500',
+            })
+          },
+          [board.id]
+        )
       } finally {
         await api.dispose()
       }
@@ -935,8 +963,7 @@ test.describe('webhooks in Settings > Developers', () => {
         'aria-selected',
         'true'
       )
-      await b.getByRole('button', { name: 'New webhook' }).click()
-      const dialog = b.getByRole('dialog')
+      const dialog = await openNewWebhook(b)
       await dialog.getByLabel('Endpoint URL').fill(sink.url(marker))
       await dialog.getByRole('checkbox', { name: 'Subscribe to New Post Created events' }).click()
       await dialog.getByRole('button', { name: 'Create webhook' }).click()

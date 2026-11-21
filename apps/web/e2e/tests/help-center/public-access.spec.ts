@@ -176,12 +176,7 @@ test(
 test(
   'HC-P-04 the landing card counts only articles the visitor can open',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'HC-B14: listPublicCategories rolls recursivePublishedArticleCount up through private and gated descendants and article audiences',
-    },
+    tag: '@core',
   },
   async ({ page, marker, playwright }) => {
     const hc = await hcApi(playwright)

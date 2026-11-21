@@ -638,12 +638,7 @@ test(
 test(
   'FBA-N-15 the unread badge leaves out bells redacted because the post was deleted',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-N-15: getUnreadCount (notification.service.ts:243) counts redacted bells; see QUARANTINE.md',
-    },
+    tag: '@core',
   },
   async ({ playwright, browser, marker, newTeammate }) => {
     const actor = await teammateApi(newTeammate, playwright)

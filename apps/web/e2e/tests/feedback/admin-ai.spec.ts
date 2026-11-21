@@ -174,12 +174,7 @@ test(
 test(
   'FBA-AI-08 the summary input leaves out private team notes',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'summary.service.ts:149 reads every non-deleted comment, private notes included, into the summary prompt (see e2e/QUARANTINE.md)',
-    },
+    tag: '@core',
   },
   async ({ playwright, marker }) => {
     test.setTimeout(60_000)

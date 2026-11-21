@@ -345,7 +345,7 @@ test.describe('REST statuses', () => {
   )
 
   test(
-    'API-R-071 create a status: defaults, a slug held even by a deleted status is 409, bad input 400',
+    'API-R-071 create a status: defaults, a live duplicate slug is 409, a deleted one frees it, bad input 400',
     { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -375,14 +375,15 @@ test.describe('REST statuses', () => {
         `A status with slug '${t}_review' already exists`
       )
       expect((await api.delete(`/api/v1/statuses/${created.data.id}`)).status()).toBe(204)
-      await expectError(
+      // A deleted status frees its slug.
+      const again = await expectJson(
         await api.post('/api/v1/statuses', {
           data: { name: `${t} again`, slug: `${t}_review`, color: '#3b82f6', category: 'active' },
         }),
-        409,
-        'CONFLICT',
-        `A status with slug '${t}_review' already exists`
+        201
       )
+      expect(again.data).toMatchObject({ name: `${t} again`, slug: `${t}_review` })
+      expect(again.data.id).not.toBe(created.data.id)
       for (const bad of [
         { slug: `${t}-In-Review`, color: '#3b82f6', category: 'active' },
         { slug: `${t}_blue`, color: 'blue', category: 'active' },
@@ -548,7 +549,7 @@ test.describe('REST tags', () => {
   )
 
   test(
-    'API-R-075 create a tag with defaults; a case-insensitive duplicate, even of a deleted tag, is 409',
+    'API-R-075 create a tag with defaults; a case-insensitive duplicate is 409, a deleted tag frees its name',
     { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await keyApi(playwright, baseURL, people)
@@ -565,12 +566,13 @@ test.describe('REST tags', () => {
         `A tag with name "${t} mobile" already exists`
       )
       expect((await api.delete(`/api/v1/tags/${created.data.id}`)).status()).toBe(204)
-      await expectError(
+      // A deleted tag frees its name.
+      const again = await expectJson(
         await api.post('/api/v1/tags', { data: { name: `${t} Mobile` } }),
-        409,
-        'CONFLICT',
-        `A tag with name "${t} Mobile" already exists`
+        201
       )
+      expect(again.data).toMatchObject({ name: `${t} Mobile` })
+      expect(again.data.id).not.toBe(created.data.id)
     }
   )
 

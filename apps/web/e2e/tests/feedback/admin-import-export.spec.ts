@@ -426,12 +426,7 @@ test.describe('import route', () => {
   test(
     'FBA-X-12 a re-import with blank status and vote_count cells keeps the stored status and votes',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Blank cells on a source_id update overwrite: import-service.ts:369 sets statusId to the default and voteCount to 0 (see e2e/QUARANTINE.md)',
-      },
+      tag: '@core',
     },
     async ({ playwright, marker }) => {
       const api = await personApi(playwright, 'admin')
@@ -626,12 +621,7 @@ test.describe('import route', () => {
   test(
     'FBA-X-19 rows naming a deleted board, status or tag get fresh live ones, not the deleted rows',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Import lookups include soft-deleted rows: import-row-resolver.ts:139/148/153 load statuses, tags and boards with no deleted_at filter (see e2e/QUARANTINE.md)',
-      },
+      tag: '@core',
     },
     async ({ playwright, marker }) => {
       const api = await personApi(playwright, 'admin')
@@ -770,12 +760,7 @@ test.describe('board export', () => {
   test(
     'FBA-X-02 a deleted board cannot be exported by id',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Deleted boards export: routes/api/export.ts:49 checks the board with getBoardById (no deleted_at filter) and post.export.ts:23 lists every board (see e2e/QUARANTINE.md)',
-      },
+      tag: '@core',
     },
     async ({ playwright, marker }) => {
       const api = await personApi(playwright, 'admin')
