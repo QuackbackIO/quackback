@@ -11,7 +11,8 @@ const SIDEBAR_PX = 224
 /**
  * The admin shell: the sidebar beside an inset page sheet. A full-page route
  * (portal Customise) folds the sidebar away, `collapsed`, and the sheet keeps
- * an even margin on every side; both changes are animated.
+ * an even margin on every side; both changes are animated. The phone top bar
+ * the sidebar renders stays either way.
  */
 export function AdminWorkspaceFrame({
   sidebar,
@@ -35,13 +36,19 @@ export function AdminWorkspaceFrame({
       >
         {intl.formatMessage({ id: 'admin.skipToContent', defaultMessage: 'Skip to content' })}
       </a>
+      {/* Below sm the slot steps aside (display: contents): the rail hides
+          itself there, and the sidebar's phone top bar, a fixed header with
+          the menu, must stay on screen on every admin page. From sm up a
+          folded slot is invisible, so the rail leaves the tab order and the
+          accessibility tree once the width transition ends. */}
       {sidebar ? (
         <div
           data-admin-sidebar-slot=""
-          inert={collapsed}
-          aria-hidden={collapsed || undefined}
           style={{ width: collapsed ? 0 : SIDEBAR_PX }}
-          className="hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-out motion-reduce:transition-none sm:flex"
+          className={cn(
+            'contents shrink-0 overflow-hidden transition-[width,visibility] duration-300 ease-out motion-reduce:transition-none sm:flex',
+            collapsed && 'sm:invisible'
+          )}
         >
           {sidebar}
         </div>
