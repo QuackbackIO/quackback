@@ -261,7 +261,10 @@ export function WidgetShell({
       {/* The Home hero backdrop fills the panel behind the header row and
           body; the header/content render transparently over it. */}
       {backdrop}
-      <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
+      {/* z-20, above the body and footer (z-10): each row is its own stacking
+          context, so the profile card the header opens can only paint over the
+          body when the header row itself stacks above it. */}
+      <div className="relative z-20 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
         {/* Left: back button on detail views; workspace logo on Home. min-w-0 so
             header content (presence copy) truncates instead of pushing the
             right-zone controls. */}
