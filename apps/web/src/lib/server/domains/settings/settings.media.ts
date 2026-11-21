@@ -92,7 +92,7 @@ export async function updateCustomCss(
       // rules. Any other non-empty write hits the feature gate.
       if (trimmed.length > 0 && trimmed !== advancedCssRemainder(org.customCss ?? '')) {
         const { assertTierFeature } = await import('./tier-enforce')
-        await assertTierFeature('customCss', 'Custom CSS')
+        await assertTierFeature('customCss', 'Custom CSS', tx)
       }
       await tx.update(settings).set({ customCss: css }).where(eq(settings.id, org.id))
     })

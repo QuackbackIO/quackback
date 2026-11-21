@@ -282,11 +282,11 @@ export async function publishPortalCustomisation(
     // Plan checks for every changed part before the first write.
     const { assertTierFeature } = await import('./tier-enforce')
     if (has('theme') && (input.theme?.light !== undefined || input.theme?.dark !== undefined))
-      await assertTierFeature('customColors', 'Custom colours')
+      await assertTierFeature('customColors', 'Custom colours', tx)
     if (has('customCss')) {
       const trimmed = input.customCss!.trim()
       if (trimmed.length > 0 && trimmed !== advancedCssRemainder(row.customCss ?? ''))
-        await assertTierFeature('customCss', 'Custom CSS')
+        await assertTierFeature('customCss', 'Custom CSS', tx)
     }
 
     const options = { executor: tx }

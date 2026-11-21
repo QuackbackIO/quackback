@@ -21,9 +21,11 @@ import {
   type UserId,
 } from '@quackback/ids'
 
+// Guarded as the real `db` is: a decision made in a transaction must not touch
+// the shared handle inside it, not even to build its guard subqueries.
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).guardedTestDb,
 }))
 
 vi.mock('@/lib/server/config', async (importOriginal) => ({
