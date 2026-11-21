@@ -187,6 +187,7 @@ export function buildDiscordMessage(
           {
             title: truncate(conversation.subject?.trim() || 'New conversation', 256),
             url: inboxUrl(links, conversation.id),
+            description: truncate(stripHtml(conversation.openingMessage ?? ''), 300) || undefined,
             color: COLORS.blue,
             author: { name: `🛟 New support conversation from ${visitor}` },
             footer: { text: `Channel: ${conversation.channel}` },
