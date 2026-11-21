@@ -84,6 +84,12 @@ describe('buildDiscordMessage: conversation.created', () => {
     expect(msg?.embeds?.[0]?.description).toBe('My login fails @everyone')
   })
 
+  it('keeps the author line within the 256 character embed limit', () => {
+    const visitorEmail = `${'a'.repeat(300)}@example.com`
+    const embed = buildDiscordMessage(conversationCreated({ visitorEmail }), links)?.embeds?.[0]
+    expect(embed?.author?.name.length).toBeLessThanOrEqual(256)
+  })
+
   it('falls back for anonymous visitors and missing subjects', () => {
     const embed = buildDiscordMessage(
       conversationCreated({ subject: '  ', visitorEmail: null }),
