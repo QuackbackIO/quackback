@@ -40,6 +40,7 @@ import { generateId, type PrincipalId, type RoleId, type UserId } from '@quackba
 import { isTeamMember, type Role, type PrincipalType } from '@/lib/shared/roles'
 import { presetForLegacyRole } from '@/lib/shared/permissions'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
+import { afterCommit } from '@/lib/server/workspaces/after-commit'
 import { addPrincipalToDefaultTeam } from '@/lib/server/domains/teams'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { enqueueMembershipSync } from './membership-sync'
@@ -197,7 +198,9 @@ export async function ensurePrincipalForUser(
     .returning()
   if (inserted) {
     await enrollTeamTierInDefaultTeam(inserted, exec)
-    await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(input.userId))
+    // After commit: the cache lives in the database, so dropping it now would
+    // need a second connection while the caller's transaction holds one.
+    await afterCommit(() => cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(input.userId)))
     if (isTeamSeat(inserted.type, inserted.role)) await noteSeatAdded(exec)
     return { principal: inserted, created: true }
   }

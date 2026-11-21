@@ -21,15 +21,21 @@ const seams = vi.hoisted(() => ({
   readWideKey: null as null | (() => Promise<string | null | undefined>),
   failAudit: false,
   globalDbCalls: [] as string[],
+  globalDbCallsInsideTransaction: [] as string[],
 }))
 
 // The global `db` is the fixture transaction, behind a proxy that records
 // what the code under test asks of it directly. Every write must go through
 // the publish transaction: a writer that ignored its executor would, in
-// production, wait on the row lock its own transaction holds.
+// production, wait on the row lock its own transaction holds. A read on it
+// inside the transaction (a plan check, say) would wait for a second pool
+// connection, so its `transaction` opens a frame as the real one does and what
+// is asked of the global handle inside that frame is recorded on its own.
 vi.mock('@/lib/server/db', async (original) => {
   const actual = await original<typeof import('@/lib/server/db')>()
   const { testDb: fixtureDb } = await import('@/lib/server/__tests__/db-test-fixture')
+  const { isInsideDbTransaction, wrapDbTransaction } =
+    await import('@/lib/server/workspaces/after-commit')
   return {
     ...actual,
     db: new Proxy(
@@ -37,9 +43,12 @@ vi.mock('@/lib/server/db', async (original) => {
       {
         get(_, prop) {
           seams.globalDbCalls.push(String(prop))
+          if (isInsideDbTransaction()) seams.globalDbCallsInsideTransaction.push(String(prop))
           const target = fixtureDb as unknown as Record<string | symbol, unknown>
           const value = target[prop]
-          return typeof value === 'function' ? value.bind(target) : value
+          if (typeof value !== 'function') return value
+          const bound = value.bind(target)
+          return prop === 'transaction' ? wrapDbTransaction(bound) : bound
         },
       }
     ),
@@ -69,6 +78,7 @@ vi.mock('@/lib/server/audit/log', async (original) => {
 })
 
 const { publishPortalCustomisation } = await import('../portal-customise.service')
+const { updateCustomCss } = await import('../settings.media')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -165,6 +175,7 @@ beforeEach(async () => {
   seams.deleted.length = 0
   seams.failAudit = false
   seams.globalDbCalls.length = 0
+  seams.globalDbCallsInsideTransaction.length = 0
 })
 afterEach(async () => {
   await fixture.rollback()
@@ -300,6 +311,26 @@ describe('publishPortalCustomisation (real Postgres)', () => {
   })
 
   describe('plan', () => {
+    it('checks the plan on its own transaction, with no plan cached', async () => {
+      const result = await publishPortalCustomisation(
+        {
+          before: { theme: loaded.theme, customCss: '' },
+          theme: { themeMode: 'dark', light: { primary: '#ff0000' } },
+          customCss: '.brand { color: red; }',
+        },
+        ctx()
+      )
+      expect(result).toMatchObject({ ok: true })
+      expect(seams.globalDbCallsInsideTransaction).toEqual([])
+    })
+
+    it('checks the plan on its own transaction when Advanced CSS is saved alone', async () => {
+      await updateCustomCss('.brand { color: red; }')
+      expect(seams.globalDbCalls).toContain('transaction')
+      expect(seams.globalDbCallsInsideTransaction).toEqual([])
+      expect((await read()).customCss).toBe('.brand { color: red; }')
+    })
+
     it('refuses Advanced CSS rules off-plan with TierLimitError and writes nothing, theme included', async () => {
       await setRow({ tierLimits: JSON.stringify({ features: { customCss: false } }) })
       invalidateTierLimitsCache()

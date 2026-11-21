@@ -27,6 +27,8 @@ import {
   desc,
   sql,
   exists,
+  type Database,
+  type Transaction,
 } from '@/lib/server/db'
 import type { PostId, PostCommentId, PrincipalId } from '@quackback/ids'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
@@ -154,10 +156,13 @@ export interface PendingCommentRow {
  * folding this into the guarded approve/reject UPDATE closes the TOCTOU
  * window between queue display and the write (no ghost-publishing into a
  * board that was soft-deleted out from under the moderator).
+ *
+ * Built on the handle the guarded write runs on: inside a transaction the
+ * shared `db` is the wrong handle even just to build a subquery.
  */
-function boardAliveForPost() {
+function boardAliveForPost(executor: Database | Transaction) {
   return exists(
-    db
+    executor
       .select({ one: sql`1` })
       .from(boards)
       .where(and(eq(boards.id, posts.boardId), isNull(boards.deletedAt)))
@@ -171,12 +176,14 @@ function boardAliveForPost() {
  * parent was soft-deleted. Composes {@link boardAliveForPost} so the
  * board-alive invariant lives in exactly one place.
  */
-function parentChainAliveForComment() {
+function parentChainAliveForComment(executor: Database | Transaction) {
   return exists(
-    db
+    executor
       .select({ one: sql`1` })
       .from(posts)
-      .where(and(eq(posts.id, postComments.postId), isNull(posts.deletedAt), boardAliveForPost()))
+      .where(
+        and(eq(posts.id, postComments.postId), isNull(posts.deletedAt), boardAliveForPost(executor))
+      )
   )
 }
 
@@ -264,7 +271,7 @@ export async function approvePost(postId: PostId, audit: ModerationAudit): Promi
         eq(posts.id, postId),
         eq(posts.moderationState, 'pending'),
         isNull(posts.deletedAt),
-        boardAliveForPost()
+        boardAliveForPost(db)
       )
     )
     .returning({ id: posts.id })
@@ -324,7 +331,7 @@ export async function rejectPost(
         eq(posts.id, postId),
         eq(posts.moderationState, 'pending'),
         isNull(posts.deletedAt),
-        boardAliveForPost()
+        boardAliveForPost(db)
       )
     )
     .returning({ id: posts.id })
@@ -373,7 +380,7 @@ export async function approveComment(
           eq(postComments.id, commentId),
           eq(postComments.moderationState, 'pending'),
           isNull(postComments.deletedAt),
-          parentChainAliveForComment()
+          parentChainAliveForComment(tx)
         )
       )
       .returning({
@@ -457,7 +464,7 @@ export async function rejectComment(
         eq(postComments.id, commentId),
         eq(postComments.moderationState, 'pending'),
         isNull(postComments.deletedAt),
-        parentChainAliveForComment()
+        parentChainAliveForComment(db)
       )
     )
     .returning({ id: postComments.id })
