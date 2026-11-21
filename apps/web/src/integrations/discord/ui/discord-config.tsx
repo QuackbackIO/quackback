@@ -48,6 +48,18 @@ const DISCORD_EVENT_CONFIG: EventConfig[] = [
     shortLabel: 'Comment',
     description: 'When someone comments on a post',
   },
+  {
+    id: 'conversation.created',
+    label: 'New support conversation',
+    shortLabel: 'Conversation',
+    description: 'When a visitor starts a support conversation',
+  },
+  {
+    id: 'message.created',
+    label: 'New support message',
+    shortLabel: 'Support msg',
+    description: 'When a visitor sends a support message (agent replies are not sent)',
+  },
 ]
 
 function useDiscordChannels() {
