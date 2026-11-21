@@ -308,14 +308,14 @@ test.describe('portal submit', () => {
         title: `${marker} crafted bad`,
         customFields: { plan: 'Enterprise' },
       })
-      expect(bad.error).toMatchObject({ code: 'VALIDATION_ERROR' })
+      expect(bad.error).toMatchObject({ code: 'CUSTOM_FIELDS_INVALID' })
       expect(bad.error?.message).toMatch(/not a valid option/)
       const missing = await fbFn(cass.request, 'publicPosts', 'createPublicPostFn', {
         boardId: board.id,
         title: `${marker} crafted missing`,
       })
       expect(missing.error).toMatchObject({
-        code: 'VALIDATION_ERROR',
+        code: 'CUSTOM_FIELDS_INVALID',
         message: 'Your plan is required',
       })
       const extra = await fbFn(cass.request, 'publicPosts', 'createPublicPostFn', {

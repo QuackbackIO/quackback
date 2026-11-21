@@ -75,6 +75,10 @@ const isReadOnlyRefusal = (err: unknown): boolean =>
 // The refusal a blocked person gets (person-blocked.ts), matched by its code.
 const isBlockedRefusal = (err: unknown): boolean =>
   err instanceof Error && (err as { code?: unknown }).code === 'BLOCKED'
+// The refusal for answers that no longer fit the board's fields
+// (CUSTOM_FIELDS_INVALID in post-custom-fields.ts), matched by its code.
+const isFieldsRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'CUSTOM_FIELDS_INVALID'
 
 /**
  * Whole minutes to wait when the post was refused for going over the hourly
@@ -328,6 +332,11 @@ export function FeedbackHeaderAnimated({
       // for the visitor, except the neutral line for a board that takes none
       // and the wait after posting too many.
       const waitMinutes = rateLimitWaitMinutes(err)
+      // The board's fields changed since the page loaded them: fetch them
+      // again so the composer shows the questions the board asks now.
+      if (isFieldsRefusal(err)) {
+        void queryClient.invalidateQueries({ queryKey: ['portal', 'data'] })
+      }
       setError(
         waitMinutes !== null
           ? intl.formatMessage(
@@ -348,10 +357,16 @@ export function FeedbackHeaderAnimated({
                   id: 'portal.feedback.readOnly',
                   defaultMessage: "This board isn't taking new feedback right now.",
                 })
-              : intl.formatMessage({
-                  id: 'portal.feedback.header.errorSubmit',
-                  defaultMessage: 'Could not submit your feedback. Please try again.',
-                })
+              : isFieldsRefusal(err)
+                ? intl.formatMessage({
+                    id: 'portal.feedback.header.errorFieldsChanged',
+                    defaultMessage:
+                      "This board's questions may have changed. Check them and try again.",
+                  })
+                : intl.formatMessage({
+                    id: 'portal.feedback.header.errorSubmit',
+                    defaultMessage: 'Could not submit your feedback. Please try again.',
+                  })
       )
     }
   }

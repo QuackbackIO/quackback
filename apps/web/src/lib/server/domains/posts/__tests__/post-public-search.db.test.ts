@@ -147,3 +147,63 @@ it('says how a search was widened', async () => {
   expect(await mode('integraton')).toBe('similar')
   expect(await mode('xyzzy')).toBe('all')
 })
+
+it('finds a word from a partial word that stems differently from it', async () => {
+  const slug = await boardWith([
+    { title: 'Zapier integration' },
+    { title: 'Email notifications' },
+    { title: 'Copyright notice in the footer' },
+    { title: 'Data integrity checks' },
+    { title: 'Copy a board' },
+  ])
+  // "integration" is kept as "integr", which "integrati" is not the start of.
+  expect(await search(slug, 'integrati')).toEqual(['Zapier integration'])
+  expect(await search(slug, 'notifica')).toEqual(['Email notifications'])
+  expect((await search(slug, 'copy')).sort()).toEqual([
+    'Copy a board',
+    'Copyright notice in the footer',
+  ])
+  expect(await search(slug, 'zapier integrati')).toEqual(['Zapier integration'])
+})
+
+it('never matches a different word that only shares the stem', async () => {
+  // "integrity" is kept as "integr" too, but does not start with "integrati":
+  // only the close-spelling fallback may offer it.
+  const slug = await boardWith([{ title: 'Data integrity checks' }])
+  const mode = async (query: string) =>
+    (await withPublicSearchMode({ boardSlug: slug, search: query }, ANONYMOUS)).searchMode
+  expect(await mode('integrati')).toBe('similar')
+  expect(await mode('integr')).toBe('all')
+})
+
+it('finds a partial word in the details, and among half the words', async () => {
+  const slug = await boardWith([
+    { title: 'Webhooks', content: 'Send notifications to Slack' },
+    { title: 'Dark mode' },
+  ])
+  expect(await search(slug, 'notifica')).toEqual(['Webhooks'])
+  expect(await search(slug, 'slack notifica theme')).toEqual(['Webhooks'])
+})
+
+it('still leaves a stop word out, never widening it to the words it starts', async () => {
+  const slug = await boardWith([{ title: 'Theme editor' }, { title: 'Export the board' }])
+  expect(await search(slug, 'the export')).toEqual(['Export the board'])
+})
+
+it('ranks whole words as before: title above details, then votes', async () => {
+  const slug = await boardWith([
+    { title: 'Webhooks', content: 'Like the Slack integration has', votes: 99 },
+    { title: 'Slack integration', votes: 0 },
+    { title: 'Integrations page', votes: 5 },
+  ])
+  // The two titles rank the same, so votes decide between them.
+  expect(await search(slug, 'integration', 'relevance')).toEqual([
+    'Integrations page',
+    'Slack integration',
+    'Webhooks',
+  ])
+  expect(await search(slug, 'slack integration', 'relevance')).toEqual([
+    'Slack integration',
+    'Webhooks',
+  ])
+})

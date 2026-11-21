@@ -7,6 +7,13 @@
  * event; its notification target honours the "Mentioned in a comment"
  * preference and checks the person can see the post.
  *
+ *  - Only a comment a teammate, an API key or an integration wrote tells
+ *    anyone. Customers get no mention picker, so a mention node in a
+ *    customer's or anonymous visitor's comment is a crafted request and
+ *    notifies nobody. The writer is who sent the text: a teammate or an API
+ *    key that files a comment for a customer still tells the people it
+ *    mentions. A comment released by approval has no other writer on record
+ *    than its author.
  *  - Only people (user principals with a role) are told; the author never is.
  *  - A private comment is team-only, so only teammates are told about it.
  *  - Ids in the document come from the client: anything that is not a
@@ -23,6 +30,7 @@ import {
   extractMentionExcerpts,
   extractMentions,
 } from '@/lib/server/domains/posts/extract-mentions'
+import { mentionerMayMention } from '@/lib/server/domains/posts/sync-post-mentions'
 import type { PublishedPostRef } from './comment.announce'
 
 const MENTIONABLE_ROLES = new Set(['admin', 'member', 'user'])
@@ -31,13 +39,21 @@ export async function dispatchCommentMentions(
   actor: EventActor,
   author: PrincipalId,
   comment: { id: PostCommentId; isPrivate: boolean; contentJson?: unknown },
-  post: PublishedPostRef
+  post: PublishedPostRef,
+  /** Who sent the text, when not the author (a comment filed for a customer). */
+  writer: PrincipalId = author
 ): Promise<void> {
   const doc = (comment.contentJson ?? null) as JSONContent | null
   const ids = [...extractMentions(doc)].filter(
     (id) => id !== author && isValidTypeId(id, 'principal')
   )
   if (ids.length === 0) return
+
+  const [mentioner] = await db
+    .select({ type: principal.type, role: principal.role })
+    .from(principal)
+    .where(inArray(principal.id, [writer]))
+  if (!mentioner || !mentionerMayMention(mentioner)) return
 
   const rows = await db
     .select({ id: principal.id, type: principal.type, role: principal.role })

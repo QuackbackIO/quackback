@@ -103,8 +103,9 @@ function allow(boardId: string) {
   return { [boardId]: { canSubmit: true, canVote: true } }
 }
 
+let qc: QueryClient
+
 function wrapper({ children }: { children: ReactNode }) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
     <QueryClientProvider client={qc}>
       <IntlProvider locale="en">{children}</IntlProvider>
@@ -113,6 +114,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function renderHome(props: Partial<WidgetHomeProps> = {}) {
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <WidgetHomeAnimated
       initialPosts={[]}
@@ -200,5 +202,25 @@ describe('widget compose board fields', () => {
 
     await waitFor(() => expect(createPost).toHaveBeenCalled())
     expect(createPost.mock.calls[0]?.[0].data).not.toHaveProperty('customFields')
+  })
+
+  it('says the board changed, and fetches its fields again, when the server refuses the answers', async () => {
+    open(ideas)
+    fireEvent.change(await screen.findByRole('textbox', { name: /Your plan/ }), {
+      target: { value: 'Pro' },
+    })
+    const refused = Object.assign(new Error('Seats is required'), {
+      code: 'CUSTOM_FIELDS_INVALID',
+    })
+    createPost.mockRejectedValueOnce(refused)
+    const invalidate = vi.spyOn(qc, 'invalidateQueries')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
+
+    expect(
+      await screen.findByText("This board's questions may have changed. Check them and try again.")
+    ).toBeTruthy()
+    expect(screen.queryByText('Network error. Please try again.')).toBeNull()
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['widget', 'boardCapabilities'] })
   })
 })

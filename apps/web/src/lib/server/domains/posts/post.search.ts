@@ -3,7 +3,9 @@
  * portal feed, the widget and the admin inbox.
  *
  * Every word matches as the start of a word, so a search typed a few
- * letters at a time finds results as it goes ("Zap" finds "Zapier"). All
+ * letters at a time finds results as it goes ("Zap" finds "Zapier", and
+ * "integrati" finds "integration" although the index keeps only its stem,
+ * "integr": see termMatch). All
  * the words must match; when no post has them all, posts with at least half
  * of them will do; and when no post has even that, titles with a close
  * spelling do ("integraton" finds "integration"). See resolvePostSearchMode.
@@ -61,6 +63,71 @@ function termQuery(term: string): SQL {
   return sql`to_tsquery('english', ${`${term}:*`})`
 }
 
+/** Shorter stems than this are left to the english query: too many words share them. */
+const MIN_STEM_LENGTH = 3
+
+/** The post's words as written, for the check a shorter stem needs. */
+const postText = sql`(coalesce(${posts.title}, '') || ' ' || coalesce(${posts.content}, ''))`
+
+/**
+ * One typed word as the start of a word in the post. The index holds english
+ * stems, and a partial word stems differently from the whole one, so the
+ * english prefix query alone misses: "integrati" is not a prefix of
+ * "integr" (integration), "notifica" not of "notif" (notifications), and
+ * "copy" stems to "copi", not a prefix of "copyright". So a word also
+ * matches:
+ *
+ *  - a stem that starts with it as typed ("copy" finds "copyright");
+ *  - a stem that is a shorter start of it ("integr" for "integrati"), when
+ *    the post has a word that really starts with the typed letters. The
+ *    index finds the candidates; the check keeps "integrity", which stems to
+ *    "integr" too, out of a search for "integrati".
+ *
+ * `candidates` is the tsquery the index serves; `matches` is true for a post
+ * that has the word. A stop word ("the") has neither: it matches nothing, as
+ * in the english query, and never widens to "theme".
+ */
+function termMatch(term: string): { candidates: SQL; matches: SQL; isWord: SQL } {
+  const english = termQuery(term)
+  const typed = sql`to_tsquery('simple', ${`${term}:*`})`
+  const letters = Array.from(term)
+  const stems: string[] = []
+  for (let length = MIN_STEM_LENGTH; length < letters.length; length++) {
+    stems.push(letters.slice(0, length).join(''))
+  }
+  const shorter = stems.length > 0 ? sql`to_tsquery('simple', ${stems.join(' | ')})` : null
+  const isWord = sql`(numnode(${english}) > 0)`
+  const widened = shorter ? sql`${english} || ${typed} || ${shorter}` : sql`${english} || ${typed}`
+  const startsAWord = shorter
+    ? sql` OR (${posts.searchVector} @@ ${shorter} AND ${postText} ~* ${`\\m${term}`})`
+    : sql``
+  return {
+    candidates: sql`(CASE WHEN ${isWord} THEN ${widened} ELSE ${english} END)`,
+    matches: sql`(${isWord} AND (${posts.searchVector} @@ ${english} OR ${posts.searchVector} @@ ${typed}${startsAWord}))`,
+    isWord,
+  }
+}
+
+/**
+ * Posts with every word (join '&') or any word ('|'), each as the start of a
+ * word (termMatch). The index finds the candidates; each word is then
+ * checked. Stop words are left out, as the english query leaves them.
+ */
+function wordsCondition(terms: string[], join: '&' | '|'): SQL {
+  const parts = terms.map(termMatch)
+  const candidates = sql.join(
+    parts.map((part) => part.candidates),
+    join === '&' ? sql` && ` : sql` || `
+  )
+  const index = sql`${posts.searchVector} @@ (${candidates})`
+  if (join === '|') return index
+  const every = sql.join(
+    parts.map((part) => sql`(NOT ${part.isWord} OR ${part.matches})`),
+    sql` AND `
+  )
+  return sql`(${index} AND ${every})`
+}
+
 /** The search as one tsquery: every word, or any word. Null when it has none. */
 function postSearchQuery(search: string, join: '&' | '|'): SQL | null {
   if (usesQuerySyntax(search)) return sql`websearch_to_tsquery('english', ${search})`
@@ -83,14 +150,14 @@ export function keywordTsQuery(search: string): SQL | null {
  * words match nothing, so they don't count toward the half).
  */
 function matchedTerms(search: string): { matched: SQL; counted: SQL } {
-  const terms = searchTerms(search).map(termQuery)
+  const terms = searchTerms(search).map(termMatch)
   return {
     matched: sql.join(
-      terms.map((query) => sql`(${posts.searchVector} @@ ${query})::int`),
+      terms.map((term) => sql`(${term.matches})::int`),
       sql` + `
     ),
     counted: sql.join(
-      terms.map((query) => sql`(numnode(${query}) > 0)::int`),
+      terms.map((term) => sql`(${term.isWord})::int`),
       sql` + `
     ),
   }
@@ -111,15 +178,18 @@ export function postSearchCondition(search: string, mode: PostSearchMode = 'all'
     const words = similarWords(search)
     return words ? sql`${words} <% ${posts.title}` : sql`false`
   }
-  const any = postSearchQuery(search, mode === 'all' ? '&' : '|')
-  if (!any) return sql`false`
+  if (usesQuerySyntax(search)) {
+    return sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`
+  }
+  const terms = searchTerms(search)
+  if (terms.length === 0) return sql`false`
   // The any-word query lets the full-text index find the candidates; the
   // count then keeps the posts with at least half of the words.
   if (mode === 'most') {
     const { matched, counted } = matchedTerms(search)
-    return sql`(${posts.searchVector} @@ ${any} AND (${matched}) * 2 >= (${counted}))`
+    return sql`(${wordsCondition(terms, '|')} AND (${matched}) * 2 >= (${counted}))`
   }
-  return sql`${posts.searchVector} @@ ${any}`
+  return wordsCondition(terms, '&')
 }
 
 /**
