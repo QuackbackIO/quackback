@@ -93,6 +93,29 @@ describe('fontLicence', () => {
       expect(fontLicence(readFontFile(woff2(font))!)).toBe('open')
   })
 
+  it('holds a font that only mentions an open licence: a bare name, or with words that doubt it', () => {
+    for (const font of [
+      { licence: 'OFL' },
+      { licence: 'Apache License' },
+      { licence: 'See OFL for details.' },
+      { licenceUrl: 'https://example.com/ofl' },
+      { licenceUrl: 'https://scripts.sil.org/OFL.evil.example' },
+      {
+        licence:
+          'Commercial licence. Unlike fonts under the SIL Open Font License, Version 1.1, this font is not free.',
+      },
+      {
+        licence: 'This font is not licensed under the SIL Open Font License, Version 1.1.',
+        licenceUrl: 'https://scripts.sil.org/OFL',
+      },
+      {
+        licence: 'Web font licence. Purchase required.',
+        licenceUrl: 'https://openfontlicense.org',
+      },
+    ])
+      expect(fontLicence(readFontFile(woff2(font))!), JSON.stringify(font)).toBe('commercial')
+  })
+
   it('is commercial otherwise: editable or installable embedding, any other licence or none', () => {
     expect(fontLicence(readFontFile(woff2({ fsType: 8 }))!)).toBe('commercial')
     expect(fontLicence(readFontFile(woff2({ fsType: 0 }))!)).toBe('commercial')

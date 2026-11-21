@@ -85,6 +85,25 @@ describe('site snapshots', () => {
     expect(await strict('https://acme.test/', 'page', limits)).not.toBeNull()
   })
 
+  it('lets a font be missing only from a snapshot that recorded no fonts', async () => {
+    await recordingFetcher(live, dir)('https://acme.test/', 'page', limits)
+    const strict = snapshotFetcher(dir, { strict: true })
+    // Taken before the static reader read fonts: a font reads as unfetched.
+    expect(await strict('https://acme.test/fonts/a.woff2', 'font', limits)).toBeNull()
+
+    // One that recorded a font is strict about every font: a wrong address throws.
+    const withFont: SiteFetcher = async (url) =>
+      url.endsWith('a.woff2')
+        ? { status: 200, url, contentType: 'font/woff2', body: new Uint8Array([0x77, 0x4f]) }
+        : (responses[url] ?? null)
+    await recordingFetcher(withFont, dir)('https://acme.test/fonts/a.woff2', 'font', limits)
+    const recorded = snapshotFetcher(dir, { strict: true })
+    expect(await recorded('https://acme.test/fonts/a.woff2', 'font', limits)).not.toBeNull()
+    await expect(recorded('https://acme.test/fonts/b.woff2', 'font', limits)).rejects.toThrow(
+      'https://acme.test/fonts/b.woff2'
+    )
+  })
+
   it('adds to an existing record without overwriting its files', async () => {
     await recordingFetcher(live, dir)('https://acme.test/', 'page', limits)
     await recordingFetcher(live, dir)('https://acme.test/main.css', 'css', limits)

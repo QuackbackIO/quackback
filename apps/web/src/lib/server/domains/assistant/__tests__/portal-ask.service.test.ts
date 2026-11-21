@@ -167,6 +167,67 @@ describe('askPortalCustomise: the model', () => {
     expect(answer.reply).not.toMatch(/[–—]/)
   })
 
+  it('keeps a header request to the header: what the model repeats from the draft is dropped', async () => {
+    // A radius between stops; the model rounds it to its nearest stop, and
+    // repeats the font and the main colour, while setting the header.
+    const current = draft({ themeMode: 'user', corners: 0.625 })
+    mockStructuredChat.mockImplementation(async () => ({
+      patch: {
+        colours: {
+          light: { header: '#0b1f3a', main: '#2563EB' },
+          dark: { header: '#0b1f3a' },
+        },
+        font: 'inter',
+        corners: 0.5,
+        buttonShape: 'pill',
+      },
+    }))
+    const answer = await askPortalCustomise({ request: 'Make the header navy', draft: current })
+    expect(answer).toMatchObject({ outcome: 'patch' })
+    if (answer.outcome !== 'patch') throw new Error('unreachable')
+    expect(answer.patch).toEqual({
+      colours: { light: { header: '#0b1f3a' }, dark: { header: '#0b1f3a' } },
+    })
+    // The model is shown the real radius, never a rounded one.
+    const user = mockStructuredChat.mock.calls[0]![0].messages[0]!.content
+    expect(user).toContain('"corners":0.625')
+    expect(mockStructuredChat.mock.calls[0]![0].systemPrompts.join('\n')).toContain(
+      'a request about the header changes the header colour alone'
+    )
+  })
+
+  it('keeps a corner stop the person asked for, beside the header, on a radius between stops', async () => {
+    const current = draft({ themeMode: 'user', corners: 0.625 })
+    mockStructuredChat.mockImplementation(async () => ({
+      patch: { colours: { light: { header: '#0b1f3a' } }, corners: 0.5 },
+    }))
+    const answer = await askPortalCustomise({
+      request: 'Corners 0.5 and a navy header',
+      draft: current,
+    })
+    if (answer.outcome !== 'patch') throw new Error('unreachable')
+    expect(answer.patch).toEqual({ colours: { light: { header: '#0b1f3a' } }, corners: 0.5 })
+  })
+
+  it('drops corners that are the draft’s own radius, asked for or not', async () => {
+    mockStructuredChat.mockImplementation(async () => ({
+      patch: { colours: { light: { header: '#0b1f3a' } }, corners: 0.5 },
+    }))
+    const answer = await askPortalCustomise({
+      request: 'Keep the corners and make the header navy',
+      draft: draft({ corners: 0.5 }),
+    })
+    if (answer.outcome !== 'patch') throw new Error('unreachable')
+    expect(answer.patch).toEqual({ colours: { light: { header: '#0b1f3a' } } })
+  })
+
+  it('keeps the patch as the model gave it when it only repeats the draft', async () => {
+    mockStructuredChat.mockImplementation(async () => ({ patch: { font: 'inter' } }))
+    const answer = await askPortalCustomise({ request: 'Use Inter', draft: draft() })
+    // The editor answers that it already looks that way.
+    expect(answer).toMatchObject({ outcome: 'patch', patch: { font: 'inter' } })
+  })
+
   it('sends the request, the draft and few-shots, under its own usage step', async () => {
     mockStructuredChat.mockImplementation(async () => ({ patch: { buttonShape: 'corners' } }))
     await askPortalCustomise({ request: OPEN_REQUEST, draft: draft(), page: 'help' })

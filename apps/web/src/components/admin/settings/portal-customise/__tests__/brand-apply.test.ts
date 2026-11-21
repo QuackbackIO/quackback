@@ -22,17 +22,17 @@ import {
 } from '../portal-draft'
 import {
   applyBrandImport,
-  assetsLabel,
-  heldAssets,
-  holdsImportAssets,
+  dropAsset,
+  revertImport,
+  stillUndone,
   importRows,
   importSuggestions,
   applySuggestion,
   welcomeLine,
-  setAssetsConfirmed,
   replaceImport,
   revertImportRow,
   siteColoursOf,
+  takeBackRow,
   type PreviousImport,
 } from '../brand-apply'
 
@@ -63,10 +63,8 @@ const sample: BrandImport = {
   missing: [],
 }
 
-/** As the existing behaviour: the brand assets confirmed. */
-const apply = (draft: PortalDraft, brand: BrandImport) => applyBrandImport(draft, brand, true)
-const replace = (draft: PortalDraft, previous: PreviousImport | null, brand: BrandImport) =>
-  replaceImport(draft, previous, brand, true)
+const apply = applyBrandImport
+const replace = replaceImport
 
 describe('applyBrandImport', () => {
   it('sets the logo, colours, font and shape, keeping the Advanced CSS', () => {
@@ -226,7 +224,7 @@ describe('replaceImport', () => {
     const first = replace(base, null, nexus)
     const second = replace(
       first.next,
-      { brand: nexus, before: first.before, undone: [], confirmed: true },
+      { brand: nexus, before: first.before, undone: [] },
       mailchimp
     )
     const alone = replace(base, null, mailchimp)
@@ -244,7 +242,7 @@ describe('replaceImport', () => {
     expect(first.next.logo.wideKey).toBe('header-logos/nexus.svg')
     const second = replace(
       first.next,
-      { brand: nexus, before: first.before, undone: [], confirmed: true },
+      { brand: nexus, before: first.before, undone: [] },
       mailchimp
     )
     expect(second.next.logo.wideKey).toBe('header-logos/mine.svg')
@@ -264,11 +262,7 @@ describe('replaceImport', () => {
     const first = replace(base, null, nhs)
     expect(draftPalette(first.next, 'light').header).toBe('#005eb8')
     expect(importRows(nhs).find((row) => row.key === 'page')?.swatches).toContain('#005eb8')
-    const second = replace(
-      first.next,
-      { brand: nhs, before: first.before, undone: [], confirmed: true },
-      sample
-    )
+    const second = replace(first.next, { brand: nhs, before: first.before, undone: [] }, sample)
     expect(draftPalette(second.next, 'light').header).toBeUndefined()
     // A header the person set themselves goes when a site gives the page.
     const own = editTheme.setColour(base, 'header', 'light', '#171717')
@@ -359,9 +353,10 @@ describe('importRows', () => {
     expect(rows.map((r) => [r.key, r.state, r.text])).toEqual([
       ['logo', 'matched', 'From the site'],
       ['icon', 'missing', 'No square icon of 120 px or more.'],
-      ['primary', 'matched', '#533afd, from the main button'],
-      ['page', 'matched', '#ffffff · #061b31, a light site, so the portal is always light'],
-      ['font', 'nearest', 'Brand Sans is licensed, so Inter stands in.'],
+      ['primary', 'matched', '#533afd'],
+      ['page', 'matched', 'Always light'],
+      // No file of it was read: nothing is claimed of its licence.
+      ['font', 'nearest', 'Brand Sans isn’t one we have, so Inter stands in.'],
       ['headings', 'skipped', 'Same as the text font.'],
       ['cards', 'skipped', 'No clear style found. Yours stays.'],
       ['shape', 'matched', 'Slight corners, pill buttons'],
@@ -379,66 +374,48 @@ describe('importRows', () => {
     expect(rows.find((r) => r.key === 'font')?.uploadFont).toBe('Brand Sans')
   })
 
-  it('shows the logo and icon as found but held until the brand assets are confirmed', () => {
-    const rows = importRows({ ...sample, icon: northwindIcon }, undefined, false)
+  it('shows the logo, icon and copied font as applied at once, like the colours', () => {
+    const rows = importRows({ ...sample, icon: northwindIcon })
     expect(rows.slice(0, 2).map((r) => [r.key, r.state, r.text, r.applied])).toEqual([
-      ['logo', 'held', 'Tick the box below to use it', false],
-      ['icon', 'held', 'Tick the box below to use it', false],
+      ['logo', 'matched', 'From the site', true],
+      ['icon', 'matched', 'The site’s app icon', true],
     ])
-    // Colours, page and shape apply at once.
-    expect(rows.filter((r) => r.applied).map((r) => r.key)).toEqual([
-      'primary',
-      'page',
-      'font',
-      'shape',
-    ])
-    // A held font applies nothing either, not even its stand-in.
     expect(
-      importRows(withAssets, undefined, false)
+      importRows(withAssets)
         .filter((r) => r.applied)
         .map((r) => r.key)
-    ).toEqual(['primary', 'page', 'shape'])
+    ).toEqual(['logo', 'icon', 'primary', 'page', 'font', 'shape'])
   })
 
   it('words the font row for each way the site’s font can come', () => {
-    const fontRow = (siteFont: BrandImport['siteFont'], confirmed: boolean) => {
-      const row = importRows({ ...sample, siteFont }, undefined, confirmed).find(
-        (r) => r.key === 'font'
-      )!
+    const fontRow = (siteFont: BrandImport['siteFont']) => {
+      const row = importRows({ ...sample, siteFont }).find((r) => r.key === 'font')!
       return [row.state, row.text, row.applied, row.uploadFont]
     }
     const files = [{ key: 'fonts/s.woff2', weight: 400, style: 'normal' as const }]
-    expect(fontRow({ family: 'Brand Sans', licence: 'commercial', files }, true)).toEqual([
+    expect(fontRow({ family: 'Brand Sans', licence: 'commercial', files })).toEqual([
       'matched',
       'Brand Sans, from the site',
       true,
       undefined,
     ])
-    // Held whole: the draft's font is untouched, so there is nothing to take back.
-    expect(fontRow({ family: 'Brand Sans', licence: 'commercial', files }, false)).toEqual([
-      'held',
-      'Tick the box below to use it',
-      false,
-      undefined,
-    ])
-    // An open-licence font needs no confirmation.
-    expect(fontRow({ family: 'Brand Sans', licence: 'open', files }, false)).toEqual([
+    expect(fontRow({ family: 'Brand Sans', licence: 'open', files })).toEqual([
       'matched',
       'Brand Sans, from the site',
       true,
       undefined,
     ])
     for (const notCopied of ['service', 'restricted'] as const)
-      expect(fontRow({ family: 'Brand Sans', notCopied }, true)).toEqual([
+      expect(fontRow({ family: 'Brand Sans', notCopied })).toEqual([
         'nearest',
         'Can’t be copied. Inter stands in.',
         true,
         'Brand Sans',
       ])
-    expect(fontRow({ family: 'Brand Sans', notCopied: 'subset' }, true)[1]).toBe(
+    expect(fontRow({ family: 'Brand Sans', notCopied: 'subset' })[1]).toBe(
       'Not copied: the site serves only part of it. Inter stands in.'
     )
-    expect(fontRow({ family: 'Brand Sans', notCopied: 'too-large' }, true)[1]).toBe(
+    expect(fontRow({ family: 'Brand Sans', notCopied: 'too-large' })[1]).toBe(
       'Not copied: its files are over 400 KB. Inter stands in.'
     )
   })
@@ -459,17 +436,14 @@ describe('importRows', () => {
     const text = Object.fromEntries(rows.map((r) => [r.key, [r.state, r.text]]))
     expect(text.logo).toEqual(['missing', 'Not found on the site.'])
     expect(text.primary).toEqual(['missing', 'No main colour found.'])
-    expect(text.page).toEqual([
-      'matched',
-      '#08090a · #f7f8f8, a dark site, so the portal is always dark',
-    ])
+    expect(text.page).toEqual(['matched', 'Always dark'])
     expect(text.font).toEqual(['matched', 'Inter, same as the site'])
     expect(text.shape).toEqual(['matched', 'Buttons with 4px corners'])
   })
 
   it('says a light site with no dark mode makes the portal always light', () => {
     const page = importRows(sample).find((r) => r.key === 'page')
-    expect(page?.text).toBe('#ffffff · #061b31, a light site, so the portal is always light')
+    expect(page?.text).toBe('Always light')
   })
 
   it('shows the site’s palette on the page row, and says when it brought a dark mode', () => {
@@ -479,7 +453,7 @@ describe('importRows', () => {
       darkMode: { background: '#0a2540' },
     }).find((r) => r.key === 'page')
     expect(page).toMatchObject({
-      text: '#ffffff · #061b31, the site has a dark mode, so visitors choose',
+      text: 'Light and dark',
       swatches: ['#ffffff', '#061b31', '#f6f9fc', '#e3e8ee', '#425466', '#0a2540'],
     })
   })
@@ -539,21 +513,9 @@ const withAssets: BrandImport = {
 }
 const sohne = { family: 'Brand Sans', fallback: 'lora', files: sohneFiles }
 
-describe('brand assets held until confirmed', () => {
-  it('applies colours, page, header and shape at once, and holds the logo, icon and font file', () => {
-    const next = applyBrandImport(base, withAssets, false)
-    expect(next.logo).toEqual(base.logo)
-    expect(next.customFont).toBeUndefined()
-    expect(draftPalette(next, 'light').primary).toBe('#533afd')
-    expect(draftPalette(next, 'light').foreground).toBe('#061b31')
-    expect(draftRadius(next)).toBe(0.25)
-    // The font waits whole: not even its stand-in applies.
-    expect(draftFont(next)).toBe(draftFont(base))
-    expect(holdsImportAssets(next, withAssets)).toBe(false)
-  })
-
-  it('applies them all when confirmed: the copied font with the nearest listed font behind it', () => {
-    const next = applyBrandImport(base, withAssets, true)
+describe('brand assets', () => {
+  it('apply at once with the colours: the copied font with the nearest listed font behind it', () => {
+    const next = applyBrandImport(base, withAssets)
     expect(next.logo).toEqual({
       wideKey: sample.logo!.stagedKey,
       mode: 'custom_logo',
@@ -561,66 +523,16 @@ describe('brand assets held until confirmed', () => {
     })
     expect(next.customFont).toEqual(sohne)
     expect(draftFont(next)).toContain('Lora')
-    expect(holdsImportAssets(next, withAssets)).toBe(true)
-  })
-
-  it('applies an open-licence font without confirmation, the logo and icon still held', () => {
-    const open: BrandImport = {
-      ...withAssets,
-      siteFont: { family: 'Brand Sans', licence: 'open', files: sohneFiles },
-    }
-    const next = applyBrandImport(base, open, false)
-    expect(next.customFont).toEqual(sohne)
-    expect(next.logo).toEqual(base.logo)
-    expect(heldAssets(open)).toEqual(['logo', 'icon'])
+    expect(draftPalette(next, 'light').primary).toBe('#533afd')
+    expect(draftRadius(next)).toBe(0.25)
   })
 
   it('keeps a family the person uploaded themselves over the site’s copy of it', () => {
     const own = { family: 'Brand Sans', fallback: 'lora' as const, files: [sohneFiles[0]!] }
-    expect(applyBrandImport({ ...base, customFont: own }, withAssets, true).customFont).toEqual(own)
+    expect(applyBrandImport({ ...base, customFont: own }, withAssets).customFont).toEqual(own)
   })
 
-  it('reads the tick from the draft: ticked while it holds any held asset', () => {
-    const confirmed = applyBrandImport(base, withAssets, true)
-    expect(holdsImportAssets(confirmed, withAssets)).toBe(true)
-    // The logo and icon taken back one by one: the font alone still counts.
-    const fontOnly = revertImportRow(revertImportRow(confirmed, base, 'logo'), base, 'icon')
-    expect(holdsImportAssets(fontOnly, withAssets)).toBe(true)
-    expect(holdsImportAssets(revertImportRow(fontOnly, base, 'font'), withAssets)).toBe(false)
-    // An open-licence font is no held asset: it never ticks the box.
-    const open: BrandImport = {
-      ...withAssets,
-      logo: undefined,
-      icon: undefined,
-      siteFont: { family: 'Brand Sans', licence: 'open', files: sohneFiles },
-    }
-    expect(holdsImportAssets(applyBrandImport(base, open, false), open)).toBe(false)
-  })
-
-  it('names what is held: only assets that were found, a font only when copied and commercial', () => {
-    expect(heldAssets(withAssets)).toEqual(['logo', 'icon', 'font'])
-    expect(heldAssets(sample)).toEqual(['logo'])
-    expect(
-      heldAssets({ ...sample, siteFont: { family: 'Brand Sans', notCopied: 'service' } })
-    ).toEqual(['logo'])
-    expect(heldAssets({ ...sample, logo: undefined })).toEqual([])
-  })
-
-  it('ticking applies exactly what an import confirmed from the start would have', () => {
-    const held = applyBrandImport(base, withAssets, false)
-    expect(setAssetsConfirmed(held, base, withAssets, true)).toEqual(
-      applyBrandImport(base, withAssets, true)
-    )
-  })
-
-  it('unticking takes them back, the way row Undo does, leaving the colours and shape', () => {
-    const confirmed = applyBrandImport(base, withAssets, true)
-    expect(setAssetsConfirmed(confirmed, base, withAssets, false)).toEqual(
-      applyBrandImport(base, withAssets, false)
-    )
-  })
-
-  it('unticking gives back the logo and icon the draft had before', () => {
+  it('drops one asset at a time, back to the draft from before, the others staying', () => {
     const before = {
       ...base,
       logo: {
@@ -629,54 +541,106 @@ describe('brand assets held until confirmed', () => {
         icon: { key: 'logos/mine.png', faviconKey: 'favicons/mine.png' },
       },
     }
-    const confirmed = applyBrandImport(before, withAssets, true)
-    expect(setAssetsConfirmed(confirmed, before, withAssets, false).logo).toEqual(before.logo)
+    const applied = applyBrandImport(before, withAssets)
+    const noLogo = dropAsset(applied, before, withAssets, 'logo')
+    expect(noLogo.logo.wideKey).toBe('header-logos/mine.svg')
+    expect(noLogo.logo.icon?.key).toBe(northwindIcon.key)
+    expect(noLogo.customFont).toEqual(sohne)
+    const noIcon = dropAsset(noLogo, before, withAssets, 'icon')
+    expect(noIcon.logo).toEqual(before.logo)
+    const noFont = dropAsset(noIcon, before, withAssets, 'font')
+    expect(noFont.customFont).toBeUndefined()
+    expect(draftFont(noFont)).toBe(draftFont(before))
+    // The colours and shape stay.
+    expect(draftPalette(noFont, 'light').primary).toBe('#533afd')
+    expect(draftRadius(noFont)).toBe(0.25)
   })
 
-  it('unticking leaves alone what the person has changed since', () => {
-    const confirmed = applyBrandImport(base, withAssets, true)
+  it('dropping leaves alone what the person has changed since', () => {
+    const applied = applyBrandImport(base, withAssets)
     const mine = {
-      ...confirmed,
-      logo: { ...confirmed.logo, wideKey: 'header-logos/mine.svg' },
+      ...applied,
+      logo: { ...applied.logo, wideKey: 'header-logos/mine.svg' },
       customFont: {
         family: 'Mine',
         fallback: 'inter' as const,
         files: [{ key: 'fonts/mine.woff2', weight: 400, style: 'normal' as const }],
       },
     }
-    const next = setAssetsConfirmed(mine, base, withAssets, false)
-    expect(next.logo.wideKey).toBe('header-logos/mine.svg')
-    expect(next.customFont?.family).toBe('Mine')
+    expect(dropAsset(mine, base, withAssets, 'logo')).toBe(mine)
+    expect(dropAsset(mine, base, withAssets, 'font')).toBe(mine)
     // The icon was still the site's: it goes.
-    expect(next.logo.icon).toBeNull()
+    expect(dropAsset(mine, base, withAssets, 'icon').logo.icon).toBeNull()
   })
 
-  it('a square logo shows as icon and name once confirmed, and goes back when unticked', () => {
+  it('a square logo shows as icon and name; without its icon, the logo shows alone again', () => {
     const square: BrandImport = { ...withAssets, logo: { ...sample.logo!, kind: 'square' } }
-    const confirmed = setAssetsConfirmed(applyBrandImport(base, square, false), base, square, true)
-    expect(confirmed.logo.mode).toBe('logo_and_name')
-    expect(setAssetsConfirmed(confirmed, base, square, false).logo).toEqual(base.logo)
+    const applied = applyBrandImport(base, square)
+    expect(applied.logo.mode).toBe('logo_and_name')
+    const noIcon = dropAsset(applied, base, square, 'icon')
+    expect(noIcon.logo).toEqual(applyBrandImport(base, { ...square, icon: undefined }).logo)
+    expect(noIcon.logo.mode).toBe('custom_logo')
+    // The row's own Undo does the same.
+    expect(takeBackRow(applied, base, square, 'icon').logo).toEqual(noIcon.logo)
+    expect(dropAsset(applied, base, square, 'logo').logo).toEqual({
+      ...base.logo,
+      icon: applied.logo.icon,
+    })
   })
 
-  it('a new import takes back only what the last one applied: never a logo set while it was held', () => {
-    const first = replaceImport(base, null, withAssets, false)
+  it('drops the text font and the headings font apart: two families, two assets', () => {
+    const headingFiles = [
+      { key: 'fonts/2026/11/h-staged-import.woff2', weight: 600, style: 'normal' as const },
+    ]
+    const two: BrandImport = {
+      ...withAssets,
+      headings: { site: 'Brand Display' },
+      siteHeadingFont: { family: 'Brand Display', licence: 'commercial', files: headingFiles },
+    }
+    const applied = applyBrandImport(base, two)
+    expect(applied.customHeadingFont?.family).toBe('Brand Display')
+    const headingsOnly = dropAsset(applied, base, two, 'font')
+    expect(headingsOnly.customFont).toEqual(base.customFont)
+    expect(headingsOnly.customHeadingFont?.family).toBe('Brand Display')
+    const textOnly = dropAsset(applied, base, two, 'headingFont')
+    expect(textOnly.customFont).toEqual(sohne)
+    expect(textOnly.customHeadingFont).toBeUndefined()
+  })
+
+  it('takes a whole import back in one, leaving rows already undone alone', () => {
+    const applied = applyBrandImport(base, withAssets)
+    const previous = { brand: withAssets, before: base, undone: [] }
+    expect(revertImport(applied, previous)).toEqual(base)
+    // A row the person took back already, then set by hand, stays as they set it.
+    const own = editTheme.setRadius(revertImportRow(applied, base, 'shape'), 1)
+    expect(draftRadius(revertImport(own, { ...previous, undone: ['shape'] }))).toBe(1)
+  })
+
+  it('reads a row taken back as in again once the editor’s undo brings its value back', () => {
+    const next = applyBrandImport(base, sample)
+    const undone = revertImportRow(next, base, 'primary')
+    expect(stillUndone(undone, base, ['primary'])).toEqual(['primary'])
+    // The editor's undo: the draft is the import's again.
+    expect(stillUndone(next, base, ['primary'])).toEqual([])
+  })
+
+  it('a new import takes back only what the last one applied: never a logo set by hand since', () => {
+    const first = replaceImport(base, null, withAssets)
     const mine = { ...first.next, logo: { ...first.next.logo, wideKey: 'header-logos/mine.svg' } }
     const second = replaceImport(
       mine,
-      { brand: withAssets, before: first.before, undone: [], confirmed: false },
-      { ...sample, logo: undefined, missing: ['logo'] },
-      false
+      { brand: withAssets, before: first.before, undone: ['logo'] },
+      { ...sample, logo: undefined, missing: ['logo'] }
     )
     expect(second.next.logo.wideKey).toBe('header-logos/mine.svg')
   })
 
-  it('a new import takes back the last one’s confirmed logo and copied font', () => {
-    const first = replaceImport(base, null, withAssets, true)
+  it('a new import takes back the last one’s logo and copied font', () => {
+    const first = replaceImport(base, null, withAssets)
     const second = replaceImport(
       first.next,
-      { brand: withAssets, before: first.before, undone: [], confirmed: true },
-      { ...sample, logo: undefined, missing: ['logo'], font: { id: 'lora', exact: true } },
-      false
+      { brand: withAssets, before: first.before, undone: [] },
+      { ...sample, logo: undefined, missing: ['logo'], font: { id: 'lora', exact: true } }
     )
     expect(second.next.logo).toEqual(base.logo)
     expect(second.next.customFont).toBeUndefined()
@@ -684,8 +648,8 @@ describe('brand assets held until confirmed', () => {
   })
 
   it('taking the font row back restores the font from before, copied or not', () => {
-    const confirmed = applyBrandImport(base, withAssets, true)
-    const back = revertImportRow(confirmed, base, 'font')
+    const applied = applyBrandImport(base, withAssets)
+    const back = revertImportRow(applied, base, 'font')
     expect(back.customFont).toBeUndefined()
     expect(draftFont(back)).toBe(draftFont(base))
   })
@@ -698,16 +662,21 @@ describe('the site’s own dark mode logo', () => {
     logoDark: { stagedKey: DARK, url: `/api/storage/${DARK}` },
   }
 
-  it('goes into the draft with the logo, under the same tick, and says so', () => {
-    expect(applyBrandImport(base, withDark, false).logo.darkKey ?? null).toBeNull()
+  it('goes into the draft with the logo, and says so', () => {
     const applied = apply(base, withDark)
     expect(applied.logo).toMatchObject({ wideKey: sample.logo!.stagedKey, darkKey: DARK })
-    expect(importRows(withDark, undefined, true).find((r) => r.key === 'logo')!.text).toBe(
-      'From the site, with its dark mode version'
+    expect(importRows(withDark).find((r) => r.key === 'logo')!.text).toBe(
+      'With its dark mode version'
     )
-    expect(importRows(sample, undefined, true).find((r) => r.key === 'logo')!.text).toBe(
-      'From the site'
-    )
+    expect(importRows(sample).find((r) => r.key === 'logo')!.text).toBe('From the site')
+  })
+
+  it('dropping the logo after the light one was changed by hand takes the site’s dark one alone', () => {
+    const applied = apply(base, withDark)
+    const mine = { ...applied, logo: { ...applied.logo, wideKey: 'header-logos/mine.svg' } }
+    const dropped = dropAsset(mine, base, withDark, 'logo')
+    expect(dropped.logo.wideKey).toBe('header-logos/mine.svg')
+    expect(dropped.logo.darkKey ?? null).toBeNull()
   })
 
   it('an imported logo with no dark version of its own drops the one the old logo had', () => {
@@ -731,22 +700,6 @@ describe('the site’s own dark mode logo', () => {
   })
 })
 
-describe('assetsLabel', () => {
-  it('names only the assets held', () => {
-    expect(assetsLabel(['logo', 'icon', 'font'])).toBe(
-      'We own this logo, icon and font, or have a licence to use them'
-    )
-    expect(assetsLabel(['logo', 'icon'])).toBe(
-      'We own this logo and icon, or have a licence to use them'
-    )
-    expect(assetsLabel(['logo', 'font'])).toBe(
-      'We own this logo and font, or have a licence to use them'
-    )
-    expect(assetsLabel(['logo'])).toBe('We own this logo, or have a licence to use it')
-    expect(assetsLabel(['font'])).toBe('We own this font, or have a licence to use it')
-  })
-})
-
 describe('the headings font', () => {
   const MANROPE = '"Manrope", ui-sans-serif, system-ui, sans-serif'
   const files = [
@@ -760,8 +713,8 @@ describe('the headings font', () => {
     siteHeadingFont: { family: 'Northwind Display', licence, files },
   })
   const display = { family: 'Northwind Display', files, fallback: 'inter' as const }
-  const row = (brand: BrandImport, confirmed = true) => {
-    const found = importRows(brand, undefined, confirmed).find((r) => r.key === 'headings')!
+  const row = (brand: BrandImport) => {
+    const found = importRows(brand).find((r) => r.key === 'headings')!
     return [found.state, found.text, found.applied]
   }
 
@@ -774,33 +727,20 @@ describe('the headings font', () => {
     expect(row(listed)).toEqual(['matched', 'Manrope, same as the site', true])
   })
 
-  it('sets an open-licence family copied from the site, with no tick', () => {
-    const next = applyBrandImport(base, copied('open'), false)
-    expect(next.customHeadingFont).toEqual(display)
-    expect(draftHeadingName(next)).toBe('Northwind Display')
-    expect(row(copied('open'), false)).toEqual([
-      'matched',
-      'Northwind Display, from the site',
-      true,
-    ])
-    expect(heldAssets(copied('open'))).toEqual(['logo'])
-  })
-
-  it('holds a commercial family for the tick, with the logo and the text font', () => {
-    const brand = copied('commercial')
-    expect(heldAssets(brand)).toEqual(['logo', 'font'])
-    const held = applyBrandImport(base, brand, false)
-    expect(held.customHeadingFont).toBeUndefined()
-    expect(row(brand, false)).toEqual(['held', 'Tick the box below to use it', false])
-    const ticked = setAssetsConfirmed(held, base, brand, true)
-    expect(ticked.customHeadingFont).toEqual(display)
-    expect(holdsImportAssets(ticked, brand)).toBe(true)
-    expect(ticked).toEqual(applyBrandImport(base, brand, true))
-    // Unticking takes it back with the logo.
-    const unticked = setAssetsConfirmed(ticked, base, brand, false)
-    expect(unticked.customHeadingFont).toBeUndefined()
-    expect(unticked.logo).toEqual(base.logo)
-    expect(holdsImportAssets(unticked, brand)).toBe(false)
+  it('sets a family copied from the site, open-licence or commercial', () => {
+    for (const licence of ['open', 'commercial'] as const) {
+      const next = applyBrandImport(base, copied(licence))
+      expect(next.customHeadingFont).toEqual(display)
+      expect(draftHeadingName(next)).toBe('Northwind Display')
+      expect(row(copied(licence))).toEqual(['matched', 'Northwind Display, from the site', true])
+    }
+    // Only a commercial one is an asset Publish asks about; dropping it takes it back.
+    const commercial = copied('commercial')
+    const dropped = dropAsset(applyBrandImport(base, commercial), base, commercial, 'headingFont')
+    expect(dropped.customHeadingFont).toBeUndefined()
+    const open = copied('open')
+    const kept = applyBrandImport(base, open)
+    expect(dropAsset(kept, base, open, 'headingFont')).toBe(kept)
   })
 
   it('stays Same as text when the family can’t be copied: no substitute', () => {
@@ -822,7 +762,11 @@ describe('the headings font', () => {
       expect(draftHeadingFont(next)).toBeNull()
       expect(next.customHeadingFont).toBeUndefined()
       expect(draftHeadingName(next)).toBe('Same as text')
-      expect(row(brand)).toEqual(['skipped', 'Can’t be copied. They match the text font.', false])
+      // No file read says nothing of a licence; a refusal the read gave says why.
+      const why = brand.siteHeadingFont
+        ? 'Can’t be copied.'
+        : 'Northwind Display isn’t one we have.'
+      expect(row(brand)).toEqual(['skipped', `${why} They match the text font.`, false])
     }
   })
 
@@ -874,7 +818,6 @@ describe('the headings font', () => {
       brand: listed,
       before: first.before,
       undone: [],
-      confirmed: true,
     }
     const second = replace(first.next, previous, sample)
     expect(draftHeadingFont(second.next)).toBeNull()
@@ -918,7 +861,7 @@ describe('the card style', () => {
     const first = replace(base, null, shadowed)
     const second = replace(
       first.next,
-      { brand: shadowed, before: first.before, undone: [], confirmed: true },
+      { brand: shadowed, before: first.before, undone: [] },
       sample
     )
     expect(second.next.cardStyle).toBe('border')

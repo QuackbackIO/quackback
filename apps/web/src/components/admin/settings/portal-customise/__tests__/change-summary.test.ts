@@ -64,8 +64,14 @@ describe('summariseChange: what changed', () => {
     })
     const { lines } = summariseChange(before, after)
     expect(lines).toEqual([
-      { text: 'Header is now navy', swatch: '#0b1f3a', target: 'header' },
-      { text: 'Corners and buttons are now square', swatchShape: 'square', target: 'colours' },
+      { text: 'Header is now navy', swatch: '#0b1f3a', target: 'header', section: 'colours' },
+      {
+        text: 'Corners and buttons are now square',
+        swatchShape: 'square',
+        target: 'colours',
+        // The line opens the section that makes it, which is not the part it flashes.
+        section: 'font',
+      },
     ])
   })
 
@@ -75,9 +81,14 @@ describe('summariseChange: what changed', () => {
       colours: { light: { main: '#ea580c', background: '#f8f6f1', text: '#0b1f3a' } },
     })
     expect(summariseChange(before, after).lines).toEqual([
-      { text: 'Main colour is now orange', swatch: '#ea580c', target: 'colours' },
-      { text: 'Background is now off-white', swatch: '#f8f6f1' },
-      { text: 'Text is now navy', swatch: '#0b1f3a' },
+      {
+        text: 'Main colour is now orange',
+        swatch: '#ea580c',
+        target: 'colours',
+        section: 'colours',
+      },
+      { text: 'Background is now off-white', swatch: '#f8f6f1', section: 'colours' },
+      { text: 'Text is now navy', swatch: '#0b1f3a', section: 'colours' },
     ])
   })
 
@@ -109,7 +120,7 @@ describe('summariseChange: what changed', () => {
     const navy = applyDraftPatch(draft(), { colours: { light: { header: '#0b1f3a' } } })
     const auto = applyDraftPatch(navy, { colours: { light: { header: 'auto' } } })
     expect(summariseChange(navy, auto)).toEqual({
-      lines: [{ text: 'Header matches the page again', target: 'header' }],
+      lines: [{ text: 'Header matches the page again', target: 'header', section: 'colours' }],
       adjustments: [],
     })
   })
@@ -137,7 +148,7 @@ describe('summariseChange: what changed', () => {
     const before = draft()
     const first = applyDraftPatch(before, { tabs: { order: ['roadmap'] } })
     expect(summariseChange(before, first).lines).toEqual([
-      { text: 'Roadmap is now first', target: 'nav' },
+      { text: 'Roadmap is now first', target: 'nav', section: 'header' },
     ])
     const changed = applyDraftPatch(before, {
       tabs: {
@@ -172,9 +183,9 @@ describe('summariseChange: what changed', () => {
       helpCenter: { homepageTitle: 'Answers', homepageDescription: 'Guides for everything' },
     })
     expect(summariseChange(before, after).lines).toEqual([
-      { text: 'Welcome message updated', target: 'welcome' },
-      { text: 'Help Center title is now “Answers”', target: 'hc-home' },
-      { text: 'Help Center description updated', target: 'hc-home' },
+      { text: 'Welcome message updated', target: 'welcome', section: 'welcome' },
+      { text: 'Help Center title is now “Answers”', target: 'hc-home', section: 'hc-home' },
+      { text: 'Help Center description updated', target: 'hc-home', section: 'hc-home' },
     ])
     expect(texts(after, applyDraftPatch(after, { welcomeMessage: '' }))).toEqual([
       'Welcome message is now hidden',
@@ -184,7 +195,9 @@ describe('summariseChange: what changed', () => {
   it('names a new logo', () => {
     const before = draft()
     const after = editLogo.setUploadedWide(before, 'header-logos/new.svg')
-    expect(summariseChange(before, after).lines).toEqual([{ text: 'Logo updated', target: 'logo' }])
+    expect(summariseChange(before, after).lines).toEqual([
+      { text: 'Logo updated', target: 'logo', section: 'header' },
+    ])
   })
 })
 
@@ -193,6 +206,21 @@ describe('summariseChange: what the editor adjusted', () => {
     const before = editTheme.setColour(draft(), 'primary', 'light', '#1e3a8a')
     const after = applyDraftPatch(before, { colours: { light: { header: '#0b1f3a' } } })
     // Dark blue on navy is under 3:1, so the main button is turned over as well.
+    expect(summariseChange(before, after).adjustments).toEqual([
+      "The header's text and tabs are now white so they read on navy.",
+      "The header's button is now white too, so it stands out.",
+    ])
+  })
+
+  it('says each adjustment once when both sides made it, the text on one side only', () => {
+    // Visitors choose: the header goes navy on both sides. The light side's
+    // text turns white; the dark side's was white already. Both buttons turn over.
+    let before = draft({ theme: userTheme })
+    for (const side of ['light', 'dark'] as const)
+      before = editTheme.setColour(before, 'primary', side, '#1e3a8a')
+    const after = applyDraftPatch(before, {
+      colours: { light: { header: '#0b1f3a' }, dark: { header: '#0b1f3a' } },
+    })
     expect(summariseChange(before, after).adjustments).toEqual([
       "The header's text and tabs are now white so they read on navy.",
       "The header's button is now white too, so it stands out.",
@@ -291,9 +319,11 @@ describe('summariseChange: headings, cards and the name', () => {
       before,
       '"Manrope", ui-sans-serif, system-ui, sans-serif'
     )
-    expect(lines(before, manrope)).toEqual([{ text: 'Headings are now set in Manrope' }])
+    expect(lines(before, manrope)).toEqual([
+      { text: 'Headings are now set in Manrope', section: 'font' },
+    ])
     expect(lines(manrope, editTheme.setHeadingFont(manrope, null))).toEqual([
-      { text: 'Headings match the text font again' },
+      { text: 'Headings match the text font again', section: 'font' },
     ])
     const uploaded = editTheme.setUploadedHeadingFont(before, {
       family: 'Northwind Display',
@@ -310,7 +340,7 @@ describe('summariseChange: headings, cards and the name', () => {
   it('says how cards now stand off the page, pointing at a card', () => {
     const before = draft()
     expect(lines(before, editTheme.setCardStyle(before, 'shadow'))).toEqual([
-      { text: 'Cards now have a shadow', target: 'type' },
+      { text: 'Cards now have a shadow', target: 'type', section: 'font' },
     ])
     expect(texts(before, editTheme.setCardStyle(before, 'flat'))).toEqual(['Cards are now flat'])
     const flat = editTheme.setCardStyle(before, 'flat')
@@ -322,10 +352,12 @@ describe('summariseChange: headings, cards and the name', () => {
   it('names the new portal name, pointing at the logo', () => {
     const before = draft({ name: 'Acme Corp' })
     const after = editHeaderName(before, 'Northwind')
-    expect(lines(before, after)).toEqual([{ text: 'Portal name is now Northwind', target: 'logo' }])
+    expect(lines(before, after)).toEqual([
+      { text: 'Portal name is now Northwind', target: 'logo', section: 'header' },
+    ])
     // Cleared, the header shows the workspace's name again.
     expect(lines(after, editHeaderName(after, ''))).toEqual([
-      { text: 'Portal name is now Acme Corp', target: 'logo' },
+      { text: 'Portal name is now Acme Corp', target: 'logo', section: 'header' },
     ])
     expect(flashTargets(summariseChange(before, after))).toEqual(['logo'])
   })

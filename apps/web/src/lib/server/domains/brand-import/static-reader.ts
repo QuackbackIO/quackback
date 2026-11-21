@@ -1,13 +1,15 @@
 /**
  * The static reader: the site's HTML and stylesheets, read without running
  * anything (site/site-read.ts), as a `BrandRead`. It names the theme colour,
- * fonts, colour candidates and logo; page and text colours and corner radii
- * need a rendered page, so it leaves those out.
+ * fonts (with the files its own `@font-face` rules serve), colour candidates
+ * and logo; page and text colours and corner radii need a rendered page, so
+ * it leaves those out.
  */
 import type { BrandRead, Hex } from '@/lib/shared/theme/brand-import'
 import type { BrandReader } from './readers'
 import { readSite } from './site/site-read'
 import { brandThemeColour } from './site/theme-colour'
+import { classifySiteFont } from './site/site-font'
 import type { PageStyle } from './site/site-style'
 import type { FontFact, SiteAsset, SiteFetcher, SiteRead } from './site/types'
 
@@ -91,6 +93,10 @@ export function brandReadFromSite(site: SiteRead): BrandRead {
     logo: siteLogo(site),
     localVersions: facts.localVersions.length > 0 ? facts.localVersions : undefined,
     icon: siteIcon(site),
+    // The site's own font files, classified as the browser reader's are: an
+    // open-licence font is copied and applied, a commercial one held.
+    siteFont: site.fonts?.text ? classifySiteFont(site.fonts.text) : undefined,
+    siteHeadingFont: site.fonts?.headings ? classifySiteFont(site.fonts.headings) : undefined,
     ...styleOf(facts.style),
   }
   return Object.fromEntries(

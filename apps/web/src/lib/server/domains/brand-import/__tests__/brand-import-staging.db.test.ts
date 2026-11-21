@@ -114,18 +114,26 @@ describe('an imported logo (real Postgres)', () => {
     // Only the staged list changed: the sweep removes the upload if no publish names it.
     const staged = await read()
     expect({ ...staged, metadata: before.metadata }).toEqual(before)
+    // Marked as a brand asset: a publish puts it live only with a confirmation.
     expect(JSON.parse(staged.metadata!).stagedUploads).toEqual([
-      { key: stagedKey, at: expect.any(String) },
+      { key: stagedKey, at: expect.any(String), brandAsset: true },
     ])
 
-    const result = await publishPortalCustomisation(
-      {
-        before: { logo: { wideKey: null, headerDisplayMode: 'logo_and_name' } },
-        logo: { wideKey: stagedKey, headerDisplayMode: 'custom_logo' },
-      },
-      { permissions: [...ALL_PERMISSIONS], actor }
-    )
-    expect(result).toMatchObject({ ok: true })
+    const publish = (confirmed: boolean) =>
+      publishPortalCustomisation(
+        {
+          before: { logo: { wideKey: null, headerDisplayMode: 'logo_and_name' } },
+          logo: { wideKey: stagedKey, headerDisplayMode: 'custom_logo' },
+          ...(confirmed
+            ? { brandAssets: { host: 'acme.example', assets: ['logo'], preTicked: [] } }
+            : {}),
+        },
+        { permissions: [...ALL_PERMISSIONS], actor }
+      )
+    // Unconfirmed, it is refused and nothing is saved.
+    expect(await publish(false)).toMatchObject({ ok: false, code: 'BRAND_ASSETS_UNCONFIRMED' })
+    expect((await read()).headerLogoKey).toBe(before.headerLogoKey)
+    expect(await publish(true)).toMatchObject({ ok: true })
     const after = await read()
     expect(after.headerLogoKey).toBe(stagedKey)
     expect(after.headerDisplayMode).toBe('custom_logo')

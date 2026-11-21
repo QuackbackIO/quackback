@@ -70,6 +70,11 @@ export interface StagedUpload {
   key: string
   /** ISO time the upload was staged. */
   at: string
+  /**
+   * Import brought it in as one of a site's brand assets (its logo, icon or
+   * a commercial font): a publish puts it live only with a confirmation.
+   */
+  brandAsset?: true
 }
 
 export function isStageableKey(key: string): boolean {
@@ -115,7 +120,7 @@ function parsedBag(metadata: string | null, settingsId: string) {
  */
 export async function recordStagedUpload(
   key: string,
-  options: SettingsWriteOptions & { now?: Date } = {}
+  options: SettingsWriteOptions & { now?: Date; brandAsset?: boolean } = {}
 ): Promise<void> {
   if (!isStageableKey(key)) {
     throw new ValidationError('INVALID_STAGED_UPLOAD', 'This file cannot be uploaded here.')
@@ -131,10 +136,15 @@ export async function recordStagedUpload(
           'Too many uploads are waiting to be published. Publish your changes or try again tomorrow.'
         )
       }
-      return [...list, { key, at }]
+      return [...list, { key, at, ...(options.brandAsset ? { brandAsset: true as const } : {}) }]
     },
     options
   )
+}
+
+/** Whether `key` is staged as an imported brand asset, which a publish must have confirmed. */
+export function isStagedBrandAsset(metadata: string | null, key: string): boolean {
+  return readStagedUploads(metadata).some((entry) => entry.key === key && entry.brandAsset === true)
 }
 
 /** Whether `key` is on the staged list of this metadata text. */
