@@ -178,6 +178,42 @@ describe('readSite', () => {
     expect(brandReadFromSite(site).siteFont).toMatchObject({ family: 'Figtree', licence: 'open' })
   })
 
+  it('takes no font the budget could only hold part of, however whole it may parse', async () => {
+    const open = { licenceUrl: 'https://scripts.sil.org/OFL' }
+    // Trailing bytes past the tables a parser reads: cut there, the file still parses.
+    const whole = new Uint8Array([...woff2(open), ...new Uint8Array(1000)])
+    const page = enc(
+      `<!doctype html><html><head><title>N</title><link rel="stylesheet" href="/s.css"></head><body><p>Hi</p></body></html>`
+    )
+    const sheet = enc(
+      `@font-face { font-family: "Figtree"; src: url(/f.woff2) format("woff2"); font-weight: 400; } body { font-family: "Figtree", sans-serif; }`
+    )
+    const routes = {
+      'https://northwind.example/': { status: 200, url: '', contentType: 'text/html', body: page },
+      'https://northwind.example/s.css': {
+        status: 200,
+        url: '',
+        contentType: 'text/css',
+        body: sheet,
+      },
+      'https://northwind.example/f.woff2': {
+        status: 200,
+        url: '',
+        contentType: 'font/woff2',
+        body: whole,
+      },
+    }
+    // Enough left for all but the last 500 bytes of the font.
+    const budgetBytes = page.byteLength + sheet.byteLength + whole.byteLength - 500
+    const cut = await readSite('https://northwind.example/', fakeFetcher(routes).fetcher, {
+      budgetBytes,
+    })
+    expect(cut.fonts?.text?.files ?? []).toEqual([])
+    // With room for it, the same file is taken whole.
+    const full = await readSite('https://northwind.example/', fakeFetcher(routes).fetcher)
+    expect(full.fonts?.text?.files[0]?.bytes.byteLength).toBe(whole.byteLength)
+  })
+
   it('reads no font files for a page set in a system font', async () => {
     const { fetcher, calls } = fakeFetcher({
       'https://northwind.example/': html(

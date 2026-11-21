@@ -25,7 +25,20 @@ const EXTENSIONS: Array<[RegExp, string]> = [
   [/gif/, 'gif'],
   [/avif/, 'avif'],
   [/icon/, 'ico'],
+  [/woff2/, 'woff2'],
+  [/woff/, 'woff'],
+  [/(?:ttf|truetype)/, 'ttf'],
+  [/(?:otf|opentype)/, 'otf'],
 ]
+
+/** Whether a snapshot recorded any font file: one taken after the static reader read fonts. */
+function recordsFonts(manifest: SnapshotManifest): boolean {
+  return Object.entries(manifest).some(
+    ([url, entry]) =>
+      /\.(?:woff2?|ttf|otf)(?:[?#]|$)/i.test(url) ||
+      (!('missing' in entry) && /font|woff|opentype|truetype/i.test(entry.contentType))
+  )
+}
 
 function extensionOf(contentType: string): string {
   const type = contentType.toLowerCase()
@@ -79,11 +92,14 @@ export function recordingFetcher(inner: SiteFetcher, dir: string): SiteFetcher {
 export function snapshotFetcher(dir: string, opts: { strict?: boolean } = {}): SiteFetcher {
   let manifest: Promise<SnapshotManifest> | null = null
   return async (url, kind, limits): Promise<FetchedBody | null> => {
-    const entry = (await (manifest ??= loadManifest(dir)))[url]
+    const all = await (manifest ??= loadManifest(dir))
+    const entry = all[url]
     if (!entry) {
-      // Snapshots captured before the static reader read font files hold none:
-      // a missing font reads as unfetched, as it did then, never as a stale snapshot.
-      if (opts.strict && kind !== 'font') throw new Error(`No snapshot of ${url} in ${dir}`)
+      // A snapshot captured before the static reader read font files holds none,
+      // and a missing font reads as unfetched, as it did then. One that recorded
+      // fonts is strict about them too: a font it lacks is a wrong address.
+      if (opts.strict && (kind !== 'font' || recordsFonts(all)))
+        throw new Error(`No snapshot of ${url} in ${dir}`)
       return null
     }
     if ('missing' in entry) return null

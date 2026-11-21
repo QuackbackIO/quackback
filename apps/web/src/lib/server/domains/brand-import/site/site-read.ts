@@ -231,6 +231,10 @@ function budgeted(
       bytesLeft += reserved - used
     }
     if (!res) return null
+    // A font cut short by what was left of the budget is no font: a parser that
+    // reads only the tables it needs would take it as whole. Too little budget
+    // to hold the whole file is no file at all.
+    if (kind === 'font' && reserved < maxBytes && res.body.byteLength >= reserved) return null
     return res.body.byteLength > reserved ? { ...res, body: res.body.subarray(0, reserved) } : res
   }
   return {
