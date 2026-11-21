@@ -113,12 +113,7 @@ test(
 test(
   'FBA-T-31 a tag can be created with the name of a deleted tag',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-T-31: createPostTag checks the name against soft-deleted tags too (post-tag.service.ts:53), so a deleted tag blocks its name for ever',
-    },
+    tag: '@core',
   },
   async ({ playwright, marker }) => {
     const api = await personApi(playwright, 'admin')
@@ -167,12 +162,7 @@ test(
 test(
   'FBA-T-32 a deleted tag no longer shows on the posts it was on',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-T-32: deletePostTag only sets deleted_at (post-tag.service.ts:148); post_tag_assignments stay and the inbox tags relation has no deleted_at filter (post.inbox.ts), so the chip stays on the post',
-    },
+    tag: '@core',
   },
   async ({ playwright, asPerson, marker }) => {
     const api = await personApi(playwright, 'admin')

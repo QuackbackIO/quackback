@@ -7,7 +7,7 @@
  * FBA-P-20 FBA-P-21 FBA-P-35 FBA-P-36 FBA-P-37 FBA-P-41, and the lower rows
  * FBA-P-03 FBA-P-06 FBA-P-10 FBA-P-24 FBA-P-31 at the server-function boundary.
  */
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { fromUuid } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { callServerFn, personApi } from '../../support/server-fns'
@@ -65,6 +65,19 @@ async function openNewPost(page: Page): Promise<void> {
   }).toPass({ timeout: 20_000 })
 }
 
+/**
+ * Pick this test's own board in the New post dialog. The picker is found by
+ * its place (the first picker, before Status), not by the board it happens to
+ * show: any board another test made can be preselected. The option is matched
+ * by its exact name.
+ */
+async function pickBoard(page: Page, dialog: Locator, boardName: string): Promise<void> {
+  const picker = dialog.getByRole('combobox').first()
+  await picker.click()
+  await page.getByRole('option', { name: boardName, exact: true }).click()
+  await expect(picker).toHaveText(boardName)
+}
+
 /** Make one status the workspace default (isolated tests only). */
 async function setDefaultStatus(statusId: string): Promise<void> {
   await supportDb()`UPDATE post_statuses SET is_default = (id = ${uuid(statusId)})`
@@ -86,12 +99,7 @@ test(
       const dialog = admin.getByRole('dialog')
       const title = `${marker} dark mode please`
       await dialog.getByPlaceholder("What's the feedback about?").fill(title)
-      await dialog
-        .getByRole('combobox')
-        .filter({ hasText: /Select board|Board/ })
-        .first()
-        .click()
-      await admin.getByRole('option', { name: board.name }).click()
+      await pickBoard(admin, dialog, board.name)
       await dialog.getByRole('button', { name: 'Create post' }).click()
       await expect(dialog).toBeHidden()
 
@@ -177,12 +185,7 @@ test(
     const dialog = admin.getByRole('dialog')
     const title = `${marker} on behalf`
     await dialog.getByPlaceholder("What's the feedback about?").fill(title)
-    await dialog
-      .getByRole('combobox')
-      .filter({ hasText: /Select board|Board/ })
-      .first()
-      .click()
-    await admin.getByRole('option', { name: board.name }).click()
+    await pickBoard(admin, dialog, board.name)
     await dialog
       .getByRole('button', { name: /Ada Admin/ })
       .first()
@@ -224,12 +227,7 @@ test(
 test(
   'FBA-P-04 a post created over REST without a status gets the workspace default status',
   {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-P-04: post.service.ts createPost falls back to the status slugged "open", not the default status',
-    },
+    tag: ['@nightly', '@isolated'],
   },
   async ({ playwright, people, baseURL, marker }) => {
     test.skip(!ISOLATED, ISOLATED_SKIP)
@@ -292,12 +290,7 @@ test(
 test(
   'FBA-P-08 choosing the status a post already has changes nothing',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-P-08: post.status.ts changeStatus has no same-status guard; re-picking the status re-sends the whole fan-out',
-    },
+    tag: '@core',
   },
   async ({ playwright, marker }) => {
     const api = await personApi(playwright, 'admin')
@@ -395,12 +388,7 @@ test(
 test(
   'FBA-P-11 a post owner must be a teammate',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-P-11: setPostOwnerFn (functions/posts.ts) accepts any principal id; a customer can be made owner',
-    },
+    tag: '@core',
   },
   async ({ playwright, marker }) => {
     const api = await personApi(playwright, 'admin')
@@ -583,12 +571,7 @@ test(
 test(
   'FBA-P-17 post.deleted from the post modal names who deleted it',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-P-17: post.user-actions.ts builds the event actor from principalId and userId only, so dispatchPostDeleted has no email or name for deletedBy',
-    },
+    tag: '@core',
   },
   async ({ playwright, marker }) => {
     const api = await personApi(playwright, 'admin')
@@ -668,12 +651,7 @@ test(
 test(
   'FBA-P-21 deleting a canonical post does not hide its merged duplicates',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-P-21: post.user-actions.ts softDeletePost never releases the duplicates of a deleted canonical; the inbox hides every post with canonical_post_id',
-    },
+    tag: '@core',
   },
   async ({ playwright, asPerson, marker }) => {
     const api = await personApi(playwright, 'admin')

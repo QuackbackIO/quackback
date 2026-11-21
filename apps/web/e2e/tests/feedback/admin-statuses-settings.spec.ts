@@ -168,12 +168,7 @@ test(
 test(
   'FBA-T-21 a status can be created again with the slug of a deleted one',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-T-21: createStatus checks the slug against soft-deleted statuses too (status.service.ts:72), so a deleted status blocks its slug for ever',
-    },
+    tag: '@core',
   },
   async ({ playwright, marker }) => {
     const api = await personApi(playwright, 'admin')
@@ -348,12 +343,7 @@ test(
 test(
   'FBA-T-25 marking another status default leaves exactly one default',
   {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-T-25: updateStatus with only { isDefault: true } moves the default, then runs an UPDATE with an empty SET (status.service.ts:136-149), which drizzle refuses ("No values to set"), so the call answers 500',
-    },
+    tag: ['@nightly', '@isolated'],
   },
   async ({ playwright, marker }) => {
     test.skip(!ISOLATED, 'moves the workspace default status: runs in product-isolated')
@@ -377,12 +367,7 @@ test(
 test(
   'FBA-T-25 the only default status cannot be unset',
   {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-T-25: updateStatus { isDefault: false } on the default clears it (status.service.ts:136), leaving the workspace with no default status',
-    },
+    tag: ['@nightly', '@isolated'],
   },
   async ({ playwright }) => {
     test.skip(!ISOLATED, 'can clear the workspace default status: runs in product-isolated')

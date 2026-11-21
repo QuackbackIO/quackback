@@ -231,14 +231,15 @@ test.describe('REST roadmaps: writes', () => {
         `A roadmap with slug "${marker}-public-plan" already exists`
       )
       expect((await api.delete(`/api/v1/roadmaps/${dated.id}`)).status()).toBe(204)
-      await expectError(
+      // A deleted roadmap frees its slug.
+      const again = await expectJson(
         await api.post('/api/v1/roadmaps', {
           data: { name: `${marker} re`, slug: `${marker}-dated` },
         }),
-        409,
-        'CONFLICT',
-        `A roadmap with slug "${marker}-dated" already exists`
+        201
       )
+      expect(again.data).toMatchObject({ slug: `${marker}-dated` })
+      expect(again.data.id).not.toBe(dated.id)
       const bad = await expectError(
         await api.post('/api/v1/roadmaps', { data: { name: `${marker} bad`, slug: 'Bad Slug' } }),
         400,

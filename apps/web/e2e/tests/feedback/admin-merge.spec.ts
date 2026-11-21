@@ -299,12 +299,7 @@ test(
 test(
   'FBA-M-11 accepting a merge suggestion needs post.merge, like merging by hand',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'acceptSuggestionFn gates on suggestion.manage only and merges without post.merge (functions/feedback.ts:29)',
-    },
+    tag: '@core',
   },
   async ({ playwright, newTeammate, marker }) => {
     const api = await personApi(playwright, 'admin')

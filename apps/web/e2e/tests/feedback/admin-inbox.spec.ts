@@ -252,12 +252,7 @@ test(
 test(
   'FBA-I-11 Responded lists posts with a public team reply; a private note is not a response',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'post.inbox.ts:44 counts any team comment, including private internal notes (QUARANTINE.md)',
-    },
+    tag: '@core',
   },
   async ({ playwright, asPerson, marker }) => {
     const api = await personApi(playwright, 'admin')
@@ -274,7 +269,7 @@ test(
     await expectTitlesUnordered(admin, marker, [replied.title, noted.title, quiet.title])
     await filterOption(admin, 'Responded').click()
     await expect.poll(() => searchParam(admin, 'responded')).toBe('responded')
-    // The bug: the private note puts "noted privately" under Responded.
+    // A private note is not a response: "noted privately" stays out of Responded.
     await expectTitlesUnordered(admin, marker, [replied.title])
     await expect(filterOption(admin, 'Responded', 1)).toBeVisible()
     await filterOption(admin, 'Unresponded', 2).click()
@@ -285,12 +280,7 @@ test(
 test(
   'FBA-I-12 Has duplicates lists only posts with a pending suggestion, and nothing when none has one',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'feedback-table-view.tsx:244 filters in the browser and skips the filter when no loaded post has a suggestion (QUARANTINE.md)',
-    },
+    tag: '@core',
   },
   async ({ playwright, asPerson, marker }) => {
     const api = await personApi(playwright, 'admin')
@@ -836,12 +826,7 @@ test(
 test(
   'FBA-I-32 a failed list read shows Failed to load feedback, and Try again recovers',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'feedback.index.tsx:62 Try again only resets the error boundary; the failed loader is not re-run, so the alert stays (QUARANTINE.md)',
-    },
+    tag: '@nightly',
   },
   async ({ asPerson }) => {
     const admin = await asPerson('admin')
@@ -853,7 +838,12 @@ test(
     await admin.route(listUrl, (route) =>
       route.fulfill({ status: 500, contentType: 'text/plain', body: 'Inbox is down' })
     )
-    await admin.getByRole('link', { name: 'Feedback', exact: true }).first().click()
+    // The nav link's name grows "N waiting for review" while any post is held.
+    await admin
+      .getByRole('navigation')
+      .getByRole('link', { name: /^Feedback(\s|$)/ })
+      .first()
+      .click()
     await expect(admin.getByText('Failed to load feedback')).toBeVisible({ timeout: 15_000 })
     await admin.unroute(listUrl)
     await admin.getByRole('button', { name: 'Try again' }).click()
@@ -864,12 +854,7 @@ test(
 test(
   'FBA-I-27 a teammate cannot delete a colleague’s private saved view',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'post-views.service.ts:76 deletes by id only: any post.edit holder deletes any view (QUARANTINE.md)',
-    },
+    tag: '@nightly',
   },
   async ({ playwright, newTeammate, marker }) => {
     const admin = await personApi(playwright, 'admin')

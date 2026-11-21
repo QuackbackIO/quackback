@@ -178,12 +178,7 @@ test(
 test(
   'FBA-P-30 a teammate without post.set_status cannot change status through a comment',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'FBA-P-30: comment.service.ts applies statusId for any team author with no post.set_status check',
-    },
+    tag: '@core',
   },
   async ({ playwright, marker }) => {
     const admin = await personApi(playwright, 'admin')

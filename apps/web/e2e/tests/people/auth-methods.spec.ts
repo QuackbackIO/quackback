@@ -120,12 +120,7 @@ test.describe('email link and code method on', () => {
   test(
     'PPL-AUTH-24 a code refused by the sign-in limit says to wait, not that the code is wrong',
     {
-      tag: ['@core', '@isolated', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A-B6: /sign-in/email-otp spends the same send bucket as the email (hooks.ts:110, :230), and useEmailSignin maps rate_limited to the wrong-code message (components/auth/use-email-signin.ts:113)',
-      },
+      tag: ['@core', '@isolated'],
     },
     async ({ browser, playwright, customerEmail }) => {
       await withAuthSettings(MAGIC_LINK_ON, async () => {

@@ -257,12 +257,7 @@ test.describe('the invite page', () => {
   test(
     'PPL-AUTH-201 accepting, then revisiting, an invite lands on the portal',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          "The invite page's loader tests redirects with `'isRedirect' in err` (routes/portal-invite.$inviteId.tsx:53), but the router's redirect is a Response with `options` and no such property, so the redirect to / after a successful accept is swallowed and the page shows 'Something went wrong'",
-      },
+      tag: '@nightly',
     },
     async ({ browser, playwright, marker }) => {
       const email = `${marker}@customers.example`

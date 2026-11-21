@@ -400,12 +400,7 @@ test.describe('categories over REST', () => {
   test(
     'HC-A-76 a key without help_center.manage cannot read drafts or private categories',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B3: REST GET article list, article, category list and category call withApiKeyAuth(request) with no permission and read at team scope',
-      },
+      tag: '@core',
     },
     async ({ playwright, marker }) => {
       const hc = await hcApi(playwright)
