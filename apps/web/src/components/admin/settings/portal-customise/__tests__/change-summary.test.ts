@@ -212,6 +212,21 @@ describe('summariseChange: what the editor adjusted', () => {
     ])
   })
 
+  it('says each adjustment once when both sides made it, the text on one side only', () => {
+    // Visitors choose: the header goes navy on both sides. The light side's
+    // text turns white; the dark side's was white already. Both buttons turn over.
+    let before = draft({ theme: userTheme })
+    for (const side of ['light', 'dark'] as const)
+      before = editTheme.setColour(before, 'primary', side, '#1e3a8a')
+    const after = applyDraftPatch(before, {
+      colours: { light: { header: '#0b1f3a' }, dark: { header: '#0b1f3a' } },
+    })
+    expect(summariseChange(before, after).adjustments).toEqual([
+      "The header's text and tabs are now white so they read on navy.",
+      "The header's button is now white too, so it stands out.",
+    ])
+  })
+
   it('leaves the button alone when it shows on the bar', () => {
     const before = draft()
     const after = applyDraftPatch(before, { colours: { light: { header: '#0b1f3a' } } })

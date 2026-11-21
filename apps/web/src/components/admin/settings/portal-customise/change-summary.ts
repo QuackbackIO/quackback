@@ -155,26 +155,34 @@ function tabLines(before: PortalNavItemConfig[], after: PortalNavItemConfig[]): 
  */
 function headerAdjustments(before: PortalDraft, after: PortalDraft): string[] {
   if (before.cssText === after.cssText) return []
-  const out = new Set<string>()
+  // One line per adjustment and shade, however many sides made it: the text
+  // and tabs once (named on the first side's header), the button once, with
+  // "too" when the text changed to the same shade on any side.
+  const text = new Map<'dark' | 'white', string>()
+  const button = new Map<'dark' | 'white', boolean>()
   for (const side of sidesOf(after)) {
     const now = expandTheme(draftPalette(after, side), { mode: side })
     const header = hexOf(now.header)
     if (!header) continue
     const was = expandTheme(draftPalette(before, side), { mode: side })
-    const text = hexOf(now.headerForeground)
-    const textChanged = text !== hexOf(was.headerForeground ?? was.foreground)
-    const word = text && luminance(text) < 0.2 ? 'dark' : 'white'
-    if (textChanged) {
-      out.add(`The header's text and tabs are now ${word} so they read on ${nameOf(header)}.`)
-    }
+    const fore = hexOf(now.headerForeground)
+    const textChanged = fore !== hexOf(was.headerForeground ?? was.foreground)
+    const word = fore && luminance(fore) < 0.2 ? 'dark' : 'white'
+    if (textChanged && !text.has(word)) text.set(word, nameOf(header))
     // Turned over: the bar's text is the button's fill, in place of the main colour.
     const turned = hexOf(now.headerPrimary) !== hexOf(now.primary)
     const wasTurned = !!hexOf(was.header) && hexOf(was.headerPrimary) !== hexOf(was.primary)
-    if (turned && !wasTurned) {
-      out.add(`The header's button is now ${word}${textChanged ? ' too,' : ''} so it stands out.`)
-    }
+    if (turned && !wasTurned) button.set(word, button.get(word) === true || textChanged)
   }
-  return [...out]
+  return [
+    ...[...text].map(
+      ([word, header]) => `The header's text and tabs are now ${word} so they read on ${header}.`
+    ),
+    ...[...button].map(
+      ([word, withText]) =>
+        `The header's button is now ${word}${withText && text.has(word) ? ' too,' : ''} so it stands out.`
+    ),
+  ]
 }
 
 /** What changed between two drafts, and what the editor adjusted because of it. */
