@@ -3,13 +3,17 @@
  * sign-in settings (password on, sign-ups open). Every request and browser
  * context carries its own `x-e2e-client-ip`, so the per-address limiters and
  * the library's in-memory per-IP limits never meet another test's budget.
+ * PPL-AUTH-16 is the exception: it switches the email link method off, so it
+ * is `@isolated` and puts the setting back with `withAuthSettings`.
  *
  * Journeys: PPL-AUTH-01, 02, 04, 06, 07, 08, 09, 12, 14, 15, 16, 20, 21, 22,
  * 25, 27, 29, 30, 33, 34, 35, 41, 51, 52, 53, 55, 56, 57, 58.
  */
+import { ISOLATED, ISOLATED_SKIP } from '../../support/automation'
 import { pollFor, supportDb } from '../../support/db'
 import { getMail, linksIn, mailTo } from '../../support/mailpit'
 import {
+  MAGIC_LINK_ON,
   PASSWORD,
   WORKSPACE,
   audits,
@@ -30,6 +34,7 @@ import {
   userRow,
   verificationRow,
   waitForAudit,
+  withAuthSettings,
 } from '../../product/auth'
 
 /** Sign in through the dialog by password, from the portal root. */
@@ -143,8 +148,13 @@ test.describe('email link and code', () => {
       expect(otp?.value.split(':')[0]).toBe(mail.code)
 
       // The app logged the send; no account exists until the link or code is used.
-      const [log] = await supportDb()<{ status: string; direction: string }[]>`
-        SELECT status, direction FROM email_log WHERE lower(address) = ${customerEmail}`
+      // The log row is written after the mail goes out, so it can trail the
+      // mailbox: wait for it.
+      const log = await pollFor('the sign-in email log row', async () => {
+        const [row] = await supportDb()<{ status: string; direction: string }[]>`
+          SELECT status, direction FROM email_log WHERE lower(address) = ${customerEmail}`
+        return row ?? null
+      })
       expect(log).toMatchObject({ status: 'sent', direction: 'outbound' })
       expect(await userRow(customerEmail)).toBeNull()
     }
@@ -304,29 +314,38 @@ test.describe('email link and code', () => {
 
   test(
     'PPL-AUTH-16 with the magic-link method off, portal-signin mails no working link',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A-B2: requestEmailSignin and /magic-link/verify never check authConfig.oauth.magicLink, so the endpoint mails a link that signs anyone in while the method is off (lib/server/auth/email-signin.ts:51, routes/api/auth/portal-signin.ts:130)',
-      },
-    },
-    async ({ anon, playwright, customerEmail }) => {
-      // The suite runs on the default sign-in settings: the magic-link method is off.
-      const [row] = await supportDb()`SELECT auth_config FROM settings LIMIT 1`
-      const oauth = (
-        JSON.parse(String(row.auth_config ?? '{}')) as { oauth?: { magicLink?: boolean } }
-      ).oauth
-      expect(oauth?.magicLink ?? false).toBe(false)
-
+    { tag: ['@core', '@isolated'] },
+    async ({ anon, visitor, playwright, customerEmail }) => {
+      test.skip(!ISOLATED, ISOLATED_SKIP)
       const existing = await portalUser(playwright, customerEmail)
-      await portalSignin(anon, existing.email, '/roadmap')
-      // Whatever the endpoint answers, no sign-in link or code may be mailed.
-      await new Promise((r) => setTimeout(r, 5_000))
-      expect(await subjectsTo(existing.email)).not.toContainEqual(
-        expect.stringMatching(/is your code for/)
-      )
+      // A link mailed while the method was on.
+      const before = await withAuthSettings(MAGIC_LINK_ON, async () => {
+        expect((await portalSignin(anon, existing.email, '/roadmap')).status()).toBe(200)
+        return signInMail(existing.email)
+      })
+      const code = await verificationRow(`sign-in-otp-${existing.email}`)
+      expect(code).not.toBeNull()
+
+      await withAuthSettings({ auth_config: { 'oauth.magicLink': false } }, async () => {
+        // Refused before anything is minted: no new code, so nothing to mail.
+        const res = await portalSignin(anon, existing.email, '/roadmap')
+        expect(res.status()).toBe(403)
+        expect(await res.json()).toEqual({
+          error: "Magic-link sign-in isn't enabled for this workspace.",
+          code: 'magic_link_method_not_allowed',
+        })
+        expect(await verificationRow(`sign-in-otp-${existing.email}`)).toEqual(code)
+
+        // The link mailed earlier no longer signs anyone in, and is not spent.
+        const page = await visitor()
+        await page.goto(before.link)
+        await page.waitForURL(/error=magic_link_method_not_allowed/, { timeout: 15_000 })
+        expect(await getSession(page.request)).toBeNull()
+        expect(await verificationRow(`magic-link:${tokenOf(before.link)}`)).not.toBeNull()
+      })
+      expect(
+        (await subjectsTo(existing.email)).filter((s) => /is your code for/.test(s))
+      ).toHaveLength(1)
     }
   )
 })

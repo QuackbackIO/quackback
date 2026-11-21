@@ -35,6 +35,7 @@ import {
   searchParam,
   setOwner,
   uniqueWord,
+  wordWithPrefix,
 } from '../../product/feedback-admin-inbox'
 
 /** A row of the inbox list (the badge sits beside the card). */
@@ -528,7 +529,7 @@ test(
   'FBA-I-16 typing the start of a word finds the post, switches to Best match, and clearing goes back',
   { tag: '@core' },
   async ({ playwright, asPerson, marker }) => {
-    const word = uniqueWord()
+    const { word, prefix } = await wordWithPrefix(7)
     const api = await personApi(playwright, 'admin')
     const board = await makeBoard(api, marker)
     const hit = await makePost(api, { boardId: board.id, title: `${marker} ${word} request` })
@@ -543,8 +544,8 @@ test(
     const admin = await asPerson('admin')
     await openInbox(admin, { board: [board.id] })
     await expectTitlesUnordered(admin, marker, [hit.title, body.title, miss.title])
-    await admin.getByPlaceholder('Search posts…').fill(word.slice(0, 7))
-    await expect.poll(() => searchParam(admin, 'search')).toBe(word.slice(0, 7))
+    await admin.getByPlaceholder('Search posts…').fill(prefix)
+    await expect.poll(() => searchParam(admin, 'search')).toBe(prefix)
     // Title matches rank above body matches.
     await expect.poll(() => inboxTitles(admin, marker)).toEqual([hit.title, body.title])
     await expect(admin.getByRole('button', { name: 'Sort: Best match' })).toBeVisible()
@@ -612,9 +613,14 @@ test(
     await expect(admin.getByText('No results for these filters')).toBeVisible({ timeout: 15_000 })
     await expect(admin.getByText('Try adjusting your search or filter criteria.')).toBeVisible()
     await admin.getByRole('button', { name: 'Clear all filters' }).click()
-    await expect.poll(() => searchParam(admin, 'board')).toBeUndefined()
-    expect(searchParam(admin, 'search')).toBeUndefined()
-    expect(searchParam(admin, 'sort')).toBe('oldest')
+    // Wait for the URL to settle as a whole: the params need not all go in one step.
+    await expect
+      .poll(() => ({
+        board: searchParam(admin, 'board'),
+        search: searchParam(admin, 'search'),
+        sort: searchParam(admin, 'sort'),
+      }))
+      .toEqual({ board: undefined, search: undefined, sort: 'oldest' })
     await expect(admin.getByText('No results for these filters')).toHaveCount(0)
   }
 )

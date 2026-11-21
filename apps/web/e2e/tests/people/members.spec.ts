@@ -169,14 +169,7 @@ test.describe('changing roles', () => {
 
   test(
     'PPL-T-35 choosing Member for a custom-role holder moves them to the Manager preset',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Member with no roleId keeps the custom assignment (principal.service.ts updateMemberRole, principal.factory.ts setMemberRole); see QUARANTINE.md',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, marker, newTeammate }) => {
       const role = await customRole(marker, ['member.view'])
       const mate = await newTeammate({ roleKey: role.key })
@@ -412,14 +405,7 @@ test.describe('REST role changes and removal', () => {
 
   test(
     'PPL-T-48 a personal key cannot change or remove its own creator',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'REST self guards compare the target with the key service principal, not its creator (api/v1/principals/$principalId.ts); see QUARANTINE.md',
-      },
-    },
+    { tag: '@core' },
     async ({ playwright, newTeammate }) => {
       const owner = await newTeammate({ roleKey: 'admin' })
       const personal = await restPersonal(playwright, owner.email)

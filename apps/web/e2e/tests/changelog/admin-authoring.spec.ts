@@ -45,10 +45,14 @@ async function openCreate(page: Page): Promise<Locator> {
   const dialog = page.getByRole('dialog', { name: 'Create changelog entry' })
   const button = page.getByRole('button', { name: /new entry/i })
   await waitForHydration(button)
+  // The dialog is a lazy chunk (editor included), so under load it can take
+  // seconds to appear after the click. Click again only while it is still
+  // missing, and never wait unbounded: a click behind an open modal never
+  // lands (the page under it takes no pointer events).
   await expect(async () => {
-    await button.click()
-    await expect(dialog).toBeVisible({ timeout: 1_000 })
-  }).toPass({ timeout: 15_000 })
+    if (!(await dialog.isVisible())) await button.click({ timeout: 2_000 })
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+  }).toPass({ timeout: 20_000 })
   return dialog
 }
 

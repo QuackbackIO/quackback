@@ -194,16 +194,7 @@ test(
 
 test(
   'INT-SR-02 the results page ignores a short query, an unknown kind and a page out of range',
-  {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'routes/admin/search.tsx:23 validateSearch leaves an invalid kind or page out of its ' +
-        'result, but the raw value survives into useSearch, so ?kind=nope and ?page=99 ' +
-        "stay on 'Searching…' instead of falling back to All and page 1",
-    },
-  },
+  { tag: '@core' },
   async ({ asPerson, marker, people }) => {
     const tok = token()
     const board = await createBoard(marker)

@@ -223,14 +223,7 @@ test.describe('password method off', () => {
 
   test(
     'PPL-AUTH-32 password method off refuses a password sign-up',
-    {
-      tag: ['@core', '@isolated', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A-B3: the method gate returns before the per-method check when no principal exists (lib/server/auth/hooks.ts:415), so /sign-up/email creates a password account and a session while Password sign-in is off',
-      },
-    },
+    { tag: ['@core', '@isolated'] },
     async ({ anon, customerEmail }) => {
       await withAuthSettings(
         { auth_config: { 'oauth.password': false, 'oauth.magicLink': true } },
@@ -497,14 +490,7 @@ test.describe('required two-factor', () => {
 
   test(
     'PPL-AUTH-151 required two-factor gives an un-enrolled password sign-in no usable session',
-    {
-      tag: ['@core', '@isolated', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Required two-factor is enforced only by the sign-in dialog (components/auth/portal-auth-form-inline.tsx:501); nothing on the server reads authConfig.twoFactor.required, so a direct sign-in gets a working session although the setting says users must enter a code',
-      },
-    },
+    { tag: ['@core', '@isolated'] },
     async ({ playwright, newApi, marker }) => {
       const person = await portalUser(playwright, `${marker}@customers.example`)
       await withAuthSettings({ auth_config: { 'twoFactor.required': true } }, async () => {

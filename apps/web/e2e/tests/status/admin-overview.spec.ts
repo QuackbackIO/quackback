@@ -4,7 +4,8 @@
  * Journeys: STA-A-56.
  *
  * The banner and tiles are workspace-wide, so this asserts only that its own
- * incident and windows show in the right cards, and tile deltas.
+ * incident and windows show in the right cards, and that the 30-day tile
+ * counts its incident.
  */
 import { test, expect } from '../../support/fixtures'
 import type { APIRequestContext } from '@playwright/test'
@@ -51,7 +52,6 @@ test(
   async ({ asPerson, playwright, marker }) => {
     const admin = await personApi(playwright, 'admin')
     try {
-      const before = await overview(admin)
       const svc = await createService(admin, `${marker} Overview`)
       const inc = await createIncident(admin, {
         title: `${marker} open one`,
@@ -70,7 +70,11 @@ test(
       })
 
       const after = await overview(admin)
-      expect(after.incidentsLast30d).toBeGreaterThanOrEqual(before.incidentsLast30d + 1)
+      // The 30-day tile counts every live incident in the workspace, and other
+      // workers create and delete theirs meanwhile, so a before/after delta can
+      // go either way. Only this test's own open incident is certain: the tile
+      // counts at least it.
+      expect(after.incidentsLast30d).toBeGreaterThanOrEqual(1)
       expect(after.activeIncidents.map((i) => i.id)).toContain(inc.id)
       expect(after.liveMaintenance.map((i) => i.id)).toContain(running.id)
       expect(after.upcomingMaintenance.map((i) => i.id)).toContain(upcoming.id)

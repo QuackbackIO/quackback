@@ -98,15 +98,7 @@ test(
 
 test(
   'INT-ON-03 connecting an integration completes its launch task',
-  {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        "launch-status.ts:77 filters integrations.status = 'connected', a value no writer stores " +
-        "(connections are 'active' or 'paused'), so hasIntegration is always false",
-    },
-  },
+  { tag: '@core' },
   async ({ playwright, asPerson }) => {
     const sql = supportDb()
     // A provider no other spec uses; a connected row is 'active' (save.ts).

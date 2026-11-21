@@ -217,14 +217,7 @@ test.describe('recovery codes', () => {
 
   test(
     'PPL-AUTH-145 a removed admin cannot use their recovery codes',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Recovery codes are never invalidated when an admin is removed or demoted (lib/server/auth/recovery-codes-status.ts:8, lib/server/functions/recovery-codes-consume.ts:126): removal only sets principal.role to user, so the code still signs them in past Require SSO',
-      },
-    },
+    { tag: '@core' },
     async ({ newTeammate, playwright }) => {
       const mate = await newTeammate({ roleKey: 'admin' })
       const api = await mate.api(playwright)

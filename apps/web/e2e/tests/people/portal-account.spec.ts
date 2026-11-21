@@ -86,14 +86,7 @@ test.describe('who may open the account pages', () => {
 test.describe('profile', () => {
   test(
     "PPL-ACC-14 saving someone else's uploaded avatar key is refused",
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'saveAvatarKeyFn accepts any avatars/ key (functions/user.ts saveAvatarKeySchema); a later remove deletes the other person object; see QUARANTINE.md',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const owner = await portalUser(browser, `${marker}-b`)
       const key = await uploadAvatar(owner.api, `${marker}.png`)

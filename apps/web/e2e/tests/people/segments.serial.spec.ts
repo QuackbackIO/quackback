@@ -15,14 +15,7 @@ import {
 
 test(
   'PPL-G-50 evaluate every dynamic segment at once',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'evaluateAllDynamicSegments stops at the first failing segment, and the seeded "Active Users" segment always fails (its comment_count/vote_count rules query tables that do not exist, segment.evaluation.ts); see QUARANTINE.md',
-    },
-  },
+  { tag: '@nightly' },
   async ({ playwright, marker }) => {
     const admin = await personApi(playwright, 'admin')
     const person = await portalUserRow(marker)
