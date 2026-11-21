@@ -346,10 +346,13 @@ export async function createComment(
   if (!options?.skipDispatch && initialModerationState === 'published') {
     // Dispatch comment.created for webhooks, Slack, etc. Shares the payload
     // mapping with approveCommentFn's release path via dispatchCommentCreatedEvent.
+    // The caller wrote the text: the author, or a teammate or API key that
+    // files the comment for them (REST authorPrincipalId).
     await dispatchCommentCreatedEvent(
       author,
       { id: comment.id, content: comment.content, isPrivate, contentJson },
-      { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug }
+      { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug },
+      actor.principalId ?? author.principalId
     )
 
     // Dispatch status change event if status was changed

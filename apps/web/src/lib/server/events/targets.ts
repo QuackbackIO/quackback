@@ -70,6 +70,7 @@ import { logger } from '@/lib/server/logger'
 import { isTestEvent } from './test-event'
 import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
 import { DELETED_USER_PRINCIPAL_ID } from '@/lib/server/domains/principals/deleted-user-principal'
+import { isBlockedCustomer } from '@/lib/server/domains/principals/blocking'
 
 const log = logger.child({ component: 'targets' })
 
@@ -802,8 +803,10 @@ export async function getMentionTargets(
  *
  * Nobody else hears about it, and the author does not when they moderated
  * their own item, when they are not a signed-in person (an anonymous author
- * has no inbox, and a deleted account has none either), when it is test
- * feedback, or when they can no longer see the item where it was. An approved
+ * has no inbox, and a deleted account has none either), when they are
+ * blocked (no bell either: the email handler already sends them no email),
+ * when it is test feedback, or when they can no longer see the item where it
+ * was. An approved
  * item links to where it now shows; a rejected one is gone, so its notice
  * links nowhere. The moderator's reason never travels.
  */
@@ -833,6 +836,8 @@ export async function getModerationDecisionTargets(
     .select({
       id: principal.id,
       type: principal.type,
+      role: principal.role,
+      blockedAt: principal.blockedAt,
       email: user.email,
       contactEmail: principal.contactEmail,
     })
@@ -840,7 +845,7 @@ export async function getModerationDecisionTargets(
     .leftJoin(user, eq(principal.userId, user.id))
     .where(eq(principal.id, authorId))
     .limit(1)
-  if (!row || row.type !== 'user') return []
+  if (!row || row.type !== 'user' || isBlockedCustomer(row)) return []
 
   const [item, decision] = type.split('.') as ['post' | 'comment', 'approved' | 'rejected']
   const approved = decision === 'approved'

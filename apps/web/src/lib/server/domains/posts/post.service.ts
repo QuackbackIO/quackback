@@ -56,7 +56,10 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { startOfUtcMonth } from '@/lib/shared/utils/date'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
-import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
+import {
+  CUSTOM_FIELDS_INVALID,
+  validatePostCustomFieldValues,
+} from '@/lib/shared/post-custom-fields'
 import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { logger } from '@/lib/server/logger'
@@ -201,7 +204,9 @@ export async function createPost(
   if (boardCustomFields.length > 0) {
     const parsed = validatePostCustomFieldValues(boardCustomFields, input.customFields ?? {})
     if (!parsed.ok) {
-      throw new ValidationError('VALIDATION_ERROR', parsed.errors[0].message)
+      // Its own code, so a composer that loaded the board before its fields
+      // changed can say so and fetch them again.
+      throw new ValidationError(CUSTOM_FIELDS_INVALID, parsed.errors[0].message)
     }
     customFieldValues = parsed.values
   }

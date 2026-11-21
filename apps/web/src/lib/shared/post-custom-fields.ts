@@ -21,6 +21,13 @@ import type { BoardCustomField, CustomFieldValues } from '@/lib/shared/db-types'
  *  column. */
 export const POST_CUSTOM_FIELD_TEXT_MAX_LENGTH = 4000
 
+/**
+ * The code a post refused for its custom-field answers carries. The widget and
+ * portal composers match it (as a literal, to share no module) to say the
+ * board's fields may have changed and fetch them again.
+ */
+export const CUSTOM_FIELDS_INVALID = 'CUSTOM_FIELDS_INVALID'
+
 /** One field-level validation failure from `validatePostCustomFieldValues`. */
 export interface PostCustomFieldError {
   key: string

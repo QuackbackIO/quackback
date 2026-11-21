@@ -52,7 +52,13 @@ export interface PublishedPostRef {
 export async function dispatchCommentCreatedEvent(
   author: PublishedCommentAuthor,
   comment: { id: PostCommentId; content: string; isPrivate: boolean; contentJson?: unknown },
-  post: PublishedPostRef
+  post: PublishedPostRef,
+  /**
+   * Who sent the comment's text, when that is not its author: a teammate or
+   * an API key filing it for a customer. Only a teammate's, an API key's or
+   * an integration's text tells the people it mentions.
+   */
+  writerPrincipalId?: PrincipalId | null
 ): Promise<void> {
   const actor = buildEventActor(author)
   await dispatchCommentCreated(
@@ -74,7 +80,13 @@ export async function dispatchCommentCreatedEvent(
   // The comment is already saved: a failure telling the people it mentions
   // is logged, never turned into a failed request a retry would duplicate.
   try {
-    await dispatchCommentMentions(actor, author.principalId, comment, post)
+    await dispatchCommentMentions(
+      actor,
+      author.principalId,
+      comment,
+      post,
+      writerPrincipalId ?? author.principalId
+    )
   } catch (error) {
     log.error({ err: error, comment_id: comment.id }, 'comment mention notices failed')
   }

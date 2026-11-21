@@ -37,8 +37,11 @@ export interface SyncPostMentionsInput {
   mentionerPrincipalId?: PrincipalId
 }
 
-/** A teammate, or a service principal (API key, integration) acting for the team. */
-function mentionerMayMention(row: { type: string; role: string | null }): boolean {
+/**
+ * A teammate, or a service principal (API key, integration) acting for the
+ * team. Only they may mention someone, in a post or a comment.
+ */
+export function mentionerMayMention(row: { type: string; role: string | null }): boolean {
   if (row.type === 'service') return true
   return row.type === 'user' && isTeamMember(row.role)
 }

@@ -288,23 +288,52 @@ describe.skipIf(!fixture.available)('moderation decision reaches the author', ()
     expect(await targetsFor('post.rejected')).toEqual([])
   })
 
-  it('says nothing to an author who moderates their own post through their API key', async () => {
-    const author = await seedPerson('admin')
-    const { postId } = await seedHeldPost(author.id)
-    const keyPrincipal = await seedPerson('admin')
-    const audit = moderationAuditFromApiAuth(
+  function keyAudit(kind: 'personal' | 'workspace', createdById: PrincipalId, key: PrincipalId) {
+    return moderationAuditFromApiAuth(
       {
-        apiKey: { id: 'api_key_1', createdById: author.id },
-        principalId: keyPrincipal.id,
+        apiKey: { id: 'api_key_1', createdById, kind },
+        principalId: key,
         role: 'admin',
         principal: null,
       } as unknown as Parameters<typeof moderationAuditFromApiAuth>[0],
       new Headers()
     )
+  }
 
-    await approvePost(postId, audit)
+  it('says nothing to an author who moderates their own post through their API key', async () => {
+    const author = await seedPerson('admin')
+    const { postId } = await seedHeldPost(author.id)
+    const keyPrincipal = await seedPerson('admin')
+
+    await approvePost(postId, keyAudit('personal', author.id, keyPrincipal.id))
 
     expect(await targetsFor('post.approved')).toEqual([])
+  })
+
+  it('tells the author when a workspace key they created moderates their post: it acts for nobody', async () => {
+    const author = await seedPerson('admin')
+    const { postId } = await seedHeldPost(author.id)
+    const keyPrincipal = await seedPerson('admin')
+
+    await approvePost(postId, keyAudit('workspace', author.id, keyPrincipal.id))
+
+    const targets = await targetsFor('post.approved')
+    expect(bellsOf(targets)).toHaveLength(1)
+    expect(bellsOf(targets)[0].target).toEqual({ principalIds: [author.id] })
+  })
+
+  it('gives a blocked author no bell and no email for the decision', async () => {
+    const author = await seedPerson('user')
+    const moderator = await seedPerson('admin')
+    await testDb.update(principal).set({ blockedAt: new Date() }).where(eq(principal.id, author.id))
+    const held = await seedHeldPost(author.id)
+    const heldComment = await seedHeldComment(author.id)
+
+    await rejectPost(held.postId, undefined, auditFor(moderator.id))
+    await approveComment(heldComment.commentId, auditFor(moderator.id))
+
+    expect(await targetsFor('post.rejected')).toEqual([])
+    expect(await targetsFor('comment.approved')).toEqual([])
   })
 
   it('says nothing about test feedback', async () => {

@@ -140,6 +140,10 @@ const isReadOnlyRefusal = (err: unknown): boolean =>
 // The refusal a blocked person gets (person-blocked.ts), matched by its code.
 const isBlockedRefusal = (err: unknown): boolean =>
   err instanceof Error && (err as { code?: unknown }).code === 'BLOCKED'
+// The refusal for answers that no longer fit the board's fields
+// (CUSTOM_FIELDS_INVALID in post-custom-fields.ts), matched by its code.
+const isFieldsRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'CUSTOM_FIELDS_INVALID'
 
 const SIMILAR_SEARCH_CACHE_LIMIT = 40
 /** Shorter titles match too much to be similar to anything, as in the portal composer. */
@@ -921,6 +925,11 @@ export function WidgetHomeAnimated({
 
       collapseForm()
     } catch (err) {
+      // The board's fields changed since the widget loaded them: fetch them
+      // again so the composer shows the questions the board asks now.
+      if (isFieldsRefusal(err)) {
+        void queryClient.invalidateQueries({ queryKey: ['widget', 'boardCapabilities'] })
+      }
       setError(
         isBlockedRefusal(err)
           ? intl.formatMessage({
@@ -932,10 +941,16 @@ export function WidgetHomeAnimated({
                 id: 'widget.readOnly',
                 defaultMessage: "This board isn't taking new feedback right now.",
               })
-            : intl.formatMessage({
-                id: 'widget.home.form.errorNetwork',
-                defaultMessage: 'Network error. Please try again.',
-              })
+            : isFieldsRefusal(err)
+              ? intl.formatMessage({
+                  id: 'widget.home.form.errorFieldsChanged',
+                  defaultMessage:
+                    "This board's questions may have changed. Check them and try again.",
+                })
+              : intl.formatMessage({
+                  id: 'widget.home.form.errorNetwork',
+                  defaultMessage: 'Network error. Please try again.',
+                })
       )
     } finally {
       setIsSubmitting(false)
