@@ -44,14 +44,14 @@ const loaded: LoadedPortal = {
 }
 const base = draftFromLoaded(loaded)
 
-const stripe: BrandImport = {
-  host: 'stripe.com',
+const sample: BrandImport = {
+  host: 'example.com',
   reader: 'static',
   primary: '#533afd',
   background: '#ffffff',
   text: '#061b31',
   scheme: 'light',
-  font: { site: 'Söhne', id: 'inter', exact: false },
+  font: { site: 'Brand Sans', id: 'inter', exact: false },
   radius: 0.25,
   buttonShape: 'pill',
   buttonPx: 4,
@@ -70,8 +70,8 @@ const replace = (draft: PortalDraft, previous: PreviousImport | null, brand: Bra
 
 describe('applyBrandImport', () => {
   it('sets the logo, colours, font and shape, keeping the Advanced CSS', () => {
-    const next = apply(base, stripe)
-    expect(next.logo).toEqual({ wideKey: stripe.logo!.stagedKey, mode: 'custom_logo', icon: null })
+    const next = apply(base, sample)
+    expect(next.logo).toEqual({ wideKey: sample.logo!.stagedKey, mode: 'custom_logo', icon: null })
     expect(draftPalette(next, 'light').primary).toBe('#533afd')
     expect(draftPalette(next, 'light').foreground).toBe('#061b31')
     expect(draftFont(next)).toContain('Inter')
@@ -82,7 +82,7 @@ describe('applyBrandImport', () => {
 
   it('makes the portal always dark for a dark site, its colours on the dark side', () => {
     const next = apply(base, {
-      ...stripe,
+      ...sample,
       scheme: 'dark',
       background: '#08090a',
       text: '#f7f8f8',
@@ -96,7 +96,7 @@ describe('applyBrandImport', () => {
 
   it('sets the site’s card, border and quieter text, and its dark mode, for visitors to choose', () => {
     const next = apply(base, {
-      ...stripe,
+      ...sample,
       tokens: { card: '#f6f9fc', border: '#e3e8ee', mutedForeground: '#425466' },
       darkMode: {
         background: '#0a2540',
@@ -123,12 +123,12 @@ describe('applyBrandImport', () => {
 
   it('follows the site: always light for a light site with no dark mode of its own', () => {
     for (const themeMode of ['user', 'dark', 'light'] as const)
-      expect(apply({ ...base, themeMode }, stripe).themeMode).toBe('light')
+      expect(apply({ ...base, themeMode }, sample).themeMode).toBe('light')
   })
 
   it('follows the site: the visitor’s choice for a light site with a dark mode of its own', () => {
     const withDark: BrandImport = {
-      ...stripe,
+      ...sample,
       darkMode: { background: '#0a2540', foreground: '#f6f9fc' },
     }
     for (const themeMode of ['user', 'dark', 'light'] as const)
@@ -136,13 +136,13 @@ describe('applyBrandImport', () => {
   })
 
   it('leaves the mode alone when no page colour was read', () => {
-    const next = apply({ ...base, themeMode: 'user' }, { ...stripe, background: undefined })
+    const next = apply({ ...base, themeMode: 'user' }, { ...sample, background: undefined })
     expect(next.themeMode).toBe('user')
   })
 
   it('undoes what an earlier dark import forced when a light site is imported over it', () => {
     const nexus = apply(base, {
-      ...stripe,
+      ...sample,
       scheme: 'dark',
       background: '#0f0f10',
       text: '#fafafa',
@@ -150,7 +150,7 @@ describe('applyBrandImport', () => {
     })
     expect(nexus.themeMode).toBe('dark')
     const mailchimp = apply(nexus, {
-      ...stripe,
+      ...sample,
       scheme: 'light',
       background: '#ffffff',
       text: undefined,
@@ -182,25 +182,25 @@ describe('applyBrandImport', () => {
   }
 
   it('sets the logo and the icon together', () => {
-    const next = apply(base, { ...stripe, icon })
+    const next = apply(base, { ...sample, icon })
     expect(next.logo).toEqual({
-      wideKey: stripe.logo!.stagedKey,
+      wideKey: sample.logo!.stagedKey,
       mode: 'custom_logo',
       icon: { key: icon.key, faviconKey: icon.faviconKey },
     })
   })
 
   it('shows a square logo (a mark alone) as the icon and name when there is an icon', () => {
-    const square = { ...stripe.logo!, kind: 'square' as const }
-    expect(apply(base, { ...stripe, logo: square, icon }).logo.mode).toBe('logo_and_name')
+    const square = { ...sample.logo!, kind: 'square' as const }
+    expect(apply(base, { ...sample, logo: square, icon }).logo.mode).toBe('logo_and_name')
     // With no icon to show, the mark stands alone.
-    expect(apply(base, { ...stripe, logo: square }).logo.mode).toBe('custom_logo')
+    expect(apply(base, { ...sample, logo: square }).logo.mode).toBe('custom_logo')
   })
 })
 
 describe('replaceImport', () => {
   const nexus: BrandImport = {
-    ...stripe,
+    ...sample,
     host: 'nexusmods.com',
     scheme: 'dark',
     background: '#0f0f10',
@@ -211,7 +211,7 @@ describe('replaceImport', () => {
     icon: { key: 'logos/nexus.png', faviconKey: 'favicons/nexus.png', url: '/n.png' },
   }
   const mailchimp: BrandImport = {
-    ...stripe,
+    ...sample,
     host: 'mailchimp.com',
     scheme: 'light',
     background: '#ffffff',
@@ -252,55 +252,55 @@ describe('replaceImport', () => {
 
   it('rebuilds an area the site gives from the default, not on top of what was there', () => {
     const tinted = apply(base, {
-      ...stripe,
+      ...sample,
       tokens: { card: '#f6f9fc', border: '#e3e8ee' },
     })
-    const next = replace(tinted, null, { ...stripe, tokens: undefined }).next
-    expect(draftPalette(next, 'light').card).toBe(draftPalette(apply(base, stripe), 'light').card)
+    const next = replace(tinted, null, { ...sample, tokens: undefined }).next
+    expect(draftPalette(next, 'light').card).toBe(draftPalette(apply(base, sample), 'light').card)
   })
 
   it('takes back a header bar the next site does not have', () => {
-    const nhs: BrandImport = { ...stripe, host: 'nhs.uk', tokens: { header: '#005eb8' } }
+    const nhs: BrandImport = { ...sample, host: 'nhs.uk', tokens: { header: '#005eb8' } }
     const first = replace(base, null, nhs)
     expect(draftPalette(first.next, 'light').header).toBe('#005eb8')
     expect(importRows(nhs).find((row) => row.key === 'page')?.swatches).toContain('#005eb8')
     const second = replace(
       first.next,
       { brand: nhs, before: first.before, undone: [], confirmed: true },
-      stripe
+      sample
     )
     expect(draftPalette(second.next, 'light').header).toBeUndefined()
     // A header the person set themselves goes when a site gives the page.
     const own = editTheme.setColour(base, 'header', 'light', '#171717')
-    expect(draftPalette(apply(own, stripe), 'light').header).toBeUndefined()
+    expect(draftPalette(apply(own, sample), 'light').header).toBeUndefined()
   })
 
   it('drops an uploaded font for another family, and keeps one the site uses', () => {
     const uploaded = {
       ...base,
       customFont: {
-        family: 'Sohne',
+        family: 'Brand Sans',
         fallback: 'inter' as const,
         files: [{ key: 'fonts/s.woff2', weight: 400, style: 'normal' as const }],
       },
     }
     expect(
       replace(uploaded, null, {
-        ...stripe,
+        ...sample,
         font: { site: 'Tally', id: 'inter', exact: false },
       }).next.customFont
     ).toBeUndefined()
     expect(
       replace(uploaded, null, {
-        ...stripe,
-        font: { site: 'Söhne', id: 'inter', exact: false },
+        ...sample,
+        font: { site: 'Brand Sans', id: 'inter', exact: false },
       }).next.customFont
     ).toEqual(uploaded.customFont)
   })
 })
 
 describe('revertImportRow', () => {
-  const imported = apply(base, stripe)
+  const imported = apply(base, sample)
 
   it('takes one row back, leaving the others', () => {
     const noShape = revertImportRow(imported, base, 'shape')
@@ -313,7 +313,7 @@ describe('revertImportRow', () => {
     expect(draftRadius(noLogo)).toBe(0.25)
 
     const both = apply(base, {
-      ...stripe,
+      ...sample,
       icon: { key: 'logos/i.png', faviconKey: 'favicons/i.png', url: '/api/storage/logos/i.png' },
     })
     const noIcon = revertImportRow(both, base, 'icon')
@@ -332,7 +332,7 @@ describe('revertImportRow', () => {
     expect(draftPalette(noPage, 'light').primary).toBe('#533afd')
 
     const paletted = apply(base, {
-      ...stripe,
+      ...sample,
       tokens: { card: '#f6f9fc', border: '#e3e8ee', mutedForeground: '#425466' },
       darkMode: { background: '#0a2540', primary: '#7a73ff' },
     })
@@ -345,7 +345,7 @@ describe('revertImportRow', () => {
     )
 
     const noFont = revertImportRow(
-      apply(base, { ...stripe, font: { id: 'lora', exact: true } }),
+      apply(base, { ...sample, font: { id: 'lora', exact: true } }),
       base,
       'font'
     )
@@ -355,13 +355,13 @@ describe('revertImportRow', () => {
 
 describe('importRows', () => {
   it('says what was matched, what stands in and what is missing', () => {
-    const rows = importRows(stripe)
+    const rows = importRows(sample)
     expect(rows.map((r) => [r.key, r.state, r.text])).toEqual([
       ['logo', 'matched', 'From the site'],
       ['icon', 'missing', 'No square icon of 120 px or more.'],
       ['primary', 'matched', '#533afd, from the main button'],
       ['page', 'matched', '#ffffff · #061b31, a light site, so the portal is always light'],
-      ['font', 'nearest', 'Söhne is licensed, so Inter stands in.'],
+      ['font', 'nearest', 'Brand Sans is licensed, so Inter stands in.'],
       ['headings', 'skipped', 'Same as the text font.'],
       ['cards', 'skipped', 'No clear style found. Yours stays.'],
       ['shape', 'matched', 'Slight corners, pill buttons'],
@@ -376,11 +376,11 @@ describe('importRows', () => {
       'Cards',
       'Shape',
     ])
-    expect(rows.find((r) => r.key === 'font')?.uploadFont).toBe('Söhne')
+    expect(rows.find((r) => r.key === 'font')?.uploadFont).toBe('Brand Sans')
   })
 
   it('shows the logo and icon as found but held until the brand assets are confirmed', () => {
-    const rows = importRows({ ...stripe, icon: northwindIcon }, undefined, false)
+    const rows = importRows({ ...sample, icon: northwindIcon }, undefined, false)
     expect(rows.slice(0, 2).map((r) => [r.key, r.state, r.text, r.applied])).toEqual([
       ['logo', 'held', 'Tick the box below to use it', false],
       ['icon', 'held', 'Tick the box below to use it', false],
@@ -402,43 +402,43 @@ describe('importRows', () => {
 
   it('words the font row for each way the site’s font can come', () => {
     const fontRow = (siteFont: BrandImport['siteFont'], confirmed: boolean) => {
-      const row = importRows({ ...stripe, siteFont }, undefined, confirmed).find(
+      const row = importRows({ ...sample, siteFont }, undefined, confirmed).find(
         (r) => r.key === 'font'
       )!
       return [row.state, row.text, row.applied, row.uploadFont]
     }
     const files = [{ key: 'fonts/s.woff2', weight: 400, style: 'normal' as const }]
-    expect(fontRow({ family: 'Söhne', licence: 'commercial', files }, true)).toEqual([
+    expect(fontRow({ family: 'Brand Sans', licence: 'commercial', files }, true)).toEqual([
       'matched',
-      'Söhne, from the site',
+      'Brand Sans, from the site',
       true,
       undefined,
     ])
     // Held whole: the draft's font is untouched, so there is nothing to take back.
-    expect(fontRow({ family: 'Söhne', licence: 'commercial', files }, false)).toEqual([
+    expect(fontRow({ family: 'Brand Sans', licence: 'commercial', files }, false)).toEqual([
       'held',
       'Tick the box below to use it',
       false,
       undefined,
     ])
     // An open-licence font needs no confirmation.
-    expect(fontRow({ family: 'Söhne', licence: 'open', files }, false)).toEqual([
+    expect(fontRow({ family: 'Brand Sans', licence: 'open', files }, false)).toEqual([
       'matched',
-      'Söhne, from the site',
+      'Brand Sans, from the site',
       true,
       undefined,
     ])
     for (const notCopied of ['service', 'restricted'] as const)
-      expect(fontRow({ family: 'Söhne', notCopied }, true)).toEqual([
+      expect(fontRow({ family: 'Brand Sans', notCopied }, true)).toEqual([
         'nearest',
         'Can’t be copied. Inter stands in.',
         true,
-        'Söhne',
+        'Brand Sans',
       ])
-    expect(fontRow({ family: 'Söhne', notCopied: 'subset' }, true)[1]).toBe(
+    expect(fontRow({ family: 'Brand Sans', notCopied: 'subset' }, true)[1]).toBe(
       'Not copied: the site serves only part of it. Inter stands in.'
     )
-    expect(fontRow({ family: 'Söhne', notCopied: 'too-large' }, true)[1]).toBe(
+    expect(fontRow({ family: 'Brand Sans', notCopied: 'too-large' }, true)[1]).toBe(
       'Not copied: its files are over 400 KB. Inter stands in.'
     )
   })
@@ -468,13 +468,13 @@ describe('importRows', () => {
   })
 
   it('says a light site with no dark mode makes the portal always light', () => {
-    const page = importRows(stripe).find((r) => r.key === 'page')
+    const page = importRows(sample).find((r) => r.key === 'page')
     expect(page?.text).toBe('#ffffff · #061b31, a light site, so the portal is always light')
   })
 
   it('shows the site’s palette on the page row, and says when it brought a dark mode', () => {
     const page = importRows({
-      ...stripe,
+      ...sample,
       tokens: { card: '#f6f9fc', border: '#e3e8ee', mutedForeground: '#425466' },
       darkMode: { background: '#0a2540' },
     }).find((r) => r.key === 'page')
@@ -486,7 +486,7 @@ describe('importRows', () => {
 
   it('says the person’s own logo and icon stay where the site has none', () => {
     const rows = importRows(
-      { ...stripe, logo: undefined, missing: ['logo', 'icon'] },
+      { ...sample, logo: undefined, missing: ['logo', 'icon'] },
       { logo: true, icon: true }
     )
     const text = Object.fromEntries(rows.map((row) => [row.key, row.text]))
@@ -498,11 +498,11 @@ describe('importRows', () => {
     const rowFor = (brand: BrandImport) => importRows(brand).find((row) => row.key === 'icon')
     expect(
       rowFor({
-        ...stripe,
+        ...sample,
         icon: { key: 'logos/i.png', faviconKey: 'favicons/i.png', url: '/i.png' },
       })
     ).toMatchObject({ state: 'matched', text: 'The site’s app icon', applied: true })
-    expect(rowFor({ ...stripe, iconBlocked: 'permission' })).toMatchObject({
+    expect(rowFor({ ...sample, iconBlocked: 'permission' })).toMatchObject({
       state: 'missing',
       text: 'Only an owner can change the icon.',
     })
@@ -511,14 +511,14 @@ describe('importRows', () => {
 
 describe('siteColoursOf', () => {
   it('offers the colours the site gave, each once', () => {
-    expect(siteColoursOf(stripe)).toEqual(['#533afd', '#ffffff', '#061b31'])
+    expect(siteColoursOf(sample)).toEqual(['#533afd', '#ffffff', '#061b31'])
     expect(siteColoursOf(null)).toEqual([])
   })
 
   it('offers the site’s neutrals and dark mode colours too', () => {
     expect(
       siteColoursOf({
-        ...stripe,
+        ...sample,
         tokens: { border: '#e3e8ee', mutedForeground: '#425466' },
         darkMode: { background: '#0a2540', primary: '#7a73ff' },
       })
@@ -532,12 +532,12 @@ const sohneFiles = [
   { key: 'fonts/2026/11/b-staged-import.woff2', weight: 700, style: 'normal' as const },
 ]
 const withAssets: BrandImport = {
-  ...stripe,
-  font: { site: 'Söhne', id: 'lora', exact: false },
+  ...sample,
+  font: { site: 'Brand Sans', id: 'lora', exact: false },
   icon: northwindIcon,
-  siteFont: { family: 'Söhne', licence: 'commercial', files: sohneFiles },
+  siteFont: { family: 'Brand Sans', licence: 'commercial', files: sohneFiles },
 }
-const sohne = { family: 'Söhne', fallback: 'lora', files: sohneFiles }
+const sohne = { family: 'Brand Sans', fallback: 'lora', files: sohneFiles }
 
 describe('brand assets held until confirmed', () => {
   it('applies colours, page, header and shape at once, and holds the logo, icon and font file', () => {
@@ -555,7 +555,7 @@ describe('brand assets held until confirmed', () => {
   it('applies them all when confirmed: the copied font with the nearest listed font behind it', () => {
     const next = applyBrandImport(base, withAssets, true)
     expect(next.logo).toEqual({
-      wideKey: stripe.logo!.stagedKey,
+      wideKey: sample.logo!.stagedKey,
       mode: 'custom_logo',
       icon: { key: northwindIcon.key, faviconKey: northwindIcon.faviconKey },
     })
@@ -567,7 +567,7 @@ describe('brand assets held until confirmed', () => {
   it('applies an open-licence font without confirmation, the logo and icon still held', () => {
     const open: BrandImport = {
       ...withAssets,
-      siteFont: { family: 'Söhne', licence: 'open', files: sohneFiles },
+      siteFont: { family: 'Brand Sans', licence: 'open', files: sohneFiles },
     }
     const next = applyBrandImport(base, open, false)
     expect(next.customFont).toEqual(sohne)
@@ -576,7 +576,7 @@ describe('brand assets held until confirmed', () => {
   })
 
   it('keeps a family the person uploaded themselves over the site’s copy of it', () => {
-    const own = { family: 'Sohne', fallback: 'lora' as const, files: [sohneFiles[0]!] }
+    const own = { family: 'Brand Sans', fallback: 'lora' as const, files: [sohneFiles[0]!] }
     expect(applyBrandImport({ ...base, customFont: own }, withAssets, true).customFont).toEqual(own)
   })
 
@@ -592,18 +592,18 @@ describe('brand assets held until confirmed', () => {
       ...withAssets,
       logo: undefined,
       icon: undefined,
-      siteFont: { family: 'Söhne', licence: 'open', files: sohneFiles },
+      siteFont: { family: 'Brand Sans', licence: 'open', files: sohneFiles },
     }
     expect(holdsImportAssets(applyBrandImport(base, open, false), open)).toBe(false)
   })
 
   it('names what is held: only assets that were found, a font only when copied and commercial', () => {
     expect(heldAssets(withAssets)).toEqual(['logo', 'icon', 'font'])
-    expect(heldAssets(stripe)).toEqual(['logo'])
-    expect(heldAssets({ ...stripe, siteFont: { family: 'Söhne', notCopied: 'service' } })).toEqual([
-      'logo',
-    ])
-    expect(heldAssets({ ...stripe, logo: undefined })).toEqual([])
+    expect(heldAssets(sample)).toEqual(['logo'])
+    expect(
+      heldAssets({ ...sample, siteFont: { family: 'Brand Sans', notCopied: 'service' } })
+    ).toEqual(['logo'])
+    expect(heldAssets({ ...sample, logo: undefined })).toEqual([])
   })
 
   it('ticking applies exactly what an import confirmed from the start would have', () => {
@@ -652,7 +652,7 @@ describe('brand assets held until confirmed', () => {
   })
 
   it('a square logo shows as icon and name once confirmed, and goes back when unticked', () => {
-    const square: BrandImport = { ...withAssets, logo: { ...stripe.logo!, kind: 'square' } }
+    const square: BrandImport = { ...withAssets, logo: { ...sample.logo!, kind: 'square' } }
     const confirmed = setAssetsConfirmed(applyBrandImport(base, square, false), base, square, true)
     expect(confirmed.logo.mode).toBe('logo_and_name')
     expect(setAssetsConfirmed(confirmed, base, square, false).logo).toEqual(base.logo)
@@ -664,7 +664,7 @@ describe('brand assets held until confirmed', () => {
     const second = replaceImport(
       mine,
       { brand: withAssets, before: first.before, undone: [], confirmed: false },
-      { ...stripe, logo: undefined, missing: ['logo'] },
+      { ...sample, logo: undefined, missing: ['logo'] },
       false
     )
     expect(second.next.logo.wideKey).toBe('header-logos/mine.svg')
@@ -675,7 +675,7 @@ describe('brand assets held until confirmed', () => {
     const second = replaceImport(
       first.next,
       { brand: withAssets, before: first.before, undone: [], confirmed: true },
-      { ...stripe, logo: undefined, missing: ['logo'], font: { id: 'lora', exact: true } },
+      { ...sample, logo: undefined, missing: ['logo'], font: { id: 'lora', exact: true } },
       false
     )
     expect(second.next.logo).toEqual(base.logo)
@@ -694,18 +694,18 @@ describe('brand assets held until confirmed', () => {
 describe('the site’s own dark mode logo', () => {
   const DARK = 'header-logos/2026/11/imported-dark.svg'
   const withDark: BrandImport = {
-    ...stripe,
+    ...sample,
     logoDark: { stagedKey: DARK, url: `/api/storage/${DARK}` },
   }
 
   it('goes into the draft with the logo, under the same tick, and says so', () => {
     expect(applyBrandImport(base, withDark, false).logo.darkKey ?? null).toBeNull()
     const applied = apply(base, withDark)
-    expect(applied.logo).toMatchObject({ wideKey: stripe.logo!.stagedKey, darkKey: DARK })
+    expect(applied.logo).toMatchObject({ wideKey: sample.logo!.stagedKey, darkKey: DARK })
     expect(importRows(withDark, undefined, true).find((r) => r.key === 'logo')!.text).toBe(
       'From the site, with its dark mode version'
     )
-    expect(importRows(stripe, undefined, true).find((r) => r.key === 'logo')!.text).toBe(
+    expect(importRows(sample, undefined, true).find((r) => r.key === 'logo')!.text).toBe(
       'From the site'
     )
   })
@@ -719,8 +719,8 @@ describe('the site’s own dark mode logo', () => {
         darkKey: 'header-logos/mine-dark.svg',
       },
     }
-    const applied = apply(mine, stripe)
-    expect(applied.logo.wideKey).toBe(stripe.logo!.stagedKey)
+    const applied = apply(mine, sample)
+    expect(applied.logo.wideKey).toBe(sample.logo!.stagedKey)
     expect(applied.logo.darkKey ?? null).toBeNull()
     // Taking the logo back brings both back.
     expect(revertImportRow(applied, mine, 'logo').logo).toMatchObject({
@@ -753,9 +753,9 @@ describe('the headings font', () => {
     { key: 'fonts/2026/11/h-600.woff2', weight: 600, style: 'normal' as const },
     { key: 'fonts/2026/11/h-700.woff2', weight: 700, style: 'normal' as const },
   ]
-  const listed: BrandImport = { ...stripe, headings: { site: 'Manrope', id: 'manrope' } }
+  const listed: BrandImport = { ...sample, headings: { site: 'Manrope', id: 'manrope' } }
   const copied = (licence: 'open' | 'commercial'): BrandImport => ({
-    ...stripe,
+    ...sample,
     headings: { site: 'Northwind Display' },
     siteHeadingFont: { family: 'Northwind Display', licence, files },
   })
@@ -805,14 +805,14 @@ describe('the headings font', () => {
 
   it('stays Same as text when the family can’t be copied: no substitute', () => {
     const cases: BrandImport[] = [
-      { ...stripe, headings: { site: 'Northwind Display' } },
+      { ...sample, headings: { site: 'Northwind Display' } },
       {
-        ...stripe,
+        ...sample,
         headings: { site: 'Northwind Display' },
         siteHeadingFont: { family: 'Northwind Display', notCopied: 'service' },
       },
       {
-        ...stripe,
+        ...sample,
         headings: { site: 'Northwind Display' },
         siteHeadingFont: { family: 'Northwind Display', notCopied: 'restricted' },
       },
@@ -847,10 +847,10 @@ describe('the headings font', () => {
   })
 
   it('says nothing was needed when the site sets its headings in the text font', () => {
-    expect(row(stripe)).toEqual(['skipped', 'Same as the text font.', false])
+    expect(row(sample)).toEqual(['skipped', 'Same as the text font.', false])
     // What the person chose themselves stays.
     const own = editTheme.setHeadingFont(base, MANROPE)
-    expect(draftHeadingFont(apply(own, stripe))).toBe(MANROPE)
+    expect(draftHeadingFont(apply(own, sample))).toBe(MANROPE)
   })
 
   it('takes the row back to the headings from before, listed or uploaded', () => {
@@ -876,19 +876,19 @@ describe('the headings font', () => {
       undone: [],
       confirmed: true,
     }
-    const second = replace(first.next, previous, stripe)
+    const second = replace(first.next, previous, sample)
     expect(draftHeadingFont(second.next)).toBeNull()
-    expect(second.next).toEqual(replace(base, null, stripe).next)
+    expect(second.next).toEqual(replace(base, null, sample).next)
     // Taken back by hand, it is not taken back twice.
     const undone = revertImportRow(first.next, first.before, 'headings')
     const own = editTheme.setHeadingFont(undone, '"Lora", ui-serif, Georgia, serif')
-    const kept = replace(own, { ...previous, undone: ['headings'] }, stripe)
+    const kept = replace(own, { ...previous, undone: ['headings'] }, sample)
     expect(draftHeadingFont(kept.next)).toContain('Lora')
   })
 })
 
 describe('the card style', () => {
-  const shadowed: BrandImport = { ...stripe, cardStyle: 'shadow' }
+  const shadowed: BrandImport = { ...sample, cardStyle: 'shadow' }
   const row = (brand: BrandImport) => {
     const found = importRows(brand).find((r) => r.key === 'cards')!
     return [found.state, found.text, found.applied]
@@ -897,8 +897,8 @@ describe('the card style', () => {
   it('sets the style the site’s cards clearly share', () => {
     expect(apply(base, shadowed).cardStyle).toBe('shadow')
     expect(row(shadowed)).toEqual(['matched', 'Shadow, like the site', true])
-    expect(row({ ...stripe, cardStyle: 'flat' })).toEqual(['matched', 'Flat, like the site', true])
-    expect(row({ ...stripe, cardStyle: 'border' })).toEqual([
+    expect(row({ ...sample, cardStyle: 'flat' })).toEqual(['matched', 'Flat, like the site', true])
+    expect(row({ ...sample, cardStyle: 'border' })).toEqual([
       'matched',
       'Border, like the site',
       true,
@@ -907,8 +907,8 @@ describe('the card style', () => {
 
   it('leaves the person’s style where the site is not clear', () => {
     const own = editTheme.setCardStyle(base, 'flat')
-    expect(apply(own, stripe).cardStyle).toBe('flat')
-    expect(row(stripe)).toEqual(['skipped', 'No clear style found. Yours stays.', false])
+    expect(apply(own, sample).cardStyle).toBe('flat')
+    expect(row(sample)).toEqual(['skipped', 'No clear style found. Yours stays.', false])
   })
 
   it('takes the row back, and a new import takes it back first', () => {
@@ -919,7 +919,7 @@ describe('the card style', () => {
     const second = replace(
       first.next,
       { brand: shadowed, before: first.before, undone: [], confirmed: true },
-      stripe
+      sample
     )
     expect(second.next.cardStyle).toBe('border')
   })
@@ -927,7 +927,7 @@ describe('the card style', () => {
 
 describe('suggested words', () => {
   const named = { ...base, workspaceName: 'Acme Corp' }
-  const northwind: BrandImport = { ...stripe, siteName: 'Northwind' }
+  const northwind: BrandImport = { ...sample, siteName: 'Northwind' }
   const texts = (draft: PortalDraft, before: PortalDraft, brand: BrandImport) =>
     importSuggestions(brand, before, draft).map((s) => [s.key, s.text, s.used])
 
@@ -947,7 +947,7 @@ describe('suggested words', () => {
     expect(importSuggestions(northwind, same, same).map((s) => s.key)).toEqual(['welcome'])
     const set = { ...named, headerName: 'Northwind' }
     expect(importSuggestions(northwind, set, set).map((s) => s.key)).toEqual(['welcome'])
-    expect(importSuggestions(stripe, named, named).map((s) => s.key)).toEqual(['welcome'])
+    expect(importSuggestions(sample, named, named).map((s) => s.key)).toEqual(['welcome'])
   })
 
   it('calls it the portal name, and compares with the name the header shows now', () => {
@@ -960,13 +960,13 @@ describe('suggested words', () => {
 
   it('writes the welcome line about a feedback board, with the site’s name, else the workspace’s', () => {
     expect(welcomeLine('Northwind')).toBe('Tell us what would make Northwind better for your team.')
-    expect(texts(named, named, stripe)[0]).toEqual([
+    expect(texts(named, named, sample)[0]).toEqual([
       'welcome',
       'Tell us what would make Acme Corp better for your team.',
       false,
     ])
     // With no name at all there is no line to offer.
-    expect(importSuggestions(stripe, base, base)).toEqual([])
+    expect(importSuggestions(sample, base, base)).toEqual([])
   })
 
   it('using the name sets the header’s only, and shows it as used until it is undone', () => {

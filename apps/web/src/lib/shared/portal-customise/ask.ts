@@ -187,7 +187,7 @@ function findTab(name: string, tabs: Tab[]): Tab | null {
 const HOST_NAME = '(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,24}'
 const HOST = new RegExp(`^(?:https?://)?(?:www\\.)?(${HOST_NAME})/?$`, 'i')
 
-/** A bare website host for Import, such as `stripe.com`. */
+/** A bare website host for Import, such as `example.com`. */
 export const websiteHostSchema = z
   .string()
   .max(253)

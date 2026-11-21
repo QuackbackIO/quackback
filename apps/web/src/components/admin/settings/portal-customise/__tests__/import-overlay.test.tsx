@@ -13,13 +13,13 @@ import type { ImportState } from '../import-section'
 import { ImportOverlay } from '../import-overlay'
 
 const brand: BrandImport = {
-  host: 'stripe.com',
+  host: 'example.com',
   reader: 'static',
   primary: '#533afd',
   background: '#ffffff',
   text: '#061b31',
   scheme: 'light',
-  font: { site: 'Söhne', id: 'inter', exact: false },
+  font: { site: 'Brand Sans', id: 'inter', exact: false },
   radius: 0.25,
   buttonShape: 'pill',
   logo: { kind: 'wide', stagedKey: 'header-logos/a.svg', url: '/api/storage/header-logos/a.svg' },
@@ -35,11 +35,11 @@ const before = draftFromLoaded({
 })
 
 const idle: ImportState = { status: 'idle' }
-const reading: ImportState = { status: 'reading', host: 'stripe.com' }
+const reading: ImportState = { status: 'reading', host: 'example.com' }
 const refused: ImportState = { status: 'refused', message: 'That website is not reachable.' }
 const done = (over: Partial<BrandImport> = {}): ImportState => ({
   status: 'done',
-  host: 'stripe.com',
+  host: 'example.com',
   brand: { ...brand, ...over },
   before,
   undone: [],
@@ -89,7 +89,7 @@ describe('ImportOverlay', () => {
     wait(240)
     expect(container).toBeEmptyDOMElement()
     wait(20)
-    expect(kit()).toHaveTextContent('stripe.com')
+    expect(kit()).toHaveTextContent('example.com')
     expect(kit()).toHaveTextContent('Reading the site')
     for (const label of ['Logo', 'Colours', 'Font', 'Corners'])
       expect(screen.getByText(label)).toBeInTheDocument()
@@ -130,7 +130,7 @@ describe('ImportOverlay', () => {
     expect(swatches()).toEqual(['#533afd', '#0a2540', '#ffffff', '#061b31'])
     expect(value('font')).toHaveAttribute('data-filled', 'false')
     wait(200)
-    expect(value('font')).toHaveTextContent('Söhne is licensed, so Inter stands in.')
+    expect(value('font')).toHaveTextContent('Brand Sans is licensed, so Inter stands in.')
     expect(value('corners')).toHaveAttribute('data-filled', 'false')
     wait(200)
     expect(value('corners')).toHaveTextContent('Slight corners, pill buttons')

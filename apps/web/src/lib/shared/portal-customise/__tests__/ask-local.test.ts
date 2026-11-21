@@ -217,9 +217,9 @@ describe('answerLocally: theme mode, undo, fonts and websites', () => {
   })
 
   it('runs Import for a website', () => {
-    expect(answerLocally('match stripe.com', ctx())).toMatchObject({
+    expect(answerLocally('match example.com', ctx())).toMatchObject({
       outcome: 'import',
-      host: 'stripe.com',
+      host: 'example.com',
     })
     expect(answerLocally('https://www.linear.app/', ctx())).toMatchObject({
       outcome: 'import',
