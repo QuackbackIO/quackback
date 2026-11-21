@@ -22,7 +22,7 @@ vi.mock('@/lib/server/functions/portal-customise', () => ({
 }))
 vi.mock('@/lib/client/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))
 
-const { ImportSection, useBrandImport, importSummary, confirmedImport } =
+const { ImportSection, useBrandImport, importSummary, confirmedImport, importStatusLine } =
   await import('../import-section')
 
 const loaded: LoadedPortal = {
@@ -157,6 +157,26 @@ describe('useBrandImport and the brand assets', () => {
     ).toEqual({ host: 'example.com', assets: ['logo'], preTicked: false })
     act(() => hook.result.current.confirmAssets(false, 'logo'))
     expect(hook.result.current.confirmed).toEqual(NONE_USED)
+    expect(current().logo.wideKey).toBeNull()
+  })
+
+  it('follows the editor’s undo after Undo import: an asset it brings back is in use again', async () => {
+    importFn.mockResolvedValue({ ok: true, brand: assets })
+    const { hook, current, editorUndo } = setup()
+    await act(() => hook.result.current.run('example.com'))
+    act(() => hook.result.current.confirmAssets(true, 'logo'))
+    act(() => hook.result.current.undoAll())
+    expect(hook.result.current.confirmed).toEqual(NONE_USED)
+    // The editor's undo of Undo import: the logo is back in the draft, and reads as in use.
+    act(() => editorUndo())
+    expect(current().logo.wideKey).toBe('header-logos/a.svg')
+    expect(hook.result.current.confirmed).toEqual({ logo: true, icon: false, font: false })
+    expect(importStatusLine(doneState(hook), hook.result.current.confirmed)).toContain(
+      'icon waiting'
+    )
+    expect(importStatusLine(doneState(hook), hook.result.current.confirmed)).toMatch(/· 1 applied/)
+    // Its Use still answers: taking it back is a step.
+    act(() => hook.result.current.confirmAssets(false, 'logo'))
     expect(current().logo.wideKey).toBeNull()
   })
 
@@ -319,22 +339,23 @@ describe('ImportSection', () => {
 
     rerender(
       <ImportSection
-        state={doneWith({ undone: ['logo'] })}
-        confirmed={{ logo: true, icon: false, font: false }}
+        state={doneWith({ undone: ['shape'] })}
+        confirmed={{ logo: false, icon: false, font: false }}
         {...props}
       />
     )
     expect(status).toBe(screen.getByRole('status'))
-    // Four rows still in the draft: main colour, page, font and shape.
-    expect(status).toHaveTextContent('Found. From example.com · 4 applied')
+    // Three rows still in the draft (main colour, page and font); the logo waits.
+    expect(status).toHaveTextContent('Found. From example.com · 3 applied · logo waiting')
     // After an import the field gives way to the result, with nothing greyed out.
     expect(screen.queryByLabelText('Your website')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(onUndoAll).toHaveBeenCalledOnce()
 
-    // Each row's own Undo stays, quieter; the logo was taken back and has none.
+    // Each row's own Undo stays, quieter; the shape was taken back and the logo has its Use.
     expect(screen.getByText('#533afd')).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /^Undo [A-Z]/ })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: /^Undo [A-Z]/ })).toHaveLength(3)
+    expect(screen.getByText('Undone')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Undo Main colour' }))
     expect(onUndoRow).toHaveBeenCalledWith('primary')
     fireEvent.click(screen.getByRole('button', { name: 'Upload Brand Sans' }))

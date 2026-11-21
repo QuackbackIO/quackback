@@ -29,6 +29,7 @@ import {
   importRows,
   revertImport,
   revertImportRow,
+  stillApplied,
   setAssetsConfirmed,
   type ConfirmedAssets,
   type ImportRow,
@@ -108,7 +109,7 @@ export function importStatusLine(
   confirmed: ConfirmedAssets
 ): string {
   const rows = importRows(state.brand, undefined, confirmed)
-  const applied = rows.filter((row) => row.applied && !state.undone.includes(row.key)).length
+  const applied = rows.filter((row) => stillApplied(row, state.undone)).length
   const waiting = heldAssets(state.brand).filter((asset) => !confirmed[asset])
   return [
     `From ${state.host}`,
@@ -202,11 +203,11 @@ export function useBrandImport({
 
   const undoRow = useCallback(
     (key: ImportRowKey) => {
-      if (state.status !== 'done' || state.undone.includes(key)) return
+      if (state.status !== 'done') return
       const { before } = state
-      // A held row changed nothing: there is nothing to take back.
+      // A held row changed nothing, and one taken back already has nothing left to take back.
       const row = importRows(state.brand, undefined, confirmed).find((r) => r.key === key)
-      if (!row?.applied) return
+      if (!row || !stillApplied(row, state.undone)) return
       update((draft) => revertImportRow(draft, before, key))
       setState({ ...state, undone: [...state.undone, key] })
     },
@@ -217,7 +218,7 @@ export function useBrandImport({
   const undoAll = useCallback(() => {
     if (state.status !== 'done') return
     const keys = importRows(state.brand, undefined, confirmed)
-      .filter((row) => row.applied && !state.undone.includes(row.key))
+      .filter((row) => stillApplied(row, state.undone))
       .map((row) => row.key)
     if (keys.length === 0) return
     update((draft) => revertImport(draft, { ...state, confirmed }))
@@ -373,7 +374,9 @@ export function ImportSection({
   const logoRow = rows.find((row) => row.key === 'logo')
   const iconRow = rows.find((row) => row.key === 'icon')
   const listRows = rows.filter((row) => row.key !== 'logo' && row.key !== 'icon')
-  const isUndone = (row: ImportRow) => done?.undone.includes(row.key) ?? false
+  // Applied, and taken back since: what the row says Undone for.
+  const isUndone = (row: ImportRow) =>
+    done !== null && row.applied && !stillApplied(row, done.undone)
   const anyApplied = rows.some((row) => row.applied && !isUndone(row))
   const anyHeld = done ? heldAssets(done.brand).length > 0 : false
   const showForm = !done || another

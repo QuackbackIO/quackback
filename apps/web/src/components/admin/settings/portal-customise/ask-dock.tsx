@@ -450,9 +450,13 @@ function ImportReply({
     )
   }
   if (brief?.status === 'refused') {
+    // What to do next (try again, a country's own site) lives in the section.
     return (
       <ReplyCard>
         <p>{brief.line}</p>
+        <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={onSee}>
+          Open Import
+        </Button>
       </ReplyCard>
     )
   }

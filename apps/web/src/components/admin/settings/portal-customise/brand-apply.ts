@@ -382,6 +382,15 @@ export function replaceImport(
 }
 
 /**
+ * Whether a row's value is in the draft now. A brand asset's row is read
+ * from the draft alone (`applied` comes from it), so an editor undo that
+ * brings the asset back counts; any other row is in unless taken back.
+ */
+export function stillApplied(row: ImportRow, undone: readonly ImportRowKey[]): boolean {
+  return row.applied && (row.asset !== undefined || !undone.includes(row.key))
+}
+
+/**
  * The draft with everything an import applied (and that was not taken back
  * since) taken back, to what it was before the import. A held row was never
  * applied: what the draft has there is the person's own.
@@ -389,8 +398,7 @@ export function replaceImport(
 export function revertImport(draft: PortalDraft, previous: PreviousImport): PortalDraft {
   let next = draft
   for (const row of importRows(previous.brand, undefined, previous.confirmed))
-    if (row.applied && !previous.undone.includes(row.key))
-      next = revertImportRow(next, previous.before, row.key)
+    if (stillApplied(row, previous.undone)) next = revertImportRow(next, previous.before, row.key)
   return next
 }
 
