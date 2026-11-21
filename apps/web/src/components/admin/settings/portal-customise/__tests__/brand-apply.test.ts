@@ -24,6 +24,7 @@ import {
   applyBrandImport,
   assetsInDraft,
   revertImport,
+  stillUndone,
   heldAssets,
   holdsImportAssets,
   importRows,
@@ -622,7 +623,12 @@ describe('brand assets held until confirmed', () => {
   it('uses one asset at a time: the others stay held, and each reads from the draft', () => {
     const held = applyBrandImport(base, withAssets, false)
     const logoOnly = setAssetsConfirmed(held, base, withAssets, true, 'logo')
-    expect(assetsInDraft(logoOnly, withAssets)).toEqual({ logo: true, icon: false, font: false })
+    expect(assetsInDraft(logoOnly, withAssets)).toEqual({
+      logo: true,
+      icon: false,
+      font: false,
+      headingFont: false,
+    })
     expect(logoOnly.logo.wideKey).toBe(withAssets.logo!.stagedKey)
     expect(logoOnly.logo.icon).toEqual(base.logo.icon)
     expect(logoOnly.customFont).toEqual(held.customFont)
@@ -641,7 +647,12 @@ describe('brand assets held until confirmed', () => {
     expect(each).toEqual(applyBrandImport(base, withAssets, true))
     // Taking one back leaves the others in use.
     const noIcon = setAssetsConfirmed(each, base, withAssets, false, 'icon')
-    expect(assetsInDraft(noIcon, withAssets)).toEqual({ logo: true, icon: false, font: true })
+    expect(assetsInDraft(noIcon, withAssets)).toEqual({
+      logo: true,
+      icon: false,
+      font: true,
+      headingFont: false,
+    })
     expect(noIcon.logo.icon).toEqual(base.logo.icon)
   })
 
@@ -690,6 +701,58 @@ describe('brand assets held until confirmed', () => {
     const confirmed = setAssetsConfirmed(applyBrandImport(base, square, false), base, square, true)
     expect(confirmed.logo.mode).toBe('logo_and_name')
     expect(setAssetsConfirmed(confirmed, base, square, false).logo).toEqual(base.logo)
+  })
+
+  it('a square logo used, then its icon used and taken back: the header shows the logo alone again', () => {
+    const square: BrandImport = { ...withAssets, logo: { ...sample.logo!, kind: 'square' } }
+    const held = applyBrandImport(base, square, false)
+    const logo = setAssetsConfirmed(held, base, square, true, 'logo')
+    expect(logo.logo.mode).toBe('custom_logo')
+    const both = setAssetsConfirmed(logo, base, square, true, 'icon')
+    expect(both.logo.mode).toBe('logo_and_name')
+    // Without the icon, icon and name would show no mark: the logo shows on its own, as before.
+    const noIcon = setAssetsConfirmed(both, base, square, false, 'icon')
+    expect(noIcon.logo).toEqual(logo.logo)
+  })
+
+  it('confirms the text font and the headings font apart: two families, two switches', () => {
+    const headingFiles = [
+      { key: 'fonts/2026/11/h-staged-import.woff2', weight: 600, style: 'normal' as const },
+    ]
+    const two: BrandImport = {
+      ...withAssets,
+      headings: { site: 'Brand Display' },
+      siteHeadingFont: { family: 'Brand Display', licence: 'commercial', files: headingFiles },
+    }
+    expect(heldAssets(two)).toEqual(['logo', 'icon', 'font', 'headingFont'])
+    const held = applyBrandImport(base, two, false)
+    const text = setAssetsConfirmed(held, base, two, true, 'font')
+    expect(text.customFont).toEqual(sohne)
+    expect(text.customHeadingFont).toBeUndefined()
+    expect(assetsInDraft(text, two)).toMatchObject({ font: true, headingFont: false })
+    const rows = importRows(two, undefined, assetsInDraft(text, two))
+    expect(
+      rows.filter((r) => r.asset?.endsWith('ont')).map((r) => [r.key, r.asset, r.state])
+    ).toEqual([
+      ['font', 'font', 'matched'],
+      ['headings', 'headingFont', 'held'],
+    ])
+    // Headings on, then the text font off: the headings stay.
+    const both = setAssetsConfirmed(text, base, two, true, 'headingFont')
+    const headingsOnly = setAssetsConfirmed(both, base, two, false, 'font')
+    expect(headingsOnly.customFont).toEqual(base.customFont)
+    expect(headingsOnly.customHeadingFont?.family).toBe('Brand Display')
+    // A text font the person then sets by hand is no longer the site's: its switch says so.
+    const byHand = editTheme.setFont(both, '"Lora", ui-serif, Georgia, serif')
+    expect(assetsInDraft(byHand, two)).toMatchObject({ font: false, headingFont: true })
+  })
+
+  it('reads a row taken back as in again once the editor’s undo brings its value back', () => {
+    const next = applyBrandImport(base, sample, false)
+    const undone = revertImportRow(next, base, 'primary')
+    expect(stillUndone(undone, base, ['primary'])).toEqual(['primary'])
+    // The editor's undo: the draft is the import's again.
+    expect(stillUndone(next, base, ['primary'])).toEqual([])
   })
 
   it('a new import takes back only what the last one applied: never a logo set while it was held', () => {
@@ -806,7 +869,7 @@ describe('the headings font', () => {
 
   it('holds a commercial family for the tick, with the logo and the text font', () => {
     const brand = copied('commercial')
-    expect(heldAssets(brand)).toEqual(['logo', 'font'])
+    expect(heldAssets(brand)).toEqual(['logo', 'headingFont'])
     const held = applyBrandImport(base, brand, false)
     expect(held.customHeadingFont).toBeUndefined()
     expect(row(brand, false)).toEqual(['held', 'Not used yet', false])

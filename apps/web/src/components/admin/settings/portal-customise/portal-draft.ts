@@ -535,12 +535,12 @@ export function brokenNavLink(draft: PortalDraft): PortalNavItemConfig | undefin
 /**
  * The last import, for the record a publish keeps of its brand assets. The
  * draft holds them only while the tick is on, so a publish that carries them
- * was confirmed. `preTicked` when the tick was there from the start, because
- * the portal is on the site's own domain.
+ * was confirmed. `preTicked` names the assets in use from the start, because
+ * the portal is on the site's own domain, whose Use the person never moved.
  */
 export interface ConfirmedImport {
   brand: Pick<BrandImport, 'host' | 'logo' | 'logoDark' | 'icon' | 'siteFont' | 'siteHeadingFont'>
-  preTicked: boolean
+  preTicked: readonly BrandAsset[]
 }
 
 /** The confirmed brand assets this publish carries: those still the imported ones. */
@@ -556,12 +556,13 @@ function confirmedAssets(
   const headingKey = commercialKey(brand.siteHeadingFont)
   // The theme is sent whole: a font counts only when it is new to what is live.
   const carriesFont =
-    (fontKey !== undefined &&
-      input.theme?.customFont?.files[0]?.key === fontKey &&
-      baseline.customFont?.files[0]?.key !== fontKey) ||
-    (headingKey !== undefined &&
-      input.theme?.customHeadingFont?.files[0]?.key === headingKey &&
-      baseline.customHeadingFont?.files[0]?.key !== headingKey)
+    fontKey !== undefined &&
+    input.theme?.customFont?.files[0]?.key === fontKey &&
+    baseline.customFont?.files[0]?.key !== fontKey
+  const carriesHeadingFont =
+    headingKey !== undefined &&
+    input.theme?.customHeadingFont?.files[0]?.key === headingKey &&
+    baseline.customHeadingFont?.files[0]?.key !== headingKey
   const assets: BrandAsset[] = [
     ...((brand.logo && input.logo?.wideKey === brand.logo.stagedKey) ||
     (brand.logoDark && input.logo?.darkKey === brand.logoDark.stagedKey)
@@ -569,11 +570,13 @@ function confirmedAssets(
       : []),
     ...(brand.icon && input.logo?.icon?.key === brand.icon.key ? ['icon' as const] : []),
     ...(carriesFont ? ['font' as const] : []),
+    ...(carriesHeadingFont ? ['headingFont' as const] : []),
   ]
   const confirmation = brandAssetsConfirmationSchema.safeParse({
     host: brand.host,
     assets,
-    preTicked,
+    // Only what this publish carries; an asset the person used themselves is confirmed by them.
+    preTicked: assets.filter((asset) => preTicked.includes(asset)),
   })
   // The record is extra: one it cannot hold never stops the publish.
   return confirmation.success ? confirmation.data : undefined

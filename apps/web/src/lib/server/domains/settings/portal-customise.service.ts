@@ -352,7 +352,9 @@ export async function publishPortalCustomisation(
     // The brand assets confirmation, for the assets this publish really carries.
     const confirmation = input.brandAssets
     // The theme is sent whole: a font counts only when its files are new to what is stored.
-    const fontIsNew = newFontKeys.some((key) => !storedFontKeys.includes(key))
+    const isNew = (files: { key: string }[] | undefined) =>
+      has('theme') && (files ?? []).some((file) => !storedFontKeys.includes(file.key))
+    const theme = input.theme as BrandingConfig | undefined
     const carried = (confirmation?.assets ?? []).filter((asset) =>
       asset === 'logo'
         ? // The logo, or its dark mode version: one asset to the person who confirmed it.
@@ -360,7 +362,8 @@ export async function publishPortalCustomisation(
           (has('logo.darkKey') && input.logo?.darkKey != null)
         : asset === 'icon'
           ? has('logo.icon')
-          : has('theme') && fontIsNew
+          : // Each font by its own role: the text's and the headings' are confirmed apart.
+            isNew(asset === 'font' ? theme?.customFont?.files : theme?.customHeadingFont?.files)
     )
     const brandAssets =
       confirmation && carried.length > 0
@@ -372,8 +375,11 @@ export async function publishPortalCustomisation(
             return {
               host: confirmation.host,
               assets: carried,
-              // Worked out here, never taken on the editor's word.
-              preTicked: confirmation.preTicked && onSite,
+              // Only assets this publish carries, and only on the site's own domain
+              // (worked out here, never taken on the editor's word); the rest were clicked.
+              preTicked: onSite
+                ? carried.filter((asset) => confirmation.preTicked.includes(asset))
+                : [],
               portalOnSite: onSite,
             }
           })()

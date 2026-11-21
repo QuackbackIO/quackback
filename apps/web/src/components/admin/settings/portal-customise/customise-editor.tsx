@@ -392,10 +392,21 @@ export function CustomiseEditor({
     [brandImport.state]
   )
   // The chat's reply to an import it started follows the import in one line.
-  const { logo: usingLogo, icon: usingIcon, font: usingFont } = brandImport.confirmed
+  const {
+    logo: usingLogo,
+    icon: usingIcon,
+    font: usingFont,
+    headingFont: usingHeadingFont,
+  } = brandImport.confirmed
   const brief = useMemo(
-    () => importBrief(brandImport.state, { logo: usingLogo, icon: usingIcon, font: usingFont }),
-    [brandImport.state, usingLogo, usingIcon, usingFont]
+    () =>
+      importBrief(brandImport.state, {
+        logo: usingLogo,
+        icon: usingIcon,
+        font: usingFont,
+        headingFont: usingHeadingFont,
+      }),
+    [brandImport.state, usingLogo, usingIcon, usingFont, usingHeadingFont]
   )
   // A phone shows the portal as a phone does.
   useEffect(() => {

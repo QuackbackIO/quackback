@@ -123,7 +123,7 @@ describe.skipIf(!fixture.available)(
       await publishLogo({
         host: 'northwind.com',
         assets: ['logo', 'icon', 'font'],
-        preTicked: false,
+        preTicked: [],
       })
       const rows = await audits()
       expect(rows).toHaveLength(1)
@@ -135,7 +135,7 @@ describe.skipIf(!fixture.available)(
           brandAssets: {
             host: 'northwind.com',
             assets: ['logo'],
-            preTicked: false,
+            preTicked: [],
             portalOnSite: false,
           },
         },
@@ -144,17 +144,26 @@ describe.skipIf(!fixture.available)(
     })
 
     it('records a pre-tick only when the portal really is on the site’s domain', async () => {
-      await publishLogo({ host: 'northwind.com', assets: ['logo'], preTicked: true })
+      await publishLogo({ host: 'northwind.com', assets: ['logo'], preTicked: ['logo'] })
       expect((await audits())[0]!.metadata).toMatchObject({
-        brandAssets: { preTicked: false, portalOnSite: false },
+        brandAssets: { preTicked: [], portalOnSite: false },
       })
     })
 
     it('records the pre-tick for a portal on a custom domain of the site', async () => {
       await setRow({ cloudIdentity: cloudIdentity('feedback.northwind.com') })
-      await publishLogo({ host: 'northwind.com', assets: ['logo'], preTicked: true })
+      await publishLogo({ host: 'northwind.com', assets: ['logo'], preTicked: ['logo'] })
       expect((await audits())[0]!.metadata).toMatchObject({
-        brandAssets: { host: 'northwind.com', preTicked: true, portalOnSite: true },
+        brandAssets: { host: 'northwind.com', preTicked: ['logo'], portalOnSite: true },
+      })
+    })
+
+    it('records as pre-ticked only the carried assets the editor says nobody clicked', async () => {
+      await setRow({ cloudIdentity: cloudIdentity('feedback.northwind.com') })
+      // The icon was pre-ticked but is not in this publish; the logo was clicked.
+      await publishLogo({ host: 'northwind.com', assets: ['logo'], preTicked: ['icon'] })
+      expect((await audits())[0]!.metadata).toMatchObject({
+        brandAssets: { assets: ['logo'], preTicked: [], portalOnSite: true },
       })
     })
 
@@ -174,10 +183,15 @@ describe.skipIf(!fixture.available)(
               files: [{ key: font, weight: 100, weightTo: 900, style: 'normal' }],
             },
           },
-          brandAssets: { host: 'northwind.com', assets: ['font', 'logo'], preTicked: false },
+          brandAssets: {
+            host: 'northwind.com',
+            assets: ['font', 'headingFont', 'logo'],
+            preTicked: [],
+          },
         } as never,
         ctx()
       )
+      // The text font is carried; the headings font, its own asset, is not.
       expect((await audits())[0]!.metadata).toMatchObject({
         parts: ['theme'],
         brandAssets: { assets: ['font'] },
@@ -189,7 +203,7 @@ describe.skipIf(!fixture.available)(
         {
           before: { theme: loaded.theme },
           theme: { themeMode: 'dark' },
-          brandAssets: { host: 'northwind.com', assets: ['logo'], preTicked: false },
+          brandAssets: { host: 'northwind.com', assets: ['logo'], preTicked: [] },
         } as never,
         ctx()
       )
@@ -198,10 +212,12 @@ describe.skipIf(!fixture.available)(
 
     it('refuses a confirmation that names no real host or asset', async () => {
       for (const brandAssets of [
-        { host: 'not a host', assets: ['logo'], preTicked: false },
-        { host: 'northwind.com', assets: [], preTicked: false },
-        { host: 'northwind.com', assets: ['banner'], preTicked: false },
-        { host: 'northwind.com', assets: ['logo'], preTicked: false, extra: true },
+        { host: 'not a host', assets: ['logo'], preTicked: [] },
+        { host: 'northwind.com', assets: [], preTicked: [] },
+        { host: 'northwind.com', assets: ['banner'], preTicked: [] },
+        { host: 'northwind.com', assets: ['logo'], preTicked: [], extra: true },
+        // The old one-flag shape: a pre-tick must name its assets.
+        { host: 'northwind.com', assets: ['logo'], preTicked: true },
       ])
         await expect(publishLogo(brandAssets)).rejects.toThrow()
       expect(await audits()).toHaveLength(0)

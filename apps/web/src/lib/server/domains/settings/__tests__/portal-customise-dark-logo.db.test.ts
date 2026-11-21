@@ -161,7 +161,7 @@ describe('the logo’s dark mode version', () => {
       {
         before: { logo: { darkKey: null } },
         logo: { darkKey: DARK },
-        brandAssets: { host: 'acme.example', assets: ['logo'], preTicked: false },
+        brandAssets: { host: 'acme.example', assets: ['logo'], preTicked: [] },
       },
       ctx()
     )

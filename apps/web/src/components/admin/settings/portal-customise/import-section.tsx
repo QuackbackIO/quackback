@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -30,6 +31,7 @@ import {
   revertImport,
   revertImportRow,
   stillApplied,
+  stillUndone,
   setAssetsConfirmed,
   type ConfirmedAssets,
   type ImportRow,
@@ -56,14 +58,17 @@ export type ImportState =
       brand: BrandImport
       /** The draft before the import, which each row's Undo takes its values from. */
       before: PortalDraft
-      /** Rows taken back since. */
+      /**
+       * Rows taken back since and still taken back: the hook reads them
+       * against the draft, so one the editor's undo brought back is in again.
+       */
       undone: ImportRowKey[]
       /**
-       * The brand assets were in use from the start (the portal is on the
-       * site's domain) and the person never touched them. Which are in use
-       * now is read from the draft (`assetsInDraft`), never kept here.
+       * The brand assets in use from the start (the portal is on the site's
+       * domain) whose Use the person never touched. Which are in use now is
+       * read from the draft (`assetsInDraft`), never kept here.
        */
-      preTicked: boolean
+      preTicked: BrandAsset[]
     }
 
 /** None of an import's brand assets in use. */
@@ -95,6 +100,14 @@ export function importSummary(state: ImportState): string {
   return 'From your website'
 }
 
+/** What the status line calls each brand asset waiting for the person. */
+const WAITING_NAME: Record<BrandAsset, string> = {
+  logo: 'logo',
+  icon: 'icon',
+  font: 'font',
+  headingFont: 'headings font',
+}
+
 /** Names joined for a sentence: `logo`, `logo and icon`, `logo, icon and font`. */
 const joinNames = (names: readonly string[]) =>
   names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
@@ -114,7 +127,9 @@ export function importStatusLine(
   return [
     `From ${state.host}`,
     applied === 0 ? 'nothing applied' : `${applied} applied`,
-    ...(waiting.length > 0 ? [`${joinNames(waiting)} waiting`] : []),
+    ...(waiting.length > 0
+      ? [`${joinNames(waiting.map((asset) => WAITING_NAME[asset]))} waiting`]
+      : []),
   ].join(' · ')
 }
 
@@ -159,9 +174,20 @@ export function useBrandImport({
   /** A suggestion was used: the draft before and after, for the reply with its Undo. */
   onSuggestionUsed?: (before: PortalDraft, after: PortalDraft) => void
 }) {
-  const [state, setState] = useState<ImportState>({ status: 'idle' })
+  const [kept, setState] = useState<ImportState>({ status: 'idle' })
   // Which assets are in use is what the draft holds: undo and redo move each with its asset.
-  const confirmed = state.status === 'done' ? assetsInDraft(getDraft(), state.brand) : NONE
+  const confirmed = kept.status === 'done' ? assetsInDraft(getDraft(), kept.brand) : NONE
+  // And which rows are taken back, likewise: an editor undo of a row's Undo brings it back.
+  const undone = kept.status === 'done' ? stillUndone(getDraft(), kept.before, kept.undone) : []
+  const undoneKey = undone.join(' ')
+  // One identity while nothing it says changes: the chat's reply follows it.
+  const state = useMemo<ImportState>(
+    () =>
+      kept.status === 'done'
+        ? { ...kept, undone: undoneKey ? (undoneKey.split(' ') as ImportRowKey[]) : [] }
+        : kept,
+    [kept, undoneKey]
+  )
 
   const run = useCallback(
     async (input: string) => {
@@ -186,10 +212,17 @@ export function useBrandImport({
         // It takes the place of the last import, never stacks on it.
         const previous = state.status === 'done' ? { ...state, confirmed } : null
         // A portal on the site's own domain is the brand itself: its assets start confirmed.
-        const preTicked = brand.portalOnSite === true
-        const { before, next } = replaceImport(getDraft(), previous, brand, preTicked)
+        const onSite = brand.portalOnSite === true
+        const { before, next } = replaceImport(getDraft(), previous, brand, onSite)
         update(() => next)
-        setState({ status: 'done', host: brand.host, brand, before, undone: [], preTicked })
+        setState({
+          status: 'done',
+          host: brand.host,
+          brand,
+          before,
+          undone: [],
+          preTicked: onSite ? heldAssets(brand) : [],
+        })
       } catch (error) {
         void track('portal_brand_import', { ok: false, reader: null, missing: [] })
         setState({
@@ -240,7 +273,8 @@ export function useBrandImport({
       const rows = heldRowKeys(brand, only)
       setState({
         ...state,
-        preTicked: false,
+        // Only the switch the person moved stops being a pre-tick; the others stay as they started.
+        preTicked: state.preTicked.filter((asset) => !assets.includes(asset)),
         // Using one again brings back its rows taken back on their own.
         undone: next ? state.undone.filter((key) => !rows.includes(key)) : state.undone,
       })
@@ -304,7 +338,18 @@ const USE_LABEL: Record<SuggestionKey, string> = {
 }
 
 /** What each asset's Use switch is called. */
-const ASSET_NAME: Record<BrandAsset, string> = { logo: 'logo', icon: 'icon', font: 'font' }
+function assetName(asset: BrandAsset, brand: BrandImport): string {
+  switch (asset) {
+    case 'logo':
+      return 'logo'
+    case 'icon':
+      return 'icon'
+    case 'font':
+      return `${brand.siteFont?.family ?? brand.font.site ?? 'the site’s font'} for text`
+    case 'headingFont':
+      return `${brand.siteHeadingFont?.family ?? brand.headings?.site ?? 'the site’s font'} for headings`
+  }
+}
 
 /** Said once beside the Use switches: the reason they exist. */
 const OWNERSHIP_NOTE = 'Use only what you own or have a licence for.'
@@ -384,7 +429,7 @@ export function ImportSection({
   const useSwitch = (row: ImportRow) =>
     row.asset ? (
       <UseToggle
-        name={ASSET_NAME[row.asset]}
+        name={assetName(row.asset, done!.brand)}
         using={row.applied && !isUndone(row)}
         describedBy={noteId}
         onChange={(next) => onConfirmAssets?.(next, row.asset)}
