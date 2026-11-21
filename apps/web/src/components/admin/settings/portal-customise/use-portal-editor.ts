@@ -39,7 +39,8 @@ import {
  */
 export type CompareView = 'before' | 'after' | 'live'
 
-type Conflict = Extract<PublishPortalCustomisationResult, { ok: false }>
+type Refusal = Extract<PublishPortalCustomisationResult, { ok: false }>
+type Conflict = Extract<Refusal, { code: 'SETTINGS_CHANGED' }>
 
 /**
  * A publish waiting on the person: it would put live imported brand assets
@@ -175,6 +176,9 @@ export function usePortalEditor(loaded: LoadedPortal) {
   // The files of brand assets the person confirmed in this session: a retry
   // of the same publish (their change kept, the rest published) never asks again.
   const confirmedKeys = useRef(new Set<string>())
+  // Files the server refused without a click (it did not take the portal for
+  // the site's own domain): those are asked about whatever the editor thought.
+  const refusedKeys = useRef(new Set<string>())
   const [assetCheck, setAssetCheck] = useState<AssetCheck | null>(null)
 
   const draft = history.present
@@ -237,26 +241,28 @@ export function usePortalEditor(loaded: LoadedPortal) {
       if (!probe) return false
       const carried = brand ? carriedAssets(probe, baseline, brand) : []
       // A portal on the site's own domain is the brand itself: nothing to ask,
-      // and the record says nobody clicked (the server checks the domain itself).
+      // and the record says nobody clicked (the server checks the domain itself,
+      // and refuses when it disagrees, which asks here after all).
       const onSite = brand?.portalOnSite === true
-      if (brand && !onSite) {
-        for (const asset of options.confirmed ?? []) {
-          const key = brandAssetKey(brand, asset)
-          if (key) confirmedKeys.current.add(key)
-        }
-        const unconfirmed = carried.filter((asset) => {
-          const key = brandAssetKey(brand, asset)
-          return !key || !confirmedKeys.current.has(key)
-        })
-        if (unconfirmed.length > 0) {
-          setAssetCheck({ brand, assets: unconfirmed, parkCss })
-          return false
-        }
+      const keyOf = (asset: BrandAsset) => (brand && brandAssetKey(brand, asset)) || ''
+      const clicked = (asset: BrandAsset) => confirmedKeys.current.has(keyOf(asset))
+      for (const asset of options.confirmed ?? [])
+        if (keyOf(asset)) confirmedKeys.current.add(keyOf(asset))
+      const unconfirmed = carried.filter(
+        (asset) => !clicked(asset) && (!onSite || refusedKeys.current.has(keyOf(asset)))
+      )
+      if (brand && unconfirmed.length > 0) {
+        setAssetCheck({ brand, assets: unconfirmed, parkCss })
+        return false
       }
       const input = brand
         ? publishInput(baseline, sent, published.current, {
             parkCss,
-            brandAssets: { brand, confirmed: carried, preTicked: onSite ? carried : [] },
+            brandAssets: {
+              brand,
+              confirmed: carried,
+              preTicked: onSite ? carried.filter((asset) => !clicked(asset)) : [],
+            },
           })
         : probe
       if (!input) return false
@@ -272,8 +278,17 @@ export function usePortalEditor(loaded: LoadedPortal) {
         toast.success(`Published. Live on ${window.location.host}.`)
         return true
       } catch (error) {
-        const refusal = (error as { conflict?: Conflict }).conflict
-        if (refusal) {
+        const refusal = (error as { conflict?: Refusal }).conflict
+        if (refusal?.code === 'BRAND_ASSETS_UNCONFIRMED') {
+          // Imported assets nobody confirmed: ask, rather than show an error.
+          for (const asset of refusal.assets) {
+            const key = keyOf(asset)
+            confirmedKeys.current.delete(key)
+            refusedKeys.current.add(key)
+          }
+          if (brand) setAssetCheck({ brand, assets: refusal.assets, parkCss })
+          else toast.error('Confirm the imported logo, icon or fonts, then publish.')
+        } else if (refusal) {
           setConflict(refusal)
         } else if (isPlanRefusal(error)) {
           const description = describePlanRefusal(

@@ -13,6 +13,7 @@ import { logger } from '@/lib/server/logger'
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { advancedCssRemainder } from '@/lib/shared/theme/readable-css'
+import type { BrandAsset } from '@/lib/shared/theme/brand-import'
 import { portalHostsOf, portalOnSite } from '@/lib/server/domains/settings/portal-domain'
 import {
   PORTAL_CUSTOMISE_PARTS,
@@ -42,7 +43,12 @@ import {
   updateHeaderDisplayName,
 } from './settings.media'
 import { updateHelpCenterConfig, updatePortalConfig } from './settings.service'
-import { isStaged, stageReplacedUploads, unstageUploads } from './settings.staged-uploads'
+import {
+  isStaged,
+  isStagedBrandAsset,
+  stageReplacedUploads,
+  unstageUploads,
+} from './settings.staged-uploads'
 import {
   DEFAULT_HELP_CENTER_CONFIG,
   type BrandingConfig,
@@ -279,6 +285,42 @@ export async function publishPortalCustomisation(
         throw new ValidationError('FONT_NOT_UPLOADED', 'Upload the font again, then publish.')
     }
 
+    // Imported brand assets go live only confirmed: each by a click, or on the
+    // site's own domain (worked out here, never taken on the editor's word).
+    const confirmation = input.brandAssets
+    const onSite = confirmation
+      ? portalOnSite(
+          confirmation.host,
+          portalHostsOf({ cloudIdentity: row.cloudIdentity, baseUrl: context.baseUrl ?? '' })
+        )
+      : false
+    const theme = input.theme as BrandingConfig | undefined
+    const imported = (key: string | null | undefined) =>
+      !!key && isStagedBrandAsset(row.metadata, key)
+    // A font counts by its files new to what is stored: one live already was asked about then.
+    const importedFont = (files: { key: string }[] | undefined) =>
+      has('theme') &&
+      (files ?? []).some((file) => !storedFontKeys.includes(file.key) && imported(file.key))
+    const needed: BrandAsset[] = [
+      ...(imported(newWideKey) || imported(newDarkKey) ? ['logo' as const] : []),
+      ...(has('logo.icon') && imported(input.logo!.icon!.key) ? ['icon' as const] : []),
+      ...(importedFont(theme?.customFont?.files) ? ['font' as const] : []),
+      ...(importedFont(theme?.customHeadingFont?.files) ? ['headingFont' as const] : []),
+    ]
+    const unconfirmed = needed.filter(
+      (asset) =>
+        !confirmation?.assets.includes(asset) || (confirmation.preTicked.includes(asset) && !onSite)
+    )
+    if (unconfirmed.length > 0) {
+      const refusal: PublishPortalCustomisationResult = {
+        ok: false,
+        code: 'BRAND_ASSETS_UNCONFIRMED',
+        message: 'Confirm the imported logo, icon or fonts are yours to use, then publish.',
+        assets: unconfirmed,
+      }
+      return { result: refusal }
+    }
+
     // Plan checks for every changed part before the first write.
     const { assertTierFeature } = await import('./tier-enforce')
     if (has('theme') && (input.theme?.light !== undefined || input.theme?.dark !== undefined))
@@ -350,11 +392,9 @@ export async function publishPortalCustomisation(
     }
 
     // The brand assets confirmation, for the assets this publish really carries.
-    const confirmation = input.brandAssets
     // The theme is sent whole: a font counts only when its files are new to what is stored.
     const isNew = (files: { key: string }[] | undefined) =>
       has('theme') && (files ?? []).some((file) => !storedFontKeys.includes(file.key))
-    const theme = input.theme as BrandingConfig | undefined
     const carried = (confirmation?.assets ?? []).filter((asset) =>
       asset === 'logo'
         ? // The logo, or its dark mode version: one asset to the person who confirmed it.
@@ -367,22 +407,16 @@ export async function publishPortalCustomisation(
     )
     const brandAssets =
       confirmation && carried.length > 0
-        ? (() => {
-            const onSite = portalOnSite(
-              confirmation.host,
-              portalHostsOf({ cloudIdentity: row.cloudIdentity, baseUrl: context.baseUrl ?? '' })
-            )
-            return {
-              host: confirmation.host,
-              assets: carried,
-              // Only assets this publish carries, and only on the site's own domain
-              // (worked out here, never taken on the editor's word); the rest were clicked.
-              preTicked: onSite
-                ? carried.filter((asset) => confirmation.preTicked.includes(asset))
-                : [],
-              portalOnSite: onSite,
-            }
-          })()
+        ? {
+            host: confirmation.host,
+            assets: carried,
+            // Only assets this publish carries, and only on the site's own domain
+            // (worked out here, never taken on the editor's word); the rest were clicked.
+            preTicked: onSite
+              ? carried.filter((asset) => confirmation.preTicked.includes(asset))
+              : [],
+            portalOnSite: onSite,
+          }
         : null
     if (brandAssets) log.info({ brandAssets }, 'brand assets confirmed on publish')
 

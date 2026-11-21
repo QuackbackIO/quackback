@@ -310,6 +310,33 @@ describe('usePortalEditor', () => {
       expect(result.current.dirty).toBe(false)
     })
 
+    it('opens the confirmation when the server refuses unconfirmed assets, never the conflict', async () => {
+      // The editor took the domain as the site's own; the server did not.
+      const { result } = withImport(true)
+      mutateAsync.mockRejectedValueOnce(
+        Object.assign(new Error('confirm'), {
+          conflict: {
+            ok: false,
+            code: 'BRAND_ASSETS_UNCONFIRMED',
+            message: 'confirm',
+            assets: ['logo'],
+          },
+        })
+      )
+      await act(() => result.current.publish())
+      expect(result.current.conflict).toBeNull()
+      expect(result.current.assetCheck).toMatchObject({ assets: ['logo'] })
+      // Confirmed by a click now: recorded as such, not as a pre-tick.
+      mutateAsync.mockResolvedValueOnce(ok(['logo.wideKey', 'logo.icon']))
+      await act(() => result.current.publish({ confirmed: ['logo'] }))
+      expect(mutateAsync.mock.calls[1]![0].brandAssets).toEqual({
+        host: 'northwind.com',
+        assets: ['logo', 'icon'],
+        preTicked: ['icon'],
+      })
+      expect(result.current.assetCheck).toBeNull()
+    })
+
     it('asks nothing on the site’s own domain, and records the assets as pre-ticked', async () => {
       const { result } = withImport(true)
       mutateAsync.mockResolvedValue(ok(['logo.wideKey', 'logo.icon']))

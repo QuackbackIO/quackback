@@ -121,11 +121,16 @@ async function robotsAllowHome(siteUrl: string, fetcher: SiteFetcher): Promise<b
   return robotsAllows(new TextDecoder().decode(res.body), '/')
 }
 
-/** Uploads `bytes` under `prefix`, recorded as staged first, or null when it cannot be stored. */
+/**
+ * Uploads `bytes` under `prefix`, recorded as staged first, or null when it
+ * cannot be stored. A brand asset (the logo, the icon, a commercial font) is
+ * recorded as one, so a publish puts it live only with a confirmation.
+ */
 async function stageObject(
   prefix: string,
   bytes: Uint8Array,
-  mime: string
+  mime: string,
+  brandAsset = true
 ): Promise<{ stagedKey: string; url: string } | null> {
   const extension = EXTENSIONS[mime]
   if (!extension || !isS3Usable()) return null
@@ -135,7 +140,7 @@ async function stageObject(
     // sweep removes it if nothing ever names it.
     const { recordStagedUpload } =
       await import('@/lib/server/domains/settings/settings.staged-uploads')
-    await recordStagedUpload(stagedKey)
+    await recordStagedUpload(stagedKey, { brandAsset })
     const url = await uploadObject(stagedKey, bytes, mime)
     return { stagedKey, url }
   } catch (err) {
@@ -248,7 +253,9 @@ async function stageFontFiles(
     const staged = await stageObject(
       FONT_UPLOADS.prefix,
       file.bytes,
-      FONT_FORMATS[file.format].type
+      FONT_FORMATS[file.format].type,
+      // An open-licence font needs no confirmation; a commercial one does.
+      font.licence === 'commercial'
     )
     // Without the first file (the regular, or a heading's semibold) there is no family to show.
     if (!staged && files.length === 0) return undefined

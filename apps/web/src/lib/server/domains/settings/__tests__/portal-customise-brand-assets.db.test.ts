@@ -281,5 +281,130 @@ describe.skipIf(!fixture.available)(
       ).rejects.toThrow()
       expect(await brandImport()).toEqual({ host: 'northwind.com' })
     })
+
+    describe('refuses imported brand assets nobody confirmed', () => {
+      const at = () => new Date().toISOString()
+      const LOGO = 'header-logos/2026/11/l-staged-import.svg'
+      const ICON = 'logos/2026/11/i-staged-import.png'
+      const FAV = 'favicons/2026/11/f-staged-import.png'
+      const FONT = 'fonts/2026/11/c-staged-import.woff2'
+      const OPEN_FONT = 'fonts/2026/11/o-staged-import.woff2'
+      beforeEach(async () => {
+        await setRow({
+          metadata: JSON.stringify({
+            stagedUploads: [
+              { key: 'header-logos/new.png', at: at() },
+              { key: LOGO, at: at(), brandAsset: true },
+              { key: ICON, at: at(), brandAsset: true },
+              { key: FAV, at: at(), brandAsset: true },
+              { key: FONT, at: at(), brandAsset: true },
+              { key: OPEN_FONT, at: at() },
+            ],
+          }),
+        })
+      })
+      const publishImported = (brandAssets?: unknown) =>
+        publishPortalCustomisation(
+          {
+            before: { theme: loaded.theme, logo: { ...loaded.logo, icon: null } },
+            theme: {
+              ...storedTheme,
+              customFont: {
+                family: 'Calibre',
+                fallback: 'inter',
+                files: [{ key: FONT, weight: 400, style: 'normal' }],
+              },
+            },
+            logo: { wideKey: LOGO, icon: { key: ICON, faviconKey: FAV } },
+            ...(brandAssets ? { brandAssets } : {}),
+          } as never,
+          ctx()
+        )
+      const stored = async () => {
+        const [row] = await testDb
+          .select({ wide: settings.headerLogoKey, icon: settings.logoKey })
+          .from(settings)
+          .limit(1)
+        return row
+      }
+
+      it('as a value naming each asset, and writes nothing', async () => {
+        const result = await publishImported()
+        expect(result).toEqual({
+          ok: false,
+          code: 'BRAND_ASSETS_UNCONFIRMED',
+          message: expect.any(String),
+          assets: ['logo', 'icon', 'font'],
+        })
+        expect(await stored()).toMatchObject({ wide: 'header-logos/old.png' })
+        expect(await audits()).toHaveLength(0)
+      })
+
+      it('names only the assets the confirmation leaves out', async () => {
+        const result = await publishImported({
+          host: 'northwind.com',
+          assets: ['logo'],
+          preTicked: [],
+        })
+        expect(result).toMatchObject({ ok: false, assets: ['icon', 'font'] })
+      })
+
+      it('publishes once each asset is confirmed by a click', async () => {
+        const result = await publishImported({
+          host: 'northwind.com',
+          assets: ['logo', 'icon', 'font'],
+          preTicked: [],
+        })
+        expect(result).toMatchObject({ ok: true })
+        expect(await stored()).toMatchObject({ wide: LOGO, icon: ICON })
+      })
+
+      it('takes a pre-tick as confirmation only on the site’s own domain', async () => {
+        const preTicked = { host: 'northwind.com', assets: ['logo', 'icon', 'font'] }
+        expect(await publishImported({ ...preTicked, preTicked: ['logo'] })).toMatchObject({
+          ok: false,
+          assets: ['logo'],
+        })
+        await setRow({ cloudIdentity: cloudIdentity('feedback.northwind.com') })
+        expect(
+          await publishImported({ ...preTicked, preTicked: ['logo', 'icon', 'font'] })
+        ).toMatchObject({ ok: true })
+      })
+
+      it('asks nothing of uploads that are not imported brand assets, nor of what is live', async () => {
+        // A logo uploaded by hand, and an open-licence font copied from a site.
+        expect(await publishLogo(undefined)).toMatchObject({ ok: true })
+        const result = await publishPortalCustomisation(
+          {
+            before: { theme: loaded.theme },
+            theme: {
+              ...storedTheme,
+              customFont: {
+                family: 'Open',
+                fallback: 'inter',
+                files: [{ key: OPEN_FONT, weight: 400, style: 'normal' }],
+              },
+            },
+          } as never,
+          ctx()
+        )
+        expect(result).toMatchObject({ ok: true })
+        // Live already: a publish of something else carries no asset to confirm.
+        await publishImported({
+          host: 'northwind.com',
+          assets: ['logo', 'icon', 'font'],
+          preTicked: [],
+        })
+        expect(
+          await publishPortalCustomisation(
+            {
+              before: { headerName: '' },
+              headerName: 'Northwind',
+            } as never,
+            ctx()
+          )
+        ).toMatchObject({ ok: true })
+      })
+    })
   }
 )

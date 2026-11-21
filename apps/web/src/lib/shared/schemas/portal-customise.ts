@@ -257,6 +257,17 @@ export type PublishPortalCustomisationResult =
     }
   | {
       ok: false
+      /**
+       * The publish would put live a logo, icon or commercial font Import
+       * brought in, and nobody confirmed the brand owns or licenses it.
+       * Nothing is written; the editor asks, then publishes again.
+       */
+      code: 'BRAND_ASSETS_UNCONFIRMED'
+      message: string
+      assets: z.infer<typeof brandAssetSchema>[]
+    }
+  | {
+      ok: false
       code: 'SETTINGS_CHANGED'
       message: string
       /** The parts someone else changed since the editor loaded them. */
