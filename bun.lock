@@ -274,7 +274,7 @@
         "tsup": "^9.0.0",
       },
       "peerDependencies": {
-        "react": "^19",
+        "react": "^18 || ^19",
       },
       "optionalPeers": [
         "react",
