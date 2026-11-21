@@ -5,9 +5,9 @@
  *
  * Colours, page, header, cards and shape apply at once. The site's logo, its
  * icon and a commercial font copied from it (the text's or the headings')
- * are brand assets: held until the person confirms the brand owns or
- * licenses them, applied together when they do, and taken back together
- * when they change their mind.
+ * are brand assets: each held until the person confirms, on that asset, that
+ * the brand owns or licenses it, and taken back when they change their mind.
+ * A portal on the site's own domain starts with all of them confirmed.
  *
  * Words are never applied: the site's name and a welcome line are offered
  * beside the rows (`importSuggestions`), each used on a click.
@@ -53,7 +53,22 @@ export interface ImportRow {
   uploadFont?: string
   /** Whether the row changed the draft, so Undo has something to take back. */
   applied: boolean
+  /**
+   * The brand asset this row is, when the site gave one: its Use switch is
+   * the confirmation, and its undo.
+   */
+  asset?: BrandAsset
 }
+
+/** Which of an import's brand assets are in use: each confirmed on its own. */
+export type ConfirmedAssets = Readonly<Record<BrandAsset, boolean>>
+
+/** Every brand asset in use, or none. */
+export const allAssets = (confirmed: boolean): ConfirmedAssets => ({
+  logo: confirmed,
+  icon: confirmed,
+  font: confirmed,
+})
 
 /** The page colours an import sets: the background and what follows it, the text and the header bar. */
 const PAGE_KEYS = [
@@ -67,7 +82,7 @@ const PAGE_KEYS = [
 ] as const
 
 /** What a held row says in place of what was found. */
-const HELD_TEXT = 'Tick the box below to use it'
+const HELD_TEXT = 'Not used yet'
 
 /** Why the site's own font files were not copied, as the font row says it. */
 const NOT_COPIED: Record<SiteFontRefusal, string> = {
@@ -119,21 +134,18 @@ export function heldAssets(brand: BrandImport): BrandAsset[] {
   ]
 }
 
-/** The rows the held assets are: what ticking brings back if one was taken back on its own. */
-export function heldRowKeys(brand: BrandImport): ImportRowKey[] {
+/**
+ * The rows the held assets are (or the rows of one of them): what confirming
+ * brings back if one was taken back on its own.
+ */
+export function heldRowKeys(brand: BrandImport, only?: BrandAsset): ImportRowKey[] {
+  const has = (asset: BrandAsset) => only === undefined || only === asset
   return [
-    ...(brand.logo ? ['logo' as const] : []),
-    ...(brand.icon ? ['icon' as const] : []),
-    ...(fontIsHeld(brand) ? ['font' as const] : []),
-    ...(headingIsHeld(brand) ? ['headings' as const] : []),
+    ...(brand.logo && has('logo') ? ['logo' as const] : []),
+    ...(brand.icon && has('icon') ? ['icon' as const] : []),
+    ...(fontIsHeld(brand) && has('font') ? ['font' as const] : []),
+    ...(headingIsHeld(brand) && has('font') ? ['headings' as const] : []),
   ]
-}
-
-/** The tick's label, naming only what is held. */
-export function assetsLabel(assets: readonly BrandAsset[]): string {
-  const names =
-    assets.length > 1 ? `${assets.slice(0, -1).join(', ')} and ${assets.at(-1)}` : assets[0]
-  return `We own this ${names}, or have a licence to use ${assets.length > 1 ? 'them' : 'it'}`
 }
 
 /**
@@ -170,25 +182,32 @@ function withHeadings(draft: PortalDraft, brand: BrandImport): PortalDraft {
   return editTheme.setHeadingScope(next, brand.headings?.display ? 'page' : undefined)
 }
 
-/** The draft with the import's brand assets applied: its logo, its icon and its held fonts. */
-function withAssets(draft: PortalDraft, brand: BrandImport): PortalDraft {
+/** The draft with the import's brand assets applied (or one of them): its logo, its icon and its held fonts. */
+function withAssets(draft: PortalDraft, brand: BrandImport, only?: BrandAsset): PortalDraft {
+  const has = (asset: BrandAsset) => only === undefined || only === asset
   let next = draft
-  if (brand.logo) {
+  if (brand.logo && has('logo')) {
     next = editLogo.setUploadedWide(next, brand.logo.stagedKey)
     // The site's own dark-mode logo with it; a dark version of the logo this one replaces goes.
     next = brand.logoDark
       ? editLogo.setUploadedDark(next, brand.logoDark.stagedKey)
       : editLogo.removeDark(next)
   }
-  if (brand.icon)
+  if (brand.icon && has('icon'))
     next = editLogo.setUploadedIcon(next, {
       key: brand.icon.key,
       faviconKey: brand.icon.faviconKey,
     })
   // A square logo is a mark alone: with an icon to show, the header shows it beside the name.
-  if (brand.logo?.kind === 'square' && next.logo.icon) next = editLogo.showSquare(next)
-  if (fontIsHeld(brand)) next = withFont(next, brand)
-  if (headingIsHeld(brand)) next = withHeadings(next, brand)
+  if (
+    brand.logo?.kind === 'square' &&
+    (has('logo') || has('icon')) &&
+    next.logo.wideKey === brand.logo.stagedKey &&
+    next.logo.icon
+  )
+    next = editLogo.showSquare(next)
+  if (fontIsHeld(brand) && has('font')) next = withFont(next, brand)
+  if (headingIsHeld(brand) && has('font')) next = withHeadings(next, brand)
   return next
 }
 
@@ -210,12 +229,22 @@ const holdsCopiedHeading = (draft: PortalDraft, brand: BrandImport) => {
  * undo and redo move the tick with the assets.
  */
 export function holdsImportAssets(draft: PortalDraft, brand: BrandImport): boolean {
-  return (
-    (brand.logo !== undefined && draft.logo.wideKey === brand.logo.stagedKey) ||
-    (brand.icon !== undefined && draft.logo.icon?.key === brand.icon.key) ||
-    (fontIsHeld(brand) && holdsCopiedFont(draft, brand)) ||
-    (headingIsHeld(brand) && holdsCopiedHeading(draft, brand))
-  )
+  const held = assetsInDraft(draft, brand)
+  return held.logo || held.icon || held.font
+}
+
+/**
+ * Which of the import's brand assets the draft holds, each on its own: what
+ * each asset's Use switch shows. Read from the draft, as `holdsImportAssets` is.
+ */
+export function assetsInDraft(draft: PortalDraft, brand: BrandImport): ConfirmedAssets {
+  return {
+    logo: brand.logo !== undefined && draft.logo.wideKey === brand.logo.stagedKey,
+    icon: brand.icon !== undefined && draft.logo.icon?.key === brand.icon.key,
+    font:
+      (fontIsHeld(brand) && holdsCopiedFont(draft, brand)) ||
+      (headingIsHeld(brand) && holdsCopiedHeading(draft, brand)),
+  }
 }
 
 /**
@@ -223,22 +252,25 @@ export function holdsImportAssets(draft: PortalDraft, brand: BrandImport): boole
  * import confirmed from the start would have. Unticking takes back each one
  * the draft still holds, to what it was before the import, the way a row's
  * Undo does. Whatever the person has changed since is theirs and stays.
+ * `only` confirms or takes back that one asset, leaving the others as they are.
  */
 export function setAssetsConfirmed(
   draft: PortalDraft,
   before: PortalDraft,
   brand: BrandImport,
-  confirmed: boolean
+  confirmed: boolean,
+  only?: BrandAsset
 ): PortalDraft {
-  if (confirmed) return withAssets(draft, brand)
+  if (confirmed) return withAssets(draft, brand, only)
+  const has = (asset: BrandAsset) => only === undefined || only === asset
   let next = draft
-  if (brand.logo && next.logo.wideKey === brand.logo.stagedKey)
+  if (brand.logo && has('logo') && next.logo.wideKey === brand.logo.stagedKey)
     next = revertImportRow(next, before, 'logo')
-  if (brand.icon && next.logo.icon?.key === brand.icon.key)
+  if (brand.icon && has('icon') && next.logo.icon?.key === brand.icon.key)
     next = revertImportRow(next, before, 'icon')
-  if (fontIsHeld(brand) && holdsCopiedFont(next, brand))
+  if (fontIsHeld(brand) && has('font') && holdsCopiedFont(next, brand))
     next = revertImportRow(next, before, 'font')
-  if (headingIsHeld(brand) && holdsCopiedHeading(next, brand))
+  if (headingIsHeld(brand) && has('font') && holdsCopiedHeading(next, brand))
     next = revertImportRow(next, before, 'headings')
   return next
 }
@@ -327,8 +359,8 @@ export interface PreviousImport {
   brand: BrandImport
   before: PortalDraft
   undone: ImportRowKey[]
-  /** Whether its brand assets were confirmed, and so in the draft. */
-  confirmed: boolean
+  /** Which of its brand assets were confirmed, and so in the draft. */
+  confirmed: boolean | ConfirmedAssets
 }
 
 /**
@@ -345,13 +377,21 @@ export function replaceImport(
   /** Whether the new import's brand assets start confirmed. */
   confirmed: boolean
 ): { next: PortalDraft; before: PortalDraft } {
-  let before = draft
-  if (previous)
-    // A held row was never applied: what the draft has there is the person's own.
-    for (const row of importRows(previous.brand, undefined, previous.confirmed))
-      if (row.applied && !previous.undone.includes(row.key))
-        before = revertImportRow(before, previous.before, row.key)
+  const before = previous ? revertImport(draft, previous) : draft
   return { before, next: applyBrandImport(before, brand, confirmed) }
+}
+
+/**
+ * The draft with everything an import applied (and that was not taken back
+ * since) taken back, to what it was before the import. A held row was never
+ * applied: what the draft has there is the person's own.
+ */
+export function revertImport(draft: PortalDraft, previous: PreviousImport): PortalDraft {
+  let next = draft
+  for (const row of importRows(previous.brand, undefined, previous.confirmed))
+    if (row.applied && !previous.undone.includes(row.key))
+      next = revertImportRow(next, previous.before, row.key)
+  return next
 }
 
 /** The draft with `tokens` written on one side's palette. */
@@ -425,23 +465,26 @@ export function importRows(
   brand: BrandImport,
   /** What the draft already had before the import, which stays where the site has none. */
   kept: { logo: boolean; icon: boolean } = { logo: false, icon: false },
-  /** Whether the brand assets are confirmed; unconfirmed, they show as found but held. */
-  confirmed = true
+  /** Which brand assets are confirmed; unconfirmed, they show as found but held. */
+  confirmedAssets: boolean | ConfirmedAssets = true
 ): ImportRow[] {
   const rows: ImportRow[] = []
   const held = { state: 'held', text: HELD_TEXT } as const
+  const confirmed =
+    typeof confirmedAssets === 'boolean' ? allAssets(confirmedAssets) : confirmedAssets
 
   rows.push(
     brand.logo
-      ? confirmed
+      ? confirmed.logo
         ? {
             key: 'logo',
             label: 'Logo',
             state: 'matched',
-            text: brand.logoDark ? 'From the site, with its dark mode version' : 'From the site',
+            text: brand.logoDark ? 'With its dark mode version' : 'From the site',
             applied: true,
+            asset: 'logo',
           }
-        : { key: 'logo', label: 'Logo', ...held, applied: false }
+        : { key: 'logo', label: 'Logo', ...held, applied: false, asset: 'logo' }
       : {
           key: 'logo',
           label: 'Logo',
@@ -453,15 +496,16 @@ export function importRows(
 
   rows.push(
     brand.icon
-      ? confirmed
+      ? confirmed.icon
         ? {
             key: 'icon',
             label: 'Icon',
             state: 'matched',
             text: 'The site’s app icon',
             applied: true,
+            asset: 'icon',
           }
-        : { key: 'icon', label: 'Icon', ...held, applied: false }
+        : { key: 'icon', label: 'Icon', ...held, applied: false, asset: 'icon' }
       : {
           key: 'icon',
           label: 'Icon',
@@ -481,7 +525,7 @@ export function importRows(
           key: 'primary',
           label: 'Main colour',
           state: 'matched',
-          text: `${brand.primary}, from the main button`,
+          text: brand.primary,
           swatches: [brand.primary],
           applied: true,
         }
@@ -504,21 +548,21 @@ export function importRows(
   const palette = [...page, ...neutrals, brand.darkMode?.background].filter(
     (c): c is NonNullable<typeof c> => !!c
   )
-  // The mode follows the site, and the row says which way it went.
-  const modeNote = !brand.background
-    ? ''
+  // The mode follows the site, and the row says which way it went; its swatches show the colours.
+  const mode = !brand.background
+    ? page.join(' · ')
     : brand.scheme === 'dark'
-      ? ', a dark site, so the portal is always dark'
+      ? 'Always dark'
       : brand.darkMode
-        ? ', the site has a dark mode, so visitors choose'
-        : ', a light site, so the portal is always light'
+        ? 'Light and dark'
+        : 'Always light'
   rows.push(
     page.length > 0
       ? {
           key: 'page',
           label: 'Page and text',
           state: 'matched',
-          text: `${page.join(' · ')}${brand.tokens?.header ? `, a ${brand.tokens.header} header` : ''}${modeNote}`,
+          text: mode,
           swatches: palette,
           applied: true,
         }
@@ -542,15 +586,17 @@ export function importRows(
       applied: false,
     })
   } else if (copiedFont(brand) && brand.siteFont) {
+    const asset = fontIsHeld(brand) ? ({ asset: 'font' } as const) : {}
     rows.push(
-      fontIsHeld(brand) && !confirmed
-        ? { key: 'font', label: 'Text font', ...held, applied: false }
+      fontIsHeld(brand) && !confirmed.font
+        ? { key: 'font', label: 'Text font', ...held, applied: false, ...asset }
         : {
             key: 'font',
             label: 'Text font',
             state: 'matched',
             text: `${brand.siteFont.family}, from the site`,
             applied: true,
+            ...asset,
           }
     )
   } else if (brand.siteFont && 'notCopied' in brand.siteFont) {
@@ -581,7 +627,7 @@ export function importRows(
     })
   }
 
-  rows.push(headingsRow(brand, confirmed), cardsRow(brand))
+  rows.push(headingsRow(brand, confirmed.font), cardsRow(brand))
 
   if (brand.radius === undefined && !brand.buttonShape) {
     rows.push({
@@ -621,14 +667,16 @@ function headingsRow(brand: BrandImport, confirmed: boolean): ImportRow {
       applied: true,
     }
   const copied = copiedHeadingFont(brand)
+  const asset = headingIsHeld(brand) ? ({ asset: 'font' } as const) : {}
   if (copied)
     return headingIsHeld(brand) && !confirmed
-      ? { ...row, state: 'held', text: HELD_TEXT, applied: false }
+      ? { ...row, state: 'held', text: HELD_TEXT, applied: false, ...asset }
       : {
           ...row,
           state: 'matched',
           text: `${copied.family}, ${where ?? 'from the site'}`,
           applied: true,
+          ...asset,
         }
   const font = brand.siteHeadingFont
   const why = font && 'notCopied' in font ? NOT_COPIED[font.notCopied] : NOT_COPIED.restricted

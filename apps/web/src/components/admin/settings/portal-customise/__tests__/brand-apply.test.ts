@@ -22,7 +22,8 @@ import {
 } from '../portal-draft'
 import {
   applyBrandImport,
-  assetsLabel,
+  assetsInDraft,
+  revertImport,
   heldAssets,
   holdsImportAssets,
   importRows,
@@ -359,8 +360,8 @@ describe('importRows', () => {
     expect(rows.map((r) => [r.key, r.state, r.text])).toEqual([
       ['logo', 'matched', 'From the site'],
       ['icon', 'missing', 'No square icon of 120 px or more.'],
-      ['primary', 'matched', '#533afd, from the main button'],
-      ['page', 'matched', '#ffffff · #061b31, a light site, so the portal is always light'],
+      ['primary', 'matched', '#533afd'],
+      ['page', 'matched', 'Always light'],
       ['font', 'nearest', 'Brand Sans is licensed, so Inter stands in.'],
       ['headings', 'skipped', 'Same as the text font.'],
       ['cards', 'skipped', 'No clear style found. Yours stays.'],
@@ -382,8 +383,8 @@ describe('importRows', () => {
   it('shows the logo and icon as found but held until the brand assets are confirmed', () => {
     const rows = importRows({ ...sample, icon: northwindIcon }, undefined, false)
     expect(rows.slice(0, 2).map((r) => [r.key, r.state, r.text, r.applied])).toEqual([
-      ['logo', 'held', 'Tick the box below to use it', false],
-      ['icon', 'held', 'Tick the box below to use it', false],
+      ['logo', 'held', 'Not used yet', false],
+      ['icon', 'held', 'Not used yet', false],
     ])
     // Colours, page and shape apply at once.
     expect(rows.filter((r) => r.applied).map((r) => r.key)).toEqual([
@@ -417,7 +418,7 @@ describe('importRows', () => {
     // Held whole: the draft's font is untouched, so there is nothing to take back.
     expect(fontRow({ family: 'Brand Sans', licence: 'commercial', files }, false)).toEqual([
       'held',
-      'Tick the box below to use it',
+      'Not used yet',
       false,
       undefined,
     ])
@@ -459,17 +460,14 @@ describe('importRows', () => {
     const text = Object.fromEntries(rows.map((r) => [r.key, [r.state, r.text]]))
     expect(text.logo).toEqual(['missing', 'Not found on the site.'])
     expect(text.primary).toEqual(['missing', 'No main colour found.'])
-    expect(text.page).toEqual([
-      'matched',
-      '#08090a · #f7f8f8, a dark site, so the portal is always dark',
-    ])
+    expect(text.page).toEqual(['matched', 'Always dark'])
     expect(text.font).toEqual(['matched', 'Inter, same as the site'])
     expect(text.shape).toEqual(['matched', 'Buttons with 4px corners'])
   })
 
   it('says a light site with no dark mode makes the portal always light', () => {
     const page = importRows(sample).find((r) => r.key === 'page')
-    expect(page?.text).toBe('#ffffff · #061b31, a light site, so the portal is always light')
+    expect(page?.text).toBe('Always light')
   })
 
   it('shows the site’s palette on the page row, and says when it brought a dark mode', () => {
@@ -479,7 +477,7 @@ describe('importRows', () => {
       darkMode: { background: '#0a2540' },
     }).find((r) => r.key === 'page')
     expect(page).toMatchObject({
-      text: '#ffffff · #061b31, the site has a dark mode, so visitors choose',
+      text: 'Light and dark',
       swatches: ['#ffffff', '#061b31', '#f6f9fc', '#e3e8ee', '#425466', '#0a2540'],
     })
   })
@@ -620,6 +618,41 @@ describe('brand assets held until confirmed', () => {
     )
   })
 
+  it('uses one asset at a time: the others stay held, and each reads from the draft', () => {
+    const held = applyBrandImport(base, withAssets, false)
+    const logoOnly = setAssetsConfirmed(held, base, withAssets, true, 'logo')
+    expect(assetsInDraft(logoOnly, withAssets)).toEqual({ logo: true, icon: false, font: false })
+    expect(logoOnly.logo.wideKey).toBe(withAssets.logo!.stagedKey)
+    expect(logoOnly.logo.icon).toEqual(base.logo.icon)
+    expect(logoOnly.customFont).toEqual(held.customFont)
+    // The rows say the same: the logo applied, the icon and the font still held.
+    const rows = importRows(withAssets, undefined, assetsInDraft(logoOnly, withAssets))
+    expect(rows.filter((r) => r.asset).map((r) => [r.key, r.state, r.applied])).toEqual([
+      ['logo', 'matched', true],
+      ['icon', 'held', false],
+      ['font', 'held', false],
+    ])
+    // Every asset used one by one is what using them all at once gives.
+    const each = (['icon', 'font'] as const).reduce(
+      (draft, asset) => setAssetsConfirmed(draft, base, withAssets, true, asset),
+      logoOnly
+    )
+    expect(each).toEqual(applyBrandImport(base, withAssets, true))
+    // Taking one back leaves the others in use.
+    const noIcon = setAssetsConfirmed(each, base, withAssets, false, 'icon')
+    expect(assetsInDraft(noIcon, withAssets)).toEqual({ logo: true, icon: false, font: true })
+    expect(noIcon.logo.icon).toEqual(base.logo.icon)
+  })
+
+  it('takes a whole import back in one, leaving held assets and rows already undone alone', () => {
+    const held = applyBrandImport(base, withAssets, false)
+    const previous = { brand: withAssets, before: base, undone: [], confirmed: false }
+    expect(revertImport(held, previous)).toEqual(base)
+    // A row the person took back already, then set by hand, stays as they set it.
+    const own = editTheme.setRadius(revertImportRow(held, base, 'shape'), 1)
+    expect(draftRadius(revertImport(own, { ...previous, undone: ['shape'] }))).toBe(1)
+  })
+
   it('unticking gives back the logo and icon the draft had before', () => {
     const before = {
       ...base,
@@ -703,7 +736,7 @@ describe('the site’s own dark mode logo', () => {
     const applied = apply(base, withDark)
     expect(applied.logo).toMatchObject({ wideKey: sample.logo!.stagedKey, darkKey: DARK })
     expect(importRows(withDark, undefined, true).find((r) => r.key === 'logo')!.text).toBe(
-      'From the site, with its dark mode version'
+      'With its dark mode version'
     )
     expect(importRows(sample, undefined, true).find((r) => r.key === 'logo')!.text).toBe(
       'From the site'
@@ -728,22 +761,6 @@ describe('the site’s own dark mode logo', () => {
       darkKey: 'header-logos/mine-dark.svg',
     })
     expect(revertImportRow(apply(base, withDark), base, 'logo').logo.darkKey ?? null).toBeNull()
-  })
-})
-
-describe('assetsLabel', () => {
-  it('names only the assets held', () => {
-    expect(assetsLabel(['logo', 'icon', 'font'])).toBe(
-      'We own this logo, icon and font, or have a licence to use them'
-    )
-    expect(assetsLabel(['logo', 'icon'])).toBe(
-      'We own this logo and icon, or have a licence to use them'
-    )
-    expect(assetsLabel(['logo', 'font'])).toBe(
-      'We own this logo and font, or have a licence to use them'
-    )
-    expect(assetsLabel(['logo'])).toBe('We own this logo, or have a licence to use it')
-    expect(assetsLabel(['font'])).toBe('We own this font, or have a licence to use it')
   })
 })
 
@@ -791,7 +808,7 @@ describe('the headings font', () => {
     expect(heldAssets(brand)).toEqual(['logo', 'font'])
     const held = applyBrandImport(base, brand, false)
     expect(held.customHeadingFont).toBeUndefined()
-    expect(row(brand, false)).toEqual(['held', 'Tick the box below to use it', false])
+    expect(row(brand, false)).toEqual(['held', 'Not used yet', false])
     const ticked = setAssetsConfirmed(held, base, brand, true)
     expect(ticked.customHeadingFont).toEqual(display)
     expect(holdsImportAssets(ticked, brand)).toBe(true)

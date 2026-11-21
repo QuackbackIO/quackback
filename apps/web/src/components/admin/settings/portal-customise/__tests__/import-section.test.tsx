@@ -6,6 +6,7 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BrandImport, SiteNotRead } from '@/lib/shared/theme/brand-import'
+import type { ImportState } from '../import-section'
 import {
   draftFromLoaded,
   draftPalette,
@@ -132,13 +133,54 @@ describe('useBrandImport and the brand assets', () => {
     if (state.status !== 'done') throw new Error('not done')
     return state
   }
+  // This site's font is a listed one, never held: only the logo and icon wait.
+  const NONE_USED = { logo: false, icon: false, font: false }
+  const BOTH_USED = { logo: true, icon: true, font: false }
+
+  it('uses the logo on its own: the icon stays held, and the person’s use is no pre-tick', async () => {
+    importFn.mockResolvedValue({ ok: true, brand: assets })
+    const { hook, steps, current, base } = setup()
+    await act(() => hook.result.current.run('example.com'))
+    act(() => hook.result.current.confirmAssets(true, 'logo'))
+    expect(steps).toHaveLength(2)
+    expect(hook.result.current.confirmed).toEqual({ logo: true, icon: false, font: false })
+    expect(current().logo).toMatchObject({ wideKey: 'header-logos/a.svg', icon: null })
+    expect(doneState(hook).preTicked).toBe(false)
+    // Used already: a second press of the same Use adds no step.
+    act(() => hook.result.current.confirmAssets(true, 'logo'))
+    expect(steps).toHaveLength(2)
+    // The publish records only what it carries.
+    expect(
+      publishInput(base, current(), publishedFromLoaded(loaded), {
+        brandAssets: confirmedImport(hook.result.current.state),
+      })?.brandAssets
+    ).toEqual({ host: 'example.com', assets: ['logo'], preTicked: false })
+    act(() => hook.result.current.confirmAssets(false, 'logo'))
+    expect(hook.result.current.confirmed).toEqual(NONE_USED)
+    expect(current().logo.wideKey).toBeNull()
+  })
+
+  it('takes the whole import back as one step, and keeps the results listed', async () => {
+    importFn.mockResolvedValue({ ok: true, brand: { ...assets, portalOnSite: true } })
+    const { hook, steps, current, base } = setup()
+    await act(() => hook.result.current.run('example.com'))
+    act(() => hook.result.current.undoRow('primary'))
+    act(() => hook.result.current.undoAll())
+    expect(steps).toHaveLength(3)
+    expect(current()).toEqual(base)
+    expect(hook.result.current.confirmed).toEqual(NONE_USED)
+    expect(doneState(hook).undone).toEqual(['primary', 'logo', 'icon', 'page', 'font', 'shape'])
+    // Nothing left to take back: no step.
+    act(() => hook.result.current.undoAll())
+    expect(steps).toHaveLength(3)
+  })
 
   it('holds the logo and icon when the portal is on another domain', async () => {
     importFn.mockResolvedValue({ ok: true, brand: { ...assets, portalOnSite: false } })
     const { hook, steps, current } = setup()
     await act(() => hook.result.current.run('example.com'))
     expect(doneState(hook).preTicked).toBe(false)
-    expect(hook.result.current.confirmed).toBe(false)
+    expect(hook.result.current.confirmed).toEqual(NONE_USED)
     expect(current().logo).toMatchObject({ wideKey: null, icon: null })
     expect(draftPalette(current(), 'light').primary).toBe('#533afd')
     expect(steps).toHaveLength(1)
@@ -149,7 +191,7 @@ describe('useBrandImport and the brand assets', () => {
     const { hook, current } = setup()
     await act(() => hook.result.current.run('example.com'))
     expect(doneState(hook).preTicked).toBe(true)
-    expect(hook.result.current.confirmed).toBe(true)
+    expect(hook.result.current.confirmed).toEqual(BOTH_USED)
     expect(current().logo.wideKey).toBe('header-logos/a.svg')
   })
 
@@ -160,12 +202,12 @@ describe('useBrandImport and the brand assets', () => {
     act(() => hook.result.current.confirmAssets(true))
     expect(steps).toHaveLength(2)
     expect(current().logo).toMatchObject({ wideKey: 'header-logos/a.svg', icon: { key: icon.key } })
-    expect(hook.result.current.confirmed).toBe(true)
+    expect(hook.result.current.confirmed).toEqual(BOTH_USED)
     expect(doneState(hook).preTicked).toBe(false)
     act(() => hook.result.current.confirmAssets(false))
     expect(steps).toHaveLength(3)
     expect(current().logo).toMatchObject({ wideKey: null, icon: null })
-    expect(hook.result.current.confirmed).toBe(false)
+    expect(hook.result.current.confirmed).toEqual(NONE_USED)
   })
 
   it('follows the editor’s own undo: assets an undo brings back are ticked, and recorded on publish', async () => {
@@ -174,11 +216,11 @@ describe('useBrandImport and the brand assets', () => {
     await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.confirmAssets(true))
     act(() => hook.result.current.confirmAssets(false))
-    expect(hook.result.current.confirmed).toBe(false)
+    expect(hook.result.current.confirmed).toEqual(NONE_USED)
     // Undo of the untick: the logo and icon are in the draft again.
     act(() => editorUndo())
     expect(current().logo.wideKey).toBe('header-logos/a.svg')
-    expect(hook.result.current.confirmed).toBe(true)
+    expect(hook.result.current.confirmed).toEqual(BOTH_USED)
     const input = publishInput(base, current(), publishedFromLoaded(loaded), {
       brandAssets: confirmedImport(hook.result.current.state),
     })
@@ -189,7 +231,7 @@ describe('useBrandImport and the brand assets', () => {
     })
     // Undo again, back to the held import: nothing imported to publish, nothing recorded.
     act(() => editorUndo())
-    expect(hook.result.current.confirmed).toBe(false)
+    expect(hook.result.current.confirmed).toEqual(NONE_USED)
     expect(
       publishInput(base, current(), publishedFromLoaded(loaded), {
         brandAssets: confirmedImport(hook.result.current.state),
@@ -203,7 +245,7 @@ describe('useBrandImport and the brand assets', () => {
     await act(() => hook.result.current.run('example.com'))
     act(() => hook.result.current.confirmAssets(false))
     act(() => hook.result.current.confirmAssets(true))
-    expect(hook.result.current.confirmed).toBe(true)
+    expect(hook.result.current.confirmed).toEqual(BOTH_USED)
     expect(doneState(hook).preTicked).toBe(false)
   })
 
@@ -246,68 +288,63 @@ describe('importSummary', () => {
 })
 
 describe('ImportSection', () => {
-  it('submits the address and lists the rows with Undo and the upload for a licensed font', async () => {
+  const doneWith = (over: Partial<Extract<ImportState, { status: 'done' }>> = {}) => ({
+    status: 'done' as const,
+    host: 'example.com',
+    brand,
+    before: { logo: { wideKey: null, mode: 'logo_and_name', icon: null } } as never,
+    undone: [],
+    preTicked: false,
+    ...over,
+  })
+
+  it('submits the address, then leads the results with one line and one Undo import', async () => {
     const onRun = vi.fn()
     const onUndoRow = vi.fn()
+    const onUndoAll = vi.fn()
     const onUploadFont = vi.fn()
-    const { rerender } = render(
-      <ImportSection
-        state={{ status: 'idle' }}
-        onRun={onRun}
-        onUndoRow={onUndoRow}
-        onUploadWide={vi.fn()}
-        onUploadFont={onUploadFont}
-      />
-    )
+    const props = { onRun, onUndoRow, onUndoAll, onUploadWide: vi.fn(), onUploadFont }
+    const { rerender } = render(<ImportSection state={{ status: 'idle' }} {...props} />)
     fireEvent.change(screen.getByLabelText('Your website'), { target: { value: 'example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Import' }))
     expect(onRun).toHaveBeenCalledWith('example.com')
     const status = screen.getByRole('status')
     expect(status).toBeEmptyDOMElement()
 
-    rerender(
-      <ImportSection
-        state={{ status: 'reading', host: 'example.com' }}
-        onRun={onRun}
-        onUndoRow={onUndoRow}
-        onUploadWide={vi.fn()}
-        onUploadFont={onUploadFont}
-      />
-    )
+    rerender(<ImportSection state={{ status: 'reading', host: 'example.com' }} {...props} />)
     // One status region, there before the read, says each stage once.
     expect(status).toBe(screen.getByRole('status'))
-    expect(status).toHaveTextContent('Reading example.com: logo, colours, font and shape…')
+    expect(status).toHaveTextContent('Reading example.com…')
     expect(screen.getAllByText(/Reading example\.com/)).toHaveLength(1)
 
     rerender(
       <ImportSection
-        state={{
-          status: 'done',
-          host: 'example.com',
-          brand,
-          before: { logo: { wideKey: null, mode: 'logo_and_name', icon: null } } as never,
-          undone: ['logo'],
-          preTicked: false,
-        }}
-        confirmed
-        onRun={onRun}
-        onUndoRow={onUndoRow}
-        onUploadWide={vi.fn()}
-        onUploadFont={onUploadFont}
+        state={doneWith({ undone: ['logo'] })}
+        confirmed={{ logo: true, icon: false, font: false }}
+        {...props}
       />
     )
-    expect(screen.getByText('#533afd, from the main button')).toBeInTheDocument()
-    // The logo row was taken back: no Undo left on it.
-    expect(screen.getAllByRole('button', { name: /^Undo/ })).toHaveLength(4)
+    expect(status).toBe(screen.getByRole('status'))
+    // Four rows still in the draft: main colour, page, font and shape.
+    expect(status).toHaveTextContent('Found. From example.com · 4 applied')
+    // After an import the field gives way to the result, with nothing greyed out.
+    expect(screen.queryByLabelText('Your website')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo import' }))
+    expect(onUndoAll).toHaveBeenCalledOnce()
+
+    // Each row's own Undo stays, quieter; the logo was taken back and has none.
+    expect(screen.getByText('#533afd')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Undo [A-Z]/ })).toHaveLength(4)
     fireEvent.click(screen.getByRole('button', { name: 'Undo Main colour' }))
     expect(onUndoRow).toHaveBeenCalledWith('primary')
     fireEvent.click(screen.getByRole('button', { name: 'Upload Brand Sans' }))
     expect(onUploadFont).toHaveBeenCalledWith('Brand Sans')
-    expect(status).toBe(screen.getByRole('status'))
-    expect(status).toHaveTextContent(
-      'Found. Matched from example.com. Everything is in your draft until you publish.'
-    )
-    expect(screen.getAllByText(/Matched from example\.com/)).toHaveLength(1)
+    // The main colour as a swatch with its exact value.
+    expect(screen.getByTitle('#533afd')).toHaveStyle({ backgroundColor: '#533afd' })
+
+    // Import another brings the field back, empty and ready.
+    fireEvent.click(screen.getByRole('button', { name: 'Import another website' }))
+    expect(screen.getByLabelText('Your website')).toHaveValue('')
   })
 
   it('announces the read when the section opens with one under way (started from the chat)', async () => {
@@ -327,29 +364,20 @@ describe('ImportSection', () => {
     expect(first).toContain('role="status"')
     expect(first).not.toContain('Reading')
     render(section)
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Reading example.com: logo, colours, font and shape…'
-    )
+    expect(screen.getByRole('status')).toHaveTextContent('Reading example.com…')
   })
 
-  describe('the brand assets tick', () => {
+  describe('the brand assets: a Use on each', () => {
     const icon = { key: 'logos/n.png', faviconKey: 'favicons/n.png', url: '/n.png' }
     const files = [{ key: 'fonts/s.woff2', weight: 400, style: 'normal' as const }]
-    const done = (over: Partial<BrandImport>, confirmed: boolean) => ({
-      confirmed,
-      state: {
-        status: 'done' as const,
-        host: 'example.com',
-        brand: { ...brand, ...over },
-        before: { logo: { wideKey: null, mode: 'logo_and_name', icon: null } } as never,
-        undone: [],
-        preTicked: false,
-      },
-    })
-    const show = ({ state, confirmed }: ReturnType<typeof done>, onConfirm = vi.fn()) => {
+    const show = (
+      over: Partial<BrandImport>,
+      confirmed: { logo: boolean; icon: boolean; font: boolean },
+      onConfirm = vi.fn()
+    ) => {
       render(
         <ImportSection
-          state={state}
+          state={doneWith({ brand: { ...brand, ...over } })}
           confirmed={confirmed}
           onRun={vi.fn()}
           onUndoRow={vi.fn()}
@@ -361,48 +389,52 @@ describe('ImportSection', () => {
       return onConfirm
     }
 
-    it('holds the logo, icon and font behind one unticked box, with no note under it', () => {
+    it('shows the logo and icon as thumbnails, each held with its own Use, and says why once', () => {
       const siteFont = { family: 'Brand Sans', licence: 'commercial' as const, files }
-      const onConfirm = show(done({ icon, siteFont }, false))
-      const box = screen.getByRole('checkbox', {
-        name: 'We own this logo, icon and font, or have a licence to use them',
-      })
-      expect(box).not.toBeChecked()
-      expect(screen.getAllByText('Tick the box below to use it')).toHaveLength(3)
-      expect(screen.getAllByLabelText('Waiting for your OK')).toHaveLength(3)
+      const onConfirm = show({ icon, siteFont }, { logo: false, icon: false, font: false })
+      const images = document.querySelectorAll('img')
+      expect([...images].map((img) => img.getAttribute('src'))).toEqual([
+        '/api/storage/header-logos/a.svg',
+        '/n.png',
+      ])
+      for (const name of ['logo', 'icon', 'font']) {
+        const use = screen.getByRole('button', { name: `Use ${name}` })
+        expect(use).toHaveAttribute('aria-pressed', 'false')
+        expect(use).toHaveAccessibleDescription('Use only what you own or have a licence for.')
+      }
+      expect(screen.getAllByText('Use only what you own or have a licence for.')).toHaveLength(1)
+      expect(screen.getByRole('status')).toHaveTextContent('logo, icon and font waiting')
       // A held row changed nothing: no Undo on it.
-      for (const label of ['Logo', 'Icon', 'Font'])
+      for (const label of ['Logo', 'Icon', 'Text font'])
         expect(screen.queryByRole('button', { name: `Undo ${label}` })).toBeNull()
-      expect(screen.queryByText(/Ticked for you|so we ask|Recorded with/)).toBeNull()
-      fireEvent.click(box)
-      expect(onConfirm).toHaveBeenCalledWith(true)
+      fireEvent.click(screen.getByRole('button', { name: 'Use logo' }))
+      expect(onConfirm).toHaveBeenCalledWith(true, 'logo')
     })
 
-    it('shows them applied once ticked, and unticks', () => {
+    it('says Using on what is in use, and a second press takes it back', () => {
       const siteFont = { family: 'Brand Sans', licence: 'commercial' as const, files }
-      const onConfirm = show(done({ icon, siteFont }, true))
-      const box = screen.getByRole('checkbox')
-      expect(box).toBeChecked()
-      expect(screen.getByText('From the site')).toBeInTheDocument()
+      const onConfirm = show({ icon, siteFont }, { logo: true, icon: false, font: true })
+      const logo = screen.getByRole('button', { name: 'Use logo' })
+      expect(logo).toHaveAttribute('aria-pressed', 'true')
+      expect(logo).toHaveTextContent('Using')
+      expect(screen.getByRole('button', { name: 'Use icon' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      )
       expect(screen.getByText('Brand Sans, from the site')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Undo Logo' })).toBeInTheDocument()
-      fireEvent.click(box)
-      expect(onConfirm).toHaveBeenCalledWith(false)
+      expect(screen.getByRole('status')).toHaveTextContent('icon waiting')
+      fireEvent.click(logo)
+      expect(onConfirm).toHaveBeenCalledWith(false, 'logo')
     })
 
-    it('leaves the font out of the label when a font service serves it', () => {
-      show(done({ icon, siteFont: { family: 'Brand Sans', notCopied: 'service' } }, true))
-      expect(
-        screen.getByRole('checkbox', {
-          name: 'We own this logo and icon, or have a licence to use them',
-        })
-      ).toBeChecked()
-      expect(screen.getByText('Can’t be copied. Inter stands in.')).toBeInTheDocument()
-    })
-
-    it('shows no box when the site gave nothing to confirm', () => {
-      show(done({ logo: undefined, missing: ['logo', 'icon'] }, false))
-      expect(screen.queryByRole('checkbox')).toBeNull()
+    it('offers no Use, and no note, when the site gave nothing to confirm', () => {
+      show(
+        { logo: undefined, missing: ['logo', 'icon'] },
+        { logo: false, icon: false, font: false }
+      )
+      expect(screen.queryByRole('button', { name: /^Use (logo|icon|font)$/ })).toBeNull()
+      expect(screen.queryByText(/what you own/)).toBeNull()
+      expect(screen.getByRole('button', { name: 'Upload' })).toBeInTheDocument()
     })
   })
 
