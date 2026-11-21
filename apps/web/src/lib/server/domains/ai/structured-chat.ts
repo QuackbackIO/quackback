@@ -93,11 +93,36 @@ export interface StructuredChatInput<S extends z.ZodType> {
   middleware?: ChatMiddleware[]
 }
 
+/**
+ * `chat({ outputSchema })` uses the adapter's `structuredOutputStream` whenever
+ * it exists, so every structured call goes out as `json_schema` + `stream: true`.
+ * Some OpenAI-compatible servers (Cloudflare Workers AI, for one) ignore the
+ * schema while streaming and return text such as `{"results":}` that never
+ * parses. `AI_STRUCTURED_OUTPUT_STREAM=false` hides the streaming method, so
+ * `chat()` falls back to the adapter's one-shot `structuredOutput` with
+ * `stream: false`. Unset keeps today's behaviour.
+ */
+export function withStructuredOutputStreaming<A extends object>(
+  adapter: A,
+  streaming: boolean | undefined
+): A {
+  if (streaming !== false) return adapter
+  return new Proxy(adapter, {
+    get(target, prop, receiver) {
+      if (prop === 'structuredOutputStream') return undefined
+      return Reflect.get(target, prop, receiver)
+    },
+  })
+}
+
 export async function structuredChat<S extends z.ZodType>(
   input: StructuredChatInput<S>
 ): Promise<z.infer<S>> {
   const baseURL = config.openaiBaseUrl!
-  const adapter = openaiCompatibleText(input.model, { baseURL, apiKey: config.openaiApiKey! })
+  const adapter = withStructuredOutputStreaming(
+    openaiCompatibleText(input.model, { baseURL, apiKey: config.openaiApiKey! }),
+    config.aiStructuredOutputStream
+  )
   const common = {
     adapter,
     messages: input.messages,

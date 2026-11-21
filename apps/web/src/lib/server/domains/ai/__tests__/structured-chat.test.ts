@@ -12,6 +12,7 @@ const hoisted = vi.hoisted(() => ({
   cfg: {
     openaiBaseUrl: 'https://llm.internal/v1' as string | null,
     aiRequireParameters: undefined,
+    aiStructuredOutputStream: undefined as boolean | undefined,
   },
 }))
 
@@ -31,6 +32,9 @@ vi.mock('@/lib/server/config', () => ({
     get aiRequireParameters() {
       return hoisted.cfg.aiRequireParameters
     },
+    get aiStructuredOutputStream() {
+      return hoisted.cfg.aiStructuredOutputStream
+    },
   },
 }))
 vi.mock('@/lib/server/logger', () => {
@@ -42,6 +46,7 @@ import {
   isResponseFormatRejection,
   resetStructuredFallbackMemory,
   structuredChat,
+  withStructuredOutputStreaming,
 } from '../structured-chat'
 
 const Schema = z.object({ sentiment: z.enum(['positive', 'negative']), confidence: z.number() })
@@ -261,5 +266,35 @@ describe('isResponseFormatRejection', () => {
     ).toBe(false)
     expect(isResponseFormatRejection(null)).toBe(false)
     expect(isResponseFormatRejection('response_format')).toBe(false)
+  })
+})
+
+describe('AI_STRUCTURED_OUTPUT_STREAM', () => {
+  const adapter = {
+    name: 'a',
+    structuredOutput: () => 'one-shot',
+    structuredOutputStream: () => 'stream',
+  }
+
+  it('keeps the streaming method unless the flag is false', () => {
+    expect(withStructuredOutputStreaming(adapter, undefined)).toBe(adapter)
+    expect(withStructuredOutputStreaming(adapter, true)).toBe(adapter)
+  })
+
+  it('hides structuredOutputStream when false so chat() uses the one-shot call', () => {
+    const wrapped = withStructuredOutputStreaming(adapter, false)
+    expect(wrapped.structuredOutputStream).toBeUndefined()
+    expect(wrapped.structuredOutput()).toBe('one-shot')
+    expect(wrapped.name).toBe('a')
+  })
+
+  it('passes the wrapped adapter to chat()', async () => {
+    hoisted.cfg.aiStructuredOutputStream = false
+    hoisted.chat.mockResolvedValueOnce({ sentiment: 'positive', confidence: 0.9 })
+    await structuredChat(base)
+    const sent = hoisted.chat.mock.calls.at(-1)![0].adapter
+    expect(sent.structuredOutputStream).toBeUndefined()
+    expect(sent.model).toBe('m')
+    hoisted.cfg.aiStructuredOutputStream = undefined
   })
 })
