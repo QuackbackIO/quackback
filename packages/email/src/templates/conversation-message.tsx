@@ -1,6 +1,7 @@
 import { Column, Heading, Link, Row, Section, Text } from '@react-email/components'
 import { EmailLayout } from './email-layout'
 import { typography, colors, utils } from './shared-styles'
+import { emailBodyHtml } from './email-body-html'
 
 interface ConversationMessageEmailProps {
   heading: string
@@ -69,7 +70,7 @@ export function ConversationMessageEmail({
                   fontSize: '16px',
                   lineHeight: '26px',
                 }}
-                dangerouslySetInnerHTML={{ __html: bodyHtml }}
+                dangerouslySetInnerHTML={{ __html: emailBodyHtml(bodyHtml) }}
               />
             ) : (
               <Text
