@@ -83,7 +83,13 @@ import type { PortalSection } from '@/lib/shared/custom-domains'
 import { AdvancedCssDrawer, AdvancedCssSection, advancedCssSummary } from './advanced-css-section'
 import { HelpCenterHomeSection, PageNote, WelcomeSection } from './page-sections'
 import { ImportOverlay } from './import-overlay'
-import { confirmedImport, ImportSection, importSummary, useBrandImport } from './import-section'
+import {
+  confirmedImport,
+  importBrief,
+  ImportSection,
+  importSummary,
+  useBrandImport,
+} from './import-section'
 import { AskDock } from './ask-dock'
 import { siteColoursOf } from './brand-apply'
 import { track } from '@/lib/client/analytics'
@@ -192,9 +198,12 @@ export function CustomiseEditor({
     [pages]
   )
 
-  // ---- Panel state: one section open at a time ----
+  // ---- Panel state: one section open at a time, or the chat over them ----
   const [open, setOpen] = useState<SectionId | null>(null)
   const [cssOpen, setCssOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  // Below md the panel and the preview take turns: one shows at a time.
+  const [mobileView, setMobileView] = useState<'edit' | 'preview'>('edit')
   const openSection = useCallback(
     (section: SectionId | null) => {
       setOpen(section)
@@ -208,9 +217,22 @@ export function CustomiseEditor({
     (target: PreviewEditTarget) => {
       const { section, page: needs } = sectionForTarget(target)
       if (needs) showPage(needs)
+      setChatOpen(false)
       setOpen(section)
     },
     [showPage]
+  )
+  // A chat reply's line opens the section that makes that change, in view.
+  const openFromChat = useCallback(
+    (section: SectionId) => {
+      openSection(section)
+      requestAnimationFrame(() =>
+        document
+          .querySelector(`[data-section="${section}"]`)
+          ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      )
+    },
+    [openSection]
   )
 
   // ---- Writes ----
@@ -369,6 +391,16 @@ export function CustomiseEditor({
     () => siteColoursOf(brandImport.state.status === 'done' ? brandImport.state.brand : null),
     [brandImport.state]
   )
+  // The chat's reply to an import it started follows the import in one line.
+  const { logo: usingLogo, icon: usingIcon, font: usingFont } = brandImport.confirmed
+  const brief = useMemo(
+    () => importBrief(brandImport.state, { logo: usingLogo, icon: usingIcon, font: usingFont }),
+    [brandImport.state, usingLogo, usingIcon, usingFont]
+  )
+  // A phone shows the portal as a phone does.
+  useEffect(() => {
+    if (window.matchMedia?.('(max-width: 767px)').matches) setDevice('mobile')
+  }, [])
 
   // ---- Derived values ----
   const font = draftFont(draft)
@@ -481,10 +513,17 @@ export function CustomiseEditor({
         onPublish={publish}
       />
 
+      <MobileViewTabs view={mobileView} onView={setMobileView} />
+
       <div className="flex min-h-0 flex-1">
         {/* ── Panel ── */}
-        <div className="flex w-[332px] shrink-0 flex-col border-e border-border">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+        <div
+          className={cn(
+            'flex w-full flex-col border-border md:w-[332px] md:shrink-0 md:border-e',
+            mobileView === 'preview' && 'max-md:hidden'
+          )}
+        >
+          <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 pb-6', chatOpen && 'hidden')}>
             <GroupLabel>Whole portal</GroupLabel>
             <PanelSection
               id="import"
@@ -499,6 +538,7 @@ export function CustomiseEditor({
                 confirmed={brandImport.confirmed}
                 onRun={(input) => void brandImport.run(input)}
                 onUndoRow={brandImport.undoRow}
+                onUndoAll={brandImport.undoAll}
                 onConfirmAssets={brandImport.confirmAssets}
                 onUploadWide={() => openSection('header')}
                 onUploadFont={(family) => {
@@ -643,12 +683,21 @@ export function CustomiseEditor({
             onChanged={flashNow}
             page={pageId}
             importDone={brandImport.state.status === 'done'}
+            importBrief={brief}
             notice={notice}
+            chatOpen={chatOpen}
+            onChatOpenChange={setChatOpen}
+            onOpenSection={openFromChat}
           />
         </div>
 
         {/* ── Canvas ── */}
-        <div className="flex min-w-0 flex-1 flex-col bg-muted/40">
+        <div
+          className={cn(
+            'flex min-w-0 flex-1 flex-col bg-muted/40',
+            mobileView === 'edit' && 'max-md:hidden'
+          )}
+        >
           <CanvasToolbar
             pages={pages}
             pageId={pageId}
@@ -740,6 +789,41 @@ function useEditorShortcuts(publish: PortalEditor['publish'], undo: () => void, 
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [publish, undo, redo])
 }
+
+/** Below md: Edit or Preview, one at a time. Both stay mounted; the preview keeps its frame. */
+const MobileViewTabs = memo(function MobileViewTabs({
+  view,
+  onView,
+}: {
+  view: 'edit' | 'preview'
+  onView: (view: 'edit' | 'preview') => void
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Customise"
+      className="flex h-10 shrink-0 items-stretch border-b border-border px-3 md:hidden"
+    >
+      {(['edit', 'preview'] as const).map((id) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={view === id}
+          onClick={() => onView(id)}
+          className={cn(
+            '-mb-px flex-1 border-b-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            view === id
+              ? 'border-foreground text-foreground'
+              : 'border-transparent text-muted-foreground'
+          )}
+        >
+          {id === 'edit' ? 'Edit' : 'Preview'}
+        </button>
+      ))}
+    </div>
+  )
+})
 
 function GroupLabel({ children }: { children: ReactNode }) {
   return <p className="pt-4 pb-1 text-xs font-medium text-muted-foreground">{children}</p>
@@ -839,9 +923,11 @@ function CanvasToolbar({
   onView: (view: CompareView) => void
 }) {
   return (
-    <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background px-3">
+    <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-3 md:gap-3">
       <PagePicker pages={pages} pageId={pageId} onPage={onPage} />
-      <DevicePicker device={device} onDevice={onDevice} />
+      <div className="max-md:hidden">
+        <DevicePicker device={device} onDevice={onDevice} />
+      </div>
       <CompareSwitch view={view} canBefore={canBefore} canLive={canLive} onView={onView} />
       <PreviewModeToggle
         previewMode={previewMode}
@@ -849,7 +935,7 @@ function CanvasToolbar({
         onToggleMode={onToggleMode}
       />
       {fit ? (
-        <span className="text-xs tabular-nums text-muted-foreground">
+        <span className="text-xs tabular-nums text-muted-foreground max-md:hidden">
           {fit.width}px · {Math.round(fit.scale * 100)}%
         </span>
       ) : null}
@@ -869,7 +955,7 @@ const PagePicker = memo(function PagePicker({
 }) {
   return (
     <Select value={pageId} onValueChange={(id) => onPage(id as CustomisePageId)}>
-      <SelectTrigger className="h-8 w-40" aria-label="Page">
+      <SelectTrigger className="h-8 w-32 md:w-40" aria-label="Page">
         <SelectValue>{pages.find((p) => p.id === pageId)?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
