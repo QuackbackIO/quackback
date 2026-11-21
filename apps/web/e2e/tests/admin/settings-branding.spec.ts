@@ -59,7 +59,8 @@ test.describe('Admin Portal Customise', () => {
     await expect(publish).toBeEnabled()
     await expect(page.getByText('1 change')).toBeVisible()
 
-    await page.getByRole('link', { name: 'Portal' }).click()
+    // Exact: the header also has "Open the live portal" (#1236).
+    await page.getByRole('link', { name: 'Portal', exact: true }).click()
     const dialog = page.getByRole('alertdialog')
     await expect(dialog).toContainText('Leave without publishing?')
     await dialog.getByRole('button', { name: 'Keep editing' }).click()
