@@ -373,6 +373,9 @@ export interface EventConversationData extends EventConversationRef {
   createdAt: string
   lastMessageAt: string
   resolvedAt: string | null
+  /** The customer's first message. Read at delivery for chat channel notices
+   *  (Slack, Discord); absent from webhook and stored event payloads. */
+  openingMessage?: string | null
 }
 
 export interface EventMessageData {

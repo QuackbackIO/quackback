@@ -75,6 +75,15 @@ describe('buildDiscordMessage: conversation.created', () => {
     expect(embed?.footer?.text).toContain('messenger')
   })
 
+  it('quotes the opening message as plain text', () => {
+    const msg = buildDiscordMessage(
+      conversationCreated({ openingMessage: '<p>My login fails @everyone</p>' }),
+      links
+    )
+    expect(msg?.content).toBeUndefined()
+    expect(msg?.embeds?.[0]?.description).toBe('My login fails @everyone')
+  })
+
   it('falls back for anonymous visitors and missing subjects', () => {
     const embed = buildDiscordMessage(
       conversationCreated({ subject: '  ', visitorEmail: null }),
