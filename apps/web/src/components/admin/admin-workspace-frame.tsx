@@ -64,7 +64,11 @@ export function AdminWorkspaceFrame({
       >
         <div
           data-admin-canvas=""
-          className="flex h-full flex-col overflow-hidden bg-background pt-14 text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:pt-0 sm:shadow-chrome-canvas"
+          className={cn(
+            'flex h-full flex-col overflow-hidden bg-background text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:pt-0 sm:shadow-chrome-canvas',
+            // Room for the phone's top bar; a full-page route has its own bar and no room to spare.
+            collapsed ? 'pt-0' : 'pt-14'
+          )}
         >
           {notices}
           <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
