@@ -105,3 +105,24 @@ any other type would make it call its real provider.
   everything but `@quarantine`.
 - `product-isolated`: the `@isolated` tests, one worker, own database.
 - `product-core-report` merges the shard reports and fails if no test ran.
+
+## Quarantine and nightly failures
+
+The same rules cover the product, support and older e2e suites.
+
+- A test that fails for a reason the suite cannot fix gets the `@quarantine`
+  tag and an entry in [`e2e/QUARANTINE.md`](../../QUARANTINE.md) that starts
+  with its journey id and names its fix: `- FBA-I-11 · fix: #1223`. The fix is
+  the PR that fixes the cause, or an issue that tracks it; with neither, open
+  an issue first. The fix PR lifts the quarantine: it removes the tag, the
+  annotation and the entry.
+- `quarantine-ledger.test.ts` (`src/lib/server/e2e-harness/__tests__/`) runs
+  in the unit suite on every PR. It fails, naming the ids, when a quarantined
+  test has no entry, an entry matches no quarantined test, or an entry names
+  no fix.
+- The nightly run (03:17 UTC, scheduled CI on main) runs every suite in full.
+  When any e2e job fails, the `nightly-triage` job comments on the open
+  GitHub issue titled `Nightly e2e failures` (opening it if none is open) with
+  the run link, the failed jobs and the failing tests. A green night adds a
+  short comment only while that issue is open. Close the issue once the
+  failures are fixed or quarantined.

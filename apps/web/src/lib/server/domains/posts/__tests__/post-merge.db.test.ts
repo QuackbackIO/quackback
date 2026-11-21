@@ -651,10 +651,9 @@ describe.skipIf(!fixture.available)('merge preview and merge suggestions (real D
     expect(await statusOf(cd)).toBe('pending')
   })
 
-  // FBA-M-12, quarantined (apps/web/e2e/QUARANTINE.md): mergePost never touches
-  // merge_suggestions, so a suggestion naming a post merged by hand stays
-  // pending until it expires and accepting it fails with ALREADY_MERGED.
-  it.skip('FBA-M-12 a manual merge resolves the pending suggestions that name the merged post', async () => {
+  // FBA-M-12: a suggestion naming a post merged by hand must not stay pending
+  // until it expires (accepting it would fail with ALREADY_MERGED).
+  it('FBA-M-12 a manual merge resolves the pending suggestions that name the merged post', async () => {
     const author = await seedPrincipal('Manual author')
     const actor = await seedPrincipal('Manual actor')
     const boardId = await seedBoard()
