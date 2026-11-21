@@ -101,6 +101,14 @@ export interface JobDefinition {
   /** Cron schedule that enqueues this job. Absent for jobs enqueued on demand. */
   cron?: string
   /**
+   * Run the slot in progress when a scheduler first sees this cron, instead of
+   * adopting it and waiting for the next one. For a daily job whose missed run
+   * costs more than a repeat: a loop started for a workspace that woke from
+   * dormancy (or after a restart) would otherwise wait up to a day. The slot's
+   * dedupe key still makes it a no-op when the slot already ran.
+   */
+  runOnFirstPass?: boolean
+  /**
    * Gate on `cron`, evaluated per tick. A false answer means the schedule is
    * inert — no row is written — rather than the job being enqueued and the
    * handler returning early, which would fill the table with no-ops.
@@ -220,6 +228,9 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
   {
     name: 'page-view-partitions',
     cron: '30 2 * * *',
+    // A parked workspace has no loop, so its partition window can run out
+    // while it sleeps. The loop that wakes it must not wait for tomorrow's slot.
+    runOnFirstPass: true,
     maxAttempts: 3,
     handler: () =>
       import('@/lib/server/domains/analytics/partition-maintenance-queue').then(
