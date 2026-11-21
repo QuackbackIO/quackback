@@ -4,7 +4,7 @@
  * Ask's request carries it. Pure; the editor applies the result as one step.
  */
 import { fontIdForValue, normalizeFontSans, tryCssColorToHex } from '@/lib/shared/theme'
-import { BRANDING_FONTS } from '@/lib/shared/theme/fonts'
+import { BRANDING_FONTS, type BrandingFontId } from '@/lib/shared/theme/fonts'
 import {
   applyTabsPatch,
   HEADER_AUTO,
@@ -69,13 +69,55 @@ function coloursOf(palette: Palette): AskDraftContext['colours']['light'] {
   return out
 }
 
+/** A stack's families, unquoted and lower case. */
+const familiesOf = (stack: string) =>
+  stack
+    .split(',')
+    .map((family) =>
+      family
+        .trim()
+        .replace(/^["']|["']$/g, '')
+        .toLowerCase()
+    )
+    .filter(Boolean)
+
+/** Generic families every stack ends in: they name no font of their own. */
+const GENERIC = new Set([
+  'ui-sans-serif',
+  'ui-serif',
+  'ui-monospace',
+  'system-ui',
+  'sans-serif',
+  'serif',
+  'monospace',
+  '-apple-system',
+])
+
+/**
+ * The listed font a draft's stack is, by its first family when the stack is
+ * not one the list has word for word (a saved `"Inter", ui-sans-serif, …`
+ * is Inter, whose listed stack starts with `"Inter Variable"`). Null for a
+ * font the list does not have: Ask then never sees a gap to fill.
+ */
+function listedFontId(stack: string): BrandingFontId | null {
+  const value = normalizeFontSans(stack)
+  const exact = fontIdForValue(value)
+  if (exact) return exact
+  const first = familiesOf(value)[0]
+  if (!first || GENERIC.has(first)) return fontIdForValue(value)
+  const match = BRANDING_FONTS.find((font) =>
+    familiesOf(font.value).some((family) => !GENERIC.has(family) && family === first)
+  )
+  return match?.id ?? null
+}
+
 /** The draft as Ask's request carries it: never Advanced CSS, logo keys or font files. */
 export function summariseDraftForAsk(draft: PortalDraft): AskDraftContext {
   return {
     themeMode: draft.themeMode,
     buttonShape: draft.buttonShape,
     corners: draftRadius(draft),
-    font: draft.customFont ? null : fontIdForValue(normalizeFontSans(draftFont(draft))),
+    font: draft.customFont ? null : listedFontId(draftFont(draft)),
     colours: {
       light: coloursOf(draftPalette(draft, 'light')),
       dark: coloursOf(draftPalette(draft, 'dark')),

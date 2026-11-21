@@ -167,6 +167,41 @@ describe('askPortalCustomise: the model', () => {
     expect(answer.reply).not.toMatch(/[–—]/)
   })
 
+  it('keeps a header request to the header: what the model repeats from the draft is dropped', async () => {
+    // A radius between stops is shown at its nearest stop; the model repeats it,
+    // the font and the main colour while setting the header.
+    const current = draft({ themeMode: 'user', corners: 0.625 })
+    mockStructuredChat.mockImplementation(async () => ({
+      patch: {
+        colours: {
+          light: { header: '#0b1f3a', main: '#2563EB' },
+          dark: { header: '#0b1f3a' },
+        },
+        font: 'inter',
+        corners: 0.5,
+        buttonShape: 'pill',
+      },
+    }))
+    const answer = await askPortalCustomise({ request: 'Make the header navy', draft: current })
+    expect(answer).toMatchObject({ outcome: 'patch' })
+    if (answer.outcome !== 'patch') throw new Error('unreachable')
+    expect(answer.patch).toEqual({
+      colours: { light: { header: '#0b1f3a' }, dark: { header: '#0b1f3a' } },
+    })
+    const user = mockStructuredChat.mock.calls[0]![0].messages[0]!.content
+    expect(user).toContain('"corners":0.5')
+    expect(mockStructuredChat.mock.calls[0]![0].systemPrompts.join('\n')).toContain(
+      'a request about the header changes the header colour alone'
+    )
+  })
+
+  it('keeps the patch as the model gave it when it only repeats the draft', async () => {
+    mockStructuredChat.mockImplementation(async () => ({ patch: { font: 'inter' } }))
+    const answer = await askPortalCustomise({ request: 'Use Inter', draft: draft() })
+    // The editor answers that it already looks that way.
+    expect(answer).toMatchObject({ outcome: 'patch', patch: { font: 'inter' } })
+  })
+
   it('sends the request, the draft and few-shots, under its own usage step', async () => {
     mockStructuredChat.mockImplementation(async () => ({ patch: { buttonShape: 'corners' } }))
     await askPortalCustomise({ request: OPEN_REQUEST, draft: draft(), page: 'help' })

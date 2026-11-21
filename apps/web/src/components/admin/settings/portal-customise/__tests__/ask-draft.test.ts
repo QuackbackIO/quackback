@@ -255,6 +255,17 @@ describe('summariseDraftForAsk', () => {
     expect(JSON.stringify(summary)).not.toMatch(/linear-gradient|secret|fonts\//)
   })
 
+  it('names the listed font a saved stack is, even when the stack is not the list’s word for word', () => {
+    // How a workspace's Inter is saved: Ask must see Inter, never a gap to fill.
+    const inter = (fontSans: string) =>
+      summariseDraftForAsk(
+        draft({ theme: { themeMode: 'light', light: { fontSans }, dark: { fontSans } } })
+      ).font
+    expect(inter('"Inter", ui-sans-serif, system-ui, sans-serif')).toBe('inter')
+    expect(inter('ui-sans-serif, system-ui, -apple-system, sans-serif')).toBe('system')
+    expect(inter('"Brand Sans", ui-sans-serif, system-ui, sans-serif')).toBeNull()
+  })
+
   it('names no listed font while an uploaded one is set', () => {
     const d = draft({
       theme: {

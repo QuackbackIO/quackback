@@ -109,7 +109,8 @@ You can change only these settings:
 - helpCenter: homepageTitle, homepageDescription, headerLinks (up to 3, each a label and an https:// or /path url). Only when the current settings include a helpCenter.
 
 Rules:
-- Change only what the request asks for. Leave everything else out of the patch.
+- Change only what the request asks for. Leave everything else out of the patch: a request about the header changes the header colour alone, not the main colour, font, corners or buttons. Never repeat a current value in the patch.
+- A font of null in the current settings is the workspace's own font: keep it unless the request is about the font.
 - Never write CSS. Nothing outside the settings above can be changed.
 - To match or copy a website's brand, answer {"matchWebsite": "<host>"} with the bare host.
 - The header's colour is a setting (colours header). Its text, tabs and button follow it on their own; never set them.
@@ -141,6 +142,50 @@ function changesSomething(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0
   if (value && typeof value === 'object') return Object.values(value).some(changesSomething)
   return true
+}
+
+/** The corner stop nearest a radius: what the model is shown, so it never "rounds" one in passing. */
+function nearestStop(rem: number): number {
+  return CORNER_STOPS.reduce((best, stop) =>
+    Math.abs(stop - rem) < Math.abs(best - rem) ? stop : best
+  )
+}
+
+const sameHex = (a: string | undefined, b: string | undefined) =>
+  a !== undefined && b !== undefined && a.toLowerCase() === b.toLowerCase()
+
+/**
+ * The patch without the values the draft already has. A model often repeats
+ * settings it was shown; applied, a repeated value is no change, but a
+ * repeated corner stop rounds a radius between stops. `shown` is the draft
+ * as the model saw it.
+ */
+export function withoutEchoes(patch: PortalDraftPatch, shown: AskDraftContext): PortalDraftPatch {
+  const out: PortalDraftPatch = { ...patch }
+  if (out.themeMode === shown.themeMode) delete out.themeMode
+  if (out.buttonShape === shown.buttonShape) delete out.buttonShape
+  if (out.font !== undefined && out.font === shown.font) delete out.font
+  if (out.corners !== undefined && out.corners === shown.corners) delete out.corners
+  if (out.welcomeMessage !== undefined && out.welcomeMessage === shown.welcomeMessage)
+    delete out.welcomeMessage
+  if (out.colours) {
+    const colours: NonNullable<PortalDraftPatch['colours']> = {}
+    for (const side of ['light', 'dark'] as const) {
+      const asked = out.colours[side]
+      if (!asked) continue
+      const kept = Object.fromEntries(
+        Object.entries(asked).filter(
+          ([role, hex]) =>
+            hex !== undefined &&
+            !sameHex(hex, shown.colours[side][role as keyof (typeof shown.colours)['light']])
+        )
+      )
+      if (Object.keys(kept).length > 0) colours[side] = kept
+    }
+    if (Object.keys(colours).length > 0) out.colours = colours
+    else delete out.colours
+  }
+  return out
 }
 
 /** True when the patch only names tabs and sections the draft has. */
@@ -219,6 +264,8 @@ export async function askPortalCustomise({
     throw err
   }
 
+  // The model sees the radius at its nearest stop, the only values it can answer with.
+  const shown: AskDraftContext = { ...draft, corners: nearestStop(draft.corners) }
   let raw: unknown
   try {
     raw = await structuredChat({
@@ -231,7 +278,7 @@ export async function askPortalCustomise({
             `Page in the preview: ${page ?? 'feedback'}`,
             '',
             'Current settings:',
-            JSON.stringify(draft),
+            JSON.stringify(shown),
             '',
             'Request:',
             request,
@@ -253,6 +300,11 @@ export async function askPortalCustomise({
     return notUnderstood
   }
   const output = parsed.data
+  // What the draft already has is no change: the patch keeps only what the request moves.
+  if (output.patch) {
+    const pruned = withoutEchoes(output.patch, shown)
+    if (changesSomething(pruned)) output.patch = pruned
+  }
 
   if (output.patch && onlyTurnsFeedbackOff(output.patch, draft)) {
     return { outcome: 'refused', handled: 'refused', reply: ASK_REPLIES.feedbackAlwaysOn }
