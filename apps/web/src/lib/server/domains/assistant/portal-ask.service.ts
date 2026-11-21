@@ -109,7 +109,7 @@ You can change only these settings:
 - helpCenter: homepageTitle, homepageDescription, headerLinks (up to 3, each a label and an https:// or /path url). Only when the current settings include a helpCenter.
 
 Rules:
-- Change only what the request asks for. Leave everything else out of the patch: a request about the header changes the header colour alone, not the main colour, font, corners or buttons. Never repeat a current value in the patch.
+- Change only what the request asks for. Leave everything else out of the patch: a request about the header changes the header colour alone, not the main colour, font, corners or buttons. Never repeat a current value in the patch. corners may sit between the stops above; leave it out unless the request is about corners or shape.
 - A font of null in the current settings is the workspace's own font: keep it unless the request is about the font.
 - Never write CSS. Nothing outside the settings above can be changed.
 - To match or copy a website's brand, answer {"matchWebsite": "<host>"} with the bare host.
@@ -144,28 +144,46 @@ function changesSomething(value: unknown): boolean {
   return true
 }
 
-/** The corner stop nearest a radius: what the model is shown, so it never "rounds" one in passing. */
+/** The corner stop nearest a radius: what a model answering with stops rounds a radius between them to. */
 function nearestStop(rem: number): number {
   return CORNER_STOPS.reduce((best, stop) =>
     Math.abs(stop - rem) < Math.abs(best - rem) ? stop : best
   )
 }
 
+/** Words a request about corners or shape uses: such a request may set a stop on purpose. */
+const SHAPE_WORDS =
+  /\b(corners?|round(?:ed|er|ness)?|square(?:r|d)?|sharp(?:er)?|soft(?:er)?|shape|radius|curv\w*|pill)\b/i
+
 const sameHex = (a: string | undefined, b: string | undefined) =>
   a !== undefined && b !== undefined && a.toLowerCase() === b.toLowerCase()
 
 /**
  * The patch without the values the draft already has. A model often repeats
- * settings it was shown; applied, a repeated value is no change, but a
- * repeated corner stop rounds a radius between stops. `shown` is the draft
+ * settings it was shown; applied, a repeated value is no change. Compared
+ * with the draft's real values, so a corner stop the person asked for stays,
+ * with one exception: a radius between stops "repeated" as its nearest stop
+ * by a request that says nothing of corners or shape, which would round it in
+ * passing. `shown` is the draft, `request` what the person asked.
  * as the model saw it.
  */
-export function withoutEchoes(patch: PortalDraftPatch, shown: AskDraftContext): PortalDraftPatch {
+export function withoutEchoes(
+  patch: PortalDraftPatch,
+  shown: AskDraftContext,
+  request: string
+): PortalDraftPatch {
   const out: PortalDraftPatch = { ...patch }
   if (out.themeMode === shown.themeMode) delete out.themeMode
   if (out.buttonShape === shown.buttonShape) delete out.buttonShape
   if (out.font !== undefined && out.font === shown.font) delete out.font
-  if (out.corners !== undefined && out.corners === shown.corners) delete out.corners
+  if (
+    out.corners !== undefined &&
+    (out.corners === shown.corners ||
+      (!(CORNER_STOPS as readonly number[]).includes(shown.corners) &&
+        out.corners === nearestStop(shown.corners) &&
+        !SHAPE_WORDS.test(request)))
+  )
+    delete out.corners
   if (out.welcomeMessage !== undefined && out.welcomeMessage === shown.welcomeMessage)
     delete out.welcomeMessage
   if (out.colours) {
@@ -264,8 +282,6 @@ export async function askPortalCustomise({
     throw err
   }
 
-  // The model sees the radius at its nearest stop, the only values it can answer with.
-  const shown: AskDraftContext = { ...draft, corners: nearestStop(draft.corners) }
   let raw: unknown
   try {
     raw = await structuredChat({
@@ -278,7 +294,7 @@ export async function askPortalCustomise({
             `Page in the preview: ${page ?? 'feedback'}`,
             '',
             'Current settings:',
-            JSON.stringify(shown),
+            JSON.stringify(draft),
             '',
             'Request:',
             request,
@@ -302,7 +318,7 @@ export async function askPortalCustomise({
   const output = parsed.data
   // What the draft already has is no change: the patch keeps only what the request moves.
   if (output.patch) {
-    const pruned = withoutEchoes(output.patch, shown)
+    const pruned = withoutEchoes(output.patch, draft, request)
     if (changesSomething(pruned)) output.patch = pruned
   }
 
