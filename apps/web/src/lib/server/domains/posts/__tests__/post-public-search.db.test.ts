@@ -185,6 +185,16 @@ it('finds a partial word in the details, and among half the words', async () => 
   expect(await search(slug, 'slack notifica theme')).toEqual(['Webhooks'])
 })
 
+it('answers a very long word, or many long words, instead of failing', async () => {
+  const slug = await boardWith([{ title: 'Zapier integration' }])
+  expect(await search(slug, 'a'.repeat(2000))).toEqual([])
+  expect(
+    await search(slug, Array.from({ length: 20 }, (_, i) => `${'w'.repeat(30)}${i}`).join(' '))
+  ).toEqual([])
+  // A long search is read by its start, so an old link with one still finds.
+  expect(await search(slug, `integrati ${'x'.repeat(1500)}`)).toEqual(['Zapier integration'])
+})
+
 it('still leaves a stop word out, never widening it to the words it starts', async () => {
   const slug = await boardWith([{ title: 'Theme editor' }, { title: 'Export the board' }])
   expect(await search(slug, 'the export')).toEqual(['Export the board'])

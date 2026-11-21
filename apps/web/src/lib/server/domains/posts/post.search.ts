@@ -27,6 +27,17 @@ export type PostSearchMode = 'all' | 'most' | 'similar'
 const MAX_TERMS = 10
 
 /**
+ * Characters past this many are ignored, so a long pasted string (or an old
+ * link carrying one) still searches, by its start, instead of failing.
+ */
+const MAX_SEARCH_LENGTH = 200
+
+/** The search as it is read: at most MAX_SEARCH_LENGTH characters. */
+function clip(search: string): string {
+  return search.slice(0, MAX_SEARCH_LENGTH)
+}
+
+/**
  * Quotes, a leading minus, or a bare OR (in any case, as websearch_to_tsquery
  * reads it): the visitor wrote a query, not words.
  */
@@ -45,12 +56,22 @@ const WHOLE_TOKEN = /[\p{L}\p{N}][@./:][\p{L}\p{N}]/u
  * to hand to to_tsquery.
  */
 export function searchTerms(search: string): string[] {
-  return (search.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).slice(0, MAX_TERMS)
+  return (
+    clip(search)
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  ).slice(0, MAX_TERMS)
 }
 
 /** Whether Postgres should read the search as written: see OPERATORS and WHOLE_TOKEN. */
 function usesQuerySyntax(search: string): boolean {
-  return OPERATORS.test(search) || WHOLE_TOKEN.test(search)
+  const read = clip(search)
+  return OPERATORS.test(read) || WHOLE_TOKEN.test(read)
+}
+
+/** A search Postgres reads as written (see usesQuerySyntax). */
+function writtenQuery(search: string): SQL {
+  return sql`websearch_to_tsquery('english', ${clip(search)})`
 }
 
 /** Whether a fallback can change anything: plain words, not operators. */
@@ -63,8 +84,31 @@ function termQuery(term: string): SQL {
   return sql`to_tsquery('english', ${`${term}:*`})`
 }
 
-/** Shorter stems than this are left to the english query: too many words share them. */
-const MIN_STEM_LENGTH = 3
+/**
+ * Limits on looking for a shorter stem (termMatch). A stem shorter than
+ * MIN_STEM_LENGTH is shared by too many words, and an english stem drops at
+ * most a few letters from the end of a word, so only the starts of the typed
+ * word at most MAX_STEM_TRIM letters shorter are tried. Words longer than
+ * MAX_WIDEN_LENGTH are not partial words anyone types, and only the first
+ * MAX_WIDENED_WORDS words of a search are widened this way, which keeps the
+ * query small.
+ */
+const MIN_STEM_LENGTH = 5
+const MAX_STEM_TRIM = 4
+const MAX_WIDEN_LENGTH = 32
+const MAX_WIDENED_WORDS = 5
+
+/** The shorter stems a typed word may be kept as: "integrati" -> integ…integrat. */
+export function shorterStems(term: string, position: number): string[] {
+  const letters = Array.from(term)
+  if (position >= MAX_WIDENED_WORDS || letters.length > MAX_WIDEN_LENGTH) return []
+  const stems: string[] = []
+  const from = Math.max(MIN_STEM_LENGTH, letters.length - MAX_STEM_TRIM)
+  for (let length = from; length < letters.length; length++) {
+    stems.push(letters.slice(0, length).join(''))
+  }
+  return stems
+}
 
 /** The post's words as written, for the check a shorter stem needs. */
 const postText = sql`(coalesce(${posts.title}, '') || ' ' || coalesce(${posts.content}, ''))`
@@ -78,23 +122,21 @@ const postText = sql`(coalesce(${posts.title}, '') || ' ' || coalesce(${posts.co
  * matches:
  *
  *  - a stem that starts with it as typed ("copy" finds "copyright");
- *  - a stem that is a shorter start of it ("integr" for "integrati"), when
- *    the post has a word that really starts with the typed letters. The
- *    index finds the candidates; the check keeps "integrity", which stems to
- *    "integr" too, out of a search for "integrati".
+ *  - a stem that is a few letters shorter start of it ("integr" for
+ *    "integrati", see shorterStems), when the post has a word that really
+ *    starts with the typed letters. The index finds the candidates; the check
+ *    keeps "integrity", which stems to "integr" too, out of a search for
+ *    "integrati". A whole word ("users", "integration") has no shorter stem
+ *    to try that the english query does not already cover.
  *
  * `candidates` is the tsquery the index serves; `matches` is true for a post
  * that has the word. A stop word ("the") has neither: it matches nothing, as
  * in the english query, and never widens to "theme".
  */
-function termMatch(term: string): { candidates: SQL; matches: SQL; isWord: SQL } {
+function termMatch(term: string, position: number): { candidates: SQL; matches: SQL; isWord: SQL } {
   const english = termQuery(term)
   const typed = sql`to_tsquery('simple', ${`${term}:*`})`
-  const letters = Array.from(term)
-  const stems: string[] = []
-  for (let length = MIN_STEM_LENGTH; length < letters.length; length++) {
-    stems.push(letters.slice(0, length).join(''))
-  }
+  const stems = shorterStems(term, position)
   const shorter = stems.length > 0 ? sql`to_tsquery('simple', ${stems.join(' | ')})` : null
   const isWord = sql`(numnode(${english}) > 0)`
   const widened = shorter ? sql`${english} || ${typed} || ${shorter}` : sql`${english} || ${typed}`
@@ -114,7 +156,7 @@ function termMatch(term: string): { candidates: SQL; matches: SQL; isWord: SQL }
  * checked. Stop words are left out, as the english query leaves them.
  */
 function wordsCondition(terms: string[], join: '&' | '|'): SQL {
-  const parts = terms.map(termMatch)
+  const parts = terms.map((term, position) => termMatch(term, position))
   const candidates = sql.join(
     parts.map((part) => part.candidates),
     join === '&' ? sql` && ` : sql` || `
@@ -130,7 +172,7 @@ function wordsCondition(terms: string[], join: '&' | '|'): SQL {
 
 /** The search as one tsquery: every word, or any word. Null when it has none. */
 function postSearchQuery(search: string, join: '&' | '|'): SQL | null {
-  if (usesQuerySyntax(search)) return sql`websearch_to_tsquery('english', ${search})`
+  if (usesQuerySyntax(search)) return writtenQuery(search)
   const terms = searchTerms(search)
   if (terms.length === 0) return null
   return sql`to_tsquery('english', ${terms.map((term) => `${term}:*`).join(` ${join} `)})`
@@ -150,7 +192,7 @@ export function keywordTsQuery(search: string): SQL | null {
  * words match nothing, so they don't count toward the half).
  */
 function matchedTerms(search: string): { matched: SQL; counted: SQL } {
-  const terms = searchTerms(search).map(termMatch)
+  const terms = searchTerms(search).map((term, position) => termMatch(term, position))
   return {
     matched: sql.join(
       terms.map((term) => sql`(${term.matches})::int`),
@@ -179,7 +221,7 @@ export function postSearchCondition(search: string, mode: PostSearchMode = 'all'
     return words ? sql`${words} <% ${posts.title}` : sql`false`
   }
   if (usesQuerySyntax(search)) {
-    return sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`
+    return sql`${posts.searchVector} @@ ${writtenQuery(search)}`
   }
   const terms = searchTerms(search)
   if (terms.length === 0) return sql`false`
