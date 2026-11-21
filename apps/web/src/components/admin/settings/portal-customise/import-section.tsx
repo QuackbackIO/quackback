@@ -36,6 +36,8 @@ import {
 } from './brand-apply'
 import type { PortalDraft } from './portal-draft'
 
+type DoneImport = Extract<ImportState, { status: 'done' }>
+
 export type ImportState =
   | { status: 'idle' }
   | { status: 'reading'; host: string }
@@ -127,7 +129,15 @@ export function useBrandImport({
   /** A suggestion was used: the draft before and after, for the reply with its Undo. */
   onSuggestionUsed?: (before: PortalDraft, after: PortalDraft) => void
 }) {
-  const [kept, setState] = useState<ImportState>({ status: 'idle' })
+  const [kept, setKept] = useState<ImportState>({ status: 'idle' })
+  // The last finished import, kept while another is read or refused: its
+  // assets stay in the draft, so Publish still asks about them, and the
+  // next import still replaces it.
+  const [last, setLast] = useState<DoneImport | null>(null)
+  const setState = useCallback((next: ImportState) => {
+    setKept(next)
+    if (next.status === 'done') setLast(next)
+  }, [])
   // Which rows are taken back is read from the draft: an editor undo of a row's Undo brings it back.
   const undone = kept.status === 'done' ? stillUndone(getDraft(), kept.before, kept.undone) : []
   const undoneKey = undone.join(' ')
@@ -161,7 +171,10 @@ export function useBrandImport({
           missing: brand.missing,
         })
         // It takes the place of the last import, never stacks on it.
-        const previous = state.status === 'done' ? state : null
+        const previous =
+          state.status === 'done'
+            ? state
+            : last && { ...last, undone: stillUndone(getDraft(), last.before, last.undone) }
         const { before, next } = replaceImport(getDraft(), previous, brand)
         update(() => next)
         setState({ status: 'done', host: brand.host, brand, before, undone: [] })
@@ -173,7 +186,7 @@ export function useBrandImport({
         })
       }
     },
-    [update, getDraft, state]
+    [update, getDraft, state, last, setState]
   )
 
   const undoRow = useCallback(
@@ -186,7 +199,7 @@ export function useBrandImport({
       update((draft) => takeBackRow(draft, before, brand, key))
       setState({ ...state, undone: [...state.undone, key] })
     },
-    [state, update]
+    [state, update, setState]
   )
 
   /** Everything the import put in the draft, taken back as one step. The results stay listed. */
@@ -198,7 +211,7 @@ export function useBrandImport({
     if (keys.length === 0) return
     update((draft) => revertImport(draft, state))
     setState({ ...state, undone: [...state.undone, ...keys] })
-  }, [state, update])
+  }, [state, update, setState])
 
   /**
    * Brand assets the person would not confirm at Publish, taken back as one
@@ -208,16 +221,20 @@ export function useBrandImport({
   const dropAssets = useCallback(
     (assets: readonly BrandAsset[]): PortalDraft => {
       const draft = getDraft()
-      if (state.status !== 'done' || assets.length === 0) return draft
-      const { before, brand } = state
+      // The import Publish asked about: the one on show, or the last finished one.
+      const from = state.status === 'done' ? state : last
+      if (!from || assets.length === 0) return draft
+      const { before, brand } = from
       const next = assets.reduce((d, asset) => dropAsset(d, before, brand, asset), draft)
       if (next === draft) return draft
       update(() => next)
       const rows = assets.map((asset) => ASSET_ROW[asset])
-      setState({ ...state, undone: [...new Set([...state.undone, ...rows])] })
+      const undone = [...new Set([...from.undone, ...rows])]
+      if (state.status === 'done') setState({ ...state, undone })
+      else setLast({ ...from, undone })
       return next
     },
-    [state, getDraft, update]
+    [state, last, getDraft, update, setState]
   )
 
   // The words the import suggests; which are in use is read from the draft, as the assets are.
@@ -237,7 +254,17 @@ export function useBrandImport({
     [state, getDraft, update, onSuggestionUsed]
   )
 
-  return { state, run, undoRow, undoAll, dropAssets, suggestions, useSuggestion }
+  return {
+    state,
+    /** The last finished import's brand, for Publish: kept while another is read or refused. */
+    importedBrand: last?.brand ?? null,
+    run,
+    undoRow,
+    undoAll,
+    dropAssets,
+    suggestions,
+    useSuggestion,
+  }
 }
 
 interface ImportSectionProps {

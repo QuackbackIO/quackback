@@ -189,6 +189,16 @@ export function dropAsset(
   brand: BrandImport,
   asset: BrandAsset
 ): PortalDraft {
+  // A logo changed by hand since, with the site's dark version still beside it: that goes alone.
+  if (
+    asset === 'logo' &&
+    draft.logo.wideKey !== brand.logo?.stagedKey &&
+    brand.logoDark &&
+    draft.logo.darkKey === brand.logoDark.stagedKey
+  )
+    return before.logo.darkKey
+      ? editLogo.setUploadedDark(draft, before.logo.darkKey)
+      : editLogo.removeDark(draft)
   const holds =
     asset === 'logo'
       ? brand.logo !== undefined && draft.logo.wideKey === brand.logo.stagedKey

@@ -671,6 +671,14 @@ describe('the site’s own dark mode logo', () => {
     expect(importRows(sample).find((r) => r.key === 'logo')!.text).toBe('From the site')
   })
 
+  it('dropping the logo after the light one was changed by hand takes the site’s dark one alone', () => {
+    const applied = apply(base, withDark)
+    const mine = { ...applied, logo: { ...applied.logo, wideKey: 'header-logos/mine.svg' } }
+    const dropped = dropAsset(mine, base, withDark, 'logo')
+    expect(dropped.logo.wideKey).toBe('header-logos/mine.svg')
+    expect(dropped.logo.darkKey ?? null).toBeNull()
+  })
+
   it('an imported logo with no dark version of its own drops the one the old logo had', () => {
     const mine = {
       ...base,

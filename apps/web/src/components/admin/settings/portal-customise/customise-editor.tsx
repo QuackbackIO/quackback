@@ -357,9 +357,8 @@ export function CustomiseEditor({
   const brandImport = useBrandImport({ update: updateNow, getDraft, onSuggestionUsed })
   // A publish of the imported logo, icon or font asks first, and records who confirmed them.
   const { setImportedBrand } = editor
-  useEffect(() => {
-    setImportedBrand(brandImport.state.status === 'done' ? brandImport.state.brand : null)
-  }, [brandImport.state, setImportedBrand])
+  const { importedBrand } = brandImport
+  useEffect(() => setImportedBrand(importedBrand), [importedBrand, setImportedBrand])
   const [fontUploadRequest, setFontUploadRequest] = useState<{
     family: string
     at: number

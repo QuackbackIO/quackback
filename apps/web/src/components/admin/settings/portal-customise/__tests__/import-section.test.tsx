@@ -216,6 +216,38 @@ describe('useBrandImport and the brand assets', () => {
     expect(doneState(hook).undone).toEqual(['primary'])
   })
 
+  it('keeps the last finished import for Publish while another is read or refused', async () => {
+    importFn.mockResolvedValue({ ok: true, brand: assets })
+    const { hook } = setup()
+    expect(hook.result.current.importedBrand).toBeNull()
+    await act(() => hook.result.current.run('example.com'))
+    expect(hook.result.current.importedBrand).toBe(assets)
+    importFn.mockResolvedValue({ ok: false, code: 'X', message: 'Could not read it.' })
+    await act(() => hook.result.current.run('typo.example'))
+    expect(hook.result.current.state.status).toBe('refused')
+    // Its logo and icon are still in the draft, so Publish still asks about them.
+    expect(hook.result.current.importedBrand).toBe(assets)
+  })
+
+  it('a refused read between two imports still lets the next one replace the last', async () => {
+    importFn.mockResolvedValue({ ok: true, brand: assets })
+    const { hook, current, base } = setup()
+    await act(() => hook.result.current.run('example.com'))
+    importFn.mockResolvedValue({ ok: false, code: 'X', message: 'Could not read it.' })
+    await act(() => hook.result.current.run('typo.example'))
+    const plain: BrandImport = {
+      ...brand,
+      host: 'plain.example',
+      logo: undefined,
+      missing: ['logo'],
+    }
+    importFn.mockResolvedValue({ ok: true, brand: plain })
+    await act(() => hook.result.current.run('plain.example'))
+    // The first site's logo and icon are taken back, not left behind unrecognised.
+    expect(current().logo).toEqual(base.logo)
+    expect(hook.result.current.importedBrand).toBe(plain)
+  })
+
   it('takes the whole import back as one step, and keeps the results listed', async () => {
     importFn.mockResolvedValue({ ok: true, brand: assets })
     const { hook, steps, current, base } = setup()
