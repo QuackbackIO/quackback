@@ -57,9 +57,46 @@ export function createMcpServer(auth: McpAuthContext): McpServer {
   )
 
   registerTools(server, auth)
+  listSecuritySchemesAtTopLevel(server)
   registerResources(server, auth)
 
   return server
+}
+
+type ListedTool = { _meta?: { securitySchemes?: unknown }; [key: string]: unknown }
+type RequestHandler = (request: unknown, ctx: unknown) => Promise<{ tools: ListedTool[] }>
+
+/**
+ * List each tool's `securitySchemes` as a top-level field as well as in
+ * `_meta`. OpenAI's Apps SDK reads the top-level field and documents the
+ * `_meta` copy as a "back-compat mirror for clients that only read `_meta`".
+ * The SDK's `tools/list` emits a fixed set of fields, so this wraps its
+ * handler rather than replacing it: the enabled filter, the converted
+ * schemas and the 2026 cache hints stay the SDK's.
+ *
+ * The SDK has no public way to read a registered handler, hence the
+ * `_requestHandlers` access. If an SDK upgrade moves it, this throws on the
+ * first server built, and `protocol-eras.test.ts` fails, rather than the
+ * field quietly disappearing.
+ */
+export function listSecuritySchemesAtTopLevel(server: McpServer): void {
+  const handlers = (server.server as unknown as { _requestHandlers?: Map<string, RequestHandler> })
+    ._requestHandlers
+  const list = handlers?.get('tools/list')
+  if (!handlers || !list) {
+    throw new Error('MCP SDK: no tools/list handler to wrap for top-level securitySchemes')
+  }
+  handlers.set('tools/list', async (request, ctx) => {
+    const result = await list(request, ctx)
+    return {
+      ...result,
+      tools: result.tools.map((tool) =>
+        tool._meta?.securitySchemes
+          ? { ...tool, securitySchemes: tool._meta.securitySchemes }
+          : tool
+      ),
+    }
+  })
 }
 
 /**
