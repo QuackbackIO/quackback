@@ -155,3 +155,6 @@ rather than calling the real one.
   `@quarantine`. To run it on a PR that touches no support path, add the label
   and re-run the CI workflow (the label is read when the job runs).
 - `support-core-report` merges the shard reports and fails if no test ran.
+
+Quarantine entries and nightly failures follow the rules in
+[the product suite README](../product/README.md#quarantine-and-nightly-failures).

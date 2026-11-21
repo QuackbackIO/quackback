@@ -473,6 +473,14 @@ jobs:
           name: e2e-full-report
           path: apps/web/playwright-report
           retention-days: 14
+      # The nightly-triage job reads failing tests from this JSON.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: e2e-full-results-json
+          path: apps/web/e2e-full-results.json
+          retention-days: 14
+          if-no-files-found: ignore
 
   # Runs only the quarantined tests, so the list in apps/web/e2e/QUARANTINE.md
   # shows each night which still fail and which could come back. It never
@@ -852,6 +860,14 @@ jobs:
           name: support-core-report
           path: apps/web/playwright-report
           retention-days: 14
+      # The nightly-triage job reads failing tests from this JSON.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: support-core-results-json
+          path: apps/web/support-core-results.json
+          retention-days: 14
+          if-no-files-found: ignore
 
   # Support tests tagged @isolated turn on a workspace-wide switch that would
   # change every other test's behaviour (the AI agent answering every widget
@@ -1238,6 +1254,14 @@ jobs:
           name: product-core-report
           path: apps/web/playwright-report
           retention-days: 14
+      # The nightly-triage job reads failing tests from this JSON.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: product-core-results-json
+          path: apps/web/product-core-results.json
+          retention-days: 14
+          if-no-files-found: ignore
 
   # Product tests tagged @isolated turn on a workspace-wide switch that would
   # change every other test's behaviour (a private portal, anonymous posting
@@ -1330,3 +1354,107 @@ jobs:
             apps/web/blob-report
             apps/web/e2e/.auth/support/app.log
           retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Nightly triage: after a scheduled run on main, record the result in one
+  # GitHub issue, "Nightly e2e failures". A failed night opens the issue (or
+  # comments on the open one) with the run, the failed jobs and the failing
+  # tests read from the Playwright reports. A green night comments only when
+  # the issue is open; it never opens one. Never runs on pull requests.
+  # e2e-quarantine never fails the run, so it is not counted.
+  # ---------------------------------------------------------------------------
+  nightly-triage:
+    needs:
+      - e2e-smoke
+      - e2e-full
+      - e2e-full-report
+      - e2e-quarantine
+      - support-smoke
+      - support-core
+      - support-core-report
+      - support-isolated
+      - product-smoke
+      - product-core
+      - product-core-report
+      - product-isolated
+    if: always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && github.repository == 'QuackbackIO/quackback'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      # Merged JSON reports from the sharded jobs.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          pattern: '*-results-json'
+          path: apps/web/nightly-reports
+          merge-multiple: true
+      # Blob reports the smoke and isolated jobs upload when they fail.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          pattern: '{e2e-smoke,support-smoke,product-smoke,support-isolated,product-isolated}-report'
+          path: apps/web/nightly-blobs
+      - name: Turn the blob reports into JSON
+        working-directory: apps/web
+        run: |
+          mkdir -p nightly-reports
+          for dir in nightly-blobs/*/; do
+            [ -d "$dir" ] || continue
+            label=$(basename "$dir")
+            label=${label%-report}
+            mkdir -p "nightly-zips/$label"
+            find "$dir" -name '*.zip' -exec cp {} "nightly-zips/$label/" \;
+            if ls "nightly-zips/$label"/*.zip > /dev/null 2>&1; then
+              PLAYWRIGHT_JSON_OUTPUT_NAME="nightly-reports/$label.json" \
+                ./node_modules/.bin/playwright merge-reports --reporter json "nightly-zips/$label" \
+                || echo "::warning::could not merge the $label blob report"
+            fi
+          done
+          ls -l nightly-reports
+      - name: Summarise the night
+        id: summary
+        working-directory: apps/web
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          printf '%s' "$NEEDS" > nightly-needs.json
+          RUN_DATE=$(date -u +%F) bun e2e/scripts/nightly-failures.ts \
+            nightly-needs.json nightly-reports nightly-comment.md >> "$GITHUB_OUTPUT"
+          cat nightly-comment.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Open or update the Nightly e2e failures issue
+        working-directory: apps/web
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          STATUS: ${{ steps.summary.outputs.status }}
+        run: |
+          title='Nightly e2e failures'
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty')
+          case "$STATUS" in
+            failed)
+              if [ -z "$number" ]; then
+                url=$(gh issue create --title "$title" \
+                  --body 'Each failed scheduled e2e run on main adds a comment here. A green night comments too while this is open. Close it when the failures are fixed or quarantined (see apps/web/e2e/QUARANTINE.md).')
+                number=${url##*/}
+              fi
+              gh issue comment "$number" --body-file nightly-comment.md
+              ;;
+            green)
+              if [ -n "$number" ]; then
+                gh issue comment "$number" --body-file nightly-comment.md
+              fi
+              ;;
+            *)
+              echo "Run status: $STATUS; nothing posted."
+              ;;
+          esac
