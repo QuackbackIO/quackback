@@ -13,6 +13,8 @@ import { isStandardWebsiteUrl } from '@/lib/shared/website-branding'
 import { READER_TOKEN } from '../../robots'
 import { liveSiteFetcher, pickStylesheets, rankFavicons, readSite } from '../site-read'
 import { registrableDomain } from '@/lib/shared/registrable-domain'
+import { brandReadFromSite } from '../../static-reader'
+import { woff2 } from './font-fixture'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const html = (body: string): FetchedBody => ({
@@ -140,6 +142,51 @@ describe('readSite', () => {
       expect.objectContaining({ host: 'acme.test', stylesheets: 1 }),
       'site read'
     )
+  })
+
+  it('reads the files its own @font-face rules serve for the text, so an open-licence font can be copied', async () => {
+    const open = { licenceUrl: 'https://scripts.sil.org/OFL' }
+    const font = (bytes: Uint8Array): FetchedBody => ({
+      status: 200,
+      url: '',
+      contentType: 'font/woff2',
+      body: bytes,
+    })
+    const page = `<!doctype html><html><head><title>Northwind</title>
+      <link rel="stylesheet" href="/site.css"></head><body><p>Hello</p></body></html>`
+    const sheet = `
+      @font-face { font-family: "Figtree"; src: url(/fonts/figtree.woff2) format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Figtree"; src: url(/fonts/figtree-bold.woff2) format("woff2"); font-weight: 700; }
+      body { font-family: "Figtree", ui-sans-serif, sans-serif; }`
+    const { fetcher, calls } = fakeFetcher({
+      'https://northwind.example/': html(page),
+      'https://northwind.example/site.css': css(sheet),
+      'https://northwind.example/fonts/figtree.woff2': font(woff2(open)),
+      'https://northwind.example/fonts/figtree-bold.woff2': font(woff2({ ...open, weight: 700 })),
+    })
+    const site = await readSite('https://northwind.example/', fetcher)
+    expect(site.fonts?.text).toMatchObject({
+      family: 'Figtree',
+      files: [{ weight: 400 }, { weight: 700 }],
+    })
+    // Fonts are asked for as fonts, under the copy limit (one byte over, to tell a large file).
+    expect(calls.filter((call) => call.kind === 'font').map((call) => call.maxBytes)).toEqual([
+      400 * 1024 + 1,
+      400 * 1024 + 1,
+    ])
+    // The static reader classifies them as the browser reader does: open, so applied with no hold.
+    expect(brandReadFromSite(site).siteFont).toMatchObject({ family: 'Figtree', licence: 'open' })
+  })
+
+  it('reads no font files for a page set in a system font', async () => {
+    const { fetcher, calls } = fakeFetcher({
+      'https://northwind.example/': html(
+        '<!doctype html><html><head><title>N</title><style>body{font-family:system-ui}</style></head><body><p>Hi</p></body></html>'
+      ),
+    })
+    const site = await readSite('https://northwind.example/', fetcher)
+    expect(site.fonts).toBeUndefined()
+    expect(calls.some((call) => call.kind === 'font')).toBe(false)
   })
 
   it('reads at most twelve stylesheets, the site’s own first, parsed in document order', async () => {

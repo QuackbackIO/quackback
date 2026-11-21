@@ -130,7 +130,7 @@ describe('ImportOverlay', () => {
     expect(swatches()).toEqual(['#533afd', '#0a2540', '#ffffff', '#061b31'])
     expect(value('font')).toHaveAttribute('data-filled', 'false')
     wait(200)
-    expect(value('font')).toHaveTextContent('Brand Sans is licensed, so Inter stands in.')
+    expect(value('font')).toHaveTextContent('Brand Sans isn’t one we have, so Inter stands in.')
     expect(value('corners')).toHaveAttribute('data-filled', 'false')
     wait(200)
     expect(value('corners')).toHaveTextContent('Slight corners, pill buttons')

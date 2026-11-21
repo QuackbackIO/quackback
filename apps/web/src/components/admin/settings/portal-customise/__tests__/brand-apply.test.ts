@@ -362,7 +362,8 @@ describe('importRows', () => {
       ['icon', 'missing', 'No square icon of 120 px or more.'],
       ['primary', 'matched', '#533afd'],
       ['page', 'matched', 'Always light'],
-      ['font', 'nearest', 'Brand Sans is licensed, so Inter stands in.'],
+      // No file of it was read: nothing is claimed of its licence.
+      ['font', 'nearest', 'Brand Sans isn’t one we have, so Inter stands in.'],
       ['headings', 'skipped', 'Same as the text font.'],
       ['cards', 'skipped', 'No clear style found. Yours stays.'],
       ['shape', 'matched', 'Slight corners, pill buttons'],
@@ -839,7 +840,11 @@ describe('the headings font', () => {
       expect(draftHeadingFont(next)).toBeNull()
       expect(next.customHeadingFont).toBeUndefined()
       expect(draftHeadingName(next)).toBe('Same as text')
-      expect(row(brand)).toEqual(['skipped', 'Can’t be copied. They match the text font.', false])
+      // No file read says nothing of a licence; a refusal the read gave says why.
+      const why = brand.siteHeadingFont
+        ? 'Can’t be copied.'
+        : 'Northwind Display isn’t one we have.'
+      expect(row(brand)).toEqual(['skipped', `${why} They match the text font.`, false])
     }
   })
 

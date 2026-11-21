@@ -629,7 +629,8 @@ export function importRows(
       key: 'font',
       label: 'Text font',
       state: 'nearest',
-      text: `${brand.font.site} is licensed, so ${name} stands in.`,
+      // No file of it was read, so nothing is known of its licence: only that the portal lacks it.
+      text: `${brand.font.site} isn’t one we have, so ${name} stands in.`,
       uploadFont: brand.font.site,
       applied: true,
     })
@@ -687,7 +688,9 @@ function headingsRow(brand: BrandImport, confirmed: boolean): ImportRow {
           ...asset,
         }
   const font = brand.siteHeadingFont
-  const why = font && 'notCopied' in font ? NOT_COPIED[font.notCopied] : NOT_COPIED.restricted
+  // Not copied for a reason the read gave, or no file of it was read at all.
+  const why =
+    font && 'notCopied' in font ? NOT_COPIED[font.notCopied] : `${headings.site} isn’t one we have.`
   return { ...row, state: 'skipped', text: `${why} ${HEADINGS_MATCH_TEXT}`, applied: false }
 }
 

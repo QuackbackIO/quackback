@@ -78,10 +78,12 @@ export function recordingFetcher(inner: SiteFetcher, dir: string): SiteFetcher {
  */
 export function snapshotFetcher(dir: string, opts: { strict?: boolean } = {}): SiteFetcher {
   let manifest: Promise<SnapshotManifest> | null = null
-  return async (url, _kind, limits): Promise<FetchedBody | null> => {
+  return async (url, kind, limits): Promise<FetchedBody | null> => {
     const entry = (await (manifest ??= loadManifest(dir)))[url]
     if (!entry) {
-      if (opts.strict) throw new Error(`No snapshot of ${url} in ${dir}`)
+      // Snapshots captured before the static reader read font files hold none:
+      // a missing font reads as unfetched, as it did then, never as a stale snapshot.
+      if (opts.strict && kind !== 'font') throw new Error(`No snapshot of ${url} in ${dir}`)
       return null
     }
     if ('missing' in entry) return null
