@@ -37,6 +37,23 @@ import {
  *
  * Attributes must be configured in Settings > User Attributes before they can be set.
  */
+/**
+ * SQL that merges `updates` into the stored metadata JSON and drops `removals`.
+ * The keys go in as one ARRAY[...] param list: interpolating a JS array directly
+ * renders `($1, ...)`, which is `()` (a syntax error) when nothing is removed.
+ */
+function mergeMetadataSql(updates: Record<string, unknown>, removals: string[]) {
+  const stored = sql`coalesce(nullif(${user.metadata}, ''), '{}')::jsonb`
+  const kept =
+    removals.length > 0
+      ? sql`(${stored} - ARRAY[${sql.join(
+          removals.map((k) => sql`${k}`),
+          sql`, `
+        )}]::text[])`
+      : stored
+  return sql`(${kept} || ${JSON.stringify(updates)}::jsonb)::text`
+}
+
 export async function identifyPortalUser(
   input: IdentifyPortalUserInput
 ): Promise<IdentifyPortalUserResult> {
@@ -78,7 +95,7 @@ export async function identifyPortalUser(
       }
     }
     if (Object.keys(metadataUpdates).length > 0 || metadataRemovals.length > 0) {
-      userUpdates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${metadataRemovals}::text[]) || ${JSON.stringify(metadataUpdates)}::jsonb)::text`
+      userUpdates.metadata = mergeMetadataSql(metadataUpdates, metadataRemovals)
     }
 
     if (Object.keys(userUpdates).length > 0) {
@@ -254,7 +271,7 @@ export async function updatePortalUser(
     }
   }
   if (Object.keys(metadataUpdates).length > 0 || metadataRemovals.length > 0) {
-    userUpdates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${metadataRemovals}::text[]) || ${JSON.stringify(metadataUpdates)}::jsonb)::text`
+    userUpdates.metadata = mergeMetadataSql(metadataUpdates, metadataRemovals)
   }
 
   if (Object.keys(userUpdates).length > 0) {
