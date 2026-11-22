@@ -17,6 +17,7 @@ import {
   authorWindow,
   authorWindowResult,
   teamActionOn,
+  othersVotedOn,
   type AuthorWindowPost,
 } from './post.author-window'
 import { logger } from '@/lib/server/logger'
@@ -44,6 +45,7 @@ function windowPost(post: Awaited<ReturnType<typeof loadPost>>): AuthorWindowPos
     // No status, or the default one.
     onDefaultStatus: !post.statusId || post.postStatus?.isDefault === true,
     canonicalPostId: post.canonicalPostId as PostId | null,
+    principalId: post.principalId as PrincipalId | null,
   }
 }
 
@@ -75,7 +77,7 @@ export async function canEditPost(
 
 /**
  * Check if a user can delete a post: team members always can; the author can
- * until the team acts on it.
+ * until the team acts on it or someone else votes on it.
  */
 export async function canDeletePost(
   postId: PostId,
@@ -130,13 +132,15 @@ export async function getPostPermissions(
     }
   }
 
-  const [config, teamAction] = await Promise.all([
+  const facts = windowPost(post)
+  const [config, teamAction, othersVoted] = await Promise.all([
     getPortalConfig(),
-    teamActionOn(windowPost(post)),
+    teamActionOn(facts),
+    othersVotedOn(facts),
   ])
   return {
-    canEdit: authorWindowResult('edit', teamAction, config),
-    canDelete: authorWindowResult('delete', teamAction, config),
+    canEdit: authorWindowResult('edit', teamAction, othersVoted, config),
+    canDelete: authorWindowResult('delete', teamAction, othersVoted, config),
   }
 }
 

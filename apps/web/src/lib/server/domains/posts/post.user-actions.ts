@@ -102,6 +102,7 @@ async function assertMayChange(
       statusId: post.statusId,
       onDefaultStatus,
       canonicalPostId: post.canonicalPostId as PostId | null,
+      principalId: post.principalId as PrincipalId | null,
     },
     config,
     executor

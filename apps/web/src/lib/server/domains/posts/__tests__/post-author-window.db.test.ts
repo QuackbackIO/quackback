@@ -3,8 +3,9 @@
  *
  * "The team acts" is one of: moving the post off the default status, a team
  * reply (a public comment from a teammate or an API key), or a merge in either
- * direction. Nothing else closes the window: not the author's own auto-vote,
- * not other customers' votes or comments, not a private team note.
+ * direction. Other customers' votes close the delete half only, since deleting
+ * would take their votes with it. Nothing else closes the window: not the
+ * author's own auto-vote, not other customers' comments, not a private team note.
  *
  * Every entry point applies the same rule: the permission reads the portal
  * menu shows (getPostPermissions, canEditPost, canDeletePost) and the writes
@@ -152,15 +153,48 @@ describe.skipIf(!fixture.available)('author edit and delete window', () => {
     expect(row.deletedAt).not.toBeNull()
   })
 
-  it('keeps the window open through other customers votes and comments', async () => {
+  it('keeps the window open through other customers comments', async () => {
     const { author, postId } = await seedOwnPost()
     const other = await seedPerson('user')
-    await testDb.insert(postVotes).values({ postId, principalId: other })
-    await testDb.update(posts).set({ voteCount: 2 }).where(eq(posts.id, postId))
     await testDb.insert(postComments).values({ postId, principalId: other, content: 'Me too' })
 
     const w = await windowFor(postId, author)
     expect(w.canEdit.allowed).toBe(true)
+    expect(w.canDelete.allowed).toBe(true)
+  })
+
+  it('still lets the author edit, but not delete, once someone else votes', async () => {
+    const { author, postId } = await seedOwnPost()
+    const other = await seedPerson('user')
+    await testDb.insert(postVotes).values({ postId, principalId: other })
+    await testDb.update(posts).set({ voteCount: 2 }).where(eq(posts.id, postId))
+
+    const w = await windowFor(postId, author)
+    expect(w.canEdit.allowed).toBe(true)
+    expect(w.canDelete).toEqual({
+      allowed: false,
+      reason: 'Cannot delete posts other people have voted on',
+    })
+    const edited = await userEditPost(
+      postId,
+      { title: 'Dark mode, please', content: 'Reworded' },
+      asUser(author)
+    )
+    expect(edited.title).toBe('Dark mode, please')
+    await expect(softDeletePost(postId, asUser(author))).rejects.toMatchObject({
+      code: 'DELETE_NOT_ALLOWED',
+    })
+    const [row] = await testDb.select().from(posts).where(eq(posts.id, postId))
+    expect(row.deletedAt).toBeNull()
+  })
+
+  it('opens delete again once the other vote is taken back', async () => {
+    const { author, postId } = await seedOwnPost()
+    const other = await seedPerson('user')
+    await testDb.insert(postVotes).values({ postId, principalId: other })
+    await testDb.delete(postVotes).where(eq(postVotes.principalId, other))
+
+    const w = await windowFor(postId, author)
     expect(w.canDelete.allowed).toBe(true)
   })
 
