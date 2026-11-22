@@ -37,6 +37,7 @@ import {
 } from '@/lib/server/email/recipient'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { isTeamMember } from '@/lib/shared/roles'
+import { MODERATION_DECISION_EMAIL_MAX_AGE_DAYS } from '@/lib/shared/moderation-policy'
 import { isSupportTicketsEnabled } from '@/lib/server/domains/settings/settings.support'
 import { canViewPost, type Actor } from '@/lib/server/policy'
 import {
@@ -67,6 +68,7 @@ import {
   type PostUnmergedPayload,
 } from './types'
 import { logger } from '@/lib/server/logger'
+import { NotFoundError } from '@/lib/shared/errors'
 import { isTestEvent } from './test-event'
 import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
 import { DELETED_USER_PRINCIPAL_ID } from '@/lib/server/domains/principals/deleted-user-principal'
@@ -796,6 +798,40 @@ export async function getMentionTargets(
 // Moderation Decision Targets
 // ============================================================================
 
+/** The backlog window for decision emails; see MODERATION_DECISION_EMAIL_MAX_AGE_DAYS. */
+export const MODERATION_DECISION_EMAIL_MAX_AGE_MS =
+  MODERATION_DECISION_EMAIL_MAX_AGE_DAYS * 24 * 60 * 60 * 1000
+
+/**
+ * Whether the decision is recent enough to email about: the item was submitted
+ * no more than {@link MODERATION_DECISION_EMAIL_MAX_AGE_MS} before the decision.
+ * A decision recorded without a submission time is not.
+ */
+function isRecentModerationDecision(submittedAt: string | undefined, decidedAt: string): boolean {
+  const submitted = submittedAt ? Date.parse(submittedAt) : NaN
+  const decided = Date.parse(decidedAt)
+  if (Number.isNaN(submitted) || Number.isNaN(decided)) return false
+  return decided - submitted <= MODERATION_DECISION_EMAIL_MAX_AGE_MS
+}
+
+/**
+ * The workspace switch for moderation decision emails (Settings > Moderation),
+ * read fresh so turning it off holds for a queue cleared straight after. On
+ * unless explicitly off; a workspace with no settings row yet keeps the
+ * default. Any other read failure throws, so the delivery retries rather than
+ * emailing a workspace that turned these emails off.
+ */
+async function moderationDecisionEmailsEnabled(): Promise<boolean> {
+  const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+  try {
+    const config = await getPortalConfig('fresh')
+    return config.moderationDefault?.emailDecisions !== false
+  } catch (err) {
+    if (err instanceof NotFoundError && err.code === 'SETTINGS_NOT_FOUND') return true
+    throw err
+  }
+}
+
 /**
  * Resolve hook targets for the team's decision on a held post or comment
  * (`post.approved`, `post.rejected`, `comment.approved`, `comment.rejected`):
@@ -809,6 +845,10 @@ export async function getMentionTargets(
  * was. An approved
  * item links to where it now shows; a rejected one is gone, so its notice
  * links nowhere. The moderator's reason never travels.
+ *
+ * The email (not the bell) is also skipped when the workspace turned these
+ * emails off, or when the item was submitted more than
+ * {@link MODERATION_DECISION_EMAIL_MAX_AGE_MS} before the decision.
  */
 export async function getModerationDecisionTargets(
   event: EventData,
@@ -897,6 +937,8 @@ export async function getModerationDecisionTargets(
 
   const to = contactRecipientFrom({ accountEmail: row.email, contactEmail: row.contactEmail })
   if (!to) return targets
+  if (!isRecentModerationDecision(data.submittedAt, event.timestamp)) return targets
+  if (!(await moderationDecisionEmailsEnabled())) return targets
   const prefs = (await batchGetNotificationPreferences([authorId])).get(authorId)
   if (prefs && !shouldNotify(prefs, 'post_moderated', 'email')) return targets
 
