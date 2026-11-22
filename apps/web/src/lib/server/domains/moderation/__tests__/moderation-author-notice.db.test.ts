@@ -76,6 +76,7 @@ import { notificationResolver } from '@/lib/server/events/resolvers/notification
 import type { DomainEvent } from '@/lib/server/events/envelope'
 import type { HookTarget } from '@/lib/server/events/hook-types'
 import { approveComment, approvePost, rejectComment, rejectPost } from '../moderation.service'
+import { updatePortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { moderationAuditFromApiAuth } from '@/routes/api/v1/moderation/-audit'
 import {
   DELETED_USER_PRINCIPAL_ID,
@@ -520,6 +521,20 @@ describe.skipIf(!fixture.available)('moderation decision reaches the author', ()
       await approvePost(postId, auditFor(moderator.id))
 
       expect(emailsOf(await targetsFor('post.approved'))).toHaveLength(1)
+    })
+
+    it('keeps decision emails off when another moderation setting is saved later', async () => {
+      await setModerationDefault({ emailDecisions: false })
+      await updatePortalConfig({ moderationDefault: { requireApproval: 'none', holdImages: true } })
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(author.id)
+
+      await approvePost(postId, auditFor(moderator.id))
+
+      const targets = await targetsFor('post.approved')
+      expect(emailsOf(targets)).toHaveLength(0)
+      expect(bellsOf(targets)).toHaveLength(1)
     })
 
     it('sends no email when the workspace turned decision emails off, and keeps the bell', async () => {

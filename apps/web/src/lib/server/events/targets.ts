@@ -68,6 +68,7 @@ import {
   type PostUnmergedPayload,
 } from './types'
 import { logger } from '@/lib/server/logger'
+import { NotFoundError } from '@/lib/shared/errors'
 import { isTestEvent } from './test-event'
 import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
 import { DELETED_USER_PRINCIPAL_ID } from '@/lib/server/domains/principals/deleted-user-principal'
@@ -816,16 +817,18 @@ function isRecentModerationDecision(submittedAt: string | undefined, decidedAt: 
 /**
  * The workspace switch for moderation decision emails (Settings > Moderation),
  * read fresh so turning it off holds for a queue cleared straight after. On
- * unless explicitly off; a workspace with no settings to read keeps the default.
+ * unless explicitly off; a workspace with no settings row yet keeps the
+ * default. Any other read failure throws, so the delivery retries rather than
+ * emailing a workspace that turned these emails off.
  */
 async function moderationDecisionEmailsEnabled(): Promise<boolean> {
+  const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
   try {
-    const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
     const config = await getPortalConfig('fresh')
     return config.moderationDefault?.emailDecisions !== false
   } catch (err) {
-    log.warn({ err }, 'moderation decision email switch unreadable; using the default')
-    return true
+    if (err instanceof NotFoundError && err.code === 'SETTINGS_NOT_FOUND') return true
+    throw err
   }
 }
 
