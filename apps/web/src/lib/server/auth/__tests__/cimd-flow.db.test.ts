@@ -709,6 +709,16 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
     const OTHER_CLIENT_ID = 'https://other.example.com/oauth/client-metadata.json'
     const OTHER_REDIRECT_URI = 'https://other.example.com/oauth/callback'
 
+    // The rollback removes the row, not the cached "off" copy or the instance
+    // built from it.
+    afterEach(async () => {
+      const { invalidateSettingsCache } =
+        await import('@/lib/server/domains/settings/settings.helpers')
+      await invalidateSettingsCache()
+      const { resetAuth } = await import('@/lib/server/auth/index')
+      resetAuth()
+    })
+
     it('stops advertising CIMD at every discovery URL', async () => {
       await setRegistration(false)
       const routes = [
