@@ -57,7 +57,7 @@ const STORED: Row[] = [
 ]
 
 describe.skipIf(!db)('migration 0323 clears legacy header settings', () => {
-  it('clears the header name and mode once, keeps the header logo, and replays as a no-op', async () => {
+  it('clears the header name and mode once, drops the settings cache, keeps the header logo, and replays as a no-op', async () => {
     await db!
       .transaction(async (tx) => {
         const schema = `m0323_${Date.now().toString(36)}`
@@ -70,7 +70,23 @@ describe.skipIf(!db)('migration 0323 clears legacy header settings', () => {
         await tx.execute(
           sql.raw(`COMMENT ON COLUMN ${schema}.settings.header_display_name IS NULL`)
         )
+        await tx.execute(
+          sql.raw(`CREATE TABLE ${schema}.kv_store (LIKE public.kv_store INCLUDING ALL)`)
+        )
         await tx.execute(sql.raw(`SET LOCAL search_path = ${schema}, public`))
+        const cacheRow = (key: string) => sql`
+          INSERT INTO "kv_store" (workspace_key, key, value, expires_at)
+          VALUES ('ws', ${key}, '{}'::jsonb, now() + interval '1 hour')
+        `
+        // The cached workspace settings carry the header values for an hour.
+        await tx.execute(cacheRow('settings:workspace'))
+        await tx.execute(cacheRow('unrelated'))
+        const cacheKeys = async () =>
+          (
+            (await tx.execute(sql`SELECT key FROM "kv_store" ORDER BY key`)) as unknown as {
+              key: string
+            }[]
+          ).map((row) => row.key)
         for (const row of STORED)
           await tx.execute(sql`
             INSERT INTO "settings" (id, name, slug, created_at, header_display_name, header_display_mode, header_logo_key)
@@ -94,6 +110,8 @@ describe.skipIf(!db)('migration 0323 clears legacy header settings', () => {
             header_display_mode: 'logo_and_name',
             header_logo_key: row.header_logo_key,
           })
+        // The cleared values must not keep showing from the settings cache.
+        expect(await cacheKeys()).toEqual(['unrelated'])
 
         // Values saved after the migration, through the new editor, on an old
         // row and on a row created later.
@@ -106,10 +124,12 @@ describe.skipIf(!db)('migration 0323 clears legacy header settings', () => {
           INSERT INTO "settings" (id, name, slug, created_at, header_display_name, header_display_mode)
           VALUES (gen_random_uuid(), 'Later', 'later', now(), 'Later Name', 'custom_logo')
         `)
+        await tx.execute(cacheRow('settings:workspace'))
         const saved = await read()
 
         await tx.execute(sql.raw(MIGRATION))
         expect(await read()).toEqual(saved)
+        expect(await cacheKeys()).toEqual(['settings:workspace', 'unrelated'])
         expect(saved.wordmark.header_display_name).toBe('New Name')
         expect(saved.later.header_display_mode).toBe('custom_logo')
 

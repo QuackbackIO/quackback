@@ -6,12 +6,13 @@
 -- the header name goes back to the workspace name, and the display mode goes
 -- back to the square logo and name. header_logo_key is kept (it is still a
 -- fallback logo elsewhere), and a dark wordmark only shows in 'custom_logo'
--- mode, so neither needs clearing.
+-- mode, so neither needs clearing. The cached workspace settings carry the
+-- old values for up to an hour, so the cache entry is dropped too.
 --
 -- The column comment written in the same block marks this database as done,
 -- so a second run leaves values saved afterwards alone, including rows
 -- created after the first run.
--- @replay: guarded-by the header_display_name column comment; once it is written the block does nothing
+-- @replay: guarded-by the header_display_name column comment; once it is written the block does nothing, so neither the UPDATE nor the cache DELETE runs again
 DO $$
 BEGIN
   IF col_description('settings'::regclass, (
@@ -23,6 +24,7 @@ BEGIN
         "header_display_mode" = 'logo_and_name'
     WHERE "header_display_name" IS NOT NULL
        OR "header_display_mode" IS DISTINCT FROM 'logo_and_name';
+    DELETE FROM "kv_store" WHERE "key" = 'settings:workspace';
     COMMENT ON COLUMN "settings"."header_display_name" IS
       'Header name set through the portal Customise editor. Values saved before migration 0323 were cleared.';
   END IF;
