@@ -1018,6 +1018,7 @@ const moderationDefaultSchema = z.object({
   requireApproval: z.enum(['none', 'anonymous', 'authenticated', 'all']),
   holdImages: z.boolean().optional(),
   holdLinks: z.boolean().optional(),
+  emailDecisions: z.boolean().optional(),
 })
 
 /**

@@ -73,7 +73,23 @@ describe('Moderation page', () => {
     expect(screen.getByLabelText('Signed-in posts')).toBeInTheDocument()
     expect(screen.getByLabelText('Images')).toBeInTheDocument()
     expect(screen.getByLabelText('Links')).toBeInTheDocument()
-    expect(document.querySelectorAll('[data-slot="setting-row"]')).toHaveLength(4)
+    expect(screen.getByRole('heading', { name: 'Author emails' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email the author')).toBeInTheDocument()
+    expect(document.querySelectorAll('[data-slot="setting-row"]')).toHaveLength(5)
+  })
+
+  it('has decision emails on when the workspace never set them', () => {
+    renderPage()
+    expect(screen.getByLabelText('Email the author')).toBeChecked()
+  })
+
+  it('turns decision emails off for the whole workspace, keeping the approval policy', async () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('Email the author'))
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ requireApproval: 'none', emailDecisions: false })
+    )
+    expect(screen.getByLabelText('Email the author')).not.toBeChecked()
   })
 
   it('saves a toggle immediately and lets the autosave handler report failures', async () => {

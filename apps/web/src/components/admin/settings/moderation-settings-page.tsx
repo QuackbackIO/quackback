@@ -11,6 +11,7 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Switch } from '@/components/ui/switch'
 import {
+  MODERATION_DECISION_EMAIL_MAX_AGE_DAYS,
   requireApprovalToToggles,
   togglesToRequireApproval,
   type ApprovalToggles,
@@ -33,6 +34,10 @@ export function ModerationPage() {
   )
   const [holdLinks, setHoldLinks] = useState(
     portalConfigQuery.data.moderationDefault?.holdLinks === true
+  )
+  // On unless the workspace turned it off.
+  const [emailDecisions, setEmailDecisions] = useState(
+    portalConfigQuery.data.moderationDefault?.emailDecisions !== false
   )
 
   // Each switch saves on change. Switches are locked while a save is in
@@ -65,6 +70,13 @@ export function ModerationPage() {
     return save(key === 'holdImages' ? setHoldImages : setHoldLinks, checked, {
       requireApproval: togglesToRequireApproval(moderationToggles),
       [key]: checked,
+    })
+  }
+
+  function updateEmailDecisions(checked: boolean) {
+    return save(setEmailDecisions, checked, {
+      requireApproval: togglesToRequireApproval(moderationToggles),
+      emailDecisions: checked,
     })
   }
 
@@ -143,6 +155,28 @@ export function ModerationPage() {
                 id="moderate-links"
                 checked={holdLinks}
                 onCheckedChange={(checked) => updateContentHold('holdLinks', checked)}
+                disabled={disabled}
+              />
+            }
+          />
+        </SettingRows>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Author emails"
+        description="When a held post or comment is approved or rejected."
+      >
+        <SettingRows>
+          <SettingRow
+            label="Email the author"
+            description={`Only for items submitted in the last ${MODERATION_DECISION_EMAIL_MAX_AGE_DAYS} days.`}
+            htmlFor="moderation-email-decisions"
+            disabled={disabled}
+            control={
+              <Switch
+                id="moderation-email-decisions"
+                checked={emailDecisions}
+                onCheckedChange={updateEmailDecisions}
                 disabled={disabled}
               />
             }

@@ -6,7 +6,9 @@
  * reaches its author as an email and a bell, under their notification
  * preferences. A rejected post no longer exists, so its notice links nowhere.
  * A teammate moderating their own item, an anonymous author and a muted author
- * get no email.
+ * get no email. Nor does the author of an item held for longer than the
+ * backlog window, or anyone when the workspace turned these emails off; the
+ * bell still goes in both cases.
  *
  * Real database (rolled back per test); the targets come from the real
  * notification resolver, so the event, its payload and the recipient rules are
@@ -61,8 +63,14 @@ import {
   postComments,
   posts,
   principal,
+  settings,
   user,
 } from '@/lib/server/db'
+import {
+  DEFAULT_PORTAL_CONFIG,
+  type ModerationDefault,
+} from '@/lib/server/domains/settings/settings.types'
+import { MODERATION_DECISION_EMAIL_MAX_AGE_MS } from '@/lib/server/events/targets'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 import { notificationResolver } from '@/lib/server/events/resolvers/notification.resolver'
 import type { DomainEvent } from '@/lib/server/events/envelope'
@@ -105,7 +113,11 @@ async function seedBoard(access = DEFAULT_BOARD_ACCESS) {
   return board
 }
 
-async function seedHeldPost(author: PrincipalId, access = DEFAULT_BOARD_ACCESS) {
+async function seedHeldPost(
+  author: PrincipalId,
+  access = DEFAULT_BOARD_ACCESS,
+  createdAt = new Date()
+) {
   const board = await seedBoard(access)
   const [row] = await testDb
     .insert(posts)
@@ -115,12 +127,13 @@ async function seedHeldPost(author: PrincipalId, access = DEFAULT_BOARD_ACCESS) 
       content: 'It hurts my eyes',
       principalId: author,
       moderationState: 'pending',
+      createdAt,
     })
     .returning()
   return { postId: row.id as PostId, board }
 }
 
-async function seedHeldComment(author: PrincipalId) {
+async function seedHeldComment(author: PrincipalId, createdAt = new Date()) {
   const board = await seedBoard()
   const [post] = await testDb
     .insert(posts)
@@ -133,10 +146,30 @@ async function seedHeldComment(author: PrincipalId) {
       principalId: author,
       content: 'Me too',
       moderationState: 'pending',
+      createdAt,
     })
     .returning()
   return { postId: post.id as PostId, commentId: comment.id as PostCommentId, board }
 }
+
+/** The workspace's moderation settings, as Settings > Moderation saves them. */
+async function setModerationDefault(patch: Partial<ModerationDefault>) {
+  const portalConfig = JSON.stringify({
+    ...DEFAULT_PORTAL_CONFIG,
+    moderationDefault: { ...DEFAULT_PORTAL_CONFIG.moderationDefault, ...patch },
+  })
+  const existing = await testDb.query.settings.findFirst()
+  if (existing) {
+    await testDb.update(settings).set({ portalConfig }).where(eq(settings.id, existing.id))
+  } else {
+    await testDb
+      .insert(settings)
+      .values({ name: 'Acme', slug: `acme-${suffix()}`, createdAt: new Date(), portalConfig })
+  }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+const ago = (ms: number) => new Date(Date.now() - ms)
 
 function auditFor(moderator: PrincipalId) {
   return {
@@ -367,5 +400,143 @@ describe.skipIf(!fixture.available)('moderation decision reaches the author', ()
     await rejectPost(postId, undefined, auditFor(moderator.id))
 
     expect(await targetsFor('post.rejected')).toEqual([])
+  })
+
+  describe('old backlog and the workspace switch', () => {
+    it('emails the author of an item submitted a day ago', async () => {
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(author.id, DEFAULT_BOARD_ACCESS, ago(DAY_MS))
+
+      await approvePost(postId, auditFor(moderator.id))
+
+      const targets = await targetsFor('post.approved')
+      expect(emailsOf(targets)).toHaveLength(1)
+      expect(bellsOf(targets)).toHaveLength(1)
+    })
+
+    it('sends no email for a post submitted 30 days before the decision, and keeps the bell', async () => {
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(author.id, DEFAULT_BOARD_ACCESS, ago(30 * DAY_MS))
+
+      await approvePost(postId, auditFor(moderator.id))
+
+      const targets = await targetsFor('post.approved')
+      expect(emailsOf(targets)).toHaveLength(0)
+      expect(bellsOf(targets)).toHaveLength(1)
+    })
+
+    it('sends no email for a spam post rejected out of an old backlog, and keeps the bell', async () => {
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(author.id, DEFAULT_BOARD_ACCESS, ago(90 * DAY_MS))
+
+      await rejectPost(postId, 'spam', auditFor(moderator.id))
+
+      const targets = await targetsFor('post.rejected')
+      expect(emailsOf(targets)).toHaveLength(0)
+      expect(bellsOf(targets)).toHaveLength(1)
+    })
+
+    it('measures a comment by when the comment was submitted', async () => {
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { commentId } = await seedHeldComment(author.id, ago(30 * DAY_MS))
+
+      await approveComment(commentId, auditFor(moderator.id))
+
+      const targets = await targetsFor('comment.approved')
+      expect(emailsOf(targets)).toHaveLength(0)
+      expect(bellsOf(targets)).toHaveLength(1)
+    })
+
+    it('sends no email for a decision recorded without a submission time, and keeps the bell', async () => {
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(author.id)
+      await approvePost(postId, auditFor(moderator.id))
+      const event = (await lastEvent('post.approved'))!
+      const payload = { ...(event.payload as Record<string, unknown>) }
+      expect(payload.submittedAt).toEqual(expect.any(String))
+      delete payload.submittedAt
+
+      const targets = await notificationResolver.resolve({ ...event, payload } as DomainEvent)
+      expect(emailsOf(targets)).toHaveLength(0)
+      expect(bellsOf(targets)).toHaveLength(1)
+    })
+
+    // One decision per test: events written in one transaction share a time,
+    // so the outbox cannot tell two apart by order.
+    it('emails about an item submitted just inside the backlog window', async () => {
+      expect(MODERATION_DECISION_EMAIL_MAX_AGE_MS).toBe(14 * DAY_MS)
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(
+        author.id,
+        DEFAULT_BOARD_ACCESS,
+        ago(MODERATION_DECISION_EMAIL_MAX_AGE_MS - 60 * 60 * 1000)
+      )
+
+      await approvePost(postId, auditFor(moderator.id))
+
+      expect(emailsOf(await targetsFor('post.approved'))).toHaveLength(1)
+    })
+
+    it('sends no email about an item submitted just outside the backlog window', async () => {
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(
+        author.id,
+        DEFAULT_BOARD_ACCESS,
+        ago(MODERATION_DECISION_EMAIL_MAX_AGE_MS + 60 * 60 * 1000)
+      )
+
+      await approvePost(postId, auditFor(moderator.id))
+
+      const targets = await targetsFor('post.approved')
+      expect(emailsOf(targets)).toHaveLength(0)
+      expect(bellsOf(targets)).toHaveLength(1)
+    })
+
+    it('emails by default: the switch is on until a workspace turns it off', async () => {
+      expect(DEFAULT_PORTAL_CONFIG.moderationDefault.emailDecisions).toBe(true)
+      await setModerationDefault({})
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(author.id)
+
+      await approvePost(postId, auditFor(moderator.id))
+
+      expect(emailsOf(await targetsFor('post.approved'))).toHaveLength(1)
+    })
+
+    it('emails when stored settings predate the switch', async () => {
+      await setModerationDefault({ emailDecisions: undefined })
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const { postId } = await seedHeldPost(author.id)
+
+      await approvePost(postId, auditFor(moderator.id))
+
+      expect(emailsOf(await targetsFor('post.approved'))).toHaveLength(1)
+    })
+
+    it('sends no email when the workspace turned decision emails off, and keeps the bell', async () => {
+      await setModerationDefault({ emailDecisions: false })
+      const author = await seedPerson('user')
+      const moderator = await seedPerson('admin')
+      const held = await seedHeldPost(author.id)
+      const heldComment = await seedHeldComment(author.id)
+
+      await approvePost(held.postId, auditFor(moderator.id))
+      await rejectComment(heldComment.commentId, undefined, auditFor(moderator.id))
+
+      for (const type of ['post.approved', 'comment.rejected']) {
+        const targets = await targetsFor(type)
+        expect(emailsOf(targets), type).toHaveLength(0)
+        expect(bellsOf(targets), type).toHaveLength(1)
+      }
+    })
   })
 })

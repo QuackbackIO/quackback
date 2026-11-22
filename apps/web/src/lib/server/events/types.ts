@@ -247,6 +247,9 @@ export interface ModerationDecisionPayload {
   /** The person who decided: the teammate, or the creator of the API key that
    *  made the call. The author is not told about their own decision. */
   moderatorPrincipalId?: string | null
+  /** When the held item was submitted (ISO). An item older than the backlog
+   *  window gets no decision email; see MODERATION_DECISION_EMAIL_MAX_AGE_MS. */
+  submittedAt?: string
 }
 
 export function isModerationDecisionEventType(type: string): type is ModerationDecisionEventType {

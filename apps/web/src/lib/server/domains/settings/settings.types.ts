@@ -253,6 +253,9 @@ export interface ModerationDefault {
   holdImages?: boolean
   /** Hold posts and comments that contain an external link. Default false. */
   holdLinks?: boolean
+  /** Email authors when their held post or comment is approved or rejected.
+   *  Default true; only an explicit false turns it off. */
+  emailDecisions?: boolean
 }
 
 /**
@@ -422,7 +425,12 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   welcomeCard: {
     body: EMPTY_WELCOME_BODY,
   },
-  moderationDefault: { requireApproval: 'none', holdImages: false, holdLinks: false },
+  moderationDefault: {
+    requireApproval: 'none',
+    holdImages: false,
+    holdLinks: false,
+    emailDecisions: true,
+  },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
   support: { enabled: true },
 }

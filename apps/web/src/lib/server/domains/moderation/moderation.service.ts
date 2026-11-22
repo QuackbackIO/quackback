@@ -85,6 +85,14 @@ export interface ModerationAudit {
   onBehalfOfPrincipalId?: PrincipalId | null
 }
 
+/** The held post or comment a decision is about, as read before it. */
+interface HeldRow {
+  id: string
+  principalId: string | null
+  /** When it was submitted; the author is emailed only about recent items. */
+  createdAt: Date
+}
+
 /**
  * Record the team's decision so its author hears about it (email + bell,
  * resolved by the notification sink). Runs after the decision is written and
@@ -93,9 +101,15 @@ export interface ModerationAudit {
  */
 async function emitModerationDecision(
   def: EventDefinition<Record<string, unknown>>,
-  item: { postId: PostId; commentId?: PostCommentId; authorPrincipalId: PrincipalId | null },
+  held: { post: HeldRow } | { comment: HeldRow & { postId: string } },
   audit: ModerationAudit
 ): Promise<void> {
+  const row = 'post' in held ? held.post : held.comment
+  const item = {
+    postId: ('comment' in held ? held.comment.postId : row.id) as PostId,
+    commentId: 'comment' in held ? (row.id as PostCommentId) : undefined,
+    authorPrincipalId: row.principalId as PrincipalId | null,
+  }
   try {
     const [post] = await db
       .select({ title: posts.title, boardId: posts.boardId, boardSlug: boards.slug })
@@ -111,6 +125,7 @@ async function emitModerationDecision(
       boardSlug: post.boardSlug,
       authorPrincipalId: item.authorPrincipalId,
       moderatorPrincipalId: audit.onBehalfOfPrincipalId ?? audit.principalId ?? null,
+      submittedAt: row.createdAt.toISOString(),
       ...(item.commentId ? { commentId: item.commentId } : {}),
     }
     await emitBestEffort(def, {
@@ -287,11 +302,7 @@ export async function approvePost(postId: PostId, audit: ModerationAudit): Promi
     after: { moderationState: 'published' },
     metadata: audit.metadata,
   })
-  await emitModerationDecision(
-    postApproved,
-    { postId, authorPrincipalId: before.principalId as PrincipalId | null },
-    audit
-  )
+  await emitModerationDecision(postApproved, { post: before }, audit)
   // Dispatch deferred external notifications. The actor must be the post's
   // author — not the moderator — so announcePublishedPost loads author data
   // from the post row (which carries principalId, not the moderator's id).
@@ -348,11 +359,7 @@ export async function rejectPost(
     metadata: { reason: reason ?? null, ...(audit.metadata ?? {}) },
   })
   // The reason stays in the audit log; the author is told the decision only.
-  await emitModerationDecision(
-    postRejected,
-    { postId, authorPrincipalId: before.principalId as PrincipalId | null },
-    audit
-  )
+  await emitModerationDecision(postRejected, { post: before }, audit)
 }
 
 /** Guarded transition: a pending comment → published, reconciling commentCount. */
@@ -422,15 +429,7 @@ export async function approveComment(
     after: { moderationState: 'published' },
     metadata: audit.metadata,
   })
-  await emitModerationDecision(
-    commentApproved,
-    {
-      postId: before.postId as PostId,
-      commentId,
-      authorPrincipalId: before.principalId as PrincipalId | null,
-    },
-    audit
-  )
+  await emitModerationDecision(commentApproved, { comment: before }, audit)
   // Dispatch deferred external notifications. Mirrors approvePost: the
   // comment is already published and audited, so swallow failures rather
   // than surface a 500 to the moderator with no retry path.
@@ -480,13 +479,5 @@ export async function rejectComment(
     after: { moderationState: before.moderationState, deletedAt },
     metadata: { reason: reason ?? null, ...(audit.metadata ?? {}) },
   })
-  await emitModerationDecision(
-    commentRejected,
-    {
-      postId: before.postId as PostId,
-      commentId,
-      authorPrincipalId: before.principalId as PrincipalId | null,
-    },
-    audit
-  )
+  await emitModerationDecision(commentRejected, { comment: before }, audit)
 }
