@@ -15,12 +15,17 @@
  *    A published key is only forgotten, never deleted; the publish that
  *    replaces it stages it again.
  *  - Never outside the staged prefixes, whatever was recorded.
- *  - The deletes happen under the settings row lock, which a publish also
- *    takes, so a publish cannot save a key between the check and the delete.
- *    A publish that comes after the delete is refused for a key no longer
- *    staged (see the publish service).
+ *  - A publish cannot save a key the sweep is deleting. Under the settings
+ *    row lock, which a publish also takes, the sweep checks each due key and
+ *    marks the ones it will delete (`sweeping`); a publish refuses a marked
+ *    key just as it refuses one no longer staged (see the publish service).
+ *  - No storage call holds the row lock. The marks are committed first, the
+ *    deletes run after with a timeout each, and a second short transaction
+ *    forgets the keys whose delete succeeded. A delete that fails or hangs,
+ *    or a run that dies part way, leaves its keys listed and marked, and the
+ *    next run checks and deletes them again.
  */
-import { db, eq, settings, type Database, type Transaction } from '@/lib/server/db'
+import { db, eq, settings, type Transaction } from '@/lib/server/db'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
 import { ValidationError } from '@/lib/shared/errors'
@@ -53,12 +58,15 @@ export const STAGED_UPLOAD_GRACE_MS = 24 * 60 * 60_000
 export const MAX_STAGED_UPLOADS = 300
 
 /**
- * Deletes per run, and a time budget well inside the job's 60s lease. The
- * deletes hold the settings row lock, so a run stays short; what is left
- * stays listed for the next run.
+ * Deletes per run, and a time budget well inside the job's 60s lease: no new
+ * delete starts after the budget, so a run ends within the budget plus one
+ * delete timeout. What is left stays listed for the next run.
  */
 export const MAX_SWEEP_DELETES = 25
 const SWEEP_BUDGET_MS = 20_000
+
+/** How long one delete may take before the sweep gives up on it until the next run. */
+export const STAGED_UPLOAD_DELETE_TIMEOUT_MS = 10_000
 
 /** A store reports a missing object two ways; either means there is nothing to delete. */
 function isNotFound(error: unknown): boolean {
@@ -75,6 +83,11 @@ export interface StagedUpload {
    * a commercial font): a publish puts it live only with a confirmation.
    */
   brandAsset?: true
+  /**
+   * The sweep has claimed it for deletion: it is past its day and nothing
+   * referred to it. A publish refuses it; the sweep forgets it once deleted.
+   */
+  sweeping?: true
 }
 
 export function isStageableKey(key: string): boolean {
@@ -142,14 +155,22 @@ export async function recordStagedUpload(
   )
 }
 
-/** Whether `key` is staged as an imported brand asset, which a publish must have confirmed. */
-export function isStagedBrandAsset(metadata: string | null, key: string): boolean {
-  return readStagedUploads(metadata).some((entry) => entry.key === key && entry.brandAsset === true)
+/**
+ * The entry a publish may save for `key`: listed and not claimed by the sweep.
+ * Only the publish gate skips claimed entries; the writers keep them listed.
+ */
+function publishable(metadata: string | null, key: string): StagedUpload | undefined {
+  return readStagedUploads(metadata).find((entry) => entry.key === key && !entry.sweeping)
 }
 
-/** Whether `key` is on the staged list of this metadata text. */
+/** Whether `key` is staged as an imported brand asset, which a publish must have confirmed. */
+export function isStagedBrandAsset(metadata: string | null, key: string): boolean {
+  return publishable(metadata, key)?.brandAsset === true
+}
+
+/** Whether `key` is on the staged list of this metadata text and a publish may still save it. */
 export function isStaged(metadata: string | null, key: string): boolean {
-  return readStagedUploads(metadata).some((entry) => entry.key === key)
+  return publishable(metadata, key) !== undefined
 }
 
 /** Forget staged keys that are now saved (a publish calls this in its own transaction). */
@@ -206,8 +227,25 @@ export interface StagedUploadSweepResult {
   removed: number
   /** Records forgotten without a delete: the settings row names the key. */
   kept: number
-  /** Deletes that failed; their records stay for the next run. */
+  /** Deletes that failed or timed out; their records stay, marked, for the next run. */
   failed: number
+}
+
+/** Delete one object, giving up after `timeoutMs` even if the store never answers. */
+async function deleteWithTimeout(key: string, timeoutMs: number): Promise<void> {
+  const signal = AbortSignal.timeout(timeoutMs)
+  let stop = () => {}
+  const timedOut = new Promise<never>((_, reject) => {
+    stop = () => reject(new Error(`deleting ${key} took longer than ${timeoutMs}ms`))
+    signal.addEventListener('abort', stop, { once: true })
+  })
+  try {
+    // The signal also aborts the request itself; the race covers a store
+    // that ignores it.
+    await Promise.race([deleteObject(key, { signal }), timedOut])
+  } finally {
+    signal.removeEventListener('abort', stop)
+  }
 }
 
 /** Every stored value of the row except the staged list itself, as one text to search. */
@@ -216,64 +254,102 @@ function referenceText(row: typeof settings.$inferSelect, bag: Record<string, un
   return JSON.stringify({ ...row, metadata: rest })
 }
 
-/** Remove the staged uploads nothing refers to a day after they were staged. */
-export async function sweepStagedUploads(
-  options: { now?: Date } = {}
-): Promise<StagedUploadSweepResult> {
-  const now = options.now ?? new Date()
-  const result: StagedUploadSweepResult = { removed: 0, kept: 0, failed: 0 }
+/**
+ * Under the row lock, with no storage calls: forget what is done with (a key
+ * the row names, or one outside the staged prefixes) and mark up to
+ * MAX_SWEEP_DELETES of the rest for deletion. Returns the marked keys.
+ */
+async function claimDueUploads(
+  tx: Transaction,
+  now: Date,
+  result: StagedUploadSweepResult
+): Promise<string[] | null> {
+  const [row] = await tx.select().from(settings).limit(1).for('update')
+  if (!row) return null
+  const bag = parsedBag(row.metadata, row.id)
+  const list = stagedIn(bag)
+  if (!list.some((entry) => isDue(entry, now))) return null
 
-  const sweep = async (tx: Database | Transaction) => {
-    const [row] = await tx.select().from(settings).limit(1).for('update')
-    if (!row) return false
-    const bag = parsedBag(row.metadata, row.id)
-    const list = stagedIn(bag)
-    const due = list.filter((entry) => isDue(entry, now))
-    if (due.length === 0) return false
-
-    const references = referenceText(row, bag)
-    const started = Date.now()
-    const leftForNextRun: StagedUpload[] = []
-    for (const entry of due) {
-      if (
-        result.removed + result.failed >= MAX_SWEEP_DELETES ||
-        Date.now() - started >= SWEEP_BUDGET_MS
-      ) {
-        leftForNextRun.push(entry)
-        continue
-      }
-      if (!isStageableKey(entry.key)) {
-        log.warn({ key: entry.key }, 'staged upload outside the staged prefixes; forgotten')
-        continue
-      }
-      if (references.includes(entry.key)) {
-        result.kept++
-        continue
-      }
-      try {
-        await deleteObject(entry.key)
-        result.removed++
-      } catch (err) {
-        if (isNotFound(err)) {
-          result.removed++
-          continue
-        }
-        result.failed++
-        leftForNextRun.push(entry)
-        log.warn({ err, key: entry.key }, 'failed to delete staged upload; will retry')
-      }
+  const references = referenceText(row, bag)
+  const claimed: string[] = []
+  const next: StagedUpload[] = []
+  for (const entry of list) {
+    if (!isDue(entry, now)) {
+      next.push(entry)
+      continue
     }
-
-    bag[STAGED_UPLOADS_KEY] = [...list.filter((entry) => !isDue(entry, now)), ...leftForNextRun]
-    await tx
-      .update(settings)
-      .set({ metadata: JSON.stringify(bag) })
-      .where(eq(settings.id, row.id))
-    return true
+    if (!isStageableKey(entry.key)) {
+      log.warn({ key: entry.key }, 'staged upload outside the staged prefixes; forgotten')
+      continue
+    }
+    if (references.includes(entry.key)) {
+      result.kept++
+      continue
+    }
+    if (claimed.length < MAX_SWEEP_DELETES) {
+      claimed.push(entry.key)
+      next.push({ ...entry, sweeping: true })
+    } else {
+      next.push(entry)
+    }
   }
 
-  const wrote = await db.transaction(sweep)
-  if (wrote) await invalidateSettingsCache()
+  bag[STAGED_UPLOADS_KEY] = next
+  await tx
+    .update(settings)
+    .set({ metadata: JSON.stringify(bag) })
+    .where(eq(settings.id, row.id))
+  return claimed
+}
+
+/** Remove the staged uploads nothing refers to a day after they were staged. */
+export async function sweepStagedUploads(
+  options: { now?: Date; deleteTimeoutMs?: number } = {}
+): Promise<StagedUploadSweepResult> {
+  const now = options.now ?? new Date()
+  const timeoutMs = options.deleteTimeoutMs ?? STAGED_UPLOAD_DELETE_TIMEOUT_MS
+  const result: StagedUploadSweepResult = { removed: 0, kept: 0, failed: 0 }
+
+  // 1. A short transaction: check and mark under the lock, then commit.
+  const claimed = await db.transaction((tx) => claimDueUploads(tx, now, result))
+  if (claimed === null) {
+    log.info({ ...result }, 'staged upload sweep')
+    return result
+  }
+  await invalidateSettingsCache()
+
+  // 2. The deletes, with no transaction open.
+  const started = Date.now()
+  const deleted: string[] = []
+  for (const key of claimed) {
+    // Past the budget, the rest stay marked for the next run.
+    if (Date.now() - started >= SWEEP_BUDGET_MS) break
+    try {
+      await deleteWithTimeout(key, timeoutMs)
+      deleted.push(key)
+    } catch (err) {
+      if (isNotFound(err)) {
+        deleted.push(key)
+        continue
+      }
+      result.failed++
+      log.warn({ err, key }, 'failed to delete staged upload; will retry')
+    }
+  }
+  result.removed = deleted.length
+
+  // 3. Another short transaction: forget what was deleted.
+  if (deleted.length > 0) {
+    try {
+      await writeMetadataKey(STAGED_UPLOADS_KEY, (stored) =>
+        readStagedUploads(stored).filter((entry) => !deleted.includes(entry.key))
+      )
+    } catch (err) {
+      // They stay marked; the next run finds them gone and forgets them.
+      log.error({ err, keys: deleted }, 'failed to forget deleted staged uploads')
+      throw err
+    }
+  }
   log.info({ ...result }, 'staged upload sweep')
   return result
 }
