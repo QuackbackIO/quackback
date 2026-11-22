@@ -29,15 +29,27 @@ jobs:
   # each as an untagged per-arch image BY DIGEST. Native beats QEMU here: the
   # image runs `bun install` plus two Vite/TanStack production builds, which are
   # far too slow under arm64 emulation (and risk job timeouts).
+  #
+  # Two images: the app, and the browser reader sidecar (docker/browser), which
+  # is published beside it as <repo>-browser so self-hosters and cloud pull it
+  # instead of building it.
   build:
     strategy:
       fail-fast: false
       matrix:
+        image: [app, browser]
+        platform: [linux/amd64, linux/arm64]
         include:
           - platform: linux/amd64
             runner: ubuntu-latest
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
+          - image: app
+            file: ./apps/web/Dockerfile
+            suffix: ''
+          - image: browser
+            file: ./docker/browser/Dockerfile
+            suffix: '-browser'
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -57,7 +69,9 @@ jobs:
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Resolve lowercase image ref
-        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+        env:
+          SUFFIX: ${{ matrix.suffix }}
+        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')${SUFFIX}" >> "$GITHUB_ENV"
 
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
@@ -70,14 +84,15 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
-          file: ./apps/web/Dockerfile
+          file: ${{ matrix.file }}
           platforms: ${{ matrix.platform }}
           # No tags here — the manifest list (and its tags) is assembled in the
           # merge job; each leg pushes an untagged per-arch image by digest.
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          # Per-arch cache scope so the two runners don't clobber each other.
-          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
-          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+          # Per-image, per-arch cache scope so the runners don't clobber each
+          # other. The app keeps its old scope name, and with it its cache.
+          cache-from: type=gha,scope=${{ matrix.image == 'app' && env.PLATFORM_PAIR || format('{0}-{1}', matrix.image, env.PLATFORM_PAIR) }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image == 'app' && env.PLATFORM_PAIR || format('{0}-{1}', matrix.image, env.PLATFORM_PAIR) }}
 
       - name: Export digest
         env:
@@ -88,7 +103,7 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: digests-${{ env.PLATFORM_PAIR }}
+          name: digests-${{ matrix.image }}-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -97,9 +112,22 @@ jobs:
   # digests and apply the moving tags (`main` on branch pushes, `X.Y.Z` +
   # `latest` on v* tags). Do not attach Cosign signature tags: they clutter
   # the package with sha256-*.sig versions and are unused.
+  #
+  # One leg per image, run even when the other image failed to build, so a
+  # broken browser build never holds back the app image (the fleet pulls it).
+  # Each leg refuses to publish unless both of its architectures built.
   merge:
     runs-on: ubuntu-latest
     needs: [build]
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: app
+            suffix: ''
+          - image: browser
+            suffix: '-browser'
     permissions:
       contents: read
       packages: write
@@ -107,13 +135,15 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: /tmp/digests
-          pattern: digests-*
+          pattern: digests-${{ matrix.image }}-*
           merge-multiple: true
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Resolve lowercase image ref
-        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+        env:
+          SUFFIX: ${{ matrix.suffix }}
+        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')${SUFFIX}" >> "$GITHUB_ENV"
 
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
@@ -139,6 +169,14 @@ jobs:
         run: |
           if [ -z "$TAGS" ]; then
             echo 'docker/metadata-action produced no tags. For workflow_dispatch with sha, pass image_tag (e.g. 0.13.2).'
+            exit 1
+          fi
+
+      - name: Require both architectures
+        working-directory: /tmp/digests
+        run: |
+          if [ "$(ls | wc -l)" -ne 2 ]; then
+            echo "Expected an amd64 and an arm64 digest for ${{ matrix.image }}, found: $(ls | tr '\n' ' ')"
             exit 1
           fi
 
