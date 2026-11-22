@@ -397,6 +397,7 @@ describe('replayGateVerdict', () => {
       '0320_roadmap_slug_live_only',
       '0321_live_taxonomy_unique',
       '0322_session_two_factor_pending',
+      '0323_clear_legacy_header_settings',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
