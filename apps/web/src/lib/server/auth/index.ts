@@ -237,6 +237,10 @@ async function createAuth() {
   // Plan limits read the plan from the same settings copy that carried that
   // version, so a plan written by another process is the one built on.
   const [ssoLive, workspaceSettings] = await Promise.all([isSsoLive(), getWorkspaceSettings()])
+  // The workspace's registration switch, for both ways a new OAuth app
+  // registers: the DCR endpoint and a client metadata document (CIMD).
+  const allowClientRegistration =
+    workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true
 
   // OIDC providers (single sign-on + portal custom OIDC) are registered
   // from the identity_provider list — the single source of truth. Each
@@ -759,8 +763,7 @@ async function createAuth() {
         loginPage: '/auth/login',
         consentPage: CONSENT_START_PATH,
         resource: mcpResourceIdentifier,
-        allowDynamicClientRegistration:
-          workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
+        allowDynamicClientRegistration: allowClientRegistration,
         allowUnauthenticatedClientRegistration: true,
         scopes: [...MCP_AS_SCOPES],
         // Baseline capability set stored on every dynamically registered (DCR)
@@ -798,11 +801,13 @@ async function createAuth() {
       }),
 
       // Client ID Metadata Documents: an MCP client may use an HTTPS URL as
-      // its client_id instead of registering. Advertises
-      // `client_id_metadata_document_supported`. Must follow `mcp()`. DCR
-      // above stays for clients without CIMD; its workspace toggle does not
-      // affect this. See ./cimd.ts for the fetch transport and policy.
-      mcpCimdPlugin(),
+      // its client_id instead of registering. Must follow `mcp()`. DCR above
+      // stays for clients without CIMD. The workspace's registration switch
+      // covers both: when it is off, no new CIMD client is accepted and
+      // `client_id_metadata_document_supported` is not advertised, while
+      // clients stored earlier keep working. See ./cimd.ts for the fetch
+      // transport and policy.
+      mcpCimdPlugin({ allowNewClients: allowClientRegistration }),
 
       // RFC 8628 device authorization grant on the same OAuth server: a
       // headless client asks `/device/code`, the person approves the code at

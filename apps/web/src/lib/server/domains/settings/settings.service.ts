@@ -767,7 +767,7 @@ export async function updateDeveloperConfig(
         .set({ developerConfig: JSON.stringify(updated) })
         .where(eq(settings.id, org.id))
 
-    // The oauthProvider plugin reads the dynamic-client-registration toggle
+    // The oauthProvider and CIMD plugins read the client-registration toggle
     // at auth-instance build time, so a change must bump auth_config_version
     // in the same transaction to rebuild cached Better-Auth instances on
     // every pod (same pattern as updateAuthConfig).
