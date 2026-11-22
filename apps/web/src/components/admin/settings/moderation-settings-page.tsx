@@ -11,7 +11,6 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Switch } from '@/components/ui/switch'
 import {
-  MODERATION_DECISION_EMAIL_MAX_AGE_DAYS,
   requireApprovalToToggles,
   togglesToRequireApproval,
   type ApprovalToggles,
@@ -125,6 +124,19 @@ export function ModerationPage() {
               />
             }
           />
+          <SettingRow
+            label="Email authors the decision"
+            htmlFor="moderation-email-decisions"
+            disabled={disabled}
+            control={
+              <Switch
+                id="moderation-email-decisions"
+                checked={emailDecisions}
+                onCheckedChange={updateEmailDecisions}
+                disabled={disabled}
+              />
+            }
+          />
         </SettingRows>
       </SettingsCard>
 
@@ -155,28 +167,6 @@ export function ModerationPage() {
                 id="moderate-links"
                 checked={holdLinks}
                 onCheckedChange={(checked) => updateContentHold('holdLinks', checked)}
-                disabled={disabled}
-              />
-            }
-          />
-        </SettingRows>
-      </SettingsCard>
-
-      <SettingsCard
-        title="Author emails"
-        description="When a held post or comment is approved or rejected."
-      >
-        <SettingRows>
-          <SettingRow
-            label="Email the author"
-            description={`Only for items submitted in the last ${MODERATION_DECISION_EMAIL_MAX_AGE_DAYS} days.`}
-            htmlFor="moderation-email-decisions"
-            disabled={disabled}
-            control={
-              <Switch
-                id="moderation-email-decisions"
-                checked={emailDecisions}
-                onCheckedChange={updateEmailDecisions}
                 disabled={disabled}
               />
             }
