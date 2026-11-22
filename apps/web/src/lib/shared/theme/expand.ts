@@ -287,8 +287,14 @@ export function expandTheme(
 
 /** A filled button stands off the page at this contrast or more (WCAG 1.4.11). */
 const BUTTON_SHOWS = 3
-/** The words on a filled button read at this contrast or more. */
+/** The words on a filled button read at this contrast or more in their usual ink. */
 const BUTTON_TEXT_CONTRAST = 4.5
+/**
+ * White words on a filled button stay white at this contrast or more (WCAG's
+ * large or bold text threshold): brand buttons in mid-tone teals, greens and
+ * indigos keep the white text they were designed with.
+ */
+const BUTTON_WHITE_TEXT_CONTRAST = 3
 const LIGHT_INK = 'oklch(0.985 0 0)'
 const DARK_INK = 'oklch(0.145 0 0)'
 
@@ -322,32 +328,34 @@ export function darkMainColour(
     }
     if (relativeLuminance(hex) <= relativeLuminance(page)) continue
     if (contrastOf(hex, page) < BUTTON_SHOWS) continue
-    const usual = computeContrastForeground(candidate)
-    const other = usual === DARK_INK ? LIGHT_INK : DARK_INK
+    // Lightened until white or near-black reads at 4.5:1; the words on it
+    // then follow the rule every filled button does.
     const reads = (ink: string) => contrastOf(oklchToHex(ink), hex) >= BUTTON_TEXT_CONTRAST
-    const foreground = reads(usual) ? usual : reads(other) ? other : null
-    if (foreground) return { primary: candidate, foreground }
+    if (reads(LIGHT_INK) || reads(DARK_INK))
+      return { primary: candidate, foreground: readableInkOn(candidate) }
   }
   return null
 }
 
 /**
  * The ink for words on a fill: the usual one (near-white on a dark fill,
- * near-black on a light one), unless it falls short of body text's contrast
- * there and a stronger or the other one does not: the words must read.
+ * near-black on a light one) where it reads at 4.5:1, or near-black's full
+ * strength on a light fill. Otherwise white, wherever pure white reaches 3:1:
+ * a teal or indigo button keeps its white words rather than turning black.
+ * Only under that do the words turn dark, and if nothing reads, the ink that
+ * reads best is used.
  */
 function readableInkOn(fill: string): string {
   const usual = computeContrastForeground(fill)
   const hex = tryCssColorToHex(fill)
   if (!hex) return usual
-  const reads = (ink: string) =>
-    contrastOf(tryCssColorToHex(ink) ?? oklchToHex(ink), hex) >= BUTTON_TEXT_CONTRAST
-  if (reads(usual)) return usual
-  // The same ink at full strength, then the other one: a mid blue takes
-  // near-white at 4.4:1, white at 4.6:1.
-  const [full, other, otherFull] =
-    usual === LIGHT_INK ? ['#ffffff', DARK_INK, '#000000'] : ['#000000', LIGHT_INK, '#ffffff']
-  return [full, other, otherFull].find(reads) ?? usual
+  const contrast = (ink: string) => contrastOf(tryCssColorToHex(ink) ?? oklchToHex(ink), hex)
+  if (contrast(usual) >= BUTTON_TEXT_CONTRAST) return usual
+  if (usual === DARK_INK && contrast('#000000') >= BUTTON_TEXT_CONTRAST) return '#000000'
+  if (contrast('#ffffff') >= BUTTON_WHITE_TEXT_CONTRAST) return '#ffffff'
+  const dark = [DARK_INK, '#000000'].find((ink) => contrast(ink) >= BUTTON_TEXT_CONTRAST)
+  if (dark) return dark
+  return contrast('#ffffff') >= contrast('#000000') ? '#ffffff' : '#000000'
 }
 
 /** Text on the header bar reads at this contrast or more, as body text does. */
