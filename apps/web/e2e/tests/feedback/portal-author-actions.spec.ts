@@ -3,8 +3,9 @@
  *
  * D13: a customer can edit or delete their own post until the team acts on it
  * (a status change off the default, a public team reply, a merge), and once
- * the team has acted the window stays closed. Their own auto-vote, and other
- * customers' votes and comments, leave it open.
+ * the team has acted the window stays closed. Their own auto-vote and other
+ * customers' comments leave it open; another customer's vote closes delete
+ * only, so their vote is not lost.
  *
  * Journeys: FBP-S-17 FBP-S-18 FBP-S-19 FBP-S-20
  */
@@ -90,7 +91,11 @@ test.describe('portal author actions', () => {
       // Voted by someone else: that does not close the window.
       const voted = await ownPost(cass, board, `${marker} voted`)
       await seedVotes({ ...voted }, [stranger.principalUuid])
-      expect(await perms(cass, voted.id)).toMatchObject({ canEdit: true, canDelete: true })
+      expect(await perms(cass, voted.id)).toMatchObject({
+        canEdit: true,
+        canDelete: false,
+        deleteReason: 'Cannot delete posts other people have voted on',
+      })
       // Deleted.
       const deleted = await ownPost(cass, board, `${marker} deleted`)
       await supportDb()`UPDATE posts SET deleted_at = now() WHERE id = ${deleted.uuid}`
@@ -177,13 +182,16 @@ test.describe('portal author actions', () => {
         expect(
           (await fbFn(cass.request, 'publicPosts', 'userDeletePostFn', { postId: post.id })).error
         ).toBeDefined()
-        // Another customer's vote leaves the window open.
+        // Another customer's vote closes delete, so their vote is not lost.
         const voted = await ownPost(cass, board, `${marker} voted`)
         await seedVotes({ ...voted }, [other.principalUuid])
         expect(
           (await fbFn(cass.request, 'publicPosts', 'userDeletePostFn', { postId: voted.id })).error
-        ).toBeUndefined()
-        expect((await postRow(voted.uuid)).deleted_at).not.toBeNull()
+        ).toMatchObject({
+          code: 'DELETE_NOT_ALLOWED',
+          message: 'Cannot delete posts other people have voted on',
+        })
+        expect((await postRow(voted.uuid)).deleted_at).toBeNull()
         // A post the team replied to cannot be deleted, even once the reply is gone.
         const replied = await ownPost(cass, board, `${marker} replied`)
         const reply = await teamReply(replied, teammate.principalUuid)

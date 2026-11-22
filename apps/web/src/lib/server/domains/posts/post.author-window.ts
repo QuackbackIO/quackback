@@ -9,10 +9,12 @@
  *     team note does not count, and does not reveal itself here), or
  *   - merges it into another post, or merges another post into it.
  *
- * Nothing a customer does closes the window: the author's own auto-vote, other
- * customers' votes and other customers' comments all leave it open. The two
- * portal switches `allowEditAfterEngagement` / `allowDeleteAfterEngagement`
- * keep it open for good.
+ * Other customers' votes close the delete half only: once someone else has
+ * voted, deleting the post would take their votes with it, so the author may
+ * still edit it but no longer delete it. Nothing else a customer does closes
+ * the window: the author's own auto-vote and other customers' comments leave
+ * it open. The two portal switches `allowEditAfterEngagement` /
+ * `allowDeleteAfterEngagement` keep it open for good.
  *
  * Every entry point (the permission reads the portal menu shows, and the
  * writes) asks here, so the rule lives once.
@@ -22,13 +24,15 @@ import {
   posts,
   postComments,
   postActivity,
+  postVotes,
   eq,
+  ne,
   and,
   inArray,
   type Database,
   type Transaction,
 } from '@/lib/server/db'
-import type { PostId, PostStatusId } from '@quackback/ids'
+import type { PostId, PostStatusId, PrincipalId } from '@quackback/ids'
 import type { PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult } from './post.types'
 
@@ -44,6 +48,8 @@ export interface AuthorWindowPost {
   /** Whether the post's status is the workspace default (true when it has none). */
   onDefaultStatus: boolean
   canonicalPostId: PostId | null
+  /** The post's author, whose own vote does not count as someone else's. */
+  principalId: PrincipalId | null
 }
 
 /** Activity types that record the team acting on a post, and what each one means. */
@@ -105,6 +111,25 @@ export async function teamActionOn(
   return null
 }
 
+/**
+ * Whether anyone other than the author has voted on the post. Only the delete
+ * half reads it. A vote bumps the post's vote count, so a write that holds the
+ * post row lock sees every vote cast before it.
+ */
+export async function othersVotedOn(
+  post: AuthorWindowPost,
+  executor: DbOrTx = db
+): Promise<boolean> {
+  const others = post.principalId
+    ? and(eq(postVotes.postId, post.id), ne(postVotes.principalId, post.principalId))
+    : eq(postVotes.postId, post.id)
+  const [vote] = await executor.select({ id: postVotes.id }).from(postVotes).where(others).limit(1)
+  return vote !== undefined
+}
+
+/** Why the author can no longer delete a post other customers voted on. */
+const VOTED_REASON = 'Cannot delete posts other people have voted on'
+
 const REASONS: Record<'edit' | 'delete', Record<TeamAction, string>> = {
   edit: {
     status: 'Cannot edit posts that have been reviewed by the team',
@@ -127,15 +152,18 @@ function alwaysOpen(action: 'edit' | 'delete', config: PortalConfig): boolean {
 
 /**
  * The author's own edit and delete rights on `post`, given the team action
- * already looked up (so one read serves both answers).
+ * and whether others voted, already looked up (so one read serves both answers).
  */
 export function authorWindowResult(
   action: 'edit' | 'delete',
   teamAction: TeamAction | null,
+  othersVoted: boolean,
   config: PortalConfig
 ): PermissionCheckResult {
-  if (!teamAction || alwaysOpen(action, config)) return { allowed: true }
-  return { allowed: false, reason: REASONS[action][teamAction] }
+  if (alwaysOpen(action, config)) return { allowed: true }
+  if (teamAction) return { allowed: false, reason: REASONS[action][teamAction] }
+  if (action === 'delete' && othersVoted) return { allowed: false, reason: VOTED_REASON }
+  return { allowed: true }
 }
 
 /** The author's right to `action` their own post. Looks up the team action itself. */
@@ -146,5 +174,9 @@ export async function authorWindow(
   executor: DbOrTx = db
 ): Promise<PermissionCheckResult> {
   if (alwaysOpen(action, config)) return { allowed: true }
-  return authorWindowResult(action, await teamActionOn(post, executor), config)
+  const [teamAction, othersVoted] = await Promise.all([
+    teamActionOn(post, executor),
+    action === 'delete' ? othersVotedOn(post, executor) : false,
+  ])
+  return authorWindowResult(action, teamAction, othersVoted, config)
 }
