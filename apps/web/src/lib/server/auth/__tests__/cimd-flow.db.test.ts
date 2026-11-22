@@ -216,6 +216,30 @@ async function consentAndExchange(headers: Headers, consentLocation: string) {
   return tokens
 }
 
+/**
+ * Set the workspace's "Dynamic client registration" switch the way a save
+ * leaves it: stored, settings cache dropped, auth instance rebuilt.
+ */
+async function setRegistration(enabled: boolean) {
+  const developerConfig = JSON.stringify({ oauthDynamicClientRegistrationEnabled: enabled })
+  const [row] = await testDb.select({ id: settings.id }).from(settings).limit(1)
+  if (row) {
+    await testDb.update(settings).set({ developerConfig }).where(eq(settings.id, row.id))
+  } else {
+    await testDb.insert(settings).values({
+      id: createId('workspace'),
+      name: 'Acme',
+      slug: 'acme',
+      createdAt: new Date(),
+      developerConfig,
+    })
+  }
+  const { invalidateSettingsCache } = await import('@/lib/server/domains/settings/settings.helpers')
+  await invalidateSettingsCache()
+  const { resetAuth } = await import('@/lib/server/auth/index')
+  resetAuth()
+}
+
 describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, rolled back)', () => {
   beforeEach(async () => {
     await fixture.begin()
@@ -676,5 +700,80 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
       expect(res.status, clientId).toBeGreaterThanOrEqual(300)
     }
     expect(docs.fetches).toEqual([])
+  })
+
+  // The switch covers both ways a new app registers. Off: no new CIMD client,
+  // no advertisement; a client that registered earlier keeps working, as a
+  // DCR client does.
+  describe('with dynamic client registration turned off', () => {
+    const OTHER_CLIENT_ID = 'https://other.example.com/oauth/client-metadata.json'
+    const OTHER_REDIRECT_URI = 'https://other.example.com/oauth/callback'
+
+    it('stops advertising CIMD at every discovery URL', async () => {
+      await setRegistration(false)
+      const routes = [
+        ['/.well-known/oauth-authorization-server', authServerMetadataRoute],
+        ['/.well-known/oauth-authorization-server/api/auth', authServerMetadataPathRoute],
+        ['/.well-known/openid-configuration', openIdConfigRoute],
+        ['/.well-known/openid-configuration/api/auth', openIdConfigPathRoute],
+        ['/api/auth/.well-known/openid-configuration', authCatchAllRoute],
+        ['/api/auth/.well-known/oauth-authorization-server', authCatchAllRoute],
+      ] as const
+      for (const [path, mod] of routes) {
+        const res = await routeGet(mod)({ request: new Request(`${ORIGIN}${path}`) })
+        expect(res.status, path).toBe(200)
+        const meta = (await res.json()) as Record<string, unknown>
+        expect(meta.client_id_metadata_document_supported, path).not.toBe(true)
+        expect(meta.issuer, path).toBe(`${ORIGIN}/api/auth`)
+      }
+    })
+
+    it('refuses a new client without fetching its document', async () => {
+      serveDocument()
+      await setRegistration(false)
+      const person = await signedIn()
+      const res = await authorize(person.headers)
+      expect(res.status).toBeGreaterThanOrEqual(300)
+      expect(`${res.location} ${res.body}`).toMatch(/access_denied/)
+      expect(res.location.startsWith(REDIRECT_URI)).toBe(false)
+      expect(docs.fetches).toEqual([])
+      const rows = await testDb
+        .select()
+        .from(oauthClient)
+        .where(eq(oauthClient.clientId, CLIENT_ID))
+      expect(rows).toHaveLength(0)
+    })
+
+    it('keeps a client that registered while it was on, and refuses a new one', async () => {
+      serveDocument()
+      serveJson(OTHER_CLIENT_ID, {
+        client_id: OTHER_CLIENT_ID,
+        client_name: 'Other Example',
+        redirect_uris: [OTHER_REDIRECT_URI],
+        token_endpoint_auth_method: 'none',
+      })
+      await setRegistration(true)
+      const person = await signedIn()
+      expect((await authorize(person.headers)).status).toBe(302)
+
+      await setRegistration(false)
+      const kept = await authorize(person.headers)
+      expect(kept.status, kept.body).toBe(302)
+      expect(kept.location).toContain('/oauth/consent')
+      expect(kept.location).not.toContain('error=')
+
+      const refused = await authorize(person.headers, {
+        client_id: OTHER_CLIENT_ID,
+        redirect_uri: OTHER_REDIRECT_URI,
+      })
+      expect(`${refused.location} ${refused.body}`).toMatch(/access_denied/)
+      expect(refused.location.startsWith(OTHER_REDIRECT_URI)).toBe(false)
+      expect(docs.fetches).not.toContain(OTHER_CLIENT_ID)
+      const rows = await testDb
+        .select()
+        .from(oauthClient)
+        .where(eq(oauthClient.clientId, OTHER_CLIENT_ID))
+      expect(rows).toHaveLength(0)
+    })
   })
 })

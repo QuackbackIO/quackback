@@ -558,9 +558,10 @@ export interface DeveloperConfig {
   /** Whether portal users (role: 'user') can access MCP */
   mcpPortalAccessEnabled: boolean
   /**
-   * Whether OAuth clients may self-register (RFC 7591 dynamic client
-   * registration). Required by MCP clients like Claude Code; disable to
-   * restrict OAuth to pre-registered clients. Read at auth-instance build
+   * Whether new OAuth clients may self-register, by either route: RFC 7591
+   * dynamic client registration or a Client ID Metadata Document (CIMD).
+   * Required by MCP clients like Claude Code; disable to restrict OAuth to
+   * clients registered already, which keep working. Read at auth-instance build
    * time; updateDeveloperConfig bumps auth_config_version on change so the
    * toggle takes effect without a restart.
    */
