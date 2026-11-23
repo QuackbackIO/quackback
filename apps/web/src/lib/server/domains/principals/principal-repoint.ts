@@ -27,6 +27,7 @@
  */
 import { toUuid, type PrincipalId } from '@quackback/ids'
 import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
+import { withdrawThreadVotes } from '@/lib/server/domains/posts/post.merge-ids'
 import {
   slackUserLinks,
   postVotes,
@@ -170,6 +171,21 @@ function collisionRepoint(
 }
 
 /**
+ * Wraps the post_votes step: the source's and target's votes in one merge
+ * thread become one voter's, so the thread's stored vote_count loses one
+ * before the rows are dropped or re-pointed.
+ */
+function withdrawCollidingVotes(step: RepointStep): RepointStep {
+  return {
+    ...step,
+    async run(tx, ctx) {
+      await withdrawThreadVotes(tx, ctx.from, { keptBy: ctx.to })
+      await step.run(tx, ctx)
+    },
+  }
+}
+
+/**
  * A fill-if-empty attribute consolidation on the principal itself (not a
  * re-point): the source value fills the target only when the target's own
  * column is still NULL (user wins, source fills gaps). A source with no value
@@ -217,12 +233,14 @@ export const REPOINT_STEPS: RepointStep[] = [
     'principal_id',
     'Preserve Slack identity links when a principal is absorbed; uniqueness is on Slack team and user, not principal.'
   ),
-  collisionRepoint(
-    'post_votes',
-    postVotes,
-    'principal_id',
-    ['post_id'],
-    'Votes; unique (post_id, principal_id). The identified vote wins: colliding anon votes are dropped.'
+  withdrawCollidingVotes(
+    collisionRepoint(
+      'post_votes',
+      postVotes,
+      'principal_id',
+      ['post_id'],
+      'Votes; unique (post_id, principal_id). The identified vote wins: colliding anon votes are dropped. Where both voted in one merge thread, the stored vote_count loses the vote first.'
+    )
   ),
   collisionRepoint(
     'post_comment_reactions',

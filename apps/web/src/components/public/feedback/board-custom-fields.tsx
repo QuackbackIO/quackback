@@ -29,15 +29,23 @@ export interface BoardCustomFieldsProps {
   fields: BoardCustomField[]
   values: Record<string, unknown>
   onChange: (key: string, value: unknown) => void
+  /** A short message under each field whose answer is missing or not valid, by key. */
+  errors?: Partial<Record<string, string>>
 }
 
-export function BoardCustomFields({ fields, values, onChange }: BoardCustomFieldsProps) {
+export function BoardCustomFields({ fields, values, onChange, errors }: BoardCustomFieldsProps) {
   if (fields.length === 0) return null
 
   return (
     <div className="space-y-3">
       {fields.map((field) => (
-        <FieldControl key={field.key} field={field} values={values} onChange={onChange} />
+        <FieldControl
+          key={field.key}
+          field={field}
+          values={values}
+          onChange={onChange}
+          error={errors?.[field.key]}
+        />
       ))}
     </div>
   )
@@ -47,26 +55,38 @@ interface FieldControlProps {
   field: BoardCustomField
   values: Record<string, unknown>
   onChange: (key: string, value: unknown) => void
+  error?: string
 }
 
-function FieldControl({ field, values, onChange }: FieldControlProps) {
+function FieldControl({ field, values, onChange, error }: FieldControlProps) {
   const id = `board-custom-field-${field.key}`
   const value = values[field.key]
+  const errorId = `${id}-error`
+  const invalid = error ? { 'aria-invalid': true, 'aria-describedby': errorId } : {}
+  const errorText = error && (
+    <p id={errorId} className="text-xs text-destructive">
+      {error}
+    </p>
+  )
 
   // Checkboxes carry their label inline (a clickable row), not above the control.
   if (field.type === 'checkbox') {
     return (
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id={id}
-          checked={value === true}
-          onCheckedChange={(checked) => onChange(field.key, checked === true)}
-          aria-label={field.label}
-        />
-        <Label htmlFor={id} className="text-sm font-normal cursor-pointer">
-          {field.label}
-          {field.required && <span className="text-destructive ms-0.5">*</span>}
-        </Label>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id={id}
+            checked={value === true}
+            onCheckedChange={(checked) => onChange(field.key, checked === true)}
+            aria-label={field.label}
+            {...invalid}
+          />
+          <Label htmlFor={id} className="text-sm font-normal cursor-pointer">
+            {field.label}
+            {field.required && <span className="text-destructive ms-0.5">*</span>}
+          </Label>
+        </div>
+        {errorText}
       </div>
     )
   }
@@ -83,6 +103,7 @@ function FieldControl({ field, values, onChange }: FieldControlProps) {
           rows={3}
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(field.key, e.target.value)}
+          {...invalid}
         />
       ) : field.type === 'number' ? (
         <Input
@@ -90,6 +111,7 @@ function FieldControl({ field, values, onChange }: FieldControlProps) {
           type="number"
           value={typeof value === 'number' ? String(value) : ((value as string) ?? '')}
           onChange={(e) => onChange(field.key, e.target.value)}
+          {...invalid}
         />
       ) : field.type === 'date' ? (
         <Input
@@ -97,17 +119,20 @@ function FieldControl({ field, values, onChange }: FieldControlProps) {
           type="date"
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(field.key, e.target.value)}
+          {...invalid}
         />
       ) : field.type === 'select' ? (
-        <SelectControl field={field} id={id} value={value} onChange={onChange} />
+        <SelectControl field={field} id={id} value={value} onChange={onChange} invalid={invalid} />
       ) : (
         <Input
           id={id}
           type="text"
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(field.key, e.target.value)}
+          {...invalid}
         />
       )}
+      {errorText}
     </div>
   )
 }
@@ -117,16 +142,17 @@ interface SelectControlProps {
   id: string
   value: unknown
   onChange: (key: string, value: unknown) => void
+  invalid: { 'aria-invalid'?: boolean; 'aria-describedby'?: string }
 }
 
-function SelectControl({ field, id, value, onChange }: SelectControlProps) {
+function SelectControl({ field, id, value, onChange, invalid }: SelectControlProps) {
   const options = field.options ?? []
   const selected = typeof value === 'string' ? value : undefined
 
   if (options.length > PILL_SELECT_MAX_OPTIONS) {
     return (
       <Select value={selected} onValueChange={(v) => onChange(field.key, v)}>
-        <SelectTrigger id={id} size="sm" className="w-full" aria-label={field.label}>
+        <SelectTrigger id={id} size="sm" className="w-full" aria-label={field.label} {...invalid}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -141,7 +167,7 @@ function SelectControl({ field, id, value, onChange }: SelectControlProps) {
   }
 
   return (
-    <div role="radiogroup" aria-label={field.label} className="flex flex-wrap gap-1.5">
+    <div role="radiogroup" aria-label={field.label} className="flex flex-wrap gap-1.5" {...invalid}>
       {options.map((option) => {
         const isSelected = option === selected
         return (

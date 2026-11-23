@@ -294,6 +294,13 @@ vi.mock('@/lib/server/domains/comments/comment.announce', () => ({
   announcePublishedComment: (...args: unknown[]) => mockAnnouncePublishedComment(...args),
 }))
 
+// The queue lists exclude test customers through test-data's predicate, which
+// is the real SQL builder; route it to the mock engine's version above.
+vi.mock('@/lib/server/test-data', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/test-data')>()),
+  notTestPrincipal: (await import('@/lib/server/db')).notTestPrincipal,
+}))
+
 const mockGetPortalConfig = hoisted.mockGetPortalConfig
 
 // Production code passes the ColRef containers (`posts`/`comments`/`boards`)

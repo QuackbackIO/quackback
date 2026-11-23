@@ -1,4 +1,3 @@
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/shared/utils'
 
 interface SettingRowProps {
@@ -32,6 +31,18 @@ export function SettingRow({
   stackOnPhone,
   className,
 }: SettingRowProps) {
+  // A plain label: the shared Label's disabled styles key off a `peer` or
+  // `group` this row never has (the row dims itself), and every byte here is
+  // repeated on every row of every settings page.
+  const rowLabel = (
+    <label
+      data-slot="label"
+      htmlFor={htmlFor}
+      className="inline-flex items-center gap-2 select-none text-sm font-medium leading-snug"
+    >
+      {label}
+    </label>
+  )
   return (
     <div
       data-slot="setting-row"
@@ -43,12 +54,14 @@ export function SettingRow({
       )}
     >
       <div className={cn('min-w-0', disabled && 'opacity-60')}>
-        <div className="flex items-center gap-2">
-          <Label htmlFor={htmlFor} className="text-sm font-medium leading-snug">
-            {label}
-          </Label>
-          {badge}
-        </div>
+        {badge ? (
+          <div className="flex items-center gap-2">
+            {rowLabel}
+            {badge}
+          </div>
+        ) : (
+          rowLabel
+        )}
         {description && <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>}
       </div>
       <div data-slot="setting-row-control" className="flex shrink-0 items-center gap-2">

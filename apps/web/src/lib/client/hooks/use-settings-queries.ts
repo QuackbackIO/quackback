@@ -18,10 +18,3 @@ export function useSettingsLogo() {
     enabled: false, // Use SSR data, don't auto-fetch
   })
 }
-
-export function useSettingsHeaderLogo() {
-  return useQuery({
-    ...settingsQueries.headerLogo(),
-    enabled: false, // Use SSR data, don't auto-fetch
-  })
-}

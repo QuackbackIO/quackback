@@ -6,6 +6,7 @@ import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { HelpCenterFiltersPanel } from './help-center-filters'
 import { HelpCenterFinder } from './help-center-finder'
 import { CategoryFormDialog } from './category-form-dialog'
+import { ARTICLE_DELETE_DESCRIPTION, categoryDeleteDescription } from './delete-copy'
 import { useHelpCenterFilters } from './use-help-center-filters'
 import type { HelpCenterStatusFilter } from './use-help-center-filters'
 import type { CategoryActions, TreeCategory } from './help-center-category-tree'
@@ -110,24 +111,13 @@ export function HelpCenterList() {
     return { descendantCount: descendantIds.size, articleCount: totalArticles }
   }, [deleteCategoryTarget, allCategories])
 
-  const deleteDescription = useMemo(() => {
-    if (!deleteCategoryTarget) return ''
-    const parts: string[] = []
-    if (cascadeImpact.descendantCount > 0) {
-      parts.push(
-        `${cascadeImpact.descendantCount} sub-categor${cascadeImpact.descendantCount === 1 ? 'y' : 'ies'}`
-      )
-    }
-    if (cascadeImpact.articleCount > 0) {
-      parts.push(
-        `${cascadeImpact.articleCount} article${cascadeImpact.articleCount === 1 ? '' : 's'}`
-      )
-    }
-    if (parts.length === 0) {
-      return `This will permanently delete "${deleteCategoryTarget.name}". This cannot be undone from the UI.`
-    }
-    return `This will delete "${deleteCategoryTarget.name}" along with ${parts.join(' and ')}. Everything can be restored from the database, but the UI provides no restore flow.`
-  }, [deleteCategoryTarget, cascadeImpact])
+  const deleteDescription = useMemo(
+    () =>
+      deleteCategoryTarget
+        ? categoryDeleteDescription(deleteCategoryTarget.name, cascadeImpact)
+        : '',
+    [deleteCategoryTarget, cascadeImpact]
+  )
 
   async function handleConfirmDeleteCategory() {
     if (!deleteCategoryTarget) return
@@ -175,7 +165,7 @@ export function HelpCenterList() {
         open={deleteArticleDialogOpen}
         onOpenChange={setDeleteArticleDialogOpen}
         title="Delete help article?"
-        description="This action cannot be undone. The article will be permanently deleted."
+        description={ARTICLE_DELETE_DESCRIPTION}
         confirmLabel="Delete"
         variant="destructive"
         isPending={deleteArticleMutation.isPending}

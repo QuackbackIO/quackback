@@ -11,6 +11,7 @@ import {
   isClientIdMetadataUrlAllowed,
   isTransientCimdFailure,
   ownHostsOf,
+  registrationGatedDiscovery,
   resilientDiscovery,
 } from '@/lib/server/auth/cimd'
 
@@ -161,5 +162,61 @@ describe('own hosts', () => {
         }),
       }).sort()
     ).toEqual(['edge.example.com', 'feedback.example.com', 'feedback.quackback.io'])
+  })
+})
+
+// The workspace's "Dynamic client registration" switch covers both ways a new
+// app registers: the register endpoint and a client metadata document.
+describe('registrationGatedDiscovery', () => {
+  function workingDiscovery(): ClientDiscovery {
+    return {
+      id: 'cimd',
+      matches: () => true,
+      resolve: vi.fn(async (_ctx, _clientId, existing) => existing ?? storedClient()),
+      fetchClientMetadataResource: vi.fn(),
+      discoveryMetadata: { client_id_metadata_document_supported: true },
+    }
+  }
+
+  it('changes nothing while registration is on', async () => {
+    const inner = workingDiscovery()
+    const gated = registrationGatedDiscovery(inner, { allowNewClients: true })
+    expect(gated.discoveryMetadata).toEqual({ client_id_metadata_document_supported: true })
+    await expect(gated.resolve({} as never, CLIENT_ID, null)).resolves.toMatchObject({
+      clientId: CLIENT_ID,
+    })
+    expect(inner.resolve).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a new client, without fetching, as the register endpoint does when off', async () => {
+    const inner = workingDiscovery()
+    const gated = registrationGatedDiscovery(inner, { allowNewClients: false })
+    const error = await Promise.resolve(gated.resolve({} as never, CLIENT_ID, null)).catch(
+      (e: unknown) => e
+    )
+    expect(error).toBeInstanceOf(APIError)
+    expect((error as APIError).statusCode).toBe(403)
+    expect((error as APIError).body).toMatchObject({
+      error: 'access_denied',
+      error_description: 'Client registration is disabled',
+    })
+    expect(inner.resolve).not.toHaveBeenCalled()
+  })
+
+  it('keeps a client that registered before the switch was turned off', async () => {
+    const inner = workingDiscovery()
+    const gated = registrationGatedDiscovery(inner, { allowNewClients: false })
+    const existing = storedClient()
+    await expect(gated.resolve({} as never, CLIENT_ID, existing)).resolves.toBe(existing)
+    expect(inner.resolve).toHaveBeenCalledWith({}, CLIENT_ID, existing)
+  })
+
+  it('stops advertising metadata documents but still owns its stored clients', () => {
+    const inner = workingDiscovery()
+    const gated = registrationGatedDiscovery(inner, { allowNewClients: false })
+    expect(gated.discoveryMetadata?.client_id_metadata_document_supported).not.toBe(true)
+    expect(gated.id).toBe('cimd')
+    expect(gated.matches).toBe(inner.matches)
+    expect(gated.fetchClientMetadataResource).toBe(inner.fetchClientMetadataResource)
   })
 })

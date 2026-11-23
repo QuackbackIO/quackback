@@ -41,17 +41,18 @@ export interface WorkspaceKeyRole {
 export async function resolveGrantableKeyRole(
   roleId: RoleId,
   granter: ApiKeyGranter,
-  options: { newGrant?: boolean } = {}
+  options: { newGrant?: boolean; executor?: Executor } = {}
 ): Promise<WorkspaceKeyRole> {
+  const exec = options.executor ?? db
   const { loadRole } = await import('@/lib/server/domains/roles/role.service')
   const { assertCanGrantTeamRole, assertGrantableRole } =
     await import('@/lib/server/domains/roles/role.grants')
-  const role = await loadRole(roleId)
+  const role = await loadRole(roleId, exec)
   if (role.key === SYSTEM_ROLES.OWNER) {
     assertCanGrantTeamRole('admin', granter.role)
     return { legacyRole: 'admin', roleName: role.name }
   }
-  const target = await assertGrantableRole(role.id, granter.permissions)
+  const target = await assertGrantableRole(role.id, granter.permissions, exec)
   if (role.key === SYSTEM_ROLES.MANAGER) return { legacyRole: 'member', roleName: target.name }
   if (options.newGrant) {
     const { assertCustomRoleAssignable } = await import('@/lib/server/domains/roles/role.plan-lock')
@@ -79,12 +80,13 @@ type RoleRef = { id: RoleId; name: string }
 
 /** The role each workspace key holds now: its explicit assignment, else its legacy tier's preset. */
 export async function currentWorkspaceKeyRoles(
-  keyPrincipalIds: PrincipalId[]
+  keyPrincipalIds: PrincipalId[],
+  exec: Executor = db
 ): Promise<Map<PrincipalId, RoleRef>> {
   const result = new Map<PrincipalId, RoleRef>()
   if (keyPrincipalIds.length === 0) return result
   const [assigned, tiers, presets] = await Promise.all([
-    db
+    exec
       .select({
         principalId: principalRoleAssignments.principalId,
         id: roles.id,
@@ -98,11 +100,11 @@ export async function currentWorkspaceKeyRoles(
           isNull(principalRoleAssignments.teamId)
         )
       ),
-    db
+    exec
       .select({ id: principal.id, role: principal.role })
       .from(principal)
       .where(inArray(principal.id, keyPrincipalIds)),
-    db
+    exec
       .select({ id: roles.id, key: roles.key, name: roles.name })
       .from(roles)
       .where(inArray(roles.key, [SYSTEM_ROLES.OWNER, SYSTEM_ROLES.MANAGER])),
@@ -123,14 +125,19 @@ export async function currentWorkspaceKeyRoles(
  * Refuse to rotate, rename or re-role a workspace key whose current role
  * `granter` could not grant: a fresh secret for it would hand them authority
  * above their own. Revoking needs no such check.
+ *
+ * Called inside the transaction that locks the key row, so pass that
+ * transaction as `executor`: a read on the shared pool would need a second
+ * connection while the transaction holds one.
  */
 export async function assertCanManageWorkspaceKey(
   keyPrincipalId: PrincipalId,
-  granter: ApiKeyGranter
+  granter: ApiKeyGranter,
+  executor: Executor = db
 ): Promise<void> {
-  const current = (await currentWorkspaceKeyRoles([keyPrincipalId])).get(keyPrincipalId)
+  const current = (await currentWorkspaceKeyRoles([keyPrincipalId], executor)).get(keyPrincipalId)
   if (!current) {
     throw new ForbiddenError('GRANT_CEILING', 'This key has no role you can manage')
   }
-  await resolveGrantableKeyRole(current.id, granter)
+  await resolveGrantableKeyRole(current.id, granter, { executor })
 }

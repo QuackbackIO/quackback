@@ -1,89 +1,93 @@
 import { useId, useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
-import type { LaunchTask } from '@/lib/shared/launch-checklist'
+import { importDeepLinkSite } from '@/components/admin/settings/portal-customise/import-deep-link'
+import { cn } from '@/lib/shared/utils'
+
+const EDITOR = '/admin/settings/portal/customise'
+
+/** Where a finished brand step is edited, named the same on Home and the plan page. */
+export function EditInCustomiseLabel() {
+  return <FormattedMessage id="onboarding.branding.edit" defaultMessage="Edit in Customise" />
+}
+
+/** A finished brand step's line: the website it was imported from, or that it was done by hand. */
+export function BrandSourceLine({ importedFrom }: { importedFrom?: string | null }) {
+  return importedFrom ? (
+    <FormattedMessage
+      id="onboarding.branding.importedFrom"
+      defaultMessage="Imported from {domain}"
+      values={{ domain: importedFrom }}
+    />
+  ) : (
+    <FormattedMessage id="onboarding.branding.customised" defaultMessage="Customised" />
+  )
+}
 
 /**
- * The launch plan's branding step. Nothing is set for the workspace until
- * someone chooses here: a logo the lookup found on their website is offered
- * with "Use it", and otherwise (a personal email has no company website, or
- * the lookup found nothing) they can name their website to look it up, or
- * upload a logo in Settings.
+ * The launch plan's brand step. With the company website known (from the
+ * signup email), one button imports from it; without one, a field asks for
+ * it. Either opens the Customise editor with the import already reading: it
+ * fills a draft there and publishes nothing. The quiet link opens the same
+ * editor with no import.
  */
 export function BrandingStepAction({
-  task,
+  domain,
   variant,
+  className,
 }: {
-  task: LaunchTask
+  /** The company website to offer, when one is known. */
+  domain: string | null | undefined
   variant: 'default' | 'outline'
+  className?: string
 }) {
   const intl = useIntl()
+  const navigate = useNavigate()
   const fieldId = useId()
-  const branding = useAutomaticWebsiteBranding({ enabled: true })
+  const errorId = useId()
   const [site, setSite] = useState('')
-  const status = branding.status
-  const offered = status?.status === 'offered' && status.canUse
-  const searching = branding.looking || status?.status === 'pending'
+  const [notWebsite, setNotWebsite] = useState(false)
+  const typed = site.trim()
+  const line = cn('flex flex-wrap items-center gap-2', className)
 
-  const upload = task.href ? (
-    <Button asChild size="sm" variant="outline">
-      <Link to={task.href} search={task.search as never}>
-        <FormattedMessage id="onboarding.branding.upload" defaultMessage="Upload a logo" />
-      </Link>
-    </Button>
-  ) : null
+  const own = (
+    <Link
+      to={EDITOR}
+      className="ms-2 text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+    >
+      <FormattedMessage id="onboarding.branding.own" defaultMessage="or customise it yourself" />
+    </Link>
+  )
 
-  // On its own line under the step, so the row's Skip stays beside the title.
-  const line = 'order-last flex basis-full flex-wrap items-center gap-2 ps-8'
-
-  if (offered) {
+  if (domain) {
     return (
       <div className={line}>
-        {status.logoUrl ? (
-          <img
-            src={status.logoUrl}
-            alt=""
-            className="size-8 shrink-0 rounded-md border border-border bg-background object-contain p-0.5"
-          />
-        ) : null}
-        <span className="text-sm text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.branding.offer"
-            defaultMessage="Use the logo from {domain}?"
-            values={{ domain: status.domain }}
-          />
-        </span>
-        <Button size="sm" variant={variant} disabled={branding.pending} onClick={branding.accept}>
-          <FormattedMessage id="onboarding.branding.use" defaultMessage="Use it" />
+        <Button asChild size="sm" variant={variant}>
+          <Link to={EDITOR} search={{ import: domain }}>
+            <FormattedMessage
+              id="onboarding.branding.importFrom"
+              defaultMessage="Import from {domain}"
+              values={{ domain }}
+            />
+          </Link>
         </Button>
-        {upload}
-        {branding.error ? (
-          <p role="alert" className="basis-full text-xs text-destructive">
-            {branding.error}
-          </p>
-        ) : null}
+        {own}
       </div>
     )
   }
-
-  const notFound =
-    !searching && status?.status === 'failed' ? (
-      <FormattedMessage
-        id="onboarding.branding.notFound"
-        defaultMessage="No logo found on {domain}. Try another website or upload one."
-        values={{ domain: status.domain }}
-      />
-    ) : null
 
   return (
     <form
       className={line}
       onSubmit={(event) => {
         event.preventDefault()
-        if (site.trim()) branding.lookup(site.trim())
+        if (!typed) return
+        // The editor's deep link would drop anything else without a word.
+        const website = importDeepLinkSite(typed)
+        if (website) void navigate({ to: EDITOR, search: { import: website } })
+        else setNotWebsite(true)
       }}
     >
       <label htmlFor={fieldId} className="sr-only">
@@ -94,37 +98,30 @@ export function BrandingStepAction({
         type="text"
         inputMode="url"
         autoComplete="url"
+        maxLength={2048}
         placeholder={intl.formatMessage({
           id: 'onboarding.branding.websitePlaceholder',
-          defaultMessage: 'Your website, like acme.com',
+          defaultMessage: 'yourcompany.com',
         })}
         value={site}
-        disabled={searching}
-        onChange={(event) => setSite(event.target.value)}
+        onChange={(event) => {
+          setSite(event.target.value)
+          setNotWebsite(false)
+        }}
+        aria-invalid={notWebsite || undefined}
+        aria-describedby={notWebsite ? errorId : undefined}
         className="h-8 w-56 max-w-full text-sm"
       />
-      <Button size="sm" variant={variant} type="submit" disabled={searching || !site.trim()}>
-        {searching ? (
-          <FormattedMessage id="onboarding.branding.finding" defaultMessage="Finding…" />
-        ) : (
-          <FormattedMessage id="onboarding.branding.find" defaultMessage="Find logo" />
-        )}
+      <Button size="sm" variant={variant} type="submit" disabled={!typed}>
+        <FormattedMessage id="onboarding.branding.import" defaultMessage="Import" />
       </Button>
-      {upload}
-      <p role="status" className="basis-full text-xs text-muted-foreground empty:hidden">
-        {searching && status?.status === 'pending' ? (
+      {own}
+      {notWebsite ? (
+        <p id={errorId} role="alert" className="basis-full text-xs text-destructive">
           <FormattedMessage
-            id="onboarding.branding.looking"
-            defaultMessage="Looking for a logo on {domain}…"
-            values={{ domain: status.domain }}
+            id="onboarding.branding.notWebsite"
+            defaultMessage="That doesn't look like a website"
           />
-        ) : (
-          notFound
-        )}
-      </p>
-      {branding.error ? (
-        <p role="alert" className="basis-full text-xs text-destructive">
-          {branding.error}
         </p>
       ) : null}
     </form>

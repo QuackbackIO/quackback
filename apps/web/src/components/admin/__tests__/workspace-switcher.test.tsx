@@ -9,9 +9,7 @@ describe('friendlySiblingAddress', () => {
     expect(friendlySiblingAddress('https://south63792f.quackback.co.uk')).toBe(
       'south63792f.quackback.co.uk'
     )
-    expect(
-      friendlySiblingAddress('https://ws-4a048e07941c5e7840e986c0.quackback.co.uk')
-    ).toBeNull()
+    expect(friendlySiblingAddress('https://ws-4a048e07941c5e7840e986c0.quackback.co.uk')).toBeNull()
     expect(friendlySiblingAddress(null)).toBeNull()
   })
 })

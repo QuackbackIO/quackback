@@ -74,7 +74,7 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
           status: row.statusLabel,
           author: row.authorEmail ?? row.authorName ?? 'unknown',
           isNewAuthor: row.isNewAuthor,
-          voteCount: row.voteCount,
+          voteCount: row.voteCount ?? 0,
           action: 'create',
           sourceId: row.sourceId,
         })

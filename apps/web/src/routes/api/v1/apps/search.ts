@@ -3,7 +3,7 @@ import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { handleDomainError } from '@/lib/server/domains/api/responses'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/search')({
   server: {
@@ -38,18 +38,24 @@ export const Route = createFileRoute('/api/v1/apps/search')({
             actor,
           })
 
-          const posts = result.items.map((p) => ({
-            id: p.id,
-            title: p.title,
-            voteCount: p.voteCount,
-            statusName: null as string | null,
-            statusColor: null as string | null,
-            board: p.board ? { name: p.board.name } : { name: '' },
-          }))
+          const { getStatusesById } = await import('@/lib/server/integrations/apps/service')
+          const statuses = await getStatusesById(result.items.map((p) => p.statusId))
+
+          const posts = result.items.map((p) => {
+            const status = p.statusId ? statuses.get(p.statusId) : undefined
+            return {
+              id: p.id,
+              title: p.title,
+              voteCount: p.voteCount,
+              statusName: status?.name ?? null,
+              statusColor: status?.color ?? null,
+              board: p.board ? { name: p.board.name } : { name: '' },
+            }
+          })
 
           return appJsonResponse({ posts })
         } catch (error) {
-          return handleDomainError(error)
+          return withCors(handleDomainError(error))
         }
       },
     },

@@ -40,18 +40,24 @@ import {
   getVoteAndSubscriptionStatus,
 } from '@/lib/server/domains/posts/post.public.utils'
 import { createPost } from '@/lib/server/domains/posts/post.service'
-import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
+import { blockedVoteToggle, voteOnPost } from '@/lib/server/domains/posts/post.voting'
 import {
   isBoardOpenFor,
   withVisitorPostCapCopy,
 } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
-import { checkAnonVoteRateLimit, reserveAnonPostSlot } from '@/lib/server/utils/anon-rate-limit'
+import {
+  anonPostRetryAfter,
+  anonVoteRetryAfter,
+  checkAnonVoteRateLimit,
+  reserveAnonPostSlot,
+} from '@/lib/server/utils/anon-rate-limit'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { getPostPermissions } from '@/lib/server/domains/posts/post.permissions'
 import { userEditPost, softDeletePost } from '@/lib/server/domains/posts/post.user-actions'
 import { getPublicBoardById } from '@/lib/server/domains/boards/board.public'
 import { getDefaultStatus } from '@/lib/server/domains/statuses/status.service'
 import { getMemberByUser } from '@/lib/server/domains/principals/principal.service'
+import { assertNotBlocked } from '@/lib/server/domains/principals/blocking'
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
@@ -60,7 +66,7 @@ import { countPublicPostFacetsOrNull } from '@/lib/server/domains/posts/post.pub
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError, RateLimitError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'public-posts' })
 
@@ -349,6 +355,9 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
   data: ToggleVoteInput
 ): Promise<{ voted: boolean; voteCount: number }> {
   log.debug({ post_id: data.postId }, 'toggle vote')
+  // A blocked person may only take back a vote they gave.
+  const blockedAnswer = await blockedVoteToggle(data.postId as PostId, ctx.principal.id)
+  if (blockedAnswer) return blockedAnswer
   // Per-post audience gate: portal-access alone is not enough — an
   // authenticated caller could still vote on a team-only / segment-
   // restricted post if they knew the id. `assertPostVotable`
@@ -375,8 +384,12 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
 
     // Rate limit anonymous voters by IP. Resolved the same way as the
     // `ipAddress` Better Auth records on the anonymous sessions it counts.
-    if (!(await checkAnonVoteRateLimit(clientIp()))) {
-      throw new ValidationError('RATE_LIMITED', 'Too many votes, please try again later')
+    const ip = clientIp()
+    if (!(await checkAnonVoteRateLimit(ip))) {
+      throw new RateLimitError(
+        await anonVoteRetryAfter(ip),
+        'Too many votes, please try again later'
+      )
     }
   }
 
@@ -408,6 +421,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   data: CreatePublicPostInput
 ) {
   log.debug({ board_id: data.boardId }, 'create public post')
+  await assertNotBlocked(ctx.principal.id)
   const { boardId: boardIdRaw, title, content, contentJson, metadata, customFields } = data
   const boardId = boardIdRaw as BoardId
 
@@ -450,8 +464,12 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     }
     // Boards can take ideas without an account, so cap how many one address
     // can post in an hour, across every anonymous identity it mints.
-    if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(clientIp()))) {
-      throw new ValidationError('RATE_LIMITED', 'Too many posts, please try again later')
+    const ip = clientIp()
+    if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(ip))) {
+      throw new RateLimitError(
+        await anonPostRetryAfter(ip),
+        'Too many posts, please try again later'
+      )
     }
   } else if (!principalRecord) {
     throw new ForbiddenError('POST_CREATE_DENIED', 'You must be a member to submit feedback.')
@@ -492,6 +510,8 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     statusId: post.statusId,
     voteCount: post.voteCount,
     createdAt: post.createdAt.toISOString(),
+    // Held for review: only the author sees it until the team approves it.
+    pendingReview: post.moderationState === 'pending',
     board: {
       id: board.id,
       name: board.name,

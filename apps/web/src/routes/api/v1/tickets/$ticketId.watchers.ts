@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
@@ -39,7 +40,7 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/watchers')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_ASSIGN })
           const ticketId = parseTypeId<TicketId>(params.ticketId, 'ticket', 'ticket ID')
 
-          const parsed = addWatcherSchema.safeParse(await request.json().catch(() => null))
+          const parsed = addWatcherSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

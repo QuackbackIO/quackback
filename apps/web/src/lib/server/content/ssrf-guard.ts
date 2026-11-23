@@ -24,6 +24,7 @@ import {
   CONNECTOR_REQUEST_TIMEOUT_MS,
 } from '@/lib/shared/assistant/connectors'
 import { isE2eWebhookSinkUrl, isLoopbackAddress } from '@/lib/server/e2e-harness/webhook-sink'
+import { isE2eOidcFakeUrl } from '@/lib/server/e2e-harness/oidc-fake'
 
 const ALLOWED_SCHEMES = new Set(['http:', 'https:'])
 
@@ -144,6 +145,18 @@ export function isPrivateAddress(addr: string): boolean {
   return isPrivateIpv4(addr)
 }
 
+/**
+ * The e2e host allowances a caller may ask for. Each has no effect unless the
+ * e2e harness gate is open and the URL is exactly the configured stand-in.
+ */
+export interface E2eAllowance {
+  /**
+   * Identity-provider URLs only (discovery, token, userinfo, JWKS): let the
+   * one e2e OIDC provider fake through (see e2e-harness/oidc-fake.ts).
+   */
+  allowE2eOidcFake?: boolean
+}
+
 export type UrlSafetyResult =
   | { safe: true; address: string; family: 4 | 6 }
   | { safe: false; reason: 'scheme-rejected' | 'ssrf-rejected' | 'dns-error' }
@@ -155,7 +168,11 @@ export type UrlSafetyResult =
  * caller should use this address to pin the fetch connection (e.g. via a
  * custom agent lookup function) to close the DNS rebinding TOCTOU window.
  */
-export async function checkUrlSafety(url: string): Promise<UrlSafetyResult> {
+export async function checkUrlSafety(
+  url: string,
+  opts: E2eAllowance = {}
+): Promise<UrlSafetyResult> {
+  if (opts.allowE2eOidcFake && isE2eOidcFakeUrl(url)) return checkE2eLoopbackSafety(url)
   if (!isSafeScheme(url)) {
     return { safe: false, reason: 'scheme-rejected' }
   }
@@ -190,11 +207,11 @@ export async function checkUrlSafety(url: string): Promise<UrlSafetyResult> {
 }
 
 /**
- * The check for the e2e webhook sink (see e2e-harness/webhook-sink.ts): the
- * named host must resolve, and every address it resolves to must be loopback.
- * Any other private range is still refused.
+ * The check for an e2e stand-in host (the webhook sink, the OIDC provider
+ * fake; see e2e-harness/): the named host must resolve, and every address it
+ * resolves to must be loopback. Any other private range is still refused.
  */
-async function checkE2eWebhookSinkSafety(url: string): Promise<UrlSafetyResult> {
+async function checkE2eLoopbackSafety(url: string): Promise<UrlSafetyResult> {
   let addresses: Array<{ address: string; family: number }>
   try {
     addresses = await lookup(new URL(url).hostname, { all: true })
@@ -233,7 +250,7 @@ export class TimeoutError extends Error {
   }
 }
 
-export interface SafeFetchInit {
+export interface SafeFetchInit extends E2eAllowance {
   method?: string
   headers?: Record<string, string>
   /** Request body for POST/PUT. */
@@ -285,8 +302,8 @@ const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024
 export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<Response> {
   const safety =
     init.allowE2eWebhookSink && isE2eWebhookSinkUrl(url)
-      ? await checkE2eWebhookSinkSafety(url)
-      : await checkUrlSafety(url)
+      ? await checkE2eLoopbackSafety(url)
+      : await checkUrlSafety(url, { allowE2eOidcFake: init.allowE2eOidcFake })
   if (!safety.safe) throw new SsrfError(safety.reason)
 
   const parsed = new URL(url)

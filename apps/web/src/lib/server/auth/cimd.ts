@@ -34,6 +34,13 @@
  * is linked to the `/api/mcp` resource by `clientRegistrationDefaultResources`.
  * That is the same capability set the DCR register interceptor writes, so the
  * 403 step-up works the same for both.
+ *
+ * Registration switch: the workspace's "Dynamic client registration" setting
+ * covers both ways a new app registers. When it is off, `registrationGatedDiscovery`
+ * refuses a client_id with no stored row, before any fetch, with the error the
+ * register endpoint returns, and the discovery metadata stops advertising
+ * `client_id_metadata_document_supported`. A client that registered while it
+ * was on keeps working (refetches included), as a registered client does.
  */
 import {
   createCimdClientDiscovery,
@@ -42,7 +49,7 @@ import {
 } from '@better-auth/cimd'
 import { fetchClientMetadataResource } from '@better-auth/cimd/node'
 import { extendOAuthProvider, type ClientDiscovery } from '@better-auth/oauth-provider'
-import { getSessionFromCtx } from 'better-auth/api'
+import { APIError, getSessionFromCtx } from 'better-auth/api'
 import type { UserId } from '@quackback/ids'
 import type { AuditActor } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
@@ -268,20 +275,55 @@ export function resilientDiscovery(
 }
 
 /**
+ * Wrap a discovery so it follows the workspace's registration switch. Off: a
+ * client_id with no stored row is refused before any fetch, with the error the
+ * register endpoint returns when registration is off, and the discovery stops
+ * advertising itself. A stored client still resolves, so apps connected
+ * earlier keep working. The id, `matches` and transport stay, because the
+ * provider needs them to serve a stored client this discovery owns.
+ */
+export function registrationGatedDiscovery(
+  discovery: ClientDiscovery,
+  options: { allowNewClients: boolean }
+): ClientDiscovery {
+  if (options.allowNewClients) return discovery
+  return {
+    ...discovery,
+    discoveryMetadata: { client_id_metadata_document_supported: false },
+    resolve: async (ctx, clientId, existing) => {
+      if (existing) return discovery.resolve(ctx, clientId, existing)
+      log.info(
+        { host: clientIdMetadataHost(clientId) },
+        'oauth client metadata document refused: client registration is off'
+      )
+      throw new APIError('FORBIDDEN', {
+        error: 'access_denied',
+        error_description: 'Client registration is disabled',
+      })
+    },
+  }
+}
+
+/**
  * The CIMD plugin for the MCP authorization server. Must follow `mcp()`, which
  * supplies the OAuth provider it extends. Built from the plugin's discovery so
  * the resolver can be wrapped; the id and version match `cimd()`.
+ * `allowNewClients` is the workspace's registration switch, read when the auth
+ * instance is built, as the register endpoint's is.
  */
-export function mcpCimdPlugin() {
-  const discovery = resilientDiscovery(
-    createCimdClientDiscovery({
-      fetchClientMetadataResource,
-      metadataProfile: 'mcp-2026-07-28',
-      isMetadataDocumentUrlAllowed: (clientIdUrl, context) =>
-        isClientIdMetadataUrlAllowed(clientIdUrl, ownHostsOf(context)),
-      onClientCreated: auditCimdClientCreated,
-      onClientRefreshed: auditCimdClientRefreshed,
-    })
+export function mcpCimdPlugin(options: { allowNewClients: boolean }) {
+  const discovery = registrationGatedDiscovery(
+    resilientDiscovery(
+      createCimdClientDiscovery({
+        fetchClientMetadataResource,
+        metadataProfile: 'mcp-2026-07-28',
+        isMetadataDocumentUrlAllowed: (clientIdUrl, context) =>
+          isClientIdMetadataUrlAllowed(clientIdUrl, ownHostsOf(context)),
+        onClientCreated: auditCimdClientCreated,
+        onClientRefreshed: auditCimdClientRefreshed,
+      })
+    ),
+    options
   )
   return {
     id: 'cimd',

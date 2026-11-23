@@ -11,51 +11,89 @@ import {
 } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import type { KbArticleFeedbackId, KbArticleId, PrincipalId } from '@quackback/ids'
-import { ValidationError } from '@/lib/shared/errors'
+import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { ARTICLE_FEEDBACK_REASON_MAX_LENGTH } from '@/lib/shared/schemas/help-center'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-article-feedback' })
+
+export interface RecordArticleFeedbackOptions {
+  /**
+   * The vote this visitor cast earlier on the page. A signed-out visitor has
+   * no principal to find that vote by, so the id they were handed back is how
+   * a changed mind replaces the vote rather than adding a second one. Ignored
+   * for a signed-in visitor, whose vote is found by principal.
+   */
+  replaces?: KbArticleFeedbackId | null
+}
 
 /**
  * Records a helpful/unhelpful vote and returns the id of the row that holds it.
  *
  * The caller needs that id to attach a free-text reason afterwards: an
  * anonymous visitor has no principal to look the row back up by, so the id is
- * the only handle on their own vote.
+ * the only handle on their own vote. Passed back as `replaces`, it turns a
+ * changed mind into a flip of that vote.
  */
 export async function recordArticleFeedback(
   articleId: KbArticleId,
   helpful: boolean,
-  principalId?: PrincipalId | null
+  principalId?: PrincipalId | null,
+  options: RecordArticleFeedbackOptions = {}
 ): Promise<KbArticleFeedbackId> {
   return db.transaction(async (tx) => {
-    if (principalId) {
+    const article = await tx.query.helpCenterArticles.findFirst({
+      where: eq(helpCenterArticles.id, articleId),
+      columns: { id: true },
+    })
+    if (!article) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${articleId} not found`)
+
+    // A signed-in visitor's vote is theirs by principal. A signed-out one is
+    // found only by the id they hold, and only when it is a signed-out vote on
+    // this same article, so a vote id never reaches anyone else's vote.
+    const owned = principalId
+      ? eq(helpCenterArticleFeedback.principalId, principalId)
+      : options.replaces
+        ? and(
+            eq(helpCenterArticleFeedback.id, options.replaces),
+            isNull(helpCenterArticleFeedback.principalId)
+          )
+        : null
+
+    if (owned) {
       const existing = await tx.query.helpCenterArticleFeedback.findFirst({
-        where: and(
-          eq(helpCenterArticleFeedback.articleId, articleId),
-          eq(helpCenterArticleFeedback.principalId, principalId)
-        ),
+        where: and(eq(helpCenterArticleFeedback.articleId, articleId), owned),
+        columns: { id: true, helpful: true },
       })
 
       if (existing) {
         if (existing.helpful === helpful) return existing.id
         // A reason explains an unhelpful vote, so it does not survive the flip.
-        await tx
+        // The counters move only when this update flipped the row, so two
+        // racing flips cannot move them twice.
+        const flipped = await tx
           .update(helpCenterArticleFeedback)
           .set({ helpful, reason: null })
-          .where(eq(helpCenterArticleFeedback.id, existing.id))
-        await tx
-          .update(helpCenterArticles)
-          .set({
-            helpfulCount: helpful
-              ? sql`${helpCenterArticles.helpfulCount} + 1`
-              : sql`${helpCenterArticles.helpfulCount} - 1`,
-            notHelpfulCount: helpful
-              ? sql`${helpCenterArticles.notHelpfulCount} - 1`
-              : sql`${helpCenterArticles.notHelpfulCount} + 1`,
-          })
-          .where(eq(helpCenterArticles.id, articleId))
+          .where(
+            and(
+              eq(helpCenterArticleFeedback.id, existing.id),
+              eq(helpCenterArticleFeedback.helpful, !helpful)
+            )
+          )
+          .returning({ id: helpCenterArticleFeedback.id })
+        if (flipped.length > 0) {
+          await tx
+            .update(helpCenterArticles)
+            .set({
+              helpfulCount: helpful
+                ? sql`${helpCenterArticles.helpfulCount} + 1`
+                : sql`${helpCenterArticles.helpfulCount} - 1`,
+              notHelpfulCount: helpful
+                ? sql`${helpCenterArticles.notHelpfulCount} - 1`
+                : sql`${helpCenterArticles.notHelpfulCount} + 1`,
+            })
+            .where(eq(helpCenterArticles.id, articleId))
+        }
         return existing.id
       }
     }

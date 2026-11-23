@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const invalidateQueries = vi.fn()
 const setQueryData = vi.fn()
-const updateThemeFn = vi.fn(async () => ({ ok: true }))
-const updateCustomCssFn = vi.fn(async () => ({ ok: true }))
+const publishPortalCustomisationFn = vi.fn(
+  async (_args: { data: Record<string, unknown> }): Promise<Record<string, unknown>> => ({
+    ok: true,
+    parts: ['theme'],
+    published: {},
+  })
+)
 
 vi.mock('@tanstack/react-query', async () => {
   const actual =
@@ -15,11 +20,7 @@ vi.mock('@tanstack/react-query', async () => {
   }
 })
 
-vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
-  updateThemeFn,
-  updateCustomCssFn,
-}))
+vi.mock('@/lib/server/functions/portal-customise', () => ({ publishPortalCustomisationFn }))
 
 describe('settings config mutations cache invalidation', () => {
   beforeEach(() => {
@@ -81,9 +82,9 @@ describe('settings config mutations cache invalidation', () => {
     expect(result).toBeInstanceOf(Promise)
   })
 
-  it('useSaveBrandingTheme leaves plan refusals to the page and names other reasons', async () => {
-    const { useSaveBrandingTheme } = await import('../settings')
-    const { meta } = useSaveBrandingTheme() as unknown as {
+  it('usePublishPortalCustomisation leaves plan refusals to the page and names other reasons', async () => {
+    const { usePublishPortalCustomisation } = await import('../settings')
+    const { meta } = usePublishPortalCustomisation() as unknown as {
       meta: { autosave?: boolean; showServerMessage?: boolean; ownsError?: (e: unknown) => boolean }
     }
     expect(meta.autosave).toBe(true)
@@ -92,51 +93,61 @@ describe('settings config mutations cache invalidation', () => {
     expect(meta.ownsError?.(new Error('Custom CSS is too long.'))).toBe(false)
   })
 
-  it('useSaveBrandingTheme persist/clear/rewrite customCss writes', async () => {
-    const { useSaveBrandingTheme } = await import('../settings')
-    const mutation = useSaveBrandingTheme() as unknown as {
-      mutationFn: (input: {
-        brandingConfig: Record<string, unknown>
-        customCss: string
-        customCssWrite: 'persist' | 'clear' | 'rewrite'
-      }) => Promise<unknown>
+  it('usePublishPortalCustomisation sends every part in one call', async () => {
+    const { usePublishPortalCustomisation } = await import('../settings')
+    const mutation = usePublishPortalCustomisation() as unknown as {
+      mutationFn: (input: Record<string, unknown>) => Promise<unknown>
     }
-
-    await mutation.mutationFn({
-      brandingConfig: { preset: 'default' },
+    const input = {
+      before: { theme: {}, customCss: '', portal: { nav: null } },
+      theme: { themeMode: 'dark' },
       customCss: '.brand { color: red; }',
-      customCssWrite: 'rewrite',
-    })
-    expect(updateThemeFn).toHaveBeenCalledOnce()
-    expect(updateCustomCssFn).toHaveBeenCalledWith({
-      data: { customCss: '.brand { color: red; }' },
-    })
+      portal: { nav: { items: [] } },
+    }
+    await mutation.mutationFn(input)
+    expect(publishPortalCustomisationFn).toHaveBeenCalledOnce()
+    expect(publishPortalCustomisationFn).toHaveBeenCalledWith({ data: input })
+  })
 
-    await mutation.mutationFn({
-      brandingConfig: { preset: 'default' },
-      customCss: ':root { --primary: red; }',
-      customCssWrite: 'clear',
+  it('usePublishPortalCustomisation fails with the server sentence when someone else changed a part', async () => {
+    publishPortalCustomisationFn.mockResolvedValueOnce({
+      ok: false,
+      code: 'SETTINGS_CHANGED',
+      message: 'Someone else changed these settings. Reload the page to see their changes.',
+      parts: ['portal.nav'],
+      current: { portal: { nav: null } },
     })
-    expect(updateCustomCssFn).toHaveBeenCalledWith({ data: { customCss: '' } })
-
-    await mutation.mutationFn({
-      brandingConfig: { preset: 'default' },
-      customCss: '.brand { color: red; }',
-      customCssWrite: 'persist',
-    })
-    expect(updateCustomCssFn).toHaveBeenCalledWith({
-      data: { customCss: '.brand { color: red; }' },
+    const { usePublishPortalCustomisation } = await import('../settings')
+    const mutation = usePublishPortalCustomisation() as unknown as {
+      mutationFn: (input: Record<string, unknown>) => Promise<unknown>
+    }
+    await expect(
+      mutation.mutationFn({ before: { portal: { nav: null } }, portal: { nav: { items: [] } } })
+    ).rejects.toMatchObject({
+      message: 'Someone else changed these settings. Reload the page to see their changes.',
+      conflict: { code: 'SETTINGS_CHANGED', parts: ['portal.nav'] },
     })
   })
 
-  it('useSaveBrandingTheme.onSuccess awaits invalidation of branding and customCss queries', async () => {
-    const { useSaveBrandingTheme } = await import('../settings')
-    const mutation = useSaveBrandingTheme() as { onSuccess?: () => unknown }
+  it('usePublishPortalCustomisation.onSuccess awaits invalidation of what it published', async () => {
+    const { usePublishPortalCustomisation } = await import('../settings')
+    const mutation = usePublishPortalCustomisation() as unknown as {
+      onSuccess?: (data: unknown, variables: Record<string, unknown>) => unknown
+    }
 
-    const result = mutation.onSuccess?.()
+    const result = mutation.onSuccess?.(undefined, {
+      before: {},
+      theme: {},
+      customCss: '',
+      portal: { nav: { items: [] } },
+    })
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['settings', 'branding'] })
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['settings', 'customCss'] })
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['settings', 'portalConfig'] })
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: ['settings', 'helpCenterConfig'],
+    })
     expect(result).toBeInstanceOf(Promise)
   })
 })

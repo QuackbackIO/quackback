@@ -1,6 +1,6 @@
 # @quackback/widget
 
-The official SDK for embedding the [Quackback](https://quackback.io) feedback widget in your app. Ships with TypeScript types and a React adapter.
+The official SDK for embedding the [Quackback](https://quackback.io) widget (feedback, live chat and help articles) in your app. Ships with TypeScript types and a React adapter.
 
 ## Install
 

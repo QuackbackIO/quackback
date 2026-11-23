@@ -21,19 +21,31 @@ const SINK_HOST_ENV = 'E2E_WEBHOOK_SINK_HOST'
 
 export function isE2eWebhookSinkUrl(url: string, env: EnvLike = process.env): boolean {
   if (!isE2eHarnessEnabled(env)) return false
-  const configured = env[SINK_HOST_ENV]?.trim().toLowerCase()
+  return isNamedLoopbackHttpsUrl(url, env[SINK_HOST_ENV])
+}
+
+/**
+ * Is `url` an https URL on exactly the configured `host:port`, where that
+ * configured hostname is a loopback NAME (`*.localhost`), never an address?
+ * The shared shape of every e2e host allowance (the webhook sink, the OIDC
+ * provider fake). Does not check the gate: callers do.
+ */
+export function isNamedLoopbackHttpsUrl(url: string, configuredHost: string | undefined): boolean {
+  const configured = configuredHost?.trim().toLowerCase()
   if (!configured) return false
-  let sink: URL
+  let named: URL
   let target: URL
   try {
-    sink = new URL(`https://${configured}`)
+    named = new URL(`https://${configured}`)
     target = new URL(url)
   } catch {
     return false
   }
-  if (!isLoopbackHostname(sink.hostname) || /^[\d.]+$|:/.test(sink.hostname)) return false
+  // Exactly `host[:port]`: no userinfo, path, query or fragment smuggled in.
+  if (named.host !== configured) return false
+  if (!isLoopbackHostname(named.hostname) || /^[\d.]+$|:/.test(named.hostname)) return false
   if (target.protocol !== 'https:') return false
-  return target.host.toLowerCase() === sink.host
+  return target.host.toLowerCase() === named.host
 }
 
 /** Is this resolved address a loopback address (and nothing wider)? */

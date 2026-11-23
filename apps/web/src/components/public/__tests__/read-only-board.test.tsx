@@ -119,3 +119,14 @@ describe('votes on a read-only board', () => {
     expect(handleVote).not.toHaveBeenCalled()
   })
 })
+
+describe('a disabled vote button (a merged post)', () => {
+  it('is disabled for assistive tech and the browser, and records nothing', () => {
+    wrap(<VoteButton postId={'post_1' as PostId} voteCount={3} disabled />)
+    const button = screen.getByTestId('vote-button')
+    expect(button.getAttribute('aria-disabled')).toBe('true')
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(button)
+    expect(handleVote).not.toHaveBeenCalled()
+  })
+})

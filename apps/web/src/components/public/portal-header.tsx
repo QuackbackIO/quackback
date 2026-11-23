@@ -1,4 +1,6 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
+import { WIDE_LOGO_CLASS } from '@/lib/shared/portal-wide-logo'
+import { WideLogo } from './wide-logo'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
@@ -49,10 +51,18 @@ import {
   useSessionContext,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { usePreviewHelpCenter, usePreviewLogo, usePreviewName } from './preview-draft-context'
 
 interface PortalHeaderProps {
   orgName: string
+  /** The name the header shows in the workspace name's place, when one is set. */
+  headerName?: string | null
   orgLogo?: string | null
+  /** The wide logo, shown alone in place of the square logo and the name. */
+  wideLogo?: string | null
+  /** The wide logo's dark mode version, shown in its place where the portal is dark. */
+  wideLogoDark?: string | null
   /** User's role in the organization (passed from server) */
   userRole?: Role | null
   /** Initial user data for SSR (store values override these after hydration) */
@@ -66,8 +76,11 @@ interface PortalHeaderProps {
 }
 
 export function PortalHeader({
-  orgName,
+  orgName: workspaceName,
+  headerName,
   orgLogo,
+  wideLogo,
+  wideLogoDark,
   userRole,
   initialUserData,
   showThemeToggle = true,
@@ -87,6 +100,23 @@ export function PortalHeader({
   })
 
   const navItems = usePortalNavItems()
+  // The Customise page's unsaved Help Center links and logo, in its preview only.
+  const previewHelpCenter = usePreviewHelpCenter()
+  const previewLogo = usePreviewLogo()
+  // The header's own name when it has one; the workspace's everywhere else
+  // (emails, sign-in, page titles). The Customise page's unsaved one wins, in its preview only.
+  const orgName = usePreviewName() || headerName?.trim() || workspaceName
+  // The Customise draft decides which logo shows, the wide one ('custom_logo')
+  // or the square one, so a draft can turn a live wide logo off as well as on.
+  const shownWide = previewLogo
+    ? previewLogo.mode === 'custom_logo'
+      ? previewLogo.url
+      : null
+    : wideLogo
+  // Its dark mode version: the draft's own, which may be none, else the saved one.
+  const shownWideDark = previewLogo ? (previewLogo.darkUrl ?? null) : wideLogoDark
+  const shownLogo =
+    previewLogo && previewLogo.mode !== 'custom_logo' ? (previewLogo.url ?? orgLogo) : orgLogo
   const supportEnabled = isPortalSupportSurfaceEnabled(
     settings?.featureFlags,
     settings?.portalConfig
@@ -290,6 +320,7 @@ export function PortalHeader({
           {showSignup && (
             <Button
               size="sm"
+              data-qb-edit="colours"
               onClick={() =>
                 soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
               }
@@ -302,49 +333,60 @@ export function PortalHeader({
     </div>
   )
 
-  // Two-row layout: Logo + Auth on top, Navigation below
+  // One row: the logo, the tabs beside it, the account controls at the end.
+  // On a phone the tabs take a row of their own below, scrolling sideways.
   return (
     // A banner landmark, so the logo and account controls sit in one.
     <header
       ref={headerRef}
+      data-qb-edit="header"
       className="portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm"
     >
-      {/* Row 1: Logo + Name + Auth */}
-      <div>
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
-          <div className="flex h-12 items-center justify-between">
-            <Link to="/" className="portal-header__logo flex items-center gap-2">
-              {orgLogo ? (
-                <img
-                  src={orgLogo}
-                  alt={orgName}
-                  className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
-                />
-              ) : (
-                <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
-                  {nameInitial(orgName)}
-                </div>
-              )}
+      <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
+        <div data-header-row="" className="flex flex-wrap items-center gap-x-4 md:flex-nowrap">
+          <Link
+            to="/"
+            data-qb-edit="logo"
+            className="portal-header__logo flex h-12 shrink-0 items-center gap-2"
+          >
+            {shownWide ? (
+              // A wordmark carries the name, so it stands alone, on phones too.
+              <WideLogo
+                src={shownWide}
+                darkSrc={shownWideDark}
+                alt={orgName}
+                className={WIDE_LOGO_CLASS}
+              />
+            ) : shownLogo ? (
+              <img
+                src={shownLogo}
+                alt={orgName}
+                className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
+              />
+            ) : (
+              <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+                {nameInitial(orgName)}
+              </div>
+            )}
+            {!shownWide && (
               <span
                 title={orgName}
-                className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
+                className="portal-header__name font-heading font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
               >
                 {orgName}
               </span>
-            </Link>
-            {authButtons}
+            )}
+          </Link>
+          <div className="order-last -mx-1 mt-1 basis-full overflow-x-auto px-1 scrollbar-none md:order-none md:mt-0 md:min-w-0 md:flex-1 md:basis-auto">
+            <Navigation
+              navItems={navItems}
+              helpHeaderLinks={
+                previewHelpCenter?.headerLinks ?? settings?.helpCenterConfig?.headerLinks
+              }
+              supportUnreadTotal={supportUnreadTotal}
+            />
           </div>
-        </div>
-      </div>
-
-      {/* Row 2: Navigation */}
-      <div className="mt-2 overflow-x-auto scrollbar-none">
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
-          <Navigation
-            navItems={navItems}
-            helpHeaderLinks={settings?.helpCenterConfig?.headerLinks}
-            supportUnreadTotal={supportUnreadTotal}
-          />
+          <div className="ms-auto shrink-0 md:ms-0">{authButtons}</div>
         </div>
       </div>
     </header>
@@ -375,7 +417,7 @@ function Navigation({
   const helpLinks = onHelpPages ? (helpHeaderLinks ?? []).slice(0, 3) : []
 
   return (
-    <nav className="portal-nav flex items-center gap-1 whitespace-nowrap">
+    <nav data-qb-edit="nav" className="portal-nav flex items-center gap-1 whitespace-nowrap">
       {navItems.map((item) => {
         if (item.kind === 'link') {
           return (
@@ -399,7 +441,8 @@ function Navigation({
         )
       })}
       {helpLinks.map((link) => {
-        const external = !link.url.startsWith('/')
+        // `//host` starts with / but is another site.
+        const external = !isSafeCallbackUrl(link.url)
         return (
           <a
             key={link.url}

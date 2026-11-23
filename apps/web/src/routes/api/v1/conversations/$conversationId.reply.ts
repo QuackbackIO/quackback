@@ -17,6 +17,7 @@ import {
   markdownToSanitizedJson,
 } from './-validation'
 import type { ConversationId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const replySchema = z.object({
   content: messageContentSchema,
@@ -37,7 +38,7 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/repl
             'conversation ID'
           )
 
-          const parsed = replySchema.safeParse(await request.json().catch(() => null))
+          const parsed = replySchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

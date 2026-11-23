@@ -1,4 +1,5 @@
 import { ServiceUnavailableError } from '@/lib/shared/errors'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 /**
  * Linear team listing via GraphQL.
  */
@@ -11,7 +12,7 @@ const LINEAR_API = 'https://api.linear.app/graphql'
 export async function listLinearTeams(
   accessToken: string
 ): Promise<Array<{ id: string; name: string; key: string }>> {
-  const response = await fetch(LINEAR_API, {
+  const response = await providerFetch(LINEAR_API, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,

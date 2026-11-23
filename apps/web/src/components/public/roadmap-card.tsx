@@ -33,7 +33,7 @@ export function RoadmapCard({
     <Link
       to="/b/$slug/posts/$postId"
       params={{ slug: board.slug, postId: id }}
-      className="roadmap-card flex bg-[var(--post-card-background)] [border-radius:var(--radius)] border border-[var(--post-card-border)]/50 shadow-sm hover:bg-[var(--post-card-background)]/80 transition-colors"
+      className="roadmap-card portal-card [--portal-card-base:var(--post-card-background)] [--portal-card-edge-colour:var(--post-card-border)] [--portal-card-edge:50%] flex [border-radius:var(--radius)] border hover:bg-[var(--post-card-background)]/80 transition-colors"
     >
       <div className="roadmap-card__vote flex flex-col items-center justify-center w-12 shrink-0 border-e border-[var(--post-card-border)]/30 text-muted-foreground">
         <ChevronUpIcon className="h-5 w-5" />
@@ -43,12 +43,12 @@ export function RoadmapCard({
         <p className="text-sm font-medium text-foreground line-clamp-2">{title}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <Badge variant="secondary" className="text-[11px] inline-flex items-center gap-0.5">
-            <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
+            <Squares2X2Icon className="h-3 w-3 text-muted-foreground" />
             {board.name}
           </Badge>
           {etaLabel && (
             <Badge variant="secondary" className="text-[11px] inline-flex items-center gap-0.5">
-              <CalendarIcon className="h-3 w-3 text-muted-foreground/40" />
+              <CalendarIcon className="h-3 w-3 text-muted-foreground" />
               {etaLabel}
             </Badge>
           )}

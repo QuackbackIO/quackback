@@ -19,7 +19,7 @@ describe('General workspace identity', () => {
     )
     expect(screen.getByRole('heading', { name: 'Workspace' })).toBeInTheDocument()
     expect(
-      screen.getByText('Your logo and name, shown across the portal, widget and emails.')
+      screen.getByText('Your icon and name, shown across the portal, widget and emails.')
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Workspace name')).toHaveValue('Acme')
     expect(screen.getByRole('button', { name: 'Change workspace logo' })).toBeInTheDocument()

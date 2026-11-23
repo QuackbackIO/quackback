@@ -30,9 +30,17 @@ interface MockTx {
   delete: (table: { __name?: string }) => { where: Mock }
   update: (table: { __name?: string }) => { set: Mock }
   query: { principal: { findFirst: Mock } }
+  execute: Mock
 }
 
+/** Raw statements (the vote-count withdrawal on merge); logged as `execute`. */
+export const mockExecute: Mock = vi.fn(async () => {
+  operations.push('execute')
+  return []
+})
+
 export const mockTx: MockTx = {
+  execute: mockExecute,
   select: (..._args: unknown[]) => ({ from: mockSelectFrom }),
   delete: (table: { __name?: string }) => {
     operations.push(`delete:${table.__name || 'unknown'}`)

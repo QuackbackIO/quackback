@@ -8,7 +8,12 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 import { createId, type PrincipalId, type RoleId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { and, eq, isNull, principal, principalRoleAssignments, roles, user } from '@/lib/server/db'
-import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLES } from '@/lib/shared/permissions'
+import {
+  ALL_PERMISSIONS,
+  PERMISSIONS,
+  SYSTEM_ROLES,
+  presetForLegacyRole,
+} from '@/lib/shared/permissions'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -187,6 +192,28 @@ describe.skipIf(!fixture.available)('updateMemberRole — custom grants (real Po
       )
     expect(rows.map((r) => r.roleId)).toEqual([customRoleId])
     expect(rows[0].grantedByPrincipalId).toBe(acting.principalId)
+  })
+
+  it('choosing Member with no roleId moves a custom-role holder to the member preset', async () => {
+    const acting = await seedTeammate('admin')
+    const target = await seedTeammate('member')
+    const customRoleId = await insertCustomRole()
+    await updateMemberRole(target.principalId, 'member', acting.principalId, null, undefined, {
+      assignRoleId: customRoleId,
+      granterPermissions: ALL_PERMISSIONS,
+    })
+
+    await updateMemberRole(target.principalId, 'member', acting.principalId, null, undefined, {
+      granterPermissions: ALL_PERMISSIONS,
+      granterRole: 'admin',
+    })
+
+    const [preset] = await testDb
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.key, presetForLegacyRole('member')!))
+      .limit(1)
+    expect(await workspaceAssignmentKeys(target.principalId)).toEqual([preset.id])
   })
 
   it('the last-admin rail fires on a demote-to-custom', async () => {

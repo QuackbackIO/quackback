@@ -107,7 +107,8 @@ describe('admin chrome surfaces', () => {
   })
 
   it('fills the screen with the page sheet on phones and insets it from the small breakpoint up', () => {
-    const shell = adminSource.match(/data-admin-shell=""\s+className="([^"]+)"/)![1]!
+    // The shell's classes are a cn() call now: its fixed classes, then the collapsed inset.
+    const shell = adminSource.match(/data-admin-shell=""\s+className=\{cn\(\s*'([^']+)'/)![1]!
     const canvas = adminSource.match(/data-admin-canvas=""\s+className="([^"]+)"/)![1]!
     expect(tokens(shell)).toEqual(
       expect.arrayContaining(['bg-chrome', 'p-0', 'sm:py-2', 'sm:pe-2'])

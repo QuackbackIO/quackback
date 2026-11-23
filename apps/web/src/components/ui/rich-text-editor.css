@@ -39,11 +39,7 @@
 [data-emoji-picker] {
   font-variant-emoji: emoji;
   font-family:
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Noto Color Emoji',
-    'Twemoji Mozilla',
-    sans-serif;
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Twemoji Mozilla', sans-serif;
 }
 
 /* Code block syntax highlighting */
@@ -58,7 +54,7 @@
   background: none;
   color: inherit;
   font-size: 0.875rem;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   padding: 0;
 }
 
@@ -68,7 +64,7 @@
   padding: 0.125rem 0.25rem;
   border-radius: 0.25rem;
   font-size: 0.875em;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 /* List items - remove extra paragraph spacing */
@@ -88,30 +84,30 @@
 }
 
 /* Task list */
-.tiptap ul[data-type="taskList"] {
+.tiptap ul[data-type='taskList'] {
   list-style: none;
   padding-left: 0;
 }
 
-.tiptap ul[data-type="taskList"] li {
+.tiptap ul[data-type='taskList'] li {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
 }
 
-.tiptap ul[data-type="taskList"] li > label {
+.tiptap ul[data-type='taskList'] li > label {
   flex-shrink: 0;
   margin-top: 0.25rem;
 }
 
-.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+.tiptap ul[data-type='taskList'] li > label input[type='checkbox'] {
   cursor: pointer;
   width: 1rem;
   height: 1rem;
   accent-color: var(--primary);
 }
 
-.tiptap ul[data-type="taskList"] li > div {
+.tiptap ul[data-type='taskList'] li > div {
   flex: 1;
 }
 
@@ -173,7 +169,7 @@
 }
 
 /* Also handle inline youtube node */
-.tiptap iframe[src*="youtube"] {
+.tiptap iframe[src*='youtube'] {
   max-width: 100%;
   border-radius: 0.5rem;
   margin: 1rem 0;
@@ -204,18 +200,32 @@
 /* Syntax highlighting colors */
 .hljs-keyword,
 .hljs-selector-tag,
-.hljs-built_in { color: var(--syntax-keyword, #c792ea); }
+.hljs-built_in {
+  color: var(--syntax-keyword, #c792ea);
+}
 .hljs-string,
-.hljs-attr { color: var(--syntax-string, #c3e88d); }
+.hljs-attr {
+  color: var(--syntax-string, #c3e88d);
+}
 .hljs-number,
-.hljs-literal { color: var(--syntax-number, #f78c6c); }
-.hljs-comment { color: var(--syntax-comment, #546e7a); }
+.hljs-literal {
+  color: var(--syntax-number, #f78c6c);
+}
+.hljs-comment {
+  color: var(--syntax-comment, #546e7a);
+}
 .hljs-function,
-.hljs-title { color: var(--syntax-function, #82aaff); }
+.hljs-title {
+  color: var(--syntax-function, #82aaff);
+}
 .hljs-variable,
-.hljs-template-variable { color: var(--syntax-variable, #f07178); }
+.hljs-template-variable {
+  color: var(--syntax-variable, #f07178);
+}
 .hljs-type,
-.hljs-class { color: var(--syntax-type, #ffcb6b); }
+.hljs-class {
+  color: var(--syntax-type, #ffcb6b);
+}
 
 /* Strip tippy's default chrome so .mention-picker is the only surface. */
 .tippy-box[data-theme~='mention-picker'] {
@@ -314,7 +324,10 @@
   border-radius: 0.125rem;
   object-fit: contain;
 }
-.mention-picker__team-badge-icon { width: 1rem; height: 1rem; }
+.mention-picker__team-badge-icon {
+  width: 1rem;
+  height: 1rem;
+}
 .mention-picker__empty {
   padding: 0.5rem 0.75rem;
   color: var(--muted-foreground);

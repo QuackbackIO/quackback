@@ -190,3 +190,19 @@ export function roadmapDateBucketsBetween(
 export function roadmapBucketWriteback(bucket: RoadmapDateBucket): string | null {
   return bucket.targetMonth
 }
+
+/**
+ * The roadmap a board should show: the requested one when it is in the list
+ * the viewer can see, otherwise the first one. `excluding` drops a roadmap
+ * that is going away (one just deleted), so it is never picked.
+ */
+export function roadmapToSelect<T extends { id: string }>(
+  roadmaps: readonly T[],
+  requestedId: string | null | undefined,
+  options: { excluding?: string } = {}
+): T | undefined {
+  const candidates = options.excluding
+    ? roadmaps.filter((roadmap) => roadmap.id !== options.excluding)
+    : roadmaps
+  return candidates.find((roadmap) => roadmap.id === requestedId) ?? candidates[0]
+}

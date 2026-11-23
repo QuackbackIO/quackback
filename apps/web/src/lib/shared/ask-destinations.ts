@@ -77,7 +77,7 @@ const KEYWORDS: Record<string, string[]> = {
   '/admin/settings/developers': ['api', 'keys', 'webhooks'],
   '/admin/settings/widget': ['messenger', 'welcome', 'chat'],
   '/admin/settings/widget/install': ['install', 'snippet', 'website', 'embed'],
-  '/admin/settings/portal': ['branding', 'logo', 'color', 'theme', 'header'],
+  '/admin/settings/portal': ['branding', 'logo', 'color', 'theme', 'header', 'customise', 'font'],
   '/admin/settings/general': ['modules', 'workspace', 'name'],
   '/admin/settings/email': ['sender', 'from address', 'sending domain', 'dkim', 'reply address'],
   [CUSTOM_DOMAINS_HREF]: ['custom domain', 'hostname', 'cname', 'dns'],
