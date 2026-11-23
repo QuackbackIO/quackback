@@ -60,7 +60,7 @@ export async function openIncident(
   )
 }
 
-export async function scheduleWindow(start: Date, end: Date | null) {
+export async function scheduleWindow(start: Date, end: Date) {
   const db = await service('Database')
   return createIncident(
     {

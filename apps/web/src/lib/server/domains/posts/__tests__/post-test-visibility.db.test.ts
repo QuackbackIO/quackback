@@ -182,7 +182,9 @@ describe('test feedback stays inside its customer session and team workspace', (
     for (const viewer of [customer, team]) {
       await expect(assertPostViewable(testPost, viewer)).resolves.toBeUndefined()
       await expect(assertPostVotable(testPost, viewer)).resolves.toBeUndefined()
-      await expect(assertCommentViewable(testComment, viewer)).resolves.toBeUndefined()
+      await expect(assertCommentViewable(testComment, viewer)).resolves.toMatchObject({
+        boardReadOnly: false,
+      })
     }
     await expect(assertPostViewable(realPost, visitor)).resolves.toBeUndefined()
   })

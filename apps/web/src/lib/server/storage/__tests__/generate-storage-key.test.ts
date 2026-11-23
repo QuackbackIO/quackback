@@ -41,6 +41,7 @@ describe('isPublicStorageKey', () => {
       'portal-welcome/hero.png',
       'post-images/2026/04/shot.png',
       'logos/brand.png',
+      'fonts/2026/10/abc-brand.woff2',
     ]) {
       expect(isPublicStorageKey(key), key).toBe(true)
     }

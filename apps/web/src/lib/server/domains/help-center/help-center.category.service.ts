@@ -33,6 +33,8 @@ import {
 } from './category-tree'
 import { logger } from '@/lib/server/logger'
 
+export { listPublicCategories } from './help-center.public-category.query'
+
 const log = logger.child({ component: 'help-center-categories' })
 
 // ============================================================================
@@ -170,22 +172,6 @@ export async function listCategories(
       recursivePublishedArticleCount: recursivePublished.get(cat.id) ?? 0,
     }
   })
-}
-
-export async function listPublicCategories(
-  viewer: Actor = ANONYMOUS_ACTOR
-): Promise<HelpCenterCategoryWithCount[]> {
-  const all = await listCategories()
-  return all
-    .filter(
-      (cat) =>
-        cat.isPublic &&
-        // Segment gate ([] = everyone) — same per-category semantics as the
-        // article-side SQL predicate (helpCenterVisibilityConditions).
-        segmentGateAllows(viewer, cat.segmentIds) &&
-        cat.recursivePublishedArticleCount > 0
-    )
-    .map((cat) => ({ ...cat, articleCount: cat.recursivePublishedArticleCount }))
 }
 
 export async function getCategoryById(id: KbCategoryId): Promise<HelpCenterCategory> {

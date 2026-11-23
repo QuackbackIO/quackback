@@ -7,6 +7,4 @@ import type { StepLocation } from '../workflow-graph'
  * inspector all read/write the same value.
  */
 export type BuilderSelection =
-  | { kind: 'node'; id: string }
-  | { kind: 'insert'; location: StepLocation; index: number }
-  | null
+  { kind: 'node'; id: string } | { kind: 'insert'; location: StepLocation; index: number } | null

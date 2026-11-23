@@ -1,0 +1,72 @@
+/**
+ * The product suite's setup project: runs once per shard before any product
+ * test, against the database that shard's app uses.
+ *
+ * Turns on every product the suite covers (a fresh seed has Help center and
+ * Status off), makes sure the storage bucket exists, and creates the people
+ * and mints their sessions. The people are the support suite's
+ * (e2e/support/people.ts), so a test written for either suite can act as the
+ * same admin, teammates and customer. All idempotent, so a local re-run
+ * against the same database is fine.
+ */
+import { test as setup, expect } from '@playwright/test'
+import {
+  enableMagicLinkMethod,
+  ensureStorageBucket,
+  mintSupportSessions,
+  seedSupportPeople,
+  setFeatureFlag,
+} from '../utils/db-helpers'
+import { closeSupportDb, supportDb } from '../support/db'
+import { SUPPORT_RUN_DIR } from '../support/env'
+import { bustSettingsCache } from '../support/isolated-settings'
+
+/** Products the suite covers, switched on before any test runs. */
+const PRODUCT_FLAGS = ['feedback', 'changelog', 'helpCenter', 'statusPage'] as const
+
+setup('prepare the product suite', async ({ request }) => {
+  // A fresh database's first run (seeding the people, minting sessions) can
+  // take over 40 s.
+  setup.setTimeout(120_000)
+  for (const flag of PRODUCT_FLAGS) setFeatureFlag(flag, true)
+  // Sign-in by emailed link and code is opt-in (absent = off). Tests that sign
+  // a portal person in through it need it on, as a workspace using it would.
+  enableMagicLinkMethod()
+  // Turning Status on in Settings also publishes the page
+  // (settings.service updateFeatureFlags); the raw flag write above does not.
+  await supportDb()`
+    UPDATE settings
+    SET metadata = (
+      coalesce(nullif(metadata, '')::jsonb, '{}'::jsonb)
+      || jsonb_build_object('statusSettings',
+           coalesce(nullif(metadata, '')::jsonb -> 'statusSettings', '{}'::jsonb)
+           || '{"enabled": true}'::jsonb)
+    )::text`
+  await bustSettingsCache()
+  // The seed's published and scheduled changelog entries were never announced
+  // (notified_at NULL). The changelog reconciler, armed 25 s after boot, would
+  // email them to every subscriber while tests read Mailpit. Mark them done.
+  await supportDb()`
+    UPDATE changelog_entries SET notified_at = now()
+    WHERE notified_at IS NULL AND published_at IS NOT NULL`
+  ensureStorageBucket()
+  const people = seedSupportPeople()
+  mintSupportSessions(SUPPORT_RUN_DIR, people)
+
+  // The app is up and is the production build the suite expects.
+  const ready = await request.get('/api/health/ready')
+  expect(ready.status()).toBe(200)
+  // A request that read the settings row before the writes above can put the
+  // old row back in the shared cache after the bust. Bust until the app serves
+  // the published status page to a signed-out visitor.
+  await expect
+    .poll(
+      async () => {
+        await bustSettingsCache()
+        return (await request.get('/status')).status()
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(200)
+  await closeSupportDb()
+})

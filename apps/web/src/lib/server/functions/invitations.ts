@@ -233,6 +233,19 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
     const role = (inv.role || 'member') as Role
     const displayName = name?.trim() || undefined
 
+    // Past the plan's custom-role cap (after the plan limits grace) the
+    // invite's custom role goes to nobody new: it lands as the plain member.
+    // Decided here, before the transaction: the plan check reads through the
+    // shared pool, which must not be asked for a second connection while the
+    // transaction holds one.
+    const invitedRoleId =
+      role === 'member' ? ((inv.roleId as RoleId | null) ?? undefined) : undefined
+    let invitedRoleHeld = false
+    if (invitedRoleId) {
+      const { isCustomRoleHeld } = await import('@/lib/server/domains/roles/role.plan-lock')
+      invitedRoleHeld = await isCustomRoleHeld(invitedRoleId)
+    }
+
     // Claim the invite and apply the membership side effects atomically:
     // a partial failure rolls the claim back, so a claimed invite can never
     // be left without its principal/user writes. The seat backstop runs
@@ -290,11 +303,10 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       // enforces it); drop it for any other stored role.
       let assignRoleId =
         role === 'member' ? ((row.roleId as RoleId | null) ?? undefined) : undefined
-      // Past the plan's custom-role cap (after the plan limits grace) the
-      // invite's custom role goes to nobody new: it lands as the plain member.
+      // A held custom role lands as the plain member. A role that changed
+      // since the check above was not checked, so it is treated as held.
       if (assignRoleId) {
-        const { isCustomRoleHeld } = await import('@/lib/server/domains/roles/role.plan-lock')
-        if (await isCustomRoleHeld(assignRoleId)) {
+        if (invitedRoleHeld || assignRoleId !== invitedRoleId) {
           log.info(
             { invitation_id: invitationId },
             'accept invitation: custom role held by the plan'

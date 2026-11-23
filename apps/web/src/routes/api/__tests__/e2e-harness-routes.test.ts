@@ -11,9 +11,16 @@ const runE2eSweep = vi.fn(async (body: unknown) => ({
   result: {},
 }))
 vi.mock('@/lib/server/e2e-harness/sweeps', () => ({ runE2eSweep }))
+const connectE2eIntegration = vi.fn(async (body: unknown) => ({
+  ok: true as const,
+  integrationId: 'integration_1',
+  integrationType: (body as { type: string }).type,
+}))
+vi.mock('@/lib/server/e2e-harness/integrations', () => ({ connectE2eIntegration }))
 
 import { handleE2eSweep } from '../e2e/sweep'
 import { handleE2ePresenceProbe } from '../e2e/presence'
+import { handleE2eIntegrationConnect } from '../e2e/integrations.connect'
 
 const KEYS = ['E2E_HARNESS', 'BASE_URL', 'QUACKBACK_TENANCY'] as const
 const saved: Record<string, string | undefined> = {}
@@ -28,6 +35,7 @@ function sweepRequest(body: unknown): Request {
 
 beforeEach(() => {
   runE2eSweep.mockClear()
+  connectE2eIntegration.mockClear()
   for (const key of KEYS) saved[key] = process.env[key]
   process.env.BASE_URL = 'http://acme.localhost:3000'
   delete process.env.E2E_HARNESS
@@ -96,5 +104,47 @@ describe('GET /api/e2e/presence', () => {
   it('is 204 when the gate is open', () => {
     process.env.E2E_HARNESS = '1'
     expect(handleE2ePresenceProbe().status).toBe(204)
+  })
+})
+
+describe('POST /api/e2e/integrations/connect', () => {
+  function connectRequest(body: unknown): Request {
+    return new Request('http://acme.localhost:3000/api/e2e/integrations/connect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('is 404 and connects nothing without E2E_HARNESS=1', async () => {
+    const res = await handleE2eIntegrationConnect(connectRequest({ type: 'slack' }))
+    expect(res.status).toBe(404)
+    expect(connectE2eIntegration).not.toHaveBeenCalled()
+  })
+
+  it('is 404 and connects nothing with the flag on a public BASE_URL', async () => {
+    process.env.E2E_HARNESS = '1'
+    process.env.BASE_URL = 'https://feedback.example.com'
+    const res = await handleE2eIntegrationConnect(connectRequest({ type: 'slack' }))
+    expect(res.status).toBe(404)
+    expect(connectE2eIntegration).not.toHaveBeenCalled()
+  })
+
+  it('is 404 on the pooled fleet even with the flag', async () => {
+    process.env.E2E_HARNESS = '1'
+    process.env.QUACKBACK_TENANCY = 'pooled'
+    const res = await handleE2eIntegrationConnect(connectRequest({ type: 'slack' }))
+    expect(res.status).toBe(404)
+    expect(connectE2eIntegration).not.toHaveBeenCalled()
+  })
+
+  it('connects through the install path when the gate is open', async () => {
+    process.env.E2E_HARNESS = '1'
+    const res = await handleE2eIntegrationConnect(
+      connectRequest({ type: 'slack', accessToken: 'xoxb-test' })
+    )
+    expect(res.status).toBe(200)
+    expect(connectE2eIntegration).toHaveBeenCalledWith({ type: 'slack', accessToken: 'xoxb-test' })
+    expect(await res.json()).toMatchObject({ ok: true, integrationId: 'integration_1' })
   })
 })

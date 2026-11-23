@@ -2,8 +2,14 @@ import { useRef } from 'react'
 import { useIntl } from 'react-intl'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
+import { toast } from 'sonner'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
 
 interface VoteButtonProps {
   postId: PostId
@@ -43,10 +49,21 @@ export function VoteButton({
   closed = false,
 }: VoteButtonProps): React.ReactElement {
   const intl = useIntl()
+  // A blocked person's vote is refused; say why, in their language.
+  const sayIfBlocked = (err: unknown) => {
+    if (!isBlockedRefusal(err)) return
+    toast.error(
+      intl.formatMessage({
+        id: 'portal.blocked',
+        defaultMessage: "You can't post, vote or comment here.",
+      })
+    )
+  }
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
     voteCount: initialVoteCount,
     enabled: !readonly && !closed,
+    onError: sayIfBlocked,
   })
 
   const displayCount = readonly || closed ? initialVoteCount : voteCount
@@ -88,7 +105,7 @@ export function VoteButton({
     isInteractive && 'group transition-colors duration-200 cursor-pointer',
     isInteractive &&
       (hasVoted
-        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
+        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-readable [--ink:var(--post-card-voted-color)]'
         : 'border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80'),
     (readonly || disabled) && 'border-border/50',
     isInteractive && isPending && 'opacity-70 cursor-wait',
@@ -113,7 +130,9 @@ export function VoteButton({
       className={cn(
         'font-semibold tabular-nums',
         compact || pill ? 'text-xs' : 'text-sm',
-        isInteractive && hasVoted ? 'text-post-card-voted' : 'text-foreground'
+        isInteractive && hasVoted
+          ? 'text-readable [--ink:var(--post-card-voted-color)]'
+          : 'text-foreground'
       )}
     >
       {displayCount}
@@ -175,11 +194,11 @@ export function VoteButton({
             )
       }
       aria-pressed={hasVoted}
-      aria-disabled={noAccessReason ? true : undefined}
+      aria-disabled={disabled || noAccessReason ? true : undefined}
       title={noAccessReason}
       className={sharedClassName}
       onClick={handleClick}
-      disabled={isPending}
+      disabled={isPending || disabled}
     >
       {chevron}
       {count}

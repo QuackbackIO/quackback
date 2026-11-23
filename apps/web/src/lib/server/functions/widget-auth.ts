@@ -62,7 +62,9 @@ export async function getWidgetSession(opts?: {
     with: { user: true },
   })
 
-  if (!sessionRecord?.user) return null
+  // A session still pending two-factor enrolment is no session here either
+  // (auth/two-factor-pending.ts): its token reaches a caller from the sign-in.
+  if (!sessionRecord?.user || sessionRecord.twoFactorPending) return null
 
   const userId = sessionRecord.userId as UserId
 

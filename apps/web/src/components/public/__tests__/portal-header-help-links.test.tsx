@@ -76,6 +76,7 @@ vi.mock('@/components/shared/user-stats', () => ({
 }))
 
 import { PortalHeader } from '../portal-header'
+import { PreviewDraftProvider } from '../preview-draft-context'
 
 const HEADER_LINKS = [
   { label: 'Community', url: 'https://community.example.com' },
@@ -127,6 +128,30 @@ describe('PortalHeader — help center header links', () => {
 
   it('renders nothing when no links are configured', () => {
     renderHeader('/hc', [])
+    expect(screen.queryByRole('link', { name: 'Community' })).toBeNull()
+  })
+
+  it('shows the draft links in the admin preview', () => {
+    mockPathname.value = '/hc'
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: {
+        featureFlags: { helpCenter: true },
+        helpCenterConfig: { enabled: true, headerLinks: HEADER_LINKS },
+      },
+      registeredAuthProviders: [],
+    })
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PreviewDraftProvider
+          draft={{ helpCenter: { headerLinks: [{ label: 'Docs', url: '/docs' }] } }}
+          css=""
+        >
+          <PortalHeader orgName="Acme" userRole={null} showThemeToggle={false} />
+        </PreviewDraftProvider>
+      </IntlProvider>
+    )
+    expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', '/docs')
     expect(screen.queryByRole('link', { name: 'Community' })).toBeNull()
   })
 

@@ -32,7 +32,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.service'
 import {
   publishAgentConversationEvent,
-  publishConversationOnlyEvent,
+  publishConversationOnlyEventAsync,
 } from '@/lib/server/realtime/conversation-channels'
 import { conversationScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import {
@@ -277,8 +277,19 @@ export async function runAssistantTurnForConversation(
   // The mirror's scope envelope comes from that one read, not one per
   // streamed fragment.
   const mirrorScope = testThread ? conversationScopeOf(testThread) : undefined
+  // The signals go out one at a time, each after the last is published, so
+  // the widget sees them in the order they happened: a fire-and-forget publish
+  // takes whichever pooled connection is free, and the first answer fragment
+  // could otherwise overtake the 'thinking' status sent just before it (or a
+  // late fragment the final reply). A failed publish is logged and the chain
+  // carries on; the persisted reply is the durable record.
+  let turnSignals: Promise<void> = Promise.resolve()
   const publishTurnSignal = (event: ConversationStreamEvent) => {
-    publishConversationOnlyEvent(conversationId, event)
+    turnSignals = turnSignals
+      .then(() => publishConversationOnlyEventAsync(conversationId, event))
+      .catch((err: unknown) =>
+        log.warn({ err, conversationId, kind: event.kind }, 'assistant turn signal publish failed')
+      )
     if (mirrorScope) publishAgentConversationEvent(event, mirrorScope)
   }
   // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
@@ -343,6 +354,8 @@ export async function runAssistantTurnForConversation(
         })
       },
     })
+    // Every streamed signal is out before the reply that replaces them.
+    await turnSignals
     // Suppressed by the engine's own silence check — nothing to persist. An
     // honest cannot-answer outcome is still a customer-visible terminal reply
     // and must be persisted; it simply must not advance resolution state.
@@ -466,6 +479,7 @@ export async function runAssistantTurnForConversation(
     } else {
       log.error({ err, conversationId }, 'assistant turn failed; escalating to a human')
     }
+    await turnSignals
     try {
       await runAssistantFailureFloor(conversationId, assistantPrincipalId)
     } catch (floorErr) {
@@ -475,6 +489,8 @@ export async function runAssistantTurnForConversation(
       throw err
     }
   } finally {
+    // Every exit drains its signals before the snapshot is cleared.
+    await turnSignals
     await clearActivitySnapshot(conversationId)
   }
 }

@@ -12,7 +12,13 @@ export * from './src/rbac-catalogue'
 export { renderPermissionsMirror } from './src/permissions-mirror'
 
 // page_views partition maintenance (SQL helpers; take a Database, import no client)
-export { ensurePageViewPartitions, dropExpiredPageViewPartitions } from './src/page-view-partitions'
+export {
+  ensurePageViewPartitions,
+  ensurePageViewPartitionFor,
+  dropExpiredPageViewPartitions,
+  insertPageView,
+  isMissingPageViewPartitionError,
+} from './src/page-view-partitions'
 
 // Visitor analytics rollup (hourly recompute of visitor_stats_daily + visitor_top_stats)
 export { refreshVisitorAnalytics, VISITOR_PERIODS } from './src/visitor-rollup'

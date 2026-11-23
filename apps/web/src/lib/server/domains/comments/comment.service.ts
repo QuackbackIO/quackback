@@ -30,8 +30,10 @@ import { dispatchCommentCreatedEvent } from './comment.announce'
 import { prepareCommentContent } from './comment-content'
 import { contentHoldReason } from '@/lib/server/content/content-holds'
 import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from './comment.types'
-import { canCreateComment } from '@/lib/server/policy/posts'
+import { canCreateComment, canViewPost } from '@/lib/server/policy/posts'
 import type { Actor } from '@/lib/server/policy/types'
+import { can } from '@/lib/server/policy/authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -68,6 +70,16 @@ export async function createComment(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
   }
   const board = post.board
+  const postShape = {
+    moderationState: post.moderationState,
+    principalId: post.principalId,
+    authorIsTest: await isTestCustomer(post.principalId),
+  }
+  // A post the caller cannot see answers exactly like a missing one, so a
+  // refusal never confirms that a held or hidden post exists.
+  if (!canViewPost(actor, postShape, { access: board.access }).allowed) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
+  }
   await assertBoardOpen(board.id, board.readOnly ?? false)
 
   // Enforce access-control policy: board audience + post visibility + comments-locked
@@ -76,9 +88,7 @@ export async function createComment(
   const decision = canCreateComment(
     actor,
     {
-      moderationState: post.moderationState,
-      principalId: post.principalId,
-      authorIsTest: await isTestCustomer(post.principalId),
+      ...postShape,
       isCommentsLocked: post.isCommentsLocked,
       isMerged: !!post.canonicalPostId,
     },
@@ -143,7 +153,22 @@ export async function createComment(
 
   // Determine if a status change should be applied
   // Only for team members, root-level comments, with a valid statusId
-  const shouldChangeStatus = !!(input.statusId && authorIsTeamMember && !input.parentId)
+  // Re-picking the post's current status is no change: the comment posts as a
+  // plain comment, with no status activity or event.
+  const shouldChangeStatus = !!(
+    input.statusId &&
+    input.statusId !== post.statusId &&
+    authorIsTeamMember &&
+    !input.parentId
+  )
+  // Changing status through a comment is still changing status: it needs
+  // post.set_status, checked before anything is written.
+  if (shouldChangeStatus && !can(actor, PERMISSIONS.POST_SET_STATUS)) {
+    throw new ForbiddenError(
+      'STATUS_CHANGE_FORBIDDEN',
+      'You do not have permission to change the status of this post'
+    )
+  }
 
   const trimmedContent = input.content.trim()
   const { content: storedContent, contentJson } = await prepareCommentContent({
@@ -307,10 +332,10 @@ export async function createComment(
     })
   }
 
-  // Auto-subscribe commenter to the post even when held — so the author
-  // receives the approval/rejection notification and any subsequent thread
-  // activity once approved. Mirrors post.service.ts which subscribes
-  // authors of held posts.
+  // Auto-subscribe commenter to the post even when held, so they follow the
+  // thread once approved. Mirrors post.service.ts, which subscribes authors
+  // of held posts. The approval or rejection notice itself reaches the
+  // commenter from the comment.approved / comment.rejected events.
   if (!options?.skipDispatch && author.principalId) {
     await subscribeToPost(author.principalId, input.postId, 'comment')
   }
@@ -321,10 +346,13 @@ export async function createComment(
   if (!options?.skipDispatch && initialModerationState === 'published') {
     // Dispatch comment.created for webhooks, Slack, etc. Shares the payload
     // mapping with approveCommentFn's release path via dispatchCommentCreatedEvent.
+    // The caller wrote the text: the author, or a teammate or API key that
+    // files the comment for them (REST authorPrincipalId).
     await dispatchCommentCreatedEvent(
       author,
-      { id: comment.id, content: comment.content, isPrivate },
-      { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug }
+      { id: comment.id, content: comment.content, isPrivate, contentJson },
+      { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug },
+      actor.principalId ?? author.principalId
     )
 
     // Dispatch status change event if status was changed

@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { KbArticleId } from '@quackback/ids'
 import de from '@/locales/de.json'
+import { upsertArticleTranslationFn } from '@/lib/server/functions/help-center-translations'
 
 const statuses = vi.hoisted(() => ({
   rows: [] as Array<{
@@ -17,7 +18,9 @@ const statuses = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/functions/help-center-translations', () => ({
   getArticleTranslationStatusesFn: vi.fn(async () => statuses.rows),
-  listArticleTranslationsFn: vi.fn(async () => []),
+  listArticleTranslationsFn: vi.fn(async () => [
+    { locale: 'de', title: 'Rückerstattung', description: null, content: 'Text' },
+  ]),
   upsertArticleTranslationFn: vi.fn(),
   setArticleTranslationStatusFn: vi.fn(),
   deleteArticleTranslationFn: vi.fn(),
@@ -68,5 +71,18 @@ describe('ArticleTranslationsDialog auto-translate pause', () => {
     renderDialog('en', {})
     expect(await screen.findByText('Untranslated')).toBeTruthy()
     expect(screen.queryByText(/Paused/)).toBeNull()
+  })
+})
+
+describe('ArticleTranslationsDialog save draft', () => {
+  it('a published translation saved as a draft is a draft afterwards', async () => {
+    statuses.rows = [
+      { locale: 'de', status: 'published', updatedAt: null, autoTranslatePaused: false },
+    ]
+    renderDialog('en', {})
+    expect(await screen.findByRole('button', { name: 'Unpublish' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByRole('button', { name: 'Publish' })).toBeTruthy()
+    expect(upsertArticleTranslationFn).toHaveBeenCalledTimes(1)
   })
 })

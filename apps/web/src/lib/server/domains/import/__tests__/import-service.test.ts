@@ -63,6 +63,7 @@ vi.mock('@/lib/server/db', () => ({
   eq: (...args: unknown[]) => ({ eq: args }),
   and: (...args: unknown[]) => ({ and: args }),
   inArray: (...args: unknown[]) => ({ inArray: args }),
+  isNull: (...args: unknown[]) => ({ isNull: args }),
 }))
 
 import { processBatch } from '../import-service'

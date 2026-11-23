@@ -16,8 +16,10 @@ import {
   posts,
   postVotes,
   boards,
+  mergeSuggestions,
   eq,
   and,
+  or,
   isNull,
   sql,
   principal as principalTable,
@@ -179,6 +181,28 @@ export async function mergePost(
         'This post was just merged elsewhere — refresh and try again.'
       )
     }
+
+    // The merged post is settled: no pending suggestion naming it may stay
+    // open (it could never be accepted now). acceptMergeSuggestion marks its
+    // own suggestion accepted after this.
+    const now = new Date()
+    await tx
+      .update(mergeSuggestions)
+      .set({
+        status: 'dismissed',
+        resolvedAt: now,
+        resolvedByPrincipalId: actorPrincipalId,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(mergeSuggestions.status, 'pending'),
+          or(
+            eq(mergeSuggestions.sourcePostId, duplicatePostId),
+            eq(mergeSuggestions.targetPostId, duplicatePostId)
+          )
+        )
+      )
 
     return recalculateCanonicalVoteCount(canonicalPostId, { resetMergeCheck: true }, tx)
   })

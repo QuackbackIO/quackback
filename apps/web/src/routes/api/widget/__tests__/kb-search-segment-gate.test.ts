@@ -10,6 +10,11 @@ import type { PrincipalId, SegmentId } from '@quackback/ids'
 
 const mockIsFeatureEnabled = vi.fn()
 const mockGetHelpCenterConfig = vi.fn()
+// The portal lets the caller in unless a case makes it private to them.
+const portalGate = vi.hoisted(() => ({ open: true }))
+vi.mock('@/lib/server/widget/portal-gate', () => ({
+  isPortalOpenToRequest: async () => portalGate.open,
+}))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...args),
   getHelpCenterConfig: (...args: unknown[]) => mockGetHelpCenterConfig(...args),
@@ -52,6 +57,7 @@ function makeRequest(q = 'hello'): Request {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  portalGate.open = true
   mockIsFeatureEnabled.mockResolvedValue(true)
   mockGetHelpCenterConfig.mockResolvedValue({ locales: { additional: [], default: 'en' } })
   mockIncrementBucket.mockResolvedValue({ count: 1 })

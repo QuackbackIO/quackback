@@ -62,7 +62,11 @@ export function getRequestSession(): Promise<RequestSession | null> {
     const { healStrandedPortalSession } = await import('@/lib/server/auth/session-audience')
     const headers = getRequestHeaders()
     const session = await auth.api.getSession({ headers })
-    return session ? healStrandedPortalSession(session, headers) : null
+    // `/get-session` already answers null for a session still pending two-factor
+    // enrolment (hooks.ts); held here too, since everything app-side reads this.
+    const { isTwoFactorPendingSession } = await import('@/lib/server/auth/two-factor-pending')
+    if (!session || isTwoFactorPendingSession(session.session)) return null
+    return healStrandedPortalSession(session, headers)
   })
 }
 

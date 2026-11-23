@@ -29,6 +29,7 @@ const h = vi.hoisted(() => ({
   getConversationNoteMentionedEmailTargets: vi.fn(),
   getTicketDueTargets: vi.fn(),
   getTicketDueEmailTargets: vi.fn(),
+  getModerationDecisionTargets: vi.fn(),
 }))
 vi.mock('../hook-context', () => ({ buildHookContext: h.buildHookContext }))
 vi.mock('../targets', () => ({
@@ -58,6 +59,7 @@ vi.mock('../targets', () => ({
   getConversationNoteMentionedEmailTargets: h.getConversationNoteMentionedEmailTargets,
   getTicketDueTargets: h.getTicketDueTargets,
   getTicketDueEmailTargets: h.getTicketDueEmailTargets,
+  getModerationDecisionTargets: h.getModerationDecisionTargets,
 }))
 
 import { createId } from '@quackback/ids'
@@ -221,6 +223,16 @@ describe('notification resolver routing (WO-8c)', () => {
     expect(h.getConversationNoteMentionedEmailTargets).toHaveBeenCalledTimes(1)
     expect(notificationResolver.interestedIn('conversation.note_mentioned')).toBe(true)
   })
+
+  it.each(['post.approved', 'post.rejected', 'comment.approved', 'comment.rejected'])(
+    'routes %s to the author notice builder',
+    async (type) => {
+      h.getModerationDecisionTargets.mockResolvedValue(T('author_notice'))
+      const out = await notificationResolver.resolve(evt(type))
+      expect(out.map((t) => t.type)).toEqual(['author_notice'])
+      expect(notificationResolver.interestedIn(type)).toBe(true)
+    }
+  )
 
   it('routes SLA events to the SLA email builder', async () => {
     h.getSlaEmailTargets.mockResolvedValue(T('sla_email'))

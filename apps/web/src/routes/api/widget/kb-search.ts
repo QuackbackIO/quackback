@@ -13,6 +13,7 @@ import {
   widgetJsonError,
 } from '@/lib/server/widget/public-endpoint'
 import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
+import { isPortalOpenToRequest } from '@/lib/server/widget/portal-gate'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'widget-kb-search' })
@@ -22,7 +23,7 @@ export const KB_SEARCH_RATE_LIMIT = 60
 const RATE_WINDOW_SECONDS = 60
 
 export async function handleKbSearch({ request }: { request: Request }): Promise<Response> {
-  if (!(await isFeatureEnabled('helpCenter'))) {
+  if (!(await isFeatureEnabled('helpCenter')) || !(await isPortalOpenToRequest())) {
     return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
   }
 

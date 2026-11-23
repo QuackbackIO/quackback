@@ -9,6 +9,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const mergeSchema = z.object({
   canonicalPostId: z.string().min(1, 'Canonical post ID is required'),
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/merge')({
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = mergeSchema.safeParse(body)
 
           if (!parsed.success) {

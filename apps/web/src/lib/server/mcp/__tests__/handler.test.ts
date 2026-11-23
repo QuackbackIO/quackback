@@ -182,6 +182,12 @@ vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: vi.fn().mockResolvedValue({ voted: true, voteCount: 6 }),
   addVoteOnBehalf: vi.fn().mockResolvedValue({ voted: true, voteCount: 7 }),
   removeVote: vi.fn().mockResolvedValue({ removed: true, voteCount: 4 }),
+  // No one here is blocked; blocked-person-tools.db.test.ts drives the guard.
+  blockedVoteToggle: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  assertNotBlocked: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/server/domains/posts/post.access', () => ({

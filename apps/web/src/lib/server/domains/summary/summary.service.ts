@@ -34,6 +34,18 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'summary' })
 
 /**
+ * The comments a summary is built from: live, public and published. A private
+ * team note or a comment held for moderation never reaches the model, so it
+ * cannot surface in keyQuotes. The sweep counts the same rows, so a post whose
+ * only change is such a comment is not re-summarised for ever.
+ */
+const summarisedComment = and(
+  isNull(postComments.deletedAt),
+  eq(postComments.isPrivate, false),
+  eq(postComments.moderationState, 'published')
+)
+
+/**
  * `chat({ outputSchema })` collapses "empty response", "response wasn't
  * valid JSON", and "response didn't match the schema" into one thrown
  * `Error` tagged with one of these `code`s (see @tanstack/ai's
@@ -146,7 +158,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
       isTeamMember: postComments.isTeamMember,
     })
     .from(postComments)
-    .where(and(eq(postComments.postId, postId), isNull(postComments.deletedAt)))
+    .where(and(eq(postComments.postId, postId), summarisedComment))
     .orderBy(postComments.createdAt)
 
   // Build prompt input
@@ -160,8 +172,22 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     }
   }
 
-  // Include existing summary for continuity when refreshing
-  const existingSummary = post.summaryJson as PostSummaryJson | null
+  // Include existing summary for continuity when refreshing, unless the post
+  // has a live comment the summary leaves out (a private note or a held
+  // comment): a summary stored before those were left out may quote one, so
+  // such a post is summarised afresh from what the model may see.
+  const [excluded] = await db
+    .select({ id: postComments.id })
+    .from(postComments)
+    .where(
+      and(
+        eq(postComments.postId, postId),
+        isNull(postComments.deletedAt),
+        or(eq(postComments.isPrivate, true), ne(postComments.moderationState, 'published'))
+      )
+    )
+    .limit(1)
+  const existingSummary = excluded ? null : (post.summaryJson as PostSummaryJson | null)
   if (existingSummary) {
     input += '\n\n## Previous Summary\n'
     input += JSON.stringify(existingSummary)
@@ -248,7 +274,7 @@ async function _doSweep(): Promise<void> {
       count: sql<number>`count(*)::int`.as('live_count'),
     })
     .from(postComments)
-    .where(isNull(postComments.deletedAt))
+    .where(summarisedComment)
     .groupBy(postComments.postId)
     .as('live_cc')
 

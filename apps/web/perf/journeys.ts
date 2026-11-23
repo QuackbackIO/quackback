@@ -708,11 +708,11 @@ export const journeys: Journey[] = [
       // count depend on timing.
       await page.locator('a[href="/admin/settings/portal"]').first().click()
       await page.waitForURL('/admin/settings/portal')
-      await page.getByRole('main').getByRole('switch').first().waitFor()
-      // The portal preview is a whole portal in a frame, with reads of its
+      await page.getByText('Look and navigation').waitFor()
+      // The summary's thumbnail is a whole portal in a frame, with reads of its
       // own after it hydrates; leaving before they finish made the count a race.
-      const preview = await page.locator('iframe[title="Portal preview"]').elementHandle()
-      const frame = await preview?.contentFrame()
+      const thumbnail = await page.locator('iframe[title="Portal thumbnail"]').elementHandle()
+      const frame = await thumbnail?.contentFrame()
       await frame?.waitForLoadState('networkidle')
       await page.locator('a[href="/admin/settings/members"]').first().click()
       await page.waitForURL('/admin/settings/members')
@@ -720,22 +720,20 @@ export const journeys: Journey[] = [
     },
   },
   {
-    // An unsaved welcome message on the portal settings page travels into the
+    // An unsaved welcome message on the portal Customise page travels into the
     // portal preview frame as one draft message: what that message re-renders
-    // in the frame is what every edit costs there. Nothing is saved.
+    // in the frame is what every edit costs there. Nothing is published.
     kind: 'browser',
     name: 'ui:admin-settings-portal-draft-welcome',
     as: 'admin',
     setup: async (page) => {
-      await page.goto('/admin/settings/portal')
+      await page.goto('/admin/settings/portal/customise')
       const preview = await page.locator('iframe[title="Portal preview"]').elementHandle()
       const frame = await preview?.contentFrame()
       await frame?.locator('a[href*="/posts/post_"]').first().waitFor()
       await frame?.waitForLoadState('networkidle')
-      const welcome = page.locator(
-        'xpath=//*[normalize-space()="Welcome message"]/ancestor::*[.//*[@contenteditable="true"]][1]'
-      )
-      await welcome.locator('[contenteditable="true"]').click()
+      await page.getByRole('button', { name: /^Welcome message/ }).click()
+      await page.locator('[data-section="welcome"] [contenteditable="true"]').click()
     },
     run: async (page) => {
       await page.keyboard.insertText(WELCOME_DRAFT)

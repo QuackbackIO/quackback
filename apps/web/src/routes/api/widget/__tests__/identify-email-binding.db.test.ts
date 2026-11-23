@@ -220,6 +220,26 @@ describe.skipIf(!fixture.available)('widget identify email binding (real DB, rol
     expect(row.emailVerified).toBe(true)
   })
 
+  it('merges attribute claims into an existing person and keeps stored attributes', async () => {
+    await testDb.insert(userAttributeDefinitions).values([
+      { key: 'plan', label: 'Plan', type: 'string' },
+      { key: 'seats', label: 'Seats', type: 'number' },
+    ])
+    const email = `existing-attrs-${suffix()}@example.com`
+    const sub = `sub-${suffix()}`
+    const userId = await seedPerson({ email, externalId: sub, emailVerified: true })
+    await testDb
+      .update(user)
+      .set({ metadata: JSON.stringify({ plan: 'pro' }) })
+      .where(eq(user.id, userId))
+
+    const res = await identify({ sub, email, seats: 5 })
+
+    expect(res.status).toBe(200)
+    const row = await loadUser({ id: userId })
+    expect(JSON.parse(row.metadata ?? '{}')).toEqual({ plan: 'pro', seats: 5 })
+  })
+
   it('never stores email_verified as a custom attribute', async () => {
     await testDb
       .insert(userAttributeDefinitions)

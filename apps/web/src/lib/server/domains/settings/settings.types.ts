@@ -5,6 +5,7 @@
  * This allows adding new settings without migrations.
  */
 
+import type { CustomFont } from '@/lib/shared/theme/font-uploads'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
@@ -252,6 +253,9 @@ export interface ModerationDefault {
   holdImages?: boolean
   /** Hold posts and comments that contain an external link. Default false. */
   holdLinks?: boolean
+  /** Email authors when their held post or comment is approved or rejected.
+   *  Default true; only an explicit false turns it off. */
+  emailDecisions?: boolean
 }
 
 /**
@@ -381,6 +385,13 @@ export interface PortalConfig {
    * map means no section has a hostname. Always written whole, never merged.
    */
   sectionDomains?: SectionDomainMap
+  /**
+   * The header logo's dark mode version: an optional second upload under
+   * `header-logos/`, shown in the logo's place wherever the portal is drawn
+   * dark. Absent or null, the logo itself shows in both. Written by a
+   * Customise publish (`logo.darkKey`) and by nothing else.
+   */
+  headerLogoDarkKey?: string | null
 }
 
 /**
@@ -414,7 +425,12 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   welcomeCard: {
     body: EMPTY_WELCOME_BODY,
   },
-  moderationDefault: { requireApproval: 'none', holdImages: false, holdLinks: false },
+  moderationDefault: {
+    requireApproval: 'none',
+    holdImages: false,
+    holdLinks: false,
+    emailDecisions: true,
+  },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
   support: { enabled: true },
 }
@@ -521,6 +537,16 @@ export interface BrandingConfig {
   preset?: string
   /** Theme mode: 'light' (force light), 'dark' (force dark), or 'user' (allow toggle) */
   themeMode?: ThemeMode
+  /** Button corners: 'pill' (default) or the theme's corner radius */
+  buttonShape?: 'pill' | 'corners'
+  /** An uploaded font family; written as @font-face plus the font stack, never as CSS text */
+  customFont?: CustomFont
+  /** Cards: 'border' (default), 'shadow' or 'flat' */
+  cardStyle?: 'border' | 'shadow' | 'flat'
+  /** An uploaded family for titles and headings, of `customFont`'s shape */
+  customHeadingFont?: CustomFont
+  /** 'page' keeps the headings font to page-level headings; unset, every title */
+  headingScope?: 'page'
   /** Light mode color overrides */
   light?: ThemeColors
   /** Dark mode color overrides */
@@ -540,9 +566,10 @@ export interface DeveloperConfig {
   /** Whether portal users (role: 'user') can access MCP */
   mcpPortalAccessEnabled: boolean
   /**
-   * Whether OAuth clients may self-register (RFC 7591 dynamic client
-   * registration). Required by MCP clients like Claude Code; disable to
-   * restrict OAuth to pre-registered clients. Read at auth-instance build
+   * Whether new OAuth clients may self-register, by either route: RFC 7591
+   * dynamic client registration or a Client ID Metadata Document (CIMD).
+   * Required by MCP clients like Claude Code; disable to restrict OAuth to
+   * clients registered already, which keep working. Read at auth-instance build
    * time; updateDeveloperConfig bumps auth_config_version on change so the
    * toggle takes effect without a restart.
    */
@@ -1097,6 +1124,8 @@ export interface SettingsBrandingData {
   logoUrl: string | null
   faviconUrl: string | null
   headerLogoUrl: string | null
+  /** The header logo's dark mode version, when the workspace has one. */
+  headerLogoDarkUrl?: string | null
   /**
    * @deprecated Unread. Social share resolves to the workspace logo
    * (`resolvePortalOgImageUrl`); the stored `portal_og_image_key` column is

@@ -433,6 +433,119 @@ describe.skipIf(!fixture.available)('roadmap derived membership (real DB)', () =
     ).resolves.toMatchObject({ total: 1 })
   })
 
+  it('RMP-A-13 matches any configured value within a dimension and every dimension together', async () => {
+    const seeded = await seedBase()
+    const [tagB] = await testDb
+      .insert(postTags)
+      .values({ name: `Roadmap tag B ${suffix()}` })
+      .returning()
+    const [segmentB] = await testDb
+      .insert(segments)
+      .values({ name: 'Roadmap segment B', slug: `roadmap-segment-b-${suffix()}` })
+      .returning()
+    await testDb
+      .insert(userSegments)
+      .values({ principalId: seeded.authorB, segmentId: segmentB.id })
+    const outsider = await seedPrincipal(`Roadmap outsider ${suffix()}`)
+    const roadmapId = await seedRoadmap(seeded, {
+      baseFilter: {
+        boardIds: [seeded.boardA, seeded.boardB],
+        tagIds: [seeded.tagA, tagB.id],
+        segmentIds: [seeded.segmentA, segmentB.id],
+      },
+    })
+
+    const viaFirstValues = await seedPost(seeded)
+    const viaSecondValues = await seedPost(seeded, {
+      boardId: seeded.boardB,
+      principalId: seeded.authorB,
+    })
+    const untagged = await seedPost(seeded)
+    const outsideSegments = await seedPost(seeded, { principalId: outsider })
+    await testDb.insert(postTagAssignments).values([
+      { postId: viaFirstValues, tagId: seeded.tagA },
+      { postId: viaSecondValues, tagId: tagB.id },
+      { postId: outsideSegments, tagId: seeded.tagA },
+    ])
+
+    const column = await getRoadmapPosts(roadmapId, { statusId: seeded.statusA })
+    expect(new Set(column.items.map((post) => post.id))).toEqual(
+      new Set([viaFirstValues, viaSecondValues])
+    )
+    expect(column.items.map((post) => post.id)).not.toContain(untagged)
+    expect(column.total).toBe(2)
+  })
+
+  it('RMP-E-15 puts every post without an ETA in No ETA on a date roadmap with an empty base filter', async () => {
+    const seeded = await seedBase()
+    const roadmapId = await seedRoadmap(seeded, { type: 'date', frequency: 'monthly' })
+    const noEtaA = await seedPost(seeded, { eta: null })
+    const noEtaB = await seedPost(seeded, {
+      eta: null,
+      statusId: seeded.statusB,
+      boardId: seeded.boardB,
+    })
+    const dated = await seedPost(seeded, { eta: new Date('2026-07-01T00:00:00.000Z') })
+    const deleted = await seedPost(seeded, { eta: null, deletedAt: new Date() })
+
+    const result = await getRoadmapPosts(roadmapId, { bucketId: 'no-eta', limit: 100 })
+    const ids = result.items.map((post) => post.id)
+    expect(ids).toEqual(expect.arrayContaining([noEtaA, noEtaB]))
+    expect(ids).not.toContain(dated)
+    expect(ids).not.toContain(deleted)
+  })
+
+  it('RMP-P-10 keeps spam posts and segment-only boards off the portal roadmap for viewers outside the segment', async () => {
+    const seeded = await seedBase()
+    const roadmapId = await seedRoadmap(seeded, {})
+    const [segmentBoard] = await testDb
+      .insert(boards)
+      .values({
+        slug: `roadmap-segment-board-${suffix()}`,
+        name: 'Segment board',
+        access: {
+          ...boardAccess('segments'),
+          segments: {
+            view: [seeded.segmentA],
+            vote: [seeded.segmentA],
+            comment: [seeded.segmentA],
+            submit: [seeded.segmentA],
+          },
+        },
+      })
+      .returning()
+    const visible = await seedPost(seeded)
+    const spam = await seedPost(seeded, { moderationState: 'spam' })
+    const segmentOnly = await seedPost(seeded, { boardId: segmentBoard.id })
+
+    const anonymous = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA },
+      ANONYMOUS_ACTOR
+    )
+    expect(anonymous.items.map((post) => post.id)).toEqual([visible])
+    expect(anonymous.total).toBe(1)
+
+    const outsider = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA },
+      actor({ principalId: seeded.authorB, role: 'user' })
+    )
+    expect(outsider.items.map((post) => post.id)).toEqual([visible])
+
+    const member = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA },
+      actor({
+        principalId: seeded.authorA,
+        role: 'user',
+        segmentIds: new Set([seeded.segmentA]),
+      })
+    )
+    expect(new Set(member.items.map((post) => post.id))).toEqual(new Set([visible, segmentOnly]))
+    expect(member.items.map((post) => post.id)).not.toContain(spam)
+  })
+
   it('keeps a test customer idea off the public roadmap, its count and its date range', async () => {
     const seeded = await seedBase()
     const owner = await seedPrincipal(`Roadmap teammate ${suffix()}`)

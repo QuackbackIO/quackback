@@ -352,7 +352,7 @@ export async function rotateApiKey(
       throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
     }
     if (filter.granter && key.kind === 'workspace') {
-      await assertCanManageWorkspaceKey(key.principalId, filter.granter)
+      await assertCanManageWorkspaceKey(key.principalId, filter.granter, tx)
     }
 
     const [updatedKey] = await tx
@@ -504,7 +504,7 @@ export async function setWorkspaceKeyRole(
       .for('update')
     if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'Workspace key not found')
     // The role it holds now must be one the caller could grant, as well as the new one.
-    await assertCanManageWorkspaceKey(key.principalId, granter)
+    await assertCanManageWorkspaceKey(key.principalId, granter, tx)
     await applyWorkspaceKeyRole(key.principalId, role, grantedBy, tx)
     await emit(tx, apiKeyUpdated, {
       payload: { apiKeyId: key.id, changedKeys: ['role'], roleName: role.roleName },
