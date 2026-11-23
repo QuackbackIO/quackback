@@ -7,12 +7,13 @@
 import { db, eq, and, postCommentReactions, principal } from '@/lib/server/db'
 import { type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { aggregateReactions } from '@/lib/shared'
-import { type Actor } from '@/lib/server/policy'
+import { canReactToComment, type Actor } from '@/lib/server/policy'
 import { assertCommentViewable } from '@/lib/server/domains/posts/post.access'
 import type { CommentReactionCount, ReactionResult } from './comment.types'
 import { logger } from '@/lib/server/logger'
 import { notTestPrincipal } from '@/lib/server/test-data'
-import { ValidationError } from '@/lib/shared/errors'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import { assertBoardOpen } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 import { isReactionEmoji, REACTION_EMOJI_MESSAGE } from '@/lib/shared/reaction-emoji'
 
 const log = logger.child({ component: 'comment-reactions' })
@@ -66,7 +67,12 @@ export async function addReaction(
   // function did its own canViewPost+isPrivate inline but didn't check
   // any of the deletedAt columns — so a reaction could be added to a
   // soft-deleted comment / post / board.
-  await assertCommentViewable(commentId, actor)
+  const target = await assertCommentViewable(commentId, actor)
+  // Whoever may not comment on the board may not react there, and a read-only
+  // board takes no new reactions (taking one back stays allowed).
+  const decision = canReactToComment(actor, { access: target.access })
+  if (!decision.allowed) throw new ForbiddenError('REACTION_NOT_ALLOWED', decision.reason)
+  await assertBoardOpen(target.boardId, target.boardReadOnly)
 
   // Atomically insert reaction (uses unique constraint to prevent duplicates)
   const inserted = await db

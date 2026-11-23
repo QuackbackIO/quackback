@@ -123,20 +123,21 @@ vi.mock('@/lib/server/db', () => {
               // with a setWhere: rows are returned when the INSERT fired
               // OR when the UPDATE matched the setWhere. The phantom-audit
               // fix relies on returning() length to detect real changes.
-              const runUpsert = (): typeof state.rows => {
+              // `inserted` mirrors the service's xmax = 0 projection.
+              const runUpsert = (): Array<Row & { inserted: boolean }> => {
                 const existing = state.rows.find(
                   (r) =>
                     r.principalId === incoming.principalId && r.segmentId === incoming.segmentId
                 )
                 if (!existing) {
                   state.rows.push(incoming)
-                  return [incoming]
+                  return [{ ...incoming, inserted: true }]
                 }
                 const newPriority = MOCK_PRIORITY[String(conflict.set.addedBy)]
                 const existingPriority = MOCK_PRIORITY[existing.addedBy]
                 if (newPriority > existingPriority) {
                   existing.addedBy = String(conflict.set.addedBy)
-                  return [existing]
+                  return [{ ...existing, inserted: false }]
                 }
                 return [] // no-op (preserves stickier source)
               }
@@ -161,8 +162,16 @@ vi.mock('@/lib/server/db', () => {
         })),
       })),
       delete: vi.fn(() => ({
-        where: vi.fn(async (pred: Condition) => {
+        // Awaitable as is, or with `.returning()` for the deleted rows.
+        where: vi.fn((pred: Condition) => {
+          const deleted = state.rows.filter((r) => matchCondition(r, pred))
           state.rows = state.rows.filter((r) => !matchCondition(r, pred))
+          return {
+            returning: async () => deleted,
+            then(onFulfilled: (v: void) => void) {
+              return Promise.resolve().then(onFulfilled)
+            },
+          }
         }),
       })),
     },
@@ -304,6 +313,12 @@ describe('removeMember — removes regardless of source', () => {
     await removeMember({ principalId: P1, segmentId: S1, actor: ACTOR_ADMIN })
     expect(state.rows).toEqual([])
     expect(state.auditEvents.find((e) => e.event === 'segment.member.removed')).toBeTruthy()
+  })
+
+  it('says whether a row was removed', async () => {
+    state.rows.push({ principalId: P1, segmentId: S1, addedBy: 'api' })
+    await expect(removeMember({ principalId: P1, segmentId: S1, actor: null })).resolves.toBe(true)
+    await expect(removeMember({ principalId: P1, segmentId: S1, actor: null })).resolves.toBe(false)
   })
 
   it('is a no-op when the row does not exist (no error, still audits)', async () => {

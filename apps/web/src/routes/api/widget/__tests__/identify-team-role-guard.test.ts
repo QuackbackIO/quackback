@@ -93,6 +93,7 @@ vi.mock('@/lib/server/auth/country-capture', () => ({
 
 vi.mock('@/lib/server/domains/users/user.attributes', () => ({
   validateAndCoerceAttributes: vi.fn(async () => ({ valid: {}, removals: [], errors: [] })),
+  metadataMergeSql: vi.fn(() => 'atomic-metadata-merge'),
   EXTERNAL_ID_KEY: '_externalUserId',
 }))
 
@@ -334,7 +335,7 @@ describe('POST /api/widget/identify — atomic metadata write', () => {
       name: 'SSO User',
       plan: 'enterprise',
     })
-    const { validateAndCoerceAttributes } =
+    const { validateAndCoerceAttributes, metadataMergeSql } =
       await import('@/lib/server/domains/users/user.attributes')
     vi.mocked(validateAndCoerceAttributes).mockResolvedValueOnce({
       valid: { plan: 'enterprise' },
@@ -358,10 +359,11 @@ describe('POST /api/widget/identify — atomic metadata write', () => {
     const setArgs = mockUpdateSet.mock.calls.map((c) => c[0] as Record<string, unknown>)
     const updateWithMetadata = setArgs.find((s) => 'metadata' in s)
     expect(updateWithMetadata).toBeDefined()
-    // The mocked `sql` tag returns only the literal text preceding the first
-    // interpolation — a plain JSON string (what a JS mergeMetadata call would
-    // produce) would never match this, so this pins the write to the atomic
-    // coalesce/jsonb SQL expression instead of a read-then-write.
-    expect(updateWithMetadata?.metadata).toBe('((coalesce(nullif(')
+    // A plain JSON string (what a JS mergeMetadata call would produce) would
+    // never match this, so this pins the write to the atomic SQL merge
+    // instead of a read-then-write. identify-email-binding.db.test.ts runs
+    // the real statement against Postgres.
+    expect(metadataMergeSql).toHaveBeenCalledWith({ plan: 'enterprise' }, [])
+    expect(updateWithMetadata?.metadata).toBe('atomic-metadata-merge')
   })
 })

@@ -63,6 +63,12 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 vi.mock('../registered-providers', () => ({
   getRegisteredOidcProviderIds: vi.fn(async () => new Set()),
+  // Single sign-on live (or not set up): email links are exactly as stored.
+  getSsoSignInState: async () => ({ ssoLive: true, providersConfigured: false }),
+}))
+// Email sign-in on: the method gate has its own suite (email-signin-method).
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettings: vi.fn(async () => ({ authConfig: { oauth: { magicLink: true } } })),
 }))
 
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.quackback.io' } }))

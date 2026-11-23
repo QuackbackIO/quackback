@@ -14,7 +14,10 @@ import { boards, postVotes, posts, principal, user } from '@/lib/server/db'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 import type { AuthContext } from '../auth-helpers'
 
-const hoisted = vi.hoisted(() => ({ session: null as AuthContext | null }))
+const hoisted = vi.hoisted(() => ({
+  session: null as AuthContext | null,
+  feedItems: [] as Record<string, unknown>[],
+}))
 
 vi.mock('@tanstack/react-start', () => ({
   createServerOnlyFn: <T>(fn: T) => fn,
@@ -50,7 +53,7 @@ vi.mock('@/lib/server/domains/boards/board.public', () => ({
 }))
 vi.mock('@/lib/server/domains/posts/post.public', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/posts/post.public')>()),
-  listPublicPostsWithVotesAndAvatars: async () => ({ items: [], hasMore: false }),
+  listPublicPostsWithVotesAndAvatars: async () => ({ items: hoisted.feedItems, hasMore: false }),
 }))
 vi.mock('@/lib/server/domains/statuses/status.service', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/statuses/status.service')>()),
@@ -67,7 +70,11 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal)
 
 const { fetchPortalData } = await import('../portal')
 
-type PortalDataResult = { votedPostIds: string[]; principalId: string | null }
+type PortalDataResult = {
+  votedPostIds: string[]
+  principalId: string | null
+  posts: { items: Record<string, unknown>[] }
+}
 const callFetchPortalData = fetchPortalData as unknown as (args: {
   data: Record<string, unknown>
 }) => Promise<PortalDataResult>
@@ -134,6 +141,7 @@ describe.skipIf(!fixture.available)('fetchPortalData voted posts (real DB)', () 
   beforeEach(async () => {
     await fixture.begin()
     hoisted.session = null
+    hoisted.feedItems = []
     const [board] = await testDb
       .insert(boards)
       .values({ slug: `votes-${suffix()}`, name: 'Votes', access: DEFAULT_BOARD_ACCESS })
@@ -185,5 +193,28 @@ describe.skipIf(!fixture.available)('fetchPortalData voted posts (real DB)', () 
 
     expect(result.votedPostIds).toEqual([anonVote])
     expect(result.principalId).toBe(anon.principalId)
+  })
+
+  it("carries each card's moderation state on the first page, so the author's held post shows as pending", async () => {
+    hoisted.session = sessionFor(viewer)
+    hoisted.feedItems = [
+      {
+        id: viewerVote,
+        title: 'Held',
+        content: '',
+        statusId: null,
+        voteCount: 0,
+        authorName: 'Viewer',
+        principalId: viewer.principalId,
+        createdAt: new Date(),
+        commentCount: 0,
+        tags: [],
+        moderationState: 'pending',
+      },
+    ]
+
+    const result = await callFetchPortalData({ data: { sort: 'top' } })
+
+    expect(result.posts.items[0]).toMatchObject({ id: viewerVote, moderationState: 'pending' })
   })
 })

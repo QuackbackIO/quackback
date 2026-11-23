@@ -82,6 +82,8 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: async () => new Set(['oidc_acme']),
+  // Single sign-on live (or not set up): email links are exactly as stored.
+  getSsoSignInState: async () => ({ ssoLive: true, providersConfigured: false }),
 }))
 vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://acme.quackback.io', trustedProxyHops: 1 },
@@ -139,7 +141,9 @@ beforeEach(() => {
   // The steady state: an owner exists, nobody can claim it by arriving, and its
   // admin has closed self-service sign-ups. The only workspace in which the
   // per-address answer is interesting at all.
-  hoisted.getWorkspaceSettings.mockResolvedValue({ authConfig: { openSignup: false } })
+  hoisted.getWorkspaceSettings.mockResolvedValue({
+    authConfig: { openSignup: false, oauth: { magicLink: true } },
+  })
   hoisted.userFindFirst.mockResolvedValue(null)
   hoisted.invitationFindFirst.mockResolvedValue(null)
   hoisted.findHumanAdmin.mockResolvedValue({ id: 'principal_owner' })

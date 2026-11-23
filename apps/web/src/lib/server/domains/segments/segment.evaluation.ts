@@ -2,10 +2,13 @@ import { db, eq, and, inArray, isNull, sql, segments, userSegments } from '@/lib
 import type { SegmentId, PrincipalId } from '@quackback/ids'
 import { fromUuid } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import type { EvaluationResult } from './segment.types'
+import type { EvaluationFailure, EvaluationResult } from './segment.types'
 import type { SegmentRules, SegmentCondition } from '@/lib/server/db'
 import { getSegment } from './segment.service'
 import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'segment-evaluation' })
 
 /** SQL comparison operators for rule conditions */
 const OPERATOR_SQL: Record<string, string> = {
@@ -17,8 +20,14 @@ const OPERATOR_SQL: Record<string, string> = {
   gte: '>=',
 }
 
-/** Activity count subquery for post_count, vote_count, comment_count */
-function activityCountSql(table: string, hasSoftDelete: boolean): ReturnType<typeof sql> {
+/**
+ * Activity count subquery for post_count, vote_count, comment_count. Votes
+ * are hard-deleted; posts and comments count only while not soft-deleted.
+ */
+function activityCountSql(
+  table: 'posts' | 'post_votes' | 'post_comments',
+  hasSoftDelete: boolean
+): ReturnType<typeof sql> {
   const whereClause = hasSoftDelete
     ? sql.raw(`WHERE ${table}.principal_id = p.id AND ${table}.deleted_at IS NULL`)
     : sql.raw(`WHERE ${table}.principal_id = p.id`)
@@ -151,9 +160,9 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
       case 'post_count':
         return sql`${activityCountSql('posts', true)} ${sql.raw(isSet ? '> 0' : '= 0')}`
       case 'vote_count':
-        return sql`${activityCountSql('votes', false)} ${sql.raw(isSet ? '> 0' : '= 0')}`
+        return sql`${activityCountSql('post_votes', false)} ${sql.raw(isSet ? '> 0' : '= 0')}`
       case 'comment_count':
-        return sql`${activityCountSql('comments', true)} ${sql.raw(isSet ? '> 0' : '= 0')}`
+        return sql`${activityCountSql('post_comments', true)} ${sql.raw(isSet ? '> 0' : '= 0')}`
       // name is NOT NULL — is_set is always true, is_not_set is never true
       case 'name':
         return isSet ? sql`TRUE` : sql`FALSE`
@@ -272,13 +281,13 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
     case 'vote_count': {
       const sqlOp = OPERATOR_SQL[operator]
       if (!sqlOp) return null
-      return sql`${activityCountSql('votes', false)} ${sql.raw(sqlOp)} ${Number(value)}`
+      return sql`${activityCountSql('post_votes', false)} ${sql.raw(sqlOp)} ${Number(value)}`
     }
 
     case 'comment_count': {
       const sqlOp = OPERATOR_SQL[operator]
       if (!sqlOp) return null
-      return sql`${activityCountSql('comments', true)} ${sql.raw(sqlOp)} ${Number(value)}`
+      return sql`${activityCountSql('post_comments', true)} ${sql.raw(sqlOp)} ${Number(value)}`
     }
 
     case 'name': {
@@ -419,17 +428,23 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
     if (!segment) throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
     if (segment.type !== 'dynamic')
       throw new ValidationError('SEGMENT_TYPE_ERROR', 'Segment is not dynamic')
+    // A person already held by another source (manual, api, widget, sso) is a
+    // member: matching them adds nothing. Only the rows evaluation wrote are
+    // its to remove.
     const currentMembers = await tx
-      .select({ principalId: userSegments.principalId })
+      .select({ principalId: userSegments.principalId, addedBy: userSegments.addedBy })
       .from(userSegments)
-      .where(and(eq(userSegments.segmentId, segmentId), eq(userSegments.addedBy, 'dynamic')))
-    const currentIds = new Set<string>(currentMembers.map((r) => r.principalId))
+      .where(eq(userSegments.segmentId, segmentId))
+    const memberIds = new Set<string>(currentMembers.map((r) => r.principalId))
+    const dynamicIds = currentMembers
+      .filter((r) => r.addedBy === 'dynamic')
+      .map((r) => r.principalId)
     const matchingIds = segment.rules?.conditions?.length
       ? await resolveMatchingPrincipals(segment.rules, tx)
       : []
     const matchingSet = new Set(matchingIds)
-    const toAdd = matchingIds.filter((id) => !currentIds.has(id)) as PrincipalId[]
-    const toRemove = [...currentIds].filter((id) => !matchingSet.has(id)) as PrincipalId[]
+    const toAdd = matchingIds.filter((id) => !memberIds.has(id)) as PrincipalId[]
+    const toRemove = dynamicIds.filter((id) => !matchingSet.has(id)) as PrincipalId[]
     if (toAdd.length)
       await tx
         .insert(userSegments)
@@ -457,18 +472,26 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
 }
 
 /**
- * Evaluate all active dynamic segments.
+ * Evaluate all active dynamic segments. Each segment commits or rolls back on
+ * its own: one that fails is logged and reported, and the rest still run.
  */
-export async function evaluateAllDynamicSegments(): Promise<EvaluationResult[]> {
+export async function evaluateAllDynamicSegments(): Promise<
+  Array<EvaluationResult | EvaluationFailure>
+> {
   const dynamicSegments = await db
     .select({ id: segments.id })
     .from(segments)
     .where(and(eq(segments.type, 'dynamic'), isNull(segments.deletedAt)))
 
-  const results: EvaluationResult[] = []
+  const results: Array<EvaluationResult | EvaluationFailure> = []
   for (const seg of dynamicSegments) {
-    const result = await evaluateDynamicSegment(seg.id as SegmentId)
-    results.push(result)
+    const segmentId = seg.id as SegmentId
+    try {
+      results.push(await evaluateDynamicSegment(segmentId))
+    } catch (err) {
+      log.error({ err, segment_id: segmentId }, 'segment evaluation failed')
+      results.push({ segmentId, error: 'Evaluation failed' })
+    }
   }
   return results
 }

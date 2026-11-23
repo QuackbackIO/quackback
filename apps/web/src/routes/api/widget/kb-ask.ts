@@ -54,6 +54,7 @@ import {
   widgetJsonError,
 } from '@/lib/server/widget/public-endpoint'
 import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
+import { isPortalOpenToRequest } from '@/lib/server/widget/portal-gate'
 import { getSettings } from '@/lib/server/functions/workspace'
 import type { Actor } from '@/lib/server/policy/types'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -134,7 +135,7 @@ export async function handleKbAskProbe({
   request: Request
 }): Promise<Response> {
   const flags = await getFeatureFlags()
-  if (!flags.helpCenter) {
+  if (!flags.helpCenter || !(await isPortalOpenToRequest())) {
     return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
   }
   return Response.json({ data: { enabled: isAskAiConfigured() } }, { headers: widgetCorsHeaders() })
@@ -142,7 +143,7 @@ export async function handleKbAskProbe({
 
 export async function handleKbAsk({ request }: { request: Request }): Promise<Response> {
   const flags = await getFeatureFlags()
-  if (!flags.helpCenter) {
+  if (!flags.helpCenter || !(await isPortalOpenToRequest())) {
     return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
   }
 

@@ -45,19 +45,14 @@ function parseCssVar(css: string, varName: string): string | undefined {
 
 /**
  * Normalize a CSS color value to hex so every client (web, iOS, Android) can
- * consume it the same way. Admin UIs can paste `oklch(...)`, rgb, or hex — we
- * coerce to hex; anything we can't recognize is dropped (`undefined`) so the
- * client uses its own default.
+ * consume it the same way. Admin UIs can paste hex, rgb(), hsl(), oklab() or
+ * oklch() — we coerce to hex; anything we can't recognize is dropped
+ * (`undefined`) so the client uses its own default.
  */
 async function toHex(value: string | undefined): Promise<string | undefined> {
   if (!value) return undefined
-  const trimmed = value.trim()
-  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed)) return trimmed
-  if (/^oklch\(/i.test(trimmed)) {
-    const { oklchToHex } = await import('@/lib/shared/theme/colors')
-    return oklchToHex(trimmed)
-  }
-  return undefined
+  const { tryCssColorToHex } = await import('@/lib/shared/theme/colors')
+  return tryCssColorToHex(value) ?? undefined
 }
 
 /** Extract theme values from :root and .dark blocks in custom CSS */
@@ -119,13 +114,14 @@ export async function getPublicServerConfig(): Promise<{
     const brandingConfig = await getBrandingConfig()
     theme.themeMode = brandingConfig.themeMode ?? 'user'
 
-    const { oklchToHex } = await import('@/lib/shared/theme/colors')
+    const { cssColorToHex } = await import('@/lib/shared/theme/colors')
     const light = brandingConfig.light
     const dark = brandingConfig.dark
-    if (light?.primary) theme.lightPrimary = oklchToHex(light.primary)
-    if (light?.primaryForeground) theme.lightPrimaryForeground = oklchToHex(light.primaryForeground)
-    if (dark?.primary) theme.darkPrimary = oklchToHex(dark.primary)
-    if (dark?.primaryForeground) theme.darkPrimaryForeground = oklchToHex(dark.primaryForeground)
+    if (light?.primary) theme.lightPrimary = cssColorToHex(light.primary)
+    if (light?.primaryForeground)
+      theme.lightPrimaryForeground = cssColorToHex(light.primaryForeground)
+    if (dark?.primary) theme.darkPrimary = cssColorToHex(dark.primary)
+    if (dark?.primaryForeground) theme.darkPrimaryForeground = cssColorToHex(dark.primaryForeground)
     if (light?.radius) theme.radius = light.radius
 
     // Custom CSS paused after the plan limits grace is kept but not applied.

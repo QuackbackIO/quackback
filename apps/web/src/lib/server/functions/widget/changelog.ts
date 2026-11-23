@@ -16,3 +16,11 @@ export const widgetListPublicChangelogsFn = createServerFn({ method: 'GET' })
     const { runListPublicChangelogs } = await import('../changelog')
     return runListPublicChangelogs(await getOptionalWidgetAuth(), data)
   })
+
+export const widgetListChangelogCategoriesFn = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { runListChangelogCategories } = await import('../changelog-categories')
+    return runListChangelogCategories(await getOptionalWidgetAuth())
+  }
+)

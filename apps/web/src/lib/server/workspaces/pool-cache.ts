@@ -66,6 +66,8 @@ interface PoolEntry {
   db: Database
   createdAt: number
   lastUsedAt: number
+  /** Transactions open on this pool. The idle sweep never closes a pool mid-transaction. */
+  openTransactions: number
   /**
    * Resolves once the database has proven it is the one the registry named AND
    * this process has proven it holds that workspace's own `SECRET_KEY`. It yields
@@ -197,12 +199,34 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
     db,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
+    openTransactions: 0,
     verification: verifyWorkspaceDatabase(workspace, sql),
   }
+  trackTransactions(entry)
   // A rejected verification promise with no attached handler would surface as an
   // unhandled rejection before the first `await` reaches it.
   entry.verification.catch(() => {})
   return entry
+}
+
+/**
+ * Count the transactions open on a pool, and treat the end of one as use.
+ *
+ * `lastUsedAt` is otherwise only set when a request checks the pool out, so a
+ * transaction that runs longer than the idle window would look idle and have
+ * its connection closed underneath it.
+ */
+function trackTransactions(entry: PoolEntry): void {
+  const transaction = entry.db.transaction.bind(entry.db)
+  entry.db.transaction = (async (...args: Parameters<typeof transaction>) => {
+    entry.openTransactions += 1
+    try {
+      return await transaction(...args)
+    } finally {
+      entry.openTransactions -= 1
+      entry.lastUsedAt = Date.now()
+    }
+  }) as typeof entry.db.transaction
 }
 
 /**
@@ -476,6 +500,7 @@ export async function sweepIdlePools(now = Date.now()): Promise<number> {
   const thresholdMs = config.workspacePoolIdleSeconds * 1000
   const doomed: string[] = []
   for (const [workspaceKey, entry] of pools) {
+    if (entry.openTransactions > 0) continue
     if (now - entry.lastUsedAt >= thresholdMs) doomed.push(workspaceKey)
   }
   for (const workspaceKey of doomed) await evict(workspaceKey, 'idle')

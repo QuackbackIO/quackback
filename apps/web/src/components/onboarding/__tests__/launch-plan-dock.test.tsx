@@ -62,7 +62,7 @@ const open: LaunchStatus = {
   hasBoards: true,
   hasPublicBoard: true,
   memberCount: 1,
-  hasBranding: false,
+  hasBranding: true,
   launchWindow: window_,
   inLaunchWindow: true,
   goals: ['product_feedback', 'customer_support', 'help_center'],
@@ -151,7 +151,7 @@ describe('launch plan dock', () => {
     mount({ status: open })
     const link = await screen.findByRole('link', { name: /Launch plan/ })
     expect(link).toHaveAttribute('href', '/admin/getting-started')
-    expect(link).toHaveTextContent('Step 2 of 3')
+    expect(link).toHaveTextContent('Step 3 of 4')
     expect(screen.queryByRole('button')).toBeNull()
   })
 
@@ -164,11 +164,11 @@ describe('launch plan dock', () => {
     hoisted.status = choresDone
     mount()
     expect(await screen.findByRole('link', { name: /Launch plan/ })).toHaveTextContent(
-      'Step 2 of 3'
+      'Step 3 of 4'
     )
     refocus()
     await settle()
-    expect(screen.getByRole('link', { name: /Launch plan/ })).toHaveTextContent('Step 2 of 3')
+    expect(screen.getByRole('link', { name: /Launch plan/ })).toHaveTextContent('Step 3 of 4')
     expect(hoisted.fetches).toBe(0)
     expect(hoisted.progressFetches).toBe(0)
   })
@@ -189,12 +189,12 @@ describe('launch plan dock', () => {
       </>
     )
     expect(await screen.findByRole('link', { name: /Launch plan/ })).toHaveTextContent(
-      'Step 2 of 3'
+      'Step 3 of 4'
     )
     hoisted.status = choresDone
     refocus()
     await waitFor(() =>
-      expect(screen.getByRole('link', { name: /Launch plan/ })).toHaveTextContent('Step 3 of 3')
+      expect(screen.getByRole('link', { name: /Launch plan/ })).toHaveTextContent('Step 4 of 4')
     )
   })
 

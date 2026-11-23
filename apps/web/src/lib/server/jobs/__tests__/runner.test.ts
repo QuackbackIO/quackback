@@ -144,6 +144,32 @@ describe('the schedule tick', () => {
     expect(await rowsFor(q)).toHaveLength(1)
   })
 
+  it('runs the slot in progress on a first pass when the job asks to, once', async () => {
+    // A daily job on a loop that starts at 14:00, as a workspace woken from
+    // dormancy does: without the opt-in it would wait until tomorrow's 03:00.
+    const q = queue('sched-first-pass')
+    __setJobDefinitionsForTests([
+      { name: q, cron: '0 3 * * *', runOnFirstPass: true, handler: async () => async () => {} },
+    ])
+    const boot = await runScheduleTick(state, new Date(2026, 7, 9, 14, 0, 0))
+    expect(boot.enqueued).toBe(1)
+    expect((await rowsFor(q)).map((r) => r.dedupe_key)).toEqual([
+      slotKey(q, new Date(2026, 7, 9, 3, 0)),
+    ])
+
+    // The same loop does not run it again.
+    expect((await runScheduleTick(state, new Date(2026, 7, 9, 14, 1, 0))).enqueued).toBe(0)
+
+    // Nor does a second scheduler (a restart, or a loop started again after
+    // parking): it tries the same slot and the dedupe key refuses it.
+    const restarted = await runScheduleTick(createScheduleState(), new Date(2026, 7, 9, 16, 0, 0))
+    expect(restarted).toMatchObject({ attempted: 1, enqueued: 0 })
+    expect(await rowsFor(q)).toHaveLength(1)
+
+    // The next slot runs as usual.
+    expect((await runScheduleTick(state, new Date(2026, 7, 10, 3, 0, 0))).enqueued).toBe(1)
+  })
+
   it('does not run a slot that passed before this process started', async () => {
     // The divergence this seed exists to prevent, stated as a test: a tier
     // booting at 14:00 must NOT immediately run the 03:00 daily sweep. Caught by
@@ -288,8 +314,13 @@ describe('the schedule tick', () => {
 
     // Only one row per slot survives here because both schedulers write to the
     // same test database; in production each workspace has its own. The rows prove
-    // the enqueue was attempted for every slot by both.
-    expect((await rowsFor(q)).map((r) => r.dedupe_key)).toEqual(expected)
+    // the enqueue was attempted for every slot by both. Compared in slot order
+    // (the keys end in the slot's ISO instant): the row id is insertion order,
+    // which is not what this asserts, and it has come back out of slot order
+    // on a busy shared database.
+    expect(
+      (await rowsFor(q)).map((r) => r.dedupe_key).sort((x, y) => String(x).localeCompare(String(y)))
+    ).toEqual(expected)
   })
 
   it('carries the definition maxAttempts onto the enqueued row', async () => {

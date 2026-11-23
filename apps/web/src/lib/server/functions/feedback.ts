@@ -11,7 +11,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { PrincipalId } from '@quackback/ids'
 import { isTypeId } from '@quackback/ids'
 
-import { requireAuth } from './auth-helpers'
+import { assertPermission, requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 
@@ -31,6 +31,8 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id, swap_direction: data.swapDirection }, 'accept suggestion')
     const auth = await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
+    // Accepting merges the two posts, so it needs post.merge like a manual merge.
+    assertPermission(auth, PERMISSIONS.POST_MERGE)
 
     if (!isTypeId(data.id, 'post_merge_sug')) {
       return { success: false, error: 'Invalid merge suggestion id' }

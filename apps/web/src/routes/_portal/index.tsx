@@ -18,30 +18,10 @@ import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
+import { portalFeedSearchSchema } from '@/lib/shared/portal-feed-search'
 import { pageCanonical } from '@/lib/shared/section-links'
 
-const searchSchema = z.object({
-  board: z.string().optional(),
-  search: z.string().optional(),
-  // No schema default: the router would write it into the URL and redirect a bare
-  // "/" to "/?sort=trending". An absent sort is trending wherever the feed reads it.
-  sort: z.enum(PUBLIC_POST_SORTS).optional().catch('trending'),
-  status: z.array(z.string()).optional(),
-  tagIds: z.array(z.string()).optional(),
-  minVotes: z.coerce.number().int().min(1).optional(),
-  dateFrom: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .refine((s) => !Number.isNaN(new Date(s).getTime()), 'Invalid calendar date')
-    .optional(),
-  responded: z.enum(['responded', 'unresponded']).optional(),
-  // Team-only filters (rendered only for post.view_private holders; the server
-  // ignores them for everyone else). URL-driven + shareable like the rest.
-  owner: z.string().optional(),
-  segmentIds: z.array(z.string()).optional(),
-  view: z.enum(PUBLIC_FEED_VIEWS).optional().catch(undefined),
-})
+const searchSchema = portalFeedSearchSchema
 
 /** Build the portalData query params from the current search + session. */
 function portalDataParams(searchParams: z.infer<typeof searchSchema>, userId: string | undefined) {

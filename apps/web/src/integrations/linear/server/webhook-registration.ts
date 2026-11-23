@@ -1,4 +1,5 @@
 import { ForbiddenError } from '@/lib/shared/errors'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 /**
  * Linear webhook registration.
  *
@@ -52,7 +53,7 @@ async function createLinearWebhook(
     },
   }
 
-  const response = await fetch(LINEAR_API, {
+  const response = await providerFetch(LINEAR_API, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -98,7 +99,7 @@ async function findLinearWebhookByUrl(
   accessToken: string,
   callbackUrl: string
 ): Promise<string | null> {
-  const response = await fetch(LINEAR_API, {
+  const response = await providerFetch(LINEAR_API, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -117,7 +118,7 @@ async function findLinearWebhookByUrl(
  * Delete a webhook from Linear.
  */
 export async function deleteLinearWebhook(accessToken: string, webhookId: string): Promise<void> {
-  await fetch(LINEAR_API, {
+  await providerFetch(LINEAR_API, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,

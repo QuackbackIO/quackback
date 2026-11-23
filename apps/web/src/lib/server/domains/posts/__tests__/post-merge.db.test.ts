@@ -7,11 +7,19 @@
  * thread, and the source in getMergedPosts (the admin Unmerge list).
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createId, type BoardId, type PostId, type PrincipalId, type UserId } from '@quackback/ids'
+import {
+  createId,
+  type BoardId,
+  type PostId,
+  type PostMergeSuggestionId,
+  type PrincipalId,
+  type UserId,
+} from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   boards,
   eq,
+  mergeSuggestions,
   postComments,
   postSubscriptions,
   postVotes,
@@ -39,7 +47,8 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
   createActivity: vi.fn(),
 }))
 
-import { mergePost, unmergePost, getMergedPosts } from '../post.merge'
+import { mergePost, unmergePost, getMergedPosts, previewMergedPost } from '../post.merge'
+import { acceptMergeSuggestion } from '../../merge-suggestions/merge-suggestion.service'
 import {
   getSubscribersForEvent,
   getSubscriptionStatus,
@@ -128,10 +137,12 @@ async function seedComment(
   })
 }
 
+// One connection for both suites below, closed once after the file.
+afterAll(fixture.close)
+
 describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
-  afterAll(fixture.close)
 
   it('rolls unique votes and public comments onto the canonical and keeps the source listed', async () => {
     const actor = await seedPrincipal('Admin')
@@ -543,5 +554,117 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     const voters = await getPostVoters(canonical)
     expect(voters).toHaveLength(1)
     expect(voters[0]?.subscriptionLevel).toBe('all')
+  })
+})
+
+/*
+ * Product e2e inventory rows FBA-M-04 (merge preview), FBA-M-12 (a manual
+ * merge and pending suggestions) and FBA-M-15 (accepting a suggestion
+ * dismisses its siblings), against the real database.
+ */
+describe.skipIf(!fixture.available)('merge preview and merge suggestions (real DB)', () => {
+  beforeEach(fixture.begin)
+  afterEach(fixture.rollback)
+
+  async function seedSuggestion(source: PostId, target: PostId) {
+    const [row] = await testDb
+      .insert(mergeSuggestions)
+      .values({
+        sourcePostId: source,
+        targetPostId: target,
+        status: 'pending',
+        vectorScore: 0.9,
+        ftsScore: 0.9,
+        hybridScore: 0.9,
+        llmConfidence: 0.9,
+      })
+      .returning()
+    return row.id
+  }
+
+  async function statusOf(id: PostMergeSuggestionId) {
+    const [row] = await testDb.select().from(mergeSuggestions).where(eq(mergeSuggestions.id, id))
+    return row?.status
+  }
+
+  it('FBA-M-04 previews the combined thread with deduplicated votes and writes nothing', async () => {
+    const author = await seedPrincipal('Preview author')
+    const shared = await seedPrincipal('Shared voter')
+    const only = await seedPrincipal('Duplicate-only voter')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: author,
+      title: 'Keep',
+      voteCount: 1,
+      commentCount: 1,
+    })
+    const duplicate = await seedPost({
+      boardId,
+      principalId: author,
+      title: 'Absorb',
+      voteCount: 2,
+      commentCount: 2,
+    })
+    await seedVote(canonical, shared)
+    await seedVote(duplicate, shared)
+    await seedVote(duplicate, only)
+    await seedComment(canonical, author, 'On the canonical')
+    await seedComment(duplicate, author, 'On the duplicate')
+
+    const preview = await previewMergedPost(canonical, duplicate, shared)
+    expect(preview.post.voteCount).toBe(2)
+    expect(preview.post.commentCount).toBe(3)
+    expect(preview.post.hasVoted).toBe(true)
+    expect(preview.duplicatePostTitle).toBe('Absorb')
+    expect(preview.post.comments.map((c) => c.content)).toEqual(['On the canonical'])
+    expect(preview.duplicateComments.map((c) => c.content)).toEqual(['On the duplicate'])
+
+    const [dup] = await testDb.select().from(posts).where(eq(posts.id, duplicate))
+    const [can] = await testDb.select().from(posts).where(eq(posts.id, canonical))
+    expect(dup.canonicalPostId).toBeNull()
+    expect(can.voteCount).toBe(1)
+  })
+
+  it('FBA-M-15 accepting a suggestion dismisses every other pending one on either post', async () => {
+    const author = await seedPrincipal('Suggestion author')
+    const actor = await seedPrincipal('Suggestion actor')
+    const boardId = await seedBoard()
+    const [a, b, c, d] = await Promise.all(
+      ['A', 'B', 'C', 'D'].map((title) => seedPost({ boardId, principalId: author, title }))
+    )
+    const ab = await seedSuggestion(a, b)
+    const ac = await seedSuggestion(a, c)
+    const db = await seedSuggestion(d, b)
+    const cd = await seedSuggestion(c, d)
+
+    await acceptMergeSuggestion(ab, actor)
+    const [accepted] = await testDb
+      .select()
+      .from(mergeSuggestions)
+      .where(eq(mergeSuggestions.id, ab))
+    expect(accepted.status).toBe('accepted')
+    expect(accepted.resolvedByPrincipalId).toBe(actor)
+    expect(accepted.resolvedAt).toBeInstanceOf(Date)
+    expect(await statusOf(ac)).toBe('dismissed')
+    expect(await statusOf(db)).toBe('dismissed')
+    expect(await statusOf(cd)).toBe('pending')
+  })
+
+  // FBA-M-12: a suggestion naming a post merged by hand must not stay pending
+  // until it expires (accepting it would fail with ALREADY_MERGED).
+  it('FBA-M-12 a manual merge resolves the pending suggestions that name the merged post', async () => {
+    const author = await seedPrincipal('Manual author')
+    const actor = await seedPrincipal('Manual actor')
+    const boardId = await seedBoard()
+    const [dup, can, other] = await Promise.all(
+      ['D', 'C', 'E'].map((title) => seedPost({ boardId, principalId: author, title }))
+    )
+    const dc = await seedSuggestion(dup, can)
+    const de = await seedSuggestion(dup, other)
+
+    await mergePost(dup, can, actor)
+    expect(await statusOf(dc)).not.toBe('pending')
+    expect(await statusOf(de)).not.toBe('pending')
   })
 })

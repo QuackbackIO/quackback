@@ -34,7 +34,9 @@ vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Usable: vi.fn(() => true),
   getStorageSigningSecret: vi.fn(() => 'test-secret'),
-  isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
+  isPublicStorageKey: vi.fn(
+    (key: string) => /^(header-)?logos\//.test(key) || key.startsWith('fonts/')
+  ),
   hasExpiringReadToken: vi.fn((key: string) => key.startsWith('files/')),
   verifyStorageReadToken: vi.fn(
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
@@ -100,6 +102,17 @@ describe('handleStorageGet — proxy response headers', () => {
   it('sends nosniff on the ?email=1 forced-proxy path even without S3_PROXY', async () => {
     const res = await get('/api/storage/logos/email-embed.gif?email=1')
     expect(res.status).toBe(200)
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+  })
+
+  it('serves a portal font from this origin even without S3_PROXY', async () => {
+    getS3Object.mockResolvedValueOnce({
+      body: new Blob([new Uint8Array([0x77, 0x4f, 0x46, 0x32])]).stream(),
+      contentType: 'font/woff2',
+    })
+    const res = await get('/api/storage/fonts/2026/10/abc-brand.woff2')
+    expect(res.status).toBe(200)
+    expect(generatePresignedGetUrl).not.toHaveBeenCalled()
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
 
@@ -264,6 +277,33 @@ describe('handleStorageGet: what a stored file may do when opened', () => {
     const key = 'chat-files/2026/09/3f2b8c1e-1a2b-4c3d-9e8f-0123456789ab-report.pdf'
     await get(`/api/storage/${key}?read=ok`)
     expect(generatePresignedGetUrl).toHaveBeenCalledWith(key, 172_800, undefined, 'application/pdf')
+  })
+})
+
+describe('handleStorageGet: an SVG wide logo', () => {
+  const svgObject = () => ({
+    body: new Blob([
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 1"><path d="M0 0h4"/></svg>',
+    ]).stream(),
+    contentType: 'image/svg+xml',
+  })
+
+  it('serves it from this origin, inline and sandboxed, without S3_PROXY', async () => {
+    getS3Object.mockImplementationOnce(async () => svgObject())
+    const res = await get('/api/storage/header-logos/2026/11/abc-wordmark.svg')
+    expect(res.status).toBe(200)
+    expect(generatePresignedGetUrl).not.toHaveBeenCalled()
+    expect(res.headers.get('content-type')).toBe('image/svg+xml')
+    expect(res.headers.get('content-disposition')).toBeNull()
+    expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
+  it('keeps an SVG under any other prefix a download', async () => {
+    mockConfig.s3Proxy = true
+    getS3Object.mockImplementationOnce(async () => svgObject())
+    const res = await get('/api/storage/logos/2026/11/abc-mark.svg')
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment;/)
   })
 })
 

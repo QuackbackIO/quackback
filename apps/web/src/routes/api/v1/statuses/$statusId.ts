@@ -11,6 +11,7 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { HexColorSchema, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
 import type { PostStatusId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema - matches UpdateStatusInput from service
 const updateStatusSchema = z.object({
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_VIEW })
 
           const statusId = parseTypeId<PostStatusId>(params.statusId, 'post_status', 'status ID')
 
@@ -63,7 +64,7 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
 
           const statusId = parseTypeId<PostStatusId>(params.statusId, 'post_status', 'status ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateStatusSchema.safeParse(body)
 
           if (!parsed.success) {
