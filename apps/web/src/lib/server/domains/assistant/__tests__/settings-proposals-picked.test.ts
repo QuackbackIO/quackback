@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { withoutPicksSetBy } from '../settings-proposals.service'
+import { areaValues } from '../settings-proposals.areas'
 
 describe('withoutPicksSetBy', () => {
   const stored = {
@@ -24,5 +25,19 @@ describe('withoutPicksSetBy', () => {
   it('keeps it where the patch repeats the colour as stored, or sets other colours', () => {
     expect(withoutPicksSetBy(stored, { light: { primary: '#6265f0' } })).toEqual(stored)
     expect(withoutPicksSetBy(stored, { dark: { background: '#0b1220' } })).toEqual(stored)
+  })
+})
+
+describe('the branding a settings change reads', () => {
+  it('shows each colour as picked, and never the picked-colour variables', () => {
+    const row = {
+      brandingConfig: JSON.stringify({
+        light: { primary: '#6265f0', pickedPrimary: '#6366f1' },
+      }),
+      logoKey: null,
+    } as unknown as Parameters<typeof areaValues>[0]
+    const light = areaValues(row, 'branding').light as Record<string, unknown>
+    expect(light.primary).toBe('#6366f1')
+    expect(light).not.toHaveProperty('pickedPrimary')
   })
 })
