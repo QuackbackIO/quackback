@@ -24,6 +24,19 @@ vi.mock('@/lib/server/config', async (importOriginal) => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
+// The portal config is the one setting these emails read through portal
+// access; public unless a test makes it private.
+const portal = vi.hoisted(() => ({ config: null as Record<string, unknown> | null }))
+vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()
+  return {
+    ...actual,
+    getPortalConfig: async (...args: Parameters<typeof actual.getPortalConfig>) =>
+      portal.config ?? actual.getPortalConfig(...args),
+  }
+})
+
 const sent = vi.hoisted(
   () => [] as Array<{ kind: string; to: string; isPostAuthor: boolean | undefined }>
 )
@@ -41,7 +54,7 @@ vi.mock('@quackback/email', async (importOriginal) => {
 })
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, postSubscriptions, posts, principal, user } from '@/lib/server/db'
+import { boards, eq, postSubscriptions, posts, principal, user } from '@/lib/server/db'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 import { getSubscriberTargets } from '@/lib/server/events/targets'
 import { emailHook } from '@/lib/server/events/handlers/email'
@@ -101,6 +114,7 @@ describe.skipIf(!fixture.available)('feedback emails know who wrote the post', (
   beforeEach(fixture.begin)
   beforeEach(() => {
     sent.length = 0
+    portal.config = null
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -120,6 +134,37 @@ describe.skipIf(!fixture.available)('feedback emails know who wrote the post', (
       [vic.email]: false,
       [dup.email]: false,
     })
+  })
+
+  it('on a private portal, emails only followers the portal still lets in', async () => {
+    const { ann, vic, dup, team, ref } = await seedFollowedPost()
+    // Ann's address is on the allowed domain list; Vic and Dee have no grant
+    // (made private after they followed the post, or removed from the list).
+    const annDomain = ann.email.split('@')[1]
+    await testDb.update(user).set({ emailVerified: true }).where(eq(user.email, ann.email))
+    portal.config = {
+      access: {
+        visibility: 'private',
+        allowedDomains: [annDomain],
+        allowedSegmentIds: [],
+        widgetSignIn: false,
+      },
+    }
+    // Vic and Dee share Ann's example.com domain, so give them another one.
+    for (const other of [vic, dup])
+      await testDb
+        .update(user)
+        .set({ email: other.email.replace('@example.com', '@elsewhere.example') })
+        .where(eq(user.email, other.email))
+    const event: CommentCreatedEvent = {
+      id: createId('event'),
+      type: 'comment.created',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: team.id, displayName: 'Tess' },
+      data: { post: ref, comment: { id: createId('post_comment'), content: 'On it' } },
+    }
+
+    expect(await sendAll(event)).toEqual({ [ann.email]: true })
   })
 
   it('a new comment tells only the author it is their feedback', async () => {

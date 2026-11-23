@@ -30,7 +30,8 @@ vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
 import { createSlaPolicy } from '@/lib/server/domains/sla/sla-policy.service'
 import { applySlaToConversation } from '@/lib/server/domains/sla/sla.service'
 import { createWorkflow, setWorkflowStatus } from '../workflow.service'
-import { sweepSlaTimerTriggers } from '../workflow-sweep'
+import { kvDel, kvSet } from '@/lib/server/kv/pg-kv'
+import { SLA_BREACH_EVENTS_SINCE_KEY, sweepSlaTimerTriggers } from '../workflow-sweep'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -89,7 +90,12 @@ async function slaEventsFor(conversationId: ConversationId, type: string) {
 }
 
 describe.skipIf(!fixture.available)('SLA timer events fire without a workflow (real DB)', () => {
-  beforeEach(() => fixture.begin())
+  // A workspace long past its first tick on this build: breaches fire as they
+  // happen. The first tick itself is covered below.
+  beforeEach(async () => {
+    await fixture.begin()
+    await kvSet(SLA_BREACH_EVENTS_SINCE_KEY, '2025-01-01T00:00:00.000Z', 3600)
+  })
   afterEach(fixture.rollback)
 
   it('fires the warning once at the default 15-minute lead when no workflow listens', async () => {
@@ -165,5 +171,25 @@ describe.skipIf(!fixture.available)('SLA timer events fire without a workflow (r
     // Due 11:00 on the 5th; the first sweep to look runs two days later.
     await sweepSlaTimerTriggers(new Date('2026-01-07T11:05:00Z'))
     expect(await slaEventsFor(conversationId, 'sla.breached')).toHaveLength(0)
+  })
+
+  it('on its first tick after the upgrade, fires no backlog of breaches, then fires new ones', async () => {
+    // The upgrade: this build has never ticked here, and no clock carries a
+    // fire-once marker because the old build only fired for a listening workflow.
+    await kvDel(SLA_BREACH_EVENTS_SINCE_KEY)
+    const backlog = await seedDueAtEleven()
+
+    // The first tick, five minutes after the 11:00 breach: nothing fires.
+    await sweepSlaTimerTriggers(new Date('2026-01-05T11:05:00Z'))
+    await sweepSlaTimerTriggers(new Date('2026-01-05T11:10:00Z'))
+    expect(await slaEventsFor(backlog, 'sla.breached')).toHaveLength(0)
+
+    // A clock that breaches after that first tick fires as usual.
+    const fresh = await seedConversation()
+    const policy = await createSlaPolicy({ name: `FR ${suffix()}`, firstResponseTargetSecs: 3600 })
+    await applySlaToConversation(fresh, policy.id, new Date('2026-01-05T11:00:00Z'))
+    await sweepSlaTimerTriggers(new Date('2026-01-05T12:05:00Z'))
+    expect(await slaEventsFor(fresh, 'sla.breached')).toHaveLength(1)
+    expect(await slaEventsFor(backlog, 'sla.breached')).toHaveLength(0)
   })
 })

@@ -121,15 +121,27 @@ async function filterSubscribersByPostAudience(
     return []
   }
 
+  // A private portal turns away anyone without a grant, whatever the board
+  // says: someone made private (or removed from the allowed domains or
+  // segments) after subscribing is not emailed what the portal now hides.
+  // Teammates always pass. On a public portal everyone does.
+  const { principalsWithPortalAccess } =
+    await import('@/lib/server/domains/settings/portal-access.recipients')
+  const admitted = await principalsWithPortalAccess(
+    subscribers.map((s) => s.principalId as PrincipalId)
+  )
+  const allowed = subscribers.filter((s) => admitted.has(s.principalId as PrincipalId))
+  if (allowed.length === 0) return allowed
+
   // Fast path: anonymous-tier view + published post — everyone is in.
   // (anonymous view tier is the access-matrix equivalent of the legacy
   // 'public' audience kind.)
   if (post.access?.view === 'anonymous' && post.moderationState === 'published') {
-    return subscribers
+    return allowed
   }
 
   // Batch-load each subscriber's role + segments in one query.
-  const principalIds = subscribers.map((s) => s.principalId)
+  const principalIds = allowed.map((s) => s.principalId)
   const principals = await db
     .select({
       id: principal.id,
@@ -155,7 +167,7 @@ async function filterSubscribersByPostAudience(
     segmentsByPrincipal.set(key, set)
   }
 
-  return subscribers.filter((sub) => {
+  return allowed.filter((sub) => {
     const principalRow = principalMap.get(String(sub.principalId))
     if (!principalRow) return false
     const actor: Actor = {
