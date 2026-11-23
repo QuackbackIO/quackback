@@ -1,8 +1,8 @@
 /**
  * Target resolution for the subscribed-you bell (post.subscriber_added): the
  * person a teammate (or an automation) subscribed hears about it, once, if
- * they can still see the post; nobody is belled for following a post
- * themselves.
+ * the portal still admits them and they can still see the post; nobody is
+ * belled for following a post themselves.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { EventData } from '../types'
@@ -26,6 +26,11 @@ const canView = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/domains/posts/post.access', () => ({
   principalsWhoCanViewPost: (...a: unknown[]) => canView(...a),
 }))
+// The portal admits everyone unless a test says otherwise.
+const portalAdmits = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/domains/settings/portal-access.recipients', () => ({
+  principalsWithPortalAccess: (...a: unknown[]) => portalAdmits(...a),
+}))
 // Links use the workspace's section origins: every section on the primary.
 vi.mock('@/lib/server/domains/settings/section-links', async () => {
   const { allOnPrimary } = await import('@/lib/shared/section-links')
@@ -42,6 +47,8 @@ beforeEach(() => {
   actorRows.length = 0
   canView.mockReset()
   canView.mockImplementation(async (_postId: string, ids: string[]) => new Set(ids))
+  portalAdmits.mockReset()
+  portalAdmits.mockImplementation(async (ids: string[]) => new Set(ids))
 })
 
 function addedEvent(actor: EventData['actor'], subscriberPrincipalId = 'principal_ada'): EventData {
@@ -74,7 +81,7 @@ describe('getPostSubscriberAddedTargets', () => {
         authorName: 'Lea',
       },
     })
-    expect(canView).toHaveBeenCalledWith('post_1', ['principal_ada'])
+    expect(canView).toHaveBeenCalledWith('post_1', ['principal_ada'], {})
   })
 
   it("reads the teammate's name from their principal, as the relayed event carries none", async () => {
@@ -111,5 +118,15 @@ describe('getPostSubscriberAddedTargets', () => {
         addedEvent({ type: 'user', principalId: 'principal_lead', displayName: 'Lea' })
       )
     ).toBeNull()
+  })
+
+  it('bells nobody a private portal no longer admits, whatever the board says', async () => {
+    portalAdmits.mockResolvedValue(new Set())
+    expect(
+      await getPostSubscriberAddedTargets(
+        addedEvent({ type: 'user', principalId: 'principal_lead', displayName: 'Lea' })
+      )
+    ).toBeNull()
+    expect(canView).not.toHaveBeenCalled()
   })
 })
