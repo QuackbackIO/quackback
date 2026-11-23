@@ -69,10 +69,9 @@ describe('readable portal text', () => {
     // --primary-ink on the document (:root and .dark), so a document-level
     // rule reaches them in both modes; the admin, which declares no
     // --primary-ink, falls back to what it drew before.
+    const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const rule = (selector: string, property: string, value: string) =>
-      new RegExp(
-        `${selector.replace(/[.()]/g, '\\$&')}\\s*{\\s*${property}:\\s*${value.replace(/[()]/g, '\\$&')};`
-      )
+      new RegExp(`${escape(selector)}\\s*{\\s*${property}:\\s*${escape(value)};`)
     for (const [utility, property] of [
       ['text-primary', 'color'],
       ['fill-primary', 'fill'],
