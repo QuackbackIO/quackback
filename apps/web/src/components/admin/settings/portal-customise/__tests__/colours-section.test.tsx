@@ -6,7 +6,7 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { expandTheme, unbrandedTheme } from '@/lib/shared/theme'
+import { expandTheme, unbrandedTheme } from '@/lib/shared/theme/expand'
 import { contrastRatio } from '@/lib/shared/theme/colour-setters'
 import { ColoursSection } from '../colours-section'
 

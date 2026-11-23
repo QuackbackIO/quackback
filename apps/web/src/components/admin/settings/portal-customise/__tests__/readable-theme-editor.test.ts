@@ -6,7 +6,7 @@
  * moved again would drift on each edit, or be kept as Advanced CSS.
  */
 import { describe, expect, it } from 'vitest'
-import { unbrandedTheme } from '@/lib/shared/theme'
+import { unbrandedTheme } from '@/lib/shared/theme/expand'
 import { applyColour, contrastRatio, type ColourRole } from '@/lib/shared/theme/colour-setters'
 import { generateReadableCSS } from '@/lib/shared/theme/readable-css'
 import { editPalettes, palettesOf } from '@/components/admin/settings/branding/theme-css'
