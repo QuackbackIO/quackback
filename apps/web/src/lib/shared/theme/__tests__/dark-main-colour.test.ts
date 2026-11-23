@@ -84,14 +84,9 @@ describe('a dark main colour in dark mode', () => {
       for (const primary of [navy, '#1a1a2e', '#4a0d0d', '#0b3d2e', '#3b0764', '#5c4400']) {
         const dark = darkOf(primary, background)
         expect(contrastRatio(dark.primaryForeground, dark.primary)).toBeGreaterThanOrEqual(4.5)
-        // It stands off the page, unless white words had the fill darkened
-        // back: readable words come first (a dark grey page and a mid-tone
-        // fill cannot have both).
-        const darkenedForWhite =
-          dark.primaryForeground === '#ffffff' && contrastRatio('#ffffff', dark.primary) < 4.7
-        if (!darkenedForWhite)
-          expect(contrastRatio(dark.primary, background)).toBeGreaterThanOrEqual(3)
-        else expect(contrastRatio(dark.primary, background)).toBeGreaterThanOrEqual(2.5)
+        // The button as drawn stands off the page: on a dark grey page where
+        // no white-worded shade of it does, it goes on to one dark words read on.
+        expect(contrastRatio(dark.primary, background)).toBeGreaterThanOrEqual(3)
       }
     }
   })

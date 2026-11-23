@@ -62,11 +62,13 @@ export const autoForeground = (background: string) =>
  * setters write it, or as the page shows it (moved to read at 4.5:1 where
  * it would not, which the editor's stylesheet then holds).
  */
-function isAutoText(foreground: string | undefined, background: string, mode: ColourMode) {
+function isAutoText(palette: Palette, background: string, mode: ColourMode) {
   const auto = autoForeground(background)
-  if (sameColour(foreground, auto)) return true
-  const shown = hexOf(expandTheme({ background, foreground: auto }, { mode }).foreground)
-  return shown !== null && sameColour(foreground, shown)
+  if (sameColour(palette.foreground, auto)) return true
+  const shown = hexOf(
+    expandTheme({ ...palette, background, foreground: auto }, { mode }).foreground ?? ''
+  )
+  return shown !== null && sameColour(palette.foreground, shown)
 }
 
 /**
@@ -131,10 +133,7 @@ export function applyColour(
     next.muted = mutedOf(hex)
     next.border = mix(hex, dim ? '#ffffff' : '#000000', dim ? 0.14 : 0.15)
     next.mutedForeground = quietTextOn([hex, next.card, next.muted], dim)
-    if (
-      !target.foreground ||
-      (oldBackground && isAutoText(target.foreground, oldBackground, mode))
-    ) {
+    if (!target.foreground || (oldBackground && isAutoText(target, oldBackground, mode))) {
       next.foreground = autoForeground(hex)
     }
   }
@@ -206,7 +205,7 @@ export function isAutoColour(
   if (role === 'background') return sameColour(unbranded.background, background)
   if (!palette.foreground) return true
   return (
-    isAutoText(palette.foreground, background, mode) ||
+    isAutoText(palette, background, mode) ||
     (sameColour(unbranded.background, background) &&
       sameColour(palette.foreground, hexOf(unbranded.foreground)!))
   )

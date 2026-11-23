@@ -246,10 +246,11 @@ export function expandTheme(
   const primaryForeground = button.ink
   const destructiveForeground = computeContrastForeground(minimal.destructive)
   // The main colour drawn as text (links, vote counts, icons), worked out from
-  // the brand colour rather than the darkened fill, so it stays as near to it
-  // as reads. --accent-ink is the same shade: light pages send any
-  // text-primary left in the stylesheet to it (globals.css).
-  const primaryInk = primaryInkOn(brand, minimal)
+  // the fill as shown: the editor stores what this writes, so starting from
+  // anything else would move the ink again on every edit. --accent-ink is the
+  // same shade: light pages send any text-primary left in the stylesheet to
+  // it (globals.css).
+  const primaryInk = primaryInkOn(minimal.primary, minimal)
   const charts = generateChartColors(minimal.primary)
 
   return {
@@ -312,9 +313,13 @@ const DARK_INK = 'oklch(0.145 0 0)'
  * A main colour for a dark page, when the one given would not show on it: a
  * navy button on near-black is there, and cannot be seen. The colour is
  * lightened (OKLCH lightness, same hue and chroma) only as far as it takes
- * for a filled button to stand off the page, and for white or near-black
- * words to read on it. Null when the colour already shows, or either colour
- * cannot be read: nothing is changed then.
+ * for the button as drawn (its fill after buttonOf, which may darken a
+ * mid-tone for white words) to stand off the page. On most dark pages a
+ * lightened colour with white words does; on a dark grey one there may be no
+ * such colour, and the lightening goes on to one dark words read on. Null
+ * when the button already shows, the page is not a dark one, or a colour
+ * cannot be read: nothing is changed then. Judging the button as drawn keeps
+ * this stable: the colour it returns comes back unchanged.
  */
 export function darkMainColour(
   primary: string,
@@ -324,25 +329,18 @@ export function darkMainColour(
   const from = tryCssColorToHex(primary)
   const lch = parseOklch(primary)
   if (!page || !from || !lch) return null
-  if (contrastOf(from, page) >= BUTTON_SHOWS) return null
-  // Only a colour darker than it needs to be: a pale one on a pale "dark" page is not this rule's.
-  if (relativeLuminance(from) > relativeLuminance(page) && relativeLuminance(page) > 0.2)
-    return null
+  // Only for a dark page: on a mid-tone one no lighter colour stands off it.
+  if (relativeLuminance(page) > 0.2) return null
+  const shows = (fill: string) => {
+    const hex = tryCssColorToHex(fill)
+    return !!hex && contrastOf(hex, page) >= BUTTON_SHOWS
+  }
+  if (shows(buttonOf(primary).fill)) return null
   for (let l = Math.ceil(lch.l * 100) / 100; l <= 1.0001; l += 0.01) {
     const candidate = formatOklch(Math.min(1, l), lch.c, lch.h)
-    let hex: string
-    try {
-      hex = oklchToHex(candidate)
-    } catch {
-      continue
-    }
-    if (relativeLuminance(hex) <= relativeLuminance(page)) continue
-    if (contrastOf(hex, page) < BUTTON_SHOWS) continue
-    // Lightened until white or near-black reads at 4.5:1; the words on it
-    // then follow the rule every filled button does.
-    const reads = (ink: string) => contrastOf(oklchToHex(ink), hex) >= BUTTON_TEXT_CONTRAST
-    if (reads(LIGHT_INK) || reads(DARK_INK))
-      return { primary: candidate, foreground: buttonOf(candidate).ink }
+    if (relativeLuminance(oklchToHex(candidate)) <= relativeLuminance(page)) continue
+    const button = buttonOf(candidate)
+    if (shows(button.fill)) return { primary: button.fill, foreground: button.ink }
   }
   return null
 }
@@ -419,13 +417,19 @@ const WANT_STEPS = 8
  * lightness (same hue; chroma lowered only where sRGB cannot hold it) in
  * steps of 0.01 toward white or black, whichever reads
  * better, until it reaches 4.5:1 on every one of `must` and, where it can,
- * on every one of `want` too; then the other way; then pure white or black.
+ * on every one of `want` too (looking `reach` steps past the first that
+ * reads on `must`); then the other way; then pure white or black.
  * On any one surface pure white or pure black reaches 4.5:1 (4.58 at the
  * worst), so `must` holds whenever its surfaces sit on one side of the text.
  * Comes back as given when it already reads or cannot be read, else as the
  * hex that was measured.
  */
-export function readableText(colour: string, must: string[], want: string[] = []): string {
+export function readableText(
+  colour: string,
+  must: string[],
+  want: string[] = [],
+  reach = WANT_STEPS
+): string {
   const hex = tryCssColorToHex(colour)
   const hard = hexesOf(must).map(relativeLuminance)
   const all = [...hard, ...hexesOf(want).map(relativeLuminance)]
@@ -447,7 +451,7 @@ export function readableText(colour: string, must: string[], want: string[] = []
         fallback ??= candidate
         // A few steps past the first that reads on `must` and no further: what
         // `want` needs beyond that is not worth losing the colour for.
-        if (++beyond > WANT_STEPS) break
+        if (++beyond > reach) break
       }
       if (l < 0 || l > 1) break
     }
@@ -463,8 +467,9 @@ type ReadableSurfaces = Pick<
 
 /**
  * The page's text and the surfaces it sits on, made to read: the text moved
- * just far enough to reach 4.5:1 on the page; a card or quiet fill the text
- * would not read on drawn toward the page until it does (and kept on the
+ * just far enough to reach 4.5:1 on the page, and on the card and quiet fill
+ * where a shade of it can; a card or quiet fill it still would not read on
+ * drawn toward the page until it does (and kept on the
  * page's side of the text, so one ink can read on all of them); and the quiet
  * text moved to read on the page, the card and the quiet fill. All of it
  * untouched where it already reads, as on every ordinary page.
@@ -472,7 +477,9 @@ type ReadableSurfaces = Pick<
 function readableSurfaces(resolved: MinimalThemeVariables): Partial<ReadableSurfaces> {
   const page = tryCssColorToHex(resolved.background)
   if (!page) return {}
-  const foreground = readableText(resolved.foreground, [page])
+  // Far enough to read on the card and quiet fill too where it can, so those
+  // are drawn toward the page only when no shade of the text reads on all.
+  const foreground = readableText(resolved.foreground, [page], [resolved.card, resolved.muted], 100)
   const text = tryCssColorToHex(foreground)
   if (!text) return {}
   const textIsLighter = relativeLuminance(text) > relativeLuminance(page)
