@@ -32,8 +32,7 @@ export function AdvancedCssSection({
         gradient header, need the Business plan.
       </p>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Links and counts use <code>--primary-ink</code>, a readable shade of the main colour.
-        Setting it yourself overrides that, and counts as your own rule.
+        Links use <code>--primary-ink</code>, kept readable for you.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -112,8 +111,7 @@ export function AdvancedCssDrawer({
       </div>
       {ownRules ? (
         <p className="border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          Anything beyond the theme's own variables is your own CSS, which needs the Business plan
-          to go live.
+          Anything beyond theme variables needs the Business plan to go live.
         </p>
       ) : null}
       <div className="min-h-0 flex-1 p-3">
