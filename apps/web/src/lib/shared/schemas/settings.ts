@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { MINIMAL_THEME_VARIABLE_KEYS } from '@/lib/shared/theme/base'
+import { MINIMAL_THEME_VARIABLE_KEYS, PICKED_KEYS } from '@/lib/shared/theme/base'
 import { BRANDING_FONTS } from '@/lib/shared/theme/fonts'
 import { FONT_FAMILY_NAME, FONT_UPLOADS, UPLOADED_FONT_KEY } from '@/lib/shared/theme/font-uploads'
 import { CARD_STYLES } from '@/lib/shared/theme/types'
@@ -86,11 +86,18 @@ const fontStack = z
   .max(300)
   .regex(/^[\p{L}\p{N}\s"'.,_-]+$/u)
 const radius = z.string().regex(/^\d+(?:\.\d+)?(?:rem|px|em)$/)
-type ThemeVariableKey = (typeof MINIMAL_THEME_VARIABLE_KEYS)[number]
+type PickedKey = (typeof PICKED_KEYS)[keyof typeof PICKED_KEYS]
+type ThemeVariableKey = Exclude<(typeof MINIMAL_THEME_VARIABLE_KEYS)[number], PickedKey>
+const PICKED: readonly string[] = Object.values(PICKED_KEYS)
+/**
+ * The colours a change sets, as picked: the picked-colour variables are the
+ * theme's own record of them (a change of the colour beside one drops it),
+ * never set directly.
+ */
 const writableThemeVariablesSchema = z
   .object(
     Object.fromEntries(
-      MINIMAL_THEME_VARIABLE_KEYS.map((key) => [
+      MINIMAL_THEME_VARIABLE_KEYS.filter((key) => !PICKED.includes(key)).map((key) => [
         key,
         (key === 'fontSans' || key === 'fontHeading'
           ? fontStack

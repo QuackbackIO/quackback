@@ -75,12 +75,15 @@ describe('the live theme CSS', () => {
 })
 
 describe('picked colours as stored', () => {
-  it('are theme variables both the settings and the publish schemas take', () => {
+  it('are theme variables the publish schema takes, and a settings change never sets', () => {
     for (const picked of Object.values(PICKED_KEYS))
       expect(MINIMAL_THEME_VARIABLE_KEYS).toContain(picked)
     const light = { primary: '#6265f0', pickedPrimary: '#6366f1', pickedForeground: '#bbbbbb' }
-    expect(brandingPatchSchema.parse({ light })).toEqual({ light })
     expect(portalThemeSchema.parse({ light })).toEqual({ light })
+    expect(brandingPatchSchema.safeParse({ light }).success).toBe(false)
+    expect(brandingPatchSchema.parse({ light: { primary: '#6366f1' } })).toEqual({
+      light: { primary: '#6366f1' },
+    })
   })
 
   it('name the colour picked, else the one set', () => {

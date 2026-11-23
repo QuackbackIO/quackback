@@ -8,13 +8,17 @@ import { describe, expect, it } from 'vitest'
 import { portalThemeSchema } from '@/lib/shared/schemas/portal-customise'
 import { contrastRatio } from '@/lib/shared/theme/colour-setters'
 import { extractCssVariables } from '@/lib/shared/theme/css-parser'
+import { pickedColour } from '@/lib/shared/theme/base'
+import type { BrandImport } from '@/lib/shared/theme/brand-import'
 import { applyDraftPatch, summariseDraftForAsk } from '../ask-draft'
+import { applyBrandImport, revertImportRow } from '../brand-apply'
 import { summariseChange } from '../change-summary'
 import { drawnNote, pickedHex } from '../colours'
 import { portalSummary } from '../summary'
 import {
   draftFromLoaded,
   draftPalette,
+  draftRemainder,
   editTheme,
   publishInput,
   publishedFromLoaded,
@@ -74,6 +78,9 @@ describe.each([
   })
 
   it('is stored on publish, and comes back the same on reload and on later edits', () => {
+    const input = publishInput(start, draft, publishedFromLoaded(loaded()))!
+    // Theme lines only: nothing for Advanced CSS, so no plan check.
+    expect(input.customCss).toBe('')
     const { theme, reloaded } = publishAndReload(start, draft, loaded())
     expect(theme.light).toMatchObject({ primary: drawn, pickedPrimary: picked })
     expect(reloaded.cssText).toBe(draft.cssText)
@@ -106,6 +113,11 @@ describe.each([
       draft.cssText.replace(`--primary: ${drawn};`, '--primary: #b91c1c;')
     )
     expect(pickedHex(draftPalette(typed, 'light'), 'primary')).toBe('#b91c1c')
+    // Later edits keep it, and the picked line left behind is never Advanced CSS.
+    const later = editTheme.setRadius(typed, 1)
+    expect(pickedHex(draftPalette(later, 'light'), 'primary')).toBe('#b91c1c')
+    expect(draftRemainder(later)).not.toContain('--picked-')
+    expect(lightVars(later)['--picked-primary']).toBeUndefined()
   })
 })
 
@@ -134,6 +146,17 @@ describe('page text picked too pale', () => {
   })
 })
 
+describe('a picked colour stored when it was drawn otherwise', () => {
+  it('is kept when the theme would now draw it another way', () => {
+    // As if the rules that drew it moved on since it was stored.
+    const stored = draftFromLoaded(
+      loaded({ themeMode: 'light', light: { primary: '#5b5fe8', pickedPrimary: '#6366f1' } })
+    )
+    expect(pickedHex(draftPalette(stored, 'light'), 'primary')).toBe('#6366f1')
+    expect(lightVars(stored)['--primary']).toBe('#6265f0')
+  })
+})
+
 describe('a theme saved before picked colours were kept', () => {
   it('shows its stored colour, and a theme that already reads carries no picked lines', () => {
     const old = draftFromLoaded(
@@ -147,5 +170,42 @@ describe('a theme saved before picked colours were kept', () => {
     const old = draftFromLoaded(loaded({ themeMode: 'light', light: { primary: '#6265f0' } }))
     expect(pickedHex(draftPalette(old, 'light'), 'primary')).toBe('#6265f0')
     expect(old.cssText).not.toContain('--picked-')
+  })
+})
+
+describe('Import', () => {
+  const site: BrandImport = {
+    host: 'example.com',
+    reader: 'static',
+    primary: '#6366f1',
+    background: '#ffffff',
+    scheme: 'light',
+    font: { id: 'inter', exact: true },
+    tokens: { mutedForeground: '#b0b0b0' },
+    missing: [],
+  }
+  const start = draftFromLoaded(loaded())
+  const imported = applyBrandImport(start, site)
+
+  it('keeps the site’s colours as picked, drawn to read', () => {
+    const palette = draftPalette(imported, 'light')
+    expect(pickedHex(palette, 'primary')).toBe('#6366f1')
+    expect(palette.primary).toBe('#6265f0')
+    expect(pickedColour(palette, 'mutedForeground')).toBe('#b0b0b0')
+    expect(contrastRatio(palette.mutedForeground!, '#ffffff')).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('taken back, leaves the colours as they were, with no picked line left behind', () => {
+    const back = revertImportRow(revertImportRow(imported, start, 'primary'), start, 'page')
+    expect(back.cssText).toBe(start.cssText)
+    expect(back.cssText).not.toContain('--picked-')
+  })
+
+  it('taken back over a colour picked before, restores that one', () => {
+    const before = editTheme.setColour(start, 'primary', 'light', '#0d9488')
+    const back = revertImportRow(applyBrandImport(before, site), before, 'primary')
+    expect(pickedHex(draftPalette(back, 'light'), 'primary')).toBe('#0d9488')
+    expect(lightVars(back)['--primary']).toBe(lightVars(before)['--primary'])
+    expect(lightVars(back)['--picked-primary']).toBe('#0d9488')
   })
 })

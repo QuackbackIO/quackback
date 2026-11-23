@@ -21,10 +21,8 @@ describe('withoutPicksSetBy', () => {
     })
   })
 
-  it('keeps one the patch sets itself, and leaves a patch of other colours alone', () => {
-    expect(
-      withoutPicksSetBy(stored, { light: { primary: '#6265f0', pickedPrimary: '#6366f1' } })
-    ).toEqual(stored)
+  it('keeps it where the patch repeats the colour as stored, or sets other colours', () => {
+    expect(withoutPicksSetBy(stored, { light: { primary: '#6265f0' } })).toEqual(stored)
     expect(withoutPicksSetBy(stored, { dark: { background: '#0b1220' } })).toEqual(stored)
   })
 })

@@ -43,22 +43,18 @@ export function buildInitialCss(initialCustomCss: string, initialThemeConfig: Th
   const parsed = extractCssVariables(initialCustomCss)
   // Structured brandingConfig wins; CSS-parsed values fill gaps so a
   // CSS-only palette (empty/partial config) is not replaced by defaults.
-  const lightMinimal = heldPicks(
-    {
-      ...unbrandedTheme('light'),
-      ...parseCssToMinimal(parsed.light),
-      ...(initialThemeConfig.light ?? {}),
-    },
-    'light'
-  )
-  const darkMinimal = heldPicks(
-    {
-      ...unbrandedTheme('dark'),
-      ...parseCssToMinimal(parsed.dark),
-      ...(initialThemeConfig.dark ?? {}),
-    },
-    'dark'
-  )
+  // Colours stored as picked are trusted: expansion may draw them otherwise
+  // than when they were stored, and the colour picked is what is kept.
+  const lightMinimal: Palette = {
+    ...unbrandedTheme('light'),
+    ...parseCssToMinimal(parsed.light),
+    ...(initialThemeConfig.light ?? {}),
+  }
+  const darkMinimal: Palette = {
+    ...unbrandedTheme('dark'),
+    ...parseCssToMinimal(parsed.dark),
+    ...(initialThemeConfig.dark ?? {}),
+  }
 
   // Always emit both palettes so a later switch back to user mode still
   // has the inactive side in cssText for themeForPublish to parse. Preview

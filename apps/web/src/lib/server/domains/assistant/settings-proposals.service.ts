@@ -128,7 +128,8 @@ export function withoutPicksSetBy(stored: BrandingConfig, patch: BrandingConfig)
     if (!side || !set) continue
     const next: Record<string, unknown> = { ...side }
     for (const [key, picked] of Object.entries(PICKED_KEYS)) {
-      if (key in set && !(picked in set)) delete next[picked]
+      const value = (set as Record<string, unknown>)[key]
+      if (value !== undefined && value !== next[key] && !(picked in set)) delete next[picked]
     }
     out[mode] = next as BrandingConfig[typeof mode]
   }
