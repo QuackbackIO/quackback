@@ -85,6 +85,7 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { group: 'Portal', label: 'Invite revoked', value: 'portal.invite.revoked' },
   { group: 'Portal', label: 'Invite sent', value: 'portal.invite.sent' },
   { group: 'Portal', label: 'Sign-in failed', value: 'auth.signin.failed' },
+  { group: 'Portal', label: 'Customisation published', value: 'portal.customise.published' },
   { group: 'Portal', label: 'Visibility changed', value: 'portal.visibility.changed' },
   { group: 'Labs', label: 'Experiment changed', value: 'labs.experiment.changed' },
   // Changes made with an API key or an MCP client, recorded at the boundary.

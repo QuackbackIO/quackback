@@ -7,7 +7,10 @@
  */
 import {
   db,
+  type Transaction,
+  and,
   eq,
+  ne,
   inArray,
   asc,
   sql,
@@ -98,7 +101,12 @@ export async function updateChangelogCategory(
   if (input.name !== undefined) {
     const name = validateName(input.name)
     const duplicate = await db.query.changelogCategories.findFirst({
-      where: sql`lower(${changelogCategories.name}) = lower(${name}) AND ${changelogCategories.id} != ${id}`,
+      // `ne` runs the id through the column codec; a raw `${id}` would hand
+      // Postgres the TypeID string for a uuid column.
+      where: and(
+        sql`lower(${changelogCategories.name}) = lower(${name})`,
+        ne(changelogCategories.id, id)
+      ),
     })
     if (duplicate) {
       throw new ConflictError('DUPLICATE_NAME', `A category named "${name}" already exists`)
@@ -193,23 +201,24 @@ export async function getCategoriesForEntries(
  */
 export async function setEntryCategories(
   entryId: ChangelogId,
-  categoryIds: ChangelogCategoryId[]
+  categoryIds: ChangelogCategoryId[],
+  executor: Transaction | typeof db = db
 ): Promise<void> {
-  await db
+  await executor
     .delete(changelogEntryCategories)
     .where(eq(changelogEntryCategories.changelogEntryId, entryId))
 
   if (categoryIds.length === 0) return
 
-  const existingCategories = await db.query.changelogCategories.findMany({
+  const existingCategories = await executor.query.changelogCategories.findMany({
     where: inArray(changelogCategories.id, categoryIds),
     columns: { id: true },
   })
   const validIds = new Set(existingCategories.map((c) => c.id))
-  const toLink = categoryIds.filter((id) => validIds.has(id))
+  const toLink = [...new Set(categoryIds)].filter((id) => validIds.has(id))
 
   if (toLink.length > 0) {
-    await db.insert(changelogEntryCategories).values(
+    await executor.insert(changelogEntryCategories).values(
       toLink.map((categoryId) => ({
         changelogEntryId: entryId,
         categoryId,

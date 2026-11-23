@@ -1,0 +1,4 @@
+/* lato for headings only: the bold cut (Lato has no semibold) titles are set in, so a
+   portal whose text is another font never declares (or fetches) the rest.
+   Loaded via loadHeadingFont in src/lib/shared/theme/heading-font-loader.ts. */
+@import "@fontsource/lato/700.css";

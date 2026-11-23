@@ -75,7 +75,7 @@ export const Route = createFileRoute('/admin/users')({
     // Imported here rather than at the top: route loaders ship in the entry
     // chunk every page loads.
     const { warmUsersPage } = await import('@/lib/client/queries/users-page')
-    await warmUsersPage(queryClient, principal.role, permissions)
+    await warmUsersPage(queryClient, permissions)
 
     return {
       currentMemberRole: principal.role,

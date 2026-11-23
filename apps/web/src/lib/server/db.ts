@@ -15,7 +15,8 @@ import {
   getScopedDatabase,
   WorkspaceScopeMissingError,
 } from '@/lib/server/workspaces/workspace-context'
-import { wrapDbTransaction } from '@/lib/server/workspaces/after-commit'
+import { isInsideDbTransaction, wrapDbTransaction } from '@/lib/server/workspaces/after-commit'
+import { logger } from '@/lib/server/logger'
 import { countingQueryLogger } from '@/lib/server/request-metrics'
 
 // Import drizzle-orm operators explicitly to work around Nitro bundler issues
@@ -122,6 +123,34 @@ function getDatabase(): Database {
   return globalThis.__db
 }
 
+const poolUseLog = logger.child({ component: 'db' })
+const reportedPoolUseSites = new Set<string>()
+
+/**
+ * Inside `db.transaction(async (tx) => ...)`, the shared `db` is the wrong
+ * handle. The transaction holds a connection until its callback returns, and a
+ * query on `db` asks the pool for another one. With a small pool that waits for
+ * the transaction, which is waiting for the query, so both hang until Postgres
+ * ends the idle transaction. A nested `db.transaction` is the same: it opens a
+ * second transaction on a second connection, not a savepoint. Use `tx`, or do
+ * the read before the transaction starts.
+ *
+ * Outside production, and in the e2e suites, this throws so the call site is
+ * found. In production it logs once per call site and lets the call through.
+ */
+function reportPoolUseInsideTransaction(prop: string | symbol): void {
+  const message = `db.${String(prop)} was used inside db.transaction; use the transaction handle instead`
+  // The e2e suites run a production build, so they opt in to the throw too.
+  if (process.env.NODE_ENV !== 'production' || process.env.E2E_HARNESS === '1') {
+    throw new Error(message)
+  }
+  const stack = new Error(message).stack ?? message
+  const site = stack.split('\n').slice(3, 5).join('\n')
+  if (reportedPoolUseSites.has(site)) return
+  reportedPoolUseSites.add(site)
+  poolUseLog.warn({ stack }, 'shared db used inside a transaction')
+}
+
 /**
  * Database instance.
  *
@@ -144,12 +173,13 @@ function getDatabase(): Database {
  */
 export const db: Database = new Proxy({} as Database, {
   get(_target, prop) {
+    if (isInsideDbTransaction()) reportPoolUseInsideTransaction(prop)
     const database = getDatabase()
     const value = Reflect.get(database as object, prop, database)
     if (typeof value !== 'function') return value
     const bound = value.bind(database)
     // Every domain transaction participates in after-commit workspace
-    // signaling. Nested calls are savepoints; only the outer commit flushes.
+    // signaling. Only the outer commit flushes.
     if (prop === 'transaction') return wrapDbTransaction(bound)
     return bound
   },
@@ -425,6 +455,7 @@ export {
   VISITOR_TOP_DIMENSIONS,
   ensurePageViewPartitions,
   dropExpiredPageViewPartitions,
+  insertPageView,
   refreshVisitorAnalytics,
   VISITOR_PERIODS,
   // Schema tables - help center

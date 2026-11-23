@@ -8,12 +8,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 type Handler = (args: { data: Record<string, unknown> }) => Promise<unknown>
-const hoisted = vi.hoisted(() => ({ handlers: [] as Handler[] }))
+const hoisted = vi.hoisted(() => ({
+  handlers: [] as Handler[],
+  validators: [] as Array<(input: unknown) => unknown>,
+}))
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      validator() {
+      validator(parse: (input: unknown) => unknown) {
+        hoisted.validators.push(parse)
         return chain
       },
       handler(fn: Handler) {
@@ -220,6 +224,15 @@ describe('updateModerationDefaultFn — happy path (admin)', () => {
     })
     expect(mockUpdatePortalConfig).toHaveBeenCalledWith({
       moderationDefault: { requireApproval: 'none', holdImages: true, holdLinks: true },
+    })
+  })
+
+  it('keeps the decision emails switch through the input check', () => {
+    // updateModerationDefaultFn is the last server function with a validator.
+    const parse = hoisted.validators[hoisted.validators.length - 1]
+    expect(parse({ requireApproval: 'none', emailDecisions: false })).toEqual({
+      requireApproval: 'none',
+      emailDecisions: false,
     })
   })
 

@@ -1,7 +1,9 @@
 /**
  * The one gate for every test-only seam the end-to-end suites use: the sweep
- * runner (`/api/e2e/sweep`), the webhook sink allowance in the SSRF guard, and
- * the admin presence switch (`/api/e2e/presence`).
+ * runner (`/api/e2e/sweep`), the webhook sink allowance in the SSRF guard, the
+ * admin presence switch (`/api/e2e/presence`), the provider fake host map
+ * (`./provider-fake.ts`), the OIDC provider fake allowance (`./oidc-fake.ts`)
+ * and the integration connect route (`/api/e2e/integrations/connect`).
  *
  * Open only when ALL of these hold:
  *

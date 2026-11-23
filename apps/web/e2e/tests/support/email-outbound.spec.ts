@@ -1,7 +1,7 @@
 /**
  * Email out: what a customer receives when a teammate answers, closes, starts a
  * conversation or works a ticket, and what they never receive (journeys
- * CUS-O-01..20, 30..35).
+ * CUS-O-01..20, 30..36).
  *
  * Oracles: Mailpit (subject, body, From, Reply-To and threading headers) and
  * the app's email_log. Absence is asserted only after a later mail to the same
@@ -18,6 +18,7 @@ import {
 import { getMailHeaders, linksIn } from '../../support/mailpit'
 import { INBOX_PERMISSIONS, newTeammate } from '../../support/api-client'
 import { addWatcherRow } from '../../support/tickets'
+import { mintVisitor, visitorSend } from '../../support/widget-portal'
 import { runSweep } from '../../support/sweeps'
 import { clearSigninRateLimit, enableMagicLinkMethod } from '../../utils/db-helpers'
 import {
@@ -157,6 +158,36 @@ test.describe('agent replies by email', () => {
         )
       })
       expect(log).toMatchObject({ direction: 'outbound', status: 'sent', address: customerEmail })
+    }
+  )
+
+  test(
+    'CUS-O-36 a thread opened with a multi-line message is answered under a one-line subject',
+    { tag: '@core' },
+    async ({ request, playwright, baseURL, people, customerEmail, marker }) => {
+      // The thread's subject is taken from the customer's first message, and
+      // this one runs over several lines. A provider may refuse a subject with
+      // a line break outright, so the reply must arrive under one clean line.
+      const multiLine = `Parcel ${marker} is late\r\n\r\n\tIt was due Monday.`
+      const oneLine = `Parcel ${marker} is late It was due Monday.`
+      const visitor = await mintVisitor({ email: customerEmail, name: 'Lena Lines' })
+      await visitorSend(request, visitor.token, multiLine)
+      const row = await latestConversationOf(visitor.principalUuid)
+      expect(row.subject).toBe(oneLine)
+
+      const api = await adminApi(playwright, baseURL!, people)
+      const first = `It ships today ${marker}`
+      await agentReply(api, conversationTypeId(row.id), first)
+      const mail = await waitForMailMatching({ to: customerEmail, body: first })
+      expect(mail.Subject).toBe(`Re: ${oneLine}`)
+
+      // A subject already stored with line breaks is cleaned when the reply is sent.
+      await supportDb()`UPDATE conversations SET subject = ${multiLine} WHERE id = ${row.id}`
+      const second = `Tracking number to follow ${marker}`
+      await agentReply(api, conversationTypeId(row.id), second)
+      await api.dispose()
+      const later = await waitForMailMatching({ to: customerEmail, body: second })
+      expect(later.Subject).toBe(`Re: ${oneLine}`)
     }
   )
 

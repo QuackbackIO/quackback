@@ -9,6 +9,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { HexColorSchema } from '@/lib/shared/schemas/taxonomy'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const createStatusSchema = z.object({
@@ -34,7 +35,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_VIEW })
 
           // Import service function
           const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')
@@ -68,7 +69,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
           await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_MANAGE })
 
           // Parse and validate body
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createStatusSchema.safeParse(body)
 
           if (!parsed.success) {

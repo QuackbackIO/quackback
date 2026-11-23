@@ -99,6 +99,23 @@ describe('github adapter delivery', () => {
     vi.clearAllMocks()
   })
 
+  it('reaches api.github.com itself on a real deployment, even with the e2e flag and a fake set', async () => {
+    vi.stubEnv('E2E_HARNESS', '1')
+    vi.stubEnv('BASE_URL', 'https://feedback.example.com')
+    vi.stubEnv('E2E_PROVIDER_FAKE_URL', 'http://127.0.0.1:4013')
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 445 }) })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await deliverGitHubAgentMessage(agentCtx(conversationId, 'msg-real-deployment'))
+    } finally {
+      vi.unstubAllEnvs()
+    }
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      'https://api.github.com/repos/acme/api/issues/201/comments'
+    )
+  })
+
   it('POSTs an issue comment for an agent reply', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

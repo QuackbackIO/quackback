@@ -53,9 +53,9 @@ export const companiesDirectoryQueries = {
     }),
 }
 
-/** Team roles that read the companies directory (both presets hold company.view). */
-export function canReadCompanies(role: string) {
-  return role === 'admin' || role === 'member'
+/** Whether the viewer reads the companies directory: its reads need company.view. */
+export function canReadCompanies(permissions: readonly PermissionKey[]) {
+  return permissions.includes(PERMISSIONS.COMPANY_VIEW)
 }
 
 /**
@@ -65,12 +65,8 @@ export function canReadCompanies(role: string) {
  * best-effort: a failed read is left to the page's own query. The segment
  * filter needs segment.view, so it is warmed only for a viewer holding it.
  */
-export function warmUsersPage(
-  queryClient: QueryClient,
-  role: string,
-  permissions: readonly PermissionKey[]
-) {
-  const companies = canReadCompanies(role)
+export function warmUsersPage(queryClient: QueryClient, permissions: readonly PermissionKey[]) {
+  const companies = canReadCompanies(permissions)
   return Promise.all([
     queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
     permissions.includes(PERMISSIONS.SEGMENT_VIEW)
@@ -81,7 +77,9 @@ export function warmUsersPage(
     warmQuery(queryClient, adminQueries.userAttributes()),
     warmQuery(queryClient, adminQueries.companyAttributes()),
     warmQuery(queryClient, userTagsQueryOptions()),
-    role === 'admin' ? warmQuery(queryClient, portalInvitesQueryOptions()) : undefined,
+    permissions.includes(PERMISSIONS.SETTINGS_MANAGE)
+      ? warmQuery(queryClient, portalInvitesQueryOptions())
+      : undefined,
     companies ? warmQuery(queryClient, companiesDirectoryQueries.count()) : undefined,
     companies
       ? queryClient

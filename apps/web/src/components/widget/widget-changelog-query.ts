@@ -1,5 +1,8 @@
-import { infiniteQueryOptions } from '@tanstack/react-query'
-import { widgetListPublicChangelogsFn } from '@/lib/server/functions/widget/changelog'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
+import {
+  widgetListChangelogCategoriesFn,
+  widgetListPublicChangelogsFn,
+} from '@/lib/server/functions/widget/changelog'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 
@@ -19,6 +22,16 @@ export function widgetChangelogListQuery(sessionVersion: number) {
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: STALE_TIME_MEDIUM,
+  })
+}
+
+/** The labels this widget session may see (Bearer + sessionVersion), for
+ *  the filter chips: identifying can reveal a label gated to a segment. */
+export function widgetChangelogLabelsQuery(sessionVersion: number) {
+  return queryOptions({
+    queryKey: widgetQueryKeys.changelogLabels.bySession(sessionVersion),
+    queryFn: () => widgetListChangelogCategoriesFn({ headers: getWidgetAuthHeaders() }),
     staleTime: STALE_TIME_MEDIUM,
   })
 }

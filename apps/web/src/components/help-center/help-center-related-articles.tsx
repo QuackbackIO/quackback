@@ -11,6 +11,8 @@ export interface RelatedArticleLink {
   title: string
   description: string | null
   categorySlug: string
+  /** The language the title is in and the link goes to; defaults to the page's. */
+  locale?: string
 }
 
 interface HelpCenterRelatedArticlesProps {
@@ -24,7 +26,7 @@ export function HelpCenterRelatedArticles({ articles, locale }: HelpCenterRelate
 
   const hrefFor = (article: RelatedArticleLink) =>
     hcArticlePath({
-      locale: locale ?? DEFAULT_LOCALE,
+      locale: article.locale ?? locale ?? DEFAULT_LOCALE,
       urlId: article.urlId,
       slug: article.slug,
     }) as '/hc'

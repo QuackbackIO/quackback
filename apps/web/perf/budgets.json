@@ -12,7 +12,7 @@
     },
     "doc:portal-roadmap": {
       "dbQueries": 4,
-      "htmlKB": 43.3
+      "htmlKB": 45.5
     },
     "doc:portal-changelog": {
       "dbQueries": 0,
@@ -20,7 +20,7 @@
     },
     "doc:portal-post": {
       "dbQueries": 15,
-      "htmlKB": 36.9
+      "htmlKB": 39
     },
     "doc:help-center": {
       "dbQueries": 3,
@@ -267,11 +267,11 @@
     "ui:admin-settings-click-through": {
       "dbQueries": 52,
       "serverRequests": 7,
-      "requests": 66,
-      "jsRequests": 62,
-      "jsKB": 312.3,
+      "requests": 42,
+      "jsRequests": 39,
+      "jsKB": 67.5,
       "htmlTransferKB": 0,
-      "componentRenders": 673
+      "componentRenders": 311
     },
     "sweep:doc:admin:/admin/analytics": {
       "dbQueries": 6,
@@ -529,7 +529,7 @@
       "serverRequests": 1,
       "requests": 107,
       "jsRequests": 102,
-      "jsKB": 397.2,
+      "jsKB": 405.6,
       "htmlTransferKB": 31.5,
       "componentRenders": 425
     },
@@ -685,7 +685,7 @@
     },
     "sweep:doc:admin:/admin/settings/members": {
       "dbQueries": 16,
-      "htmlKB": 98.7
+      "htmlKB": 104
     },
     "sweep:ui:admin:/admin/settings/members": {
       "dbQueries": 16,
@@ -763,29 +763,29 @@
     },
     "sweep:doc:admin:/admin/settings/portal": {
       "dbQueries": 6,
-      "htmlKB": 105.9
+      "htmlKB": 75.3
     },
     "sweep:ui:admin:/admin/settings/portal": {
       "dbQueries": 40,
       "serverRequests": 6,
-      "requests": 290,
-      "jsRequests": 275,
-      "jsKB": 1143.6,
-      "htmlTransferKB": 34.3,
-      "componentRenders": 1517
+      "requests": 257,
+      "jsRequests": 242,
+      "jsKB": 928.5,
+      "htmlTransferKB": 14.3,
+      "componentRenders": 1011
     },
     "sweep:doc:admin:/admin/settings/portal?tab=custom-domains": {
       "dbQueries": 6,
-      "htmlKB": 73.9
+      "htmlKB": 72.5
     },
     "sweep:ui:admin:/admin/settings/portal?tab=custom-domains": {
       "dbQueries": 6,
       "serverRequests": 1,
-      "requests": 153,
-      "jsRequests": 145,
-      "jsKB": 671.6,
-      "htmlTransferKB": 14.2,
-      "componentRenders": 356
+      "requests": 130,
+      "jsRequests": 123,
+      "jsKB": 450,
+      "htmlTransferKB": 14,
+      "componentRenders": 334
     },
     "sweep:doc:admin:/admin/settings/security/authentication": {
       "dbQueries": 11,
@@ -906,7 +906,7 @@
     },
     "sweep:doc:anon:/roadmap": {
       "dbQueries": 4,
-      "htmlKB": 43.3
+      "htmlKB": 45.5
     },
     "sweep:ui:anon:/roadmap": {
       "dbQueries": 11,
@@ -1042,7 +1042,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 143
+      "componentRenders": 179
     },
     "ui:admin-settings-tour": {
       "dbQueries": 52,

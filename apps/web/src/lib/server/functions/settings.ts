@@ -1,11 +1,9 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
-import { updateThemeSchema } from '@/lib/shared/schemas/settings'
+import { updatePortalConfigSchema } from '@/lib/shared/schemas/portal-config'
 // Import types from barrel export (client-safe)
 import {
   DEFAULT_PORTAL_CONFIG,
-  type BrandingConfig,
   type PortalPageConfig,
   type UpdatePortalConfigInput,
 } from '@/lib/server/domains/settings'
@@ -20,18 +18,12 @@ import {
 } from '@/lib/server/domains/settings/settings.service'
 import {
   getBrandingConfig,
-  updateBrandingConfig,
   saveLogoKey,
   deleteLogoKey,
-  saveHeaderLogoKey,
-  deleteHeaderLogoKey,
   saveFaviconKey,
   deleteFaviconKey,
-  updateHeaderDisplayMode,
-  updateHeaderDisplayName,
   updateWorkspaceName,
   getCustomCss,
-  updateCustomCss,
 } from '@/lib/server/domains/settings/settings.media'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
@@ -43,7 +35,6 @@ import { db, principal, user, invitation, account, eq, and } from '@/lib/server/
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import {
   PORTAL_DESIGN_READ_PERMISSIONS,
-  PORTAL_DESIGN_WRITE_PERMISSIONS,
   PORTAL_MODERATION_READ_PERMISSIONS,
   PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
 } from '@/lib/shared/settings-read-permissions'
@@ -361,79 +352,14 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
 // Write Operations
 // ============================================
 
-export const updatePortalConfigSchema = z.object({
-  features: z
-    .object({
-      allowAnonymous: z.boolean().optional(),
-    })
-    .optional(),
-  // May a member of the public open an account on the portal? The portal's own
-  // answer, distinct from `authConfig.openSignup`, which answers for the team.
-  // A `z.object` strips what it does not name, so the key has to be here or the
-  // save is accepted and discarded — and the portal has no other writer.
-  openSignup: z.boolean().optional(),
-  welcomeCard: z
-    .object({
-      // Body is re-sanitized server-side by normalizeWelcomeCardInput;
-      // tiptapContentSchema gates the shape at the boundary.
-      body: tiptapContentSchema.optional(),
-    })
-    .optional(),
-  support: z
-    .object({
-      enabled: z.boolean().optional(),
-    })
-    .optional(),
-  nav: z
-    .object({
-      items: z
-        .array(
-          z.object({
-            id: z.string().min(1).max(64),
-            type: z.enum(['feedback', 'roadmap', 'changelog', 'help', 'support', 'status', 'link']),
-            enabled: z.boolean().optional(),
-            label: z.string().trim().max(30).optional(),
-            // http(s) only — blocks javascript:/data: URLs at the boundary.
-            url: z
-              .string()
-              .url()
-              .max(2048)
-              .refine((u) => /^https?:\/\//i.test(u), 'URL must be http(s)')
-              .optional(),
-            newTab: z.boolean().optional(),
-          })
-        )
-        .max(20)
-        .optional(),
-    })
-    .optional(),
-})
+export { updatePortalConfigSchema }
 
 const saveLogoKeySchema = z.object({
   key: z.string(),
 })
 
-const updateHeaderDisplayModeSchema = z.object({
-  mode: z.enum(['logo_and_name', 'logo_only', 'custom_logo']),
-})
-
-const updateHeaderDisplayNameSchema = z.object({
-  name: z.string().nullable(),
-})
-
-export type UpdateThemeInput = z.infer<typeof updateThemeSchema>
 export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSchema>
 export type SaveLogoKeyInput = z.infer<typeof saveLogoKeySchema>
-export type UpdateHeaderDisplayModeInput = z.infer<typeof updateHeaderDisplayModeSchema>
-export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNameSchema>
-
-export const updateThemeFn = createServerFn({ method: 'POST' })
-  .validator(updateThemeSchema)
-  .handler(async ({ data }) => {
-    log.info('update theme')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
-  })
 
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .validator(updatePortalConfigSchema)
@@ -441,46 +367,6 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
     log.info('update portal config')
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return await updatePortalConfig(data as UpdatePortalConfigInput)
-  })
-
-/**
- * The two parts of the portal config the Design tab of Settings > Portal
- * edits: the portal's top tabs and its welcome message. Strict, so a save that
- * names anything else (who may open the portal, signup, section domains) is
- * refused rather than quietly dropped.
- */
-export const updatePortalDesignSchema = updatePortalConfigSchema
-  .pick({ nav: true, welcomeCard: true })
-  .strict()
-
-const PORTAL_DESIGN_FIELDS: ReadonlySet<string> = new Set(['nav', 'welcomeCard'])
-
-/**
- * Saves the portal's tabs and welcome message for settings.manage or
- * settings.branding. Every other part of the portal config saves through
- * `updatePortalConfigFn`, under settings.manage alone; this write takes only
- * these two fields and hands back only them.
- */
-export const updatePortalDesignFn = createServerFn({ method: 'POST' })
-  .validator(updatePortalDesignSchema)
-  .handler(async ({ data }): Promise<PortalPageConfig> => {
-    log.info('update portal design')
-    const auth = await requireAuth()
-    assertAnyPermission(auth, PORTAL_DESIGN_WRITE_PERMISSIONS)
-    // The schema refuses other fields at the boundary; this holds the line for
-    // any caller that reaches the handler past it.
-    const other = Object.keys(data).filter((key) => !PORTAL_DESIGN_FIELDS.has(key))
-    if (other.length > 0) {
-      throw new ForbiddenError(
-        'FORBIDDEN',
-        `Access denied: The portal design save takes only nav and welcomeCard, not ${other.join(', ')}`
-      )
-    }
-    const updated = await updatePortalConfig({
-      ...(data.nav && { nav: data.nav }),
-      ...(data.welcomeCard && { welcomeCard: data.welcomeCard }),
-    } as UpdatePortalConfigInput)
-    return { nav: updated.nav, welcomeCard: updated.welcomeCard }
   })
 
 export const updateAuthConfigSchema = z.object({
@@ -693,20 +579,6 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
   return await deleteLogoKey()
 })
 
-export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
-  .validator(saveLogoKeySchema)
-  .handler(async ({ data }) => {
-    log.info({ key: data.key }, 'save header logo key')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await saveHeaderLogoKey(data.key)
-  })
-
-export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
-  log.info('delete header logo')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-  return await deleteHeaderLogoKey()
-})
-
 export const saveFaviconKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
@@ -720,22 +592,6 @@ export const deleteFaviconFn = createServerFn({ method: 'POST' }).handler(async 
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   return await deleteFaviconKey()
 })
-
-export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
-  .validator(updateHeaderDisplayModeSchema)
-  .handler(async ({ data }) => {
-    log.info({ mode: data.mode }, 'update header display mode')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateHeaderDisplayMode(data.mode)
-  })
-
-export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
-  .validator(updateHeaderDisplayNameSchema)
-  .handler(async ({ data }) => {
-    log.info({ name: data.name }, 'update header display name')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateHeaderDisplayName(data.name)
-  })
 
 const updateWorkspaceNameSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
@@ -755,26 +611,10 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
 // Custom CSS Operations
 // ============================================
 
-const MAX_CUSTOM_CSS_SIZE = 50 * 1024 // 50KB limit
-
-const updateCustomCssSchema = z.object({
-  customCss: z.string().max(MAX_CUSTOM_CSS_SIZE, 'Custom CSS exceeds 50KB limit'),
-})
-
-export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>
-
 export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch custom css')
   return await getCustomCss()
 })
-
-export const updateCustomCssFn = createServerFn({ method: 'POST' })
-  .validator(updateCustomCssSchema)
-  .handler(async ({ data }) => {
-    log.info({ css_length: data.customCss.length }, 'update custom css')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateCustomCss(data.customCss)
-  })
 
 // ============================================
 // Developer Config Operations
@@ -1178,6 +1018,7 @@ const moderationDefaultSchema = z.object({
   requireApproval: z.enum(['none', 'anonymous', 'authenticated', 'all']),
   holdImages: z.boolean().optional(),
   holdLinks: z.boolean().optional(),
+  emailDecisions: z.boolean().optional(),
 })
 
 /**

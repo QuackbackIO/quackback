@@ -65,7 +65,12 @@ const WELCOME = {
   body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hi' }] }] },
 }
 const NAV = { items: [{ id: 'feedback', type: 'feedback' }] }
-const MODERATION = { requireApproval: 'anonymous', holdImages: true, holdLinks: false }
+const MODERATION = {
+  requireApproval: 'anonymous',
+  holdImages: true,
+  holdLinks: false,
+  emailDecisions: false,
+}
 
 describe.skipIf(!fixture.available)('settings reads for narrower permissions (real DB)', () => {
   beforeEach(async () => {
