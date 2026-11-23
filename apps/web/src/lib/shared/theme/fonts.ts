@@ -1,5 +1,4 @@
-import { DEFAULT_FONT_SANS, NO_HEADING_FONT } from './expand'
-import { normalizeFontSans } from './generator'
+import { DEFAULT_FONT_SANS, NO_HEADING_FONT, normalizeFontSans } from './base'
 
 /**
  * Canonical list of self-hosted branding font families, shared between the

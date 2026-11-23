@@ -1,5 +1,7 @@
 import { cssColorToOklch, oklchToHex, oklchToHexInGamut, tryCssColorToHex } from './colors'
 import type { ThemeVariables } from './types'
+import { DEFAULT_FONT_SANS, MINIMAL_THEME_VARIABLE_KEYS, NO_HEADING_FONT } from './base'
+export { DEFAULT_FONT_SANS, MINIMAL_THEME_VARIABLE_KEYS, NO_HEADING_FONT } from './base'
 
 export interface MinimalThemeVariables {
   primary: string
@@ -65,19 +67,6 @@ export const DEFAULT_DARK_BASE: ThemeColorBase = {
   success: 'oklch(0.696 0.149 163)',
 }
 
-/**
- * The font an unbranded page renders in: globals.css's --font-sans, led by the
- * Inter it self-hosts (@fontsource-variable/inter names it "Inter Variable").
- */
-export const DEFAULT_FONT_SANS = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif'
-
-/**
- * What a side with no headings font writes when the other side has one: the
- * variable made empty, so headings there fall back to the text font where
- * they are drawn (`var(--font-heading, var(--font-sans))`).
- */
-export const NO_HEADING_FONT = 'initial'
-
 /** The corner radius globals.css ships. */
 export const DEFAULT_RADIUS = '0.5rem'
 
@@ -98,26 +87,6 @@ export function unbrandedTheme(mode: 'light' | 'dark'): MinimalThemeVariables {
     radius: DEFAULT_RADIUS,
   }
 }
-
-/** Every variable a theme may carry. Anything else on the object is derived. */
-export const MINIMAL_THEME_VARIABLE_KEYS = [
-  'primary',
-  'background',
-  'foreground',
-  'card',
-  'muted',
-  'mutedForeground',
-  'border',
-  'destructive',
-  'success',
-  'ring',
-  'secondary',
-  'accent',
-  'header',
-  'fontSans',
-  'fontHeading',
-  'radius',
-] as const
 
 /**
  * Fill the gaps in a theme with the base palette for that mode.

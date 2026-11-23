@@ -2,57 +2,10 @@ import type { ThemeConfig, ThemeVariables } from './types'
 import type { CustomFont } from './font-uploads'
 import { cardStyleCss } from './card-style'
 import { DEFAULT_FONT_SANS, expandTheme, NO_HEADING_FONT, PAGE_HEADER } from './expand'
+import { normalizeFontSans, variableMap } from './base'
+export { normalizeFontSans, variableMap } from './base'
 import { isWritableCustomFont, uploadedFontFaces } from './font-uploads'
 import { BRANDING_FONTS } from './fonts'
-
-export const variableMap: Record<string, string> = {
-  background: '--background',
-  foreground: '--foreground',
-  card: '--card',
-  cardForeground: '--card-foreground',
-  popover: '--popover',
-  popoverForeground: '--popover-foreground',
-  primary: '--primary',
-  primaryForeground: '--primary-foreground',
-  primaryInk: '--primary-ink',
-  secondary: '--secondary',
-  secondaryForeground: '--secondary-foreground',
-  muted: '--muted',
-  mutedForeground: '--muted-foreground',
-  accent: '--accent',
-  accentForeground: '--accent-foreground',
-  accentInk: '--accent-ink',
-  destructive: '--destructive',
-  destructiveForeground: '--destructive-foreground',
-  border: '--border',
-  input: '--input',
-  ring: '--ring',
-  success: '--success',
-  chart1: '--chart-1',
-  chart2: '--chart-2',
-  chart3: '--chart-3',
-  chart4: '--chart-4',
-  chart5: '--chart-5',
-  fontSans: '--font-sans',
-  fontHeading: '--font-heading',
-  radius: '--radius',
-  shadow2xs: '--shadow-2xs',
-  shadowXs: '--shadow-xs',
-  shadowSm: '--shadow-sm',
-  shadow: '--shadow',
-  shadowMd: '--shadow-md',
-  shadowLg: '--shadow-lg',
-  shadowXl: '--shadow-xl',
-  shadow2xl: '--shadow-2xl',
-  header: '--header-background',
-  headerForeground: '--header-foreground',
-  headerBorder: '--header-border',
-  navActiveBackground: '--nav-active-background',
-  navActiveForeground: '--nav-active-foreground',
-  navInactiveColor: '--nav-inactive-color',
-  headerPrimary: '--header-primary',
-  headerPrimaryForeground: '--header-primary-foreground',
-}
 
 /**
  * Both sides' variables, the side with no header colour writing the page's
@@ -98,22 +51,6 @@ function variablesToCSS(vars: ThemeVariables): string {
     }
   }
   return declarations.join(' ')
-}
-
-// Maps a font family saved under an old name to the one now self-hosted in
-// globals.css. Geist self-hosts via @fontsource/geist-sans, whose @font-face
-// family is "Geist Sans", so a fontSans saved before that rename still resolves.
-const LEGACY_FONT_ALIASES: Record<string, string> = {
-  '"Geist"': '"Geist Sans"',
-}
-
-/** Rewrite legacy font-family names in a fontSans stack to their bundled equivalent. */
-export function normalizeFontSans(fontSans: string): string {
-  let normalized = fontSans
-  for (const [legacy, current] of Object.entries(LEGACY_FONT_ALIASES)) {
-    normalized = normalized.replaceAll(legacy, current)
-  }
-  return normalized
 }
 
 export function generateThemeCSS(config: ThemeConfig): string {

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { MINIMAL_THEME_VARIABLE_KEYS } from '@/lib/shared/theme/expand'
+import { MINIMAL_THEME_VARIABLE_KEYS } from '@/lib/shared/theme/base'
 import { BRANDING_FONTS } from '@/lib/shared/theme/fonts'
 import { FONT_FAMILY_NAME, FONT_UPLOADS, UPLOADED_FONT_KEY } from '@/lib/shared/theme/font-uploads'
 import { CARD_STYLES } from '@/lib/shared/theme/types'
