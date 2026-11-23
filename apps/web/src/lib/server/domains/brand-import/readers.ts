@@ -39,6 +39,22 @@ const defined = <T extends object>(value: T | undefined): Partial<T> =>
  * card and font values merge field by field; a logo or palette is taken
  * whole, since its parts only make sense together.
  */
+/**
+ * Both reads' page colours, the preferred one's winning. The header bar is
+ * the preferred read's alone when it read a page: a rendered page with no
+ * header fill has a bar that shows the page (a transparent bar over the
+ * body), which is not a gap for the stylesheet read to fill.
+ */
+function pageOf(preferred: BrandRead, fallback: BrandRead): BrandRead['page'] {
+  if (!preferred.page) return fallback.page
+  const page = { ...defined(fallback.page), ...defined(preferred.page) }
+  delete page.header
+  delete page.headerText
+  if (preferred.page.header) page.header = preferred.page.header
+  if (preferred.page.headerText) page.headerText = preferred.page.headerText
+  return page
+}
+
 export function mergeBrandReads(preferred: BrandRead, fallback: BrandRead): BrandRead {
   const pick = <K extends keyof BrandRead>(key: K) => preferred[key] ?? fallback[key]
   const both = <K extends 'page' | 'button' | 'card' | 'fonts'>(key: K) =>
@@ -53,7 +69,7 @@ export function mergeBrandReads(preferred: BrandRead, fallback: BrandRead): Bran
       preferred.names || fallback.names
         ? [...new Set([...(preferred.names ?? []), ...(fallback.names ?? [])])]
         : undefined,
-    page: both('page'),
+    page: pageOf(preferred, fallback),
     button: both('button'),
     card: both('card'),
     fonts: both('fonts'),
