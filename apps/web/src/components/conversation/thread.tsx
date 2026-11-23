@@ -168,6 +168,28 @@ export function useThreadVirtualizer<Row extends { key: string }>({
     }
   }, [rows.length, lastRowKey, virtualizer])
 
+  // A smooth scroll (the scroll-to-latest pill) only measures rows near its
+  // target: virtual-core drops measurements for rows more than ~overscan away
+  // while the scroll runs. A row it mounts in that window is never measured
+  // afterwards, because the ResizeObserver reports size changes only and the
+  // ref measures on mount only. The row keeps the estimate and the rows below
+  // it overlap its bubble. Once scrolling stops, read each mounted row's real
+  // height. resizeItem goes around the in-scroll gate and does nothing for
+  // rows that are already right.
+  const isScrolling = virtualizer.isScrolling
+  useLayoutEffect(() => {
+    if (isScrolling) return
+    for (const node of virtualizer.elementsCache.values()) {
+      if (!(node instanceof HTMLElement) || !node.isConnected) continue
+      const index = Number(node.dataset.index)
+      if (!Number.isInteger(index) || index < 0 || index >= virtualizer.options.count) continue
+      virtualizer.resizeItem(
+        index,
+        virtualizer.options.measureElement(node, undefined, virtualizer)
+      )
+    }
+  }, [isScrolling, virtualizer])
+
   return virtualizer
 }
 
