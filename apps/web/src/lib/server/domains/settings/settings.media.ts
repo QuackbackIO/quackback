@@ -1,7 +1,7 @@
 import { db, eq, settings } from '@/lib/server/db'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { ValidationError } from '@/lib/shared/errors'
-import { advancedCssRemainder } from '@/lib/shared/theme/generator'
+import { advancedCssRemainder } from '@/lib/shared/theme/readable-css'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { logger } from '@/lib/server/logger'
 import type { BrandingConfig } from './settings.types'
@@ -11,6 +11,7 @@ import {
   wrapDbError,
   parseJsonOrNull,
   invalidateSettingsCache,
+  writeLockedSettings,
   type SettingsWriteOptions,
 } from './settings.helpers'
 
@@ -43,7 +44,7 @@ export async function updateBrandingConfig(
     const isCustomisingColors = config.light !== undefined || config.dark !== undefined
     if (isCustomisingColors) {
       const { assertTierFeature } = await import('./tier-enforce')
-      await assertTierFeature('customColors', 'Custom colours')
+      await assertTierFeature('customColors', 'Custom colours', options.executor)
     }
 
     const org = await requireSettings(options.executor)
@@ -74,25 +75,27 @@ export async function getCustomCss(): Promise<string> {
   }
 }
 
-export async function updateCustomCss(css: string): Promise<string> {
+export async function updateCustomCss(
+  css: string,
+  options: SettingsWriteOptions = {}
+): Promise<string> {
   log.info('update custom css')
   try {
     if (css.includes('<')) {
       throw new ValidationError('INVALID_CUSTOM_CSS', 'Custom CSS cannot contain the "<" character')
     }
-    const org = await requireSettings()
-    const trimmed = css.trim()
-    // Empty is always allowed so a workspace whose tier just stopped including
-    // custom CSS can wipe it. Stripping generated theme declarations from CSS
-    // already stored is also ungated — that rewrite cannot introduce extra
-    // rules. Any other non-empty write hits the feature gate.
-    if (trimmed.length > 0 && trimmed !== advancedCssRemainder(org.customCss ?? '')) {
-      const { assertTierFeature } = await import('./tier-enforce')
-      await assertTierFeature('customCss', 'Custom CSS')
-    }
-
-    await db.update(settings).set({ customCss: css }).where(eq(settings.id, org.id))
-    await invalidateSettingsCache()
+    await writeLockedSettings(options, async (tx, org) => {
+      const trimmed = css.trim()
+      // Empty is always allowed so a workspace whose tier just stopped including
+      // custom CSS can wipe it. Stripping generated theme declarations from CSS
+      // already stored is also ungated — that rewrite cannot introduce extra
+      // rules. Any other non-empty write hits the feature gate.
+      if (trimmed.length > 0 && trimmed !== advancedCssRemainder(org.customCss ?? '')) {
+        const { assertTierFeature } = await import('./tier-enforce')
+        await assertTierFeature('customCss', 'Custom CSS', tx)
+      }
+      await tx.update(settings).set({ customCss: css }).where(eq(settings.id, org.id))
+    })
     return css
   } catch (error) {
     log.error({ err: error }, 'update custom css failed')
@@ -220,28 +223,23 @@ export async function deleteFaviconKey(): Promise<{ success: true }> {
 }
 
 /**
- * Save header logo S3 key and delete old image if exists.
+ * Save the header logo key under the row lock. The previous image is deleted
+ * only once the new key is committed: here after the write's own transaction,
+ * or, with an executor, by the caller after its commit (from `previousKey`).
  */
-export async function saveHeaderLogoKey(key: string): Promise<{ success: true; key: string }> {
+export async function saveHeaderLogoKey(
+  key: string,
+  options: SettingsWriteOptions = {}
+): Promise<{ success: true; key: string; previousKey: string | null }> {
   log.info('save header logo key')
   try {
-    const org = await requireSettings()
-
-    if (org.headerLogoKey) {
-      try {
-        await deleteObject(org.headerLogoKey)
-      } catch (err) {
-        log.warn(
-          { err, header_logo_key: org.headerLogoKey },
-          'failed to delete old header logo s3 object'
-        )
-      }
-    }
-
-    await db.update(settings).set({ headerLogoKey: key }).where(eq(settings.id, org.id))
-    await invalidateSettingsCache()
-
-    return { success: true, key }
+    const previousKey = await writeLockedSettings(options, async (tx, org) => {
+      await tx.update(settings).set({ headerLogoKey: key }).where(eq(settings.id, org.id))
+      return org.headerLogoKey
+    })
+    if (!options.executor && previousKey && previousKey !== key)
+      await deleteHeaderLogoObject(previousKey)
+    return { success: true, key, previousKey }
   } catch (error) {
     log.error({ err: error }, 'save header logo key failed')
     wrapDbError('save header logo key', error)
@@ -249,31 +247,62 @@ export async function saveHeaderLogoKey(key: string): Promise<{ success: true; k
 }
 
 /**
- * Delete header logo from S3 and clear the key.
+ * Clear the header logo key under the row lock, then delete the image (with
+ * an executor, the caller deletes `previousKey` after its commit).
  */
-export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
+export async function deleteHeaderLogoKey(
+  options: SettingsWriteOptions = {}
+): Promise<{ success: true; previousKey: string | null }> {
   log.info('delete header logo key')
   try {
-    const org = await requireSettings()
-
-    if (org.headerLogoKey) {
-      try {
-        await deleteObject(org.headerLogoKey)
-      } catch (err) {
-        log.warn(
-          { err, header_logo_key: org.headerLogoKey },
-          'failed to delete header logo s3 object'
-        )
-      }
-    }
-
-    await db.update(settings).set({ headerLogoKey: null }).where(eq(settings.id, org.id))
-    await invalidateSettingsCache()
-
-    return { success: true }
+    const previousKey = await writeLockedSettings(options, async (tx, org) => {
+      await tx.update(settings).set({ headerLogoKey: null }).where(eq(settings.id, org.id))
+      return org.headerLogoKey
+    })
+    if (!options.executor && previousKey) await deleteHeaderLogoObject(previousKey)
+    return { success: true, previousKey }
   } catch (error) {
     log.error({ err: error }, 'delete header logo key failed')
     wrapDbError('delete header logo key', error)
+  }
+}
+
+/**
+ * Set or clear (null) the header logo's dark mode version, under the row
+ * lock. It is kept with the portal's settings, one key among them, so every
+ * other key is carried. The file it replaces is never deleted here: the
+ * caller leaves it for the staged-uploads sweep, as a replaced logo is left.
+ */
+export async function saveHeaderLogoDarkKey(
+  key: string | null,
+  options: SettingsWriteOptions = {}
+): Promise<{ success: true; previousKey: string | null }> {
+  log.info({ cleared: key === null }, 'save header logo dark key')
+  try {
+    const previousKey = await writeLockedSettings(options, async (tx, org) => {
+      // The stored text as it is, never the parsed config: its defaults are not written back.
+      const stored = parseJsonOrNull<Record<string, unknown>>(org.portalConfig)
+      const config = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}
+      const { headerLogoDarkKey: previous, ...rest } = config
+      const next = key === null ? rest : { ...rest, headerLogoDarkKey: key }
+      await tx
+        .update(settings)
+        .set({ portalConfig: JSON.stringify(next) })
+        .where(eq(settings.id, org.id))
+      return typeof previous === 'string' ? previous : null
+    })
+    return { success: true, previousKey }
+  } catch (error) {
+    log.error({ err: error }, 'save header logo dark key failed')
+    wrapDbError('save header logo dark key', error)
+  }
+}
+
+async function deleteHeaderLogoObject(key: string): Promise<void> {
+  try {
+    await deleteObject(key)
+  } catch (err) {
+    log.warn({ err, header_logo_key: key }, 'failed to delete old header logo s3 object')
   }
 }
 
@@ -337,7 +366,7 @@ export async function updateWorkspaceName(
 ): Promise<string> {
   log.info('update workspace name')
   try {
-    await assertNotManaged('workspace.name')
+    await assertNotManaged('workspace.name', options.executor)
     const org = await requireSettings(options.executor)
     const sanitizedName = name.trim()
     if (!sanitizedName) throw new ValidationError('INVALID_NAME', 'Workspace name cannot be empty')

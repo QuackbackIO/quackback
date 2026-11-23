@@ -121,6 +121,8 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: async () => new Set<string>(),
+  // Single sign-on live (or not set up): email links are exactly as stored.
+  getSsoSignInState: async () => ({ ssoLive: true, providersConfigured: false }),
 }))
 
 const IP = '203.0.113.7'
@@ -214,7 +216,9 @@ beforeEach(() => {
   // An owner exists, nobody can claim the workspace by arriving, and its admin
   // has closed self-service sign-ups: the only workspace where the per-address
   // answer differs at all.
-  hoisted.getWorkspaceSettings.mockResolvedValue({ authConfig: { openSignup: false } })
+  hoisted.getWorkspaceSettings.mockResolvedValue({
+    authConfig: { openSignup: false, oauth: { magicLink: true } },
+  })
   hoisted.userFindFirst.mockResolvedValue(null)
   hoisted.principalFindFirst.mockResolvedValue(null)
   hoisted.invitationFindFirst.mockResolvedValue(null)

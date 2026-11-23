@@ -24,6 +24,7 @@ import {
   isNotNull,
   lte,
   inArray,
+  type Transaction,
 } from '@/lib/server/db'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -114,31 +115,33 @@ export async function createChangelog(
     principalId: author.principalId,
   })
 
-  const [entry] = await db
-    .insert(changelogEntries)
-    .values({
-      title,
-      // Store the markdown projection of the canonical contentJson so every
-      // consumer of the `content` column (webhooks, notifications) sees images.
-      content: projectContentJsonToMarkdown(contentJson, markdown),
-      contentJson,
-      principalId: author.principalId,
-      publishedAt,
-      ...(displayDate != null && { displayDate }),
-      ...(input.featuredImageUrl != null && { featuredImageUrl: input.featuredImageUrl }),
-      ...(input.segmentIds != null && { segmentIds: input.segmentIds }),
-    })
-    .returning()
+  // The entry, its links and its labels are written together: a failed link
+  // write leaves no half-made entry behind.
+  const entry = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(changelogEntries)
+      .values({
+        title,
+        // Store the markdown projection of the canonical contentJson so every
+        // consumer of the `content` column (webhooks, notifications) sees images.
+        content: projectContentJsonToMarkdown(contentJson, markdown),
+        contentJson,
+        principalId: author.principalId,
+        publishedAt,
+        ...(displayDate != null && { displayDate }),
+        ...(input.featuredImageUrl != null && { featuredImageUrl: input.featuredImageUrl }),
+        ...(input.segmentIds != null && { segmentIds: input.segmentIds }),
+      })
+      .returning()
 
-  // Link posts if provided
-  if (input.linkedPostIds && input.linkedPostIds.length > 0) {
-    await linkPostsToChangelog(entry.id, input.linkedPostIds)
-  }
-
-  // Link categories if provided
-  if (input.categoryIds && input.categoryIds.length > 0) {
-    await setEntryCategories(entry.id, input.categoryIds)
-  }
+    if (input.linkedPostIds && input.linkedPostIds.length > 0) {
+      await linkPostsToChangelog(tx, created.id, input.linkedPostIds)
+    }
+    if (input.categoryIds && input.categoryIds.length > 0) {
+      await setEntryCategories(created.id, input.categoryIds, tx)
+    }
+    return created
+  })
 
   // Dispatch event or schedule delayed job based on publish state. `notify`
   // defaults true; false stamps notifiedAt without dispatching (see
@@ -179,7 +182,8 @@ export async function createChangelog(
  */
 export async function updateChangelog(
   id: ChangelogId,
-  input: UpdateChangelogInput
+  input: UpdateChangelogInput,
+  publisher?: { principalId: PrincipalId }
 ): Promise<ChangelogEntryWithDetails> {
   // Get existing entry (exclude soft-deleted)
   const existing = await db.query.changelogEntries.findFirst({
@@ -198,6 +202,14 @@ export async function updateChangelog(
       throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
     }
   }
+  // Same rule as create: a body is required, and only refused when both the
+  // markdown and the document are empty.
+  const bodySent = input.contentJson !== undefined || input.content !== undefined
+  const markdown = (input.content ?? '').trim()
+  const jsonHasContent = input.contentJson != null && !isEmptyTiptapDoc(input.contentJson)
+  if (bodySent && !markdown && !jsonHasContent) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content is required')
+  }
 
   // Build update data
   const updateData: Record<string, unknown> = {
@@ -205,8 +217,8 @@ export async function updateChangelog(
   }
 
   if (input.title !== undefined) updateData.title = input.title.trim()
-  if (input.contentJson !== undefined || input.content !== undefined) {
-    const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
+  if (bodySent) {
+    const parsed = jsonHasContent ? input.contentJson! : markdownToTiptapJson(markdown)
     const contentJson = await rehostExternalImages(parsed, {
       contentType: 'changelog',
       principalId: existing.principalId ?? undefined,
@@ -223,7 +235,9 @@ export async function updateChangelog(
       input.publishState !== undefined
         ? getPublishedAtFromState(input.publishState)
         : existing.publishedAt
-    validateDisplayDate(publishedAtRef, input.displayDate)
+    // Clearing the override (null) is always allowed, so a stale display date
+    // on a draft or scheduled entry can be removed.
+    if (input.displayDate !== null) validateDisplayDate(publishedAtRef, input.displayDate)
     updateData.displayDate = normalizeDisplayDate(input.displayDate, publishedAtRef)
   }
 
@@ -243,30 +257,31 @@ export async function updateChangelog(
     updateData.segmentIds = input.segmentIds
   }
 
-  // Update the entry
-  await db.update(changelogEntries).set(updateData).where(eq(changelogEntries.id, id))
+  // The entry, its links and its labels change together: replacing the links
+  // never leaves an entry with its old links deleted and the new ones unsaved.
+  await db.transaction(async (tx) => {
+    await tx.update(changelogEntries).set(updateData).where(eq(changelogEntries.id, id))
 
-  // Update linked posts if provided
-  if (input.linkedPostIds !== undefined) {
-    // Remove all existing links
-    await db.delete(changelogEntryPosts).where(eq(changelogEntryPosts.changelogEntryId, id))
-
-    // Add new links
-    if (input.linkedPostIds.length > 0) {
-      await linkPostsToChangelog(id, input.linkedPostIds)
+    // Linked posts and labels are replaced in full when provided.
+    if (input.linkedPostIds !== undefined) {
+      await tx.delete(changelogEntryPosts).where(eq(changelogEntryPosts.changelogEntryId, id))
+      if (input.linkedPostIds.length > 0) {
+        await linkPostsToChangelog(tx, id, input.linkedPostIds)
+      }
     }
-  }
-
-  // Update linked categories if provided (full replace)
-  if (input.categoryIds !== undefined) {
-    await setEntryCategories(id, input.categoryIds)
-  }
+    if (input.categoryIds !== undefined) {
+      await setEntryCategories(id, input.categoryIds, tx)
+    }
+  })
 
   // Handle event dispatch / scheduling when publish state changes
   if (input.publishState !== undefined) {
     const jobId = `changelog-publish--${id}`
-    const actor = existing.principalId
-      ? buildEventActor({ principalId: existing.principalId })
+    // The person publishing now, when known, so they are not told about their
+    // own announcement; otherwise the entry's author.
+    const actorPrincipalId = publisher?.principalId ?? existing.principalId
+    const actor = actorPrincipalId
+      ? buildEventActor({ principalId: actorPrincipalId })
       : { type: 'service' as const, displayName: 'system' }
     const notify = input.notify ?? true
 
@@ -286,7 +301,7 @@ export async function updateChangelog(
             jobId,
             handler: '__changelog_publish__',
             delayMs,
-            payload: { changelogId: id, principalId: existing.principalId, notify },
+            payload: { changelogId: id, principalId: actorPrincipalId, notify },
             actor,
           }).catch((err) => log.error({ err }, 'failed to schedule changelog publish job'))
         }
@@ -566,18 +581,23 @@ export async function reconcileChangelogNotifications(): Promise<number> {
 /**
  * Link posts to a changelog entry
  */
-async function linkPostsToChangelog(changelogId: ChangelogId, postIds: PostId[]): Promise<void> {
+async function linkPostsToChangelog(
+  tx: Transaction,
+  changelogId: ChangelogId,
+  postIds: PostId[]
+): Promise<void> {
   // Validate posts exist
-  const existingPosts = await db.query.posts.findMany({
+  const existingPosts = await tx.query.posts.findMany({
     where: inArray(posts.id, postIds),
     columns: { id: true },
   })
 
   const existingPostIds = new Set(existingPosts.map((p) => p.id))
-  const validPostIds = postIds.filter((id) => existingPostIds.has(id))
+  // A post listed twice is linked once.
+  const validPostIds = [...new Set(postIds)].filter((id) => existingPostIds.has(id))
 
   if (validPostIds.length > 0) {
-    await db.insert(changelogEntryPosts).values(
+    await tx.insert(changelogEntryPosts).values(
       validPostIds.map((postId) => ({
         changelogEntryId: changelogId,
         postId,

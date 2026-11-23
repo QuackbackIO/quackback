@@ -5,17 +5,31 @@
  * Server-only code (handler with crypto/dns) is in handler.ts.
  */
 import type { WebhookId } from '@quackback/ids'
-import { EVENT_TYPES, type EventType } from '../../types'
+import {
+  EVENT_TYPES,
+  NOTIFICATION_ONLY_EVENT_TYPES,
+  isNotificationOnlyEvent,
+  type EventType,
+} from '../../types'
 
 // ============================================
 // Event Types
 // ============================================
 
+export type WebhookEventType = Exclude<EventType, (typeof NOTIFICATION_ONLY_EVENT_TYPES)[number]>
+
+function isWebhookEvent(type: EventType): type is WebhookEventType {
+  return !isNotificationOnlyEvent(type)
+}
+
 /**
- * Supported webhook event types -- derived from the shared EVENT_TYPES source.
+ * Supported webhook event types -- derived from the shared EVENT_TYPES source,
+ * less the notification-only events.
  */
-export const WEBHOOK_EVENTS = EVENT_TYPES
-export type WebhookEventType = EventType
+export const WEBHOOK_EVENTS = EVENT_TYPES.filter(isWebhookEvent) as unknown as readonly [
+  WebhookEventType,
+  ...WebhookEventType[],
+]
 
 /**
  * Human-readable labels and descriptions for webhook events.

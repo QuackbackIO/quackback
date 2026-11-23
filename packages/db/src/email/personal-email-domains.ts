@@ -12,7 +12,25 @@
 import FREE_EMAIL_DOMAINS from './free-email-domains.json'
 
 /** Personal providers the upstream list does not carry. */
-const ADDITIONAL_PERSONAL_DOMAINS = ['hey.com', 'tutanota.com', 'tuta.com', 'tutamail.com']
+const ADDITIONAL_PERSONAL_DOMAINS = [
+  'hey.com',
+  'tutanota.com',
+  'tuta.com',
+  'tutamail.com',
+  // Relay and alias addresses: they hide a personal inbox, and never name a company.
+  'privaterelay.appleid.com',
+  'users.noreply.github.com',
+  'mozmail.com',
+  'simplelogin.com',
+  'simplelogin.co',
+  'aleeas.com',
+  'slmail.me',
+  'addy.io',
+  'anonaddy.com',
+  'anonaddy.me',
+  'passmail.net',
+  'passinbox.com',
+]
 
 const PERSONAL_DOMAINS: ReadonlySet<string> = new Set([
   ...FREE_EMAIL_DOMAINS,

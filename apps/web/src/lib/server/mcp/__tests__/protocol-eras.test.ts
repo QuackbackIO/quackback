@@ -46,7 +46,15 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'https://example.com',
 }))
 vi.mock('@/lib/server/domains/settings/widget-install-pairing', () => ({
-  getWidgetInstallStatus: vi.fn(async () => ({ connected: true, enabled: true })),
+  getWidgetInstallStatus: vi.fn(async () => ({
+    connected: true,
+    enabled: true,
+    lastDetectedAt: null,
+    originHost: null,
+    sdkVersion: null,
+    currentSdkVersion: '1.0.0',
+    sdkNeedsUpdate: false,
+  })),
 }))
 vi.mock('@/lib/server/audit/log', () => ({ recordAuditEvent: hoisted.recordAuditEvent }))
 
@@ -164,14 +172,20 @@ describe('MCP 2026-07-28 (stateless, per-request envelope)', () => {
       title?: string
       inputSchema: { $schema?: string }
       _meta?: { securitySchemes?: unknown }
+      securitySchemes?: unknown
+      outputSchema?: { type?: string }
     }[]
     expect(tools).toHaveLength(49)
     const search = tools.find((tool) => tool.name === 'search')
     expect(search?.title).toBe('Search workspace')
-    expect(search?._meta?.securitySchemes).toEqual([
-      { type: 'oauth2', scopes: ['read:feedback', 'read:article'] },
-    ])
+    const schemes = [{ type: 'oauth2', scopes: ['read:feedback', 'read:article'] }]
+    // Top level for OpenAI's Apps SDK, and the `_meta` mirror it documents.
+    expect(search?.securitySchemes).toEqual(schemes)
+    expect(search?._meta?.securitySchemes).toEqual(schemes)
     expect(search?.inputSchema.$schema).toBe('https://json-schema.org/draft/2020-12/schema')
+    // Read tools list an output schema; write tools do not.
+    expect(search?.outputSchema?.type).toBe('object')
+    expect(tools.find((tool) => tool.name === 'create_post')?.outputSchema).toBeUndefined()
   })
 
   it('lists the same tools for every caller', async () => {
@@ -209,6 +223,8 @@ describe('MCP 2026-07-28 (stateless, per-request envelope)', () => {
     expect(body.result?.isError).not.toBe(true)
     const [content] = body.result?.content as { type: string; text: string }[]
     expect(JSON.parse(content.text)).toMatchObject({ connected: true })
+    // The same body, structured, for clients that read the output schema.
+    expect(body.result?.structuredContent).toEqual(JSON.parse(content.text))
   })
 
   it('refuses a revision it does not serve and names the one it does', async () => {
@@ -312,6 +328,12 @@ describe('MCP 2025-11-25 (initialize, then stateless JSON)', () => {
 
     const list = await json(await handleMcpRequest(legacy('tools/list')))
     expect(list.result?.tools).toHaveLength(49)
+    const legacySearch = (list.result?.tools as { name: string; securitySchemes?: unknown }[]).find(
+      (tool) => tool.name === 'search'
+    )
+    expect(legacySearch?.securitySchemes).toEqual([
+      { type: 'oauth2', scopes: ['read:feedback', 'read:article'] },
+    ])
     // 2026-only fields never reach a 2025 client.
     expect(list.result).not.toHaveProperty('resultType')
     expect(list.result).not.toHaveProperty('ttlMs')
@@ -324,6 +346,7 @@ describe('MCP 2025-11-25 (initialize, then stateless JSON)', () => {
     )
     expect(call.id).toBe(2)
     expect(call.result?.isError).not.toBe(true)
+    expect(call.result?.structuredContent).toMatchObject({ connected: true })
     expect(call.result).not.toHaveProperty('resultType')
   })
 

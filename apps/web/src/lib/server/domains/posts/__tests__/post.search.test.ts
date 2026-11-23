@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canWidenSearch, resolvePostSearchMode, searchTerms } from '../post.search'
+import { canWidenSearch, resolvePostSearchMode, searchTerms, shorterStems } from '../post.search'
 
 describe('searchTerms', () => {
   it('splits on anything that is not a letter or digit, and lowercases', () => {
@@ -67,5 +67,31 @@ describe('resolvePostSearchMode', () => {
     const { asked, hasMatch } = probe('similar')
     expect(await resolvePostSearchMode('"dark mode"', hasMatch)).toBe('all')
     expect(asked).toEqual([])
+  })
+})
+
+describe('shorterStems', () => {
+  it('tries the few shorter starts a partial word may be stored as', () => {
+    expect(shorterStems('integrati', 0)).toContain('integr')
+    expect(shorterStems('notifica', 0)).toContain('notif')
+  })
+
+  it('tries nothing a whole word or a short word does not need', () => {
+    expect(shorterStems('users', 0)).toEqual([])
+    expect(shorterStems('apple', 0)).toEqual([])
+    expect(shorterStems('copy', 0)).toEqual([])
+    // Never a stem common to many words.
+    expect(shorterStems('integration', 0)).toEqual([
+      'integra',
+      'integrat',
+      'integrati',
+      'integratio',
+    ])
+  })
+
+  it('keeps the query small: no long words, and only the first few words', () => {
+    expect(shorterStems('a'.repeat(33), 0)).toEqual([])
+    expect(shorterStems('integrati', 5)).toEqual([])
+    expect(shorterStems('w'.repeat(32), 0)).toHaveLength(4)
   })
 })

@@ -20,6 +20,16 @@ export function preflightResponse(): Response {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
 
+/**
+ * Add the CORS headers to a response built elsewhere (an error from
+ * handleDomainError or badRequestResponse), keeping its own headers. Without
+ * them the browser hides an error's status and body from the app.
+ */
+export function withCors(response: Response): Response {
+  for (const [name, value] of Object.entries(corsHeaders())) response.headers.set(name, value)
+  return response
+}
+
 /** Create a JSON response with CORS headers. Used by all /api/v1/apps/* routes. */
 export function appJsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify({ data }), {

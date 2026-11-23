@@ -108,6 +108,41 @@ describe('notificationHook — post.mentioned', () => {
     ])
   })
 
+  it('a comment mention is a comment_mentioned notice anchored to the comment', async () => {
+    const event = {
+      id: 'evt-comment-mention',
+      type: 'comment.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_mentioner' },
+      data: {
+        postId: 'post_123',
+        postTitle: 'My post',
+        postUrl: 'https://example.com/posts/post_123',
+        commentId: 'comment_9',
+        isPrivate: false,
+        mentionedPrincipalId: 'principal_target',
+        mentioningPrincipalId: 'principal_mentioner',
+        excerpt: 'Over to you',
+      },
+    } as EventData
+
+    await notificationHook.run(
+      event,
+      { principalIds: ['principal_target' as never] },
+      { mentionerName: 'Bea' }
+    )
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_target',
+        type: 'comment_mentioned',
+        title: 'Bea mentioned you in a comment',
+        body: 'My post',
+        postId: 'post_123',
+        commentId: 'comment_9',
+      }),
+    ])
+  })
+
   it('renders title as "Anonymous user mentioned you" when actor has no displayName', async () => {
     const event = {
       id: 'evt-2',

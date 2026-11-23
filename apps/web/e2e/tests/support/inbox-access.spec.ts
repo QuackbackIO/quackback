@@ -22,6 +22,7 @@ import {
 } from '../../support/access'
 import { callServerFn, personApi, serverFnId } from '../../support/server-fns'
 import { createTeam } from '../../support/teammates'
+import { clientIp } from '../../support/api-client'
 import { createSupportApiKey } from '../../utils/db-helpers'
 
 /** Everything a scoped writer may do to a conversation, with no cross-team view. */
@@ -539,7 +540,10 @@ test.describe('ticket access at the server', () => {
 
       // REST and MCP with the teammate's personal key follow the same scope.
       const key = createSupportApiKey(s.email, 'personal')
-      const auth = { authorization: `Bearer ${key}` }
+      // Its own client address (TRUSTED_CLIENT_IP_HEADER): the teammate's
+      // context sends none, and loopback's 100 REST and MCP calls a minute
+      // are shared with every other test in the shard.
+      const auth = { authorization: `Bearer ${key}`, 'x-e2e-client-ip': clientIp() }
       expect((await api.get(`/api/v1/tickets/${otherTeam.id}`, { headers: auth })).status()).toBe(
         404
       )

@@ -8,6 +8,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const identifyUserSchema = z.object({
   email: z.string().email('Valid email is required'),
@@ -31,7 +32,7 @@ export const Route = createFileRoute('/api/v1/users/identify')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.PEOPLE_MANAGE })
 
           // Parse and validate body
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = identifyUserSchema.safeParse(body)
 
           if (!parsed.success) {

@@ -21,7 +21,7 @@ import {
   workflows,
 } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
-import { generateReadableCSS } from '@/lib/shared/theme/generator'
+import { generateReadableCSS } from '@/lib/shared/theme/readable-css'
 import { unbrandedTheme } from '@/lib/shared/theme/expand'
 
 vi.mock('@/lib/server/db', async (original) => ({

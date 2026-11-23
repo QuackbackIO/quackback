@@ -148,8 +148,12 @@ export class RateLimitError extends DomainException {
   readonly statusCode = 429
   readonly retryAfter: number
 
-  constructor(retryAfter: number, cause?: unknown) {
-    super('RATE_LIMITED', 'Too many requests. Please try again later.', cause)
+  constructor(
+    retryAfter: number,
+    message = 'Too many requests. Please try again later.',
+    cause?: unknown
+  ) {
+    super('RATE_LIMITED', message, cause)
     this.retryAfter = retryAfter
   }
 }

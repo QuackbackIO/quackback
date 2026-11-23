@@ -35,6 +35,8 @@ function selectors(): string[] {
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/@import[^;]+;/g, '')
     .replace(/@font-face\s*{[^}]*}/g, '')
+    // A keyframe's steps are not selectors; they apply only through a scoped rule.
+    .replace(/@keyframes[^{]*{(?:[^{}]*{[^{}]*})*[^{}]*}/g, '')
   return [...rules.matchAll(/([^{}]+){[^{}]*}/g)].map((m) => m[1].trim())
 }
 
@@ -171,5 +173,19 @@ describe('admin theme stylesheet', () => {
     for (const [name, value] of light) {
       if (name.startsWith('--metric-')) expect(value, name).not.toBe('#f7cc29')
     }
+  })
+  it('lets a field inside a bordered box drop its own edge, so focus draws one ring', () => {
+    const rules = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    const bare = [...rules.matchAll(/([^{}]+){([^{}]*)}/g)].find(([, sel]) =>
+      sel.includes('input[data-bare-field]')
+    )
+    expect(bare, 'no rule for input[data-bare-field]').toBeDefined()
+    expect(bare![1]).toContain(':focus-visible')
+    expect(bare![2]).toMatch(/outline:\s*none/)
+    expect(bare![2]).toMatch(/box-shadow:\s*none/)
+    // Ties the text-field rule on specificity, so it must come after it to win.
+    const field = rules.indexOf("input:not([type='checkbox']")
+    expect(field).toBeGreaterThanOrEqual(0)
+    expect(rules.indexOf('input[data-bare-field]')).toBeGreaterThan(field)
   })
 })

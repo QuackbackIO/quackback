@@ -13,6 +13,7 @@
  * Only real SQL shows either, so this suite runs against Postgres.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { createId, type BoardId, type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { boards, postComments, posts, principal, user } from '@/lib/server/db'
@@ -24,6 +25,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import { countInboxFilterFacets, listInboxPosts } from '../post.inbox'
+import { listBoardsWithDetails } from '../../boards/board.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -106,5 +108,71 @@ describe.skipIf(!fixture.available)('inbox correlated predicates (real DB)', () 
     const list = await listInboxPosts({ authorEmail: email.toUpperCase() })
 
     expect(list.items.map((p) => p.title)).toEqual(['By Ada'])
+  })
+
+  // FBA-I-22
+  it('leaves a merged duplicate out of the list, the facet counts and the board count until unmerged', async () => {
+    const author = await seedPrincipal('Author')
+    const boardId = await seedBoard()
+    const canonical = await seedPost(boardId, author, 'Canonical')
+    const duplicate = await seedPost(boardId, author, 'Duplicate')
+    await testDb
+      .update(posts)
+      .set({ canonicalPostId: canonical, mergedAt: new Date() })
+      .where(eq(posts.id, duplicate))
+
+    const titles = async () =>
+      (await listInboxPosts({ boardIds: [boardId] })).items.map((p) => p.title).sort()
+    const boardCount = async () =>
+      (await listBoardsWithDetails()).find((b) => b.id === boardId)?.postCount
+    expect(await titles()).toEqual(['Canonical'])
+    expect((await countInboxFilterFacets({ boardIds: [boardId] })).boards[boardId]).toBe(1)
+    expect(await boardCount()).toBe(1)
+
+    await testDb
+      .update(posts)
+      .set({ canonicalPostId: null, mergedAt: null })
+      .where(eq(posts.id, duplicate))
+    expect(await titles()).toEqual(['Canonical', 'Duplicate'])
+    expect((await countInboxFilterFacets({ boardIds: [boardId] })).boards[boardId]).toBe(2)
+    expect(await boardCount()).toBe(2)
+  })
+
+  // FBA-I-29
+  it('counts each facet over every other active filter but not its own', async () => {
+    const author = await seedPrincipal('Author')
+    const boardA = await seedBoard()
+    const boardB = await seedBoard()
+    const answeredA = await seedPost(boardA, author, 'Answered on A')
+    await seedPost(boardA, author, 'Silent on A')
+    const answeredB = await seedPost(boardB, author, 'Answered on B')
+    const goneA = await seedPost(boardA, author, 'Deleted answered on A')
+    const goneB = await seedPost(boardB, author, 'Deleted answered on B')
+    for (const id of [answeredA, answeredB, goneA, goneB]) await seedComment(id, author, true)
+    await testDb.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, goneA))
+    await testDb.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, goneB))
+
+    const counts = await countInboxFilterFacets({ boardIds: [boardA], responded: 'responded' })
+    // Board counts ignore the board filter but keep "responded".
+    expect(counts.boards[boardA]).toBe(1)
+    expect(counts.boards[boardB]).toBe(1)
+    // Responded counts ignore their own filter but keep the board.
+    expect(counts.responded).toEqual({ responded: 1, unresponded: 1 })
+    // Deleted counts keep both: only the restorable answered post on board A.
+    expect(counts.deleted).toBe(1)
+  })
+
+  // FBA-I-31
+  it('updatedBefore keeps only posts not updated since the date', async () => {
+    const author = await seedPrincipal('Author')
+    const boardId = await seedBoard()
+    const stale = await seedPost(boardId, author, 'Stale')
+    await seedPost(boardId, author, 'Fresh')
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+    await testDb.update(posts).set({ updatedAt: tenDaysAgo }).where(eq(posts.id, stale))
+
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+    const list = await listInboxPosts({ boardIds: [boardId], updatedBefore: fiveDaysAgo })
+    expect(list.items.map((p) => p.title)).toEqual(['Stale'])
   })
 })

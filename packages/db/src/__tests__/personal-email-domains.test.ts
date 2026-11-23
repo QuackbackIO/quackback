@@ -36,6 +36,32 @@ describe('personal email domains', () => {
     }
   })
 
+  it('treats relay and alias services as personal, on any subdomain', () => {
+    for (const domain of [
+      'privaterelay.appleid.com',
+      'users.noreply.github.com',
+      'mozmail.com',
+      'simplelogin.com',
+      'simplelogin.co',
+      'aleeas.com',
+      'slmail.me',
+      'addy.io',
+      'anonaddy.com',
+      'anonaddy.me',
+      'passmail.net',
+      'passinbox.com',
+    ]) {
+      expect(isPersonalEmailDomain(domain), domain).toBe(true)
+      expect(companyEmailDomain(`you@${domain}`), domain).toBeNull()
+      expect(companyEmailDomain(`you@abc.${domain}`), domain).toBeNull()
+    }
+    expect(companyEmailDomain('x@abc.privaterelay.appleid.com')).toBeNull()
+    expect(companyEmailDomain('1234+you@users.noreply.github.com')).toBeNull()
+    // The services' own companies are still companies.
+    expect(companyEmailDomain('you@github.com')).toBe('github.com')
+    expect(companyEmailDomain('you@appleid.com')).toBe('appleid.com')
+  })
+
   it('matches a parent provider domain but never a company that merely contains one', () => {
     expect(isPersonalEmailDomain('eu.gmail.com')).toBe(true)
     expect(isPersonalEmailDomain('gmail.com.')).toBe(true)

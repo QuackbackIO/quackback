@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { checkedAgainstOutputSchema } from './output-schema-check'
 import type { CallToolResult } from '@modelcontextprotocol/server'
 
 const mockListTickets = vi.fn()
@@ -60,8 +61,8 @@ type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 function collect(auth: McpAuthContext): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const fakeServer = {
-    registerTool: (name: string, _c: unknown, handler: Handler) => {
-      handlers.set(name, handler)
+    registerTool: (name: string, config: unknown, handler: Handler) => {
+      handlers.set(name, checkedAgainstOutputSchema(config, handler))
     },
   }
   registerTicketTools(fakeServer as never, auth)

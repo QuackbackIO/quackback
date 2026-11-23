@@ -50,6 +50,7 @@ afterEach(() => {
   cleanup()
   counts.bell = 0
   counts.themeMenu = 0
+  headerProps = {}
 })
 
 // The root beforeLoad keeps one answer between navigations (its route-context
@@ -76,6 +77,11 @@ const rootAnswer = {
 }
 
 let headerCommits = 0
+let headerProps: {
+  headerName?: string | null
+  wideLogo?: string | null
+  wideLogoDark?: string | null
+} = {}
 
 function buildRouter() {
   const rootRoute = createRootRouteWithContext<object>()({
@@ -83,7 +89,7 @@ function buildRouter() {
     component: () => (
       <>
         <Profiler id="header" onRender={() => headerCommits++}>
-          <PortalHeader orgName="Acme" userRole="user" />
+          <PortalHeader orgName="Acme" userRole="user" {...headerProps} />
         </Profiler>
         <Outlet />
       </>
@@ -158,5 +164,42 @@ describe('PortalHeader renders', () => {
     expect(accountMenu()).toBe(menu)
     expect(counts.bell).toBe(bell)
     expect(counts.themeMenu).toBe(themeMenu)
+  })
+
+  it('sets the logo, the tabs and the account controls in one row', async () => {
+    const { container } = await mount()
+    const row = container.querySelector('[data-header-row]')
+    expect(row).not.toBeNull()
+    expect(row!.querySelector('[data-qb-edit="logo"]')).not.toBeNull()
+    expect(row!.querySelector('nav.portal-nav')).not.toBeNull()
+    expect(row!.contains(screen.getByRole('button', { name: 'Toggle theme' }))).toBe(true)
+  })
+
+  it('shows the workspace name until the header has a name of its own', async () => {
+    const { container } = await mount()
+    expect(container.querySelector('[data-qb-edit="logo"]')).toHaveTextContent('Acme')
+  })
+
+  it('shows the header’s own name in place of the workspace’s', async () => {
+    headerProps = { headerName: ' Northwind ' }
+    const { container } = await mount()
+    const logo = container.querySelector('[data-qb-edit="logo"]')!
+    expect(logo).toHaveTextContent('Northwind')
+    expect(logo).not.toHaveTextContent('Acme')
+  })
+
+  it('draws the logo’s dark mode version beside the logo, for the stylesheet to show where the portal is dark', async () => {
+    headerProps = { wideLogo: '/l.svg', wideLogoDark: '/d.svg' }
+    const { container } = await mount()
+    const imgs = [...container.querySelectorAll('[data-qb-edit="logo"] img')]
+    expect(imgs.map((img) => img.getAttribute('src'))).toEqual(['/l.svg', '/d.svg'])
+    expect(imgs[0]!.className).toMatch(/dark:hidden/)
+    expect(imgs[1]!.className).toMatch(/dark:block/)
+  })
+
+  it('draws the logo alone without one', async () => {
+    headerProps = { wideLogo: '/l.svg' }
+    const { container } = await mount()
+    expect(container.querySelectorAll('[data-qb-edit="logo"] img')).toHaveLength(1)
   })
 })

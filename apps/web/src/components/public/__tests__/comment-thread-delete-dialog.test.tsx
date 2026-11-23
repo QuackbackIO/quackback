@@ -35,6 +35,12 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('../comment-form', () => ({ CommentForm: () => null }))
+// The server allows the author to delete (no team reply).
+vi.mock('@/lib/server/functions/comments', () => ({
+  addReactionFn: vi.fn(),
+  removeReactionFn: vi.fn(),
+  getCommentPermissionsFn: vi.fn(async () => ({ canEdit: true, canDelete: true })),
+}))
 
 import { CommentThread } from '../comment-thread'
 

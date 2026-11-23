@@ -36,6 +36,10 @@ vi.mock('@/lib/server/db', () => ({
     insert: vi.fn(() => ({ values: vi.fn() })),
   },
   pageViews: {},
+  insertPageView: (
+    database: { insert: (t: unknown) => { values: (v: unknown) => unknown } },
+    values: unknown
+  ) => database.insert({}).values(values),
   visitorDevices: { deviceId: 'deviceId', principalId: 'principalId' },
   conversations: {
     id: 'id',

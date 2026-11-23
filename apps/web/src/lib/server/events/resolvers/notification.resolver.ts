@@ -38,6 +38,7 @@ import {
   getConversationNoteMentionedEmailTargets,
   getTicketDueTargets,
   getTicketDueEmailTargets,
+  getModerationDecisionTargets,
 } from '../targets'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
@@ -96,6 +97,11 @@ const EMAIL_BUILDERS: Record<string, EmailBuilder> = {
   'ticket.due_soon': getTicketDueEmailTargets,
   'ticket.overdue': getTicketDueEmailTargets,
   'conversation.note_mentioned': getConversationNoteMentionedEmailTargets,
+  // The author's bell and email for the team's decision on their held item.
+  'post.approved': getModerationDecisionTargets,
+  'post.rejected': getModerationDecisionTargets,
+  'comment.approved': getModerationDecisionTargets,
+  'comment.rejected': getModerationDecisionTargets,
 }
 
 export const notificationResolver: SinkResolver = {

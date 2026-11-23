@@ -34,3 +34,11 @@ describe('ChangelogPublishedEmail rich body', () => {
     expect(html).toContain('A short plain-text preview')
   })
 })
+
+describe('ChangelogPublishedEmail footer', () => {
+  it('labels its link as leaving the changelog, not a post', async () => {
+    const html = await render(ChangelogPublishedEmail({ ...BASE }))
+    expect(html).toContain('Unsubscribe from the changelog')
+    expect(html).not.toContain('Unsubscribe from this post')
+  })
+})

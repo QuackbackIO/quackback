@@ -49,6 +49,7 @@ import {
   getPublishedArticleTranslation,
   getCategoryTranslation,
 } from './help-center-translations.service'
+import type { RelatedArticle } from './help-center-related.service'
 import type {
   HelpCenterCategoryWithCount,
   HelpCenterArticleWithCategory,
@@ -294,4 +295,40 @@ export async function getPublicArticleBySlugForLocale(
     content: translation.content,
     contentJson: translation.contentJson ?? article.contentJson,
   }
+}
+
+/** A related article and the language its title, description and link are in. */
+export type LocalizedRelatedArticle = RelatedArticle & { locale: string }
+
+/**
+ * Related articles for a page in `locale`. An article with a published
+ * translation there shows it and links to that language; one without keeps
+ * the main language and links to its main language page, since the
+ * untranslated page in `locale` does not exist.
+ */
+export async function localizeRelatedArticles(
+  related: RelatedArticle[],
+  locale: string
+): Promise<LocalizedRelatedArticle[]> {
+  if (locale === DEFAULT_LOCALE || related.length === 0) {
+    return related.map((a) => ({ ...a, locale: DEFAULT_LOCALE }))
+  }
+  const translations = await db.query.helpCenterArticleTranslations.findMany({
+    where: and(
+      inArray(
+        helpCenterArticleTranslations.articleId,
+        related.map((a) => a.id as KbArticleId)
+      ),
+      eq(helpCenterArticleTranslations.locale, locale),
+      eq(helpCenterArticleTranslations.status, 'published')
+    ),
+    columns: { articleId: true, title: true, description: true },
+  })
+  const byArticle = new Map(translations.map((t) => [t.articleId as string, t]))
+  return related.map((a) => {
+    const t = byArticle.get(a.id)
+    return t
+      ? { ...a, title: t.title, description: t.description, locale }
+      : { ...a, locale: DEFAULT_LOCALE }
+  })
 }

@@ -6,7 +6,7 @@
  * report). The batch tag is created once, at commit start, and its id is
  * stored on the run so history stays linkable even if the tag is renamed.
  */
-import { db, importRuns, postTags, eq, desc } from '@/lib/server/db'
+import { db, importRuns, postTags, and, eq, desc, isNull } from '@/lib/server/db'
 import type {
   ImportRunSource,
   ImportRunStatus,
@@ -15,7 +15,7 @@ import type {
 } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import type { ImportRunId, PrincipalId, PostTagId } from '@quackback/ids'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 
 export interface ImportRunRecord {
   id: ImportRunId
@@ -106,17 +106,32 @@ export function buildBatchTagName(source: ImportRunSource, now: Date = new Date(
 /**
  * Get-or-create the batch tag for a run. Reused across a single UTC day so
  * multiple imports run back to back land on one findable tag, not a new tag
- * per run.
+ * per run. A deleted tag of that name is not reused: a fresh live one is made.
+ *
+ * Two imports starting together both miss the tag and both insert; the live
+ * name index lets one win, and the other reads the winner's row back.
  */
 export async function ensureBatchTag(
   source: ImportRunSource
 ): Promise<{ id: PostTagId; name: string }> {
   const name = buildBatchTagName(source)
-  const existing = await db.query.postTags.findFirst({ where: eq(postTags.name, name) })
+  const findLive = () =>
+    db.query.postTags.findFirst({
+      where: and(eq(postTags.name, name), isNull(postTags.deletedAt)),
+    })
+  const existing = await findLive()
   if (existing) {
     return { id: existing.id as PostTagId, name }
   }
-  const id = createId('post_tag')
-  await db.insert(postTags).values({ id, name, color: '#6b7280' })
-  return { id, name }
+  const [inserted] = await db
+    .insert(postTags)
+    .values({ id: createId('post_tag'), name, color: '#6b7280' })
+    .onConflictDoNothing()
+    .returning({ id: postTags.id })
+  if (inserted) return { id: inserted.id as PostTagId, name }
+  const winner = await findLive()
+  if (!winner) {
+    throw new ConflictError('BATCH_TAG_CONFLICT', `Could not create the batch tag "${name}"`)
+  }
+  return { id: winner.id as PostTagId, name }
 }

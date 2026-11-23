@@ -21,15 +21,28 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+const statusSettings = vi.hoisted(() => ({ enabled: true }))
 vi.mock('@/lib/server/domains/settings/settings.status', () => ({
-  getStatusSettings: vi.fn().mockResolvedValue({
-    enabled: true,
+  getStatusSettings: vi.fn().mockImplementation(async () => ({
+    enabled: statusSettings.enabled,
     portalTabEnabled: true,
     audience: 'public',
     allowedSegmentIds: [],
     emailsDisabled: false,
     pageDescription: null,
-  }),
+  })),
+}))
+
+// The workspace switches the status page and the portal gate read: the
+// status page flag on and a public portal, unless a case changes them.
+const workspace = vi.hoisted(() => ({
+  statusPage: true,
+  portal: { access: { visibility: 'public' } } as Record<string, unknown>,
+}))
+vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()),
+  isFeatureEnabled: async (flag: string) => (flag === 'statusPage' ? workspace.statusPage : true),
+  getPortalConfig: async () => workspace.portal,
 }))
 vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
   getSubscribersForEvent: vi.fn().mockResolvedValue([]),
@@ -165,7 +178,7 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
     const outsiderUser = createId('user')
     const pickerUser = createId('user')
     await testDb.insert(user).values([
-      { id: memberUser, name: 'Member', email: MEMBER_EMAIL },
+      { id: memberUser, name: 'Member', email: MEMBER_EMAIL, emailVerified: true },
       { id: outsiderUser, name: 'Outsider', email: OUTSIDER_EMAIL },
       { id: pickerUser, name: 'Picker', email: PICKER_EMAIL },
     ])
@@ -206,6 +219,9 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
   })
   afterEach(async () => {
     planVisible.ids = null
+    statusSettings.enabled = true
+    workspace.statusPage = true
+    workspace.portal = { access: { visibility: 'public' } }
     await fixture.rollback()
   })
   afterAll(fixture.close)
@@ -221,6 +237,30 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
       .filter((t) => t.type === 'notification')
       .flatMap((t) => (t.target as { principalIds: string[] }).principalIds)
     expect(notified).not.toContain(P_PICKER)
+  })
+
+  it('tells no one while the status page is unpublished', async () => {
+    statusSettings.enabled = false
+    expect(await getStatusSubscriberTargets(incidentCreated, context)).toEqual([])
+  })
+
+  it('tells no one while the status page product is off', async () => {
+    workspace.statusPage = false
+    expect(await getStatusSubscriberTargets(incidentCreated, context)).toEqual([])
+  })
+
+  it('on a private portal, tells only the subscribers the portal lets in', async () => {
+    // Members of SEGMENT may open the portal; the outsider may not.
+    workspace.portal = {
+      access: { visibility: 'private', allowedDomains: [], allowedSegmentIds: [SEGMENT] },
+    }
+    const targets = await getStatusSubscriberTargets(incidentCreated, context)
+    expect(Object.keys(emailedComponents(targets))).toEqual([MEMBER_EMAIL])
+    const notified = targets
+      .filter((t) => t.type === 'notification')
+      .flatMap((t) => (t.target as { principalIds: string[] }).principalIds)
+    expect(notified).toContain(P_MEMBER)
+    expect(notified).not.toContain(P_OUTSIDER)
   })
 
   it('tells no one about an incident on hidden components alone', async () => {

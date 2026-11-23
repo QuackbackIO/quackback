@@ -41,6 +41,7 @@ const WHY: Record<string, string> = {
   'create-board': 'Give customers a place to post and vote on feedback.',
   'distribute-feedback':
     'Customers post and vote on feedback there. Paste it wherever they already talk to you.',
+  'customize-branding': 'Bring in your logo, colours and font from your website.',
   'invite-team': 'Only teammates can see this board. Bring them in so posts start coming in.',
   'connect-messenger':
     'Customers reach you from any page. Paste one snippet, or send it to whoever runs your site.',

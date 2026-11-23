@@ -5,8 +5,9 @@
  * in the user.metadata JSON column.
  */
 
-import { db, userAttributeDefinitions } from '@/lib/server/db'
+import { db, sql, user, userAttributeDefinitions } from '@/lib/server/db'
 import type { UserAttributeType } from '@/lib/server/db'
+import type { SQL } from 'drizzle-orm'
 import { coerceAttributeValue } from '@/lib/shared/coerce-attribute-value'
 import { ValidationError } from '@/lib/shared/errors'
 
@@ -111,6 +112,28 @@ export async function validateAndCoerceAttributes(attributes: Record<string, unk
   }
 
   return { valid, removals, errors }
+}
+
+/**
+ * SQL that merges `updates` into the stored `user.metadata` and drops the
+ * `removals` keys, atomically in one UPDATE so a concurrent writer is never
+ * clobbered. The column is text-typed, so it round-trips through jsonb.
+ *
+ * Removals are passed as `ARRAY[$1, $2]::text[]`: drizzle spreads a JS array
+ * interpolated into `sql` into a parenthesised list, so `${removals}::text[]`
+ * would render `()::text[]` or `($1, $2)::text[]`, which Postgres rejects.
+ * With no removals the `-` step is left out entirely.
+ */
+export function metadataMergeSql(updates: Record<string, unknown>, removals: string[]): SQL {
+  const current = sql`coalesce(nullif(${user.metadata}, ''), '{}')::jsonb`
+  const kept =
+    removals.length > 0
+      ? sql`(${current} - ARRAY[${sql.join(
+          removals.map((key) => sql`${key}`),
+          sql`, `
+        )}]::text[])`
+      : current
+  return sql`(${kept} || ${JSON.stringify(updates)}::jsonb)::text`
 }
 
 /**

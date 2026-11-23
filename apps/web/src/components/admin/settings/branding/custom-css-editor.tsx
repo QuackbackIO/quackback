@@ -83,6 +83,8 @@ export const CUSTOM_CSS_EDITOR_HEIGHT = '280px'
 interface CustomCssEditorProps {
   value: string
   onChange: (value: string) => void
+  /** CSS height; the fixed default suits a panel, a drawer passes '100%'. */
+  height?: string
 }
 
 /**
@@ -91,12 +93,12 @@ interface CustomCssEditorProps {
  * @uiw/react-codemirror + @codemirror/lang-css make the portal route the
  * largest chunk in the app, yet most visits never open this panel.
  */
-export function CustomCssEditor({ value, onChange }: CustomCssEditorProps) {
+export function CustomCssEditor({ value, onChange, height }: CustomCssEditorProps) {
   return (
     <CodeMirror
       value={value}
       onChange={onChange}
-      height={CUSTOM_CSS_EDITOR_HEIGHT}
+      height={height ?? CUSTOM_CSS_EDITOR_HEIGHT}
       theme="none"
       extensions={adminEditorExtensions}
       basicSetup={{
@@ -110,6 +112,7 @@ export function CustomCssEditor({ value, onChange }: CustomCssEditorProps) {
       }}
       className={cn(
         'overflow-hidden rounded-md border border-input bg-background',
+        height === '100%' && 'h-full',
         '[&_.cm-editor]:!outline-none',
         '[&_.cm-editor.cm-focused]:ring-1 [&_.cm-editor.cm-focused]:ring-ring',
         '[&_.cm-scroller]:overflow-auto'

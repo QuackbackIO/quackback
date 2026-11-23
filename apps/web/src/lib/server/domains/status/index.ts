@@ -116,6 +116,7 @@ export {
   listIncidentHistory,
   listStatusFeedItems,
   statusIncidentLastActivityAt,
+  getVisitorTopLevelStatus,
 } from './status.public'
 
 export {

@@ -125,6 +125,15 @@ vi.mock('@/lib/server/db', () => ({
   inArray: vi.fn(),
 }))
 
+/** The public list's per-category count of articles the viewer can open. */
+function visibleArticleCounts(rows: Array<{ categoryId: string; visibleCount: number }>) {
+  mockSelectFrom.mockReturnValue({
+    innerJoin: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({ groupBy: vi.fn().mockResolvedValue(rows) }),
+    }),
+  })
+}
+
 let listCategories: typeof import('../help-center.category.service').listCategories
 let listPublicCategories: typeof import('../help-center.category.service').listPublicCategories
 let getCategoryById: typeof import('../help-center.category.service').getCategoryById
@@ -287,14 +296,10 @@ describe('listPublicCategories', () => {
       },
     ])
 
-    mockSelectFrom.mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        groupBy: vi.fn().mockResolvedValue([
-          { categoryId: 'kb_category_1', totalCount: 2, publishedCount: 2 },
-          { categoryId: 'kb_category_2', totalCount: 1, publishedCount: 1 },
-        ]),
-      }),
-    })
+    visibleArticleCounts([
+      { categoryId: 'kb_category_1', visibleCount: 2 },
+      { categoryId: 'kb_category_2', visibleCount: 1 },
+    ])
 
     const result = await listPublicCategories()
     expect(result).toHaveLength(1)
@@ -341,15 +346,7 @@ describe('listPublicCategories', () => {
       },
     ])
 
-    mockSelectFrom.mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        groupBy: vi
-          .fn()
-          .mockResolvedValue([
-            { categoryId: 'kb_category_child', totalCount: 14, publishedCount: 14 },
-          ]),
-      }),
-    })
+    visibleArticleCounts([{ categoryId: 'kb_category_child', visibleCount: 14 }])
 
     const result = await listPublicCategories()
     const slugs = result.map((c) => c.slug).sort()
@@ -601,13 +598,7 @@ describe('listPublicCategories returns parentId and icon', () => {
       },
     ])
 
-    mockSelectFrom.mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        groupBy: vi
-          .fn()
-          .mockResolvedValue([{ categoryId: 'kb_category_1', totalCount: 2, publishedCount: 2 }]),
-      }),
-    })
+    visibleArticleCounts([{ categoryId: 'kb_category_1', visibleCount: 2 }])
 
     const result = await listPublicCategories()
     expect(result).toHaveLength(1)
