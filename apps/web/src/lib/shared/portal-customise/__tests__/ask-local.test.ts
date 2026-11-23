@@ -254,7 +254,7 @@ describe('answerLocally: headings, cards and the header', () => {
     })
     expect(patchOf('make the headings match the text')).toEqual({ headingFont: 'same_as_text' })
     expect(answerLocally('use Lora for headings', ctx())).toMatchObject({
-      reply: 'Headings are now in Lora.',
+      reply: 'Headings are now set in Lora.',
     })
     // The text font is still its own request.
     expect(patchOf('use Lora')).toEqual({ font: 'lora' })
@@ -266,7 +266,7 @@ describe('answerLocally: headings, cards and the header', () => {
     expect(patchOf('give the cards a shadow')).toEqual({ cardStyle: 'shadow' })
     expect(patchOf('make the cards bordered')).toEqual({ cardStyle: 'border' })
     expect(answerLocally('give the cards a shadow', ctx())).toMatchObject({
-      reply: 'Cards have a shadow now.',
+      reply: 'Cards now have a shadow.',
     })
     expect(answerLocally('make the cards pop', ctx())).toBeNull()
   })

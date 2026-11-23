@@ -354,7 +354,7 @@ describe('askPortalCustomise: the model', () => {
     expect(answer).toMatchObject({
       outcome: 'patch',
       patch: { cardStyle: 'flat' },
-      reply: 'Cards are flat now.',
+      reply: 'Cards are now flat.',
     })
     const prompt = mockStructuredChat.mock.calls[0]![0].systemPrompts.join('\n')
     for (const field of ['headingFont', 'cardStyle', 'portalName', 'headerShows']) {
@@ -395,7 +395,20 @@ describe('askPortalCustomise: the model', () => {
     expect(withLogo).toMatchObject({
       outcome: 'patch',
       patch: { headerShows: 'logo' },
-      reply: 'The header shows your logo now.',
+      reply: 'Header now shows the logo.',
+    })
+  })
+
+  it('drops showing a logo there is none of from a patch that changes more', async () => {
+    mockStructuredChat.mockImplementation(async () => ({
+      patch: { cardStyle: 'flat', headerShows: 'logo' },
+    }))
+    const answer = await askPortalCustomise({ request: OPEN_REQUEST, draft: draft() })
+    expect(answer).toEqual({
+      outcome: 'patch',
+      handled: 'model',
+      patch: { cardStyle: 'flat' },
+      reply: 'Cards are now flat.',
     })
   })
 

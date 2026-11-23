@@ -355,6 +355,11 @@ export async function askPortalCustomise({
   if (output.patch && onlyShowsMissingLogo(output.patch, draft)) {
     return { outcome: 'refused', handled: 'refused', reply: ASK_REPLIES.noLogo }
   }
+  // Beside other changes, a logo there is none of is dropped: the header has nothing to show.
+  if (output.patch?.headerShows === 'logo' && !draft.hasLogo) {
+    const { headerShows: _none, ...rest } = output.patch
+    output.patch = rest
+  }
   if (output.patch && changesSomething(output.patch)) {
     if (!fitsDraft(output.patch, draft)) {
       log.warn('portal ask patch named tabs or sections the draft does not have')

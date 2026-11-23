@@ -136,8 +136,8 @@ const THEME_MODE_REPLIES = {
 
 const CARD_STYLE_REPLIES: Record<CardStyle, string> = {
   border: 'Cards have a border again.',
-  shadow: 'Cards have a shadow now.',
-  flat: 'Cards are flat now.',
+  shadow: 'Cards now have a shadow.',
+  flat: 'Cards are now flat.',
 }
 
 /** A one-sentence reply for a patch, from what it changes. Never quotes values. */
@@ -157,18 +157,18 @@ export function replyForPatch(patch: PortalDraftPatch): string {
   if (patch.headingFont) {
     return patch.headingFont === SAME_AS_TEXT_FONT
       ? 'Headings match the text font again.'
-      : `Headings are now in ${fontName(patch.headingFont)}.`
+      : `Headings are now set in ${fontName(patch.headingFont)}.`
   }
   if (patch.cardStyle) return CARD_STYLE_REPLIES[patch.cardStyle]
   if (patch.portalName !== undefined) {
     return patch.portalName.trim()
-      ? `The header now says ${patch.portalName.trim()}.`
-      : 'The header shows your workspace name again.'
+      ? `Portal name is now ${patch.portalName.trim()}.`
+      : 'Portal name is the workspace name again.'
   }
   if (patch.headerShows) {
     return patch.headerShows === 'logo'
-      ? 'The header shows your logo now.'
-      : 'The header shows your icon and name now.'
+      ? 'Header now shows the logo.'
+      : 'Header now shows the icon and name.'
   }
   if (patch.colours) return 'Colours updated.'
   if (patch.tabs) return 'Tabs updated.'
