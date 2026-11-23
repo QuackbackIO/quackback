@@ -1,5 +1,6 @@
 import { tryCssColorToHex } from './colors'
 import { expandTheme, unbrandedTheme, type MinimalThemeVariables } from './expand'
+import { PICKED_KEYS, pickedColour, type PickableKey } from './base'
 
 export type ColourRole = 'primary' | 'background' | 'foreground' | 'header'
 export type ColourMode = 'light' | 'dark'
@@ -53,6 +54,16 @@ export function sameColour(a: string | undefined, b: string): boolean {
   return p.every((c, i) => Math.abs(c - q[i]!) <= 12)
 }
 
+/**
+ * A palette colour set as picked: the colour kept as picked beside it (the
+ * one it may be drawn as instead) goes, and expansion works it out again.
+ */
+function setPicked(palette: Palette, key: keyof Palette, value: string | undefined) {
+  if (value === undefined) delete palette[key]
+  else palette[key] = value
+  if (key in PICKED_KEYS) delete palette[PICKED_KEYS[key as PickableKey]]
+}
+
 /** The text colour a background gets until the admin picks one. */
 export const autoForeground = (background: string) =>
   isDarkBackground(background) ? DARK_FOREGROUND : LIGHT_FOREGROUND
@@ -64,11 +75,16 @@ export const autoForeground = (background: string) =>
  */
 function isAutoText(palette: Palette, background: string, mode: ColourMode) {
   const auto = autoForeground(background)
-  if (sameColour(palette.foreground, auto)) return true
+  const text = pickedColour(palette, 'foreground')
+  if (sameColour(text, auto)) return true
+  // A theme saved before picked colours were kept holds the text as drawn.
   const shown = hexOf(
-    expandTheme({ ...palette, background, foreground: auto }, { mode }).foreground ?? ''
+    expandTheme(
+      { ...palette, background, foreground: auto, [PICKED_KEYS.foreground]: undefined },
+      { mode }
+    ).foreground ?? ''
   )
-  return shown !== null && sameColour(palette.foreground, shown)
+  return shown !== null && sameColour(text, shown)
 }
 
 /**
@@ -120,39 +136,51 @@ export function applyColour(
   const next: Palette = { ...target }
 
   if (role === 'foreground') {
-    next.foreground = hex
+    setPicked(next, 'foreground', hex)
   } else if (role === 'header') {
     next.header = hex
   } else if (role === 'primary') {
-    next.primary = hex
+    setPicked(next, 'primary', hex)
   } else {
     const oldBackground = hexOf(target.background)
     const dim = isDarkBackground(hex)
+    const card = mix(hex, '#ffffff', dim ? 0.05 : 0.7)
+    const muted = mutedOf(hex)
     next.background = hex
-    next.card = mix(hex, '#ffffff', dim ? 0.05 : 0.7)
-    next.muted = mutedOf(hex)
+    setPicked(next, 'card', card)
+    setPicked(next, 'muted', muted)
     next.border = mix(hex, dim ? '#ffffff' : '#000000', dim ? 0.14 : 0.15)
-    next.mutedForeground = quietTextOn([hex, next.card, next.muted], dim)
+    setPicked(next, 'mutedForeground', quietTextOn([hex, card, muted], dim))
     if (!target.foreground || (oldBackground && isAutoText(target, oldBackground, mode))) {
-      next.foreground = autoForeground(hex)
+      setPicked(next, 'foreground', autoForeground(hex))
     }
   }
 
   const palettes = mode === 'light' ? { light: next, dark } : { light, dark: next }
   if (role === 'primary' && mode === 'light') {
-    const oldLight = hexOf(light.primary)
+    const oldLight = hexOf(pickedColour(light, 'primary'))
     // The automatic one, as stored or as the dark page shows it (lightened to stand off it).
     const auto = oldLight === null ? null : autoDarkPrimary(oldLight)
     // The automatic one as the dark page shows it: lightened to stand off the
     // page, or darkened for white words on it (expandTheme).
     const shown = auto
-      ? hexOf(expandTheme({ ...dark, primary: auto }, { mode: 'dark' }).primary)
+      ? hexOf(
+          expandTheme(
+            { ...dark, primary: auto, [PICKED_KEYS.primary]: undefined },
+            { mode: 'dark' }
+          ).primary
+        )
       : null
+    const darkPrimary = pickedColour(dark, 'primary')
     const wasAuto =
-      !dark.primary ||
-      (auto !== null && sameColour(dark.primary, auto)) ||
-      (shown !== null && sameColour(dark.primary, shown))
-    if (wasAuto) palettes.dark = { ...dark, primary: autoDarkPrimary(hex) }
+      !darkPrimary ||
+      (auto !== null && sameColour(darkPrimary, auto)) ||
+      // A theme saved before picked colours were kept holds it as drawn.
+      (shown !== null && sameColour(darkPrimary, shown))
+    if (wasAuto) {
+      palettes.dark = { ...dark }
+      setPicked(palettes.dark, 'primary', autoDarkPrimary(hex))
+    }
   }
   return palettes
 }
@@ -179,13 +207,18 @@ export function resetColour(
   if (role === 'header') {
     delete next.header
   } else if (role === 'background') {
-    for (const key of BACKGROUND_FAMILY) next[key] = unbranded[key]
-    if (isAutoColour(target, 'foreground', mode)) next.foreground = unbranded.foreground
+    for (const key of BACKGROUND_FAMILY) setPicked(next, key, unbranded[key])
+    if (isAutoColour(target, 'foreground', mode))
+      setPicked(next, 'foreground', unbranded.foreground)
   } else {
     const background = hexOf(target.background) ?? hexOf(unbranded.background)!
-    next.foreground = sameColour(unbranded.background, background)
-      ? unbranded.foreground
-      : autoForeground(background)
+    setPicked(
+      next,
+      'foreground',
+      sameColour(unbranded.background, background)
+        ? unbranded.foreground
+        : autoForeground(background)
+    )
   }
   return mode === 'light' ? { light: next, dark } : { light, dark: next }
 }
@@ -203,11 +236,11 @@ export function isAutoColour(
   const unbranded = unbrandedTheme(mode)
   const background = hexOf(palette.background) ?? hexOf(unbranded.background)!
   if (role === 'background') return sameColour(unbranded.background, background)
-  if (!palette.foreground) return true
+  const text = pickedColour(palette, 'foreground')
+  if (!text) return true
   return (
     isAutoText(palette, background, mode) ||
-    (sameColour(unbranded.background, background) &&
-      sameColour(palette.foreground, hexOf(unbranded.foreground)!))
+    (sameColour(unbranded.background, background) && sameColour(text, hexOf(unbranded.foreground)!))
   )
 }
 

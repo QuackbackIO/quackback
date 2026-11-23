@@ -3,7 +3,7 @@
  * Ask applied through the same writes the sections use, and the draft as
  * Ask's request carries it. Pure; the editor applies the result as one step.
  */
-import { fontIdForValue, normalizeFontSans, tryCssColorToHex } from '@/lib/shared/theme'
+import { fontIdForValue, normalizeFontSans } from '@/lib/shared/theme'
 import { BRANDING_FONTS, type BrandingFontId } from '@/lib/shared/theme/fonts'
 import {
   applyTabsPatch,
@@ -28,6 +28,7 @@ import {
   type PortalDraft,
 } from './portal-draft'
 import type { Palette } from '@/components/admin/settings/branding/theme-css'
+import { pickedHex } from './colours'
 
 /**
  * The draft with a patch applied. Colours go through the colour setters (so
@@ -91,8 +92,8 @@ function coloursOf(palette: Palette): AskDraftContext['colours']['light'] {
     // Only a header colour of its own: unset, the header is the page.
     ['header', 'header'],
   ] as const) {
-    const value = palette[variable]
-    const hex = value ? tryCssColorToHex(value) : null
+    // The colour picked, not the shade it may be drawn as.
+    const hex = pickedHex(palette, variable)
     if (hex) out[key] = hex
   }
   return out

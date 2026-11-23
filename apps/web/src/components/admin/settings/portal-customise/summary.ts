@@ -15,7 +15,7 @@ import {
   palettesOf,
   radiusOf,
 } from '@/components/admin/settings/branding/theme-css'
-import { hexOrNull } from './colours'
+import { hexOrNull, pickedHex } from './colours'
 import { cornersName, fontName } from './font-shape-section'
 
 export interface SummaryRow {
@@ -44,7 +44,7 @@ export function portalSummary(live: {
   const cssText = buildInitialCss(live.customCss, live.theme)
   const mode = themeMode === 'dark' ? 'dark' : 'light'
   const palette = palettesOf(cssText)[mode]
-  const primary = hexOrNull(palette.primary) ?? ''
+  const primary = pickedHex(palette, 'primary') ?? ''
   const background = hexOrNull(palette.background) ?? ''
   const backgroundAuto = isAutoColour(palette, 'background', mode)
   const buttons = live.theme.buttonShape === 'corners' ? 'matching buttons' : 'pill buttons'

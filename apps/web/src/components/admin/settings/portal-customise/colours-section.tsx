@@ -4,7 +4,7 @@ import { ThemeModeTiles } from '@/components/admin/settings/branding/theme-mode-
 import { type ThemeMode } from '@/lib/shared/theme'
 import { isAutoColour, type ColourMode, type ColourRole } from '@/lib/shared/theme/colour-setters'
 import type { Palette } from '@/components/admin/settings/branding/theme-css'
-import { hexOrNull, roleSuggestions } from './colours'
+import { drawnNote, hexOrNull, pickedHex, roleSuggestions } from './colours'
 import { ColourPicker } from './colour-picker'
 
 export type SetColour = (
@@ -132,45 +132,49 @@ function ColourRow({
   const trigger = useRef<HTMLButtonElement>(null)
   // An unset header is the page: its swatch shows the page.
   const hex =
-    hexOrNull(palette[role]) ??
+    pickedHex(palette, role) ??
     (role === 'header' ? hexOrNull(palette.background) : null) ??
     '#000000'
   const auto = role !== 'primary' && isAutoColour(palette, role, mode)
+  const note = auto ? null : drawnNote(palette, role)
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          ref={trigger}
-          type="button"
-          title={hint}
-          className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-start text-[13px] transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+    <div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            ref={trigger}
+            type="button"
+            title={hint}
+            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-start text-[13px] transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+          >
+            <span>{label}</span>
+            <span className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className="size-4 rounded border border-border/70"
+                style={{ backgroundColor: hex }}
+              />
+              {auto ? 'Auto' : hex}
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          side="right"
+          sideOffset={12}
+          className="w-[252px] p-3"
+          finalFocus={trigger}
         >
-          <span>{label}</span>
-          <span className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-            <span
-              aria-hidden="true"
-              className="size-4 rounded border border-border/70"
-              style={{ backgroundColor: hex }}
-            />
-            {auto ? 'Auto' : hex}
-          </span>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        side="right"
-        sideOffset={12}
-        className="w-[252px] p-3"
-        finalFocus={trigger}
-      >
-        <ColourPicker
-          value={hex}
-          isAuto={auto}
-          allowAuto={role !== 'primary'}
-          swatches={roleSuggestions(role, mode, palette, siteColours)}
-          onChange={(next, options) => setColour(role, mode, next, options)}
-        />
-      </PopoverContent>
-    </Popover>
+          <ColourPicker
+            value={hex}
+            isAuto={auto}
+            allowAuto={role !== 'primary'}
+            swatches={roleSuggestions(role, mode, palette, siteColours)}
+            onChange={(next, options) => setColour(role, mode, next, options)}
+          />
+        </PopoverContent>
+      </Popover>
+      {note ? <p className="-mt-1 px-3 pb-2.5 text-xs text-muted-foreground">{note}</p> : null}
+    </div>
   )
 }

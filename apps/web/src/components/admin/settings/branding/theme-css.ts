@@ -14,7 +14,8 @@ import {
   type ThemeMode,
   tryCssColorToHex,
 } from '@/lib/shared/theme'
-import { unbrandedTheme, type MinimalThemeVariables } from '@/lib/shared/theme/expand'
+import { expandTheme, unbrandedTheme, type MinimalThemeVariables } from '@/lib/shared/theme/expand'
+import { PICKED_KEYS, type PickableKey } from '@/lib/shared/theme/base'
 import { extractCssVariables } from '@/lib/shared/theme/css-parser'
 import {
   generateReadableCSS,
@@ -42,33 +43,91 @@ export function buildInitialCss(initialCustomCss: string, initialThemeConfig: Th
   const parsed = extractCssVariables(initialCustomCss)
   // Structured brandingConfig wins; CSS-parsed values fill gaps so a
   // CSS-only palette (empty/partial config) is not replaced by defaults.
-  const lightMinimal: Palette = {
-    ...unbrandedTheme('light'),
-    ...parseCssToMinimal(parsed.light),
-    ...(initialThemeConfig.light ?? {}),
-  }
-  const darkMinimal: Palette = {
-    ...unbrandedTheme('dark'),
-    ...parseCssToMinimal(parsed.dark),
-    ...(initialThemeConfig.dark ?? {}),
-  }
+  const lightMinimal = heldPicks(
+    {
+      ...unbrandedTheme('light'),
+      ...parseCssToMinimal(parsed.light),
+      ...(initialThemeConfig.light ?? {}),
+    },
+    'light'
+  )
+  const darkMinimal = heldPicks(
+    {
+      ...unbrandedTheme('dark'),
+      ...parseCssToMinimal(parsed.dark),
+      ...(initialThemeConfig.dark ?? {}),
+    },
+    'dark'
+  )
 
   // Always emit both palettes so a later switch back to user mode still
   // has the inactive side in cssText for themeForPublish to parse. Preview
   // locking uses initialThemeConfig.themeMode separately.
   const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
   const remainder = advancedCssRemainder(initialCustomCss, generated)
-  if (!remainder) return generated
-  return `${generated.trimEnd()}\n\n${remainder}`
+  return written(remainder ? `${generated.trimEnd()}\n\n${remainder}` : generated)
+}
+
+/**
+ * Stylesheets this module wrote, whose colours kept as picked hold: their
+ * lines are the generator's, and Advanced CSS never carries theme colours.
+ * Reading one back skips the check, which works the theme out again.
+ */
+const WRITTEN = new Set<string>()
+function written(cssText: string): string {
+  if (WRITTEN.size >= 32) WRITTEN.clear()
+  WRITTEN.add(cssText)
+  return cssText
 }
 
 /** Both palettes as the stylesheet sets them, unbranded values filling any gap. */
 export function palettesOf(cssText: string): { light: Palette; dark: Palette } {
   const parsed = extractCssVariables(cssText)
-  return {
-    light: withoutHeaderLines({ ...unbrandedTheme('light'), ...parseCssToMinimal(parsed.light) }),
-    dark: withoutHeaderLines({ ...unbrandedTheme('dark'), ...parseCssToMinimal(parsed.dark) }),
+  const ours = WRITTEN.has(cssText)
+  const side = (mode: 'light' | 'dark') => {
+    const palette = withoutHeaderLines({
+      ...unbrandedTheme(mode),
+      ...parseCssToMinimal(parsed[mode]),
+    })
+    return ours ? palette : heldPicks(palette, mode)
   }
+  return { light: side('light'), dark: side('dark') }
+}
+
+const PICKED = Object.entries(PICKED_KEYS) as [PickableKey, (typeof PICKED_KEYS)[PickableKey]][]
+
+/**
+ * A palette whose colours kept as picked still hold: each is one the colour
+ * beside it is drawn from. One that no longer is (that colour was set some
+ * other way, by hand in the stylesheet, say) goes, and the colour set is the
+ * one picked.
+ */
+function heldPicks(palette: Palette, mode: 'light' | 'dark'): Palette {
+  if (!PICKED.some(([, picked]) => palette[picked])) return palette
+  const drawn = expandTheme(palette, { mode })
+  const out: Palette = { ...palette }
+  for (const [key, picked] of PICKED) {
+    if (!out[picked]) continue
+    const now = palette[key] ? tryCssColorToHex(palette[key]) : null
+    if (!now || now !== tryCssColorToHex(drawn[key] ?? '')) delete out[picked]
+  }
+  return out
+}
+
+/**
+ * An edit's palette with each colour kept as picked dropped where the edit
+ * set the colour beside it and left the picked one alone: the colour set is
+ * the one picked now.
+ */
+function withPicksOfEdit(before: Palette, after: Palette): Palette {
+  let out = after
+  for (const [key, picked] of PICKED) {
+    if (after[picked] && after[key] !== before[key] && after[picked] === before[picked]) {
+      if (out === after) out = { ...after }
+      delete out[picked]
+    }
+  }
+  return out
 }
 
 /** Lines the header colour brings along, worked out again from it on every write. */
@@ -116,9 +175,13 @@ export function editPalettes(
 ): string {
   const { light, dark } = palettesOf(cssText)
   const remainder = advancedCssRemainder(cssText, generateReadableCSS(light, dark, 'user'))
-  const next = edit(light, dark)
+  const edited = edit(light, dark)
+  const next = {
+    light: withPicksOfEdit(light, edited.light),
+    dark: withPicksOfEdit(dark, edited.dark),
+  }
   const generated = generateReadableCSS(next.light, next.dark, 'user')
-  return remainder ? `${generated.trimEnd()}\n\n${remainder}` : generated
+  return written(remainder ? `${generated.trimEnd()}\n\n${remainder}` : generated)
 }
 
 /** The font stack the stylesheet sets, for the palette the mode shows. */

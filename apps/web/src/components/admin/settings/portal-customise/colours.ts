@@ -1,10 +1,12 @@
 /**
  * The Colours section's rules: the hex box and the swatches the picker
  * offers for each role. No warnings: whatever is picked, the portal's text
- * is worked out to read (expandTheme).
+ * is worked out to read (expandTheme), and the colour picked is the one kept
+ * and shown, with a line where it is drawn otherwise.
  */
 import { tryCssColorToHex } from '@/lib/shared/theme'
-import type { ColourMode, ColourRole } from '@/lib/shared/theme/colour-setters'
+import { pickedColour } from '@/lib/shared/theme/base'
+import { luminance, type ColourMode, type ColourRole } from '@/lib/shared/theme/colour-setters'
 import type { Palette } from '@/components/admin/settings/branding/theme-css'
 
 /** A typed colour (`533AFD`, `#53f`, `rgb(83, 58, 253)` and so on) as hex, or null. */
@@ -16,6 +18,27 @@ export function parseColourInput(input: string): string | null {
 
 /** Hex for any stored colour, or the fallback. */
 export const hexOrNull = (colour: string | undefined) => (colour ? tryCssColorToHex(colour) : null)
+
+/** The colour picked for a role, as hex: what its hex box shows and the picker starts from. */
+export function pickedHex(palette: Palette, role: ColourRole): string | null {
+  return hexOrNull(
+    role === 'primary' || role === 'foreground' ? pickedColour(palette, role) : palette[role]
+  )
+}
+
+/** Why a role's colour is drawn otherwise than picked, in one line; null when it is drawn as picked. */
+export function drawnNote(palette: Palette, role: ColourRole): string | null {
+  if (role !== 'primary' && role !== 'foreground') return null
+  const picked = hexOrNull(pickedColour(palette, role))
+  const drawn = hexOrNull(palette[role])
+  if (!picked || !drawn || picked === drawn) return null
+  const darker = luminance(drawn) < luminance(picked)
+  if (role === 'primary')
+    return darker
+      ? 'Buttons are drawn a little deeper so their text reads.'
+      : 'Buttons are drawn lighter so they show on the page.'
+  return darker ? 'Text is drawn darker so it reads.' : 'Text is drawn lighter so it reads.'
+}
 
 export interface Swatch {
   name: string
@@ -82,7 +105,7 @@ export function roleSuggestions(
   palette: Palette,
   siteColours: string[] = []
 ): Swatch[] {
-  const primary = hexOrNull(palette.primary)
+  const primary = pickedHex(palette, 'primary')
   let suggested: Swatch[]
   if (role === 'primary') suggested = MAIN
   else if (role === 'background') {

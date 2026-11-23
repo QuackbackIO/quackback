@@ -9,7 +9,7 @@
  * and the server need what is here.
  */
 import { expandTheme, withStandIns, type MinimalThemeVariables } from './expand'
-import { variableMap } from './base'
+import { PICKED_KEYS, variableMap } from './base'
 import type { ThemeMode, ThemeVariables } from './types'
 
 /** Reverse lookup: CSS variable name → ThemeVariables key */
@@ -40,8 +40,8 @@ export function generateReadableCSS(
 ): string {
   const parts: string[] = []
   const [lightVars, darkVars] = withStandIns(
-    expandTheme(lightMinimal, { mode: 'light' }),
-    expandTheme(darkMinimal, { mode: 'dark' })
+    expandTheme(lightMinimal, { mode: 'light', picked: true }),
+    expandTheme(darkMinimal, { mode: 'dark', picked: true })
   )
 
   if (themeMode !== 'dark') parts.push(formatCssBlock(':root', lightVars))
@@ -87,6 +87,7 @@ const MINIMAL_THEME_CSS_VARS = new Set(
       'fontSans',
       'fontHeading',
       'radius',
+      ...Object.values(PICKED_KEYS),
     ] as const
   ).map((key) => variableMap[key])
 )
