@@ -28,16 +28,6 @@ export const PORTAL_DESIGN_READ_PERMISSIONS: readonly PermissionKey[] = [
 ]
 
 /**
- * Who saves the portal's tabs and welcome message (`updatePortalDesignFn`):
- * the Design tab's own permission or settings.manage. Nothing else of the
- * portal config saves with settings.branding.
- */
-export const PORTAL_DESIGN_WRITE_PERMISSIONS: readonly PermissionKey[] = [
-  PERMISSIONS.SETTINGS_MANAGE,
-  PERMISSIONS.SETTINGS_BRANDING,
-]
-
-/**
  * The portal page config read (`fetchPortalPageConfigFn`): any one of these
  * passes, and each viewer gets only the parts their permissions read.
  */

@@ -34,7 +34,7 @@ vi.mock('@/lib/server/domains/settings/redact', () => ({
 vi.mock('@/lib/shared/theme', () => ({
   generateThemeCSS: vi.fn(() => ''),
   generateWorkspaceThemeCSS: vi.fn(() => ''),
-  readFontSans: vi.fn(() => null),
+  readConfigFontSans: vi.fn(() => null),
 }))
 vi.mock('@/lib/shared/i18n', () => ({
   resolveLocale: vi.fn(async () => 'en'),

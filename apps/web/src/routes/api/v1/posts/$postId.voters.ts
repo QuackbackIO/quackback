@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { parseLimit } from '@/lib/server/domains/api/request'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId, PostVoteId } from '@quackback/ids'
 
@@ -20,10 +21,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/voters')({
 
           const url = new URL(request.url)
           const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(
-            100,
-            Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
-          )
+          const limit = parseLimit(url)
 
           const { isValidTypeId } = await import('@quackback/ids')
           const cursorVoteId =

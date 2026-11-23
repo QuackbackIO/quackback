@@ -1,3 +1,4 @@
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 /**
  * Discord OAuth utilities.
  * Handles OAuth2 bot authorization flow for adding the bot to a guild.
@@ -58,7 +59,7 @@ export async function exchangeDiscordCode(
     throw new Error('Discord bot token not configured')
   }
 
-  const response = await fetch(`${DISCORD_API}/oauth2/token`, {
+  const response = await providerFetch(`${DISCORD_API}/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

@@ -67,15 +67,18 @@ export async function getPublishedArticleTranslation(
 
 /**
  * Create-or-update a translation; a fresh one always starts as a draft. A
- * manual write (the default) also drops pending auto-translate jobs for that
- * locale, so a job parked at the AI allowance can never later replace it.
- * Auto-translate passes `source: 'auto'`.
+ * manual write (the default) is a saved draft: it also takes a published
+ * translation back to draft, so the edit is not live until it is published
+ * again. It also drops pending auto-translate jobs for that locale, so a job
+ * parked at the AI allowance can never later replace it. Auto-translate
+ * passes `source: 'auto'` and leaves the status as it is.
  */
 export async function upsertArticleTranslation(
   input: UpsertArticleTranslationInput,
   opts: { source?: 'manual' | 'auto' } = {}
 ): Promise<HelpCenterArticleTranslation> {
-  if (opts.source !== 'auto') await cancelPendingAutoTranslations(input.articleId, input.locale)
+  const manual = opts.source !== 'auto'
+  if (manual) await cancelPendingAutoTranslations(input.articleId, input.locale)
   const [row] = await db
     .insert(helpCenterArticleTranslations)
     .values({
@@ -93,6 +96,7 @@ export async function upsertArticleTranslation(
         description: input.description ?? null,
         content: input.content,
         contentJson: input.contentJson ?? null,
+        ...(manual ? { status: 'draft' as const } : {}),
         updatedAt: new Date(),
       },
     })

@@ -169,8 +169,9 @@ export async function getPublicUserProfile(
           .orderBy(desc(posts.createdAt))
           .limit(ACTIVITY_LIMIT),
 
-        // Posts the owner commented on (public comments only — a private
-        // team note must never surface as public activity), grouped per
+        // Posts the owner commented on (public, published comments only — a
+        // private team note or a comment held for review must never surface
+        // as public activity), grouped per
         // post with the latest comment time.
         db
           .select({
@@ -185,6 +186,7 @@ export async function getPublicUserProfile(
             and(
               eq(postComments.principalId, principalId),
               eq(postComments.isPrivate, false),
+              eq(postComments.moderationState, 'published'),
               isNull(postComments.deletedAt),
               isNull(posts.deletedAt),
               viewerFilter
@@ -220,6 +222,7 @@ export async function getPublicUserProfile(
             and(
               eq(postComments.principalId, principalId),
               eq(postComments.isPrivate, false),
+              eq(postComments.moderationState, 'published'),
               isNull(postComments.deletedAt),
               isNull(posts.deletedAt),
               viewerFilter

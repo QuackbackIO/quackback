@@ -72,7 +72,9 @@ export function isTestSiteHost(host: string): boolean {
   if (name === '::1' || TEST_SITE_SUFFIX.test(name)) return true
   if (/^(127|10)\.\d+\.\d+\.\d+$/.test(name) || /^192\.168\.\d+\.\d+$/.test(name)) return true
   if (/^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(name)) return true
-  return name.split('.').some((label) => label.split('-').some((part) => TEST_SITE_LABEL.test(part)))
+  return name
+    .split('.')
+    .some((label) => label.split('-').some((part) => TEST_SITE_LABEL.test(part)))
 }
 
 /** Script-tag snippet for hand install. Always documents identify. */

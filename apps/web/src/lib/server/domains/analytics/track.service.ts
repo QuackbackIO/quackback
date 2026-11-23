@@ -10,7 +10,7 @@
 import { z } from 'zod'
 import Bowser from 'bowser'
 import { isbot } from 'isbot'
-import { db, eq, desc, pageViews, visitorDevices, conversations } from '@/lib/server/db'
+import { db, eq, desc, insertPageView, visitorDevices, conversations } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
@@ -173,7 +173,7 @@ export async function recordPageView(request: Request): Promise<void> {
   const country = captureCountryFromHeaders(request.headers)
 
   try {
-    await db.insert(pageViews).values({
+    await insertPageView(db, {
       siteOrigin: url.origin,
       surface: beacon.surface,
       path: url.pathname,
@@ -194,7 +194,8 @@ export async function recordPageView(request: Request): Promise<void> {
       void dispatchPageVisitWorkflows(beacon.deviceId, url.pathname)
     }
   } catch (error) {
-    // Most likely a missing day partition (maintenance job not running).
+    // A missing day partition is repaired inside insertPageView, so whatever
+    // lands here is a real failure.
     log.error({ err: error }, 'pageview insert failed, dropping')
   }
 }

@@ -123,10 +123,18 @@ export const consumeRecoveryCodeFn = createServerFn({ method: 'POST' })
       return { ok: false, error: 'invalid_credentials' }
     }
 
-    const activeCodes = await db.query.ssoRecoveryCode.findMany({
-      where: and(eq(ssoRecoveryCode.userId, userRow.id), isNull(ssoRecoveryCode.usedAt)),
-      columns: { id: true, codeHash: true },
-    })
+    // Codes work only while their holder manages sign-in. A person removed or
+    // demoted keeps no codes: they are deleted then, and refused here in case
+    // the role moved some other way. Read as "no active codes", so the answer
+    // and the work below are those of a wrong code.
+    const { isRecoveryCodeHolder } = await import('@/lib/server/auth/recovery-codes-status')
+    const holder = await isRecoveryCodeHolder(userRow.id as UserId)
+    const activeCodes = holder
+      ? await db.query.ssoRecoveryCode.findMany({
+          where: and(eq(ssoRecoveryCode.userId, userRow.id), isNull(ssoRecoveryCode.usedAt)),
+          columns: { id: true, codeHash: true },
+        })
+      : []
 
     let matchedId: string | null = null
     for (const row of activeCodes) {
@@ -149,7 +157,7 @@ export const consumeRecoveryCodeFn = createServerFn({ method: 'POST' })
         outcome: 'failure',
         actor: { userId: userRow.id, email: userRow.email },
         headers,
-        metadata: { method: 'recovery_code', reason: 'invalid_code' },
+        metadata: { method: 'recovery_code', reason: holder ? 'invalid_code' : 'not_a_holder' },
       })
       return { ok: false, error: 'invalid_credentials' }
     }

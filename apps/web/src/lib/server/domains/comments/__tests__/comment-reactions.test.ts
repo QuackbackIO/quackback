@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PostCommentId, PrincipalId } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
+import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 
 const insertValues = vi.hoisted(() => vi.fn())
 const deleteWhere = vi.hoisted(() => vi.fn())
@@ -36,6 +37,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 vi.mock('@/lib/server/domains/posts/post.access', () => ({
   assertCommentViewable: (...args: unknown[]) => assertCommentViewable(...args),
 }))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.board-guard', () => ({
+  assertBoardOpen: vi.fn(async () => undefined),
+}))
 
 import { addReaction, removeReaction } from '../comment.reactions'
 
@@ -46,7 +50,11 @@ const actor = { principalId: principal } as never
 describe('comment reactions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    assertCommentViewable.mockResolvedValue(undefined)
+    assertCommentViewable.mockResolvedValue({
+      boardId: 'board_01abc',
+      boardReadOnly: false,
+      access: DEFAULT_BOARD_ACCESS,
+    })
   })
 
   it('adds a single emoji', async () => {

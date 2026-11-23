@@ -1,15 +1,22 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { checkedAgainstOutputSchema } from './output-schema-check'
 import type { CallToolResult } from '@modelcontextprotocol/server'
 
 const mockUpdatePost = vi.fn()
+const mockCreatePost = vi.fn()
 vi.mock('@/lib/server/domains/posts/post.service', () => ({
-  createPost: vi.fn(),
+  createPost: (...args: unknown[]) => mockCreatePost(...args),
   updatePost: (...args: unknown[]) => mockUpdatePost(...args),
 }))
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: vi.fn(),
   addVoteOnBehalf: vi.fn(),
   removeVote: vi.fn(),
+  blockedVoteToggle: vi.fn(async () => null),
+}))
+// No one here is blocked; blocked-person-tools.db.test.ts drives the guard.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  assertNotBlocked: vi.fn(async () => undefined),
 }))
 vi.mock('@/lib/server/domains/posts/post.merge', () => ({
   mergePost: vi.fn(),
@@ -44,8 +51,8 @@ type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 function collect(auth: McpAuthContext): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const fakeServer = {
-    registerTool: (name: string, _c: unknown, handler: Handler) => {
-      handlers.set(name, handler)
+    registerTool: (name: string, config: unknown, handler: Handler) => {
+      handlers.set(name, checkedAgainstOutputSchema(config, handler))
     },
   }
   registerPostTools(fakeServer as never, auth)
@@ -183,5 +190,49 @@ describe('post subscriber MCP tools', () => {
     expect(out.isError).toBe(true)
     expect((out.content[0] as { text: string }).text).toContain('PERSON_REQUIRED')
     expect(subs.followPost).not.toHaveBeenCalled()
+  })
+})
+
+describe('create_post MCP tool', () => {
+  const portalAuth = {
+    ...teamAuth,
+    principalId: 'principal_carl',
+    name: 'Carl',
+    email: 'carl@example.com',
+    role: 'user' as const,
+  } as unknown as McpAuthContext
+  const args = {
+    boardId: 'board_1',
+    title: 'Dark mode',
+    statusId: 'post_status_complete',
+    tagIds: ['post_tag_internal'],
+  }
+
+  beforeEach(() => {
+    mockCreatePost.mockResolvedValue({
+      id: 'post_1',
+      title: 'Dark mode',
+      boardId: 'board_1',
+      statusId: 'post_status_open',
+      createdAt: '2026-11-20T00:00:00.000Z',
+    })
+  })
+
+  it("drops a portal user's status and tags, so the post takes the board default and no tags", async () => {
+    const result = await collect(portalAuth).get('create_post')!(args)
+    expect(result.isError).not.toBe(true)
+    const [input] = mockCreatePost.mock.calls[0]
+    expect(input).toMatchObject({ boardId: 'board_1', title: 'Dark mode' })
+    expect(input.statusId).toBeUndefined()
+    expect(input.tagIds).toBeUndefined()
+  })
+
+  it("passes a teammate's status and tags through", async () => {
+    const result = await collect(teamAuth).get('create_post')!(args)
+    expect(result.isError).not.toBe(true)
+    expect(mockCreatePost.mock.calls[0][0]).toMatchObject({
+      statusId: 'post_status_complete',
+      tagIds: ['post_tag_internal'],
+    })
   })
 })

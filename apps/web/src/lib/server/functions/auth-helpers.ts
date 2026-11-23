@@ -346,6 +346,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
 
 import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 /**
@@ -383,4 +384,31 @@ export async function policyActorFromAuth(auth: AuthContext | null): Promise<Act
   if (actor.principalType !== 'anonymous') return actor
   const { resolveTestFeedbackActor } = await import('@/lib/server/test-customer-feedback')
   return resolveTestFeedbackActor(actor)
+}
+
+/**
+ * The policy actor for a teammate (admin or member) who holds
+ * post.view_private, built from the AuthContext alone, or null for anyone
+ * else (who needs policyActorFromAuth).
+ *
+ * Segments are skipped on purpose: for such an actor the post and board view
+ * filters never read `segmentIds` (boardViewFilter passes team actors, and
+ * postViewFilter takes the view_private branch), so the segment lookup
+ * policyActorFromAuth runs would be a wasted query on every admin page load
+ * (the unread badge). Use it only where those filters are the sole consumer.
+ */
+export function teamActorFromAuth(auth: AuthContext | null): Actor | null {
+  if (!auth) return null
+  const role = auth.principal.role
+  if (role !== 'admin' && role !== 'member') return null
+  const principalType = normalizePrincipalType(auth.principal.type)
+  if (principalType === 'anonymous') return null
+  if (!auth.permissions.includes(PERMISSIONS.POST_VIEW_PRIVATE)) return null
+  return {
+    principalId: auth.principal.id,
+    role,
+    principalType,
+    segmentIds: new Set(),
+    permissions: new Set(auth.permissions),
+  }
 }

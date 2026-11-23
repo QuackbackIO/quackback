@@ -1,5 +1,5 @@
 import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
-import { EmailLayout, NotificationFooter } from './email-layout'
+import { EmailLayout, NotificationFooter, feedbackFooterReason } from './email-layout'
 import { typography, button, colors } from './shared-styles'
 
 interface NewCommentEmailProps {
@@ -12,6 +12,8 @@ interface NewCommentEmailProps {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The reader wrote the post. Everyone else follows it (voted, commented or subscribed). */
+  isPostAuthor?: boolean
 }
 
 export function NewCommentEmail({
@@ -24,7 +26,9 @@ export function NewCommentEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  isPostAuthor = false,
 }: NewCommentEmailProps) {
+  const whose = isPostAuthor ? 'your feedback' : 'a post you follow'
   return (
     <EmailLayout
       preview={`New comment on "${postTitle}"`}
@@ -32,10 +36,10 @@ export function NewCommentEmail({
       logoAlt={organizationName}
     >
       {/* Content */}
-      <Heading style={typography.h1}>New comment on your feedback</Heading>
+      <Heading style={typography.h1}>{`New comment on ${whose}`}</Heading>
       <Text style={typography.text}>
         {commenterName}
-        {isTeamMember ? ' (Team)' : ''} commented on your feedback in {organizationName}.
+        {isTeamMember ? ' (Team)' : ''} {`commented on ${whose} in ${organizationName}.`}
       </Text>
 
       {/* Post Title */}
@@ -88,7 +92,7 @@ export function NewCommentEmail({
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you submitted or subscribed to this feedback."
+        reason={feedbackFooterReason(isPostAuthor)}
         unsubscribeUrl={unsubscribeUrl}
         preferencesUrl={preferencesUrl}
       />

@@ -1,0 +1,5 @@
+/* lora for headings only: the semibold and bold cuts titles are set in, so a
+   portal whose text is another font never declares (or fetches) the rest.
+   Loaded via loadHeadingFont in src/lib/shared/theme/heading-font-loader.ts. */
+@import "@fontsource/lora/600.css";
+@import "@fontsource/lora/700.css";

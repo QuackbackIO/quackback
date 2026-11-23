@@ -3,6 +3,7 @@
  */
 
 import { logger } from '@/lib/server/logger'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 
 const log = logger.child({ component: 'github' })
 
@@ -51,7 +52,7 @@ export async function exchangeGitHubCode(
     throw new Error('GitHub credentials not configured')
   }
 
-  const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+  const tokenResponse = await providerFetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -84,7 +85,7 @@ export async function exchangeGitHubCode(
   }
 
   // Get authenticated user info
-  const userResponse = await fetch(`${GITHUB_API}/user`, {
+  const userResponse = await providerFetch(`${GITHUB_API}/user`, {
     headers: {
       Authorization: `Bearer ${tokens.access_token}`,
       Accept: 'application/vnd.github+json',
@@ -128,7 +129,7 @@ export async function revokeGitHubToken(
 
     const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
 
-    await fetch(`${GITHUB_API}/applications/${clientId}/token`, {
+    await providerFetch(`${GITHUB_API}/applications/${clientId}/token`, {
       method: 'DELETE',
       headers: {
         Authorization: `Basic ${basicAuth}`,

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { SyncOutcome } from './types'
 import { deliveryError, httpDeliveryFailure, type DeliveryOutcome } from './outcomes'
+import { providerFetch } from '../provider-fetch'
 
 interface Evidence {
   writes: number
@@ -29,7 +30,7 @@ export async function integrationFetch(
   const originalSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
   const timeout = AbortSignal.timeout(20_000)
   try {
-    const response = await fetch(input, {
+    const response = await providerFetch(input, {
       ...init,
       signal: originalSignal ? AbortSignal.any([originalSignal, timeout]) : timeout,
     })

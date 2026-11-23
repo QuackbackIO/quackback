@@ -22,6 +22,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   // Spread the real db module so tables/operators stay current; override only what this suite drives.
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
+    // Runs the callback on the same mock, as a transaction would on its client.
+    async transaction(fn: (tx: unknown) => unknown) {
+      return fn(this)
+    },
     query: {
       changelogEntries: { findFirst: (...args: unknown[]) => mockEntryFindFirst(...args) },
       changelogEntryPosts: {

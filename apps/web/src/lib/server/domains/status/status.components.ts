@@ -177,18 +177,43 @@ export async function createStatusComponent(
   input: CreateStatusComponentInput
 ): Promise<StatusComponentRow> {
   const name = validateName(input.name, 'Component')
-  const [component] = await db
-    .insert(statusComponents)
-    .values({
-      name,
-      description: input.description ?? null,
-      groupId: input.groupId ?? null,
-      status: input.status ?? 'operational',
-      showUptime: input.showUptime ?? true,
-      segmentIds: input.segmentIds ?? [],
-      position: await nextPosition(statusComponents, statusComponents.position),
-    })
-    .returning()
+  const position = await nextPosition(statusComponents, statusComponents.position)
+  // A service created at operational has nothing to record: uptime starts
+  // from operational. Created at any other status, it records that status as
+  // a change from operational, like the same status set a moment later, so
+  // its uptime bar and webhooks see it. One transaction, so the service never
+  // exists without them.
+  const component = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(statusComponents)
+      .values({
+        name,
+        description: input.description ?? null,
+        groupId: input.groupId ?? null,
+        status: 'operational',
+        showUptime: input.showUptime ?? true,
+        segmentIds: input.segmentIds ?? [],
+        position,
+      })
+      .returning()
+    const status = input.status ?? 'operational'
+    if (status === 'operational') return created
+    const source = input.source ?? 'manual'
+    await writeComponentStatus(created, status, source, null, tx)
+    await writeStatusEvent(
+      'status.component_changed',
+      { type: 'service', displayName: source },
+      {
+        componentId: created.id,
+        componentName: created.name,
+        previousStatus: 'operational',
+        status,
+        source,
+      },
+      tx
+    )
+    return { ...created, status }
+  })
 
   await invalidatePlanLimits()
   return toComponentRow(component)

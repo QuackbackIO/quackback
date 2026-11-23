@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { z } from 'zod'
+import { assertApiPermissions, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   badRequestResponse,
@@ -8,6 +9,9 @@ import {
 import { isValidTypeId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostMergeSuggestionId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
+
+const acceptSchema = z.object({ swapDirection: z.boolean().optional() })
 
 export const Route = createFileRoute('/api/v1/suggestions/$suggestionId/accept')({
   server: {
@@ -18,27 +22,30 @@ export const Route = createFileRoute('/api/v1/suggestions/$suggestionId/accept')
        */
       POST: async ({ request, params }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, {
+          const auth = await withApiKeyAuth(request, {
             permission: PERMISSIONS.SUGGESTION_MANAGE,
           })
+          // Accepting merges the two posts, so it needs post.merge like a manual merge.
+          assertApiPermissions(auth, [PERMISSIONS.POST_MERGE])
+          const { principalId } = auth
           const { suggestionId } = params
 
           if (!isValidTypeId(suggestionId, 'post_merge_sug')) {
             return badRequestResponse('Invalid suggestion ID format. Expected post_merge_sug_xxx')
           }
 
-          // Parse optional body
-          let body: { swapDirection?: boolean } = {}
-          try {
-            body = await request.json()
-          } catch {
-            // Empty body is ok
+          // The body is optional
+          const parsed = acceptSchema.safeParse((await readJsonBody(request)) ?? {})
+          if (!parsed.success) {
+            return badRequestResponse('Invalid request body', {
+              errors: parsed.error.flatten().fieldErrors,
+            })
           }
 
           const { acceptMergeSuggestion } =
             await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
           await acceptMergeSuggestion(suggestionId as PostMergeSuggestionId, principalId, {
-            swapDirection: body.swapDirection,
+            swapDirection: parsed.data.swapDirection,
           })
           return successResponse({ accepted: true, id: suggestionId })
         } catch (error) {

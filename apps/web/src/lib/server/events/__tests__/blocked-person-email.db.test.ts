@@ -140,6 +140,17 @@ const AUTOMATED: Array<[string, Record<string, unknown>]> = [
     },
   ],
   [
+    'comment.created',
+    {
+      workspaceName: 'Acme',
+      postTitle: 'Dark mode',
+      postUrl: 'https://acme.test/p/1#comment-1',
+      commenterName: 'Ada',
+      commentPreview: 'We are on it',
+      isTeamMember: true,
+    },
+  ],
+  [
     'changelog.published',
     {
       workspaceName: 'Acme',
