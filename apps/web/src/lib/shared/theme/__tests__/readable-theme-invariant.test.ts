@@ -200,7 +200,7 @@ describe('the readable shade reaches every page the theme is written to', () => 
       light: { primary: '#facc15' },
       dark: { primary: '#1e3a8a' },
     })
-    const block = (selector: string) => css.match(new RegExp(`${selector} \\{([^}]*)\\}`))?.[1]
+    const block = (selector: string) => css.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1]
     expect(block(':root')).toMatch(/--primary-ink: [^;]+;/)
     expect(block('\\.dark')).toMatch(/--primary-ink: [^;]+;/)
   })
