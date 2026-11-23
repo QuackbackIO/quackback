@@ -72,6 +72,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     surfaces: ['admin', 'portal'],
   },
   {
+    type: 'post_moderated',
+    label: 'Post reviewed',
+    description: 'The team publishes or declines a post or comment you wrote',
+    group: 'feedback',
+    surfaces: ['portal'],
+  },
+  {
     type: 'post_owner_assigned',
     label: 'Post assigned',
     description: 'A post is assigned to you',

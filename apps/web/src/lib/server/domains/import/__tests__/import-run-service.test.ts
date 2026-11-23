@@ -19,7 +19,10 @@ vi.mock('@/lib/server/db', () => ({
     insert: (_table: unknown) => ({
       values: (...args: unknown[]) => {
         hoisted.insertValues(...args)
-        return { returning: hoisted.insertReturning }
+        return {
+          returning: hoisted.insertReturning,
+          onConflictDoNothing: () => ({ returning: hoisted.insertReturning }),
+        }
       },
     }),
     update: (_table: unknown) => ({
@@ -41,6 +44,8 @@ vi.mock('@/lib/server/db', () => ({
   importRuns: { id: 'import_runs.id', createdAt: 'import_runs.created_at' },
   postTags: { id: 'post_tags.id', name: 'post_tags.name' },
   eq: (...args: unknown[]) => ({ eq: args }),
+  and: (...args: unknown[]) => ({ and: args }),
+  isNull: (...args: unknown[]) => ({ isNull: args }),
   desc: (...args: unknown[]) => ({ desc: args }),
 }))
 
@@ -158,12 +163,21 @@ describe('ensureBatchTag', () => {
 
   it('creates the tag when none exists yet', async () => {
     hoisted.findFirstPostTags.mockResolvedValue(undefined)
-    hoisted.insertReturning.mockResolvedValue([])
+    hoisted.insertReturning.mockResolvedValue([{ id: 'post_tag_generated' }])
     const result = await ensureBatchTag('uservoice')
     expect(result.id).toBe('post_tag_generated')
     expect(result.name).toMatch(/^import-uservoice-\d{4}-\d{2}-\d{2}$/)
     expect(hoisted.insertValues).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'post_tag_generated', color: '#6b7280' })
     )
+  })
+
+  it('reads back the tag a concurrent import created first', async () => {
+    hoisted.findFirstPostTags
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ id: 'post_tag_winner', name: 'import-csv-x' })
+    hoisted.insertReturning.mockResolvedValue([])
+    const result = await ensureBatchTag('csv')
+    expect(result.id).toBe('post_tag_winner')
   })
 })

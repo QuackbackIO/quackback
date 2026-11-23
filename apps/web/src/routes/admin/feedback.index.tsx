@@ -7,10 +7,7 @@ import {
 } from '@/lib/client/hooks/use-admin-catalogues'
 import { warmFeedbackPage } from '@/lib/client/queries/feedback-page'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { errorMessage } from '@/components/shared/error-page'
+import { FeedbackLoadError } from '@/components/admin/feedback/feedback-load-error'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { AdminPageGate } from '@/components/admin/admin-page-gate'
 import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
@@ -22,7 +19,7 @@ export const Route = createFileRoute('/admin/feedback/')({
   // Client-side filter changes are handled by InboxContainer's useInboxPosts
   // (combined with its placeholderData) instead of re-running this loader —
   // mirrors the documented pattern in src/routes/_portal/index.tsx.
-  errorComponent: FeedbackErrorComponent,
+  errorComponent: FeedbackLoadError,
   loader: async ({ context }) => {
     // Protected route - user and principal are guaranteed by parent's beforeLoad auth check
     const {
@@ -58,24 +55,6 @@ export const Route = createFileRoute('/admin/feedback/')({
     </AdminPageGate>
   ),
 })
-
-function FeedbackErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
-  const message = errorMessage(error)
-  return (
-    <div className="flex items-center justify-center min-h-[400px] p-4">
-      <Alert variant="destructive" className="max-w-2xl">
-        <ExclamationCircleIcon className="h-4 w-4" />
-        <AlertTitle>Failed to load feedback</AlertTitle>
-        <AlertDescription className="mt-2">
-          <p className="mb-4">{message}</p>
-          <Button onClick={reset} variant="outline" size="sm">
-            Try again
-          </Button>
-        </AlertDescription>
-      </Alert>
-    </div>
-  )
-}
 
 function FeedbackIndexPage() {
   const { currentUser } = Route.useLoaderData()

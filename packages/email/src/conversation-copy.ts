@@ -5,14 +5,21 @@
  * spelling of "Re: {subject}" and of the first-vs-follow-up team-alert intro.
  */
 
+import { singleLineSubject } from './subject'
+
 export type ConversationMailDirection = 'agent_reply' | 'visitor_message' | 'agent_started'
 
-/** Strip any leading `Re:` tokens (any case, repeated) and prefix a single `Re:`. */
+/**
+ * Strip any leading `Re:` tokens (any case, repeated) and prefix a single `Re:`.
+ * The stored subject can come from a multi-line message, so it is made one line first.
+ */
 export function conversationReplySubject(subject: string | null | undefined): string | null {
   if (subject == null) return null
-  const stripped = subject.replace(/^\s*(re:\s*)+/i, '').trim()
+  const stripped = singleLineSubject(subject)
+    .replace(/^\s*(re:\s*)+/i, '')
+    .trim()
   if (!stripped) return null
-  return `Re: ${stripped}`
+  return singleLineSubject(`Re: ${stripped}`)
 }
 
 /** Human correspondence template: email-channel agent replies and agent-started mail. */
@@ -32,7 +39,10 @@ export function teamAlertSubject(
   preview?: string | null
 ): string {
   const topic =
-    subject?.replace(/^\s*(re:\s*)+/i, '').trim() ||
+    (subject &&
+      singleLineSubject(subject)
+        .replace(/^\s*(re:\s*)+/i, '')
+        .trim()) ||
     preview?.replace(/\s+/g, ' ').trim().slice(0, 80) ||
     'New message'
   return `${visitorName}: ${topic}`

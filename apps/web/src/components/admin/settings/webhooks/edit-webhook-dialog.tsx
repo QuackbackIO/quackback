@@ -77,7 +77,11 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
           webhookId: webhook.id,
           url,
           events: selectedEvents as (typeof WEBHOOK_EVENTS)[number][],
-          status: isEnabled ? 'active' : 'disabled',
+          // Only a change of the switch is sent, so saving another edit never
+          // re-enables the webhook or clears its failure count.
+          ...(isEnabled !== (webhook.status === 'active')
+            ? { status: isEnabled ? ('active' as const) : ('disabled' as const) }
+            : {}),
         },
       })
 

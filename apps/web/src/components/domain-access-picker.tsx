@@ -125,7 +125,7 @@ export function DomainAccessPicker({
               {group.domain === 'settings'
                 ? intl.formatMessage({
                     id: 'apiKeys.scopes.settingsDescription',
-                    defaultMessage: 'Branding, Messenger, modules, and office hours',
+                    defaultMessage: 'Branding, Messenger, modules, office hours, and webhooks',
                   })
                 : group.description}
             </p>

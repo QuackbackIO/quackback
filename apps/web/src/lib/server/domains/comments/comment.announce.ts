@@ -5,8 +5,9 @@
  *  - At create time (in comment.service.ts) when the comment is NOT held.
  *  - At approve time (approveCommentFn), after a pending comment is released.
  *
- * Sends the comment.created webhook event. The actor is always the comment's
- * original author, not the moderator. Mirrors announcePublishedPost.
+ * Sends the comment.created webhook event and tells anyone the comment
+ * @-mentions. The actor is always the comment's original author, not the
+ * moderator. Mirrors announcePublishedPost.
  */
 
 import { db, boards, postComments, posts, principal as principalTable, eq } from '@/lib/server/db'
@@ -19,6 +20,10 @@ import {
   type UserId,
 } from '@quackback/ids'
 import { dispatchCommentCreated, buildEventActor } from '@/lib/server/events/dispatch'
+import { dispatchCommentMentions } from './comment-mentions'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'comment-announce' })
 
 /** Author of a published comment, as the `comment.created` event sees it. */
 export interface PublishedCommentAuthor {
@@ -27,6 +32,14 @@ export interface PublishedCommentAuthor {
   name?: string
   email?: string
   displayName?: string
+}
+
+/** The post a published comment sits on. */
+export interface PublishedPostRef {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
 }
 
 /**
@@ -38,11 +51,18 @@ export interface PublishedCommentAuthor {
  */
 export async function dispatchCommentCreatedEvent(
   author: PublishedCommentAuthor,
-  comment: { id: PostCommentId; content: string; isPrivate: boolean },
-  post: { id: PostId; title: string; boardId: BoardId; boardSlug: string }
+  comment: { id: PostCommentId; content: string; isPrivate: boolean; contentJson?: unknown },
+  post: PublishedPostRef,
+  /**
+   * Who sent the comment's text, when that is not its author: a teammate or
+   * an API key filing it for a customer. Only a teammate's, an API key's or
+   * an integration's text tells the people it mentions.
+   */
+  writerPrincipalId?: PrincipalId | null
 ): Promise<void> {
+  const actor = buildEventActor(author)
   await dispatchCommentCreated(
-    buildEventActor(author),
+    actor,
     {
       id: comment.id,
       content: comment.content,
@@ -57,6 +77,19 @@ export async function dispatchCommentCreatedEvent(
       boardSlug: post.boardSlug,
     }
   )
+  // The comment is already saved: a failure telling the people it mentions
+  // is logged, never turned into a failed request a retry would duplicate.
+  try {
+    await dispatchCommentMentions(
+      actor,
+      author.principalId,
+      comment,
+      post,
+      writerPrincipalId ?? author.principalId
+    )
+  } catch (error) {
+    log.error({ err: error, comment_id: comment.id }, 'comment mention notices failed')
+  }
 }
 
 /**
@@ -90,6 +123,7 @@ export async function announcePublishedComment(commentId: PostCommentId): Promis
       id: commentRow.id,
       content: commentRow.content,
       isPrivate: commentRow.isPrivate ?? false,
+      contentJson: commentRow.contentJson,
     },
     {
       id: postRow.id,

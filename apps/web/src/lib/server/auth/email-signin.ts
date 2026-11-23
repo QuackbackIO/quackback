@@ -12,10 +12,12 @@ const log = logger.child({ component: 'auth-email-signin' })
  * address's DOMAIN and on workspace configuration, never on whether an account
  * exists: "Require SSO" on a verified domain is already visible to anyone who
  * types an address there, because the sign-in form routes the domain to its
- * provider. Account-dependent refusals stay silent (see below).
+ * provider, and the "Email magic link" method being off is visible to anyone
+ * who opens the sign-in form. Account-dependent refusals stay silent (see
+ * below).
  */
 export class EmailSigninRefusedError extends Error {
-  constructor(readonly code: 'verified_domain_requires_sso') {
+  constructor(readonly code: 'verified_domain_requires_sso' | 'magic_link_method_not_allowed') {
     super(code)
     this.name = 'EmailSigninRefusedError'
   }
@@ -71,6 +73,25 @@ export async function requestEmailSignin(opts: {
     throw new EmailSigninRefusedError('verified_domain_requires_sso')
   }
 
+  // The link lands on `${origin}${callbackPath}`, so only a same-origin path
+  // may ride in it ("@evil.example" or ".evil.example" would change the host).
+  const callbackPath = isSafeCallbackUrl(opts.callbackURL) ? opts.callbackURL : '/'
+
+  // The "Email magic link" method, in front of the mint for the same reason as
+  // "Require SSO" above: nothing downstream runs the hook layer that enforces
+  // it for every other email path. One predicate with that layer, so email
+  // links that stand in while single sign-on is paused stay in force here too.
+  const { isAuthMethodAllowed } = await import('./auth-restrictions')
+  const methodInForce = (await isAuthMethodAllowed('magic-link', 'user', registered)).allowed
+
+  // The link-conflict confirmation (`/auth/link-sso`) is refused like any
+  // other email while the method is off. Nothing on the server records that a
+  // provider sign-in actually hit `account_not_linked` for this address (the
+  // dialog keeps that in the browser), so a callback naming `/auth/link-sso`
+  // is the caller's word alone and cannot earn an exemption. An account in
+  // that state signs in another way it has and links the provider from there.
+  if (!methodInForce) throw new EmailSigninRefusedError('magic_link_method_not_allowed')
+
   const auth = await getAuth()
 
   const { db } = await import('@/lib/server/db')
@@ -115,10 +136,6 @@ export async function requestEmailSignin(opts: {
     return
   }
 
-  // The link lands on `${origin}${callbackPath}`, so only a same-origin path
-  // may ride in it ("@evil.example" or ".evil.example" would change the host).
-  const callbackPath = isSafeCallbackUrl(opts.callbackURL) ? opts.callbackURL : '/'
-
   // Failed verifies (token consumed by an email scanner, expired, etc.)
   // need to land on the right login page. Team callbacks (`/admin/...`)
   // bounce to the unified login carrying the same deep link so it renders
@@ -154,6 +171,9 @@ export async function requestEmailSignin(opts: {
       callbackPath,
       errorCallbackPath,
       portalUrl: opts.linkOrigin ?? config.baseUrl,
+      // A link the method governs, so the verify side can refuse it once the
+      // method is off.
+      purpose: 'email-signin',
     }),
     auth.api.createVerificationOTP({
       body: { email: opts.email, type: 'sign-in' },

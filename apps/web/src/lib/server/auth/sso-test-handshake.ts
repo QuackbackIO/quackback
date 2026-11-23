@@ -205,7 +205,10 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   if (input.discoveryUrl) {
     let discoveryRes: Response
     try {
-      discoveryRes = await safeFetch(input.discoveryUrl, { timeoutMs: 5000 })
+      discoveryRes = await safeFetch(input.discoveryUrl, {
+        timeoutMs: 5000,
+        allowE2eOidcFake: true,
+      })
     } catch (err) {
       if (err instanceof SsrfError) {
         return {
@@ -288,6 +291,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   let tokenRes: Response
   try {
     tokenRes = await safeFetch(discovery.token_endpoint, {
+      allowE2eOidcFake: true,
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -382,6 +386,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
 
     try {
       const jwksRes = await safeFetch(discovery.jwks_uri, {
+        allowE2eOidcFake: true,
         timeoutMs: 5000,
         maxResponseBytes: 256 * 1024,
       })
@@ -467,6 +472,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     }
     try {
       const uiRes = await safeFetch(discovery.userinfo_endpoint, {
+        allowE2eOidcFake: true,
         headers: { Authorization: `Bearer ${tokens.access_token}` },
         timeoutMs: 5000,
       })

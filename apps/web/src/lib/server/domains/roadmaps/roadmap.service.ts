@@ -14,7 +14,7 @@ import {
   type Transaction,
 } from '@/lib/server/db'
 import type { PostTagId, RoadmapId, RoadmapColumnId } from '@quackback/ids'
-import { nextPosition, positionCaseSql } from '@/lib/server/utils'
+import { isUniqueViolation, nextPosition, positionCaseSql } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { roadmapBaseFilterSchema } from '@/lib/shared/roadmap-config'
 import { roadmapViewFilter, isTeamActor, type Actor, ANONYMOUS_ACTOR } from '@/lib/server/policy'
@@ -27,15 +27,19 @@ import type {
   UpdateRoadmapInput,
 } from './roadmap.types'
 
-function validateColumns(columns: RoadmapColumnInput[]): void {
+function validateColumnFields(column: { name?: string; color?: string }): void {
+  if (column.name !== undefined && !column.name.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Column name is required')
+  }
+  if (column.color !== undefined && !column.color.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Column color is required')
+  }
+}
+
+function validateColumns(columns: Pick<RoadmapColumnInput, 'statusId' | 'name' | 'color'>[]): void {
   const statuses = new Set<string>()
   for (const column of columns) {
-    if (!column.name.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Column name is required')
-    }
-    if (!column.color.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Column color is required')
-    }
+    validateColumnFields(column)
     if (statuses.has(column.statusId)) {
       throw new ValidationError('VALIDATION_ERROR', 'Each status can appear only once in a roadmap')
     }
@@ -140,7 +144,9 @@ export async function createRoadmap(input: CreateRoadmapInput): Promise<RoadmapW
   }
   validateConfig(input)
 
-  const existing = await db.query.roadmaps.findFirst({ where: eq(roadmaps.slug, input.slug) })
+  const existing = await db.query.roadmaps.findFirst({
+    where: and(eq(roadmaps.slug, input.slug), isNull(roadmaps.deletedAt)),
+  })
   if (existing) {
     throw new ConflictError('DUPLICATE_SLUG', `A roadmap with slug "${input.slug}" already exists`)
   }
@@ -149,28 +155,40 @@ export async function createRoadmap(input: CreateRoadmapInput): Promise<RoadmapW
   const type = input.type ?? 'column'
   const visibility = input.visibility ?? 'public'
 
-  const roadmap = await db.transaction(async (tx) => {
-    const [created] = await tx
-      .insert(roadmaps)
-      .values({
-        name: input.name.trim(),
-        slug: input.slug.trim(),
-        description: input.description?.trim() || null,
-        type,
-        baseFilter: input.baseFilter ?? {},
-        dateSource: type === 'date' ? 'eta' : null,
-        frequency: type === 'date' ? (input.frequency ?? 'monthly') : null,
-        visibility,
-        visibleSegmentIds: visibility === 'segment' ? input.visibleSegmentIds : null,
-        position,
-      })
-      .returning()
+  const roadmap = await db
+    .transaction(async (tx) => {
+      const [created] = await tx
+        .insert(roadmaps)
+        .values({
+          name: input.name.trim(),
+          slug: input.slug.trim(),
+          description: input.description?.trim() || null,
+          type,
+          baseFilter: input.baseFilter ?? {},
+          dateSource: type === 'date' ? 'eta' : null,
+          frequency: type === 'date' ? (input.frequency ?? 'monthly') : null,
+          visibility,
+          visibleSegmentIds: visibility === 'segment' ? input.visibleSegmentIds : null,
+          position,
+        })
+        .returning()
 
-    if (type === 'column') {
-      await replaceColumns(tx, created.id, input.columns ?? (await defaultColumns(tx)))
-    }
-    return created
-  })
+      if (type === 'column') {
+        await replaceColumns(tx, created.id, input.columns ?? (await defaultColumns(tx)))
+      }
+      return created
+    })
+    .catch((error: unknown) => {
+      // A concurrent create can take the slug between the check above and
+      // this insert; the partial unique index then refuses it.
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(
+          'DUPLICATE_SLUG',
+          `A roadmap with slug "${input.slug}" already exists`
+        )
+      }
+      throw error
+    })
 
   return getRoadmap(roadmap.id)
 }
@@ -341,6 +359,14 @@ export async function createRoadmapColumn(input: CreateRoadmapColumnInput): Prom
   if (roadmap.type !== 'column') {
     throw new ValidationError('VALIDATION_ERROR', 'Date roadmaps cannot have status columns')
   }
+  const status = await db.query.postStatuses.findFirst({
+    where: and(eq(postStatuses.id, input.statusId), isNull(postStatuses.deletedAt)),
+    columns: { id: true },
+  })
+  if (!status) {
+    throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${input.statusId} not found`)
+  }
+  validateColumns([...roadmap.columns, input])
   const [column] = await db
     .insert(roadmapColumns)
     .values({
@@ -352,13 +378,32 @@ export async function createRoadmapColumn(input: CreateRoadmapColumnInput): Prom
       position: input.position ?? roadmap.columns.length,
     })
     .returning()
+    .catch((error: unknown) => {
+      // A concurrent add of the same status reaches the unique index.
+      if (isUniqueViolation(error)) {
+        throw new ValidationError(
+          'VALIDATION_ERROR',
+          'Each status can appear only once in a roadmap'
+        )
+      }
+      throw error
+    })
   return column
+}
+
+/** A column by id, narrowed to one roadmap's columns when `roadmapId` is given. */
+function columnWhere(id: RoadmapColumnId, roadmapId?: RoadmapId) {
+  return roadmapId
+    ? and(eq(roadmapColumns.id, id), eq(roadmapColumns.roadmapId, roadmapId))
+    : eq(roadmapColumns.id, id)
 }
 
 export async function updateRoadmapColumn(
   id: RoadmapColumnId,
-  input: UpdateRoadmapColumnInput
+  input: UpdateRoadmapColumnInput,
+  roadmapId?: RoadmapId
 ): Promise<RoadmapColumn> {
+  validateColumnFields(input)
   const [column] = await db
     .update(roadmapColumns)
     .set({
@@ -368,7 +413,7 @@ export async function updateRoadmapColumn(
       ...(input.position !== undefined ? { position: input.position } : {}),
       updatedAt: new Date(),
     })
-    .where(eq(roadmapColumns.id, id))
+    .where(columnWhere(id, roadmapId))
     .returning()
   if (!column) {
     throw new NotFoundError('ROADMAP_COLUMN_NOT_FOUND', `Roadmap column ${id} not found`)
@@ -376,8 +421,11 @@ export async function updateRoadmapColumn(
   return column
 }
 
-export async function deleteRoadmapColumn(id: RoadmapColumnId): Promise<void> {
-  const deleted = await db.delete(roadmapColumns).where(eq(roadmapColumns.id, id)).returning()
+export async function deleteRoadmapColumn(
+  id: RoadmapColumnId,
+  roadmapId?: RoadmapId
+): Promise<void> {
+  const deleted = await db.delete(roadmapColumns).where(columnWhere(id, roadmapId)).returning()
   if (!deleted.length) {
     throw new NotFoundError('ROADMAP_COLUMN_NOT_FOUND', `Roadmap column ${id} not found`)
   }

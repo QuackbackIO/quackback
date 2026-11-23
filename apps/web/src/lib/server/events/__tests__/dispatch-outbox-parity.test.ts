@@ -163,6 +163,20 @@ const cases: Array<{ type: string; run: () => Promise<void> }> = [
         excerpt: 'e',
       }),
   },
+  {
+    type: 'comment.mentioned',
+    run: () =>
+      d.dispatchCommentMentioned(actor(), {
+        postId: createId('post'),
+        postTitle: 't',
+        postUrl: 'https://x',
+        commentId: createId('post_comment'),
+        isPrivate: true,
+        mentionedPrincipalId: createId('principal'),
+        mentioningPrincipalId: createId('principal'),
+        excerpt: 'e',
+      }),
+  },
   { type: 'post.updated', run: () => d.dispatchPostUpdated(actor(), postRef(), ['title']) },
   { type: 'post.deleted', run: () => d.dispatchPostDeleted(actor(), postRef()) },
   { type: 'post.restored', run: () => d.dispatchPostRestored(actor(), postRef()) },

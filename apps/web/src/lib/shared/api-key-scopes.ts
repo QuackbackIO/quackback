@@ -118,7 +118,7 @@ export const ACCESS_DOMAINS: readonly AccessDomain[] = [
   {
     domain: 'settings',
     label: 'Settings',
-    description: 'Branding, Messenger, modules, and office hours',
+    description: 'Branding, Messenger, modules, office hours, and webhooks',
     kind: 'read_write',
     readScope: 'read:settings',
     writeScope: 'write:settings',
@@ -226,10 +226,12 @@ export function summarizeDomainAccess(
  *
  * The REST API gates on catalogue permissions while MCP gates on scopes; this
  * table joins the two vocabularies. Feedback is the base domain: directory and
- * workspace families (people, members, segments, webhooks, integrations, ...)
- * ride the feedback scopes because they exist on the REST surface as feedback
- * integration plumbing. Changelog READS ride `read:feedback` — there is no
- * read:changelog scope, matching the MCP search / get_details convention.
+ * workspace families (people, members, segments, integrations, ...) ride the
+ * feedback scopes because they exist on the REST surface as feedback
+ * integration plumbing. Webhooks are the exception (see scopeForPermission):
+ * a webhook can carry any domain's events, so managing one is settings work.
+ * Changelog READS ride `read:feedback` — there is no read:changelog scope,
+ * matching the MCP search / get_details convention.
  * Support (tickets) shares the chat scopes with conversations. AI rides the
  * feedback scopes like the other workspace-config families: its keys gate
  * assistant configuration, not conversation access. Status page
@@ -272,13 +274,48 @@ export function readScopeForCategory(category: PermissionCategory): ApiKeyScope 
   return CATEGORY_SCOPES[category].read
 }
 
+/**
+ * The teammate permissions that let someone see a category's data, any one of
+ * which suffices. The person-side twin of `readScopeForCategory`: a webhook
+ * subscription is a read of every event it receives, so subscribing needs the
+ * event's read scope on the key AND one of these on the person (empty = any
+ * teammate, for data the portal already shows publicly).
+ */
+const CATEGORY_VIEW_PERMISSIONS: Record<PermissionCategory, readonly PermissionKey[]> = {
+  workspace: [PERMISSIONS.SETTINGS_MANAGE],
+  members: [PERMISSIONS.MEMBER_VIEW],
+  people: [PERMISSIONS.PEOPLE_VIEW],
+  company: [PERMISSIONS.COMPANY_VIEW],
+  audience: [PERMISSIONS.SEGMENT_VIEW],
+  feedback: [PERMISSIONS.POST_VIEW_PRIVATE],
+  // Published changelog entries are public.
+  changelog: [],
+  help_center: [PERMISSIONS.HELP_CENTER_MANAGE],
+  survey: [PERMISSIONS.SURVEY_VIEW],
+  conversation: [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.CONVERSATION_VIEW_ALL],
+  analytics: [PERMISSIONS.ANALYTICS_VIEW],
+  integration: [PERMISSIONS.INTEGRATION_VIEW],
+  support: [PERMISSIONS.TICKET_VIEW, PERMISSIONS.TICKET_VIEW_ALL],
+  ai: [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
+  status_page: [PERMISSIONS.STATUS_PAGE_PUBLISH, PERMISSIONS.STATUS_PAGE_MANAGE],
+}
+
+export function viewPermissionsForCategory(category: PermissionCategory): readonly PermissionKey[] {
+  return CATEGORY_VIEW_PERMISSIONS[category]
+}
+
 export function scopeForPermission(permission: PermissionKey): ApiKeyScope {
   if (
     permission === PERMISSIONS.SETTINGS_MANAGE ||
     permission === PERMISSIONS.SETTINGS_BRANDING ||
-    permission === PERMISSIONS.OFFICE_HOURS_MANAGE
+    permission === PERMISSIONS.OFFICE_HOURS_MANAGE ||
+    // A webhook subscription can carry any domain's events (chat and tickets
+    // included), so managing one is workspace configuration, not feedback
+    // work. Each event's own read scope is checked when it is subscribed.
+    permission === PERMISSIONS.WEBHOOK_MANAGE
   )
     return 'write:settings'
+  if (permission === PERMISSIONS.WEBHOOK_VIEW) return 'read:settings'
   // Every catalogue key has a category; fall back to the base write scope so an
   // unmapped permission fails toward requiring MORE authority, never less.
   const category = CATEGORY_BY_KEY.get(permission) ?? 'feedback'

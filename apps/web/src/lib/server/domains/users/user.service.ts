@@ -46,6 +46,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { notTestPrincipal } from '@/lib/server/test-data'
+import { withdrawThreadVotes } from '@/lib/server/domains/posts/post.merge-ids'
 import { EXTERNAL_ID_KEY } from '@/lib/server/domains/users/user.attributes'
 
 const log = logger.child({ component: 'users' })
@@ -177,6 +178,7 @@ export async function listPortalUsers(
       sort = 'newest',
       page = 1,
       limit = 20,
+      offset = (page - 1) * limit,
       segmentIds,
       tagIds,
       lifecycle = 'users',
@@ -385,7 +387,7 @@ export async function listPortalUsers(
         .where(whereClause)
         .orderBy(orderBy)
         .limit(limit)
-        .offset((page - 1) * limit),
+        .offset(offset),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(principal)
@@ -422,7 +424,7 @@ export async function listPortalUsers(
     return {
       items,
       total,
-      hasMore: page * limit < total,
+      hasMore: offset + items.length < total,
     }
   } catch (error) {
     log.error({ err: error }, 'failed to list portal users')
@@ -491,11 +493,13 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
       const { revokeApiKeysCreatedBy } =
         await import('@/lib/server/domains/principals/principal.factory')
       await revokeApiKeysCreatedBy(tx, principalId)
-      await reattributeAuthoredContent(tx, principalId)
+      // Clear the visitor email while the conversations still name this
+      // person: re-attribution moves them to the placeholder.
       await tx
         .update(conversations)
         .set({ visitorEmail: null })
         .where(eq(conversations.visitorPrincipalId, principalId))
+      await reattributeAuthoredContent(tx, principalId)
       if (userId) {
         await tx.delete(session).where(eq(session.userId, userId))
         // Release widget identity keys so a later ssoToken with this `sub`
@@ -509,6 +513,9 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
           })
           .where(eq(user.id, userId))
       }
+      // Their votes cascade away with the principal; the stored counts on the
+      // posts they voted on drop with them.
+      await withdrawThreadVotes(tx, principalId)
       // Delete principal record (user record is retained; the FK cascades the
       // other way, from user to principal)
       await tx.delete(principal).where(eq(principal.id, principalId))

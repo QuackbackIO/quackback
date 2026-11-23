@@ -210,7 +210,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-1 py-2 text-sm font-medium text-foreground/80 hover:text-foreground"
+        className="flex w-full items-center gap-2 px-1 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         {intl.formatMessage({ id: 'portal.feedback.filter.more', defaultMessage: 'More filters' })}
         {onCount > 0 && (

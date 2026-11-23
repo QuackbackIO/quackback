@@ -10,7 +10,8 @@ import {
 import { db, segments, principal, eq, and, isNull, inArray } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { addMember, removeMember } from '@/lib/server/domains/segments/segment-membership.service'
-import type { PrincipalId } from '@quackback/ids'
+import { isValidTypeId, type PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const MutateBody = z.object({
   principalIds: z.array(z.string()).min(1).max(1000),
@@ -30,6 +31,8 @@ async function validatePrincipals(
   // Dedupe so a duplicate id in the body doesn't double-add or
   // double-remove (REST callers occasionally include dupes when paging).
   const unique = Array.from(new Set(requested))
+  // A malformed id cannot name a principal; querying it would fail the batch.
+  const wellFormed = unique.filter((id) => isValidTypeId(id, 'principal'))
   // Only human `type='user'` principals are eligible for segment
   // membership: anonymous visitors have no stable identity for SSO
   // reconcile, and service principals (API keys, integrations) would
@@ -38,7 +41,7 @@ async function validatePrincipals(
   const rows = await db
     .select({ id: principal.id })
     .from(principal)
-    .where(and(inArray(principal.id, unique as PrincipalId[]), eq(principal.type, 'user')))
+    .where(and(inArray(principal.id, wellFormed as PrincipalId[]), eq(principal.type, 'user')))
   const found = new Set(rows.map((r) => String(r.id)))
   const valid: PrincipalId[] = []
   const missing: string[] = []
@@ -68,7 +71,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
       POST: async ({ request, params }) => {
         try {
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.SEGMENT_MANAGE })
-          const body = MutateBody.parse(await request.json())
+          const body = MutateBody.parse(await readJsonBody(request))
 
           const segment = await db.query.segments.findFirst({
             where: and(eq(segments.slug, params.slug), isNull(segments.deletedAt)),
@@ -102,7 +105,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
           settled.forEach((r, i) => {
             if (r.status === 'rejected') failed.push(String(valid[i]))
           })
-          const added = settled.filter((r) => r.status === 'fulfilled').length
+          const added = settled.filter((r) => r.status === 'fulfilled' && r.value).length
 
           return successResponse({ added, failed })
         } catch (error) {
@@ -121,7 +124,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
       DELETE: async ({ request, params }) => {
         try {
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.SEGMENT_MANAGE })
-          const body = MutateBody.parse(await request.json())
+          const body = MutateBody.parse(await readJsonBody(request))
 
           const segment = await db.query.segments.findFirst({
             where: and(eq(segments.slug, params.slug), isNull(segments.deletedAt)),
@@ -150,7 +153,8 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
           settled.forEach((r, i) => {
             if (r.status === 'rejected') failed.push(String(valid[i]))
           })
-          const removed = settled.filter((r) => r.status === 'fulfilled').length
+          // A person who held no row was not removed.
+          const removed = settled.filter((r) => r.status === 'fulfilled' && r.value).length
 
           return successResponse({ removed, failed })
         } catch (error) {

@@ -68,3 +68,9 @@ export interface EvaluationResult {
   added: number
   removed: number
 }
+
+/** A segment that could not be evaluated in a bulk run; its members are unchanged. */
+export interface EvaluationFailure {
+  segmentId: SegmentId
+  error: string
+}

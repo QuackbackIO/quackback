@@ -24,10 +24,11 @@ export const Route = createFileRoute('/admin/search')({
     const page = Number(search.page)
     return {
       q: typeof search.q === 'string' ? search.q.trim().slice(0, MAX_SEARCH_LENGTH) : '',
-      ...(SEARCH_KINDS.includes(search.kind as SearchKind)
-        ? { kind: search.kind as SearchKind }
-        : {}),
-      ...(Number.isInteger(page) && page > 1 && page <= LAST_PAGE ? { page } : {}),
+      // Explicit undefined, not an omitted key, so a raw bad value cannot survive.
+      kind: SEARCH_KINDS.includes(search.kind as SearchKind)
+        ? (search.kind as SearchKind)
+        : undefined,
+      page: Number.isInteger(page) && page > 1 && page <= LAST_PAGE ? page : undefined,
     }
   },
   component: SearchPage,

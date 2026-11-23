@@ -25,17 +25,17 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('LogoUploader', () => {
-  it('shows an Upload logo control at rest when there is no logo', () => {
+  it('shows an Upload icon control at rest when there is no icon', () => {
     render(<LogoUploader workspaceName="Fernhill" />)
-    const control = screen.getByRole('button', { name: 'Upload logo' })
+    const control = screen.getByRole('button', { name: 'Upload icon' })
     expect(control.className).not.toContain('opacity-0')
-    expect(control.textContent).toBe('Upload logo')
+    expect(control.textContent).toBe('Upload icon')
   })
 
-  it('offers Change once a logo is set', () => {
+  it('offers Change once an icon is set', () => {
     logoUrl = 'https://example.com/logo.png'
     render(<LogoUploader workspaceName="Fernhill" />)
-    expect(screen.getByRole('button', { name: 'Change logo' }).textContent).toBe('Change')
+    expect(screen.getByRole('button', { name: 'Change icon' }).textContent).toBe('Change')
     expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy()
   })
 

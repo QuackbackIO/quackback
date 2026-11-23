@@ -1,6 +1,7 @@
 import { TierLimitError } from '../../errors/tier-limit-error'
 import { getAiBudgetStatus } from '../ai/ai-budget'
 import { aiAllowance, type AiCreditsState } from '@/lib/shared/billing/ai-credits'
+import type { Database, Transaction } from '@/lib/server/db'
 import { getTierLimits } from './tier-limits.service'
 import type { TierFeatureFlags } from './tier-limits.types'
 import {
@@ -59,9 +60,10 @@ export function enforceFeatureGate(args: EnforceFeatureGateArgs): void {
  */
 export async function assertTierFeature(
   feature: keyof TierFeatureFlags,
-  friendly: string
+  friendly: string,
+  executor?: Database | Transaction
 ): Promise<void> {
-  const limits = await getTierLimits()
+  const limits = await getTierLimits(undefined, executor)
   enforceFeatureGate({ enabled: limits.features[feature], feature, friendly })
 }
 

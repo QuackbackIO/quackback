@@ -4,9 +4,9 @@ import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { contentPreview } from '@/lib/shared/utils/string'
 import { cn } from '@/lib/shared/utils'
-import { changelogCategoryQueries } from '@/lib/client/queries/changelog'
 import {
   shouldClearUnavailableChangelogCategory,
+  widgetChangelogLabelsQuery,
   widgetChangelogListQuery,
 } from './widget-changelog-query'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -50,7 +50,7 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   const { sessionVersion } = useWidgetAuth()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError, isLoading } =
     useInfiniteQuery(widgetChangelogListQuery(sessionVersion))
-  const { data: categories = [] } = useQuery(changelogCategoryQueries.list())
+  const { data: categories = [] } = useQuery(widgetChangelogLabelsQuery(sessionVersion))
   const [activeCategoryId, setActiveCategoryId] = useState<ChangelogCategoryId | null>(
     lastVisit.categoryId
   )
