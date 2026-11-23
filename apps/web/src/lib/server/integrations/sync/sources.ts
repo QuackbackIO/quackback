@@ -1,4 +1,14 @@
-import { db, eq, conversations, conversationMessages, principal, user } from '@/lib/server/db'
+import {
+  and,
+  asc,
+  db,
+  eq,
+  isNull,
+  conversations,
+  conversationMessages,
+  principal,
+  user,
+} from '@/lib/server/db'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type {
@@ -33,6 +43,7 @@ export async function refreshConversationSyncEvent(
         createdAt: conversation.createdAt.toISOString(),
         lastMessageAt: conversation.lastMessageAt.toISOString(),
         resolvedAt: conversation.resolvedAt?.toISOString() ?? null,
+        openingMessage: await openingMessage(conversation.id),
       },
     }
   } else {
@@ -69,6 +80,20 @@ export async function refreshConversationSyncEvent(
     }
   }
   return true
+}
+
+/** The customer's first message, quoted by a new conversation notice. */
+async function openingMessage(conversationId: string): Promise<string | null> {
+  const first = await db.query.conversationMessages.findFirst({
+    where: and(
+      eq(conversationMessages.conversationId, conversationId as never),
+      eq(conversationMessages.senderType, 'visitor'),
+      eq(conversationMessages.isInternal, false),
+      isNull(conversationMessages.deletedAt)
+    ),
+    orderBy: asc(conversationMessages.createdAt),
+  })
+  return first ? contentJsonToMarkdown(first.contentJson, first.content) : null
 }
 
 /** Identity in old event snapshots may have been edited or erased meanwhile. */
