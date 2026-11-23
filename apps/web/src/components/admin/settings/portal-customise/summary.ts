@@ -3,7 +3,7 @@
  * Customise page reads it.
  */
 import { type ThemeConfig, type ThemeMode } from '@/lib/shared/theme'
-import { customFontStack } from '@/lib/shared/theme/generator'
+import { customFontStack } from '@/lib/shared/theme/fonts'
 import { advancedCssRemainder } from '@/lib/shared/theme/readable-css'
 import { isAutoColour } from '@/lib/shared/theme/colour-setters'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'

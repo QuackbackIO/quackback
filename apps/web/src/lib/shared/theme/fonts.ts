@@ -1,4 +1,5 @@
 import { DEFAULT_FONT_SANS, NO_HEADING_FONT, normalizeFontSans } from './base'
+import { isWritableCustomFont, type CustomFont } from './font-uploads'
 
 /**
  * Canonical list of self-hosted branding font families, shared between the
@@ -121,4 +122,28 @@ export function readConfigFontSans(
   const fallback = config?.customFont?.fallback
   const match = fallback ? BRANDING_FONTS.find((f) => f.id === fallback) : undefined
   return match?.value ?? readFontSans(config?.light)
+}
+
+/**
+ * The font stack for an uploaded family: the family, then the listed font it
+ * falls back to. Null when the stored family or its files are not safe to
+ * write, or the fallback is not a listed font.
+ */
+export function customFontStack(font: CustomFont | null | undefined): string | null {
+  if (!isWritableCustomFont(font)) return null
+  const fallback = BRANDING_FONTS.find((f) => f.id === font.fallback)
+  return fallback ? `"${font.family}", ${fallback.value}` : null
+}
+
+/**
+ * The font stack for an uploaded headings family: the family, then the text
+ * font, written out (a `var()` here would be worked out where the variable
+ * is declared, not where a heading is drawn). Null when the stored family or
+ * its files are not safe to write.
+ */
+export function headingFontStack(
+  font: CustomFont | null | undefined,
+  textStack: string
+): string | null {
+  return isWritableCustomFont(font) ? `"${font.family}", ${textStack}` : null
 }

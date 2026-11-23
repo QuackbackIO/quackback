@@ -5,7 +5,7 @@ import { generateThemeCSS, generateWorkspaceThemeCSS } from '../generator'
 import type { ThemeConfig } from '../types'
 
 function readVar(css: string, selector: string, name: string): string | undefined {
-  const block = css.split('}').find((part) => part.includes(`${selector} {`))
+  const block = css.split('}').find((part) => part.trimStart().startsWith(`${selector}{`))
   if (!block) return undefined
   const match = block.match(new RegExp(`${name}:\\s*([^;]+)`))
   return match?.[1]?.trim()
