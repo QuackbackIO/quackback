@@ -134,8 +134,6 @@ export {
   isValidOklch,
 } from './colors'
 
-export { cardStyleCss, flatFill } from './card-style'
-
 export type { BrandingFontId } from './fonts'
 export {
   BRANDING_FONTS,

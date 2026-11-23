@@ -9,7 +9,7 @@
  * and the server need what is here.
  */
 import { expandTheme, withStandIns, type MinimalThemeVariables } from './expand'
-import { variableMap } from './base'
+import { PICKED_KEYS, variableMap } from './base'
 import type { ThemeMode, ThemeVariables } from './types'
 
 /** Reverse lookup: CSS variable name → ThemeVariables key */
@@ -40,8 +40,8 @@ export function generateReadableCSS(
 ): string {
   const parts: string[] = []
   const [lightVars, darkVars] = withStandIns(
-    expandTheme(lightMinimal, { mode: 'light' }),
-    expandTheme(darkMinimal, { mode: 'dark' })
+    expandTheme(lightMinimal, { mode: 'light', picked: true }),
+    expandTheme(darkMinimal, { mode: 'dark', picked: true })
   )
 
   if (themeMode !== 'dark') parts.push(formatCssBlock(':root', lightVars))
@@ -87,9 +87,13 @@ const MINIMAL_THEME_CSS_VARS = new Set(
       'fontSans',
       'fontHeading',
       'radius',
+      ...Object.values(PICKED_KEYS),
     ] as const
   ).map((key) => variableMap[key])
 )
+
+/** The picked colours' lines, written only while a colour is drawn otherwise. */
+const PICKED_CSS_VARS = new Set(Object.values(PICKED_KEYS).map((key) => variableMap[key]))
 
 function stripLeadingCssComments(decl: string): string {
   let s = decl.trim()
@@ -116,6 +120,8 @@ function parsePropertyValue(decl: string): { property: string; value: string } |
 function isGeneratedThemeDeclaration(decl: string, generated: Map<string, string>): boolean {
   const parsed = parsePropertyValue(decl)
   if (!parsed) return false
+  // A picked colour's line is the theme's whether or not this palette writes one.
+  if (PICKED_CSS_VARS.has(parsed.property)) return true
   const emitted = generated.get(parsed.property)
   if (emitted === undefined) return false
   // Minimal keys live in brandingConfig; stale copies must not override.

@@ -68,6 +68,27 @@ describe('ColoursSection', () => {
     expect(screen.getAllByRole('button', { name: /Main colour/ })).toHaveLength(2)
   })
 
+  it('shows the colour picked, with one line when it is drawn otherwise', () => {
+    renderSection({
+      light: {
+        ...light,
+        primary: '#6265f0',
+        pickedPrimary: '#6366f1',
+        foreground: '#767676',
+        pickedForeground: '#bbbbbb',
+      },
+    })
+    expect(screen.getByRole('button', { name: /Main colour.*#6366f1/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Text.*#bbbbbb/ })).toBeInTheDocument()
+    expect(
+      screen.getByText('Buttons are drawn a little deeper so their text reads.')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Text is drawn darker so it reads.')).toBeInTheDocument()
+    cleanup()
+    renderSection()
+    expect(screen.queryByText(/drawn/)).toBeNull()
+  })
+
   it('shows the dark rows alone for an always dark portal', () => {
     renderSection({ themeMode: 'dark' })
     expect(screen.getAllByRole('button', { name: /Main colour/ })).toHaveLength(1)

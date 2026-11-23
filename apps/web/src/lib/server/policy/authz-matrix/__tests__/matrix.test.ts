@@ -108,6 +108,7 @@ describe('portal customise authorization (decision Q2)', () => {
       ['lib/server/functions/portal-customise.ts', 'importBrandFn'],
       ['lib/server/functions/portal-customise.ts', 'askPortalCustomiseFn'],
       ['lib/server/functions/settings.ts', 'fetchPortalPageConfigFn'],
+      ['lib/server/functions/portal-summary.ts', 'fetchPortalSummaryFn'],
     ]) {
       const surface = surfaces.find((item) => item.file === file && item.surface === name)
       expect(surface, name).toBeDefined()

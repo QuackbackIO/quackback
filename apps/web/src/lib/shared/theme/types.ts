@@ -49,6 +49,16 @@ export interface ThemeVariables {
   navInactiveColor?: string
   headerPrimary?: string
   headerPrimaryForeground?: string
+  /**
+   * The colours as picked, where the theme draws them otherwise to read
+   * (PICKED_KEYS). Only the editor's stylesheet and the stored theme carry
+   * them; the live theme CSS never does.
+   */
+  pickedPrimary?: string
+  pickedForeground?: string
+  pickedCard?: string
+  pickedMuted?: string
+  pickedMutedForeground?: string
 }
 
 export type ThemeMode = 'light' | 'dark' | 'user'

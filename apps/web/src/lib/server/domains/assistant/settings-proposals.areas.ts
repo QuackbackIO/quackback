@@ -17,6 +17,7 @@ import { resolveFeatureFlags } from '@/lib/server/domains/settings/settings.type
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { isWidgetMessengerEnabled } from '@/lib/shared/support-surfaces'
 import { expandTheme } from '@/lib/shared/theme/expand'
+import { PICKED_KEYS } from '@/lib/shared/theme/base'
 import type { ThemeConfig } from '@/lib/shared/theme/types'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
@@ -70,6 +71,20 @@ export async function requireAreaPermission(
     )
 }
 
+/**
+ * A theme side as a change reads it: every variable expanded, and each
+ * colour as picked where it is drawn otherwise (a change sets the colour
+ * picked; the picked-colour variables themselves are never shown).
+ */
+function shownSide(side: ThemeConfig['light'], mode: 'light' | 'dark'): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...side, ...expandTheme(side ?? {}, { mode }) }
+  for (const [key, picked] of Object.entries(PICKED_KEYS)) {
+    if (side?.[picked]) out[key] = side[picked]
+    delete out[picked]
+  }
+  return out
+}
+
 export function areaValues(row: SettingsRecord, area: SettingsArea): Record<string, unknown> {
   switch (area) {
     case 'branding': {
@@ -77,8 +92,8 @@ export function areaValues(row: SettingsRecord, area: SettingsArea): Record<stri
       return {
         ...config,
         themeMode: config.themeMode ?? 'user',
-        light: { ...config.light, ...expandTheme(config.light ?? {}, { mode: 'light' }) },
-        dark: { ...config.dark, ...expandTheme(config.dark ?? {}, { mode: 'dark' }) },
+        light: shownSide(config.light, 'light'),
+        dark: shownSide(config.dark, 'dark'),
         logoKey: row.logoKey,
       }
     }

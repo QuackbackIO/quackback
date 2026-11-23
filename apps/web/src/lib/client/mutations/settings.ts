@@ -452,6 +452,8 @@ export function usePublishPortalCustomisation() {
     },
     onSuccess: (_result, input) =>
       Promise.all([
+        // Settings > Portal's summary reads the theme, the tabs and the logos.
+        queryClient.invalidateQueries({ queryKey: ['settings', 'branding', 'summary'] }),
         ...(input.theme !== undefined
           ? [queryClient.invalidateQueries({ queryKey: settingsQueries.branding().queryKey })]
           : []),

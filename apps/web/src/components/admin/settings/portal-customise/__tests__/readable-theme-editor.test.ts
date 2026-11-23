@@ -3,11 +3,13 @@
  * back out of it on every edit, so what expansion moves to make text read
  * (a button fill darkened for white words, pale text, a main colour lightened
  * on a dark page) must come back unchanged on the next pass. Anything that
- * moved again would drift on each edit, or be kept as Advanced CSS.
+ * moved again would drift on each edit, or be kept as Advanced CSS. The
+ * colour picked is kept beside the one drawn, and is what comes back.
  */
 import { describe, expect, it } from 'vitest'
 import { unbrandedTheme } from '@/lib/shared/theme/expand'
 import { applyColour, contrastRatio, type ColourRole } from '@/lib/shared/theme/colour-setters'
+import { pickedColour } from '@/lib/shared/theme/base'
 import { generateReadableCSS } from '@/lib/shared/theme/readable-css'
 import { editPalettes, palettesOf } from '@/components/admin/settings/branding/theme-css'
 
@@ -93,5 +95,19 @@ describe('the editor’s readable theme', () => {
     const pale = palettesOf(stylesheet('light', { foreground: '#bbbbbb' })).light
     expect(contrastRatio(pale.foreground!, pale.muted!)).toBeGreaterThanOrEqual(4.5)
     expect([pale.card, pale.muted]).toEqual([start.card, start.muted])
+    // The pale shade picked is kept beside the one drawn.
+    expect(pale.pickedForeground).toBe('#bbbbbb')
+  })
+
+  it('keeps every colour as picked, and draws it to read', () => {
+    const moved = MODES.flatMap((mode) =>
+      COLOURS.flatMap((hex) =>
+        (['primary', 'foreground'] as const).flatMap((role) => {
+          const palette = palettesOf(stylesheet(mode, { [role]: hex }))[mode]
+          return pickedColour(palette, role) === hex ? [] : [`${mode} ${role} ${hex}`]
+        })
+      )
+    )
+    expect(moved).toEqual([])
   })
 })

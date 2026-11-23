@@ -1,6 +1,11 @@
 import { cssColorToOklch, oklchToHex, oklchToHexInGamut, tryCssColorToHex } from './colors'
 import type { ThemeVariables } from './types'
-import { DEFAULT_FONT_SANS, MINIMAL_THEME_VARIABLE_KEYS, NO_HEADING_FONT } from './base'
+import {
+  DEFAULT_FONT_SANS,
+  MINIMAL_THEME_VARIABLE_KEYS,
+  NO_HEADING_FONT,
+  PICKED_KEYS,
+} from './base'
 export { DEFAULT_FONT_SANS, MINIMAL_THEME_VARIABLE_KEYS, NO_HEADING_FONT } from './base'
 
 export interface MinimalThemeVariables {
@@ -24,6 +29,16 @@ export interface MinimalThemeVariables {
   accent?: string
   /** The header bar's colour. Unset, the header is the page. */
   header?: string
+  /**
+   * The colours as picked, kept where the theme draws them otherwise
+   * (PICKED_KEYS): each, when set, is what expansion works from in place of
+   * the colour beside it, which then holds the one drawn.
+   */
+  pickedPrimary?: string
+  pickedForeground?: string
+  pickedCard?: string
+  pickedMuted?: string
+  pickedMutedForeground?: string
 }
 
 export interface MinimalThemeConfig {
@@ -34,8 +49,9 @@ export interface MinimalThemeConfig {
 /** The variables an expansion cannot do without; the rest derive from these. */
 type ThemeColorBase = Omit<
   MinimalThemeVariables,
-  'ring' | 'secondary' | 'accent' | 'fontSans' | 'fontHeading' | 'radius'
+  'ring' | 'secondary' | 'accent' | 'fontSans' | 'fontHeading' | 'radius' | PickedKey
 >
+type PickedKey = (typeof PICKED_KEYS)[keyof typeof PICKED_KEYS]
 
 /**
  * Palette used for any variable a theme leaves out. globals.css
@@ -114,6 +130,14 @@ function resolveMinimal(
   if (!(typeof minimal.radius === 'string' && minimal.radius.trim())) {
     resolved.radius = DEFAULT_RADIUS
   }
+  // A colour kept as picked is the one to work from; the one beside it was drawn.
+  for (const [key, picked] of Object.entries(PICKED_KEYS) as [
+    keyof typeof PICKED_KEYS,
+    PickedKey,
+  ][]) {
+    if (resolved[picked]) resolved[key] = resolved[picked]
+    delete resolved[picked]
+  }
   return resolved
 }
 
@@ -190,16 +214,31 @@ export function generateChartColors(primary: string): [string, string, string, s
 /**
  * Expand a theme into the full variable set. The input is whatever the
  * workspace saved, complete or not: gaps resolve to the base palette first, so
- * every variable read below is a real value.
+ * every variable read below is a real value. Colours are worked out from the
+ * ones picked; with `picked`, each picked colour drawn otherwise comes back
+ * too, as its PICKED_KEYS variable (for the editor and the stored theme, never
+ * the live CSS).
  */
 export function expandTheme(
   partial: Partial<MinimalThemeVariables>,
-  options: { mode: 'light' | 'dark' }
+  options: { mode: 'light' | 'dark'; picked?: boolean }
 ): ThemeVariables {
   const resolved = resolveMinimal(partial, options.mode)
+  const expanded = expandResolved(resolved, options.mode)
+  if (options.picked) {
+    for (const [key, picked] of Object.entries(PICKED_KEYS) as [
+      keyof typeof PICKED_KEYS,
+      PickedKey,
+    ][]) {
+      if (expanded[key] !== resolved[key]) expanded[picked] = resolved[key]
+    }
+  }
+  return expanded
+}
+
+function expandResolved(resolved: MinimalThemeVariables, mode: 'light' | 'dark'): ThemeVariables {
   // In dark mode a main colour too dark to show on the page is lightened.
-  const shown =
-    options.mode === 'dark' ? darkMainColour(resolved.primary, resolved.background) : null
+  const shown = mode === 'dark' ? darkMainColour(resolved.primary, resolved.background) : null
   const brand = shown?.primary ?? resolved.primary
   // The button fill is --primary itself: every filled use of the main colour
   // (buttons, badges, counters, the header's button) carries words in
@@ -211,7 +250,7 @@ export function expandTheme(
     ...readableSurfaces(resolved),
     primary: button.fill,
   }
-  const shadows = options.mode === 'light' ? LIGHT_SHADOWS : DARK_SHADOWS
+  const shadows = mode === 'light' ? LIGHT_SHADOWS : DARK_SHADOWS
   const primaryForeground = button.ink
   const destructiveForeground = computeContrastForeground(minimal.destructive)
   // The main colour drawn as text (links, vote counts, icons), worked out from

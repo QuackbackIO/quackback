@@ -12,6 +12,7 @@ import type { PortalNavItemConfig } from '@/lib/shared/types/settings'
 import { tabDisplayName } from '@/lib/shared/portal-customise/ask'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { colourName } from './colour-name'
+import { pickedHex } from './colours'
 import type { SectionId } from './pages'
 import {
   draftFontName,
@@ -68,8 +69,8 @@ function colourLines(before: PortalDraft, after: PortalDraft): ChangeLine[] {
   for (const { role, label, target } of COLOURS) {
     const now = sides.map((side) => ({
       side,
-      was: hexOf(draftPalette(before, side)[role]),
-      hex: hexOf(draftPalette(after, side)[role]),
+      was: pickedHex(draftPalette(before, side), role),
+      hex: pickedHex(draftPalette(after, side), role),
     }))
     const changed = now.filter(({ was, hex }) => was !== hex)
     if (changed.length === 0) continue
