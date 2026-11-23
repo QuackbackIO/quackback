@@ -1304,7 +1304,7 @@ export function VisitorConversationThread({
                       onClick={() => submitRating(n)}
                       // Brand colour rather than a fixed amber: the stars are
                       // the only element in the thread that ignored the theme.
-                      className="rounded text-lg leading-none text-muted-foreground/50 transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      className="rounded text-lg leading-none text-muted-foreground/50 transition-colors hover:text-primary-ink focus-visible:text-primary-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       aria-label={intl.formatMessage(
                         {
                           id: 'widget.messenger.csat.rateAria',
