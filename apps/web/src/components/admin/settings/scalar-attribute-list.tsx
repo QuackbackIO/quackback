@@ -18,6 +18,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { errorText } from '@/lib/client/error-text'
+import { toastError } from '@/lib/client/error-notice'
 import { AttributeList, type AttributeListItem } from './attribute-list'
 
 const ATTRIBUTE_TYPES = [
@@ -131,9 +133,11 @@ function AttributeFormDialog({
   const [type, setType] = useState<ScalarAttributeType>(initialValues?.type ?? 'string')
   const [currencyCode, setCurrencyCode] = useState(initialValues?.currencyCode ?? 'USD')
   const [externalKey, setExternalKey] = useState(initialValues?.externalKey ?? '')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
+      setError(null)
       setKey(initialValues?.key ?? '')
       setLabel(initialValues?.label ?? '')
       setDescription(initialValues?.description ?? '')
@@ -146,7 +150,17 @@ function AttributeFormDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await onSubmit({ key, label, description, type, currencyCode, externalKey })
+    setError(null)
+    try {
+      await onSubmit({ key, label, description, type, currencyCode, externalKey })
+    } catch (err) {
+      setError(
+        errorText(
+          err,
+          isEditing ? "Couldn't save the attribute." : "Couldn't create the attribute."
+        )
+      )
+    }
   }
 
   const canSubmit = key.trim().length > 0 && label.trim().length > 0
@@ -253,6 +267,12 @@ function AttributeFormDialog({
             <p className="text-[11px] text-muted-foreground">{copy.externalHint}</p>
           </div>
 
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+
           <DialogFooter>
             <Button
               type="button"
@@ -311,7 +331,12 @@ export function ScalarAttributeList<T extends ScalarAttribute>({
 
   const handleDelete = async () => {
     if (!deleteTarget) return
-    await onDelete(deleteTarget.id)
+    try {
+      await onDelete(deleteTarget.id)
+    } catch (err) {
+      toastError(err, "Couldn't delete the attribute.")
+      return
+    }
     setAttributes((prev) => prev.filter((a) => a.id !== deleteTarget.id))
     setDeleteTarget(null)
   }

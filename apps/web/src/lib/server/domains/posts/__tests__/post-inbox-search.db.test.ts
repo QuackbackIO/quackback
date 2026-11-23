@@ -108,6 +108,16 @@ it('pages a best match list without repeating or skipping a post', async () => {
   expect(await search(boardId, 'exporrt', 'relevance', 1)).toEqual(similar)
 })
 
+it('answers a very long word, or many long words, instead of failing', async () => {
+  const boardId = await boardWith([{ title: 'Zapier integration' }])
+  const many = Array.from({ length: 20 }, (_, i) => `${'w'.repeat(30)}${i}`).join(' ')
+  for (const query of ['a'.repeat(2000), many]) {
+    expect(await search(boardId, query, 'relevance')).toEqual([])
+    expect(await search(boardId, query, 'votes', 1)).toEqual([])
+  }
+  expect(await search(boardId, 'integrati', 'relevance')).toEqual(['Zapier integration'])
+})
+
 it('lists newest first under best match when there is no search', async () => {
   const boardId = await boardWith([{ title: 'First' }, { title: 'Second' }])
   const titles = await search(boardId, '', 'relevance')

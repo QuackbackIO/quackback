@@ -26,12 +26,18 @@ export type AuthBlockCode =
   | 'require_two_factor'
   | 'token_expired'
   | 'invalid_token'
+  // The magic-link plugin's own spelling: a spent, unknown or expired link
+  // redirects to its errorCallbackURL with these, uppercase.
+  | 'INVALID_TOKEN'
+  | 'EXPIRED_TOKEN'
   | 'signup_disabled'
   | 'signup_not_allowed'
   | 'OAUTH_CALLBACK_ERROR'
   | 'oauth_signin_error'
   | 'not_team_member'
   | 'reserved_email_domain'
+  // A blocked person who proved who they are (hooks.ts handleBlockedSignInAfter).
+  | 'account_blocked'
   // Better-Auth OAuth/OIDC callback codes (redirectOnError in the
   // generic-oauth plugin and the linking pipeline). These arrive as
   // `?error=<code>` on the errorCallbackURL, not from our pre-checks.
@@ -66,6 +72,8 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   oauth_method_not_allowed: "That sign-in provider isn't enabled for this workspace.",
   auth_method_blocked: "That sign-in method isn't allowed for your account.",
   rate_limited: 'Too many sign-in attempts. Please wait a moment and try again.',
+  // The same words widget identify answers a blocked person with: nothing more.
+  account_blocked: 'This account is blocked.',
   reserved_email_domain:
     'That email domain is reserved and cannot be used to sign in. Use your own email address.',
   verified_domain_requires_sso:
@@ -73,6 +81,10 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   require_two_factor: 'Two-factor authentication is required. Please verify your second factor.',
   token_expired: 'Your login link has expired. Please request a new one.',
   invalid_token: 'Your login link is invalid or has been tampered with. Please try again.',
+  // A used link is the common case (a second click, or a mail scanner opening
+  // it first), so both read as "ask for a new one", which is what helps.
+  INVALID_TOKEN: 'Your login link has expired. Please request a new one.',
+  EXPIRED_TOKEN: 'Your login link has expired. Please request a new one.',
   signup_disabled:
     "Your account isn't pre-provisioned for SSO. Ask an administrator to invite you first.",
   signup_not_allowed:

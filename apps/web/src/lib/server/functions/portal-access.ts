@@ -209,6 +209,31 @@ async function resolvePortalAccess(): Promise<PortalAccessDecision> {
     }
   }
 
+  // The widget's own session counts as the widget grant too, once the visitor
+  // was identified with a verified ssoToken: that is the same proof the
+  // handoff marker stands for, so with widget sign-in on, the widget's
+  // changelog and help reads open to them without a trip through the portal.
+  // An anonymous widget session is not authenticated, so it never gets here;
+  // an unverified identity has hmacVerified=false. Fails closed on DB error.
+  if (
+    !hasViaWidgetMarker &&
+    portalConfig.access?.widgetSignIn &&
+    isAuthenticated &&
+    session?.session?.id &&
+    toSessionScope(session.session.scope) === 'widget'
+  ) {
+    const { widgetIdentifiedSession } = await import('@/lib/server/db')
+    try {
+      const identified = await db.query.widgetIdentifiedSession.findFirst({
+        where: eq(widgetIdentifiedSession.sessionId, session.session.id),
+        columns: { hmacVerified: true },
+      })
+      hasViaWidgetMarker = identified?.hmacVerified === true
+    } catch {
+      hasViaWidgetMarker = false
+    }
+  }
+
   const { evaluatePortalAccess } = await import('@/lib/server/domains/settings/portal-access')
   // Widget identify is verified-only (backend-signed ssoToken; GH issue
   // #300), so HMAC verification is structural, not a per-workspace toggle.

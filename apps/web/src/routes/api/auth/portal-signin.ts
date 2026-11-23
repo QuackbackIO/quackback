@@ -86,11 +86,13 @@ function asRateLimited(err: unknown): { retryAfter: string | null } | null {
  * invitation exemption would have made it an oracle for "invited but not yet
  * joined" as well.
  *
- * The one exception is a domain that requires SSO, refused with a 403 by
- * `EmailSigninRefusedError`. That answer depends only on the domain, which the
- * sign-in form already routes to its provider for anyone who types it, so it is
- * the same for every address at the domain. Nothing that depends on an
- * account may ever be added to that error.
+ * The exceptions are refused with a 403 by `EmailSigninRefusedError`: a domain
+ * that requires SSO, and the "Email magic link" method being off. The first
+ * depends only on the domain, which the sign-in form already routes to its
+ * provider for anyone who types it; the second only on the workspace, which
+ * the sign-in form shows to anyone who opens it. Each is the same for every
+ * address it covers. Nothing that depends on an account may ever be added to
+ * that error.
  *
  * Exported so it can be driven directly: a handler that can only be reached
  * through the router is a handler nobody can hold two requests up against.

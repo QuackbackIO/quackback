@@ -9,7 +9,15 @@
  * The one exception is an unchanged rule whose role has since been deleted: it
  * grants nothing at sign-in, so it must not block the edit.
  */
-import { db, eq, inArray, permissions, rolePermissions } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  inArray,
+  permissions,
+  rolePermissions,
+  type Database,
+  type Transaction,
+} from '@/lib/server/db'
 import type { RoleId } from '@quackback/ids'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -32,7 +40,8 @@ import { assertGrantableRole } from './role.grants'
 export async function checkRoleRuleGrants(
   before: unknown,
   after: unknown,
-  granter: readonly PermissionKey[] | undefined
+  granter: readonly PermissionKey[] | undefined,
+  exec: Database | Transaction = db
 ): Promise<{ adminTierRoleIds: Set<string> }> {
   const granted = roleRuleGrantsToCheck(before, after)
   if (granted.length > 0) {
@@ -43,7 +52,7 @@ export async function checkRoleRuleGrants(
     }
     for (const roleId of granted) {
       try {
-        await assertGrantableRole(roleId as RoleId, granter)
+        await assertGrantableRole(roleId as RoleId, granter, exec)
       } catch (error) {
         if (error instanceof NotFoundError) {
           if (!added.has(roleId)) continue
@@ -59,7 +68,7 @@ export async function checkRoleRuleGrants(
 
   const named = roleRuleRoleIds(after)
   if (named.length === 0) return { adminTierRoleIds: new Set() }
-  const rows = await db
+  const rows = await exec
     .select({ roleId: rolePermissions.roleId, key: permissions.key })
     .from(rolePermissions)
     .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
@@ -79,5 +88,8 @@ export async function checkRoleRuleGrants(
 
 /** The grant check for one saving admin, for the identity-provider saves. */
 export function roleRuleGrantCheck(granter: readonly PermissionKey[]): RoleRuleGrantCheck {
-  return (before, after) => checkRoleRuleGrants(before, after, granter)
+  // The executor comes through the shared type untyped; it is the save's
+  // transaction, which the checks read on instead of the shared pool.
+  return (before, after, executor) =>
+    checkRoleRuleGrants(before, after, granter, executor as Database | Transaction | undefined)
 }

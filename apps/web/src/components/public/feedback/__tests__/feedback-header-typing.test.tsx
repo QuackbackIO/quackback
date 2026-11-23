@@ -373,6 +373,26 @@ describe('feedback header post composer', () => {
     ).toBeTruthy()
     expect(screen.queryByText(/invalid_type|expected object/)).toBeNull()
   })
+
+  it('says how long to wait when the address has posted too many this hour', async () => {
+    // In the browser a typed refusal is a plain Error carrying code and retryAfter.
+    createPost.mockRejectedValue(
+      Object.assign(new Error('Too many posts, please try again later'), {
+        code: 'RATE_LIMITED',
+        statusCode: 429,
+        retryAfter: 1150,
+      })
+    )
+    renderHeader()
+    typeTitle('Dark mode')
+    await screen.findByTestId('editor')
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
+
+    expect(
+      await screen.findByText('Too many posts from here in the last hour. Try again in 20 minutes.')
+    ).toBeTruthy()
+    expect(screen.queryByText('Could not submit your feedback. Please try again.')).toBeNull()
+  })
 })
 
 describe('opening the composer', () => {

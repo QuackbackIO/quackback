@@ -54,6 +54,9 @@ export interface CreateStatusComponentInput {
   status?: StatusComponentStatus
   showUptime?: boolean
   segmentIds?: SegmentId[]
+  /** Who set a non-operational initial status, for its history row and
+   *  `status.component_changed` event. Defaults to 'manual'. */
+  source?: Extract<StatusComponentEventSource, 'manual' | 'api'>
 }
 
 export interface UpdateStatusComponentInput {

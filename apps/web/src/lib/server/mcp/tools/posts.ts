@@ -8,8 +8,14 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
+import { assertNotBlocked } from '@/lib/server/domains/principals/blocking'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
-import { voteOnPost, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
+import {
+  blockedVoteToggle,
+  voteOnPost,
+  addVoteOnBehalf,
+  removeVote,
+} from '@/lib/server/domains/posts/post.voting'
 import { mergePost, unmergePost } from '@/lib/server/domains/posts/post.merge'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.user-actions'
 import { getActivityForPost, createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -213,6 +219,9 @@ Examples:
     annotations: WRITE,
     scope: 'write:feedback',
     handler: async (args) => {
+      // A blocked person may only take back a vote they gave (blocking.ts).
+      const blockedAnswer = await blockedVoteToggle(args.postId as PostId, auth.principalId)
+      if (blockedAnswer) return jsonResult({ postId: args.postId, ...blockedAnswer })
       // Chokepoint: resolves the post + board, then runs canVotePost
       // (which composes canViewPost). Team API keys always pass the
       // tier check; this primarily enforces post.deletedAt /
@@ -309,7 +318,7 @@ Examples:
     // A teammate needs post.create, as the dashboard requires; a portal user
     // is gated by the board's submit policy inside createPost.
     permissions: (_args, caller) => (isTeamMember(caller.role) ? [PERMISSIONS.POST_CREATE] : []),
-    description: `Submit new feedback on a board. Requires board and title; content/status/tags optional.
+    description: `Submit new feedback on a board. Requires board and title; content/status/tags optional. Status and tags apply only for team members.
 
 Examples:
 - Minimal: create_post({ boardId: "board_01abc...", title: "Add dark mode" })
@@ -321,14 +330,18 @@ Examples:
       // The actor carries the caller's REAL role so the policy gate inside
       // createPost (submit tier + moderation axis) reflects who is writing.
       const actor = await mcpMemberActor(auth)
+      await assertNotBlocked(auth.principalId)
+      // Status and tags are triage, which the portal never offers its users: a
+      // portal user's post takes the board default status and no tags.
+      const team = isTeamMember(auth.role)
 
       const result = await createPost(
         {
           boardId: args.boardId as BoardId,
           title: args.title,
           content: args.content ?? '',
-          statusId: args.statusId as PostStatusId | undefined,
-          tagIds: args.tagIds as PostTagId[] | undefined,
+          statusId: team ? (args.statusId as PostStatusId | undefined) : undefined,
+          tagIds: team ? (args.tagIds as PostTagId[] | undefined) : undefined,
         },
         {
           principalId: auth.principalId,

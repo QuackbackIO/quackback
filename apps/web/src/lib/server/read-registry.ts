@@ -26,6 +26,7 @@ export const BATCHED_READS: readonly BatchedRead[] = [
   settingsQueries.customCss,
   settingsQueries.developerConfig,
   settingsQueries.exportRuns,
+  settingsQueries.headerLogo,
   settingsQueries.identityProviders,
   settingsQueries.importRuns,
   settingsQueries.logo,

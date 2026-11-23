@@ -1,3 +1,4 @@
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 /**
  * GitHub webhook registration.
  *
@@ -29,7 +30,7 @@ export async function registerGitHubWebhook(
   secret: string,
   events: string[] = ['issues']
 ): Promise<GitHubWebhookResult> {
-  const response = await fetch(`${GITHUB_API}/repos/${ownerRepo}/hooks`, {
+  const response = await providerFetch(`${GITHUB_API}/repos/${ownerRepo}/hooks`, {
     method: 'POST',
     headers: githubHeaders(accessToken),
     body: JSON.stringify({
@@ -72,7 +73,7 @@ export async function patchGitHubWebhook(
       insecure_ssl: '0',
     }
   }
-  const response = await fetch(`${GITHUB_API}/repos/${ownerRepo}/hooks/${webhookId}`, {
+  const response = await providerFetch(`${GITHUB_API}/repos/${ownerRepo}/hooks/${webhookId}`, {
     method: 'PATCH',
     headers: githubHeaders(accessToken),
     body: JSON.stringify(body),
@@ -88,7 +89,7 @@ export async function findGitHubWebhookByUrl(
   ownerRepo: string,
   callbackUrl: string
 ): Promise<string | null> {
-  const response = await fetch(`${GITHUB_API}/repos/${ownerRepo}/hooks?per_page=100`, {
+  const response = await providerFetch(`${GITHUB_API}/repos/${ownerRepo}/hooks?per_page=100`, {
     headers: githubHeaders(accessToken),
   })
   if (!response.ok) return null
@@ -105,7 +106,7 @@ export async function deleteGitHubWebhook(
   ownerRepo: string,
   webhookId: string
 ): Promise<void> {
-  await fetch(`${GITHUB_API}/repos/${ownerRepo}/hooks/${webhookId}`, {
+  await providerFetch(`${GITHUB_API}/repos/${ownerRepo}/hooks/${webhookId}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${accessToken}`,

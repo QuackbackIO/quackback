@@ -5,6 +5,7 @@ const widget = vi.hoisted(() => ({
   enabled: true,
   stored: {} as Record<string, unknown>,
   customCss: null as string | null,
+  branding: {} as Record<string, unknown>,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
@@ -13,7 +14,7 @@ vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.media', () => ({
-  getBrandingConfig: async () => ({}),
+  getBrandingConfig: async () => widget.branding,
   getCustomCss: async () => widget.customCss,
 }))
 vi.mock(
@@ -48,6 +49,7 @@ beforeEach(() => {
   widget.enabled = true
   widget.stored = {}
   widget.customCss = null
+  widget.branding = {}
   setEntitled(true)
   setFeatureState('tierOff')
 })
@@ -106,4 +108,41 @@ describe('getPublicServerConfig custom CSS and the plan limits pause', () => {
       )
     }
   )
+})
+
+describe('getPublicServerConfig launcher colours', () => {
+  it('passes a stored hex primary through as lowercase 6-digit hex', async () => {
+    widget.branding = {
+      light: { primary: '#0E7C66', primaryForeground: '#fff' },
+      dark: { primary: '#0e7c66', primaryForeground: '#000' },
+    }
+    const { config } = await getPublicServerConfig()
+    expect(config.theme).toMatchObject({
+      lightPrimary: '#0e7c66',
+      lightPrimaryForeground: '#ffffff',
+      darkPrimary: '#0e7c66',
+      darkPrimaryForeground: '#000000',
+    })
+  })
+
+  it('still converts an oklch primary', async () => {
+    widget.branding = { light: { primary: 'oklch(1 0 0)' } }
+    const { config } = await getPublicServerConfig()
+    expect(config.theme?.lightPrimary).toBe('#ffffff')
+  })
+})
+
+describe('getPublicServerConfig custom CSS overrides', () => {
+  it('reads hex, rgb() and hsl() overrides and drops unparseable ones', async () => {
+    widget.customCss =
+      ':root { --primary: rgb(14 124 102); --primary-foreground: #FFF; }\n' +
+      '.dark { --primary: hsl(0, 100%, 50%); --primary-foreground: nonsense; }'
+    const { config } = await getPublicServerConfig()
+    expect(config.theme).toMatchObject({
+      lightPrimary: '#0e7c66',
+      lightPrimaryForeground: '#ffffff',
+      darkPrimary: '#ff0000',
+    })
+    expect(config.theme?.darkPrimaryForeground).toBeUndefined()
+  })
 })

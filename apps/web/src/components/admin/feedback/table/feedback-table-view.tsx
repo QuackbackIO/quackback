@@ -239,19 +239,22 @@ export function FeedbackTableView({
     </FeedbackListHeader>
   )
 
-  // Filter posts by duplicates if active
-  const filteredPosts =
-    filters.hasDuplicates && duplicateCountByPostId
-      ? posts.filter((p) => (duplicateCountByPostId.get(p.id) ?? 0) > 0)
-      : posts
+  // Filter posts by duplicates if active. No counts yet means they are still
+  // loading: list nothing until they arrive, never every post.
+  const duplicateCountsPending = !!filters.hasDuplicates && !duplicateCountByPostId
+  const filteredPosts = filters.hasDuplicates
+    ? posts.filter((p) => (duplicateCountByPostId?.get(p.id) ?? 0) > 0)
+    : posts
   const isSearchingForDuplicateMatches =
-    !!filters.hasDuplicates && filteredPosts.length === 0 && (hasMore || isLoadingMore)
+    !!filters.hasDuplicates &&
+    filteredPosts.length === 0 &&
+    (duplicateCountsPending || hasMore || isLoadingMore)
 
   useEffect(() => {
-    if (isSearchingForDuplicateMatches && !isLoading && !isLoadingMore) {
+    if (isSearchingForDuplicateMatches && !duplicateCountsPending && !isLoading && !isLoadingMore) {
       onLoadMore()
     }
-  }, [isSearchingForDuplicateMatches, isLoading, isLoadingMore, onLoadMore])
+  }, [isSearchingForDuplicateMatches, duplicateCountsPending, isLoading, isLoadingMore, onLoadMore])
 
   if (isLoading) {
     return (

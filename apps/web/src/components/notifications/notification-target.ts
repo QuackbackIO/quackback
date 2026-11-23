@@ -28,7 +28,9 @@ export function getNotificationTarget(
     }
     // Anchor a comment notification to the comment itself rather than just the post.
     if (
-      (notification.type === 'comment_created' || notification.type === 'comment_mentioned') &&
+      (notification.type === 'comment_created' ||
+        notification.type === 'comment_mentioned' ||
+        notification.type === 'post_moderated') &&
       notification.commentId
     ) {
       target.hash = `comment-${notification.commentId}`

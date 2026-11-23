@@ -63,9 +63,17 @@ import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
 import { ConversationReplyEmail } from './templates/conversation-reply'
 import { conversationMessageCopy, conversationReplySubject } from './conversation-copy'
+import { singleLineSubject } from './subject'
 import { ConversationClosedEmail } from './templates/conversation-closed'
 import { isEmailBillable } from './mail-class'
 import { PostMentionEmail } from './templates/post-mention'
+import {
+  ModerationDecisionEmail,
+  moderationDecisionHeadline,
+  type ModerationDecision,
+  type ModeratedItem,
+} from './templates/moderation-decision'
+export type { ModerationDecision, ModeratedItem } from './templates/moderation-decision'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
@@ -390,6 +398,9 @@ async function dispatch(
     attachments?: EmailAttachment[]
   } & ThreadingOptions
 ): Promise<EmailResult> {
+  // One line, whatever the template built: a provider may reject a subject with
+  // a line break outright. Rebound so every rung and ledger row sees the same.
+  options = { ...options, subject: singleLineSubject(options.subject) }
   const threadingHeaders = buildThreadingHeaders(options)
 
   // Defense in depth: the synthetic anonymous placeholder domain
@@ -1139,6 +1150,8 @@ interface SendStatusChangeParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The reader wrote the post. Absent or false: they follow it, and are not told "your feedback". */
+  isPostAuthor?: boolean
   /** Send from the workspace's address for this kind of email, once verified.
    *  Absent = the platform default (EMAIL_FROM). */
   from?: SendingIdentity
@@ -1157,6 +1170,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    isPostAuthor = false,
     from,
     fromDisplayName,
   } = params
@@ -1165,7 +1179,9 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
 
   return sendEmail({
     to,
-    subject: `Your feedback is now ${formattedNewStatus}!`,
+    subject: isPostAuthor
+      ? `Your feedback is now ${formattedNewStatus}!`
+      : `A post you follow is now ${formattedNewStatus}`,
     react: StatusChangeEmail({
       postTitle,
       postUrl,
@@ -1175,6 +1191,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       unsubscribeUrl,
       preferencesUrl,
       logoUrl,
+      isPostAuthor,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     from,
@@ -1200,6 +1217,8 @@ interface SendNewCommentParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The reader wrote the post. Absent or false: they follow it, and are not told "your feedback". */
+  isPostAuthor?: boolean
   /** Send from the workspace's address for this kind of email, once verified.
    *  Absent = the platform default (EMAIL_FROM). */
   from?: SendingIdentity
@@ -1219,6 +1238,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    isPostAuthor = false,
     from,
     fromDisplayName,
   } = params
@@ -1236,6 +1256,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       unsubscribeUrl,
       preferencesUrl,
       logoUrl,
+      isPostAuthor,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     from,
@@ -1733,6 +1754,55 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     emailType: 'PostMentionEmail',
     workspaceName,
     preview: { postUrl },
+  })
+}
+
+// ============================================================================
+// Moderation Decision Email
+// ============================================================================
+
+export interface SendModerationDecisionEmailArgs {
+  to: string
+  item: ModeratedItem
+  decision: ModerationDecision
+  postTitle: string
+  /** Where the approved item now shows; absent for a rejection. */
+  postUrl?: string
+  workspaceName: string
+  unsubscribeUrl?: string
+  preferencesUrl?: string
+  logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
+}
+
+/** Tell the author of a held post or comment what the team decided. */
+export async function sendModerationDecisionEmail(
+  args: SendModerationDecisionEmailArgs
+): Promise<EmailResult> {
+  const { to, item, decision, postTitle, postUrl, workspaceName, unsubscribeUrl } = args
+  return sendEmail({
+    to,
+    subject: moderationDecisionHeadline(item, decision),
+    react: ModerationDecisionEmail({
+      item,
+      decision,
+      postTitle,
+      postUrl,
+      workspaceName,
+      unsubscribeUrl,
+      preferencesUrl: args.preferencesUrl,
+      logoUrl: args.logoUrl,
+    }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from: args.from,
+    fromDisplayName: args.fromDisplayName,
+    emailType: 'ModerationDecisionEmail',
+    workspaceName,
+    preview: { item, decision, postUrl },
   })
 }
 

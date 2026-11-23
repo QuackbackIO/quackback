@@ -100,6 +100,36 @@ const CASES: {
     } as EventData,
     config: {},
   },
+  ...(
+    [
+      ['post.approved', 'post', 'approved'],
+      ['post.rejected', 'post', 'rejected'],
+      ['comment.approved', 'comment', 'approved'],
+      ['comment.rejected', 'comment', 'rejected'],
+    ] as const
+  ).map(([type, item, decision]) => ({
+    name: `${item} ${decision}`,
+    event: { ...base, type, data: {} } as unknown as EventData,
+    config: { ...post, item, decision },
+  })),
+  {
+    name: 'comment mention',
+    event: {
+      ...base,
+      type: 'comment.mentioned',
+      data: {
+        postId: 'post_1',
+        postTitle: 'Dark mode',
+        postUrl: '/p/1',
+        commentId: 'comment_1',
+        isPrivate: false,
+        mentionedPrincipalId: 'principal_target',
+        mentioningPrincipalId: 'principal_actor',
+        excerpt: 'Take a look',
+      },
+    } as EventData,
+    config: {},
+  },
   {
     name: 'changelog',
     event: { ...base, type: 'changelog.published', data: {} } as EventData,

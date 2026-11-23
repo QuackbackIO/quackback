@@ -2,7 +2,8 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 import { revokesSlackInstallation } from './revocation'
 import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions'
 import { createHash } from 'node:crypto'
-import { WebClient } from '@slack/web-api'
+import type { WebClient } from '@slack/web-api'
+import { slackClient } from '@/integrations/slack/server/client'
 import type { ChatStopStreamArguments } from '@slack/web-api'
 type KnownBlock = NonNullable<ChatStopStreamArguments['blocks']>[number]
 import { generateId, isTypeId, type AssistantPendingActionId } from '@quackback/ids'
@@ -45,6 +46,7 @@ import {
   markSlackThreadHeard,
 } from './sessions'
 import { beginSlackTurn, endSlackTurn } from './turns'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 
 const log = logger.child({ component: 'slack-agent' })
 type Payload = Record<string, any>
@@ -64,7 +66,7 @@ async function respondViaUrl(url: string, text: string, blocks?: KnownBlock[]): 
     target.port
   )
     throw new Error('Invalid Slack response URL')
-  const response = await fetch(target, {
+  const response = await providerFetch(target, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -247,7 +249,7 @@ export async function handleSlackDecision(
       target.port
     )
       throw new Error('Invalid response URL')
-    const response = await fetch(target, {
+    const response = await providerFetch(target, {
       method: 'POST',
       redirect: 'error',
       signal: AbortSignal.timeout(10_000),
@@ -381,7 +383,7 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
     return
   }
   const secrets = decryptSecrets<{ accessToken: string }>(row.secrets)
-  const client = new WebClient(secrets.accessToken, {
+  const client = slackClient(secrets.accessToken, {
     retryConfig: { retries: 0 },
     timeout: 15_000,
   })

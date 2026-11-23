@@ -122,7 +122,7 @@ export function scopeTicketEmbed(ticket: TicketEmbedRow, actor: Actor): TicketEm
 export interface EmbedResolverDeps {
   getPostDetail: (id: PostId, actor: Actor) => Promise<PostDetailInput | null>
   listStatuses: () => Promise<readonly StatusInput[]>
-  getChangelog: (id: ChangelogId) => Promise<ChangelogInput | null>
+  getChangelog: (id: ChangelogId, actor: Actor) => Promise<ChangelogInput | null>
   /** Resolve a published, viewer-accessible help-center article by slug. */
   getArticle: (slug: string) => Promise<ArticleInput | null>
   /** Resolve a ticket the viewer may embed (already scoped via
@@ -255,7 +255,7 @@ export async function resolveEmbed(
       if (!ticket) return { unavailable: true }
       return projectTicketPreview(ticket, links)
     }
-    const entry = await deps.getChangelog(id as ChangelogId)
+    const entry = await deps.getChangelog(id as ChangelogId, actor)
     if (!entry) return { unavailable: true }
     return projectChangelogPreview(entry, links)
   } catch {
@@ -311,6 +311,8 @@ export const getEmbedPreviewFn = createServerFn({ method: 'GET' })
         {
           getPostDetail: getPublicPostDetail,
           listStatuses: listPublicStatuses,
+          // The actor drives the changelog's audience and label gates: an
+          // entry this viewer could not read embeds as unavailable.
           getChangelog: getPublicChangelogMetaById,
           getArticle: async (slug: string) => {
             try {

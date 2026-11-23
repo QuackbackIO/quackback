@@ -1,0 +1,198 @@
+{
+  "stripe.com": {
+    "title": "Stripe | Financial Infrastructure to Grow Your Revenue",
+    "themeColor": null,
+    "bg": "rgba(0, 0, 0, 0)",
+    "text": "rgb(0, 0, 0)",
+    "bodyFont": "sohne-var, \"SF Pro Display\", sans-serif",
+    "headerBg": "rgba(0, 0, 0, 0)",
+    "h1": {
+      "text": "Financial infrastructure to grow your revenue. Accept paymen",
+      "font": "sohne-var, \"SF Pro Display\", sans-serif",
+      "size": "48px",
+      "weight": "300",
+      "color": "rgb(129, 184, 26)"
+    },
+    "buttons": [
+      {
+        "text": "Contact sales",
+        "bg": "rgb(83, 58, 253)",
+        "fg": "rgb(255, 255, 255)",
+        "radius": "4px",
+        "h": 40,
+        "top": 54,
+        "font": "sohne-var"
+      },
+      {
+        "text": "Get started",
+        "bg": "rgb(83, 58, 253)",
+        "fg": "rgb(255, 255, 255)",
+        "radius": "4px",
+        "h": 48,
+        "top": 555,
+        "font": "sohne-var"
+      },
+      {
+        "text": "Sign up with Google",
+        "bg": "rgba(255, 255, 255, 0.65)",
+        "fg": "rgb(83, 58, 253)",
+        "radius": "4px",
+        "h": 48,
+        "top": 555,
+        "font": "sohne-var"
+      }
+    ],
+    "linkColours": ["rgb(255, 255, 255)", "rgb(83, 58, 253)", "rgb(6, 27, 49)"],
+    "logo": {
+      "tag": "svg",
+      "src": null,
+      "w": 60,
+      "h": 25
+    }
+  },
+  "www.ikea.com": {
+    "title": "Hej! Welcome to IKEA Global",
+    "themeColor": null,
+    "bg": "rgb(255, 254, 251)",
+    "text": "rgb(17, 17, 17)",
+    "bodyFont": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto IKEA\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "headerBg": "rgb(255, 254, 251)",
+    "h1": {
+      "text": "Hej! You are in control of your cookies.",
+      "font": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto IKEA\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+      "size": "15.4px",
+      "weight": "600",
+      "color": "rgb(17, 17, 17)"
+    },
+    "buttons": [
+      {
+        "text": "dining room table setting.",
+        "bg": "rgb(17, 17, 17)",
+        "fg": "rgb(255, 255, 255)",
+        "radius": "50%",
+        "h": 56,
+        "top": 800,
+        "font": "\"Omani Rial\""
+      },
+      {
+        "text": "Store: IKEA.co.uk",
+        "bg": "rgb(255, 219, 0)",
+        "fg": "rgb(17, 17, 17)",
+        "radius": "0px 0px 8px 8px",
+        "h": 100,
+        "top": 780,
+        "font": "\"Omani Rial\""
+      }
+    ],
+    "linkColours": ["rgb(0, 0, 0)", "rgb(0, 0, 238)", "rgb(17, 17, 17)", "rgb(255, 255, 255)"],
+    "logo": {
+      "tag": "IMG",
+      "src": "https://www.ikea.com/global/assets/logos/brand/ikea.svg",
+      "w": 89,
+      "h": 36
+    }
+  },
+  "linear.app": {
+    "title": "Linear – The system for product development",
+    "themeColor": "#08090a",
+    "bg": "rgb(8, 9, 10)",
+    "text": "rgb(247, 248, 248)",
+    "bodyFont": "\"Inter Variable\", \"SF Pro Display\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
+    "headerBg": "rgba(0, 0, 0, 0)",
+    "h1": {
+      "text": "The product development system for teams and agentsThe produ",
+      "font": "\"Inter Variable\", \"SF Pro Display\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
+      "size": "64px",
+      "weight": "510",
+      "color": "rgb(247, 248, 248)"
+    },
+    "buttons": [
+      {
+        "text": "Sign up",
+        "bg": "rgb(229, 229, 230)",
+        "fg": "rgb(8, 9, 10)",
+        "radius": "9999px",
+        "h": 32,
+        "top": 20,
+        "font": "\"Inter Variable\""
+      },
+      {
+        "text": "Faster app launch",
+        "bg": "rgba(255, 255, 255, 0.04)",
+        "fg": "rgb(208, 214, 224)",
+        "radius": "8px",
+        "h": 28,
+        "top": 873,
+        "font": "\"Inter Variable\""
+      }
+    ],
+    "linkColours": ["rgb(247, 248, 248)", "rgb(138, 143, 152)", "rgb(8, 9, 10)"],
+    "logo": {
+      "tag": "svg",
+      "src": null,
+      "w": 88,
+      "h": 22
+    }
+  },
+  "notion.com": {
+    "title": "The AI workspace that works for you. | Notion",
+    "themeColor": null,
+    "bg": "rgb(255, 255, 255)",
+    "text": "rgba(0, 0, 0, 0.95)",
+    "bodyFont": "NotionInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+    "headerBg": "rgba(0, 0, 0, 0)",
+    "h1": {
+      "text": "Where teams and agents Ship together.",
+      "font": "NotionInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+      "size": "96px",
+      "weight": "600",
+      "color": "rgba(0, 0, 0, 0.95)"
+    },
+    "buttons": [
+      {
+        "text": "Get Notion free",
+        "bg": "rgb(0, 117, 222)",
+        "fg": "rgb(255, 255, 255)",
+        "radius": "8px",
+        "h": 36,
+        "top": 58,
+        "font": "NotionInter"
+      },
+      {
+        "text": "Get Notion free",
+        "bg": "rgb(0, 117, 222)",
+        "fg": "rgb(255, 255, 255)",
+        "radius": "8px",
+        "h": 38,
+        "top": 458,
+        "font": "NotionInter"
+      },
+      {
+        "text": "Request a demo",
+        "bg": "rgb(230, 243, 254)",
+        "fg": "rgb(0, 91, 171)",
+        "radius": "8px",
+        "h": 38,
+        "top": 458,
+        "font": "NotionInter"
+      },
+      {
+        "text": "Pause",
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "fg": "rgb(255, 255, 255)",
+        "radius": "50%",
+        "h": 32,
+        "top": 1132,
+        "font": "NotionInter"
+      }
+    ],
+    "linkColours": [
+      "rgb(0, 117, 222)",
+      "rgba(0, 0, 0, 0.95)",
+      "rgba(0, 0, 0, 0.898)",
+      "rgb(255, 255, 255)",
+      "rgb(0, 91, 171)"
+    ],
+    "logo": null
+  }
+}

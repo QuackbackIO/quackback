@@ -7,6 +7,7 @@ import {
   and,
   isNull,
   sql,
+  inArray,
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
@@ -31,6 +32,8 @@ import {
   resolveUserAvatarUrl,
 } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
+import { reserveArticleView } from '@/lib/server/utils/anon-rate-limit'
+import { canonicalArticleTypeId } from '@/lib/shared/widget/article-ref'
 
 const log = logger.child({ component: 'help-center-articles' })
 
@@ -183,13 +186,47 @@ export async function getPublicArticleBySlug(
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }
 
-  // Increment view count (fire and forget)
-  db.update(helpCenterArticles)
-    .set({ viewCount: sql`${helpCenterArticles.viewCount} + 1` })
-    .where(eq(helpCenterArticles.id, article.id))
-    .catch(() => {})
-
   return resolveArticleWithCategory(article, 'public')
+}
+
+/**
+ * Count one view of an article the viewer can open. Only the canonical
+ * article page records views (see recordPublicArticleViewFn): lookups by
+ * slug serve legacy URLs that redirect there, and embeds, so counting them
+ * too would count one visit twice.
+ */
+export async function recordArticleView(
+  id: KbArticleId,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<void> {
+  const visible = db
+    .select({ id: helpCenterArticles.id })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(and(eq(helpCenterArticles.id, id), ...helpCenterVisibilityConditions('public', viewer)))
+  await db
+    .update(helpCenterArticles)
+    .set({ viewCount: sql`${helpCenterArticles.viewCount} + 1` })
+    .where(inArray(helpCenterArticles.id, visible))
+}
+
+/**
+ * A visitor's view of an article, from the help center page or the widget.
+ * Counted once per article per address an hour, within a per-address cap
+ * (reserveArticleView), so reloads and a scripted loop do not inflate the
+ * popular list. `articleRef` is the id the client sent; anything that is not
+ * an article id is ignored. Returns whether the view was counted.
+ */
+export async function countPublicArticleView(
+  articleRef: string,
+  clientIp: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<boolean> {
+  const id = canonicalArticleTypeId(articleRef)
+  if (!id) return false
+  if (!(await reserveArticleView(clientIp, id))) return false
+  await recordArticleView(id as KbArticleId, viewer)
+  return true
 }
 
 // Fallback slug base for article titles that romanize to nothing (see
@@ -201,6 +238,15 @@ const findArticleSlugConflict = (slug: string) =>
     where: eq(helpCenterArticles.slug, slug),
     columns: { id: true },
   })
+
+/** An article can only be filed in a category that exists and is not deleted. */
+async function assertLiveCategory(categoryId: KbCategoryId): Promise<void> {
+  const category = await db.query.helpCenterCategories.findFirst({
+    where: and(eq(helpCenterCategories.id, categoryId), isNull(helpCenterCategories.deletedAt)),
+    columns: { id: true },
+  })
+  if (!category) throw new ValidationError('VALIDATION_ERROR', 'Category not found')
+}
 
 export async function createArticle(
   input: CreateArticleInput,
@@ -250,8 +296,9 @@ export async function createArticle(
   })
   // No category picked (a first article in an empty help center): file it
   // under General rather than refusing the save.
-  const categoryId =
-    (input.categoryId?.trim() as KbCategoryId) || (await ensureDefaultHelpCategory())
+  const chosen = input.categoryId?.trim() as KbCategoryId | undefined
+  if (chosen) await assertLiveCategory(chosen)
+  const categoryId = chosen || (await ensureDefaultHelpCategory())
 
   const [article] = await db
     .insert(helpCenterArticles)
@@ -295,7 +342,10 @@ export async function updateArticle(
     updateData.contentJson = contentJson
     updateData.content = projectContentJsonToMarkdown(contentJson, input.content?.trim() ?? '')
   }
-  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId as KbCategoryId
+  if (input.categoryId !== undefined) {
+    await assertLiveCategory(input.categoryId as KbCategoryId)
+    updateData.categoryId = input.categoryId as KbCategoryId
+  }
   if (input.slug !== undefined)
     updateData.slug = await uniqueHelpCenterSlug(
       input.slug.trim(),

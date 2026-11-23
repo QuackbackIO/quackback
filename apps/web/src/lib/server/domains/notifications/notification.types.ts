@@ -13,6 +13,7 @@ export type NotificationType =
   | 'post_status_changed'
   | 'comment_created'
   | 'post_mentioned'
+  | 'post_moderated'
   | 'changelog_published'
   | 'status_incident'
   | 'chat_message'
