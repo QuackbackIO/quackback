@@ -8,9 +8,8 @@
  * barrel ship in every page's script; only the editors, the preview frame
  * and the server need what is here.
  */
-import { expandTheme, type MinimalThemeVariables } from './expand'
+import { expandTheme, withStandIns, type MinimalThemeVariables } from './expand'
 import { variableMap } from './base'
-import { withStandIns } from './stand-ins'
 import type { ThemeMode, ThemeVariables } from './types'
 
 /** Reverse lookup: CSS variable name → ThemeVariables key */

@@ -592,3 +592,38 @@ export function extractMinimal(vars: ThemeVariables): Partial<MinimalThemeVariab
     header: vars.header && tryCssColorToHex(vars.header) ? vars.header : undefined,
   }
 }
+
+/**
+ * Both sides' variables, the side with no header colour writing the page's
+ * own header when the other has one: the light side's :root lines also apply
+ * in dark mode, and would otherwise show there.
+ */
+function withPageHeaders(
+  light: ThemeVariables,
+  dark: ThemeVariables
+): [ThemeVariables, ThemeVariables] {
+  if (!light.header && !dark.header) return [light, dark]
+  return [
+    light.header ? light : { ...light, ...PAGE_HEADER },
+    dark.header ? dark : { ...dark, ...PAGE_HEADER },
+  ]
+}
+
+/**
+ * The same for the headings font: the side with none empties the variable
+ * when the other has one, so headings there are set in the text font.
+ */
+function withHeadingFonts(
+  light: ThemeVariables,
+  dark: ThemeVariables
+): [ThemeVariables, ThemeVariables] {
+  if (!light.fontHeading === !dark.fontHeading) return [light, dark]
+  return [
+    light.fontHeading ? light : { ...light, fontHeading: NO_HEADING_FONT },
+    dark.fontHeading ? dark : { ...dark, fontHeading: NO_HEADING_FONT },
+  ]
+}
+
+/** Both sides' variables, each standing in for what only the other sets. */
+export const withStandIns = (light: ThemeVariables, dark: ThemeVariables) =>
+  withHeadingFonts(...withPageHeaders(light, dark))

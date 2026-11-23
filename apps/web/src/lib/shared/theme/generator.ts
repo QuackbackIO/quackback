@@ -1,14 +1,13 @@
 import type { ThemeConfig, ThemeVariables } from './types'
 import { cardStyleCss } from './card-style'
-import { DEFAULT_FONT_SANS, expandTheme } from './expand'
-import { withStandIns } from './stand-ins'
+import { DEFAULT_FONT_SANS, expandTheme, withStandIns } from './expand'
 import { normalizeFontSans, variableMap } from './base'
 import { customFontStack, headingFontStack } from './fonts'
 export { customFontStack, headingFontStack } from './fonts'
 export { normalizeFontSans, variableMap } from './base'
 import { isWritableCustomFont, uploadedFontFaces } from './font-uploads'
 
-export { withStandIns } from './stand-ins'
+export { withStandIns } from './expand'
 
 function variablesToCSS(vars: ThemeVariables): string {
   const declarations: string[] = []
