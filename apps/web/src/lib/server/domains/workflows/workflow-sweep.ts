@@ -36,6 +36,7 @@ import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { mapWithConcurrency } from '@/lib/server/utils'
 import { logger } from '@/lib/server/logger'
+import { kvGetOrCreate } from '@/lib/server/kv/pg-kv'
 import { settleRunning } from './workflow.engine'
 import { logRunEvent } from './workflow-run-events'
 import { setConversationStatus } from '@/lib/server/domains/conversation/conversation.service'
@@ -642,6 +643,38 @@ async function resolveBreachLeadMinutes(): Promise<number> {
   return Math.max(DEFAULT_BREACH_LEAD_MINUTES, ...approachingWorkflows.map(readBreachLeadMinutes))
 }
 
+/** The kv key holding when this workspace's breach trigger started firing
+ *  for every clock (see slaBreachEventsSince). */
+export const SLA_BREACH_EVENTS_SINCE_KEY = 'sla:breach-events-since'
+
+/** Ten years: kv rows always expire, and this one must outlive upgrades. If it
+ *  ever does expire, the next tick restarts it at that tick, which only skips
+ *  breaches older than one sweep interval, already fired by then. */
+const SLA_BREACH_EVENTS_SINCE_TTL_SECONDS = 10 * 365 * 24 * 60 * 60
+
+/**
+ * The time before which a breached clock never fires `sla.breached`: the
+ * first tick this build ran in the workspace, recorded once.
+ *
+ * Builds before it fired the breach trigger only where a live workflow
+ * listened, so in every other workspace no clock carries the fire-once
+ * marker. Without this, the first tick after the upgrade would fire (and
+ * email the assignee or the whole assigned team for) every open clock that
+ * breached in the last SLA_BREACH_TRIGGER_LOOKBACK_MS at once: breaches the
+ * team can already see in the inbox. From the first tick on, every breach
+ * fires as it happens. Stored per workspace, so a workspace that wakes up
+ * later (or a self-hosted install that upgrades later) starts at its own
+ * first tick.
+ */
+export async function slaBreachEventsSince(now: Date): Promise<Date> {
+  const since = await kvGetOrCreate<string>(
+    SLA_BREACH_EVENTS_SINCE_KEY,
+    now.toISOString(),
+    SLA_BREACH_EVENTS_SINCE_TTL_SECONDS
+  )
+  return new Date(since)
+}
+
 /**
  * Scan + dispatch both SLA timer triggers on every tick, whether or not any
  * workflow listens: the events also drive the SLA warning/breach emails and
@@ -653,7 +686,8 @@ async function resolveBreachLeadMinutes(): Promise<number> {
  * that type when wider (see sla.sweep.ts's module doc for why one scalar
  * marker can't fire each live workflow independently at ITS OWN lead);
  * `sla.breached` has no configurable lead, and looks back only
- * SLA_BREACH_TRIGGER_LOOKBACK_MS (sla.sweep.ts). Both scans ride the
+ * SLA_BREACH_TRIGGER_LOOKBACK_MS (sla.sweep.ts), and never before
+ * slaBreachEventsSince. Both scans ride the
  * conversations_sla_unsettled_idx / tickets_sla_unsettled_idx partial
  * indexes, the same candidate set the per-minute reporting sweep reads.
  * Each trigger scans TWO axes per tick, sharing the same lead resolution:
@@ -737,7 +771,8 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
     fired++
   })
 
-  const breachCandidates = await sweepSlaBreachTriggers(now)
+  const breachSince = await slaBreachEventsSince(now)
+  const breachCandidates = await sweepSlaBreachTriggers(now, breachSince)
   await mapWithConcurrency(breachCandidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
     const jobId = `timer:sla.breached:${c.conversationId}:${c.clock}:${c.dueAt}`
     try {
@@ -759,7 +794,7 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
   })
 
   // Ticket-anchored TTR pass — see the approaching_breach ticket pass above.
-  const ticketBreachCandidates = await sweepTicketSlaBreachTriggers(now)
+  const ticketBreachCandidates = await sweepTicketSlaBreachTriggers(now, undefined, breachSince)
   await mapWithConcurrency(ticketBreachCandidates, SWEEP_DISPATCH_CONCURRENCY, async (c) => {
     const jobId = `timer:sla.breached:ticket:${c.ticketId}:${c.clock}:${c.dueAt}`
     try {
