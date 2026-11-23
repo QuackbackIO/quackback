@@ -19,6 +19,9 @@
  * `resolveKnowledgeSources`); per-agent toggles arrive in Phase 3.
  */
 import { db, changelogEntries, and, isNull, sql } from '@/lib/server/db'
+import { isChangelogOpenToAnonymous } from '@/lib/server/domains/changelog/changelog.audience'
+import { categoryGateCondition } from '@/lib/server/domains/changelog/changelog-category.service'
+import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import type { ContentAudience } from './audience'
 import {
@@ -59,10 +62,13 @@ function adminChangelogUrl(entryId: string): string {
  *
  * Always excludes soft-deleted entries. Beyond that the ceiling decides: a
  * `public` ceiling (the Agent) only sees PUBLISHED entries (`published_at` set
- * and not in the future) — the same slice the public changelog site serves —
- * so a draft or scheduled entry can never reach a customer-facing turn. A
- * `team`/`internal` ceiling (the copilot) sees every non-deleted entry,
- * relying on the per-row `isPublished` flag for the copilot leak gate.
+ * and not in the future) whose labels let an anonymous visitor in — the same
+ * slice the public changelog site serves an anonymous visitor — so a draft,
+ * a scheduled entry or a segment-gated one can never reach a customer-facing
+ * turn. A `team`/`internal` ceiling (the copilot) sees every non-deleted
+ * entry, relying on the per-row `isPublished` flag for the copilot leak gate.
+ * Whether the changelog is open to an anonymous visitor at all is asked once
+ * per retrieval (`retrieveChangelogEntries`).
  */
 export function changelogVisibilityConditions(ceiling: ContentAudience) {
   const base = [isNull(changelogEntries.deletedAt)]
@@ -71,6 +77,7 @@ export function changelogVisibilityConditions(ceiling: ContentAudience) {
       ...base,
       sql`${changelogEntries.publishedAt} IS NOT NULL`,
       sql`${changelogEntries.publishedAt} <= now()`,
+      categoryGateCondition(ANONYMOUS_ACTOR, changelogEntries.id),
     ]
   }
   return base
@@ -204,6 +211,11 @@ export async function retrieveChangelogEntries(
   const topK = options.topK ?? CHANGELOG_TOP_K
   const minScore = options.minScore ?? CHANGELOG_SEMANTIC_SIMILARITY_FLOOR
 
+  // A customer-facing turn reads the changelog as an anonymous visitor would:
+  // nothing while the product is off, the portal is private or the changelog
+  // is for signed-in people.
+  if (ceiling === 'public' && !(await isChangelogOpenToAnonymous())) return []
+
   const embedding = await generateEmbedding(query, {
     pipelineStep: 'assistant_changelog_query',
   })
@@ -231,25 +243,23 @@ export const changelogKnowledgeSource: KnowledgeSource = {
   sourceType: 'changelog',
   async retrieve(query, ceiling) {
     const rows = await retrieveChangelogEntries(query, ceiling)
-    return rows.map(
-      (e): RetrievedItem => ({
+    return rows.map((e): RetrievedItem => ({
+      id: e.id,
+      sourceType: 'changelog' as const,
+      title: e.title,
+      excerpt: e.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+      score: e.score,
+      updatedAt: e.updatedAt.toISOString(),
+      citation: {
+        type: 'changelog' as const,
         id: e.id,
-        sourceType: 'changelog' as const,
         title: e.title,
-        excerpt: e.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-        score: e.score,
-        updatedAt: e.updatedAt.toISOString(),
-        citation: {
-          type: 'changelog' as const,
-          id: e.id,
-          title: e.title,
-          // Published entries link to the public changelog and stay
-          // customer-visible; drafts/scheduled entries (only reachable at a
-          // team ceiling) link to the admin editor and trip the leak gate.
-          url: e.isPublished ? publicChangelogUrl(e.id) : adminChangelogUrl(e.id),
-          ...(e.isPublished ? {} : { internal: true }),
-        },
-      })
-    )
+        // Published entries link to the public changelog and stay
+        // customer-visible; drafts/scheduled entries (only reachable at a
+        // team ceiling) link to the admin editor and trip the leak gate.
+        url: e.isPublished ? publicChangelogUrl(e.id) : adminChangelogUrl(e.id),
+        ...(e.isPublished ? {} : { internal: true }),
+      },
+    }))
   },
 }

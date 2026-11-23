@@ -18,8 +18,11 @@ const m = vi.hoisted(() => {
     companyCreate: make(),
     companyUpdate: make(),
     companyDelete: make(),
+    toastError: vi.fn(),
   }
 })
+
+vi.mock('@/lib/client/error-notice', () => ({ toastError: m.toastError }))
 
 vi.mock('@/lib/client/mutations', () => ({
   useCreateUserAttribute: () => m.userCreate,
@@ -102,6 +105,57 @@ describe.each(ENTITIES)('ScalarAttributeList for $name', (entity) => {
       expect.objectContaining({ key: 'plan_tier', label: 'Plan tier', type: 'string' })
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('keeps the dialog open and says why when the server refuses the key', async () => {
+    const { create } = entity.mocks()
+    create.mutateAsync.mockRejectedValue(new Error('An attribute with that key already exists'))
+    const user = userEvent.setup()
+    renderList([])
+    await user.click(screen.getAllByRole('button', { name: /new attribute/i })[0])
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(/^Key/), 'seats')
+    await user.type(within(dialog).getByLabelText('Display label'), 'Seats again')
+    await user.click(within(dialog).getByRole('button', { name: 'Create attribute' }))
+    expect((await within(dialog).findByRole('alert')).textContent).toBe(
+      'An attribute with that key already exists'
+    )
+    expect(screen.getByRole('dialog')).toBeTruthy()
+
+    // Reopening starts clean.
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await user.click(screen.getAllByRole('button', { name: /new attribute/i })[0])
+    expect(within(await screen.findByRole('dialog')).queryByRole('alert')).toBeNull()
+  })
+
+  it('says why when the server refuses an edit', async () => {
+    const { update } = entity.mocks()
+    update.mutateAsync.mockRejectedValue(new Error('Attribute not found'))
+    const user = userEvent.setup()
+    renderList()
+    await user.click(screen.getByRole('button', { name: 'Actions for Seats' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+    expect((await within(dialog).findByRole('alert')).textContent).toBe('Attribute not found')
+  })
+
+  it('toasts a refused delete and keeps the row', async () => {
+    const { del } = entity.mocks()
+    del.mutateAsync.mockRejectedValue(new Error('Attribute not found'))
+    const user = userEvent.setup()
+    renderList()
+    await user.click(screen.getByRole('button', { name: 'Actions for Seats' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Delete attribute',
+      })
+    )
+    await waitFor(() => expect(m.toastError).toHaveBeenCalledTimes(1))
+    expect(m.toastError.mock.calls[0][0]).toMatchObject({ message: 'Attribute not found' })
+    expect(screen.getByText('Seats')).toBeTruthy()
   })
 
   it('edits an attribute with the key locked and saves the new label', async () => {

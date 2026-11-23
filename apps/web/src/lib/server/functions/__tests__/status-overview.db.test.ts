@@ -7,7 +7,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { eq, principal, statusIncidents } from '@/lib/server/db'
+import { eq, principal, sql, statusComponents, statusIncidents } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -57,6 +57,7 @@ const HOUR = 60 * 60 * 1000
 let author: PrincipalId
 
 const getOverview = getStatusOverviewAdminFn as unknown as () => Promise<{
+  topLevelStatus: string
   liveMaintenance: { id: string }[]
   upcomingMaintenance: { id: string }[]
 }>
@@ -118,5 +119,18 @@ describe('status overview (Postgres)', () => {
     const overview = await getOverview()
     expect(overview.upcomingMaintenance).toHaveLength(20)
     expect(overview.upcomingMaintenance[0]?.id).toBe(soonest.id)
+  })
+
+  it('"Visitors currently see" leaves out a gated service, as the public page does', async () => {
+    await testDb
+      .update(statusComponents)
+      .set({ status: 'operational' })
+      .where(sql`true`)
+    await createStatusComponent({
+      name: 'Team only',
+      status: 'major_outage',
+      segmentIds: [createId('segment')],
+    })
+    expect((await getOverview()).topLevelStatus).toBe('operational')
   })
 })

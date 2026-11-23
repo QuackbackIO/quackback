@@ -58,7 +58,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: { posts: { findFirst: (...a: unknown[]) => hoisted.mockFindFirst(...a) } },
-    select: () => ({ from: () => ({ where: () => ({ orderBy: () => Promise.resolve([]) }) }) }),
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          orderBy: () => Promise.resolve([]),
+          limit: () => Promise.resolve([]),
+        }),
+      }),
+    }),
     update: (...a: unknown[]) => {
       hoisted.mockUpdate(...a)
       return { set: () => ({ where: () => Promise.resolve() }) }

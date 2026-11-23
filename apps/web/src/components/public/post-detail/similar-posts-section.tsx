@@ -21,7 +21,7 @@ function SimilarPostRow({ post }: { post: SimilarPost }) {
         <span className="font-medium">{post.voteCount}</span>
       </div>
 
-      <span className="flex-1 text-foreground/80 line-clamp-1">{post.title}</span>
+      <span className="flex-1 text-muted-foreground line-clamp-1">{post.title}</span>
 
       {post.status && (
         <span
@@ -70,7 +70,7 @@ export function SimilarPostsSection({
       )}
     >
       <div className="mb-1.5 flex items-center gap-1.5 px-1">
-        <LinkIcon className="h-3 w-3 text-muted-foreground/70" />
+        <LinkIcon className="h-3 w-3 text-muted-foreground" />
         <h3 className="text-xs font-medium text-muted-foreground">
           {intl.formatMessage({ id: 'portal.postDetail.related', defaultMessage: 'Related' })}
         </h3>

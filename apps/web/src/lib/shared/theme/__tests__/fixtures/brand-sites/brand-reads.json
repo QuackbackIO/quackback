@@ -1,0 +1,110 @@
+{
+  "stripe.com": {
+    "title": "Stripe | Financial Infrastructure to Grow Your Revenue",
+    "page": {
+      "background": "transparent",
+      "text": "#000000"
+    },
+    "button": {
+      "fill": "#533afd",
+      "ink": "#ffffff",
+      "heightPx": 40,
+      "radiusPx": 4
+    },
+    "fonts": {
+      "body": {
+        "family": "sohne-var",
+        "stack": "sohne-var, \"SF Pro Display\", sans-serif"
+      },
+      "headline": {
+        "family": "sohne-var",
+        "stack": "sohne-var, \"SF Pro Display\", sans-serif"
+      }
+    },
+    "logo": {
+      "widthPx": 60,
+      "heightPx": 25,
+      "from": "header-svg"
+    }
+  },
+  "www.ikea.com": {
+    "title": "Hej! Welcome to IKEA Global",
+    "page": {
+      "background": "#fffefb",
+      "text": "#111111"
+    },
+    "button": {
+      "fill": "#111111",
+      "ink": "#ffffff",
+      "heightPx": 56,
+      "radiusPercent": 50
+    },
+    "fonts": {
+      "body": {
+        "family": "Omani Rial",
+        "stack": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto IKEA\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif"
+      },
+      "headline": {
+        "family": "Omani Rial",
+        "stack": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto IKEA\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif"
+      }
+    },
+    "logo": {
+      "widthPx": 89,
+      "heightPx": 36,
+      "from": "header-img"
+    }
+  },
+  "linear.app": {
+    "title": "Linear – The system for product development",
+    "themeColor": "#08090a",
+    "page": {
+      "background": "#08090a",
+      "text": "#f7f8f8"
+    },
+    "button": {
+      "fill": "#e5e5e6",
+      "ink": "#08090a",
+      "heightPx": 32,
+      "radiusPx": 9999
+    },
+    "fonts": {
+      "body": {
+        "family": "Inter Variable",
+        "stack": "\"Inter Variable\", \"SF Pro Display\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif"
+      },
+      "headline": {
+        "family": "Inter Variable",
+        "stack": "\"Inter Variable\", \"SF Pro Display\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif"
+      }
+    },
+    "logo": {
+      "widthPx": 88,
+      "heightPx": 22,
+      "from": "header-svg"
+    }
+  },
+  "notion.com": {
+    "title": "The AI workspace that works for you. | Notion",
+    "page": {
+      "background": "#ffffff",
+      "text": "#0d0d0d"
+    },
+    "button": {
+      "fill": "#0075de",
+      "ink": "#ffffff",
+      "heightPx": 36,
+      "radiusPx": 8
+    },
+    "fonts": {
+      "body": {
+        "family": "NotionInter",
+        "stack": "NotionInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+      },
+      "headline": {
+        "family": "NotionInter",
+        "stack": "NotionInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+      }
+    }
+  }
+}

@@ -164,6 +164,86 @@ function renderHeader({
   )
 }
 
+describe('PortalHeader: the wide logo', () => {
+  afterEach(() => cleanup())
+
+  const WIDE = '/api/storage/header-logos/2026/11/abc-wordmark.svg'
+  const SQUARE = '/api/storage/logos/2026/11/abc-mark.png'
+
+  function renderWith(props: { wideLogo?: string | null; orgLogo?: string | null }) {
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: { name: 'Acme', headerDisplayMode: 'custom_logo' },
+      registeredAuthProviders: [],
+    })
+    return render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PortalHeader orgName="Acme" showThemeToggle={false} {...props} />
+      </IntlProvider>
+    )
+  }
+
+  it('shows the wide logo in place of the square logo and the name', () => {
+    renderWith({ wideLogo: WIDE, orgLogo: SQUARE })
+    const logo = screen.getByRole('img', { name: 'Acme' })
+    expect(logo).toHaveAttribute('src', WIDE)
+    expect(logo.className).toMatch(/\bh-8\b/)
+    expect(logo.className).toMatch(/\bw-auto\b/)
+    expect(logo.className).toMatch(/max-w-\[180px\]/)
+    expect(logo.className).toMatch(/\bobject-contain\b/)
+    // A wordmark is the brand's own shape: no rounded crop.
+    expect(logo.className).not.toMatch(/radius|rounded/)
+    expect(screen.queryByText('Acme')).not.toBeInTheDocument()
+    expect(document.querySelector(`img[src="${SQUARE}"]`)).toBeNull()
+  })
+
+  it('keeps the wide logo on a phone, where the name is hidden', () => {
+    renderWith({ wideLogo: WIDE, orgLogo: SQUARE })
+    const logo = screen.getByRole('img', { name: 'Acme' })
+    expect(logo.className).not.toMatch(/(^|\s)hidden(\s|$)/)
+    expect(logo.className).not.toMatch(/sm:block/)
+  })
+
+  it('shows the square logo and the name without one', () => {
+    renderWith({ wideLogo: null, orgLogo: SQUARE })
+    expect(screen.getByRole('img', { name: 'Acme' })).toHaveAttribute('src', SQUARE)
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+  })
+
+  function renderDraft(
+    logo: PortalPreviewDraft['logo'],
+    props: { wideLogo?: string | null; orgLogo?: string | null }
+  ) {
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: { name: 'Acme' },
+      registeredAuthProviders: [],
+    })
+    return render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PreviewDraftProvider draft={{ logo }} css="">
+          <PortalHeader orgName="Acme" showThemeToggle={false} {...props} />
+        </PreviewDraftProvider>
+      </IntlProvider>
+    )
+  }
+
+  it("draws the Customise draft's wide logo before it is published", () => {
+    renderDraft({ url: WIDE, mode: 'custom_logo' }, { wideLogo: null, orgLogo: SQUARE })
+    const logo = screen.getByRole('img', { name: 'Acme' })
+    expect(logo).toHaveAttribute('src', WIDE)
+    expect(logo.className).toMatch(/max-w-\[180px\]/)
+    expect(screen.queryByText('Acme')).not.toBeInTheDocument()
+  })
+
+  it('shows the square icon and the name when the draft turns a live wide logo off', () => {
+    renderDraft({ url: SQUARE, mode: 'logo_and_name' }, { wideLogo: WIDE, orgLogo: SQUARE })
+    expect(screen.getByRole('img', { name: 'Acme' })).toHaveAttribute('src', SQUARE)
+    expect(document.querySelector(`img[src="${WIDE}"]`)).toBeNull()
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+  })
+})
+
 describe('PortalHeader — Admin dropdown item', () => {
   afterEach(() => cleanup())
 

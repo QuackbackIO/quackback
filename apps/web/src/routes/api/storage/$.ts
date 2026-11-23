@@ -6,8 +6,11 @@ import {
   cleanDownloadName,
   downloadFileName,
   downloadHeaders,
+  forcesProxy,
   redirectPolicy,
   servedFileHeaders,
+  SVG_LOGO_PREFIX,
+  SVG_TYPE,
 } from '@/lib/server/storage/serve-policy'
 
 const log = logger.child({ component: 'storage' })
@@ -114,6 +117,9 @@ function isRangeNotSatisfiable(error: unknown): boolean {
 
 const KEY_PREFIX = '/api/storage/'
 
+/** A wide logo SVG's cap. A wordmark from a design tool is rarely past 100 KB. */
+const MAX_SVG_UPLOAD_BYTES = 512 * 1024
+
 /**
  * The stored key this request is asking for, or null if it is not one.
  *
@@ -183,7 +189,10 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
     isAllowedImageType,
     MAX_FILE_SIZE,
   } = await import('@/lib/server/storage/s3')
-  const { sniffImageMime } = await import('@/lib/server/content/magic-bytes')
+  const { sniffImageMime, sniffFontFormat } = await import('@/lib/server/content/magic-bytes')
+  const { sanitizeSvg } = await import('@/lib/server/content/svg-sanitize')
+  const { FONT_FORMATS, FONT_UPLOADS, fontExtension, fontTypeExtension } =
+    await import('@/lib/shared/theme/font-uploads')
 
   // Browser uploads always come through this route. A 403 "proxy off" used
   // to send the client to a presigned object-store URL, which CORS-fails on
@@ -215,14 +224,43 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
 
   // The token authenticates which (key, ct) may be written, not that the bytes
   // are that type — apply the same magic-byte check as the multipart path.
-  // Every presigned flow signs an allowed image type, so non-image cts are
-  // rejected outright.
-  const sniffed = sniffImageMime(Buffer.from(body.buffer, body.byteOffset, body.byteLength))
-  if (!isAllowedImageType(ct) || sniffed !== ct) {
+  // Every presigned flow signs an allowed image type or, for a portal font, a
+  // font file under `fonts/` whose name, type and signature agree, so any
+  // other ct is rejected outright.
+  // The one image exception is a wide logo, which may be an SVG: only under
+  // header-logos/, and what is stored is the sanitiser's rebuild of it, never
+  // the bytes sent.
+  const bytes = Buffer.from(body.buffer, body.byteOffset, body.byteLength)
+  let stored: Uint8Array = body
+  const fontType = fontTypeExtension(ct)
+  if (fontType) {
+    if (
+      !key.startsWith(`${FONT_UPLOADS.prefix}/`) ||
+      fontExtension(key) !== fontType ||
+      sniffFontFormat(bytes) !== fontType
+    ) {
+      return Response.json({ error: 'File content does not match its type' }, { status: 400 })
+    }
+    if (bytes.byteLength > FONT_FORMATS[fontType].maxBytes) {
+      return Response.json({ error: 'File too large' }, { status: 413 })
+    }
+  } else if (ct === SVG_TYPE) {
+    const clean = key.startsWith(SVG_LOGO_PREFIX)
+      ? sanitizeSvg(bytes.toString('utf8'), { maxBytes: MAX_SVG_UPLOAD_BYTES })
+      : null
+    if (!clean) {
+      // Said in words for the person uploading: the editor shows `error` as is.
+      return Response.json(
+        { code: 'SVG_NOT_SAFE', error: "This SVG can't be used. Try a PNG or a simpler SVG." },
+        { status: 400 }
+      )
+    }
+    stored = new TextEncoder().encode(clean)
+  } else if (!isAllowedImageType(ct) || sniffImageMime(bytes) !== ct) {
     return Response.json({ error: 'File content does not match its type' }, { status: 400 })
   }
 
-  await uploadObject(key, body, ct)
+  await uploadObject(key, stored, ct)
   proxyCache.delete(proxyCacheKey(key))
   return new Response(null, { status: 200 })
 }
@@ -381,7 +419,10 @@ async function serveStorageGet(request: Request): Promise<Response> {
   // Force proxy for email embeds (?email=1), since email clients don't follow
   // redirects, and for the file viewer's fetch (?proxy=1), since a script
   // cannot read a cross-origin redirect target the bucket has no CORS grant for.
-  const forceProxy = url.searchParams.has('email') || url.searchParams.has('proxy')
+  // Header logos too: one may be an SVG, which the redirect would make a
+  // download. And a portal font, fetched in CORS mode by @font-face.
+  const forceProxy =
+    url.searchParams.has('email') || url.searchParams.has('proxy') || forcesProxy(key)
   const requestedRange = request.headers.get('range')
   if (requestedRange && !isSingleByteRange(requestedRange)) {
     return new Response(null, { status: 416, headers: { 'Accept-Ranges': 'bytes' } })

@@ -19,6 +19,7 @@ import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-co
 import { pausedCustomDomainMiddleware } from '@/lib/server/middleware/paused-custom-domain'
 import { sectionHostMiddleware } from '@/lib/server/middleware/section-host'
 import { auditAttributionMiddleware } from '@/lib/server/middleware/audit-attribution'
+import { staleBuildMiddleware } from '@/lib/server/middleware/stale-build'
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
 import { serverFnFetch } from '@/lib/client/server-fn-fetch'
 import { liftErrorReferenceOnFailure } from '@/lib/client/error-reference-middleware'
@@ -54,6 +55,8 @@ export const startInstance = createStart(() => {
     // domain, whose decision (the default origin, the paused hosts) they read.
     // Audit attribution last: it opens the request's attribution boundary, and
     // anything it records must land in the workspace resolved above.
+    // A call from a page built before this server is answered innermost, so
+    // every middleware above sees a 409 response rather than a failure.
     requestMiddleware: [
       requestContextMiddleware,
       userContentHostMiddleware,
@@ -63,6 +66,7 @@ export const startInstance = createStart(() => {
       sectionHostMiddleware,
       csrfMiddleware,
       auditAttributionMiddleware,
+      staleBuildMiddleware,
     ],
     // Server-function failures never reach the request middleware's error
     // branch (see server-fn-log.ts), so they are logged here instead. Unlike

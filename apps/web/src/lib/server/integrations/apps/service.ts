@@ -6,8 +6,26 @@
  * Integration-type agnostic — the integrationType field distinguishes sources.
  */
 
-import { db, eq, and, sql, posts, boards, postStatuses, postExternalLinks } from '@/lib/server/db'
-import { createId, fromUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import {
+  db,
+  eq,
+  and,
+  inArray,
+  isNull,
+  sql,
+  posts,
+  boards,
+  postStatuses,
+  postExternalLinks,
+} from '@/lib/server/db'
+import {
+  createId,
+  fromUuid,
+  type PostId,
+  type PostStatusId,
+  type PrincipalId,
+} from '@quackback/ids'
+import { NotFoundError } from '@/lib/shared/errors'
 import { getExecuteRows } from '@/lib/server/utils'
 import { addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'
 import { identifyPortalUser } from '@/lib/server/domains/users/user.identify'
@@ -49,6 +67,16 @@ export async function linkTicketToPost(
   input: LinkTicketInput,
   _actorPrincipalId: PrincipalId
 ): Promise<LinkTicketResult> {
+  // Check the post before writing anything: a link to a deleted post would be
+  // an orphan, and an unknown id would fail the foreign key.
+  const post = await db.query.posts.findFirst({
+    where: and(eq(posts.id, input.postId), isNull(posts.deletedAt)),
+    columns: { voteCount: true },
+  })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
+  }
+
   const linkId = createId('post_external_link')
 
   // Insert link (idempotent - ON CONFLICT returns existing)
@@ -86,12 +114,8 @@ export async function linkTicketToPost(
     voted = voteResult.voted
     voteCount = voteResult.voteCount
   } else {
-    // No requester - just get current vote count
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, input.postId),
-      columns: { voteCount: true },
-    })
-    voteCount = post?.voteCount ?? 0
+    // No requester - the post's current vote count
+    voteCount = post.voteCount
   }
 
   return {
@@ -191,4 +215,21 @@ export async function getLinkedPosts(input: {
     linkId: fromUuid('post_external_link', r.link_id),
     linkedAt: typeof r.linked_at === 'string' ? new Date(r.linked_at) : r.linked_at,
   }))
+}
+
+/**
+ * Name and colour of each status, keyed by id, for labelling a list of posts.
+ * Deleted statuses are included, as getLinkedPosts does: a post still shows
+ * the status it carries.
+ */
+export async function getStatusesById(
+  ids: (PostStatusId | null)[]
+): Promise<Map<PostStatusId, { name: string; color: string }>> {
+  const wanted = [...new Set(ids.filter((id): id is PostStatusId => id !== null))]
+  if (!wanted.length) return new Map()
+  const rows = await db
+    .select({ id: postStatuses.id, name: postStatuses.name, color: postStatuses.color })
+    .from(postStatuses)
+    .where(inArray(postStatuses.id, wanted))
+  return new Map(rows.map(({ id, ...status }) => [id, status]))
 }

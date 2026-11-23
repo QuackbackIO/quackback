@@ -10,6 +10,7 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { moderationAuditFromApiAuth } from './-audit'
 import type { PostId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const rejectSchema = z.object({
   reason: z.string().max(500).optional(),
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/api/v1/moderation/posts/$postId/reject')(
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_APPROVE })
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          const parsed = rejectSchema.safeParse(await request.json().catch(() => ({})))
+          const parsed = rejectSchema.safeParse((await readJsonBody(request)) ?? {})
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

@@ -283,7 +283,7 @@ export async function processBatch(
       content: row.content,
       statusId: row.statusId,
       principalId: row.principalId,
-      voteCount: rowVoters ? rowVoters.length : row.voteCount,
+      voteCount: rowVoters ? rowVoters.length : (row.voteCount ?? 0),
       createdAt: row.createdAt,
       updatedAt: row.createdAt,
     }
@@ -355,17 +355,19 @@ export async function processBatch(
 
   // Update rows matched by source_id: re-import overwrites content/status/
   // votes and replaces the tag set (including the batch tag) rather than
-  // creating a duplicate post.
+  // creating a duplicate post. A blank status or vote_count cell keeps what
+  // the post has; only a value in the row overwrites it.
   for (const { row } of toUpdate) {
     const postId = existingBySourceId.get(row.sourceId!)!
     const rowVoters = row.sourceId ? votersBySourceId.get(row.sourceId) : undefined
+    const voteCount = rowVoters ? rowVoters.length : row.voteCount
     await db
       .update(posts)
       .set({
         title: row.title,
         content: row.content,
-        statusId: row.statusId,
-        voteCount: rowVoters ? rowVoters.length : row.voteCount,
+        ...(row.statusGiven && { statusId: row.statusId }),
+        ...(voteCount !== null && { voteCount }),
         updatedAt: new Date(),
       })
       .where(eq(posts.id, postId))

@@ -11,7 +11,14 @@ import {
 import { copyBoardLinkAction } from '@/lib/shared/activation-action'
 import { markStatusLinkCopiedFn } from '@/lib/server/functions/activation'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
-import { launchOutcome, type LaunchStatus, type LaunchTask } from '@/lib/shared/launch-checklist'
+import {
+  BRAND_STEP_ID,
+  brandStepOnPath,
+  launchOutcome,
+  launchPath,
+  type LaunchStatus,
+  type LaunchTask,
+} from '@/lib/shared/launch-checklist'
 import { openGoingLiveSheet } from './going-live-events'
 import { BrandingStepAction } from './branding-step-action'
 
@@ -109,9 +116,9 @@ function CopyStatusLinkButton({ variant }: { variant: 'default' | 'outline' }) {
 
 /**
  * The one action a launch step offers: copy the board or status link, create
- * the board, use the logo found on the website (or look one up), open the
- * sheet that does the step in place, or open the page that does it. The automatic first win takes its action from the caller. Null for
- * a step that is done, skipped or blocked.
+ * the board, import the brand from the website, open the sheet that does the
+ * step in place, or open the page that does it. The automatic first win takes
+ * its action from the caller. Null for a step that is done, skipped or blocked.
  */
 export function LaunchStepAction({
   task,
@@ -119,6 +126,7 @@ export function LaunchStepAction({
   primary,
   pending = false,
   firstWinAction,
+  brandClassName,
   onCreateBoard,
 }: {
   task: LaunchTask
@@ -126,6 +134,8 @@ export function LaunchStepAction({
   primary: boolean
   pending?: boolean
   firstWinAction?: ReactNode
+  /** Lays the brand step's actions out for the caller, such as on a line of their own. */
+  brandClassName?: string
   onCreateBoard: () => void
 }): ReactNode {
   if (task.isCompleted || task.isSkipped || task.availability === 'blocked') return null
@@ -145,7 +155,17 @@ export function LaunchStepAction({
   }
   if (task.id === 'share-status-page') return <CopyStatusLinkButton variant={variant} />
   if (task.id === 'help-article') return <WriteArticleButton variant={variant} />
-  if (task.id === 'customize-branding') return <BrandingStepAction task={task} variant={variant} />
+  // On the path the brand step imports from the website; under Later (a
+  // team-only board) it is a plain Start like its neighbours.
+  if (task.id === BRAND_STEP_ID && task.href && brandStepOnPath(launchPath(status))) {
+    return (
+      <BrandingStepAction
+        domain={status.brandDomain}
+        variant={variant}
+        className={brandClassName}
+      />
+    )
+  }
   if (task.id === 'create-board') {
     return (
       <Button size="sm" variant={variant} disabled={pending} onClick={onCreateBoard}>

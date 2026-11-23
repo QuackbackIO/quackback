@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockIsFeatureEnabled = vi.fn()
 const mockGetHelpCenterConfig = vi.fn()
+// The portal lets the caller in unless a case makes it private to them.
+const portalGate = vi.hoisted(() => ({ open: true }))
+vi.mock('@/lib/server/widget/portal-gate', () => ({
+  isPortalOpenToRequest: async () => portalGate.open,
+}))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...args),
   getHelpCenterConfig: (...args: unknown[]) => mockGetHelpCenterConfig(...args),
@@ -32,6 +37,7 @@ function makeRequest(q?: string, ip = '203.0.113.9'): Request {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  portalGate.open = true
   mockIsFeatureEnabled.mockResolvedValue(true)
   mockGetHelpCenterConfig.mockResolvedValue({ locales: { additional: [], default: 'en' } })
   mockIncrementBucket.mockResolvedValue({ count: 1 })
@@ -44,6 +50,13 @@ describe('GET /api/widget/kb-search rate limiting', () => {
     mockIsFeatureEnabled.mockResolvedValue(false)
     const res = await handleKbSearch({ request: makeRequest('hello') })
     expect(res.status).toBe(404)
+  })
+
+  it('404s to a caller a private portal turns away, without searching', async () => {
+    portalGate.open = false
+    const res = await handleKbSearch({ request: makeRequest('hello') })
+    expect(res.status).toBe(404)
+    expect(mockHybridSearch).not.toHaveBeenCalled()
   })
 
   it('searches normally under the limit', async () => {

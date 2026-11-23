@@ -170,15 +170,19 @@ Examples:
         publishState = { type: 'draft' }
       }
 
-      const result = await updateChangelog(args.changelogId as ChangelogId, {
-        title: args.title,
-        content: args.content,
-        linkedPostIds: args.linkedPostIds as PostId[] | undefined,
-        publishState,
-        ...(args.displayDate !== undefined && {
-          displayDate: args.displayDate === null ? null : new Date(args.displayDate),
-        }),
-      })
+      const result = await updateChangelog(
+        args.changelogId as ChangelogId,
+        {
+          title: args.title,
+          content: args.content,
+          linkedPostIds: args.linkedPostIds as PostId[] | undefined,
+          publishState,
+          ...(args.displayDate !== undefined && {
+            displayDate: args.displayDate === null ? null : new Date(args.displayDate),
+          }),
+        },
+        { principalId: auth.principalId }
+      )
 
       return jsonResult({
         id: result.id,
