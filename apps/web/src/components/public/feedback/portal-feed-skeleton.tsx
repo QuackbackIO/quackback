@@ -33,7 +33,7 @@ const PILL_WIDTHS = ['w-16', 'w-24', 'w-20', 'w-24', 'w-20', 'w-16']
 function CardSkeleton({ widths }: { widths: readonly [string, string, string] }) {
   const [title, body, tags] = widths
   return (
-    <div className="overflow-hidden rounded-lg border border-border/40 bg-card shadow-sm">
+    <div className="portal-card [--portal-card-edge:40%] overflow-hidden rounded-lg border">
       <div className="flex items-start gap-4 p-4">
         <div className="flex h-14 w-12 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border border-border">
           <Bone className="h-1.5 w-2.5" />
@@ -143,7 +143,8 @@ function PanelSkeleton({ layout }: { layout: 'sidebar' | 'sheet' }) {
     <div
       className={cn(
         'divide-y divide-border/50',
-        layout === 'sheet' && 'overflow-hidden rounded-lg border border-border/50 bg-card shadow-sm'
+        layout === 'sheet' &&
+          'portal-card [--portal-card-edge:50%] overflow-hidden rounded-lg border'
       )}
     >
       {layout === 'sheet' ? [show, statuses, boards, tags] : [show, boards, statuses, tags]}

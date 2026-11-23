@@ -11,6 +11,7 @@ import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeConversation } from './-serialize'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // null or omitted = unassign; no 'me' sentinel for a service key (it has no
 // personal identity to resolve to).
@@ -33,7 +34,7 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/assi
             'conversation ID'
           )
 
-          const parsed = assignSchema.safeParse(await request.json().catch(() => null))
+          const parsed = assignSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

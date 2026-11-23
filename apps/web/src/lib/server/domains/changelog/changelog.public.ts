@@ -19,7 +19,12 @@ import {
 import type { ChangelogId, PostStatusId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
-import { getCategoriesForEntries, categoryGateAllows } from './changelog-category.service'
+import {
+  getCategoriesForEntries,
+  categoryGateAllows,
+  categoryGateCondition,
+} from './changelog-category.service'
+import { isChangelogOpenTo } from './changelog.audience'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
@@ -42,18 +47,38 @@ export function publicChangelogConditions(now: Date) {
 }
 
 /**
+ * What a reader with no session (a crawler, the customer assistant) may see:
+ * published entries whose labels do not gate an anonymous visitor out. Only
+ * meaningful once `isChangelogOpenToAnonymous()` has said the changelog is
+ * open to them at all.
+ */
+export function anonymousChangelogConditions(now: Date) {
+  return [
+    ...publicChangelogConditions(now),
+    categoryGateCondition(ANONYMOUS_ACTOR, changelogEntries.id),
+  ]
+}
+
+/**
  * Slim public lookup for link embeds: title + published date only, under the
- * same published-only visibility filter, but WITHOUT the view-count increment
- * or linked-post joins of {@link getPublicChangelogById}. An embed resolves on
- * every page render, so it must neither inflate analytics nor over-fetch.
- * Returns null (no throw) when the entry isn't publicly visible.
+ * same visibility the changelog page applies for `actor` (product on, the
+ * changelog audience, the entry's label gate), but WITHOUT the view-count
+ * increment or linked-post joins of {@link getPublicChangelogById}. An embed
+ * resolves on every page render, so it must neither inflate analytics nor
+ * over-fetch. Returns null (no throw) when `actor` could not read the entry.
  */
 export async function getPublicChangelogMetaById(
-  id: ChangelogId
+  id: ChangelogId,
+  actor: Actor
 ): Promise<{ id: ChangelogId; title: string; publishedAt: Date } | null> {
+  if (!(await isChangelogOpenTo(actor))) return null
   const now = new Date()
   const entry = await db.query.changelogEntries.findFirst({
-    where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now)),
+    where: and(
+      eq(changelogEntries.id, id),
+      ...publicChangelogConditions(now),
+      categoryGateCondition(actor, changelogEntries.id)
+    ),
     columns: { id: true, title: true, publishedAt: true, displayDate: true },
   })
   if (!entry || !entry.publishedAt) return null
@@ -194,7 +219,12 @@ export async function listPublicChangelogs(
   const { cursor, limit = 20 } = params
   const now = new Date()
 
-  const conditions = publicChangelogConditions(now)
+  // The category segment gate is part of the paged query, so a page is never
+  // cut first and emptied after: `limit` counts only entries the viewer may see.
+  const conditions = [
+    ...publicChangelogConditions(now),
+    categoryGateCondition(actor, changelogEntries.id),
+  ]
 
   // Cursor-based pagination. The lookup does NOT filter on deletedAt:
   // if an admin deleted the cursor row between page load and "Load
@@ -289,16 +319,11 @@ export async function listPublicChangelogs(
     statuses.forEach((s) => publicStatusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
-  // Category segment gate. Applied as a display-time filter over the
-  // already-paginated page (not a SQL predicate) — cheap given a workspace's
-  // changelog volume, and it keeps the cursor anchored on the underlying
-  // publish ordering rather than reshuffling pagination around a rare gate.
   const categoriesByEntry = await getCategoriesForEntries(entryIds)
 
   // Transform to output format (no author info for public view)
   const result: PublicChangelogEntry[] = items
     .filter((entry) => entry.publishedAt !== null)
-    .filter((entry) => categoryGateAllows(categoriesByEntry.get(entry.id) ?? [], actor))
     .map((entry) => {
       const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
       const entryCategories = categoriesByEntry.get(entry.id) ?? []

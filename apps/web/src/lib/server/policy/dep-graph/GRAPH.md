@@ -60,8 +60,8 @@ Edges (30):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (56): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, plan-limits, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (177):
+Nodes (57): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, brand-import, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, plan-limits, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (182):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -80,6 +80,7 @@ Edges (177):
 - assistant -> ai
 - assistant -> api
 - assistant -> boards
+- assistant -> changelog
 - assistant -> conversation
 - assistant -> conversation-attributes
 - assistant -> embeddings
@@ -102,6 +103,7 @@ Edges (177):
 - boards -> plan-limits
 - boards -> posts
 - boards -> settings
+- brand-import -> settings
 - changelog -> ai
 - changelog -> embeddings
 - changelog -> settings
@@ -151,6 +153,7 @@ Edges (177):
 - export -> users
 - files -> principals
 - help-center -> ai
+- help-center -> api
 - help-center -> plan-limits
 - help-center -> principals
 - help-center -> settings
@@ -188,6 +191,7 @@ Edges (177):
 - posts -> settings
 - posts -> subscriptions
 - principals -> plan-limits
+- principals -> posts
 - principals -> roles
 - principals -> settings
 - principals -> teams
@@ -225,6 +229,7 @@ Edges (177):
 - tickets -> subscriptions
 - tickets -> teams
 - user-attributes -> attribute-definitions
+- users -> posts
 - users -> principals
 - webhooks -> plan-limits
 - webhooks -> settings

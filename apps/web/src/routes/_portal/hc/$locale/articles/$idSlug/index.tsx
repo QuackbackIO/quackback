@@ -8,6 +8,7 @@ import { HelpCenterPrevNext } from '@/components/help-center/help-center-prev-ne
 import { HelpCenterArticleFeedback } from '@/components/help-center/help-center-article-feedback'
 import { HelpCenterRelatedArticles } from '@/components/help-center/help-center-related-articles'
 import { HelpCenterToc } from '@/components/help-center/help-center-toc'
+import { useRecordArticleView } from '@/components/help-center/use-record-article-view'
 import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-utils'
 import {
   extractHeadings,
@@ -90,6 +91,7 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug/')({
 function ArticleDetailPage() {
   const intl = useIntl()
   const { article, related, category, articles, allCategories } = Route.useLoaderData()
+  useRecordArticleView(article.id)
   const { locale } = Route.useParams()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
   // Structured data names the help center's own host once it has one.

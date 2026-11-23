@@ -94,7 +94,8 @@ registerPath('/apps/boards', {
   get: {
     tags: ['Apps'],
     summary: 'List boards for an embedded app',
-    description: 'Returns the boards the API key owner can see, with name and slug only.',
+    description:
+      'Returns the boards the API key owner can see, with name and slug only. Requires the read:feedback scope and the post.view_private permission.',
     responses: {
       200: {
         description: 'Boards',
@@ -109,7 +110,7 @@ registerPath('/apps/boards', {
           },
         },
       },
-      ...errorResponses(),
+      ...errorResponses(403),
     },
   },
 })

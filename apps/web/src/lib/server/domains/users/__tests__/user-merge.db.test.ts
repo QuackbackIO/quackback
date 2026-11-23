@@ -200,6 +200,36 @@ describe.skipIf(!fixture.available)('mergeLeadIntoUser', () => {
     expect(votes).toEqual([{ principalId: target.principalId }])
   })
 
+  it('takes the dropped lead vote off the post count, and leaves a moved vote counted', async () => {
+    const target = await seedUser({ name: 'Counted User' })
+    const lead = await seedLead({ name: null, contactEmail: null })
+    const boardId = await seedBoard()
+    const shared = await seedPost(boardId, target.principalId)
+    const leadOnly = await seedPost(boardId, target.principalId)
+    const canonical = await seedPost(boardId, target.principalId)
+    const source = await seedPost(boardId, target.principalId)
+    await testDb.update(posts).set({ voteCount: 2 }).where(eq(posts.id, shared))
+    await testDb.update(posts).set({ voteCount: 1 }).where(eq(posts.id, leadOnly))
+    await testDb.update(posts).set({ voteCount: 2 }).where(eq(posts.id, canonical))
+    await testDb.update(posts).set({ canonicalPostId: canonical }).where(eq(posts.id, source))
+    await testDb.insert(postVotes).values([
+      { postId: shared, principalId: target.principalId },
+      { postId: shared, principalId: lead.principalId },
+      { postId: leadOnly, principalId: lead.principalId },
+      // One merged thread, two rows: once merged they are one voter.
+      { postId: canonical, principalId: target.principalId },
+      { postId: source, principalId: lead.principalId },
+    ])
+
+    await mergeLeadIntoUser(lead.principalId, target.principalId)
+
+    const count = async (id: PostId) =>
+      (await testDb.select({ n: posts.voteCount }).from(posts).where(eq(posts.id, id)))[0].n
+    expect(await count(shared)).toBe(1)
+    expect(await count(leadOnly)).toBe(1)
+    expect(await count(canonical)).toBe(1)
+  })
+
   it('rejects a source that is not a lead', async () => {
     const a = await seedUser({ name: 'User A' })
     const b = await seedUser({ name: 'User B' })

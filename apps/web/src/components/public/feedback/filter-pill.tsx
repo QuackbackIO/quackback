@@ -44,7 +44,7 @@ export function FilterPill({
         size === 'md' ? 'h-9 px-3 text-sm' : 'h-7 px-2.5 text-xs',
         pressed
           ? 'border-foreground bg-foreground text-background'
-          : 'border-border bg-card text-foreground/80 hover:bg-muted/60 hover:text-foreground'
+          : 'border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground'
       )}
     >
       {color && (
@@ -55,7 +55,9 @@ export function FilterPill({
         />
       )}
       <span className="min-w-0 truncate">{children}</span>
-      {count && <span className="shrink-0 font-normal tabular-nums opacity-70">{count}</span>}
+      {count && (
+        <span className="shrink-0 font-normal tabular-nums text-muted-foreground">{count}</span>
+      )}
     </button>
   )
 }

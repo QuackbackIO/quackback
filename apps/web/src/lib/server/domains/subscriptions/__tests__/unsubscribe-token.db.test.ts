@@ -4,9 +4,19 @@
  * spending it turns setup tips off once.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createId, type PrincipalId, type UserId } from '@quackback/ids'
+import { createId, type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { eq, notificationPreferences, principal, unsubscribeTokens, user } from '@/lib/server/db'
+import {
+  and,
+  boards,
+  eq,
+  notificationPreferences,
+  posts,
+  postSubscriptions,
+  principal,
+  unsubscribeTokens,
+  user,
+} from '@/lib/server/db'
 import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -97,5 +107,40 @@ describe.skipIf(!fixture.available)('unsubscribe tokens (real DB)', () => {
 
     expect(await processUnsubscribeToken(token)).toBeNull()
     expect(await tipsEmail()).toBeUndefined()
+  })
+
+  it('a mute link stops every notification about that post for that person', async () => {
+    const [board] = await testDb
+      .insert(boards)
+      .values({ name: 'Ideas', slug: `ideas-${createId('board').slice(-6)}` })
+      .returning()
+    const [post] = await testDb
+      .insert(posts)
+      .values({ boardId: board.id, principalId: owner, title: 'Dark mode', content: '' })
+      .returning()
+    await testDb
+      .insert(postSubscriptions)
+      .values({ postId: post.id, principalId: owner, reason: 'vote' })
+    const token = crypto.randomUUID()
+    await testDb.insert(unsubscribeTokens).values({
+      token,
+      principalId: owner,
+      postId: post.id as PostId,
+      action: 'mute_post',
+      expiresAt: new Date(Date.now() + 86_400_000),
+    })
+
+    expect(await processUnsubscribeToken(token)).toMatchObject({ action: 'mute_post' })
+
+    const { getSubscribersForEvent } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    expect(await getSubscribersForEvent(post.id as PostId, 'comment')).toEqual([])
+    expect(await getSubscribersForEvent(post.id as PostId, 'status_change')).toEqual([])
+    const rows = await testDb
+      .select()
+      .from(postSubscriptions)
+      .where(and(eq(postSubscriptions.postId, post.id), eq(postSubscriptions.principalId, owner)))
+    expect(rows).toEqual([])
+    expect(await usedAt(token)).toBeInstanceOf(Date)
   })
 })

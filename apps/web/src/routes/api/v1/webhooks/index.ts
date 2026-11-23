@@ -12,6 +12,7 @@ import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { toWebhookListResponse } from '@/lib/server/domains/api/webhooks'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const createWebhookSchema = z.object({
@@ -46,11 +47,11 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       POST: async ({ request }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, {
+          const auth = await withApiKeyAuth(request, {
             permission: PERMISSIONS.WEBHOOK_MANAGE,
           })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createWebhookSchema.safeParse(body)
 
           if (!parsed.success) {
@@ -58,6 +59,13 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
               errors: parsed.error.flatten().fieldErrors,
             })
           }
+
+          const { assertCanSubscribeToEvents } =
+            await import('@/lib/server/domains/webhooks/webhook-event-access')
+          assertCanSubscribeToEvents(parsed.data.events, {
+            scopes: auth.apiKey.scopes,
+            permissions: auth.permissions,
+          })
 
           const boardIds = parseTypeIdArray<BoardId>(parsed.data.boardIds, 'board', 'board IDs')
 
@@ -68,7 +76,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
               events: parsed.data.events,
               boardIds,
             },
-            principalId
+            auth.principalId
           )
 
           // Return with secret (only shown once)

@@ -218,7 +218,8 @@ export function PortalFilterPanel({
       className={cn(
         'divide-y divide-border/50',
         // In the sidebar the card chrome sits on the scroll area around it.
-        layout === 'sheet' && 'overflow-hidden rounded-lg border border-border/50 bg-card shadow-sm'
+        layout === 'sheet' &&
+          'portal-card [--portal-card-edge:50%] overflow-hidden rounded-lg border'
       )}
     >
       {sections}

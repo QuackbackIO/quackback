@@ -12,6 +12,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeTicket } from './-serialize'
 import { priorityEnum } from './-validation'
 import type { TicketId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const prioritySchema = z.object({
   priority: priorityEnum,
@@ -26,7 +27,7 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/priority')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_SET_STATUS })
           const ticketId = parseTypeId<TicketId>(params.ticketId, 'ticket', 'ticket ID')
 
-          const parsed = prioritySchema.safeParse(await request.json().catch(() => null))
+          const parsed = prioritySchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

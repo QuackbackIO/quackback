@@ -11,7 +11,12 @@ import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ALL_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import {
+  ALL_PERMISSIONS,
+  PERMISSIONS,
+  SYSTEM_ROLE_PERMISSIONS,
+  type PermissionKey,
+} from '@/lib/shared/permissions'
 
 const calls: string[] = []
 function stub<T>(name: string, value: T) {
@@ -58,8 +63,8 @@ type LoaderFn = (ctx: {
 const loader = (Route as unknown as { options: { loader: LoaderFn } }).options.loader
 
 /** The page's reads on load, as UsersContainer and UsersList make them. */
-function usePageReads(role: string) {
-  const companies = role === 'admin' || role === 'member'
+function usePageReads(permissions: readonly PermissionKey[]) {
+  const companies = permissions.includes(PERMISSIONS.COMPANY_VIEW)
   usePortalUsers({ filters: { sort: 'newest' } })
   useTotalUserCount()
   useTotalUserCount('leads')
@@ -67,7 +72,7 @@ function usePageReads(role: string) {
   useUserAttributes()
   useCompanyAttributes()
   useUserTags()
-  usePortalInvites({ enabled: role === 'admin' })
+  usePortalInvites({ enabled: permissions.includes(PERMISSIONS.SETTINGS_MANAGE) })
   useInfiniteQuery({
     ...companiesDirectoryQueries.page(undefined, undefined),
     enabled: companies,
@@ -86,13 +91,13 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
-async function mountAfterLoader(role: string) {
+async function mountAfterLoader(role: string, permissions: PermissionKey[]) {
   await loader({
-    context: { principal: { role }, permissions: ALL_PERMISSIONS, queryClient: client },
+    context: { principal: { role }, permissions, queryClient: client },
   })
   const warmed = [...calls].sort()
   calls.length = 0
-  renderHook(() => usePageReads(role), { wrapper })
+  renderHook(() => usePageReads(permissions), { wrapper })
   // Anything the warm-up missed goes out on mount; give it a tick to show.
   await waitFor(() => expect(client.isFetching()).toBe(0))
   return { warmed, afterMount: [...calls] }
@@ -100,7 +105,7 @@ async function mountAfterLoader(role: string) {
 
 describe('/admin/users loader', () => {
   it('warms every read an admin page makes, so mounting it fetches nothing', async () => {
-    const { warmed, afterMount } = await mountAfterLoader('admin')
+    const { warmed, afterMount } = await mountAfterLoader('admin', ALL_PERMISSIONS)
     expect(afterMount).toEqual([])
     expect(warmed).toEqual(
       [
@@ -118,10 +123,31 @@ describe('/admin/users loader', () => {
     )
   })
 
-  it('leaves out what a member cannot read (invites need settings.manage)', async () => {
-    const { warmed, afterMount } = await mountAfterLoader('member')
+  it('leaves out what a Manager cannot read (invites need settings.manage)', async () => {
+    const { warmed, afterMount } = await mountAfterLoader('member', SYSTEM_ROLE_PERMISSIONS.manager)
     expect(afterMount).toEqual([])
     expect(warmed).not.toContain('invites')
     expect(warmed).toContain('companies')
+  })
+
+  it('follows the permissions, not the legacy role: an admin without company.view', async () => {
+    const { warmed, afterMount } = await mountAfterLoader(
+      'admin',
+      ALL_PERMISSIONS.filter(
+        (key) => key !== PERMISSIONS.COMPANY_VIEW && key !== PERMISSIONS.SETTINGS_MANAGE
+      )
+    )
+    expect(afterMount).toEqual([])
+    expect(warmed).not.toContain('companies')
+    expect(warmed).not.toContain('invites')
+  })
+
+  it('a custom member role with settings.manage warms the invites', async () => {
+    const { warmed } = await mountAfterLoader('member', [
+      PERMISSIONS.PEOPLE_VIEW,
+      PERMISSIONS.SETTINGS_MANAGE,
+    ])
+    expect(warmed).toContain('invites')
+    expect(warmed).not.toContain('companies')
   })
 })

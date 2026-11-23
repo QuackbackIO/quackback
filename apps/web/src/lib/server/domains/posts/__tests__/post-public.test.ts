@@ -8,7 +8,10 @@ const mockIsNull = vi.fn((col) => ({ _tag: 'isNull', col }))
 const mockInArray = vi.fn((col, arr) => ({ _tag: 'inArray', col, arr }))
 const mockAnd = vi.fn((...args) => ({ _tag: 'and', args }))
 const mockDesc = vi.fn((col) => ({ _tag: 'desc', col }))
-const mockSql = vi.fn(() => ({ _tag: 'sql', as: vi.fn(() => ({ _tag: 'sql_as' })) }))
+const mockSql = Object.assign(
+  vi.fn(() => ({ _tag: 'sql', as: vi.fn(() => ({ _tag: 'sql_as' })) })),
+  { join: vi.fn(() => ({ _tag: 'sql_join' })) }
+)
 const mockGte = vi.fn((col, val) => ({ _tag: 'gte', col, val }))
 
 const mockPosts = {

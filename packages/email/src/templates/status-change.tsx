@@ -1,5 +1,5 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
-import { EmailLayout, NotificationFooter } from './email-layout'
+import { EmailLayout, NotificationFooter, feedbackFooterReason } from './email-layout'
 import { typography, button, colors } from './shared-styles'
 
 interface StatusChangeEmailProps {
@@ -11,6 +11,8 @@ interface StatusChangeEmailProps {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The reader wrote the post. Everyone else follows it (voted, commented or subscribed). */
+  isPostAuthor?: boolean
 }
 
 function getStatusEmoji(status: string): string {
@@ -41,23 +43,23 @@ export function StatusChangeEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  isPostAuthor = false,
 }: StatusChangeEmailProps) {
   const emoji = getStatusEmoji(newStatus)
   const formattedNewStatus = capitalizeStatus(newStatus)
   const formattedPreviousStatus = capitalizeStatus(previousStatus)
+  const headline = isPostAuthor
+    ? `Your feedback is now ${formattedNewStatus}!`
+    : `A post you follow is now ${formattedNewStatus}`
 
   return (
-    <EmailLayout
-      preview={`${emoji} Your feedback is now ${formattedNewStatus}`}
-      logoUrl={logoUrl}
-      logoAlt={organizationName}
-    >
+    <EmailLayout preview={`${emoji} ${headline}`} logoUrl={logoUrl} logoAlt={organizationName}>
       {/* Content */}
-      <Heading style={typography.h1}>
-        {emoji} Your feedback is now {formattedNewStatus}!
-      </Heading>
+      <Heading style={typography.h1}>{`${emoji} ${headline}`}</Heading>
       <Text style={typography.text}>
-        Great news! The status of your feedback has been updated on {organizationName}.
+        {isPostAuthor
+          ? `Great news! The status of your feedback has been updated on ${organizationName}.`
+          : `The status of a post you follow has been updated on ${organizationName}.`}
       </Text>
 
       {/* Post Title */}
@@ -90,7 +92,7 @@ export function StatusChangeEmail({
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you submitted or subscribed to this feedback."
+        reason={feedbackFooterReason(isPostAuthor)}
         unsubscribeUrl={unsubscribeUrl}
         preferencesUrl={preferencesUrl}
       />

@@ -14,6 +14,11 @@ interface WidgetUser {
   avatarUrl: string | null
 }
 
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
+
 interface WidgetCommentFormProps {
   isIdentified: boolean
   user: WidgetUser | null
@@ -58,13 +63,18 @@ export function WidgetCommentForm({
       })
     } catch (err) {
       setError(
-        errorText(
-          err,
-          intl.formatMessage({
-            id: 'widget.commentForm.errorPost',
-            defaultMessage: 'Could not post comment. Please try again.',
-          })
-        )
+        isBlockedRefusal(err)
+          ? intl.formatMessage({
+              id: 'widget.blocked',
+              defaultMessage: "You can't post, vote or comment here.",
+            })
+          : errorText(
+              err,
+              intl.formatMessage({
+                id: 'widget.commentForm.errorPost',
+                defaultMessage: 'Could not post comment. Please try again.',
+              })
+            )
       )
     } finally {
       setIsSubmitting(false)

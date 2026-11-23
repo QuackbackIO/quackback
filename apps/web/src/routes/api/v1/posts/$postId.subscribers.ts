@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
@@ -43,7 +44,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/subscribers')({
             permission: PERMISSIONS.POST_VOTE_ON_BEHALF,
           })
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
-          const parsed = addSubscriberSchema.safeParse(await request.json().catch(() => null))
+          const parsed = addSubscriberSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

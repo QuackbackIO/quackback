@@ -11,6 +11,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   // Spread the real db module so tables/operators stay current; override only what this suite drives.
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
+    // Runs the callback on the same mock, as a transaction would on its client.
+    async transaction(fn: (tx: unknown) => unknown) {
+      return fn(this)
+    },
     query: {
       changelogEntries: {
         findFirst: (...args: unknown[]) => mockEntryFindFirst(...args),
@@ -108,6 +112,38 @@ describe('displayDate', () => {
     mockEntryFindFirst.mockResolvedValueOnce(baseEntry()).mockResolvedValueOnce(baseEntry())
 
     await updateChangelog(ENTRY_ID, { displayDate: sameDay })
+
+    expect(mockUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ displayDate: null }))
+  })
+
+  it('CHG-A-19 rejects a display date on a draft or scheduled entry', async () => {
+    const { updateChangelog } = await import('../changelog.service')
+    const past = new Date('2024-01-15T09:00:00Z')
+
+    mockEntryFindFirst.mockResolvedValueOnce(baseEntry({ publishedAt: null }))
+    await expect(updateChangelog(ENTRY_ID, { displayDate: past })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'Display date can only be set on published changelog entries',
+    })
+
+    mockEntryFindFirst.mockResolvedValueOnce(
+      baseEntry({ publishedAt: new Date(Date.now() + 86_400_000) })
+    )
+    await expect(updateChangelog(ENTRY_ID, { displayDate: past })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'Display date can only be set on published changelog entries',
+    })
+    expect(mockUpdateSet).not.toHaveBeenCalled()
+  })
+  it('CHG-A-19 clears a stale display date on a draft entry with null', async () => {
+    const { updateChangelog } = await import('../changelog.service')
+    const stale = new Date('2024-01-15T09:00:00Z')
+
+    mockEntryFindFirst
+      .mockResolvedValueOnce(baseEntry({ publishedAt: null, displayDate: stale }))
+      .mockResolvedValueOnce(baseEntry({ publishedAt: null, displayDate: null }))
+
+    await updateChangelog(ENTRY_ID, { displayDate: null })
 
     expect(mockUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ displayDate: null }))
   })

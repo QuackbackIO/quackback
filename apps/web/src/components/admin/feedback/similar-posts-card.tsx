@@ -27,6 +27,8 @@ import { acceptSuggestionFn, dismissSuggestionFn } from '@/lib/server/functions/
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostId } from '@quackback/ids'
 import { toastError } from '@/lib/client/error-notice'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 interface SimilarPostsCardProps {
   postId: PostId
@@ -37,6 +39,8 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
   const [isOpen, setIsOpen] = useState(true)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  // Accepting a suggestion merges the posts, which needs post.merge.
+  const canMerge = usePermission(PERMISSIONS.POST_MERGE)
 
   const { data: suggestions } = useQuery(mergeSuggestionQueries.forPost(postId))
 
@@ -119,34 +123,36 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
 
               const actions = (
                 <div className="flex items-center gap-1 shrink-0">
-                  <Tooltip>
-                    <DropdownMenu>
-                      <TooltipTrigger asChild>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                            disabled={isPending}
-                            aria-label="Merge"
-                          >
-                            <IconGitMerge className="size-4" strokeWidth={1.5} />
-                          </Button>
-                        </DropdownMenuTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">Merge</TooltipContent>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuItem onClick={() => handleAccept(suggestion.id, isSource)}>
-                          <ArrowDownIcon className="size-4 mr-2" />
-                          Merge into this
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleAccept(suggestion.id, !isSource)}>
-                          <ArrowUpIcon className="size-4 mr-2" />
-                          Merge into that
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </Tooltip>
+                  {canMerge && (
+                    <Tooltip>
+                      <DropdownMenu>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                              disabled={isPending}
+                              aria-label="Merge"
+                            >
+                              <IconGitMerge className="size-4" strokeWidth={1.5} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">Merge</TooltipContent>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem onClick={() => handleAccept(suggestion.id, isSource)}>
+                            <ArrowDownIcon className="size-4 mr-2" />
+                            Merge into this
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleAccept(suggestion.id, !isSource)}>
+                            <ArrowUpIcon className="size-4 mr-2" />
+                            Merge into that
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </Tooltip>
+                  )}
 
                   <Tooltip>
                     <TooltipTrigger asChild>

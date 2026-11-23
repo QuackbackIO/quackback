@@ -32,6 +32,7 @@ import { cn } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
 import type { RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
+import { roadmapToSelect } from '@/lib/shared/roadmap-config'
 import {
   useAdminBoards,
   useAdminStatuses,
@@ -111,7 +112,9 @@ export function RoadmapSidebar({
       setIsDeleteDialogOpen(false)
       setDeletingRoadmap(null)
       if (selectedRoadmapId === deletingRoadmap.id) {
-        onSelectRoadmap(roadmaps?.[0]?.id ?? null)
+        onSelectRoadmap(
+          roadmapToSelect(roadmaps ?? [], null, { excluding: deletingRoadmap.id })?.id ?? null
+        )
       }
     } catch (error) {
       toastError(error, "Couldn't delete roadmap. Try again.")

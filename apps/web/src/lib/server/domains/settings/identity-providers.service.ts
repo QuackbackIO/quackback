@@ -504,7 +504,7 @@ export async function upsertIdentityProvider(
       const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
       for (const [label, value] of guardedUrls) {
         if (!value) continue
-        const safety = await checkUrlSafety(value)
+        const safety = await checkUrlSafety(value, { allowE2eOidcFake: true })
         if (!safety.safe) {
           throw new ValidationError(
             'INVALID_IDP_CONFIG',
@@ -591,7 +591,8 @@ export async function upsertIdentityProvider(
             const grants = await runRoleGrantCheck(
               existing.claimMapping,
               input.claimMapping,
-              input.checkRoleGrants
+              input.checkRoleGrants,
+              tx
             )
             const risks = mappingSaveRisks(existing.claimMapping, input.claimMapping, grants)
             if (risks.identifierChanged && !input.acknowledgeIdentifierChange) {
@@ -620,7 +621,7 @@ export async function upsertIdentityProvider(
           !storedJsonEqual(existing.claimMapping, nextMapping) ||
           existing.autoProvisionRole !== nextDefault
         ) {
-          await refuseSyncLockout(existing.id, nextMapping, nextDefault)
+          await refuseSyncLockout(existing.id, nextMapping, nextDefault, tx)
         }
         if (input.showButton !== undefined) patch.showButton = input.showButton
 
@@ -640,7 +641,7 @@ export async function upsertIdentityProvider(
           .returning()
       } else {
         if (input.claimMapping) {
-          await runRoleGrantCheck(null, input.claimMapping, input.checkRoleGrants)
+          await runRoleGrantCheck(null, input.claimMapping, input.checkRoleGrants, tx)
         }
         // Insert: omit `id` so the typeIdWithDefault column generates it.
         ;[row] = await tx
@@ -937,10 +938,11 @@ export async function persistTestResult(
 async function refuseSyncLockout(
   id: IdentityProviderId,
   mapping: unknown,
-  defaultRole: Role | null
+  defaultRole: Role | null,
+  tx: Transaction
 ): Promise<void> {
   const { syncLockoutCount } = await import('./identity-provider-accounts')
-  const n = await syncLockoutCount(id, mapping, defaultRole)
+  const n = await syncLockoutCount(id, mapping, defaultRole, tx)
   if (n === 0) return
   throw new ValidationError(
     'SYNC_LOCKOUT',
@@ -956,9 +958,10 @@ async function refuseSyncLockout(
 async function runRoleGrantCheck(
   before: unknown,
   after: unknown,
-  check: RoleRuleGrantCheck | undefined
+  check: RoleRuleGrantCheck | undefined,
+  tx: Transaction
 ): Promise<{ adminTierRoleIds: ReadonlySet<string> }> {
-  if (check) return check(before, after)
+  if (check) return check(before, after, tx)
   if (roleRuleGrantsToCheck(before, after).length > 0) {
     throw new ForbiddenError('GRANT_CEILING', 'Assigner permission set is required')
   }
@@ -997,7 +1000,7 @@ export async function saveIdentityProviderClaimMapping(
         )
       }
       const next = applyClaimMappingEdits(existing.claimMapping, args.operations)
-      const grants = await runRoleGrantCheck(existing.claimMapping, next, args.checkRoleGrants)
+      const grants = await runRoleGrantCheck(existing.claimMapping, next, args.checkRoleGrants, tx)
       const risks = mappingSaveRisks(existing.claimMapping, next, grants)
       if (risks.identifierChanged && !args.acknowledgeIdentifierChange) {
         throw new ValidationError(
@@ -1013,7 +1016,7 @@ export async function saveIdentityProviderClaimMapping(
       }
       const roleSection = (m: unknown) => (isPlainRecord(m) ? m.role : undefined)
       if (!storedJsonEqual(roleSection(existing.claimMapping), roleSection(next))) {
-        await refuseSyncLockout(id, next, existing.autoProvisionRole)
+        await refuseSyncLockout(id, next, existing.autoProvisionRole, tx)
       }
       const restamp =
         effectiveProfileSignature(existing.claimMapping) !== effectiveProfileSignature(next)

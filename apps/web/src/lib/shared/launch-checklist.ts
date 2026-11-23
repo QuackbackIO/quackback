@@ -35,7 +35,12 @@ export interface LaunchStatus {
   memberCount: number
   /** A teammate has been invited, whether or not they have joined yet. */
   hasTeamInvite?: boolean
+  /** The portal has an icon or a header logo. */
   hasBranding: boolean
+  /** The company website the brand step offers to import from, when one is known. */
+  brandDomain?: string | null
+  /** The website the published look was last imported from; null once customised by hand. */
+  brandImportedFrom?: string | null
   hasWidgetInstalled?: boolean
   widgetOriginHost?: string | null
   widgetLastDetectedAt?: string | null
@@ -76,6 +81,7 @@ export type LaunchTaskHref =
   | '/admin/settings/boards'
   | '/admin/settings/members'
   | '/admin/settings/portal'
+  | '/admin/settings/portal/customise'
   | '/admin/settings/general'
   | '/admin/settings/widget/install'
   | '/admin/settings/integrations'
@@ -423,14 +429,14 @@ function buildOutcomeTasks(
   }
   const branding: LaunchTaskInput = {
     id: 'customize-branding',
-    title: 'Add your logo',
-    description: 'Make your portal, widget, and emails feel like your brand.',
+    title: 'Make it look like your brand',
+    description: 'Bring in your logo, colours and font from your website.',
     completed: status.hasBranding,
     canAct: permissions.brandingManage,
     classification: 'polish',
-    href: '/admin/settings/general',
-    actionLabel: 'Add logo',
-    completedLabel: 'Edit branding',
+    href: '/admin/settings/portal/customise',
+    actionLabel: 'Customise',
+    completedLabel: 'Edit in Customise',
   }
   const integration: LaunchTaskInput = {
     id: 'connect-integration',
@@ -580,14 +586,17 @@ export function launchVisibilityHref(goal: LaunchPathGoal, status: LaunchStatus)
   return null
 }
 
-/** Steps on the path: the live page, the goal step and the first win. */
-export const LAUNCH_PATH_LENGTH = 3
+/** The brand step: on the path of every goal whose page customers see. */
+export const BRAND_STEP_ID = 'customize-branding'
 
 export interface LaunchPath {
   goal: LaunchPathGoal
-  /** The goal step, then the first win. The live page is step 1 and always done. */
-  steps: [LaunchTask, LaunchTask]
-  /** The step the workspace is on, 1-based, out of {@link LAUNCH_PATH_LENGTH}. */
+  /**
+   * The steps after the live page (step 1, always done): the brand step for a
+   * goal whose page customers see, the goal step, then the first win, last.
+   */
+  steps: LaunchTask[]
+  /** The step the workspace is on, 1-based, out of {@link total}. */
   step: number
   total: number
   /** A customer (or, for a private board, a teammate) has acted: the plan is done. */
@@ -599,6 +608,8 @@ export interface LaunchPath {
 }
 
 const isDone = (task: LaunchTask) => task.isCompleted || task.isReady
+/** Done or skipped: a skipped step is behind the plan, as it is for the Next pointer and under Later. */
+const isSettled = (task: LaunchTask) => isDone(task) || task.isSkipped
 
 /**
  * The launch plan as everything shows it: Home, the sidebar dock, the Launch
@@ -627,17 +638,20 @@ export function launchPath(status: LaunchStatus): LaunchPath {
   const goal = stepIn(tasks, preferred) ? preferred : 'feedback'
   // A feedback goal always builds create-board, so a step is always found.
   const goalStep = stepIn(tasks, goal)!
+  // A team-only board is never seen by customers: its brand step waits under Later.
+  const brand = goal === 'private' ? undefined : tasks.find((task) => task.id === BRAND_STEP_ID)
+  const chores = brand ? [brand, goalStep] : [goalStep]
+  const steps = [...chores, win]
+  const total = steps.length + 1
   const complete = win.isCompleted
-  const step = complete || isDone(goalStep) ? 3 : 2
-  const goalOpen = !isDone(goalStep) && !goalStep.isSkipped && goalStep.availability !== 'blocked'
   return {
     goal,
-    steps: [goalStep, win],
-    step,
-    total: LAUNCH_PATH_LENGTH,
+    steps,
+    step: complete ? total : 2 + chores.filter(isSettled).length,
+    total,
     complete,
-    next: complete ? null : goalOpen ? goalStep : win,
-    later: tasks.filter((task) => task !== goalStep && task !== win && !task.isReady),
+    next: complete ? null : (chores.find((task) => !task.isReady && isOpenLaunchStep(task)) ?? win),
+    later: tasks.filter((task) => !steps.includes(task) && !task.isReady),
   }
 }
 
@@ -646,13 +660,21 @@ export function isOpenLaunchStep(task: LaunchTask): boolean {
   return !task.isCompleted && !task.isSkipped && task.availability !== 'blocked'
 }
 
+/** Whether the brand step is on this plan's path (rather than under Later). */
+export function brandStepOnPath(path: LaunchPath): boolean {
+  return path.steps.some((task) => task.id === BRAND_STEP_ID)
+}
+
 /**
  * The plan's other steps still to do, in plan order: every picked goal's
  * step, then the polish. Home names these; the Launch plan page lists them
  * under Later.
  */
 export function openLaterSteps(path: LaunchPath): LaunchTask[] {
-  return path.later.filter(isOpenLaunchStep)
+  // Once the plan is done its path is closed, so an unfinished brand step
+  // counts with the optional steps rather than vanishing.
+  const brand = path.complete ? path.steps.filter((task) => task.id === BRAND_STEP_ID) : []
+  return [...brand, ...path.later].filter(isOpenLaunchStep)
 }
 
 /** Whether any step of the plan is still open: the path to the first win, or a later step. */

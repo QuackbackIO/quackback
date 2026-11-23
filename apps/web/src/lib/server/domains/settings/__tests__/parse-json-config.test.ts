@@ -9,11 +9,12 @@ import {
 } from '../settings.types'
 
 describe('DEFAULT_PORTAL_CONFIG', () => {
-  it('DEFAULT_PORTAL_CONFIG carries a moderationDefault of none with holds off', () => {
+  it('DEFAULT_PORTAL_CONFIG carries a moderationDefault of none with holds off and decision emails on', () => {
     expect(DEFAULT_PORTAL_CONFIG.moderationDefault).toEqual({
       requireApproval: 'none',
       holdImages: false,
       holdLinks: false,
+      emailDecisions: true,
     })
   })
 

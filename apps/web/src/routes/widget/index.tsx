@@ -263,6 +263,9 @@ export const Route = createFileRoute('/widget/')({
         id: b.id as string,
         name: b.name,
         slug: b.slug,
+        // The fields the composer asks for on this board (same as the live
+        // capabilities list), sent only when the board declares some.
+        ...(b.settings.customFields?.length ? { customFields: b.settings.customFields } : {}),
       })),
       orgSlug: settings?.slug ?? '',
       // Per-board submit/vote capability for the request actor, server-computed
@@ -345,6 +348,8 @@ interface SuccessPost {
   voteCount: number
   statusId: string | null
   board: { id: string; name: string; slug: string }
+  /** Held for review: only its author sees it until the team approves it. */
+  pendingReview?: boolean
 }
 
 /**
@@ -1204,10 +1209,17 @@ function SuccessView({
             />
           </p>
           <p className="text-[11px] text-muted-foreground">
-            <FormattedMessage
-              id="widget.success.subtitle"
-              defaultMessage="Your post has been submitted."
-            />
+            {post.pendingReview ? (
+              <FormattedMessage
+                id="widget.success.pendingSubtitle"
+                defaultMessage="Your post is waiting for review. Others will see it once the team approves it."
+              />
+            ) : (
+              <FormattedMessage
+                id="widget.success.subtitle"
+                defaultMessage="Your post has been submitted."
+              />
+            )}
           </p>
         </div>
       </div>

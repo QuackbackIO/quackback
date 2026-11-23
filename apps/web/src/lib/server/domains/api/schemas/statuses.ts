@@ -85,7 +85,8 @@ registerPath('/statuses', {
   get: {
     tags: ['Statuses'],
     summary: 'List statuses',
-    description: 'Returns all statuses in the workspace, ordered by category and position',
+    description:
+      'Returns all statuses in the workspace, ordered by category and position. Requires the read:feedback scope and the status.view permission.',
     responses: {
       200: {
         description: 'List of statuses',
@@ -98,6 +99,11 @@ registerPath('/statuses', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the status.view permission',
+        content: { 'application/json': { schema: ForbiddenStatusErrorSchema } },
       },
     },
   },
@@ -141,7 +147,8 @@ registerPath('/statuses/{statusId}', {
   get: {
     tags: ['Statuses'],
     summary: 'Get a status',
-    description: 'Get a single status by ID',
+    description:
+      'Get a single status by ID. Requires the read:feedback scope and the status.view permission.',
     parameters: [
       {
         name: 'statusId',
@@ -161,6 +168,11 @@ registerPath('/statuses/{statusId}', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the status.view permission',
+        content: { 'application/json': { schema: ForbiddenStatusErrorSchema } },
       },
       404: {
         description: 'Status not found',

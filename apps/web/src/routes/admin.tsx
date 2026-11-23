@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
+import { isFullPageAdminPath } from '@/components/admin/admin-full-page'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadAdminMessages } from '@/lib/shared/i18n'
@@ -372,12 +373,15 @@ function AdminContent({
   | 'currentUser'
 >) {
   const githubStarPrompt = useGithubStarPrompt()
+  // Full-page routes (portal Customise) keep the frame, the app sidebar folded away.
+  const fullPage = useRouterState({ select: (s) => isFullPageAdminPath(s.location.pathname) })
   return (
     <>
       {/* In the launch window the corner launcher stays hidden (it reads like the
           workspace's own Messenger); Help, Contact us opens it. */}
       <CloudQuackbackWidget launcherHidden={inLaunchWindow} />
       <AdminWorkspaceFrame
+        collapsed={fullPage}
         sidebar={
           initialUserData && (
             <AdminSidebar

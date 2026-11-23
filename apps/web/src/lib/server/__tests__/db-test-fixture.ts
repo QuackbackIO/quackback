@@ -24,7 +24,11 @@ import { sql, type Logger } from 'drizzle-orm'
 // @quackback/db/client for the canonical db.ts entry; this fixture is a
 // sanctioned caller of `createDb`, like board-view-filter-parity.test.ts.
 // oxlint-disable-next-line no-restricted-imports
-import { createDb, type Database } from '@quackback/db/client'
+import { createDb, createDbFromSql, type Database } from '@quackback/db/client'
+import { isInsideDbTransaction, wrapDbTransaction } from '@/lib/server/workspaces/after-commit'
+
+/** For race tests that need a second, independent connection pool. */
+export { createDbFromSql }
 
 /** The transaction handle type the fixture parks each test inside. */
 export type TestTransaction = Parameters<Parameters<Database['transaction']>[0]>[0]
@@ -60,6 +64,28 @@ export const testDb: Database = new Proxy({} as Database, {
     return typeof value === 'function'
       ? (value as (...args: unknown[]) => unknown).bind(activeTx)
       : value
+  },
+})
+
+/**
+ * `testDb` with the guard the real `db` has. Its `transaction` opens an
+ * after-commit frame as the real one does, and touching the shared handle
+ * inside that callback throws, even to build a subquery: in production that
+ * handle would ask the pool for a second connection the transaction is holding.
+ * Mock the global `db` with this to prove code under test passes its `tx` on.
+ */
+export const guardedTestDb: Database = new Proxy({} as Database, {
+  get(_, prop) {
+    if (isInsideDbTransaction()) {
+      throw new Error(
+        `db.${String(prop)} was used inside db.transaction; use the transaction handle instead`
+      )
+    }
+    const value = (testDb as unknown as Record<string | symbol, unknown>)[prop]
+    if (prop === 'transaction' && typeof value === 'function') {
+      return wrapDbTransaction(value as (...args: unknown[]) => unknown)
+    }
+    return value
   },
 })
 
