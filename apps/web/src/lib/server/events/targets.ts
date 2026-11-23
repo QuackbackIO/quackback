@@ -76,11 +76,31 @@ import { isBlockedCustomer } from '@/lib/server/domains/principals/blocking'
 const log = logger.child({ component: 'targets' })
 
 /**
- * Drop subscribers who can't view the post under its current board
- * audience + moderation state. Used by every notification fan-out path
- * (subscriber + @-mention) so an audience flip after the subscription
- * was created doesn't keep leaking content via email/in-app. The rule
- * lives in `principalsWhoCanViewPost`.
+ * The people among `principalIds` who may be told about a post: a private
+ * portal turns away anyone without a grant, whatever the board says, so
+ * someone made private (or removed from the allowed domains or segments)
+ * after subscribing is not emailed what the portal now hides. Teammates
+ * always pass, and on a public portal everyone does. Past the portal, the
+ * post's board audience and moderation state decide (`principalsWhoCanViewPost`).
+ */
+async function principalsToNotifyOfPost(
+  postId: PostId,
+  principalIds: PrincipalId[],
+  options: { includeDeletedPost?: boolean } = {}
+): Promise<Set<PrincipalId>> {
+  const { principalsWithPortalAccess } =
+    await import('@/lib/server/domains/settings/portal-access.recipients')
+  const admitted = await principalsWithPortalAccess(principalIds)
+  const portalAllowed = principalIds.filter((id) => admitted.has(id))
+  if (portalAllowed.length === 0) return new Set()
+  return principalsWhoCanViewPost(postId, portalAllowed, options)
+}
+
+/**
+ * Drop subscribers who can't view the post under the portal's access, its
+ * board audience and its moderation state. Used by every notification
+ * fan-out path (subscriber + @-mention) so an audience flip after the
+ * subscription was created doesn't keep leaking content via email/in-app.
  */
 async function filterSubscribersByPostAudience(
   postId: PostId,
@@ -88,12 +108,12 @@ async function filterSubscribersByPostAudience(
   options: { includeDeletedPost?: boolean } = {}
 ): Promise<Subscriber[]> {
   if (subscribers.length === 0) return subscribers
-  const allowed = await principalsWhoCanViewPost(
+  const allowed = await principalsToNotifyOfPost(
     postId,
-    subscribers.map((s) => s.principalId),
+    subscribers.map((s) => s.principalId as PrincipalId),
     options
   )
-  return subscribers.filter((sub) => allowed.has(sub.principalId))
+  return subscribers.filter((sub) => allowed.has(sub.principalId as PrincipalId))
 }
 
 /**
@@ -1124,7 +1144,8 @@ export function getPostOwnerAssignedTargets(event: EventData): HookTarget | null
 /**
  * Notification target for `post.subscriber_added`: the person a teammate (or
  * an automation) subscribed, never someone who followed the post themselves.
- * Re-checks that they can still see the post, as every post fan-out does.
+ * Re-checks that they can still see the post, portal included, as every post
+ * fan-out does.
  * Exported for direct unit testing.
  */
 export async function getPostSubscriberAddedTargets(event: EventData): Promise<HookTarget | null> {
@@ -1132,7 +1153,7 @@ export async function getPostSubscriberAddedTargets(event: EventData): Promise<H
   const { post, subscriberPrincipalId } = event.data
   if (subscriberPrincipalId === event.actor.principalId) return null
   const subscriber = subscriberPrincipalId as PrincipalId
-  if (!(await principalsWhoCanViewPost(post.id as PostId, [subscriber])).has(subscriber)) {
+  if (!(await principalsToNotifyOfPost(post.id as PostId, [subscriber])).has(subscriber)) {
     return null
   }
   return {
