@@ -6,6 +6,7 @@ import { PRINCIPAL_CLASS_BY_ID, ALL_MCP_SCOPES } from '../principals'
 import { evaluate, evaluateMcpTool, renderMatrixDoc } from '../matrix'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
+import { STATUS_PAGE_READ_PERMISSIONS } from '@/routes/api/v1/status/-serialize'
 
 const SRC_ROOT = join(__dirname, '../../../../..') // apps/web/src
 const { surfaces } = resolveSurfaces(SRC_ROOT)
@@ -96,26 +97,54 @@ describe('API-route channel reachability', () => {
   })
 })
 
-describe('automatic website branding authorization', () => {
-  it('requires current settings management before lookup, private status, an offer answer or Undo', () => {
-    const brandingOnly = {
+describe('portal customise authorization (decision Q2)', () => {
+  it('lets settings.branding alone publish, import a brand, and read the tabs and welcome message', () => {
+    const withOnly = (permission: PermissionKey) => ({
       ...byId('admin'),
-      permissions: new Set<PermissionKey>(['settings.branding']),
-    }
-    for (const name of [
-      'startAutomaticWebsiteBrandingFn',
-      'getAutomaticWebsiteBrandingStatusFn',
-      'undoAutomaticWebsiteBrandingFn',
-      'acceptWebsiteBrandingOfferFn',
-      'declineWebsiteBrandingOfferFn',
+      permissions: new Set<PermissionKey>([permission]),
+    })
+    for (const [file, name] of [
+      ['lib/server/functions/portal-customise.ts', 'publishPortalCustomisationFn'],
+      ['lib/server/functions/portal-customise.ts', 'importBrandFn'],
+      ['lib/server/functions/portal-customise.ts', 'askPortalCustomiseFn'],
+      ['lib/server/functions/settings.ts', 'fetchPortalPageConfigFn'],
     ]) {
+      const surface = surfaces.find((item) => item.file === file && item.surface === name)
+      expect(surface, name).toBeDefined()
+      expect(evaluate(withOnly('settings.branding'), surface!), name).toBe('allow')
+      expect(evaluate(withOnly('help_center.manage'), surface!), name).toBe('deny')
+      expect(evaluate(byId('portal_user'), surface!), name).toBe('deny')
+    }
+  })
+
+  it('keeps the whole portal config, read and write, with settings.manage', () => {
+    for (const name of ['fetchPortalConfig', 'updatePortalConfigFn']) {
       const surface = surfaces.find(
-        (item) => item.file === 'lib/server/functions/website-branding.ts' && item.surface === name
+        (item) => item.file === 'lib/server/functions/settings.ts' && item.surface === name
       )
       expect(surface, name).toBeDefined()
-      expect(evaluate(byId('admin'), surface!), name).toBe('allow')
-      expect(evaluate(brandingOnly, surface!), name).toBe('deny')
-      expect(evaluate(byId('portal_user'), surface!), name).toBe('deny')
+      const withOnly = (permission: PermissionKey) => ({
+        ...byId('admin'),
+        permissions: new Set<PermissionKey>([permission]),
+      })
+      expect(evaluate(withOnly('settings.manage'), surface!), name).toBe('allow')
+      expect(evaluate(withOnly('settings.branding'), surface!), name).toBe('deny')
+    }
+  })
+})
+
+describe('wide logo writes', () => {
+  // The publish is the one way to set or clear the wide logo: it checks the
+  // key was staged and keeps the old object for the sweep. No server
+  // function saves or deletes it directly.
+  it('has no direct save or delete of the header logo key', () => {
+    for (const name of ['saveHeaderLogoKeyFn', 'deleteHeaderLogoFn']) {
+      expect(
+        surfaces.find(
+          (item) => item.file === 'lib/server/functions/settings.ts' && item.surface === name
+        ),
+        name
+      ).toBeUndefined()
     }
   })
 })
@@ -156,12 +185,50 @@ describe('API key scope enforcement (owner permissions ∩ key scopes)', () => {
     expect(tightened.length).toBeGreaterThan(0)
   })
 
-  it('public-tier reads still admit any valid key regardless of scopes', () => {
-    const publicReads = surfaces.filter((s) => s.authz.type === 'public_data')
-    expect(publicReads.length).toBeGreaterThan(0)
-    for (const s of publicReads) {
+  it('scoped reads admit a read-only key and refuse a key without the read scope', () => {
+    const scopedReads = surfaces.filter((s) => s.authz.type === 'scoped_read')
+    expect(scopedReads.length).toBeGreaterThan(0)
+    const chatOnly = { ...byId('scoped_api_key'), mcpScopes: new Set(['read:chat']) }
+    for (const s of scopedReads) {
       expect(evaluate(byId('scoped_api_key'), s), `${s.file}::${s.surface}`).toBe('allow')
+      expect(evaluate(chatOnly, s), `${s.file}::${s.surface}`).toBe('deny')
     }
+  })
+
+  it('a scoped read that lists permissions refuses a key whose creator holds none', () => {
+    const gated = surfaces.filter(
+      (s) => s.authz.type === 'scoped_read' && s.authz.permissions.length > 0
+    )
+    expect(gated.length).toBeGreaterThan(0)
+    const portalRole = { ...byId('scoped_api_key'), role: 'user' as const }
+    for (const s of gated) {
+      expect(evaluate(portalRole, s), `${s.file}::${s.surface}`).toBe('deny')
+    }
+  })
+
+  it('a status page scoped read lists exactly the permissions its route checks', () => {
+    const statusReads = surfaces.filter(
+      (s) => s.authz.type === 'scoped_read' && s.file.startsWith('routes/api/v1/status/')
+    )
+    expect(statusReads.length).toBeGreaterThan(0)
+    for (const s of statusReads) {
+      if (s.authz.type !== 'scoped_read') continue
+      expect(s.authz.scope, `${s.file}::${s.surface}`).toBe('read:feedback')
+      if (s.file.endsWith('summary.ts')) {
+        expect(s.authz.permissions, `${s.file}::${s.surface}`).toEqual([])
+      } else {
+        expect([...s.authz.permissions].sort(), `${s.file}::${s.surface}`).toEqual(
+          [...STATUS_PAGE_READ_PERMISSIONS].sort()
+        )
+      }
+    }
+  })
+
+  it('no REST read is open to any valid key: each names a scope or a permission', () => {
+    const publicReads = surfaces.filter(
+      (s) => s.channel === 'api-route' && s.authz.type === 'public_data'
+    )
+    expect(publicReads.map((s) => `${s.file}::${s.surface}`)).toEqual([])
   })
 })
 

@@ -56,7 +56,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     select: () => ({
       from: () => ({
         where: () => Promise.resolve([]),
-        limit: () => Promise.resolve([]),
+        // A locked read (`.limit(1).for('update')`) sees the row findFirst returns.
+        limit: () =>
+          Object.assign(Promise.resolve([]), {
+            for: async () => {
+              const row = await mockFindFirst()
+              return row ? [row] : []
+            },
+          }),
         orderBy: () => Promise.resolve([]),
       }),
     }),

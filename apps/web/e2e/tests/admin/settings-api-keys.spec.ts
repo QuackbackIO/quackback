@@ -88,6 +88,20 @@ test.describe('Admin API Keys Settings', () => {
 
     // Key should now appear in the list
     await expect(page.getByText(keyName)).toBeVisible({ timeout: 10000 })
+
+    // Give it a different role. The save locks the key row and re-checks the
+    // role it holds now inside one transaction, which is where a read on the
+    // shared pool used to hang until the database timed the transaction out.
+    const row = page.getByRole('row').filter({ hasText: keyName })
+    await page.getByRole('button', { name: `Actions for ${keyName}` }).click()
+    await page.getByRole('menuitem', { name: 'Change role' }).click()
+    const roleDialog = page.getByRole('dialog', { name: 'Change role' })
+    const otherRole = roleDialog.getByRole('radio', { checked: false, disabled: false }).first()
+    const otherRoleName = await otherRole.getAttribute('aria-label')
+    await otherRole.click()
+    await roleDialog.getByRole('button', { name: 'Save' }).click()
+    await expect(roleDialog).toBeHidden({ timeout: 10000 })
+    await expect(row).toContainText(otherRoleName ?? '', { timeout: 10000 })
   })
 
   test('API key list shows key name and creation date', async ({ page }) => {

@@ -1,9 +1,20 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
-import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import {
+  badRequestResponse,
+  successResponse,
+  handleDomainError,
+} from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { RoadmapId, PostStatusId } from '@quackback/ids'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
+
+const pagingSchema = z.object({
+  limit: z.coerce.number().int().min(1).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+})
 
 export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
   server: {
@@ -14,7 +25,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
 
@@ -24,8 +35,17 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
             ? parseTypeId<PostStatusId>(rawStatusId, 'post_status', 'status ID')
             : undefined
           const bucketId = url.searchParams.get('bucketId') ?? undefined
-          const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100)
-          const offset = parseInt(url.searchParams.get('offset') || '0', 10)
+          const paging = pagingSchema.safeParse({
+            limit: url.searchParams.get('limit') || undefined,
+            offset: url.searchParams.get('offset') || undefined,
+          })
+          if (!paging.success) {
+            return badRequestResponse('Invalid paging', {
+              errors: paging.error.flatten().fieldErrors,
+            })
+          }
+          const limit = Math.min(paging.data.limit, 100)
+          const { offset } = paging.data
 
           const { getRoadmapPosts } = await import('@/lib/server/domains/roadmaps/roadmap.query')
 

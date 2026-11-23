@@ -131,7 +131,10 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
         // redirects, so a DNS rebind or a 3xx can't turn this into an
         // internal-network probe. Any failure (incl. SsrfError) → unreachable.
         const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-        const res = await safeFetch(provider.discoveryUrl, { timeoutMs: 5000 })
+        const res = await safeFetch(provider.discoveryUrl, {
+          timeoutMs: 5000,
+          allowE2eOidcFake: true,
+        })
         if (!res.ok) return { error: 'discovery-unreachable' }
         const discovery = (await res.json()) as {
           issuer: string

@@ -4,6 +4,7 @@
  */
 
 import type {
+  ChangelogId,
   ConversationId,
   ConversationMessageId,
   PostId,
@@ -25,6 +26,7 @@ import {
   tickets,
   ticketConversations,
   type StatusIncidentImpact,
+  posts,
 } from '@/lib/server/db'
 import {
   resolveContactRecipients,
@@ -33,6 +35,7 @@ import {
 } from '@/lib/server/email/recipient'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { isTeamMember } from '@/lib/shared/roles'
+import { MODERATION_DECISION_EMAIL_MAX_AGE_DAYS } from '@/lib/shared/moderation-policy'
 import { isSupportTicketsEnabled } from '@/lib/server/domains/settings/settings.support'
 import { type Actor } from '@/lib/server/policy'
 import { principalsWhoCanViewPost } from '@/lib/server/domains/posts/post.access'
@@ -55,10 +58,20 @@ import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { type HookContext } from './hook-context'
 import { hookOrigins } from './hook-origins'
 import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
-import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
+import {
+  isModerationDecisionEventType,
+  type EventData,
+  type EventActor,
+  type ModerationDecisionPayload,
+  type PostMergedPayload,
+  type PostUnmergedPayload,
+} from './types'
 import { logger } from '@/lib/server/logger'
+import { NotFoundError } from '@/lib/shared/errors'
 import { isTestEvent } from './test-event'
 import { loadApiKeyFeedbackAuthors } from '@/lib/server/domains/principals/principal-display'
+import { DELETED_USER_PRINCIPAL_ID } from '@/lib/server/domains/principals/deleted-user-principal'
+import { isBlockedCustomer } from '@/lib/server/domains/principals/blocking'
 
 const log = logger.child({ component: 'targets' })
 
@@ -71,12 +84,14 @@ const log = logger.child({ component: 'targets' })
  */
 async function filterSubscribersByPostAudience(
   postId: PostId,
-  subscribers: Subscriber[]
+  subscribers: Subscriber[],
+  options: { includeDeletedPost?: boolean } = {}
 ): Promise<Subscriber[]> {
   if (subscribers.length === 0) return subscribers
   const allowed = await principalsWhoCanViewPost(
     postId,
-    subscribers.map((s) => s.principalId)
+    subscribers.map((s) => s.principalId),
+    options
   )
   return subscribers.filter((sub) => allowed.has(sub.principalId))
 }
@@ -105,7 +120,7 @@ export const SUBSCRIBER_EVENT_TYPES = [
   'changelog.published',
 ] as const
 /** Events that resolve a single mentioned principal as the notification target */
-export const MENTION_EVENT_TYPES = ['post.mentioned'] as const
+export const MENTION_EVENT_TYPES = ['post.mentioned', 'comment.mentioned'] as const
 /**
  * Get all hook targets for an event.
  * Gracefully handles errors - returns empty array on failure.
@@ -266,7 +281,7 @@ async function buildEmailTargets(
   if (eligibleSubscribers.length === 0) return []
 
   // Batch generate unsubscribe tokens (single insert instead of N inserts)
-  const [sender, tokenMap] = await Promise.all([
+  const [sender, tokenMap, postAuthorId] = await Promise.all([
     surfaceSender('feedback'),
     batchGenerateUnsubscribeTokens(
       eligibleSubscribers.map((s) => ({
@@ -275,6 +290,7 @@ async function buildEmailTargets(
         action: 'unsubscribe_post' as const,
       }))
     ),
+    postAuthorOf(postId),
   ])
 
   // `Subscriber.email` is the IDENTITY field `isActorSubscriber` compares
@@ -298,10 +314,24 @@ async function buildEmailTargets(
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           ...eventConfig,
           ...sender,
+          isPostAuthor: subscriber.principalId === postAuthorId,
         }
       ),
     ]
   })
+}
+
+/**
+ * Who wrote the post, so only they are told it is "your feedback". Read from
+ * the post, not the subscription reason: a merged duplicate's author follows
+ * the canonical post with reason 'author' without having written it.
+ */
+async function postAuthorOf(postId: PostId): Promise<PrincipalId | null> {
+  const row = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    columns: { principalId: true },
+  })
+  return (row?.principalId as PrincipalId | undefined) ?? null
 }
 
 /**
@@ -321,13 +351,15 @@ function extractPostId(event: EventData): PostId | null {
  * Check if subscriber is the actor (don't notify yourself).
  */
 function isActorSubscriber(subscriber: Subscriber, actor: EventActor): boolean {
-  if (actor.type === 'service') return false
   // principalId is the primary match: it survives the DomainEvent round-trip
   // (the envelope carries actorId=principalId but not email/userId), so the
   // "don't notify yourself" filter works identically whether the event came
-  // through the legacy full-actor path or the resolver registry. For a real
-  // user, principalId maps 1:1 to userId, so this is behaviour-preserving.
+  // through the legacy full-actor path or the resolver registry. It is checked
+  // for every actor type: a publish built from a principal id alone (a
+  // changelog entry, its scheduled job) is a `service` actor that is still a
+  // person who may be subscribed.
   if (actor.principalId && subscriber.principalId === actor.principalId) return true
+  if (actor.type === 'service') return false
   return subscriber.userId === actor.userId || subscriber.email === actor.email
 }
 
@@ -556,7 +588,7 @@ async function mentionerNameOf(
 const MENTION_ELIGIBLE_ROLES = new Set(['admin', 'member', 'user'])
 
 /**
- * Resolve hook targets for a `post.mentioned` event.
+ * Resolve hook targets for a `post.mentioned` or `comment.mentioned` event.
  *
  * The event payload carries a single `mentionedPrincipalId`. We look up that
  * principal (left-joined to user for email), apply defensive type/role
@@ -564,12 +596,17 @@ const MENTION_ELIGIBLE_ROLES = new Set(['admin', 'member', 'user'])
  * return:
  *  - one notification target (always, when the principal exists and is eligible)
  *  - one email target (only when the joined user has a non-null email)
+ *
+ * A comment mention is its own preference ("Mentioned in a comment"), links to
+ * the comment, and for a private comment reaches teammates only.
  */
 export async function getMentionTargets(
   event: EventData,
   context: HookContext
 ): Promise<HookTarget[]> {
-  if (event.type !== 'post.mentioned') return []
+  if (event.type !== 'post.mentioned' && event.type !== 'comment.mentioned') return []
+  const comment = event.type === 'comment.mentioned' ? event.data : null
+  const preference = comment ? 'comment_mentioned' : 'post_mentioned'
   if (
     await isTestEvent({
       entityId: event.data.postId,
@@ -579,7 +616,10 @@ export async function getMentionTargets(
   )
     return []
 
-  const { mentionedPrincipalId, postTitle, postUrl } = event.data
+  const { mentionedPrincipalId, postTitle } = event.data
+  const postUrl = comment
+    ? `${event.data.postUrl}#comment-${comment.commentId}`
+    : event.data.postUrl
   if (!mentionedPrincipalId) return []
   // The event fires for a self-mention (webhooks see it); nobody is told
   // about their own mention.
@@ -606,6 +646,8 @@ export async function getMentionTargets(
   // are integrations/API keys, not humans. The role check is belt-and-suspenders for
   // the same reason.
   if (row.type !== 'user' || !MENTION_ELIGIBLE_ROLES.has(row.role)) return []
+  // A private comment is team-only: a portal user never hears of it.
+  if (comment?.isPrivate && !isTeamMember(row.role)) return []
 
   // Audience filter: the mentioned principal must be able to see the
   // post under its board's current audience. Without this, an admin can
@@ -642,8 +684,9 @@ export async function getMentionTargets(
       postId: event.data.postId,
       postTitle,
       postUrl,
-      eventType: 'post.mentioned',
+      eventType: event.type,
       mentionerName,
+      ...(comment ? { commentId: comment.commentId } : {}),
     },
   })
 
@@ -659,7 +702,7 @@ export async function getMentionTargets(
     // subscriber filter that runs shouldNotify.
     const prefsMap = await batchGetNotificationPreferences([row.id as PrincipalId])
     const prefs = prefsMap.get(row.id as PrincipalId)
-    if (!prefs || shouldNotify(prefs, 'post_mentioned', 'email')) {
+    if (!prefs || shouldNotify(prefs, preference, 'email')) {
       const [sender, tokenMap] = await Promise.all([
         surfaceSender('feedback'),
         batchGenerateUnsubscribeTokens([
@@ -681,7 +724,7 @@ export async function getMentionTargets(
             workspaceName: context.workspaceName,
             logoUrl: context.logoUrl ?? undefined,
             preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
-            eventType: 'post.mentioned',
+            eventType: event.type,
             mentionerName,
             ...sender,
           }
@@ -690,6 +733,176 @@ export async function getMentionTargets(
     }
   }
 
+  return targets
+}
+
+// ============================================================================
+// Moderation Decision Targets
+// ============================================================================
+
+/** The backlog window for decision emails; see MODERATION_DECISION_EMAIL_MAX_AGE_DAYS. */
+export const MODERATION_DECISION_EMAIL_MAX_AGE_MS =
+  MODERATION_DECISION_EMAIL_MAX_AGE_DAYS * 24 * 60 * 60 * 1000
+
+/**
+ * Whether the decision is recent enough to email about: the item was submitted
+ * no more than {@link MODERATION_DECISION_EMAIL_MAX_AGE_MS} before the decision.
+ * A decision recorded without a submission time is not.
+ */
+function isRecentModerationDecision(submittedAt: string | undefined, decidedAt: string): boolean {
+  const submitted = submittedAt ? Date.parse(submittedAt) : NaN
+  const decided = Date.parse(decidedAt)
+  if (Number.isNaN(submitted) || Number.isNaN(decided)) return false
+  return decided - submitted <= MODERATION_DECISION_EMAIL_MAX_AGE_MS
+}
+
+/**
+ * The workspace switch for moderation decision emails (Settings > Moderation),
+ * read fresh so turning it off holds for a queue cleared straight after. On
+ * unless explicitly off; a workspace with no settings row yet keeps the
+ * default. Any other read failure throws, so the delivery retries rather than
+ * emailing a workspace that turned these emails off.
+ */
+async function moderationDecisionEmailsEnabled(): Promise<boolean> {
+  const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+  try {
+    const config = await getPortalConfig('fresh')
+    return config.moderationDefault?.emailDecisions !== false
+  } catch (err) {
+    if (err instanceof NotFoundError && err.code === 'SETTINGS_NOT_FOUND') return true
+    throw err
+  }
+}
+
+/**
+ * Resolve hook targets for the team's decision on a held post or comment
+ * (`post.approved`, `post.rejected`, `comment.approved`, `comment.rejected`):
+ * one bell and, under their preferences, one email to the item's author.
+ *
+ * Nobody else hears about it, and the author does not when they moderated
+ * their own item, when they are not a signed-in person (an anonymous author
+ * has no inbox, and a deleted account has none either), when they are
+ * blocked (no bell either: the email handler already sends them no email),
+ * when it is test feedback, or when they can no longer see the item where it
+ * was. An approved
+ * item links to where it now shows; a rejected one is gone, so its notice
+ * links nowhere. The moderator's reason never travels.
+ *
+ * The email (not the bell) is also skipped when the workspace turned these
+ * emails off, or when the item was submitted more than
+ * {@link MODERATION_DECISION_EMAIL_MAX_AGE_MS} before the decision.
+ */
+export async function getModerationDecisionTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  const type: string = event.type
+  if (!isModerationDecisionEventType(type)) return []
+  const data = event.data as unknown as ModerationDecisionPayload
+  const authorId = data.authorPrincipalId as PrincipalId | null
+  // No author left: none recorded, or a deleted account's placeholder.
+  if (!authorId || authorId === DELETED_USER_PRINCIPAL_ID) return []
+  // A teammate moderating their own item: the session principal, or the person
+  // behind the API key that made the call.
+  if (authorId === event.actor.principalId || authorId === data.moderatorPrincipalId) return []
+  if (
+    await isTestEvent({
+      entityId: data.commentId ?? data.postId,
+      payload: data,
+      actorId: event.actor.principalId,
+    })
+  )
+    return []
+
+  const [row] = await db
+    .select({
+      id: principal.id,
+      type: principal.type,
+      role: principal.role,
+      blockedAt: principal.blockedAt,
+      email: user.email,
+      contactEmail: principal.contactEmail,
+    })
+    .from(principal)
+    .leftJoin(user, eq(principal.userId, user.id))
+    .where(eq(principal.id, authorId))
+    .limit(1)
+  if (!row || row.type !== 'user' || isBlockedCustomer(row)) return []
+
+  const [item, decision] = type.split('.') as ['post' | 'comment', 'approved' | 'rejected']
+  const approved = decision === 'approved'
+  const postId = data.postId as PostId
+
+  // Only an author who can still see the item where it was hears about it:
+  // an approved item for its link, a rejected one because the notice names
+  // its post. A rejected post is gone but still pending, so it is checked as
+  // the held post its author could see.
+  {
+    const allowed = await filterSubscribersByPostAudience(
+      postId,
+      [
+        {
+          principalId: authorId,
+          userId: '',
+          email: row.email ?? '',
+          contactEmail: null,
+          name: null,
+          reason: 'manual',
+          notifyComments: false,
+          notifyStatusChanges: false,
+        },
+      ],
+      { includeDeletedPost: !approved && item === 'post' }
+    )
+    if (allowed.length === 0) return []
+  }
+
+  const postUrl = approved
+    ? `${buildPostUrl(hookOrigins(context), { boardSlug: data.boardSlug, id: data.postId })}${
+        data.commentId ? `#comment-${data.commentId}` : ''
+      }`
+    : undefined
+  const notice = { postTitle: data.postTitle, decision, item }
+
+  const targets: HookTarget[] = [
+    {
+      type: 'notification',
+      target: { principalIds: [authorId] },
+      config: {
+        ...notice,
+        ...(approved
+          ? { postId, boardSlug: data.boardSlug, postUrl, commentId: data.commentId }
+          : {}),
+      },
+    },
+  ]
+
+  const to = contactRecipientFrom({ accountEmail: row.email, contactEmail: row.contactEmail })
+  if (!to) return targets
+  if (!isRecentModerationDecision(data.submittedAt, event.timestamp)) return targets
+  if (!(await moderationDecisionEmailsEnabled())) return targets
+  const prefs = (await batchGetNotificationPreferences([authorId])).get(authorId)
+  if (prefs && !shouldNotify(prefs, 'post_moderated', 'email')) return targets
+
+  const [sender, tokenMap] = await Promise.all([
+    surfaceSender('feedback'),
+    batchGenerateUnsubscribeTokens([{ principalId: authorId, postId, action: 'unsubscribe_all' }]),
+  ])
+  const token = tokenMap.get(authorId)
+  targets.push(
+    emailTarget(
+      { principalId: authorId, email: to },
+      token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : '',
+      {
+        ...notice,
+        ...(postUrl ? { postUrl } : {}),
+        workspaceName: context.workspaceName,
+        logoUrl: context.logoUrl ?? undefined,
+        preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+        ...sender,
+      }
+    )
+  )
   return targets
 }
 
@@ -2137,6 +2350,79 @@ export async function getTicketDueEmailTargets(
 // ============================================================================
 
 /**
+ * The subscribers who could read the entry on the changelog itself: the
+ * portal lets them in, the changelog audience allows them, and every
+ * segment-gated label on the entry includes one of their segments. Anyone
+ * else would be emailed what the page then hides from them.
+ */
+async function filterChangelogReaders(
+  changelogId: ChangelogId,
+  subscribers: Subscriber[]
+): Promise<Subscriber[]> {
+  if (subscribers.length === 0) return subscribers
+  const [{ principalsWithPortalAccess }, { isAudienceOpenTo }, categoryService] = await Promise.all(
+    [
+      import('@/lib/server/domains/settings/portal-access.recipients'),
+      import('@/lib/server/domains/changelog/changelog.audience'),
+      import('@/lib/server/domains/changelog/changelog-category.service'),
+    ]
+  )
+
+  const admitted = await principalsWithPortalAccess(
+    subscribers.map((s) => s.principalId as PrincipalId)
+  )
+  const candidates = subscribers.filter((s) => admitted.has(s.principalId as PrincipalId))
+  if (candidates.length === 0) return []
+
+  // Fast path: a public changelog and an entry with no gated label let in
+  // everyone the portal did.
+  const [categoriesByEntry, { getChangelogSettings }] = await Promise.all([
+    categoryService.getCategoriesForEntries([changelogId]),
+    import('@/lib/server/domains/settings/settings.changelog'),
+  ])
+  const categories = categoriesByEntry.get(changelogId) ?? []
+  const { audience } = await getChangelogSettings()
+  if (audience !== 'authenticated' && categories.every((c) => c.segmentIds.length === 0)) {
+    return candidates
+  }
+
+  const principalIds = candidates.map((s) => s.principalId as PrincipalId)
+  const [principals, segmentRows] = await Promise.all([
+    db
+      .select({ id: principal.id, role: principal.role, type: principal.type })
+      .from(principal)
+      .where(inArray(principal.id, principalIds)),
+    db
+      .select({ principalId: userSegments.principalId, segmentId: userSegments.segmentId })
+      .from(userSegments)
+      .where(inArray(userSegments.principalId, principalIds)),
+  ])
+  const segmentsByPrincipal = new Map<string, Set<SegmentId>>()
+  for (const row of segmentRows) {
+    const set = segmentsByPrincipal.get(String(row.principalId)) ?? new Set<SegmentId>()
+    set.add(row.segmentId as SegmentId)
+    segmentsByPrincipal.set(String(row.principalId), set)
+  }
+
+  const readers = new Set<string>()
+  for (const p of principals) {
+    const actor: Actor = {
+      principalId: p.id,
+      role: (p.role ?? null) as Actor['role'],
+      principalType: p.type as Actor['principalType'],
+      segmentIds: segmentsByPrincipal.get(String(p.id)) ?? new Set(),
+    }
+    if (
+      isAudienceOpenTo(audience, actor) &&
+      categoryService.categoryGateAllows(categories, actor)
+    ) {
+      readers.add(String(p.id))
+    }
+  }
+  return candidates.filter((s) => readers.has(s.principalId))
+}
+
+/**
  * Get subscriber targets for changelog.published events: the UNION of the
  * dedicated `changelog_subscriptions` table (primary, opt-out source) and
  * the legacy linked-post subscribers (additive — "subscribers of a feature
@@ -2152,6 +2438,10 @@ export async function getChangelogSubscriberTargets(
 
   const changelogId = event.data.changelog.id
   if (!changelogId) return []
+
+  // With the Changelog product off the entry has nowhere to be read.
+  const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+  if (!(await isFeatureEnabled('changelog'))) return []
 
   const {
     changelogEntries,
@@ -2251,7 +2541,9 @@ export async function getChangelogSubscriberTargets(
     }
   }
 
-  const subscribers = [...allSubscribers.values()]
+  const subscribers = await filterChangelogReaders(changelogId as ChangelogId, [
+    ...allSubscribers.values(),
+  ])
   log.debug(
     {
       count: subscribers.length,
@@ -2271,8 +2563,8 @@ export async function getChangelogSubscriberTargets(
 
   const targets: HookTarget[] = []
 
-  // Build changelog URL
-  const changelogUrl = sectionUrl('changelog', '/changelog', hookOrigins(context))
+  // The email button and the bell open the entry itself, not the index.
+  const changelogUrl = sectionUrl('changelog', `/changelog/${changelogId}`, hookOrigins(context))
 
   // Email targets — gated on the per-principal notification matrix
   // (changelog_published/email, which subsumes emailMuted) and the
@@ -2350,9 +2642,10 @@ export async function getChangelogSubscriberTargets(
 
 /**
  * Subscriber targets for the two status publish events (incident_created,
- * maintenance_scheduled). A subscriber is notified iff (a) they pass the
- * page-level audience gate AND (b) they can see at least one affected
- * component (Status Product Spec §4). Email is additionally gated on the
+ * maintenance_scheduled). Nothing goes out while the page is unpublished. A
+ * subscriber is notified iff (a) the portal lets them in (a private portal
+ * turns some away), (b) they pass the page-level audience gate AND (c) they
+ * can see at least one affected component (Status Product Spec §4). Email is additionally gated on the
  * workspace `emailsDisabled` switch and the per-principal notification
  * matrix (`status_incident`/email, which subsumes `emailMuted`); the in-app
  * notification ignores `emailsDisabled` (it's email-specific).
@@ -2394,6 +2687,13 @@ export async function getStatusSubscriberTargets(
     await import('@/lib/server/domains/subscriptions/subscription.service')
 
   const settings = await getStatusSettings()
+
+  // An unpublished page announces nothing: its links would lead nowhere.
+  const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+  const { isStatusPagePublished } = await import('@/lib/shared/status-settings')
+  if (!isStatusPagePublished({ statusPage: await isFeatureEnabled('statusPage') }, settings)) {
+    return []
+  }
 
   // Affected components (for the per-subscriber visibility check + email
   // body), each with the status this incident set on it. A component whose
@@ -2441,7 +2741,14 @@ export async function getStatusSubscriberTargets(
   // with the components each one chose (null: the whole page).
   const subscriptions = await getActiveSubscriptionsForComponents(affectedComponentIds as never)
   if (subscriptions.length === 0) return []
-  const principalIds = subscriptions.map((s) => s.principalId as PrincipalId)
+  // A private portal keeps its status page from whoever it would turn away.
+  const { principalsWithPortalAccess } =
+    await import('@/lib/server/domains/settings/portal-access.recipients')
+  const admitted = await principalsWithPortalAccess(
+    subscriptions.map((s) => s.principalId as PrincipalId)
+  )
+  const principalIds = [...admitted]
+  if (principalIds.length === 0) return []
   const chosenComponents = new Map(
     subscriptions.map((s) => [
       String(s.principalId),

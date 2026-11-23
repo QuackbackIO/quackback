@@ -11,6 +11,7 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import { createComment, deleteComment } from '@/lib/server/domains/comments/comment.service'
 import { userEditComment } from '@/lib/server/domains/comments/comment.permissions'
 import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
+import { assertNotBlocked } from '@/lib/server/domains/principals/blocking'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
 import {
@@ -104,6 +105,7 @@ Examples:
     annotations: WRITE,
     scope: 'write:feedback',
     handler: async (args) => {
+      await assertNotBlocked(auth.principalId)
       // The actor carries the caller's REAL role so the policy gate inside
       // createComment reflects who is doing the write.
       const result = await createComment(
@@ -211,6 +213,7 @@ Examples:
     handler: async (args) => {
       // The actor reflects who is reacting, for the canViewPost + isPrivate
       // gates inside add/removeReaction.
+      await assertNotBlocked(auth.principalId)
       const reactionActor = await mcpMemberActor(auth)
       const result =
         args.action === 'add'

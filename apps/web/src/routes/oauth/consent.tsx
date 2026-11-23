@@ -2,7 +2,6 @@ import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { DomainAccessPicker } from '@/components/domain-access-picker'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { Button } from '@/components/ui/button'
@@ -14,8 +13,8 @@ import {
   scopesFromDomainLevels,
   type DomainAccessLevels,
 } from '@/lib/shared/api-key-scopes'
+import { consentQueryFields, consentQueryFromSearch } from '@/lib/shared/oauth-consent-query'
 import {
-  CLIENT_REQUESTED_SCOPE_PARAM,
   clientRequestedFromConsentSearch,
   consentGrantScope,
   consentPreset,
@@ -26,23 +25,10 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { BadgeCheck, ChevronRight, ExternalLink, Globe, ShieldCheck } from 'lucide-react'
 
-const searchSchema = z.object({
-  client_id: z.string(),
-  scope: z.string().optional(),
-  [CLIENT_REQUESTED_SCOPE_PARAM]: z.string().optional(),
-  redirect_uri: z.string().optional(),
-  state: z.string().optional(),
-  response_type: z.string().optional(),
-  code_challenge: z.string().optional(),
-  code_challenge_method: z.string().optional(),
-  prompt: z.string().optional(),
-  exp: z.union([z.string(), z.number()]).optional(),
-  sig: z.string().optional(),
-  resource: z.string().optional(),
-})
-
 export const Route = createFileRoute('/oauth/consent')({
-  validateSearch: searchSchema,
+  // Kept as the router parsed it: the signed query is read from it whole
+  // (consentQueryFromSearch), never from fields the router may have retyped.
+  validateSearch: (search: Record<string, unknown>) => search,
   component: ConsentRoute,
 })
 
@@ -186,15 +172,17 @@ function AccessChoice({
 }
 
 function ConsentPage() {
-  const search = Route.useSearch()
+  // Posted back unchanged on submit: Better Auth checks its signature.
+  const oauthQuery = consentQueryFromSearch(Route.useSearch())
+  const search = consentQueryFields(oauthQuery)
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   // An anonymous session's address is synthetic, never a person's.
   const signedInAs = realEmail(session?.user?.email)
   const workspaceName = settings?.name ?? null
-  const client = useClientInfo(search.client_id, search.redirect_uri)
+  const client = useClientInfo(search.clientId, search.redirectUri)
   const clientRequested = clientRequestedFromConsentSearch({
-    requested: search[CLIENT_REQUESTED_SCOPE_PARAM],
+    requested: search.requested,
     scope: search.scope,
   })
   const defaults = defaultSelectedScopes(clientRequested)
@@ -231,7 +219,6 @@ function ConsentPage() {
     setSubmitting(accept ? 'accept' : 'deny')
     setError(null)
     try {
-      const oauthQuery = window.location.search.replace(/^\?/, '')
       const response = await fetch('/api/auth/oauth2/consent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

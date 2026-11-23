@@ -111,7 +111,11 @@ function flushPending(pending: Map<string, Set<string>>): void {
  */
 export async function runInAfterCommitFrame<T>(fn: () => Promise<T>): Promise<T> {
   const parent = frames.getStore()
-  if (parent) {
+  // Only an open transaction is a parent. Work started at a commit (a job
+  // the commit woke, say) inherits that transaction's closed frame; its own
+  // transaction must get a frame of its own, or it would flush nothing and
+  // make every sibling sharing the old frame look as if it were inside it.
+  if (parent && parent.depth > 0) {
     const snapshot = clonePending(parent.pending)
     const callbackCount = parent.callbacks.length
     parent.depth += 1
@@ -137,6 +141,10 @@ export async function runInAfterCommitFrame<T>(fn: () => Promise<T>): Promise<T>
       frame.pending.clear()
       frame.callbacks.length = 0
       throw err
+    } finally {
+      // Work started inside the transaction can outlive it and still sees this
+      // frame. Once the transaction is over it must read as closed.
+      frame.depth = 0
     }
   })
   // Outside the frame, so whatever a callback writes is its own commit.
@@ -150,6 +158,12 @@ async function runCallback(callback: () => unknown): Promise<void> {
   } catch (err) {
     log.error({ err }, 'after-commit callback threw')
   }
+}
+
+/** True while the caller is inside a `db.transaction` callback. */
+export function isInsideDbTransaction(): boolean {
+  const frame = frames.getStore()
+  return frame !== undefined && frame.depth > 0
 }
 
 /**

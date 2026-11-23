@@ -54,6 +54,9 @@ export const EVENT_TYPES = [
   'comment.created',
   'comment.updated',
   'comment.deleted',
+  // Notification-only: a published comment @-mentions someone. Never a
+  // webhook (a private comment's words must not leave), never a trigger.
+  'comment.mentioned',
   'changelog.published',
   'status.incident_created',
   'status.incident_updated',
@@ -103,6 +106,27 @@ export const EVENT_TYPES = [
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]
+
+/**
+ * Events that only ever tell people (a bell, an email) and never leave the
+ * workspace: no webhook, integration or app receives them. A comment mention
+ * can carry a private comment's words.
+ */
+export const NOTIFICATION_ONLY_EVENT_TYPES = [
+  'comment.mentioned',
+] as const satisfies readonly EventType[]
+
+/**
+ * Whether an event type only ever notifies people and never leaves the
+ * workspace. Besides the listed EVENT_TYPES members, the moderation decisions
+ * (catalogue-only, so never webhook events) exist only to tell the author.
+ */
+export function isNotificationOnlyEvent(type: string): boolean {
+  return (
+    (NOTIFICATION_ONLY_EVENT_TYPES as readonly string[]).includes(type) ||
+    isModerationDecisionEventType(type)
+  )
+}
 
 /**
  * Actor information for events - identifies who or what triggered the event.
@@ -188,6 +212,16 @@ export interface EventPostMentionedData {
   excerpt: string
 }
 
+/**
+ * Payload for comment.mentioned — fired once per principal a comment
+ * @-mentions, when the comment becomes visible (at create, or on approval).
+ */
+export interface EventCommentMentionedData extends EventPostMentionedData {
+  commentId: string
+  /** A private (team-only) comment: only teammates hear about it. */
+  isPrivate: boolean
+}
+
 export interface PostUpdatedPayload {
   post: EventPostRef
   changedFields: string[]
@@ -221,6 +255,39 @@ export interface PostOwnerAssignedPayload {
   boardId?: string
   ownerPrincipalId: string
   previousOwnerPrincipalId: string | null
+}
+
+/**
+ * The team's decision on a held post or comment. Catalogue-only events (not in
+ * EVENT_TYPES, so off the webhook surface): they exist to tell the author.
+ */
+export const MODERATION_DECISION_EVENT_TYPES = [
+  'post.approved',
+  'post.rejected',
+  'comment.approved',
+  'comment.rejected',
+] as const
+export type ModerationDecisionEventType = (typeof MODERATION_DECISION_EVENT_TYPES)[number]
+
+export interface ModerationDecisionPayload {
+  postId: string
+  postTitle: string
+  boardId: string
+  boardSlug: string
+  /** Who wrote the held item; null for an item with no author left. */
+  authorPrincipalId: string | null
+  /** comment.approved / comment.rejected only. */
+  commentId?: string
+  /** The person who decided: the teammate, or the creator of the API key that
+   *  made the call. The author is not told about their own decision. */
+  moderatorPrincipalId?: string | null
+  /** When the held item was submitted (ISO). An item older than the backlog
+   *  window gets no decision email; see MODERATION_DECISION_EMAIL_MAX_AGE_MS. */
+  submittedAt?: string
+}
+
+export function isModerationDecisionEventType(type: string): type is ModerationDecisionEventType {
+  return (MODERATION_DECISION_EVENT_TYPES as readonly string[]).includes(type)
 }
 
 export interface PostDeletedPayload {
@@ -778,6 +845,9 @@ export interface CommentUpdatedEvent extends EventBase<'comment.updated'> {
 export interface CommentDeletedEvent extends EventBase<'comment.deleted'> {
   data: CommentDeletedPayload
 }
+export interface CommentMentionedEvent extends EventBase<'comment.mentioned'> {
+  data: EventCommentMentionedData
+}
 
 export interface ChangelogPublishedEvent extends EventBase<'changelog.published'> {
   data: ChangelogPublishedPayload
@@ -938,6 +1008,7 @@ export type EventData =
   | CommentCreatedEvent
   | CommentUpdatedEvent
   | CommentDeletedEvent
+  | CommentMentionedEvent
   | ChangelogPublishedEvent
   | StatusIncidentCreatedEvent
   | StatusMaintenanceScheduledEvent

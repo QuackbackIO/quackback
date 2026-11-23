@@ -5,8 +5,11 @@ import {
   handleDomainError,
   decodeCursor,
   encodeCursor,
+  parsePaginationParams,
 } from '@/lib/server/domains/api/responses'
+import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { SegmentId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/users/')({
   server: {
@@ -39,13 +42,14 @@ export const Route = createFileRoute('/api/v1/users/')({
             | 'name'
             | undefined
           const segmentIdsParam = url.searchParams.get('segmentIds')
-          const segmentIds = segmentIdsParam
-            ? (segmentIdsParam.split(',').filter(Boolean) as import('@quackback/ids').SegmentId[])
-            : undefined
-          const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100)
+          const segmentIds = parseTypeIdArray<SegmentId>(
+            segmentIdsParam ? segmentIdsParam.split(',').filter(Boolean) : undefined,
+            'segment',
+            'segment IDs'
+          )
+          // The cursor is a row offset, so a caller may change the limit between pages.
+          const { cursor, limit } = parsePaginationParams(url)
           const offset = decodeCursor(cursor)
-          const page = Math.floor(offset / limit) + 1
 
           // Import service functions
           const { listPortalUsers } = await import('@/lib/server/domains/users/user.service')
@@ -58,7 +62,7 @@ export const Route = createFileRoute('/api/v1/users/')({
             dateTo: dateTo ? new Date(dateTo) : undefined,
             sort: sort || 'newest',
             segmentIds,
-            page,
+            offset,
             limit,
           })
 

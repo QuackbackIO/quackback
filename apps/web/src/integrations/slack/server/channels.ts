@@ -2,7 +2,7 @@
  * Slack channel listing and membership.
  */
 
-import { WebClient } from '@slack/web-api'
+import { slackClient } from '@/integrations/slack/server/client'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 
@@ -29,7 +29,7 @@ export async function listSlackChannels(
     }
   }
 
-  const client = new WebClient(accessToken)
+  const client = slackClient(accessToken)
   const channels: SlackChannelInfo[] = []
   let cursor: string | undefined
 
@@ -76,7 +76,7 @@ export async function listSlackChannels(
  * Returns true if the bot is now in the channel (joined or already a member).
  */
 export async function joinSlackChannel(accessToken: string, channelId: string): Promise<boolean> {
-  const client = new WebClient(accessToken)
+  const client = slackClient(accessToken)
   try {
     await client.conversations.join({ channel: channelId })
     return true

@@ -3,7 +3,7 @@
  * Handles OAuth flow for connecting Slack workspaces.
  */
 
-import { WebClient } from '@slack/web-api'
+import { slackClient } from '@/integrations/slack/server/client'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'slack' })
@@ -42,7 +42,7 @@ export function getSlackOAuthUrl(
  */
 export async function revokeSlackToken(accessToken: string): Promise<void> {
   try {
-    const client = new WebClient(accessToken)
+    const client = slackClient(accessToken)
     await client.auth.revoke()
     log.info('token revoked')
   } catch (error) {
@@ -70,7 +70,7 @@ export async function exchangeSlackCode(
     throw new Error('Slack credentials not configured')
   }
 
-  const client = new WebClient()
+  const client = slackClient()
   const response = await client.oauth.v2.access({
     client_id: clientId,
     client_secret: clientSecret,

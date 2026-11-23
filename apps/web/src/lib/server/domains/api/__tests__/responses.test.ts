@@ -262,6 +262,13 @@ describe('API Responses', () => {
       expect(response.status).toBe(404)
     })
 
+    it('names a missing tag "Tag", not the internal model name', async () => {
+      const response = handleDomainError({ code: 'TAG_NOT_FOUND', message: 'x' })
+
+      expect(response.status).toBe(404)
+      expect(((await response.json()) as ErrorBody).error.message).toBe('Tag not found')
+    })
+
     it('should handle VALIDATION_ERROR', async () => {
       const error = { code: 'VALIDATION_ERROR', message: 'Name is required' }
       const response = handleDomainError(error)
@@ -418,27 +425,9 @@ describe('API Responses', () => {
       expect(result.limit).toBe(100)
     })
 
-    it('should use default for limit=0', () => {
-      // limit=0 is falsy, so it falls through to the default of 20
-      const url = new URL('https://example.com/api?limit=0')
-      const result = parsePaginationParams(url)
-
-      expect(result.limit).toBe(20)
-    })
-
-    it('should enforce minimum limit of 1', () => {
-      // Negative numbers are capped to 1 by Math.max
-      const url = new URL('https://example.com/api?limit=-5')
-      const result = parsePaginationParams(url)
-
-      expect(result.limit).toBe(1)
-    })
-
-    it('should handle invalid limit gracefully', () => {
-      const url = new URL('https://example.com/api?limit=invalid')
-      const result = parsePaginationParams(url)
-
-      expect(result.limit).toBe(20)
+    it.each(['0', '-5', 'invalid'])('refuses limit=%s as a ValidationError', (limit) => {
+      const url = new URL(`https://example.com/api?limit=${limit}`)
+      expect(() => parsePaginationParams(url)).toThrow('limit must be a whole number of 1 or more')
     })
   })
 
