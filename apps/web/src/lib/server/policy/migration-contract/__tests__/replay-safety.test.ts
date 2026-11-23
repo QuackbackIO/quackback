@@ -330,9 +330,6 @@ describe('the real corpus', () => {
     // only while the header_display_name column comment it writes in the same
     // block is absent, so a second run does nothing and never clears a value
     // saved afterwards, on an old row or a new one.
-    // 0324 marks SLA clocks already past due as emailed only while the
-    // conversations.sla_applied column comment it writes in the same block is
-    // absent, so a second run never marks a breach that happened later.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -366,7 +363,6 @@ describe('the real corpus', () => {
       '0313_email_senders.sql',
       '0316_personal_key_reply_cutoff.sql',
       '0323_clear_legacy_header_settings.sql',
-      '0324_sla_breach_email_backlog.sql',
     ])
   })
 
