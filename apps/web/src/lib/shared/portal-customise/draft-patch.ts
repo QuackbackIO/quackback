@@ -15,6 +15,7 @@ import { helpCenterHeaderLinkSchema } from '@/lib/shared/schemas/help-center'
 import { BRANDING_FONTS, type BrandingFontId } from '@/lib/shared/theme/fonts'
 import { CARD_STYLES } from '@/lib/shared/theme/types'
 import type { PortalNavItemConfig } from '@/lib/server/domains/settings'
+import { HEADER_SHOWS } from './ask-request'
 
 /** The corner stops the Font and shape section offers, in rem. */
 export const CORNER_STOPS = [0, 0.25, 0.5, 1] as const
@@ -37,9 +38,7 @@ export const COLOUR_AUTO = 'auto'
 /** Headings back in the text font: a word, never null (see the header colour). */
 export const SAME_AS_TEXT_FONT = 'same_as_text'
 
-/** What the header shows: the uploaded logo alone, or the icon with the name beside it. */
-export const HEADER_SHOWS = ['logo', 'icon_and_name'] as const
-export type HeaderShows = (typeof HEADER_SHOWS)[number]
+export { HEADER_SHOWS, type HeaderShows } from './ask-request'
 
 /** The colour a patch sets, or "auto" to put it back on Auto. */
 const colourOrAuto = z.union([hexColour, z.literal(COLOUR_AUTO)])
