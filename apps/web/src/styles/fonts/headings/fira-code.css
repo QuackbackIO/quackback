@@ -1,0 +1,5 @@
+/* fira-code for headings only: the semibold and bold cuts titles are set in, so a
+   portal whose text is another font never declares (or fetches) the rest.
+   Loaded via loadHeadingFont in src/lib/shared/theme/heading-font-loader.ts. */
+@import "@fontsource/fira-code/600.css";
+@import "@fontsource/fira-code/700.css";

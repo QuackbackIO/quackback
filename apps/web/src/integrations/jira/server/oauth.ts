@@ -1,4 +1,5 @@
 import { integrationFetch } from '@/lib/server/integrations/sync/transport'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 /**
  * Jira (Atlassian) OAuth 2.0 (3LO) utilities.
  */
@@ -52,7 +53,7 @@ export async function exchangeJiraCode(
   }
 
   // Exchange code for tokens
-  const tokenResponse = await fetch('https://auth.atlassian.com/oauth/token', {
+  const tokenResponse = await providerFetch('https://auth.atlassian.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -76,7 +77,7 @@ export async function exchangeJiraCode(
   }
 
   // Get accessible resources (cloudId + site name)
-  const resourcesResponse = await fetch(
+  const resourcesResponse = await providerFetch(
     'https://api.atlassian.com/oauth/token/accessible-resources',
     {
       headers: { Authorization: `Bearer ${tokens.access_token}` },

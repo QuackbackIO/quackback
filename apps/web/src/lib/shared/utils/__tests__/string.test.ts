@@ -14,6 +14,7 @@ import {
   getStatusEmoji,
   contentPreview,
   safeEmail,
+  stripMarkdownPreview,
 } from '../string'
 import { slugify } from '../slugify'
 
@@ -394,5 +395,17 @@ describe('safeEmail', () => {
 
   it('handles empty string', () => {
     expect(safeEmail('')).toBe('(no email)')
+  })
+})
+
+describe('stripMarkdownPreview', () => {
+  it('drops an image entirely instead of leaving "!alt"', () => {
+    expect(stripMarkdownPreview('Before ![screenshot](https://x.test/a.png) after')).toBe(
+      'Before  after'
+    )
+  })
+
+  it('keeps link text and drops the url', () => {
+    expect(stripMarkdownPreview('See [the docs](https://x.test/docs).')).toBe('See the docs.')
   })
 })

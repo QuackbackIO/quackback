@@ -24,6 +24,7 @@ import {
 import type { TicketType, TicketStatusCategory, TicketStage } from '@/lib/server/db'
 import type { TicketSort } from '@/lib/server/domains/tickets/ticket.types'
 import type { PrincipalId, CompanyId, TicketTypeId } from '@quackback/ids'
+import { parseLimit, readJsonBody } from '@/lib/server/domains/api/request'
 
 const createTicketSchema = z.object({
   // Optional since Phase 4: derivable from ticketTypeId (a mismatched explicit
@@ -59,10 +60,7 @@ export const Route = createFileRoute('/api/v1/tickets/')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_VIEW })
 
           const url = new URL(request.url)
-          const limit = Math.min(
-            100,
-            Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
-          )
+          const limit = parseLimit(url)
           const type = (url.searchParams.get('type') as TicketType | null) ?? undefined
           // The Phase 4 registry-type filter — the TypeID check keeps a junk
           // value out of the uuid-backed query (mirrors listTicketsFn).
@@ -70,9 +68,16 @@ export const Route = createFileRoute('/api/v1/tickets/')({
           const statusCategory =
             (url.searchParams.get('statusCategory') as TicketStatusCategory | null) ?? undefined
           const stage = (url.searchParams.get('stage') as TicketStage | null) ?? undefined
-          const requesterPrincipalId =
-            (url.searchParams.get('requesterPrincipalId') as PrincipalId | null) ?? undefined
-          const companyId = (url.searchParams.get('companyId') as CompanyId | null) ?? undefined
+          const requesterPrincipalId = parseOptionalTypeId<PrincipalId>(
+            url.searchParams.get('requesterPrincipalId'),
+            'principal',
+            'requesterPrincipalId'
+          )
+          const companyId = parseOptionalTypeId<CompanyId>(
+            url.searchParams.get('companyId'),
+            'company',
+            'companyId'
+          )
           const sort = parseSort(url.searchParams.get('sort'))
           // The due filter is a closed set: a typo 400s rather than silently
           // listing every ticket.
@@ -119,7 +124,7 @@ export const Route = createFileRoute('/api/v1/tickets/')({
         try {
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_CREATE })
 
-          const parsed = createTicketSchema.safeParse(await request.json().catch(() => null))
+          const parsed = createTicketSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

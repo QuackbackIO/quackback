@@ -11,6 +11,7 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { HexColorSchema, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
 import type { PostTagId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const updateTagSchema = z.object({
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.TAG_VIEW })
 
           const tagId = parseTypeId<PostTagId>(params.tagId, 'post_tag', 'tag ID')
 
@@ -60,7 +61,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
 
           const tagId = parseTypeId<PostTagId>(params.tagId, 'post_tag', 'tag ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateTagSchema.safeParse(body)
 
           if (!parsed.success) {

@@ -59,8 +59,9 @@ export function stripMarkdownPreview(text: string, maxLength = 150): string {
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
     .replace(/`(.*?)`/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Images before links, or `![alt](url)` would become `!alt`.
     .replace(/!\[.*?\]\(.+?\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/^\s*\d+\.\s+/gm, '')
     .replace(/\n+/g, ' ')

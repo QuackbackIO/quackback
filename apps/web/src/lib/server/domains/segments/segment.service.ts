@@ -35,12 +35,26 @@ import type {
 } from './segment.types'
 import type { EvaluationSchedule, SegmentRules, SegmentWeightConfig } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { parseCron } from '@/lib/server/jobs/cron'
 
 const log = logger.child({ component: 'segments' })
 
 // ============================================
 // Helpers
 // ============================================
+
+/**
+ * Refuse a schedule the segment scheduler could not run: it is checked with
+ * the scheduler's own parser, so a saved schedule never fails silently later.
+ */
+function assertRunnableSchedule(schedule: EvaluationSchedule | null | undefined): void {
+  if (!schedule) return
+  try {
+    parseCron(schedule.pattern)
+  } catch {
+    throw new ValidationError('VALIDATION_ERROR', 'Must be a valid cron expression')
+  }
+}
 
 function rowToSegment(row: {
   id: string
@@ -163,6 +177,7 @@ export async function createSegment(input: CreateSegmentInput): Promise<Segment>
       'Dynamic segments require at least one rule condition'
     )
   }
+  if (input.type === 'dynamic') assertRunnableSchedule(input.evaluationSchedule)
 
   const id = createId('segment') as SegmentId
   const slug = await uniqueSegmentSlug(input.name.trim())
@@ -196,6 +211,19 @@ export async function updateSegment(
   if (!existing) {
     throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
   }
+  // A dynamic segment without rules matches no one, so its next evaluation
+  // would remove every member: the same refusal as create.
+  if (
+    existing.type === 'dynamic' &&
+    input.rules !== undefined &&
+    !input.rules?.conditions?.length
+  ) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'Dynamic segments require at least one rule condition'
+    )
+  }
+  assertRunnableSchedule(input.evaluationSchedule)
 
   const updates: Partial<typeof segments.$inferInsert> = {}
   if (input.name !== undefined) {

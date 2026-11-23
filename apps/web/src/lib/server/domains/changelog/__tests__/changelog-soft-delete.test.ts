@@ -154,4 +154,15 @@ describe('deleteChangelog', () => {
     expect(setArgs.deletedAt).toBeInstanceOf(Date)
     expect('publishedAt' in setArgs).toBe(false)
   })
+
+  it('CHG-A-17 deleting an unknown or already-deleted entry fails with CHANGELOG_NOT_FOUND', async () => {
+    // The UPDATE is scoped to live rows (deletedAt IS NULL), so a second delete
+    // matches nothing and returns no rows.
+    mockUpdateReturning.mockResolvedValueOnce([])
+
+    await expect(deleteChangelog('cl_1' as ChangelogId)).rejects.toMatchObject({
+      code: 'CHANGELOG_NOT_FOUND',
+    })
+    expect(isNull).toHaveBeenCalledWith(changelogEntriesTable.deletedAt)
+  })
 })

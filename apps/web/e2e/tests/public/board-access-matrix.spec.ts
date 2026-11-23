@@ -297,8 +297,11 @@ test.describe('vote tier — vote affordance + gating', () => {
 // sees their own pending item, but a held item must NOT reach other (anonymous)
 // viewers — until a moderator approves it.
 
-/** Submit a post to a board via the portal composer; resolves once accepted. */
-async function submitFeedback(page: Page, boardSlug: string, title: string) {
+/**
+ * Submit a post to a board that holds posts for review, via the portal
+ * composer; resolves once accepted and held.
+ */
+async function submitHeldFeedback(page: Page, boardSlug: string, title: string) {
   await page.goto(`/?board=${boardSlug}`)
   await page.waitForLoadState('networkidle')
   const composer = page.getByPlaceholder(/what'?s on your mind/i).first()
@@ -308,7 +311,8 @@ async function submitFeedback(page: Page, boardSlug: string, title: string) {
   const submit = page.getByRole('button', { name: 'Post', exact: true }).first()
   await expect(submit).toBeEnabled()
   await submit.click()
-  await expect(page.getByText('Feedback submitted')).toBeVisible({ timeout: 10000 })
+  // A held post's toast says it waits for review since 03289cf36b (#1211).
+  await expect(page.getByText('Your post is waiting for review')).toBeVisible({ timeout: 10000 })
 }
 
 /** Does the board's filtered feed (newest-first) surface a post with this title? */
@@ -360,7 +364,7 @@ async function postShowsComment(
 test.describe('moderation — hold for review + approve/reject', () => {
   test('a held post is approved into the public feed', async () => {
     const title = `E2E Hold-Approve ${Date.now()}`
-    await submitFeedback(user, 'e2e-mod', title)
+    await submitHeldFeedback(user, 'e2e-mod', title)
 
     // Held: the pending post is not visible to other (anonymous) viewers.
     expect(await feedShowsPost(anon, 'e2e-mod', title)).toBe(false)
@@ -377,7 +381,7 @@ test.describe('moderation — hold for review + approve/reject', () => {
 
   test('a held post is rejected and never shown publicly', async () => {
     const title = `E2E Hold-Reject ${Date.now()}`
-    await submitFeedback(user, 'e2e-mod', title)
+    await submitHeldFeedback(user, 'e2e-mod', title)
 
     const row = await queueRow(admin, title)
     await expect(row).toBeVisible({ timeout: 10000 })

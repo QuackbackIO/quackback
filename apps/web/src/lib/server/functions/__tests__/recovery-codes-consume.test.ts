@@ -36,6 +36,7 @@ const hoisted = vi.hoisted(() => ({
   whereStub: vi.fn(),
   incrementRateBucket: vi.fn(),
   rateBucketRetryAfter: vi.fn(),
+  isRecoveryCodeHolder: vi.fn(),
 }))
 
 vi.mock('@/lib/server/audit/log', () => ({
@@ -55,6 +56,12 @@ vi.mock('@tanstack/react-start/server', () => ({
 vi.mock('@/lib/server/auth/recovery-codes', () => ({
   verifyRecoveryCode: hoisted.verifyRecoveryCode,
   hashRecoveryCode: hoisted.hashRecoveryCode,
+}))
+
+// Whether the code's holder still manages sign-in. Its own rule runs against
+// real Postgres in `auth/__tests__/recovery-code-holders.db.test.ts`.
+vi.mock('@/lib/server/auth/recovery-codes-status', () => ({
+  isRecoveryCodeHolder: (...a: unknown[]) => hoisted.isRecoveryCodeHolder(...a),
 }))
 
 vi.mock('@/lib/server/auth/magic-link-mint', () => ({
@@ -113,6 +120,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  hoisted.isRecoveryCodeHolder.mockResolvedValue(true)
   hoisted.updateUsedFn.mockReturnValue({
     set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
   })
@@ -177,6 +185,30 @@ describe('consumeRecoveryCodeFn', () => {
     expect(hoisted.updateUsedFn).toHaveBeenCalled()
     expect(hoisted.mintMagicLinkUrl).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'admin@example.com' })
+    )
+  })
+
+  // Removed or demoted: the right code is refused exactly as a wrong one is,
+  // with the same scrypt work, and stays unspent.
+  it('refuses a right code whose holder no longer manages sign-in', async () => {
+    hoisted.isRecoveryCodeHolder.mockResolvedValue(false)
+    hoisted.findUser.mockResolvedValue({ id: 'user_1', email: 'admin@example.com' })
+    hoisted.findCodes.mockResolvedValue([{ id: 'rcode_1', codeHash: 'h' }])
+    hoisted.verifyRecoveryCode.mockResolvedValue(true)
+
+    const result = await consumeRecoveryCode({
+      data: { email: 'admin@example.com', code: 'ABCD-EFGH-JKMN' },
+    })
+
+    expect(result).toEqual({ ok: false, error: 'invalid_credentials' })
+    expect(hoisted.verifyRecoveryCode).toHaveBeenCalledTimes(1)
+    expect(hoisted.updateUsedFn).not.toHaveBeenCalled()
+    expect(hoisted.mintMagicLinkUrl).not.toHaveBeenCalled()
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth.method.blocked',
+        metadata: expect.objectContaining({ reason: 'not_a_holder' }),
+      })
     )
   })
 

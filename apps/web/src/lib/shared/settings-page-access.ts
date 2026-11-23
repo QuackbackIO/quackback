@@ -73,6 +73,8 @@ export const SETTINGS_PAGE_ACCESS = {
   '/admin/settings/email': one(EMAIL_SENDING_PERMISSION),
   // Design needs settings.branding; Custom domains settings.custom_domain.
   '/admin/settings/portal': PORTAL_PAGE_GATE,
+  // Reads and publishes the portal's look, tabs and welcome message.
+  '/admin/settings/portal/customise': one(PERMISSIONS.SETTINGS_BRANDING),
   '/admin/settings/widget': one(PERMISSIONS.SETTINGS_MANAGE),
   '/admin/settings/widget/install': one(PERMISSIONS.SETTINGS_MANAGE),
   '/admin/settings/members': one(PERMISSIONS.MEMBER_VIEW),

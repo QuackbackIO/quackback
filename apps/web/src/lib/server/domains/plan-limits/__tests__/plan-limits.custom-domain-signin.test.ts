@@ -59,6 +59,11 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: vi.fn(async () => new Set()),
+  getSsoSignInState: async () => ({ ssoLive: true, providersConfigured: false }),
+}))
+// Email sign-in on: the method gate has its own suite (email-signin-method).
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettings: vi.fn(async () => ({ authConfig: { oauth: { magicLink: true } } })),
 }))
 vi.mock('@/lib/server/domains/settings/settings.plan-limits', async () =>
   (

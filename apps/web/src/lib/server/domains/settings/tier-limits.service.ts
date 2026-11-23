@@ -1,4 +1,4 @@
-import { db, settings } from '@/lib/server/db'
+import { db, settings, type Database, type Transaction } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { settingsLocalTtlMs } from '@/lib/server/local-cache'
@@ -171,12 +171,18 @@ const LIMITS_KEY = 'limits'
  * reads the row again when its copy expires, so a plan change reaches all of
  * them within that window, as a settings change does.
  */
-export async function getTierLimits(now = new Date()): Promise<TierLimits> {
+export async function getTierLimits(
+  now = new Date(),
+  executor?: Database | Transaction
+): Promise<TierLimits> {
   let cached = cachedLimits.get(LIMITS_KEY)
   if (cached && cached.expiresAt <= Date.now()) cached = undefined
 
   if (!cached) {
-    const rows = await db
+    // Inside a transaction, read on it: the shared pool would need a second
+    // connection while the transaction holds one. A read inside a transaction
+    // is not cached, since the transaction may still roll back.
+    const rows = await (executor ?? db)
       .select({ tierLimits: settings.tierLimits, cloud: settings.cloud })
       .from(settings)
       .limit(1)
@@ -188,7 +194,7 @@ export async function getTierLimits(now = new Date()): Promise<TierLimits> {
       projection: parseBillingProjection(rawProjection),
       expiresAt: Date.now() + settingsLocalTtlMs(),
     }
-    cachedLimits.set(LIMITS_KEY, cached)
+    if (!executor) cachedLimits.set(LIMITS_KEY, cached)
   }
 
   return resolveEffectiveTierLimits(cached.stored, cached.projection, now)

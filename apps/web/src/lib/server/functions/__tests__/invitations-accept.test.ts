@@ -409,6 +409,10 @@ describe('acceptInvitationFn — atomic claim + side effects', () => {
 
   it('applies a custom-role invite to a brand-new principal via the role writer', async () => {
     hoisted.mockClaimReturning.mockResolvedValue([{ ...CLAIMED_ROW, roleId: 'role_custom1' }])
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      ...PENDING_INVITE,
+      roleId: 'role_custom1',
+    })
 
     await acceptHandler({ data: { invitationId: 'invite_1' } })
 
@@ -425,6 +429,10 @@ describe('acceptInvitationFn — atomic claim + side effects', () => {
 
   it('applies a custom-role invite to an existing member without touching an admin', async () => {
     hoisted.mockClaimReturning.mockResolvedValue([{ ...CLAIMED_ROW, roleId: 'role_custom1' }])
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      ...PENDING_INVITE,
+      roleId: 'role_custom1',
+    })
     hoisted.mockTxQuery.principal.findFirst.mockResolvedValue({ id: 'principal_1', role: 'member' })
 
     await acceptHandler({ data: { invitationId: 'invite_1' } })
@@ -452,6 +460,10 @@ describe('acceptInvitationFn — atomic claim + side effects', () => {
 
   it("signals the role change to the teammate's inbox only after the transaction commits", async () => {
     hoisted.mockClaimReturning.mockResolvedValue([{ ...CLAIMED_ROW, roleId: 'role_custom1' }])
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      ...PENDING_INVITE,
+      roleId: 'role_custom1',
+    })
     hoisted.mockTxQuery.principal.findFirst.mockResolvedValue({ id: 'principal_1', role: 'member' })
     hoisted.mockSetPrincipalRole.mockResolvedValue({
       cacheKeysToBust: [],

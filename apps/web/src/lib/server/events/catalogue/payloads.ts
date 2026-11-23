@@ -16,6 +16,16 @@ const id = z.string()
 const nullableStr = z.string().nullable().optional()
 
 // --- shared sub-schemas ---
+/** The team's decision on a held post or comment, addressed to its author. */
+const moderationDecision = z.looseObject({
+  postId: id,
+  postTitle: z.string(),
+  boardId: id,
+  boardSlug: z.string(),
+  authorPrincipalId: id.nullable(),
+  moderatorPrincipalId: id.nullable().optional(),
+  submittedAt: z.string().optional(),
+})
 export const postRef = z.object({ id, title: z.string(), boardId: id, boardSlug: z.string() })
 export const postData = z.object({
   id,
@@ -102,6 +112,10 @@ export const P = {
     mentioningPrincipalId: id,
     excerpt: z.string(),
   }),
+  'post.approved': moderationDecision,
+  'post.rejected': moderationDecision,
+  'comment.approved': moderationDecision.extend({ commentId: id }),
+  'comment.rejected': moderationDecision.extend({ commentId: id }),
   'post.owner_assigned': z.looseObject({
     postId: id,
     postTitle: z.string(),
@@ -127,6 +141,17 @@ export const P = {
   'comment.deleted': z.looseObject({
     comment: z.looseObject({ id, isPrivate: z.boolean().optional() }),
     post: postRef,
+  }),
+  'comment.mentioned': z.looseObject({
+    postId: id,
+    postTitle: z.string(),
+    postUrl: z.string(),
+    boardId: id.optional(),
+    commentId: id,
+    isPrivate: z.boolean(),
+    mentionedPrincipalId: id,
+    mentioningPrincipalId: id,
+    excerpt: z.string(),
   }),
   // changelog
   'changelog.published': z.looseObject({

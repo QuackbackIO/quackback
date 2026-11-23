@@ -374,3 +374,72 @@ describe('mention email — reachable only via a contact address', () => {
     expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
   })
 })
+
+describe('comment.mentioned target resolution', () => {
+  function makeCommentMentionedEvent(isPrivate = false) {
+    const base = makePostMentionedEvent()
+    return {
+      ...base,
+      type: 'comment.mentioned' as const,
+      data: { ...base.data, commentId: 'comment_9', isPrivate },
+    }
+  }
+  const person = (role: string) => [
+    { id: 'principal_mentioned', type: 'user', role, email: 'alice@example.com' },
+  ]
+
+  it('tells the person in the app and by email, linking to the comment', async () => {
+    setupMentionDbChain(person('user'))
+
+    const targets = await getHookTargets(makeCommentMentionedEvent())
+
+    const bell = targets.filter((t) => t.type === 'notification')
+    expect(bell).toHaveLength(1)
+    expect(bell[0].target).toEqual({ principalIds: ['principal_mentioned'] })
+    expect(bell[0].config).toMatchObject({ mentionerName: 'Bea', commentId: 'comment_9' })
+    const mail = targets.filter((t) => t.type === 'email')
+    expect(mail).toHaveLength(1)
+    expect(mail[0].config).toMatchObject({
+      postTitle: 'A test post',
+      postUrl: 'https://test.quackback.io/b/bugs/posts/post_1#comment-comment_9',
+    })
+  })
+
+  it('honours the "Mentioned in a comment" email switch, not the post one', async () => {
+    setupMentionDbChain(person('user'))
+    mockBatchGetNotificationPreferences.mockResolvedValueOnce(
+      new Map([
+        [
+          'principal_mentioned',
+          {
+            emailMuted: false,
+            emailStatusChange: true,
+            emailNewComment: true,
+            matrix: { comment_mentioned: { email: false } },
+          },
+        ],
+      ])
+    )
+
+    const targets = await getHookTargets(makeCommentMentionedEvent())
+
+    expect(targets.filter((t) => t.type === 'notification')).toHaveLength(1)
+    expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
+  })
+
+  it('never tells a portal user about a private comment', async () => {
+    setupMentionDbChain(person('user'))
+
+    const targets = await getHookTargets(makeCommentMentionedEvent(true))
+
+    expect(targets.filter((t) => t.type === 'notification' || t.type === 'email')).toEqual([])
+  })
+
+  it('tells a teammate about a private comment', async () => {
+    setupMentionDbChain(person('member'))
+
+    const targets = await getHookTargets(makeCommentMentionedEvent(true))
+
+    expect(targets.filter((t) => t.type === 'notification')).toHaveLength(1)
+  })
+})

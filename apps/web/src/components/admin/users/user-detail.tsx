@@ -67,6 +67,9 @@ import type { PrincipalId } from '@quackback/ids'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import { toastError } from '@/lib/client/error-notice'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { isAdmin } from '@/lib/shared/roles'
 
 // Team dialogs load the first time one opens, not with the profile.
 const AddPeopleDialog = lazy(() =>
@@ -514,8 +517,13 @@ export function UserDetail({
   const sessionUserId = useSessionContext()?.user?.id ?? null
   const supportInboxEnabled =
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
-  // Check if current user can manage portal users
-  const canManageUsers = currentMemberRole === 'admin'
+  // Each control follows the permission its server function checks.
+  const canManageUsers = usePermission(PERMISSIONS.PEOPLE_MANAGE)
+  const canManageCompany = usePermission(PERMISSIONS.COMPANY_MANAGE)
+  const canManageSegments = usePermission(PERMISSIONS.SEGMENT_MANAGE)
+  const canManageMembers = usePermission(PERMISSIONS.MEMBER_MANAGE)
+  // Only an admin grants Admin or changes an admin (role.grants.ts).
+  const viewerIsAdmin = isAdmin(currentMemberRole)
   const { blocked, unblock } = usePersonBlockActions(user?.principalId as PrincipalId | undefined)
   const conversationsQuery = useInfiniteQuery({
     queryKey: ['admin', 'user-conversations', user?.principalId, 'all'],
@@ -635,12 +643,13 @@ export function UserDetail({
   const personName = user.name || displayEmail || 'this person'
   // Only someone who has signed in can join the team from here; others are
   // invited by email from Members & Teams.
-  const canJoinTeam = !teamRole && !user.isLead && user.hasSignedIn
+  const canJoinTeam = canManageMembers && !teamRole && !user.isLead && user.hasSignedIn
   // The server refuses a change to your own role, and blocking or removing
   // applies to portal users only, never to a teammate.
   const isSelf = sessionUserId != null && sessionUserId === user.userId
-  const canChangeRole = !!teamRole && !isSelf
-  const portalActions = !teamRole
+  const canChangeRole =
+    canManageMembers && !!teamRole && !isSelf && (viewerIsAdmin || teamRole.role !== 'admin')
+  const portalActions = canManageUsers && !teamRole
   const hasMenu = canChangeRole || canJoinTeam || portalActions
   const noEmailTooltip = 'This user has no email address to deliver a message to'
 
@@ -756,7 +765,7 @@ export function UserDetail({
                   View public profile
                 </Link>
               </Button>
-              {canManageUsers && hasMenu && (
+              {hasMenu && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon-sm" variant="ghost" aria-label="More actions">
@@ -828,35 +837,35 @@ export function UserDetail({
             }}
           />
         )}
+        {canJoinTeam && addToTeamOpened && (
+          <Suspense fallback={null}>
+            <AddPeopleDialog
+              open={addToTeamOpen}
+              onOpenChange={setAddToTeamOpen}
+              canGrantAdmin={viewerIsAdmin}
+              initialPerson={{
+                principalId: user.principalId,
+                name: personName,
+                avatarUrl: user.image,
+                detail: displayEmail ?? '',
+              }}
+            />
+          </Suspense>
+        )}
+        {teamRole && canChangeRole && changeRoleOpened && (
+          <Suspense fallback={null}>
+            <ChangeRoleDialog
+              open={changeRoleOpen}
+              onOpenChange={setChangeRoleOpen}
+              principalId={user.principalId}
+              personName={personName}
+              current={teamRole}
+              canGrantAdmin={viewerIsAdmin}
+            />
+          </Suspense>
+        )}
         {canManageUsers && (
           <>
-            {canJoinTeam && addToTeamOpened && (
-              <Suspense fallback={null}>
-                <AddPeopleDialog
-                  open={addToTeamOpen}
-                  onOpenChange={setAddToTeamOpen}
-                  canGrantAdmin={canManageUsers}
-                  initialPerson={{
-                    principalId: user.principalId,
-                    name: personName,
-                    avatarUrl: user.image,
-                    detail: displayEmail ?? '',
-                  }}
-                />
-              </Suspense>
-            )}
-            {teamRole && canChangeRole && changeRoleOpened && (
-              <Suspense fallback={null}>
-                <ChangeRoleDialog
-                  open={changeRoleOpen}
-                  onOpenChange={setChangeRoleOpen}
-                  principalId={user.principalId}
-                  personName={personName}
-                  current={teamRole}
-                  canGrantAdmin={canManageUsers}
-                />
-              </Suspense>
-            )}
             <BlockPersonControl
               mode="dialog"
               principalId={user.principalId as PrincipalId}
@@ -950,14 +959,14 @@ export function UserDetail({
             <RailCard title="Company">
               <UserCompanyControl
                 principalId={user.principalId as PrincipalId}
-                canManage={canManageUsers}
+                canManage={canManageCompany}
               />
             </RailCard>
             <RailCard title="Segments">
               <UserSegmentBadges
                 principalId={user.principalId as PrincipalId}
                 segments={user.segments}
-                canManage={canManageUsers}
+                canManage={canManageSegments}
               />
             </RailCard>
             <RailCard title="Tags">

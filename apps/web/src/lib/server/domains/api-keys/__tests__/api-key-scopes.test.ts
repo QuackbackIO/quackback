@@ -84,9 +84,12 @@ describe('scopeForPermission', () => {
     expect(scopeForPermission(PERMISSIONS.PEOPLE_VIEW)).toBe('read:feedback')
     expect(scopeForPermission(PERMISSIONS.PEOPLE_MANAGE)).toBe('write:feedback')
     expect(scopeForPermission(PERMISSIONS.MEMBER_VIEW)).toBe('read:feedback')
-    expect(scopeForPermission(PERMISSIONS.WEBHOOK_VIEW)).toBe('read:feedback')
-    expect(scopeForPermission(PERMISSIONS.WEBHOOK_MANAGE)).toBe('write:feedback')
     expect(scopeForPermission(PERMISSIONS.SEGMENT_MANAGE)).toBe('write:feedback')
+  })
+
+  it('maps webhook subscriptions to the settings scopes, not the feedback ones', () => {
+    expect(scopeForPermission(PERMISSIONS.WEBHOOK_VIEW)).toBe('read:settings')
+    expect(scopeForPermission(PERMISSIONS.WEBHOOK_MANAGE)).toBe('write:settings')
   })
 })
 
