@@ -193,7 +193,7 @@ export function VotersAvatarStack({
               type="button"
               className={cn(
                 'inline-flex items-center gap-1 text-[13px]',
-                'text-muted-foreground/60 hover:text-muted-foreground',
+                'text-muted-foreground hover:text-foreground',
                 'transition-colors duration-150'
               )}
             >

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { parseLimit } from '@/lib/server/domains/api/request'
 import type { CompanyId } from '@quackback/ids'
 import { serializeCompany } from './-serialize'
 
@@ -19,10 +20,7 @@ export const Route = createFileRoute('/api/v1/companies/')({
           const url = new URL(request.url)
           const search = url.searchParams.get('search') ?? undefined
           const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(
-            100,
-            Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
-          )
+          const limit = parseLimit(url)
 
           // Integration lookup filters: company_id is an exact match on the
           // external reference; tag_id/segment_id restrict the list.

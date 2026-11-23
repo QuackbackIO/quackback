@@ -17,6 +17,7 @@ import {
   NotFoundErrorSchema,
   ValidationErrorSchema,
 } from './common'
+import { ForbiddenErrorSchema } from './errors'
 
 // Board audience — legacy API contract. The internal storage shape is now
 // the BoardAccess matrix (view/comment/submit + segmentIds + approval), but
@@ -114,7 +115,8 @@ registerPath('/boards', {
   get: {
     tags: ['Boards'],
     summary: 'List boards',
-    description: 'Returns all boards in the workspace',
+    description:
+      'Returns all boards in the workspace. Requires the read:feedback scope and the post.view_private permission.',
     responses: {
       200: {
         description: 'List of boards',
@@ -127,6 +129,11 @@ registerPath('/boards', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the post.view_private permission',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
     },
   },
@@ -172,7 +179,8 @@ registerPath('/boards/{boardId}', {
   get: {
     tags: ['Boards'],
     summary: 'Get a board',
-    description: 'Get a single board by ID',
+    description:
+      'Get a single board by ID. Requires the read:feedback scope and the post.view_private permission.',
     parameters: [
       {
         name: 'boardId',
@@ -194,6 +202,11 @@ registerPath('/boards/{boardId}', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the post.view_private permission',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
       404: {
         description: 'Board not found',

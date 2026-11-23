@@ -689,12 +689,16 @@ async function executeGetStatus(
   try {
     const isPublic = ctx.audience === 'public'
     const [
-      { getStatusPageSnapshot, isStatusAudienceGranted },
+      { getStatusPageSnapshot },
       { getStatusSettings },
+      { getWorkspaceSettings },
+      { isStatusFeedReadable },
       { ANONYMOUS_ACTOR },
     ] = await Promise.all([
       import('@/lib/server/domains/status'),
       import('@/lib/server/domains/settings/settings.status'),
+      import('@/lib/server/domains/settings/settings.service'),
+      import('@/lib/shared/status-settings'),
       import('@/lib/server/policy/types'),
     ])
     const settings = await getStatusSettings()
@@ -712,7 +716,10 @@ async function executeGetStatus(
           principalType: 'service',
           segmentIds: new Set<SegmentId>(),
         }
-    if (isPublic && !isStatusAudienceGranted(actor, settings)) {
+    // A customer is told only what an anonymous visitor could read on the
+    // page: the portal is not private, the page is published and it is for
+    // everyone (the status gate, asked for a caller with no session).
+    if (isPublic && !isStatusFeedReadable(await getWorkspaceSettings())) {
       return unavailable('The status page is not publicly available.')
     }
     const snapshot = await getStatusPageSnapshot(actor, settings)

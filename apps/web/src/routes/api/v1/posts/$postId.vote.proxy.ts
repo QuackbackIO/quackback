@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId, PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const bodySchema = z.object({
   voterPrincipalId: z.string().min(1, 'Voter principal ID is required'),
@@ -32,7 +33,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote/proxy')({
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          const body = await request.json().catch(() => null)
+          const body = await readJsonBody(request)
           const parsed = bodySchema.safeParse(body)
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
@@ -92,7 +93,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote/proxy')({
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          const body = await request.json().catch(() => null)
+          const body = await readJsonBody(request)
           const parsed = bodySchema.safeParse(body)
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {

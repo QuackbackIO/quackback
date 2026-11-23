@@ -29,7 +29,7 @@ import type {
   ConversationSide,
 } from '@/lib/shared/conversation/types'
 import { conversationIdOf } from '@/lib/shared/conversation/types'
-import { publish } from './pubsub'
+import { publish, publishAsync } from './pubsub'
 import { CONVERSATION_INBOX_CHANNEL, publishInboxFrame } from './inbox-publish'
 import { conversationScopeOf, type InboxItemScope } from './inbox-envelope'
 import type { ScopedRow } from '@/lib/server/policy/row-scope'
@@ -163,6 +163,20 @@ export function publishConversationOnlyEvent(
   event: ConversationStreamEvent
 ): void {
   publish(conversationChannel(conversationId), event)
+}
+
+/**
+ * The awaitable form of publishConversationOnlyEvent, for a caller whose
+ * events must arrive in the order it sends them. Each publish is a NOTIFY on
+ * whichever pooled connection is free, so two fire-and-forget publishes can
+ * commit, and so arrive, in either order; awaiting each before the next keeps
+ * them in order.
+ */
+export function publishConversationOnlyEventAsync(
+  conversationId: ConversationId,
+  event: ConversationStreamEvent
+): Promise<void> {
+  return publishAsync(conversationChannel(conversationId), event)
 }
 
 /**

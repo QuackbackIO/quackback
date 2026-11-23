@@ -1,0 +1,95 @@
+// @vitest-environment happy-dom
+/**
+ * The article editor: an emptied description is saved as cleared, and an
+ * article id that matches nothing says so instead of loading for ever.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { UseFormReturn } from 'react-hook-form'
+import type { ArticleId } from '@quackback/ids'
+import { NotFoundError } from '@/lib/shared/errors'
+
+const mocks = vi.hoisted(() => ({
+  getArticleFn: vi.fn(),
+  updateMutate: vi.fn(),
+}))
+
+vi.mock('@/lib/server/functions/help-center', () => ({
+  getArticleFn: (...args: unknown[]) => mocks.getArticleFn(...args),
+}))
+vi.mock('@/lib/server/functions/admin', () => ({
+  listSegmentsFn: vi.fn(async () => []),
+}))
+vi.mock('@/lib/client/mutations/help-center', () => ({
+  useUpdateArticle: () => ({ mutate: mocks.updateMutate, isPending: false, isError: false }),
+  usePublishArticle: () => ({ mutate: vi.fn(), isPending: false }),
+  useUnpublishArticle: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+// The rich editor and the sidebars are not under test; the description field is.
+vi.mock('../help-center-form-fields', () => ({
+  HelpCenterFormFields: ({ form }: { form: UseFormReturn<{ description?: string }> }) => (
+    <input aria-label="Page description" {...form.register('description')} />
+  ),
+}))
+vi.mock('../help-center-metadata-sidebar', () => ({
+  HelpCenterMetadataSidebar: () => null,
+  HelpCenterMetadataSidebarContent: () => null,
+}))
+vi.mock('../article-translations-dialog', () => ({ ArticleTranslationsDialog: () => null }))
+vi.mock('../article-feedback-reasons-dialog', () => ({
+  ArticleFeedbackReasonsDialog: () => null,
+}))
+
+import { ArticleModalContent } from '../article-modal'
+
+const ARTICLE_ID = 'article_01h455vb4pex5vsknk084sn02q' as ArticleId
+
+function renderModal() {
+  const queryClient = new QueryClient()
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ArticleModalContent articleId={ARTICLE_ID} onClose={() => {}} />
+    </QueryClientProvider>
+  )
+}
+
+beforeEach(() => {
+  mocks.getArticleFn.mockReset()
+  mocks.updateMutate.mockReset()
+})
+afterEach(cleanup)
+
+describe('ArticleModalContent', () => {
+  it('saves an emptied description as cleared, not as unchanged', async () => {
+    mocks.getArticleFn.mockResolvedValue({
+      id: ARTICLE_ID,
+      title: 'Refunds',
+      description: 'Old summary',
+      content: 'Body',
+      contentJson: null,
+      categoryId: 'kb_category_1',
+      segmentIds: [],
+      publishedAt: null,
+      notHelpfulCount: 0,
+      category: { slug: 'billing' },
+      slug: 'refunds',
+      author: null,
+    })
+    renderModal()
+    const description = (await screen.findByLabelText('Page description')) as HTMLInputElement
+    await waitFor(() => expect(description.value).toBe('Old summary'))
+    fireEvent.change(description, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mocks.updateMutate).toHaveBeenCalled())
+    expect(mocks.updateMutate.mock.calls[0][0]).toMatchObject({ description: '' })
+  })
+
+  it('says the article was not found when the id matches nothing', async () => {
+    mocks.getArticleFn.mockRejectedValue(new NotFoundError('ARTICLE_NOT_FOUND', 'not found'))
+    const { container } = renderModal()
+    expect(await screen.findByText(/no longer exists/i, {}, { timeout: 3000 })).toBeTruthy()
+    expect(container.querySelector('.animate-spin')).toBeNull()
+  })
+})

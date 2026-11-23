@@ -94,7 +94,7 @@ registerPath('/webhooks', {
     tags: ['Webhooks'],
     summary: 'List webhooks',
     description:
-      'Returns every webhook. Signing secrets are never included. Requires the webhook.view permission.',
+      'Returns every webhook. Signing secrets are never included. Requires the webhook.view permission and the read:settings scope.',
     responses: {
       200: {
         description: 'List of webhooks',
@@ -111,7 +111,7 @@ registerPath('/webhooks', {
     tags: ['Webhooks'],
     summary: 'Create a webhook',
     description:
-      'Creates a webhook. The signing secret is returned once, in this response only. Requires the webhook.manage permission.',
+      'Creates a webhook. The signing secret is returned once, in this response only. Requires the webhook.manage permission and the write:settings scope. Each event needs its own read scope on the key (read:feedback for feedback, changelog and status page events; read:chat for conversation, message and ticket events) and its view permission on the creator of the key (post.view_private, conversation.view, ticket.view, status_page.publish), or the request is refused with 403.',
     requestBody: {
       required: true,
       content: { 'application/json': { schema: asSchema(CreateWebhookBodySchema) } },
@@ -134,7 +134,7 @@ registerPath('/webhooks/{webhookId}', {
   get: {
     tags: ['Webhooks'],
     summary: 'Get a webhook',
-    description: 'Requires the webhook.view permission.',
+    description: 'Requires the webhook.view permission and the read:settings scope.',
     parameters: [webhookIdParam],
     responses: {
       200: {
@@ -149,7 +149,8 @@ registerPath('/webhooks/{webhookId}', {
   patch: {
     tags: ['Webhooks'],
     summary: 'Update a webhook',
-    description: 'Requires the webhook.manage permission.',
+    description:
+      'Requires the webhook.manage permission and the write:settings scope. Changing events or the URL re-checks event access: new events, or for a URL change the events the webhook already carries. Each event needs its own read scope on the key (read:feedback for feedback, changelog and status page events; read:chat for conversation, message and ticket events) and its view permission on the creator of the key (post.view_private, conversation.view, ticket.view, status_page.publish), or the request is refused with 403.',
     parameters: [webhookIdParam],
     requestBody: {
       required: true,
@@ -170,7 +171,7 @@ registerPath('/webhooks/{webhookId}', {
   delete: {
     tags: ['Webhooks'],
     summary: 'Delete a webhook',
-    description: 'Requires the webhook.manage permission.',
+    description: 'Requires the webhook.manage permission and the write:settings scope.',
     parameters: [webhookIdParam],
     responses: {
       204: { description: 'Webhook deleted' },
@@ -184,7 +185,7 @@ registerPath('/webhooks/{webhookId}/rotate', {
     tags: ['Webhooks'],
     summary: 'Rotate a webhook signing secret',
     description:
-      'Generates a new signing secret and returns it once. Deliveries are signed with the new secret immediately. Requires the webhook.manage permission.',
+      'Generates a new signing secret and returns it once. Deliveries are signed with the new secret immediately. Requires the webhook.manage permission and the write:settings scope.',
     parameters: [webhookIdParam],
     responses: {
       200: {

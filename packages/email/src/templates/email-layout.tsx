@@ -90,6 +90,13 @@ export function TransactionalFooter({ children }: { children: React.ReactNode })
   return <Text style={typography.footer}>{children}</Text>
 }
 
+/** Why a post's status or comment email reached this reader: they wrote the post, or follow it. */
+export function feedbackFooterReason(isPostAuthor: boolean): string {
+  return isPostAuthor
+    ? 'You received this email because you submitted this feedback.'
+    : 'You received this email because you follow this post.'
+}
+
 /** Standard footer for notification emails with unsubscribe link */
 export function NotificationFooter({
   reason,

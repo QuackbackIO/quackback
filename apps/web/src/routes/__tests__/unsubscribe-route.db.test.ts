@@ -183,7 +183,7 @@ describe.skipIf(!fixture.available)('/unsubscribe (real DB, rolled back)', () =>
     expect(await tokenUsedAt(s.token)).toBeNull()
   })
 
-  it('confirming unsubscribes, and a second confirm is a harmless invalid result', async () => {
+  it('confirming unsubscribes, and a second confirm is a harmless used result', async () => {
     const s = await seed()
 
     const first = await processUnsubscribeTokenFn({ data: { token: s.token } })
@@ -196,14 +196,42 @@ describe.skipIf(!fixture.available)('/unsubscribe (real DB, rolled back)', () =>
     expect(await tokenUsedAt(s.token)).not.toBeNull()
 
     const second = await processUnsubscribeTokenFn({ data: { token: s.token } })
-    expect(second).toEqual({ success: false, error: 'invalid' })
+    expect(second).toEqual({ success: false, error: 'used' })
   })
 
-  it('a reopened link after confirming shows the spent-link view, still without writing', async () => {
+  it('a reopened link after confirming shows the used-link view, still without writing', async () => {
     const s = await seed()
     await processUnsubscribeTokenFn({ data: { token: s.token } })
+    const spentAt = await tokenUsedAt(s.token)
 
-    expect(await openPage(s.token)).toMatchObject({ status: 'error', error: 'invalid' })
+    expect(await openPage(s.token)).toMatchObject({ status: 'error', error: 'used' })
+    expect(await tokenUsedAt(s.token)).toEqual(spentAt)
+  })
+
+  it('an expired link reads as expired, and is never spent', async () => {
+    const s = await seed()
+    await testDb
+      .update(unsubscribeTokens)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(unsubscribeTokens.token, s.token))
+
+    expect(await openPage(s.token)).toMatchObject({ status: 'error', error: 'expired' })
+    expect(await processUnsubscribeTokenFn({ data: { token: s.token } })).toEqual({
+      success: false,
+      error: 'expired',
+    })
+    expect(await isSubscribed(s)).toBe(true)
+    expect(await tokenUsedAt(s.token)).toBeNull()
+  })
+
+  it('a well-formed link that was never issued reads as not valid, not expired', async () => {
+    const token = crypto.randomUUID()
+
+    expect(await openPage(token)).toMatchObject({ status: 'error', error: 'invalid' })
+    expect(await processUnsubscribeTokenFn({ data: { token } })).toEqual({
+      success: false,
+      error: 'invalid',
+    })
   })
 
   it('one-click POST unsubscribes, and a repeat still answers 200', async () => {

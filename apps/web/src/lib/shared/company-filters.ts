@@ -26,11 +26,7 @@ const MRR_OPS = new Set(['gt', 'gte', 'lt', 'lte', 'eq'])
 export const COMPANY_COLUMN_FILTER_KEYS = new Set(['source', 'size', 'website', 'industry'])
 
 /** Keys that map to standard company columns rather than custom attributes. */
-export const COMPANY_RESERVED_FILTER_KEYS = new Set([
-  'plan',
-  'mrr',
-  ...COMPANY_COLUMN_FILTER_KEYS,
-])
+export const COMPANY_RESERVED_FILTER_KEYS = new Set(['plan', 'mrr', ...COMPANY_COLUMN_FILTER_KEYS])
 
 /** Decode the `companyAttrs` URL param into the server filter shape. */
 export function parseCompanyFilterParts(encoded?: string): CompanyFilterParts {

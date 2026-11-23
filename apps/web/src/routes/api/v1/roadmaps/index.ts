@@ -18,6 +18,7 @@ import {
   segmentIdInputSchema,
 } from '@/lib/shared/roadmap-config'
 import { postStatusIdSchema, roadmapColumnIdSchema } from '@quackback/ids/zod'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const roadmapColumnSchema = z.object({
   id: roadmapColumnIdSchema.optional(),
@@ -80,7 +81,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           // Import service function
           const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
@@ -102,7 +103,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
           await withApiKeyAuth(request, { permission: PERMISSIONS.ROADMAP_MANAGE })
 
           // Parse and validate body
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createRoadmapSchema.safeParse(body)
 
           if (!parsed.success) {

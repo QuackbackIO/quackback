@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { helpCenterApiAccess } from '@/lib/server/domains/help-center/help-center-api-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -10,12 +11,17 @@ import {
   handleDomainError,
   parsePaginationParams,
 } from '@/lib/server/domains/api/responses'
-import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
+import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { listArticles, createArticle } from '@/lib/server/domains/help-center/help-center.service'
+import {
+  listArticles,
+  listPublicArticles,
+  createArticle,
+} from '@/lib/server/domains/help-center/help-center.service'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import type { KbCategoryId, PrincipalId } from '@quackback/ids'
+import { parseCursor, readJsonBody } from '@/lib/server/domains/api/request'
 
 const createArticleBody = z.object({
   categoryId: z.string().min(1, 'Category ID is required'),
@@ -69,15 +75,24 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request)
+          const { manages } = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const url = new URL(request.url)
-          const { cursor, limit } = parsePaginationParams(url)
-          const categoryId = url.searchParams.get('categoryId') ?? undefined
+          const { limit } = parsePaginationParams(url)
+          const cursor = parseCursor(url)
+          const categoryId = parseOptionalTypeId<KbCategoryId>(
+            url.searchParams.get('categoryId'),
+            'kb_category',
+            'categoryId'
+          )
           const status = (url.searchParams.get('status') as 'draft' | 'published' | 'all') ?? 'all'
           const search = url.searchParams.get('search') ?? undefined
 
-          const result = await listArticles({ categoryId, status, search, cursor, limit })
+          // Drafts, private categories and gated articles are team material:
+          // a key without help_center.manage reads the published public slice.
+          const result = manages
+            ? await listArticles({ categoryId, status, search, cursor, limit })
+            : await listPublicArticles({ categoryId, search, cursor, limit })
 
           return successResponse(result.items.map(formatArticle), {
             pagination: {
@@ -98,7 +113,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
             permission: PERMISSIONS.HELP_CENTER_MANAGE,
           })
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createArticleBody.safeParse(body)
 
           if (!parsed.success) {
@@ -108,6 +123,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
           }
 
           const { authorId, ...articleData } = parsed.data
+          const categoryId = parseTypeId<KbCategoryId>(
+            articleData.categoryId,
+            'kb_category',
+            'category ID'
+          )
 
           const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
             authorId,
@@ -116,7 +136,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
           )
 
           const article = await createArticle(
-            articleData,
+            { ...articleData, categoryId },
             principalId as PrincipalId,
             authorPrincipalId
           )

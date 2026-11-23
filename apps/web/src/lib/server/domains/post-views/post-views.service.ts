@@ -10,6 +10,7 @@
 import { db, postViews, eq, and, or, asc, isNull } from '@/lib/server/db'
 import type { PostViewId, PrincipalId } from '@quackback/ids'
 import type { PostViewDTO, PostViewFilters } from '@/lib/shared/post/views'
+import { NotFoundError } from '@/lib/shared/errors'
 
 function toDTO(row: {
   id: PostViewId
@@ -72,7 +73,28 @@ export async function createView(
   return row.id
 }
 
-/** Soft-delete a view (it leaves every teammate's listing). */
-export async function deleteView(id: PostViewId): Promise<void> {
-  await db.update(postViews).set({ deletedAt: new Date() }).where(eq(postViews.id, id))
+/** Who is deleting a view, as far as the ownership rule needs to know. */
+export interface PostViewDeleter {
+  principalId: PrincipalId
+  isAdmin: boolean
+}
+
+/**
+ * Soft-delete a view (it leaves every teammate's listing). Its author may
+ * delete it; a shared view may also be deleted by an admin. Anyone else, or a
+ * view already deleted, gets VIEW_NOT_FOUND: a private view is not listed to
+ * them, so it does not exist as far as they can tell.
+ */
+export async function deleteView(id: PostViewId, deleter: PostViewDeleter): Promise<void> {
+  const mayDelete = deleter.isAdmin
+    ? or(eq(postViews.createdByPrincipalId, deleter.principalId), eq(postViews.isShared, true))
+    : eq(postViews.createdByPrincipalId, deleter.principalId)
+  const deleted = await db
+    .update(postViews)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(postViews.id, id), isNull(postViews.deletedAt), mayDelete))
+    .returning({ id: postViews.id })
+  if (deleted.length === 0) {
+    throw new NotFoundError('VIEW_NOT_FOUND', `View with ID ${id} not found`)
+  }
 }

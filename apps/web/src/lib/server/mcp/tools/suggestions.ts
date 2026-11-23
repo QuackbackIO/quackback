@@ -53,7 +53,8 @@ export function registerSuggestionTools(server: McpServer, auth: McpAuthContext)
   registerTool<AcceptSuggestionArgs>(server, auth, {
     name: 'accept_suggestion',
     title: 'Accept merge suggestion',
-    permissions: [PERMISSIONS.SUGGESTION_MANAGE],
+    // Accepting merges the two posts, so it needs post.merge like merge_posts.
+    permissions: [PERMISSIONS.SUGGESTION_MANAGE, PERMISSIONS.POST_MERGE],
     description: `Accept a post-to-post merge suggestion, merging the source post into the target. Use swapDirection to reverse which post is kept.
 
 Examples:

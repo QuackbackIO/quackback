@@ -71,7 +71,7 @@ export function LogoUploader({ workspaceName, onLogoChange, focus }: LogoUploade
     }
     uploadMutation.mutate(croppedBlob, {
       onSuccess: () => toast.success('Logo updated'),
-      onError: (error) => toastError(error, 'Failed to upload logo'),
+      onError: (error) => toastError(error, 'Failed to upload the icon'),
     })
   }
 
@@ -128,9 +128,9 @@ export function LogoUploader({ workspaceName, onLogoChange, focus }: LogoUploade
         size="sm"
         onClick={() => fileInputRef.current?.click()}
         disabled={uploadMutation.isPending}
-        aria-label={hasCustomLogo ? 'Change logo' : 'Upload logo'}
+        aria-label={hasCustomLogo ? 'Change icon' : 'Upload icon'}
       >
-        {hasCustomLogo ? 'Change' : 'Upload logo'}
+        {hasCustomLogo ? 'Change' : 'Upload icon'}
       </Button>
       {hasCustomLogo && (
         <button
@@ -141,7 +141,7 @@ export function LogoUploader({ workspaceName, onLogoChange, focus }: LogoUploade
                 toast.success('Logo removed')
                 onLogoChange?.(null)
               },
-              onError: (error) => toastError(error, 'Failed to remove logo'),
+              onError: (error) => toastError(error, 'Failed to remove the icon'),
             })
           }
           disabled={deleteMutation.isPending}

@@ -203,6 +203,7 @@ vi.mock('@/lib/server/functions/workspace', () => ({
   getSettings: vi.fn().mockResolvedValue({ portalConfig: { features: { allowAnonymous: true } } }),
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  isFeatureEnabled: vi.fn().mockResolvedValue(true),
   getPortalConfig: vi.fn().mockResolvedValue({ features: { allowAnonymous: true } }),
   getWorkspaceSettingsRow: vi.fn().mockResolvedValue({
     portalConfig: { features: { allowAnonymous: true } },

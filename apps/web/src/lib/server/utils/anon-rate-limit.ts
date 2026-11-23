@@ -9,10 +9,11 @@
  * address when they are minted (see `assignSessionScope` in `auth/session-audience.ts`).
  */
 
-import { db, principal, session, eq, and, sql } from '@/lib/server/db'
-import { incrementBucket } from '@/lib/server/utils/rate-bucket'
+import { db, principal, session, eq, and, desc, sql } from '@/lib/server/db'
+import { bucketRetryAfter, incrementBucket, incrementBuckets } from '@/lib/server/utils/rate-bucket'
 
 const ANON_RATE_LIMIT = 50
+const ANON_VOTE_WINDOW_S = 60 * 60
 
 /**
  * Check if an IP is under the anonymous vote rate limit.
@@ -35,6 +36,33 @@ export async function checkAnonVoteRateLimit(clientIp: string): Promise<boolean>
   return (result?.count ?? 0) < ANON_RATE_LIMIT
 }
 
+/**
+ * Seconds until an address over the vote limit may vote again: voting opens
+ * once fewer than ANON_RATE_LIMIT of its anonymous sessions are left in the
+ * hour, which is when the ANON_RATE_LIMIT-th newest one leaves the window.
+ * Only called on the refused path.
+ */
+export async function anonVoteRetryAfter(clientIp: string): Promise<number> {
+  const [row] = await db
+    .select({
+      seconds: sql<number>`ceil(extract(epoch from (${session.createdAt} + interval '1 hour' - now())))::int`,
+    })
+    .from(session)
+    .innerJoin(principal, eq(session.userId, principal.userId))
+    .where(
+      and(
+        eq(principal.type, 'anonymous'),
+        eq(session.ipAddress, clientIp),
+        sql`${session.createdAt} > now() - interval '1 hour'`
+      )
+    )
+    .orderBy(desc(session.createdAt))
+    .offset(ANON_RATE_LIMIT - 1)
+    .limit(1)
+  const seconds = row?.seconds
+  return typeof seconds === 'number' && seconds > 0 ? seconds : ANON_VOTE_WINDOW_S
+}
+
 /** Ideas anonymous visitors from one address may post in an hour. */
 export const ANON_POST_RATE_LIMIT = 5
 const ANON_POST_WINDOW_S = 60 * 60
@@ -53,4 +81,31 @@ export async function reserveAnonPostSlot(clientIp: string): Promise<boolean> {
     windowSeconds: ANON_POST_WINDOW_S,
   })
   return count === null || count <= ANON_POST_RATE_LIMIT
+}
+
+/** Articles one address may count a view of in an hour. */
+export const ARTICLE_VIEW_RATE_LIMIT = 120
+const ARTICLE_VIEW_WINDOW_S = 60 * 60
+
+/**
+ * Reserve one article view for an address. A view counts once per article per
+ * address in an hour (a reload or reopen does not count again), and one
+ * address counts at most {@link ARTICLE_VIEW_RATE_LIMIT} views an hour, so the
+ * public view endpoint cannot push an article up the popular list. Both
+ * buckets move in one statement. Fails open, like the other rate limits.
+ * @returns true if the view should be counted
+ */
+export async function reserveArticleView(clientIp: string, articleId: string): Promise<boolean> {
+  const [perAddress, perArticle] = await incrementBuckets([
+    { key: `hc:view:ip:${clientIp}`, windowSeconds: ARTICLE_VIEW_WINDOW_S },
+    { key: `hc:view:ip:${clientIp}:article:${articleId}`, windowSeconds: ARTICLE_VIEW_WINDOW_S },
+  ])
+  const underCap = perAddress === null || perAddress <= ARTICLE_VIEW_RATE_LIMIT
+  const firstView = perArticle === null || perArticle === 1
+  return underCap && firstView
+}
+
+/** Seconds until an address over the anonymous idea limit may post again. */
+export async function anonPostRetryAfter(clientIp: string): Promise<number> {
+  return bucketRetryAfter({ key: `anon:post:ip:${clientIp}`, windowSeconds: ANON_POST_WINDOW_S })
 }

@@ -181,6 +181,9 @@ export function FeedbackContainer({
   // Holders of post.approve get the inline moderation section (banner + pending
   // cards).
   const canApprove = can(PERMISSIONS.POST_APPROVE)
+  // A held post is listed only for its author and for those who may see
+  // unpublished posts, so a viewer without that permission wrote it.
+  const pendingForAuthor = !can(PERMISSIONS.POST_VIEW_PRIVATE)
   const approvePost = useApprovePost()
   const rejectPost = useRejectPost()
 
@@ -596,7 +599,7 @@ export function FeedbackContainer({
                     {intl.formatMessage(
                       {
                         id: 'portal.feedback.list.noPostsYetDescription',
-                        defaultMessage: 'The {workspace} team reads every request.',
+                        defaultMessage: 'The {workspace} team reads every post.',
                       },
                       { workspace: workspaceName }
                     )}
@@ -614,7 +617,7 @@ export function FeedbackContainer({
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
+                      className="portal-card [--portal-card-edge:40%] border rounded-lg overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
                       <PostCard
@@ -649,6 +652,7 @@ export function FeedbackContainer({
                         showAvatar={false}
                         moderationState={post.moderationState}
                         canModerate={canApprove}
+                        pendingForAuthor={pendingForAuthor}
                         moderationBusy={approvePost.isPending || rejectPost.isPending}
                         onApprove={() => approvePost.mutate(post.id)}
                         onReject={() => rejectPost.mutate({ postId: post.id })}

@@ -11,13 +11,13 @@ export const Route = createFileRoute('/api/v1/status/components/$componentId')({
        * GET /api/v1/status/components/:componentId
        */
       GET: async ({ request, params }) =>
-        getStatusComponentHandler({ request, id: params.componentId }),
+        getStatusComponentHandler({ request, id: params.componentId, noun: 'component' }),
 
       /**
        * PATCH /api/v1/status/components/:componentId
        */
       PATCH: async ({ request, params }) =>
-        patchStatusComponentHandler({ request, id: params.componentId }),
+        patchStatusComponentHandler({ request, id: params.componentId, noun: 'component' }),
     },
   },
 })

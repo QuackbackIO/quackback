@@ -163,7 +163,7 @@ describe('importChangelogSubscribersFromEmails', () => {
 
     const result = await importChangelogSubscribersFromEmails([])
 
-    expect(result).toEqual({ imported: 0, skipped: 0, total: 0 })
+    expect(result).toEqual({ imported: 0, skipped: 0, optedOut: 0, total: 0 })
     expect(mockInsertValues).not.toHaveBeenCalled()
   })
 })

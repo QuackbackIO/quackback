@@ -3,7 +3,8 @@
  * Sends messages to Slack channels when events occur.
  */
 
-import { WebClient } from '@slack/web-api'
+import type { WebClient } from '@slack/web-api'
+import { slackClient } from '@/integrations/slack/server/client'
 import { recordDeliveryOutcome } from '@/lib/server/integrations/sync/transport'
 import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
@@ -136,7 +137,7 @@ export const slackHook: IntegrationHook = {
       return { state: 'succeeded' }
     }
 
-    const client = new WebClient(accessToken, {
+    const client = slackClient(accessToken, {
       retryConfig: { retries: 0 },
       timeout: 20_000,
       rejectRateLimitedCalls: true,
@@ -165,7 +166,7 @@ export const slackHook: IntegrationHook = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as SlackConfig
     try {
-      const client = new WebClient(accessToken)
+      const client = slackClient(accessToken)
       const result = await client.auth.test()
       return { ok: result.ok === true, error: result.error }
     } catch (error) {

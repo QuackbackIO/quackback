@@ -58,6 +58,25 @@ describe('HelpCenterArticleFeedback', () => {
     expect(screen.getByRole('textbox')).toBeTruthy()
   })
 
+  it('changes the vote already cast rather than casting a second one', async () => {
+    renderFeedback()
+
+    fireEvent.click(screen.getByRole('button', { name: /yes/i }))
+    await waitFor(() => expect(recordFeedback).toHaveBeenCalledTimes(1))
+    expect(recordFeedback.mock.calls[0][0]).toEqual({
+      data: { articleId: 'article_1', helpful: true },
+    })
+
+    await voteUnhelpful()
+    expect(recordFeedback.mock.calls[1][0]).toEqual({
+      data: {
+        articleId: 'article_1',
+        helpful: false,
+        replacesFeedbackId: 'kb_article_feedback_1',
+      },
+    })
+  })
+
   it('sends the typed reason against the vote it explains', async () => {
     renderFeedback()
     await voteUnhelpful()

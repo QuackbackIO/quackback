@@ -153,3 +153,60 @@ test.describe('Admin Feedback Page (Dashboard Content)', () => {
     await expect(feedbackLink).toBeVisible()
   })
 })
+
+test.describe('Admin tab opened before an update', () => {
+  test('a call from the older build is answered as stale and the page reloads once', async ({
+    page,
+    baseURL,
+  }) => {
+    // The server answers an id it does not have (what an older build asks
+    // for) with a marked 409, never cached, instead of a 500.
+    const answer = await page.request.post('/_serverFn/an-id-from-an-older-build', {
+      headers: {
+        'content-type': 'application/json',
+        'x-tsr-serverFn': 'true',
+        origin: new URL(baseURL!).origin,
+      },
+      data: {},
+    })
+    expect(answer.status()).toBe(409)
+    expect(answer.headers()['x-stale-build']).toBe('1')
+    expect(answer.headers()['cache-control']).toBe('no-store')
+    const message = await answer.text()
+    expect(message).toBe('This page is out of date. Reload the page to continue.')
+
+    // In the browser, every server function now gets that answer, as it would
+    // after an update. The page reloads once, and does not keep reloading.
+    await page.goto('/admin')
+    await page.waitForLoadState('networkidle')
+    await page.route('**/_serverFn/**', (route) =>
+      route.fulfill({ status: 409, headers: answer.headers(), body: message })
+    )
+    // A reload is a document request, issued the moment the page asks for it.
+    let reloads = 0
+    page.on('request', (r) => {
+      if (r.isNavigationRequest() && r.frame() === page.mainFrame()) reloads++
+    })
+
+    const reloaded = page.waitForEvent('load')
+    await page.getByRole('link', { name: 'Feedback' }).first().click()
+    await reloaded
+    expect(reloads).toBe(1)
+    await page.waitForLoadState('networkidle')
+
+    // After the reload the calls still get that answer: the call fails like
+    // any other, and the page does not reload again. The marker only survives
+    // on the same document; the pause gives a second reload time to start.
+    await page.evaluate(() => {
+      ;(window as unknown as { sameDocument?: boolean }).sameDocument = true
+    })
+    const staleAgain = page.waitForResponse((r) => r.url().includes('/_serverFn/'))
+    await page.getByRole('link', { name: 'Roadmap' }).first().click()
+    expect((await staleAgain).status()).toBe(409)
+    await page.waitForTimeout(1500)
+    expect(reloads).toBe(1)
+    expect(
+      await page.evaluate(() => (window as unknown as { sameDocument?: boolean }).sameDocument)
+    ).toBe(true)
+  })
+})

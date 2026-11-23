@@ -1,5 +1,6 @@
 import { ForbiddenError } from '@/lib/shared/errors'
 import { isPathManaged } from './managed-paths'
+import { settings, type Database, type Transaction } from '@/lib/server/db'
 
 /**
  * Throw 403 (ForbiddenError, code FIELD_MANAGED) if `path` is in the
@@ -9,7 +10,18 @@ import { isPathManaged } from './managed-paths'
  * field. The managed-paths read goes via getWorkspaceSettings() so the
  * Redis cache backing it absorbs the per-mutator cost.
  */
-export async function assertNotManaged(path: string): Promise<void> {
+export async function assertNotManaged(
+  path: string,
+  executor?: Database | Transaction
+): Promise<void> {
+  if (executor) {
+    // Inside a transaction, read on it rather than through the shared pool.
+    const [row] = await executor
+      .select({ managedFieldPaths: settings.managedFieldPaths })
+      .from(settings)
+      .limit(1)
+    return _internalAssertNotManaged(path, async () => row?.managedFieldPaths ?? [])
+  }
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   await _internalAssertNotManaged(path, async () => {
     const s = await getWorkspaceSettings()

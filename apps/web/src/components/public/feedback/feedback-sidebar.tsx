@@ -92,7 +92,7 @@ export function FeedbackSidebar({ children, footer }: FeedbackSidebarProps) {
       >
         <div
           ref={panelRef}
-          className="min-h-0 overflow-y-auto scrollbar-thin rounded-lg border border-border/50 bg-card shadow-sm data-more-below:[mask-image:linear-gradient(to_bottom,black_calc(100%-2.5rem),transparent)]"
+          className="min-h-0 overflow-y-auto scrollbar-thin portal-card [--portal-card-edge:50%] rounded-lg border data-more-below:[mask-image:linear-gradient(to_bottom,black_calc(100%-2.5rem),transparent)]"
         >
           {children}
         </div>
