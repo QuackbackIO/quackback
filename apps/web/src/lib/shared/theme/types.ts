@@ -8,6 +8,8 @@ export interface ThemeVariables {
   popoverForeground?: string
   primary?: string
   primaryForeground?: string
+  /** The main colour as text (links, vote counts, icons): a shade of it that reads at 4.5:1 on the page and its cards. */
+  primaryInk?: string
   secondary?: string
   secondaryForeground?: string
   muted?: string

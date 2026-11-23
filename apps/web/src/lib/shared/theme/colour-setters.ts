@@ -1,5 +1,5 @@
 import { tryCssColorToHex } from './colors'
-import { darkMainColour, unbrandedTheme, type MinimalThemeVariables } from './expand'
+import { expandTheme, unbrandedTheme, type MinimalThemeVariables } from './expand'
 
 export type ColourRole = 'primary' | 'background' | 'foreground' | 'header'
 export type ColourMode = 'light' | 'dark'
@@ -56,6 +56,20 @@ export function sameColour(a: string | undefined, b: string): boolean {
 /** The text colour a background gets until the admin picks one. */
 export const autoForeground = (background: string) =>
   isDarkBackground(background) ? DARK_FOREGROUND : LIGHT_FOREGROUND
+
+/**
+ * Whether a text colour is the automatic one for its background: as the
+ * setters write it, or as the page shows it (moved to read at 4.5:1 where
+ * it would not, which the editor's stylesheet then holds).
+ */
+function isAutoText(palette: Palette, background: string, mode: ColourMode) {
+  const auto = autoForeground(background)
+  if (sameColour(palette.foreground, auto)) return true
+  const shown = hexOf(
+    expandTheme({ ...palette, background, foreground: auto }, { mode }).foreground ?? ''
+  )
+  return shown !== null && sameColour(palette.foreground, shown)
+}
 
 /**
  * The quiet text for a page: the usual grey, moved toward black or white only
@@ -119,10 +133,7 @@ export function applyColour(
     next.muted = mutedOf(hex)
     next.border = mix(hex, dim ? '#ffffff' : '#000000', dim ? 0.14 : 0.15)
     next.mutedForeground = quietTextOn([hex, next.card, next.muted], dim)
-    if (
-      !target.foreground ||
-      (oldBackground && sameColour(target.foreground, autoForeground(oldBackground)))
-    ) {
+    if (!target.foreground || (oldBackground && isAutoText(target, oldBackground, mode))) {
       next.foreground = autoForeground(hex)
     }
   }
@@ -132,8 +143,11 @@ export function applyColour(
     const oldLight = hexOf(light.primary)
     // The automatic one, as stored or as the dark page shows it (lightened to stand off it).
     const auto = oldLight === null ? null : autoDarkPrimary(oldLight)
-    const page = hexOf(dark.background) ?? hexOf(unbrandedTheme('dark').background)!
-    const shown = auto ? hexOf(darkMainColour(auto, page)?.primary) : null
+    // The automatic one as the dark page shows it: lightened to stand off the
+    // page, or darkened for white words on it (expandTheme).
+    const shown = auto
+      ? hexOf(expandTheme({ ...dark, primary: auto }, { mode: 'dark' }).primary)
+      : null
     const wasAuto =
       !dark.primary ||
       (auto !== null && sameColour(dark.primary, auto)) ||
@@ -191,7 +205,7 @@ export function isAutoColour(
   if (role === 'background') return sameColour(unbranded.background, background)
   if (!palette.foreground) return true
   return (
-    sameColour(palette.foreground, autoForeground(background)) ||
+    isAutoText(palette, background, mode) ||
     (sameColour(unbranded.background, background) &&
       sameColour(palette.foreground, hexOf(unbranded.foreground)!))
   )
@@ -206,8 +220,7 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/** Links and buttons need 3:1 against the page; body text needs 4.5:1. */
-export const LINK_CONTRAST = 3
+/** Body text reads at this contrast or more on what it sits on. */
 export const TEXT_CONTRAST = 4.5
 
 /** Hue (0 to 360), saturation and value (0 to 1) of a hex colour. */
@@ -231,25 +244,4 @@ export function hsvToHex(h: number, s: number, v: number): string {
     return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255)
   }
   return `#${[f(5), f(3), f(1)].map((c) => c.toString(16).padStart(2, '0')).join('')}`
-}
-
-/**
- * The main colour moved just far enough to read on the background: darker on
- * a light page, lighter on a dark one, keeping its hue, until links reach 3:1.
- * Unchanged when it already does (or when either colour cannot be parsed).
- */
-export function fixLinkContrast(primary: string, background: string): string {
-  const hex = hexOf(primary)
-  const bg = hexOf(background)
-  if (!hex || !bg || contrastRatio(hex, bg) >= LINK_CONTRAST) return hex ?? primary
-  const [h, s, v] = hexToHsv(hex)
-  const darken = !isDarkBackground(bg)
-  for (let step = 1; step <= 100; step++) {
-    const value = darken ? v * (1 - step / 100) : v + (1 - v) * (step / 100)
-    // On a dark page a saturated colour stays dim as it lightens, so it gives up saturation too.
-    const saturation = darken ? s : s * (1 - step / 100)
-    const candidate = hsvToHex(h, saturation, value)
-    if (contrastRatio(candidate, bg) >= LINK_CONTRAST) return candidate
-  }
-  return darken ? '#000000' : '#ffffff'
 }

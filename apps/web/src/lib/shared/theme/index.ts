@@ -120,19 +120,10 @@ export { CORE_THEME_VARIABLES, CARD_STYLES } from './types'
 export type { CustomFont, CustomFontFile } from './font-uploads'
 
 export type { MinimalThemeVariables, MinimalThemeConfig } from './expand'
-export {
-  expandTheme,
-  extractMinimal,
-  unbrandedTheme,
-  DEFAULT_FONT_SANS,
-  DEFAULT_DARK_BASE,
-  DEFAULT_LIGHT_BASE,
-  parseOklch,
-  formatOklch,
-  adjustHue,
-  computeContrastForeground,
-  generateChartColors,
-} from './expand'
+// The theme engine (expand.ts, generator.ts) is never re-exported here: this
+// barrel ships with every page, and those modules would ship whole with it.
+// Import them from their own modules.
+export { DEFAULT_FONT_SANS, normalizeFontSans } from './base'
 
 export {
   hexToOklch,
@@ -142,16 +133,6 @@ export {
   isValidHex,
   isValidOklch,
 } from './colors'
-export {
-  generateThemeCSS,
-  generateWorkspaceThemeCSS,
-  themeExtrasCss,
-  customFontStack,
-  headingFontStack,
-  parseThemeConfig,
-  serializeThemeConfig,
-  normalizeFontSans,
-} from './generator'
 
 export { cardStyleCss, flatFill } from './card-style'
 

@@ -3,7 +3,8 @@
  * preview's outlines both come from this comparison of the draft before and
  * after a change, so they say what happened, never what a model said it did.
  */
-import { expandTheme, tryCssColorToHex } from '@/lib/shared/theme'
+import { tryCssColorToHex } from '@/lib/shared/theme'
+import { expandTheme } from '@/lib/shared/theme/expand'
 import { type ColourMode, type ColourRole } from '@/lib/shared/theme/colour-setters'
 import { luminance } from '@/lib/shared/theme/colour-setters'
 import type { PreviewEditTarget } from '@/components/public/preview-draft-context'

@@ -46,6 +46,17 @@ describe('readable portal text', () => {
     }
   })
 
+  it('draws the main colour as text in its readable shade, never the button fill', () => {
+    // --primary-ink is worked out per theme to read at 4.5:1 on the page and
+    // its cards (lib/shared/theme/expand.ts); --primary is the button fill.
+    expect(globals).toContain('--color-primary-ink: var(--primary-ink, var(--primary));')
+    const routes = files(join(src, 'routes')).filter((file) => file.includes('/_portal'))
+    for (const file of [...portal, ...routes]) {
+      const code = readFileSync(file, 'utf8')
+      expect(code, file).not.toMatch(/(?<![\w-])text-primary(?![-\w])/)
+    }
+  })
+
   it('never fades portal text at rest below its colour (a hover or a disabled state may)', () => {
     for (const file of portal) {
       const code = readFileSync(file, 'utf8')

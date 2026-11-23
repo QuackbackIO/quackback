@@ -99,7 +99,7 @@ function NotificationsPage() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <BellIcon className="h-6 w-6 text-primary" />
+              <BellIcon className="h-6 w-6 text-primary-ink" />
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">

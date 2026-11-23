@@ -1,28 +1,11 @@
 /**
- * The Colours section's rules: the warnings, the hex box and the swatches
- * the picker offers for each role.
+ * The Colours section's rules: the hex box and the swatches the picker
+ * offers for each role. No warnings: whatever is picked, the portal's text
+ * is worked out to read (expandTheme).
  */
 import { tryCssColorToHex } from '@/lib/shared/theme'
-import {
-  contrastRatio,
-  LINK_CONTRAST,
-  TEXT_CONTRAST,
-  type ColourMode,
-  type ColourRole,
-} from '@/lib/shared/theme/colour-setters'
+import type { ColourMode, ColourRole } from '@/lib/shared/theme/colour-setters'
 import type { Palette } from '@/components/admin/settings/branding/theme-css'
-
-export type ColourWarning = 'links' | 'text'
-
-/** What fails on a palette: links (main colour) under 3:1, text under 4.5:1. Empty when all reads. */
-export function colourWarnings(palette: Palette): ColourWarning[] {
-  const { primary, background, foreground } = palette
-  if (!background) return []
-  const warnings: ColourWarning[] = []
-  if (primary && contrastRatio(primary, background) < LINK_CONTRAST) warnings.push('links')
-  if (foreground && contrastRatio(foreground, background) < TEXT_CONTRAST) warnings.push('text')
-  return warnings
-}
 
 /** A typed colour (`533AFD`, `#53f`, `rgb(83, 58, 253)` and so on) as hex, or null. */
 export function parseColourInput(input: string): string | null {

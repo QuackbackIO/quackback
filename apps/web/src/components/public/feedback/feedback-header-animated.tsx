@@ -439,7 +439,7 @@ export function FeedbackHeaderAnimated({
               transition={{ duration: 0.2 }}
               className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center"
             >
-              <PencilIcon className="w-4 h-4 text-primary" />
+              <PencilIcon className="w-4 h-4 text-primary-ink" />
             </motion.div>
           )}
         </AnimatePresence>
@@ -576,7 +576,7 @@ export function FeedbackHeaderAnimated({
                   {' ('}
                   <button
                     type="button"
-                    className="text-primary hover:underline"
+                    className="text-primary-ink hover:underline"
                     onClick={async () => {
                       if (!(await signOutChecked())) {
                         toast.error(intl.formatMessage(SIGN_OUT_FAILED))
@@ -604,7 +604,7 @@ export function FeedbackHeaderAnimated({
                 <button
                   type="button"
                   onClick={() => openAuthPopover({ mode: 'login' })}
-                  className="text-xs text-primary hover:underline font-medium"
+                  className="text-xs text-primary-ink hover:underline font-medium"
                 >
                   <FormattedMessage
                     id="portal.feedback.header.signInToPost"

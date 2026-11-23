@@ -3,7 +3,8 @@
  * history covers it all, one comparison says what changed, and one publish
  * sends it. Plain functions; usePortalEditor holds the state.
  */
-import { expandTheme, tryCssColorToHex } from '@/lib/shared/theme'
+import { tryCssColorToHex } from '@/lib/shared/theme'
+import { expandTheme } from '@/lib/shared/theme/expand'
 import {
   applyColour,
   resetColour,

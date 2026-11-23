@@ -230,7 +230,7 @@ function StatusPage() {
                           <Link
                             to="/status/$incidentId"
                             params={{ incidentId: incident.id }}
-                            className="hover:text-primary"
+                            className="hover:text-primary-ink"
                           >
                             {incident.title}
                           </Link>
@@ -312,7 +312,7 @@ function StatusPage() {
                         <Link
                           to="/status/$incidentId"
                           params={{ incidentId: incident.id }}
-                          className="hover:text-primary"
+                          className="hover:text-primary-ink"
                         >
                           {incident.title}
                         </Link>
@@ -346,7 +346,7 @@ function StatusPage() {
                   <Link
                     to="/status/$incidentId"
                     params={{ incidentId: incident.id }}
-                    className="hover:text-primary"
+                    className="hover:text-primary-ink"
                   >
                     {incident.title}
                   </Link>
@@ -419,7 +419,7 @@ function StatusPageNotFound() {
           defaultMessage="This status page isn't published, or you don't have access to view it."
         />
       </p>
-      <Link to="/" className="text-sm font-medium text-primary hover:underline">
+      <Link to="/" className="text-sm font-medium text-primary-ink hover:underline">
         <FormattedMessage id="portal.status.notFound.backLink" defaultMessage="Go home" />
       </Link>
     </div>

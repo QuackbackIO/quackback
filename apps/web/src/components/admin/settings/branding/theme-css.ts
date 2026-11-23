@@ -6,16 +6,15 @@
  * kept as a remainder.
  */
 import {
-  unbrandedTheme,
   DEFAULT_FONT_SANS,
   type ButtonShape,
   type CardStyle,
   type CustomFont,
   type ThemeConfig,
-  type MinimalThemeVariables,
   type ThemeMode,
   tryCssColorToHex,
 } from '@/lib/shared/theme'
+import { unbrandedTheme, type MinimalThemeVariables } from '@/lib/shared/theme/expand'
 import { extractCssVariables } from '@/lib/shared/theme/css-parser'
 import {
   generateReadableCSS,

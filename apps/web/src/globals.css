@@ -256,6 +256,11 @@
     --color-popover-foreground: var(--popover-foreground);
     --color-primary: var(--primary);
     --color-primary-foreground: var(--primary-foreground);
+    /* The main colour as text (text-primary-ink): the readable shade the
+       workspace theme writes for the portal, widget and sign-in pages. Not
+       declared in this stylesheet, so anywhere else (the admin app) it is
+       plain --primary, as text-primary is there. */
+    --color-primary-ink: var(--primary-ink, var(--primary));
     --color-secondary: var(--secondary);
     --color-secondary-foreground: var(--secondary-foreground);
     --color-muted: var(--muted);
@@ -447,6 +452,12 @@
   }
   html:not(.dark) .caret-primary {
     caret-color: var(--accent-ink);
+  }
+  /* In the portal, light or dark, the main colour as text is the theme's
+     readable shade of it (--primary-ink, 4.5:1 on the page and its cards),
+     for the shared components (links, rich text) still drawn in text-primary. */
+  [data-portal] .text-primary {
+    color: var(--primary-ink, var(--primary));
   }
 }
 

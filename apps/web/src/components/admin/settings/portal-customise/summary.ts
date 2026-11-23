@@ -2,7 +2,8 @@
  * Settings > Portal's summary of what is live, row by row, read the way the
  * Customise page reads it.
  */
-import { customFontStack, type ThemeConfig, type ThemeMode } from '@/lib/shared/theme'
+import { type ThemeConfig, type ThemeMode } from '@/lib/shared/theme'
+import { customFontStack } from '@/lib/shared/theme/fonts'
 import { advancedCssRemainder } from '@/lib/shared/theme/readable-css'
 import { isAutoColour } from '@/lib/shared/theme/colour-setters'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
