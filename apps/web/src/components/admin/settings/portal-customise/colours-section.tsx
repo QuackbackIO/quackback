@@ -2,14 +2,9 @@ import { useRef, useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ThemeModeTiles } from '@/components/admin/settings/branding/theme-mode-tiles'
 import { type ThemeMode } from '@/lib/shared/theme'
-import {
-  fixLinkContrast,
-  isAutoColour,
-  type ColourMode,
-  type ColourRole,
-} from '@/lib/shared/theme/colour-setters'
+import { isAutoColour, type ColourMode, type ColourRole } from '@/lib/shared/theme/colour-setters'
 import type { Palette } from '@/components/admin/settings/branding/theme-css'
-import { colourWarnings, hexOrNull, roleSuggestions } from './colours'
+import { hexOrNull, roleSuggestions } from './colours'
 import { ColourPicker } from './colour-picker'
 
 export type SetColour = (
@@ -98,8 +93,6 @@ function ColourRows({
   setColour: SetColour
   siteColours?: string[]
 }) {
-  const warnings = colourWarnings(palette)
-  const background = hexOrNull(palette.background) ?? '#ffffff'
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       <div className="divide-y divide-border">
@@ -114,28 +107,6 @@ function ColourRows({
           />
         ))}
       </div>
-      {warnings.map((warning) => (
-        <div
-          key={warning}
-          role="alert"
-          className="flex items-center justify-between gap-3 border-t border-border bg-destructive/5 px-3 py-2 text-xs text-destructive"
-        >
-          {warning === 'links'
-            ? 'Links are hard to read on this background.'
-            : 'Text is hard to read on this background.'}
-          <button
-            type="button"
-            className="font-medium underline underline-offset-2"
-            onClick={() =>
-              warning === 'links'
-                ? setColour('primary', mode, fixLinkContrast(palette.primary ?? '', background))
-                : setColour('foreground', mode, null)
-            }
-          >
-            Fix
-          </button>
-        </div>
-      ))}
     </div>
   )
 }

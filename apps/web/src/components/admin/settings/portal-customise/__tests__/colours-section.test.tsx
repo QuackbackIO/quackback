@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 /**
- * The Colours section: four rows, a warning only when something fails, and
- * a Fix that writes the corrected colour.
+ * The Colours section: four rows and no warnings, since whatever is picked
+ * the portal's text is worked out to read.
  */
 import '@testing-library/jest-dom/vitest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { unbrandedTheme } from '@/lib/shared/theme'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { expandTheme, unbrandedTheme } from '@/lib/shared/theme'
 import { contrastRatio } from '@/lib/shared/theme/colour-setters'
 import { ColoursSection } from '../colours-section'
 
@@ -46,22 +46,18 @@ describe('ColoursSection', () => {
     expect(screen.getByRole('button', { name: /Header.*#005eb8/ })).toBeInTheDocument()
   })
 
-  it('warns about hard to read links and fixes them', () => {
-    const { setColour } = renderSection({ light: { ...light, primary: '#ffd43b' } })
-    const warning = screen.getByRole('alert')
-    expect(warning).toHaveTextContent('Links are hard to read on this background.')
-    fireEvent.click(within(warning).getByRole('button', { name: 'Fix' }))
-    const [role, mode, hex] = setColour.mock.calls[0]!
-    expect([role, mode]).toEqual(['primary', 'light'])
-    expect(contrastRatio(hex, '#ffffff')).toBeGreaterThanOrEqual(3)
-  })
-
-  it('warns about hard to read text and puts it back on Auto', () => {
-    const { setColour } = renderSection({ light: { ...light, foreground: '#bbbbbb' } })
-    const warning = screen.getByRole('alert')
-    expect(warning).toHaveTextContent('Text is hard to read on this background.')
-    fireEvent.click(within(warning).getByRole('button', { name: 'Fix' }))
-    expect(setColour).toHaveBeenCalledWith('foreground', 'light', null)
+  it('never warns: a pale main colour or pale text is worked out to read on the portal', () => {
+    renderSection({ light: { ...light, primary: '#ffd43b' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    cleanup()
+    renderSection({ light: { ...light, foreground: '#bbbbbb' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    const portal = expandTheme(
+      { ...light, primary: '#ffd43b', foreground: '#bbbbbb' },
+      { mode: 'light' }
+    )
+    expect(contrastRatio(portal.primaryInk!, portal.background!)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(portal.foreground!, portal.background!)).toBeGreaterThanOrEqual(4.5)
   })
 
   it('works dark colours out until the admin asks to change them', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { computeAccentInk, expandTheme, DEFAULT_DARK_BASE, DEFAULT_LIGHT_BASE } from '../expand'
+import { expandTheme, parseOklch, DEFAULT_DARK_BASE, DEFAULT_LIGHT_BASE } from '../expand'
+import { contrastRatio } from '../colour-setters'
 import { generateThemeCSS, generateWorkspaceThemeCSS } from '../generator'
 import type { ThemeConfig } from '../types'
 
@@ -10,13 +11,19 @@ function readVar(css: string, selector: string, name: string): string | undefine
   return match?.[1]?.trim()
 }
 
-describe('computeAccentInk', () => {
-  it('steps default gold down in lightness only, keeping chroma and hue', () => {
-    expect(computeAccentInk('oklch(0.886 0.176 86)', 'light')).toBe('oklch(0.720 0.176 86)')
+describe('the main colour as text', () => {
+  it('steps default gold down until it reads at 4.5:1 on the page, keeping its hue', () => {
+    const light = expandTheme({}, { mode: 'light' })
+    for (const surface of [light.background, light.card, light.muted]) {
+      expect(contrastRatio(light.primaryInk!, surface!)).toBeGreaterThanOrEqual(4.5)
+    }
+    expect(Math.abs(parseOklch(light.primaryInk!)!.h - 86)).toBeLessThan(10)
+    // --accent-ink, where light pages send text-primary, is the same shade.
+    expect(light.accentInk).toBe(light.primaryInk)
   })
 
   it('leaves dark-mode gold unchanged', () => {
-    expect(computeAccentInk('oklch(0.886 0.176 86)', 'dark')).toBe('oklch(0.886 0.176 86)')
+    expect(expandTheme({}, { mode: 'dark' }).primaryInk).toBe('oklch(0.886 0.176 86)')
   })
 })
 

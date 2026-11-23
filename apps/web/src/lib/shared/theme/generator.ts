@@ -14,6 +14,7 @@ export const variableMap: Record<string, string> = {
   popoverForeground: '--popover-foreground',
   primary: '--primary',
   primaryForeground: '--primary-foreground',
+  primaryInk: '--primary-ink',
   secondary: '--secondary',
   secondaryForeground: '--secondary-foreground',
   muted: '--muted',

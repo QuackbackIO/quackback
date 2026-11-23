@@ -485,6 +485,7 @@ export interface ThemeColors {
   popoverForeground?: string
   primary?: string
   primaryForeground?: string
+  primaryInk?: string
   secondary?: string
   secondaryForeground?: string
   muted?: string
