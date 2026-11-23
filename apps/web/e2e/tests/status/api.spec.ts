@@ -82,7 +82,17 @@ test('STA-X-01 the summary endpoint', { tag: '@core' }, async ({ playwright, peo
 })
 
 test('STA-X-02 list and get services', { tag: '@core' }, async ({ playwright, people, marker }) => {
-  const api = await keyApi(playwright, people, 'noAccess')
+  // Reading services (with their segment ids) needs read:feedback and
+  // status_page.publish or status_page.manage: a Contributor holds publish.
+  const api = await keyApi(playwright, people, 'contributor')
+  const noAccess = await keyApi(playwright, people, 'noAccess')
+  for (const path of ['/api/v1/status/services', '/api/v1/status/components']) {
+    const refused = await expectJson<Wire>(await noAccess.get(path), 403)
+    expect(refused.error).toEqual({
+      code: 'FORBIDDEN',
+      message: "Requires the 'status_page.publish' or 'status_page.manage' permission",
+    })
+  }
   const svc = await createService(admin, `${marker} Listed`)
   const gone = await createService(admin, `${marker} Gone`)
   await must(admin, 'deleteStatusComponentFn', { id: gone.id })
@@ -154,12 +164,7 @@ test(
 test(
   'STA-X-04 a service created with a non-operational status records it',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'createStatusComponent (status.components.ts:176) writes no status_component_events row and no status.component_changed for an initial non-operational status; see QUARANTINE.md (STA-P-15)',
-    },
+    tag: '@nightly',
   },
   async ({ playwright, people, marker }) => {
     const api = await keyApi(playwright, people, 'admin')
@@ -225,12 +230,7 @@ test(
 test(
   'STA-X-06 incident list paging answers bad limits and cursors cleanly',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'GET /api/v1/status/incidents parses limit itself (incidents/index.ts:64) without the shared pagination guard: limit=0 reports hasMore with no cursor and a negative or non-numeric limit, or a garbage cursor, fails with 500; see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ playwright, people }) => {
     const api = await keyApi(playwright, people, 'admin')
@@ -435,7 +435,8 @@ test(
   'STA-X-08 get one incident over REST',
   { tag: '@nightly' },
   async ({ playwright, people, marker }) => {
-    const api = await keyApi(playwright, people, 'noAccess')
+    // Incident detail (with its audit fields) needs status_page.publish or manage.
+    const api = await keyApi(playwright, people, 'contributor')
     const a = await createService(admin, `${marker} A`)
     const b = await createService(admin, `${marker} B`)
     const inc = await must<{ id: string }>(admin, 'createStatusIncidentFn', {
@@ -580,12 +581,19 @@ test(
     try {
       for (const who of ['noAccess', 'contributor', 'admin', 'workspace'] as const) {
         const api = await keyApi(playwright, people, who)
-        for (const path of [
-          '/api/v1/status/summary',
-          '/api/v1/status/services',
-          '/api/v1/status/incidents',
-        ]) {
-          expect((await api.get(path)).status(), `${who} ${path}`).toBe(200)
+        // The public snapshot needs only read:feedback; services and incidents
+        // (segment ids, audit fields) also need status_page.publish or manage.
+        expect((await api.get('/api/v1/status/summary')).status(), `${who} summary`).toBe(200)
+        for (const path of ['/api/v1/status/services', '/api/v1/status/incidents']) {
+          const res = await api.get(path)
+          if (who === 'noAccess') {
+            expect(res.status(), `${who} ${path}`).toBe(403)
+            expect(((await res.json()) as Wire).error.message).toBe(
+              "Requires the 'status_page.publish' or 'status_page.manage' permission"
+            )
+          } else {
+            expect(res.status(), `${who} ${path}`).toBe(200)
+          }
         }
         const inc = await api.post('/api/v1/status/incidents', { data: incidentBody })
         const svcPatch = await api.patch(`/api/v1/status/services/${svc.id}`, {
@@ -621,6 +629,8 @@ test(
       expect(
         (await scopedApi.post('/api/v1/status/incidents', { data: incidentBody })).status()
       ).toBe(403)
+      // ...but it reads them: a read needs only the read scope.
+      expect((await scopedApi.get('/api/v1/status/incidents')).status()).toBe(200)
     } finally {
       for (const id of made) await deleteRestIncident(id)
     }

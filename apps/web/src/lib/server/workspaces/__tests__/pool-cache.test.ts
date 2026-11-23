@@ -58,7 +58,13 @@ vi.mock('postgres', () => ({ default: postgresFactory }))
 
 vi.mock('@quackback/db/client', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, createDbFromSql: vi.fn((sql: unknown) => ({ boundTo: sql })) }
+  return {
+    ...actual,
+    createDbFromSql: vi.fn((sql: unknown) => ({
+      boundTo: sql,
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({}),
+    })),
+  }
 })
 
 vi.mock('@/lib/server/fleet/ensure-schema-current', () => ({
@@ -216,6 +222,25 @@ describe('workspace pool cache', () => {
     expect(await cache.sweepIdlePools(later + 1_000)).toBe(1)
     expect(ended).toEqual([expect.stringContaining('/t1')])
     await cache.closeAllWorkspacePools()
+  })
+
+  it('never closes a pool while one of its transactions is still open', async () => {
+    const cache = await loadCache()
+    const { db } = await cache.acquireWorkspacePool(descriptor('t1'))
+
+    let finish!: () => void
+    const open = db.transaction(() => new Promise<void>((resolve) => (finish = resolve)))
+
+    // Long past the idle window, but the transaction still holds a connection.
+    expect(await cache.sweepIdlePools(Date.now() + 60_000)).toBe(0)
+    expect(ended).toHaveLength(0)
+
+    finish()
+    await open
+    // The end of the transaction counts as use, so the window restarts from it.
+    expect(await cache.sweepIdlePools(Date.now())).toBe(0)
+    expect(await cache.sweepIdlePools(Date.now() + 60_000)).toBe(1)
+    expect(ended).toEqual([expect.stringContaining('/t1')])
   })
 
   it('evicts the least recently used pool when the cap is exceeded', async () => {

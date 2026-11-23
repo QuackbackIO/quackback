@@ -2,12 +2,24 @@
  * Shared response-serialization helpers for the /api/v1/status/* routes.
  * Not a route itself (the `-` prefix opts it out of file-based routing).
  */
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type {
   StatusComponentRow,
   PublicStatusComponent,
   PublicStatusIncident,
   StatusIncidentWithDetails,
 } from '@/lib/server/domains/status'
+
+/**
+ * Who may read the admin status shapes over REST (services with their
+ * segment ids, incidents with their audit fields): a teammate who manages the
+ * status page or posts to it, the same people the admin screens serve. The
+ * public snapshot (`/status/summary`) needs only the read scope.
+ */
+export const STATUS_PAGE_READ_PERMISSIONS = [
+  PERMISSIONS.STATUS_PAGE_PUBLISH,
+  PERMISSIONS.STATUS_PAGE_MANAGE,
+] as const
 
 /** Admin-facing component shape (create/update/get responses). */
 export function serializeStatusComponent(row: StatusComponentRow) {

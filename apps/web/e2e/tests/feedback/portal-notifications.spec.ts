@@ -117,7 +117,7 @@ test.describe('portal notifications', () => {
   )
 
   test(
-    'FBP-N-10 a held comment sends nothing until a moderator approves it',
+    'FBP-N-10 a held comment sends nothing until a moderator approves it; then its author hears so',
     { tag: '@core' },
     async ({ browser, playwright, marker }) => {
       const board = await createBoard(marker, { access: { moderation: { comments: 'on' } } })
@@ -140,7 +140,10 @@ test.describe('portal notifications', () => {
       expect((await notificationsOf(cass.principalUuid, post.uuid)).map((r) => r.type)).toEqual([
         'comment_created',
       ])
-      expect(await notificationsOf(dana.principalUuid, post.uuid)).toHaveLength(0)
+      // D12: the commenter is told their comment is public, and nothing else.
+      expect((await notificationsOf(dana.principalUuid, post.uuid)).map((r) => r.type)).toEqual([
+        'post_moderated',
+      ])
     }
   )
 
@@ -196,7 +199,7 @@ test.describe('portal notifications', () => {
       })
       expect(set.error).toBeUndefined()
       await setStatus(await adminRest(playwright, marker), post, 'planned')
-      await mailFor(cass.email, 'Your feedback is now Planned')
+      await mailFor(cass.email, 'A post you follow is now Planned')
       await eventHandled(post.id, 'post.status_changed')
       expect(await notificationsOf(cass.principalUuid, post.uuid)).toHaveLength(0)
       expect((await list(cass.request)).value?.unreadCount).toBe(0)
@@ -306,7 +309,9 @@ test.describe('portal notifications', () => {
       })
       expect(JSON.stringify(hidden)).not.toContain('soon gone')
       expect(JSON.stringify(rows)).toContain('still here')
-      expect(res.value?.unreadCount).toBe(2)
+      // The redacted bell keeps its row but no longer counts as unread: the
+      // count (like the badge) covers only bells the reader can open (FBA-N-15).
+      expect(res.value?.unreadCount).toBe(1)
     }
   )
 

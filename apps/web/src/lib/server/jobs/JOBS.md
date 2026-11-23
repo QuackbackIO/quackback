@@ -177,6 +177,13 @@ Two properties follow, and both match what the repeatable jobs did:
   restart, not three times.
 - **No duplicate on a race.** Two replicas ticking the same slot produce one row.
 
+A scheduler's first pass adopts the slot in progress rather than running it, so a
+restart does not replay one of everything. A job that sets `runOnFirstPass` runs
+that slot instead, and the dedupe key makes it a no-op when the slot already ran.
+`page-view-partitions` sets it: a parked workspace has no loop, so its partition
+window can run out while it sleeps, and the loop that wakes it must not wait for
+the next 02:30.
+
 The runner then sleeps to the next slot rather than re-asking every second — the
 schedule is deterministic, and a tick that finds nothing is pure traffic against
 a per-workspace database.
@@ -429,6 +436,7 @@ went stale the moment a queue moved.
 | `integration-install-cleanup`   | —              | 1           | 1        | 60s   |
 | `integration-installs-backfill` | —              | 1           | 1        | 60s   |
 | `anon-sweep`                    | `0 3 * * *`    | 1           | 3        | 60s   |
+| `cimd-client-sweep`             | `45 3 * * *`   | 1           | 3        | 60s   |
 | `page-view-partitions`          | `30 2 * * *`   | 1           | 3        | 60s   |
 | `sla-breach-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
 | `snooze-sweep`                  | `* * * * *`    | 1           | 3        | 60s   |
@@ -457,6 +465,7 @@ went stale the moment a queue moved.
 | `segment-evaluation`            | dynamic        | 2           | 3        | 60s   |
 | `file-preview`                  | —              | 2           | 2        | 120s  |
 | `file-retention`                | `40 4 * * *`   | 1           | 3        | 60s   |
+| `staged-upload-sweep`           | `50 4 * * *`   | 1           | 3        | 60s   |
 | `help-center-translate`         | —              | 1           | 3        | 120s  |
 | `help-center-translate-resume`  | `25 * * * *`   | 1           | 1        | 60s   |
 | `email-imap`                    | `* * * * *`    | 1           | 1        | 60s   |

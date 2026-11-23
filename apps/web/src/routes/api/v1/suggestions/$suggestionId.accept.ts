@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { assertApiPermissions, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   badRequestResponse,
@@ -22,9 +22,12 @@ export const Route = createFileRoute('/api/v1/suggestions/$suggestionId/accept')
        */
       POST: async ({ request, params }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, {
+          const auth = await withApiKeyAuth(request, {
             permission: PERMISSIONS.SUGGESTION_MANAGE,
           })
+          // Accepting merges the two posts, so it needs post.merge like a manual merge.
+          assertApiPermissions(auth, [PERMISSIONS.POST_MERGE])
+          const { principalId } = auth
           const { suggestionId } = params
 
           if (!isValidTypeId(suggestionId, 'post_merge_sug')) {

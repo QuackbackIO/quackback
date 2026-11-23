@@ -75,7 +75,9 @@ export async function executeListFeedback(
     return { items: [] }
   const args = listInput.parse(input)
   const board = args.boardSlug
-    ? await db.query.boards.findFirst({ where: eq(boards.slug, args.boardSlug) })
+    ? await db.query.boards.findFirst({
+        where: and(eq(boards.slug, args.boardSlug), isNull(boards.deletedAt)),
+      })
     : null
   if (args.boardSlug && !board) return { items: [] }
   const tag = args.tagSlug

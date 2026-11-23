@@ -80,6 +80,16 @@ export const TYPE_LABELS: Partial<
       defaultMessage: 'Someone @-mentions you in a post',
     },
   },
+  post_moderated: {
+    label: {
+      id: 'portal.settings.notifications.type.postModerated.label',
+      defaultMessage: 'Post reviewed',
+    },
+    description: {
+      id: 'portal.settings.notifications.type.postModerated.description',
+      defaultMessage: 'The team publishes or declines a post or comment you wrote',
+    },
+  },
   comment_mentioned: {
     label: {
       id: 'portal.settings.notifications.type.commentMention.label',

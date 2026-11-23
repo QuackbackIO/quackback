@@ -252,12 +252,7 @@ test(
 test(
   'HC-P-33 reading the canonical article page counts a view',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'HC-B1: view_count is incremented only in getPublicArticleBySlug (legacy URLs, widget by slug, embeds, admin View); the canonical page uses getPublicArticleByUrlId, which never counts',
-    },
+    tag: '@core',
   },
   async ({ page, marker, playwright }) => {
     const hc = await hcApi(playwright)

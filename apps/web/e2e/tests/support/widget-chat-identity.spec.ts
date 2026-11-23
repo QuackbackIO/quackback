@@ -7,7 +7,7 @@
  * each identify test resets that budget first (resetIdentifyBudget); the
  * limiter itself is not tested here.
  */
-import { toUuid } from '@quackback/ids'
+import { generateId, toUuid } from '@quackback/ids'
 import type { APIRequestContext } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { pollFor, supportDb } from '../../support/db'
@@ -150,10 +150,23 @@ test.describe('widget identity: verified identify', () => {
         canPortalHandoff: true,
       })
 
+      // A configured attribute claim on the known user is merged into their
+      // stored metadata.
+      const attrKey = `plan_${marker}`.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+      await supportDb()`INSERT INTO user_attribute_definitions (id, key, label, type)
+        VALUES (${toUuid(generateId('user_attr'))}, ${attrKey}, 'Plan', 'string')`
       const upper = await identify(request, {
-        ssoToken: signSsoToken({ id: sub, email: customerEmail.toUpperCase() }, secret),
+        ssoToken: signSsoToken(
+          { id: sub, email: customerEmail.toUpperCase(), [attrKey]: 'pro' },
+          secret
+        ),
       })
+      expect(upper.res.status()).toBe(200)
       expect(upper.json?.user?.id).toBe(first.json?.user?.id)
+      const [stored] = await supportDb()`SELECT metadata FROM "user"
+        WHERE lower(email) = lower(${customerEmail})`
+      expect(JSON.parse(stored.metadata ?? '{}')).toMatchObject({ [attrKey]: 'pro' })
+      await supportDb()`DELETE FROM user_attribute_definitions WHERE key = ${attrKey}`
       const [{ n }] = await supportDb()`SELECT count(*)::int AS n FROM "user"
         WHERE lower(email) = lower(${customerEmail})`
       expect(n).toBe(1)

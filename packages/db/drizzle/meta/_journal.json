@@ -2080,6 +2080,34 @@
       "when": 1791002400000,
       "tag": "0319_outbound_email_sent_message_id",
       "breakpoints": true
+    },
+    {
+      "idx": 297,
+      "version": "7",
+      "when": 1791006000000,
+      "tag": "0320_roadmap_slug_live_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "7",
+      "when": 1791006100000,
+      "tag": "0321_live_taxonomy_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 299,
+      "version": "7",
+      "when": 1791006200000,
+      "tag": "0322_session_two_factor_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 300,
+      "version": "7",
+      "when": 1791006300000,
+      "tag": "0323_clear_legacy_header_settings",
+      "breakpoints": true
     }
   ]
 }

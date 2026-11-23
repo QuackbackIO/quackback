@@ -190,7 +190,7 @@ test.describe('portal subscriptions', () => {
       await restPost(api, `/posts/${b.id}/merge`, { canonicalPostId: a.id })
       await setStatus(api, a, 'planned')
 
-      await mailFor(cass.email, 'Your feedback is now Planned')
+      await mailFor(cass.email, 'A post you follow is now Planned')
       await expect
         .poll(async () =>
           (await notificationsOf(cass.principalUuid)).filter(
@@ -198,7 +198,7 @@ test.describe('portal subscriptions', () => {
           )
         )
         .toHaveLength(1)
-      expect(await mailsFor(cass.email, 'Your feedback is now')).toHaveLength(1)
+      expect(await mailsFor(cass.email, 'A post you follow is now')).toHaveLength(1)
 
       // The bell on the merged-away post reads the family level.
       const status = await fbFn<{ level: string }>(

@@ -12,6 +12,7 @@ import {
   sendStatusMaintenanceScheduledEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
+  sendModerationDecisionEmail,
 } from '@quackback/email'
 import type { EmailResult, IncidentImpact, SendingIdentity } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
@@ -23,8 +24,13 @@ import type {
   EmailConfig,
   TicketEmailConfig,
   NoteMentionEmailConfig,
+  ModerationDecisionEmailConfig,
 } from '../hook-types'
-import type { EventData, EventPostMentionedData } from '../types'
+import {
+  isModerationDecisionEventType,
+  type EventData,
+  type EventPostMentionedData,
+} from '../types'
 import {
   ticketRootMessageId,
   mintTicketOutboundMessageId,
@@ -217,6 +223,7 @@ async function deliverEmail(
         postUrl: cfg.postUrl,
         previousStatus: cfg.previousStatus!,
         newStatus: cfg.newStatus!,
+        isPostAuthor: cfg.isPostAuthor === true,
         workspaceName: cfg.workspaceName,
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
@@ -231,6 +238,7 @@ async function deliverEmail(
         commenterName: cfg.commenterName!,
         commentPreview: cfg.commentPreview!,
         isTeamMember: cfg.isTeamMember ?? false,
+        isPostAuthor: cfg.isPostAuthor === true,
         workspaceName: cfg.workspaceName,
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
@@ -252,6 +260,38 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...sender,
+      })
+    } else if (event.type === 'comment.mentioned') {
+      // Worded like a post mention; the link (resolved by the target) opens
+      // the comment itself.
+      result = await sendPostMentionEmail({
+        to: email,
+        mentionerName:
+          cfg.mentionerName?.trim() ||
+          (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+          '',
+        postTitle: event.data.postTitle,
+        excerpt: event.data.excerpt,
+        postUrl: cfg.postUrl,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+        ...sender,
+      })
+    } else if (isModerationDecisionEventType(event.type)) {
+      const c = config as unknown as ModerationDecisionEmailConfig
+      result = await sendModerationDecisionEmail({
+        to: email,
+        item: c.item,
+        decision: c.decision,
+        postTitle: c.postTitle,
+        postUrl: c.postUrl,
+        workspaceName: c.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: c.preferencesUrl,
+        logoUrl: c.logoUrl,
         ...sender,
       })
     } else if (event.type === 'conversation.note_mentioned') {

@@ -133,17 +133,22 @@ export async function getComponentLinksForIncidents(
   incidentIds: StatusIncidentId[]
 ): Promise<ComponentLinkRow[]> {
   if (incidentIds.length === 0) return []
-  return db
-    .select({
-      incidentId: statusIncidentComponents.incidentId,
-      componentId: statusIncidentComponents.componentId,
-      componentStatus: statusIncidentComponents.componentStatus,
-      name: statusComponents.name,
-      segmentIds: statusComponents.segmentIds,
-    })
-    .from(statusIncidentComponents)
-    .innerJoin(statusComponents, eq(statusIncidentComponents.componentId, statusComponents.id))
-    .where(inArray(statusIncidentComponents.incidentId, incidentIds))
+  return (
+    db
+      .select({
+        incidentId: statusIncidentComponents.incidentId,
+        componentId: statusIncidentComponents.componentId,
+        componentStatus: statusIncidentComponents.componentStatus,
+        name: statusComponents.name,
+        segmentIds: statusComponents.segmentIds,
+      })
+      .from(statusIncidentComponents)
+      .innerJoin(statusComponents, eq(statusIncidentComponents.componentId, statusComponents.id))
+      .where(inArray(statusIncidentComponents.incidentId, incidentIds))
+      // Page order, so the page, the feed's "Affected:" line and the emails
+      // list an incident's services alike every time.
+      .orderBy(asc(statusComponents.position), asc(statusComponents.id))
+  )
 }
 
 export function groupLinksByIncident(

@@ -659,7 +659,10 @@ describe('status lifecycle (Postgres)', () => {
     it('still sends the creation event, once, flagged as not emailed', async () => {
       const api = await service('API')
       const quiet = await openIncident([{ componentId: api, componentStatus: 'major_outage' }])
-      const window = await scheduleWindow(new Date(Date.now() + HOUR), null)
+      const window = await scheduleWindow(
+        new Date(Date.now() + HOUR),
+        new Date(Date.now() + 2 * HOUR)
+      )
 
       const actor = { type: 'service' as const, displayName: 'test' }
       expect(await notifyStatusIncidentPublished(quiet.id, actor)).toBe(false)

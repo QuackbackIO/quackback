@@ -181,12 +181,7 @@ test(
 test(
   'STA-A-49 a blank template name is refused with the Name field named',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'createStatusIncidentTemplate validates the name with validateTitle (status.service.ts), so the refusal says "Title is required"; see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ marker }) => {
     const res = await callServerFn(admin, 'createStatusIncidentTemplateFn', {

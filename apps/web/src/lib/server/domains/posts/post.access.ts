@@ -14,7 +14,7 @@
  * NotFoundError-shaped error (don't leak existence to denied callers).
  */
 import { db, eq, and, or, isNull, posts, boards, postComments } from '@/lib/server/db'
-import { type PostCommentId, type PostId } from '@quackback/ids'
+import { type BoardId, type PostCommentId, type PostId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import {
@@ -23,6 +23,7 @@ import {
   isTeamActor,
   postViewFilter,
   type Actor,
+  type BoardShape,
 } from '@/lib/server/policy'
 
 /**
@@ -182,13 +183,18 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
  * Throws NotFoundError on every deny path so the response shape is
  * uniform — denied callers can't probe existence by varying inputs.
  */
-export async function assertCommentViewable(commentId: PostCommentId, actor: Actor): Promise<void> {
+export async function assertCommentViewable(
+  commentId: PostCommentId,
+  actor: Actor
+): Promise<{ boardId: BoardId; boardReadOnly: boolean; access: BoardShape['access'] }> {
   const rows = await db
     .select({
       isPrivate: postComments.isPrivate,
       postModerationState: posts.moderationState,
       postPrincipalId: posts.principalId,
       access: boards.access,
+      boardId: boards.id,
+      boardReadOnly: boards.readOnly,
     })
     .from(postComments)
     .innerJoin(posts, eq(postComments.postId, posts.id))
@@ -234,4 +240,5 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
   if (row.isPrivate && !isTeamActor(actor)) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment ${commentId} not found`)
   }
+  return { boardId: row.boardId, boardReadOnly: row.boardReadOnly, access: row.access }
 }

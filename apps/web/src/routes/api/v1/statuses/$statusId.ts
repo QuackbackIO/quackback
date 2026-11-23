@@ -30,7 +30,7 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_VIEW })
 
           const statusId = parseTypeId<PostStatusId>(params.statusId, 'post_status', 'status ID')
 

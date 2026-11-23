@@ -9,6 +9,15 @@
  * workflow-wait (promotes delayed workflow jobs due by then). Wall clock only:
  * email-log-retention, workflow-retention, spam-retention, anon-sweep,
  * status-maintenance, status-notify.
+ * email-log-retention, workflow-retention, spam-retention, anon-sweep,
+ * segment-evaluation (every scheduled dynamic segment, once).
+ * summary-sweep (feedback post summaries), merge-sweep (duplicate checks).
+ * email-log-retention, workflow-retention, spam-retention, anon-sweep,
+ * summary-sweep (feedback post summaries), merge-sweep (duplicate checks).
+ * workflow-wait (promotes delayed workflow jobs due by then), changelog-publish
+ * (promotes delayed changelog-publish--<id> announcement jobs due by then). Wall clock only:
+ * email-log-retention, workflow-retention, spam-retention, anon-sweep,
+ * changelog-notify (the reconciler that announces live, unannounced entries).
  */
 import { expect, type APIRequestContext } from '@playwright/test'
 
@@ -23,6 +32,11 @@ export type SweepName =
   | 'anon-sweep'
   | 'status-maintenance'
   | 'status-notify'
+  | 'segment-evaluation'
+  | 'summary-sweep'
+  | 'merge-sweep'
+  | 'changelog-notify'
+  | 'changelog-publish'
 
 export interface SweepRun {
   ok: true

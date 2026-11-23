@@ -682,14 +682,7 @@ test.describe('post events', () => {
   test(
     'API-W-48 post.deleted says who deleted the post',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'API-W-48: post.user-actions.ts softDeletePost dispatches post.deleted with an ' +
-          'id-only actor, so dispatch.ts deletedBy (actor.email || actor.displayName) is ' +
-          'always missing (QUARANTINE.md)',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)

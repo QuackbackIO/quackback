@@ -57,6 +57,27 @@ const SWEEPS: Record<string, SweepEntry> = {
     asOf: true,
     run: (at) => promoteDueJobs('workflow-wait', at),
   },
+  // The welcome and day-two setup emails are queued rows (the nudge 48 hours
+  // out), promoted like workflow-wait so the worker sends them now.
+  'onboarding-email': {
+    asOf: true,
+    run: (at) => promoteDueJobs('onboarding-email', at),
+  },
+  'changelog-notify': {
+    asOf: false,
+    run: async () => {
+      const { reconcileChangelogNotifications } =
+        await import('@/lib/server/domains/changelog/changelog.service')
+      return { announced: await reconcileChangelogNotifications() }
+    },
+  },
+  // A scheduled changelog entry's announcement is a delayed `events` job
+  // named changelog-publish--<entry id>; promote only those, never the rest
+  // of the events queue.
+  'changelog-publish': {
+    asOf: true,
+    run: (at) => promoteDueJobs('events', at, 'changelog-publish--'),
+  },
   'email-log-retention': {
     asOf: false,
     run: async () => {
@@ -80,6 +101,16 @@ const SWEEPS: Record<string, SweepEntry> = {
       const { runSpamRetention } =
         await import('@/lib/server/domains/conversation/spam-retention-queue')
       await runSpamRetention()
+      return {}
+    },
+  },
+  // The hourly analytics refresh: the materialized daily stats and the
+  // visitor rollup the Analytics page reads.
+  'analytics-refresh': {
+    asOf: false,
+    run: async () => {
+      const { runAnalyticsRefresh } = await import('@/lib/server/domains/analytics/analytics-queue')
+      await runAnalyticsRefresh()
       return {}
     },
   },
@@ -111,6 +142,51 @@ const SWEEPS: Record<string, SweepEntry> = {
       return { notified: await reconcileStatusNotifications() }
     },
   },
+  // One pass of the segment-evaluation queue: every dynamic segment the
+  // scheduler would schedule now (enabled, parseable pattern), each run
+  // through the queue's own handler. Segments it leaves out are not run.
+  'segment-evaluation': {
+    asOf: false,
+    run: async () => {
+      const { segmentEvaluationSchedules, runSegmentEvaluation } =
+        await import('@/lib/server/events/segment-scheduler')
+      const evaluated: string[] = []
+      const failed: Array<{ segmentId: string; error: string }> = []
+      for (const schedule of await segmentEvaluationSchedules()) {
+        const segmentId = String((schedule.payload as { segmentId: string }).segmentId)
+        try {
+          // The handler reads only the payload of the job it is given.
+          const job = { payload: { segmentId } } as unknown as Parameters<
+            typeof runSegmentEvaluation
+          >[0]
+          await runSegmentEvaluation(job)
+          evaluated.push(segmentId)
+        } catch (err) {
+          failed.push({ segmentId, error: err instanceof Error ? err.message : String(err) })
+        }
+      }
+      return { evaluated, failed }
+    },
+  },
+  // Feedback: refresh missing and stale post summaries (the hourly cron's pass).
+  'summary-sweep': {
+    asOf: false,
+    run: async () => {
+      const { refreshStaleSummaries } = await import('@/lib/server/domains/summary/summary.service')
+      await refreshStaleSummaries()
+      return {}
+    },
+  },
+  // Feedback: check posts with an embedding and no recent duplicate check.
+  'merge-sweep': {
+    asOf: false,
+    run: async () => {
+      const { sweepMergeSuggestions } =
+        await import('@/lib/server/domains/merge-suggestions/merge-check.service')
+      await sweepMergeSuggestions()
+      return {}
+    },
+  },
 }
 
 /** The sweeps the runner accepts, for the refusal message and the tests. */
@@ -118,12 +194,19 @@ export const E2E_SWEEP_NAMES: readonly string[] = Object.keys(SWEEPS)
 
 /**
  * Make every pending row of `queue` that is due by `at` due now, then wake the
- * worker so it claims them at once instead of at its next poll.
+ * worker so it claims them at once instead of at its next poll. With
+ * `jobIdPrefix`, only rows whose job id (the dedupe key a delayed job is
+ * scheduled under) starts with it.
  */
-async function promoteDueJobs(queue: string, at: Date): Promise<Record<string, unknown>> {
+async function promoteDueJobs(
+  queue: string,
+  at: Date,
+  jobIdPrefix = ''
+): Promise<Record<string, unknown>> {
   const result = await db.execute(sql`
     UPDATE job_queue SET run_at = now(), updated_at = now()
     WHERE queue = ${queue} AND status = 'pending' AND run_at <= ${at.toISOString()}::timestamptz
+      AND starts_with(coalesce(dedupe_key, ''), ${jobIdPrefix})
     RETURNING job_id, workspace_key
   `)
   const rows = getExecuteRows<{ job_id: string; workspace_key: string | null }>(result)

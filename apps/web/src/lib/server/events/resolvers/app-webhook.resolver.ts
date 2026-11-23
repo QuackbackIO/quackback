@@ -13,6 +13,7 @@ import { db, apps, oauthClient, and, eq } from '@/lib/server/db'
 import { getEventDefinition } from '../catalogue'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
+import { isNotificationOnlyEvent } from '../types'
 import type { HookTarget } from '../hook-types'
 
 /** Pure subscription + scope gate (unit-tested). */
@@ -39,9 +40,11 @@ export function appMatches(
 export const appWebhookResolver: SinkResolver = {
   sink: 'app_webhook',
   interestedIn(type: string): boolean {
-    return getEventDefinition(type) !== undefined
+    return getEventDefinition(type) !== undefined && !isNotificationOnlyEvent(type)
   },
   async resolve(event: DomainEvent): Promise<HookTarget[]> {
+    // A notification-only event (a comment mention) never reaches an app.
+    if (isNotificationOnlyEvent(event.type)) return []
     const requiredScope = getEventDefinition(event.type)?.requiredScope
     const rows = await db
       .select({ app: apps })

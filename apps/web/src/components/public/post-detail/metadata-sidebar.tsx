@@ -119,6 +119,28 @@ export function ManagePostActions({
   className,
 }: ManagePostActionsProps) {
   const intl = useIntl()
+  // The icon buttons are named by the same words their tooltips show.
+  const mergeLabel = intl.formatMessage({
+    id: 'portal.postDetail.metadata.merge',
+    defaultMessage: 'Merge',
+  })
+  const lockLabel = actions.isCommentsLocked
+    ? intl.formatMessage({
+        id: 'portal.postDetail.metadata.unlockComments',
+        defaultMessage: 'Unlock comments',
+      })
+    : intl.formatMessage({
+        id: 'portal.postDetail.metadata.lockComments',
+        defaultMessage: 'Lock comments',
+      })
+  const restoreLabel = intl.formatMessage({
+    id: 'portal.postDetail.metadata.restorePost',
+    defaultMessage: 'Restore post',
+  })
+  const deleteLabel = intl.formatMessage({
+    id: 'portal.postDetail.metadata.deletePost',
+    defaultMessage: 'Delete post',
+  })
 
   return (
     <div className={cn('flex items-center justify-between', className)}>
@@ -170,6 +192,7 @@ export function ManagePostActions({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
+                      aria-label={mergeLabel}
                       className="relative flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
                     >
                       <IconGitMerge className="h-5 w-5" strokeWidth={1.5} />
@@ -179,12 +202,7 @@ export function ManagePostActions({
                     </button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {intl.formatMessage({
-                    id: 'portal.postDetail.metadata.merge',
-                    defaultMessage: 'Merge',
-                  })}
-                </TooltipContent>
+                <TooltipContent side="bottom">{mergeLabel}</TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={actions.onMergeOthers}>
@@ -208,6 +226,7 @@ export function ManagePostActions({
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label={lockLabel}
                   onClick={actions.onToggleLock}
                   disabled={actions.isLockPending}
                   className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
@@ -219,17 +238,7 @@ export function ManagePostActions({
                   )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {actions.isCommentsLocked
-                  ? intl.formatMessage({
-                      id: 'portal.postDetail.metadata.unlockComments',
-                      defaultMessage: 'Unlock comments',
-                    })
-                  : intl.formatMessage({
-                      id: 'portal.postDetail.metadata.lockComments',
-                      defaultMessage: 'Lock comments',
-                    })}
-              </TooltipContent>
+              <TooltipContent side="bottom">{lockLabel}</TooltipContent>
             </Tooltip>
           )}
 
@@ -238,6 +247,7 @@ export function ManagePostActions({
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label={restoreLabel}
                   onClick={actions.onRestore}
                   disabled={actions.isRestorePending}
                   className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
@@ -245,30 +255,21 @@ export function ManagePostActions({
                   <IconRestore className="h-5 w-5" strokeWidth={1.5} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {intl.formatMessage({
-                  id: 'portal.postDetail.metadata.restorePost',
-                  defaultMessage: 'Restore post',
-                })}
-              </TooltipContent>
+              <TooltipContent side="bottom">{restoreLabel}</TooltipContent>
             </Tooltip>
           ) : !actions.isDeleted && actions.onDelete ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label={deleteLabel}
                   onClick={actions.onDelete}
                   className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors"
                 >
                   <IconTrash className="h-5 w-5" strokeWidth={1.5} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {intl.formatMessage({
-                  id: 'portal.postDetail.metadata.deletePost',
-                  defaultMessage: 'Delete post',
-                })}
-              </TooltipContent>
+              <TooltipContent side="bottom">{deleteLabel}</TooltipContent>
             </Tooltip>
           ) : null}
         </div>
@@ -591,7 +592,7 @@ export function MetadataSidebar({
                     disabled={isUpdating}
                     className={cn(
                       'text-sm font-medium text-end',
-                      etaLabel ? 'text-foreground' : 'text-muted-foreground/70',
+                      etaLabel ? 'text-foreground' : 'text-muted-foreground',
                       'hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                     )}
                   >
@@ -667,7 +668,7 @@ export function MetadataSidebar({
                       onClick={() => handleBoardChange(b.id as BoardId)}
                       className={cn(
                         'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
-                        'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                        'text-muted-foreground hover:text-foreground hover:bg-muted/60',
                         'transition-all duration-100 text-start font-medium'
                       )}
                     >
@@ -719,7 +720,7 @@ export function MetadataSidebar({
                       <span className="truncate text-foreground">{owner.name}</span>
                     </>
                   ) : (
-                    <span className="text-muted-foreground/70">
+                    <span className="text-muted-foreground">
                       <FormattedMessage
                         id="portal.postDetail.metadata.ownerUnassigned"
                         defaultMessage="Unassigned"
@@ -739,7 +740,7 @@ export function MetadataSidebar({
                       onClick={() => handleOwnerSelect(null)}
                       className={cn(
                         'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
-                        'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                        'text-muted-foreground hover:text-foreground hover:bg-muted/60',
                         'transition-all duration-100 text-start font-medium'
                       )}
                     >
@@ -759,7 +760,7 @@ export function MetadataSidebar({
                         onClick={() => handleOwnerSelect(m.principalId as PrincipalId)}
                         className={cn(
                           'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
-                          'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                          'text-muted-foreground hover:text-foreground hover:bg-muted/60',
                           'transition-all duration-100 text-start font-medium'
                         )}
                       >
@@ -800,7 +801,7 @@ export function MetadataSidebar({
                   disabled={isUpdating}
                   className={cn(
                     'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
-                    'rounded-full text-[11px] font-medium border',
+                    'rounded-full text-[11px] font-medium border text-readable',
                     'hover:opacity-80',
                     'transition-all duration-150',
                     'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -808,7 +809,7 @@ export function MetadataSidebar({
                   style={{
                     backgroundColor: tag.color + '20',
                     borderColor: tag.color + '40',
-                    color: tag.color,
+                    ['--ink' as string]: tag.color,
                   }}
                 >
                   {tag.name}
@@ -824,7 +825,7 @@ export function MetadataSidebar({
                       className={cn(
                         'inline-flex items-center gap-0.5 px-1.5 py-0.5',
                         'rounded-full text-[11px] font-medium',
-                        'text-muted-foreground/70 hover:text-muted-foreground',
+                        'text-muted-foreground hover:text-muted-foreground',
                         'border border-dashed border-border/60 hover:border-border',
                         'hover:bg-muted/40',
                         'transition-all duration-150',
@@ -851,7 +852,7 @@ export function MetadataSidebar({
                             onClick={() => handleAddTag(tag.id as PostTagId)}
                             className={cn(
                               'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
-                              'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                              'text-muted-foreground hover:text-foreground hover:bg-muted/60',
                               'transition-all duration-100 text-start font-medium'
                             )}
                           >
@@ -868,7 +869,7 @@ export function MetadataSidebar({
                 </Popover>
               )}
               {tags.length === 0 && availableTags.length === 0 && !tagOpen && (
-                <span className="text-xs text-muted-foreground/60">-</span>
+                <span className="text-xs text-muted-foreground">-</span>
               )}
             </div>
           ) : tags.length > 0 ? (
@@ -876,10 +877,10 @@ export function MetadataSidebar({
               {tags.map((tag) => (
                 <span
                   key={tag.id}
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium text-readable"
                   style={{
                     backgroundColor: tag.color + '20',
-                    color: tag.color,
+                    ['--ink' as string]: tag.color,
                   }}
                 >
                   {tag.name}
@@ -887,7 +888,7 @@ export function MetadataSidebar({
               ))}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground/60">-</span>
+            <span className="text-xs text-muted-foreground">-</span>
           )}
         </div>
 
@@ -974,7 +975,7 @@ export function MetadataSidebar({
                 disabled={!isMember}
               />
             </div>
-            <p className="text-xs text-muted-foreground/70 mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               <FormattedMessage
                 id="portal.postDetail.metadata.subscribeHint"
                 defaultMessage="Get notified when there are updates to this post"

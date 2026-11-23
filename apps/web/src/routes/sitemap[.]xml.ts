@@ -73,22 +73,26 @@ export const Route = createFileRoute('/sitemap.xml')({
 async function collectContent() {
   const [
     { db, changelogEntries, and, desc, eq, sql },
-    { publicChangelogConditions },
+    { anonymousChangelogConditions },
+    { isChangelogOpenToAnonymous },
     { getFeatureFlags },
   ] = await Promise.all([
     import('@/lib/server/db'),
     import('@/lib/server/domains/changelog/changelog.public'),
+    import('@/lib/server/domains/changelog/changelog.audience'),
     import('@/lib/server/domains/settings/settings.service'),
   ])
 
   const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
   const flags = await getFeatureFlags()
 
-  const entries = flags.changelog
+  // A crawler has no session: it is listed only the entries an anonymous
+  // visitor can open (the changelog audience and each entry's label gate).
+  const entries = (await isChangelogOpenToAnonymous())
     ? await db
         .select({ id: changelogEntries.id, updatedAt: changelogEntries.updatedAt })
         .from(changelogEntries)
-        .where(and(...publicChangelogConditions(new Date())))
+        .where(and(...anonymousChangelogConditions(new Date())))
         .orderBy(desc(effectiveDisplayDate))
     : []
 

@@ -272,12 +272,7 @@ test.describe('MCP settings tools', () => {
   test(
     'API-M-88 update_settings does not change the changelog area without write:changelog',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: MCP update_settings skips assertAreaScope (mcp/tools/settings.ts), so write:settings alone changes the changelog area that REST guards with write:changelog. See QUARANTINE.md.',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people }) => {
       const key = await keyApi(playwright, baseURL, {
@@ -400,12 +395,7 @@ test.describe('Admin MCP page', () => {
   test(
     "API-M-93 the admin setup guide's tool list matches the server's",
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Product bug: the setup guide hard-codes 22 tools including list_suggestions, which the server does not register (components/admin/settings/mcp/mcp-setup-guide.tsx MCP_TOOLS). See QUARANTINE.md.',
-      },
+      tag: '@nightly',
     },
     async ({ asPerson, playwright, baseURL, people }) => {
       const admin = await adminApi(playwright, baseURL, people)

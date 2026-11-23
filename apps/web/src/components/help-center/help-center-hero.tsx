@@ -52,11 +52,17 @@ export function HelpCenterHero({ variant, title, description, children }: HelpCe
       <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
         {variant === 'home' && title && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <h1 className="text-4xl font-bold leading-[1.05] tracking-tight text-foreground sm:text-5xl lg:text-[3.5rem]">
+            <h1
+              data-qb-edit="hc-home"
+              className="text-4xl font-bold leading-[1.05] tracking-tight text-foreground sm:text-5xl lg:text-[3.5rem]"
+            >
               {title}
             </h1>
             {description && (
-              <p className="mt-4 max-w-xl text-lg leading-relaxed text-muted-foreground">
+              <p
+                data-qb-edit="hc-home"
+                className="mt-4 max-w-xl text-lg leading-relaxed text-muted-foreground"
+              >
                 {description}
               </p>
             )}

@@ -201,14 +201,7 @@ test(
 
 test(
   'STA-S-08 subscribing honours the page gate',
-  {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'subscribeStatusFn (functions/status-subscriptions.ts:40) checks only that the caller is not anonymous, never the status page gate, so a visitor who cannot see the page still takes a subscriber slot; see QUARANTINE.md',
-    },
-  },
+  { tag: ['@nightly', '@isolated'] },
   async ({ playwright, marker }) => {
     const u = await user(playwright, marker, 'gated')
     await withSettings(UNPUBLISHED, async () => {
@@ -221,14 +214,7 @@ test(
 
 test(
   'STA-S-25 subscribers are not emailed while the page is unpublished',
-  {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'The status subscriber fan-out (events/targets.ts:2132) never checks isStatusPagePublished or portal privacy, so subscribers are emailed links that 404; see QUARANTINE.md',
-    },
-  },
+  { tag: ['@nightly', '@isolated'] },
   async ({ playwright, marker }) => {
     const svc = await createService(admin, `${marker} Launch`)
     const u = await user(playwright, marker, 'early')
@@ -293,12 +279,7 @@ test(
 test(
   'STA-A-62 clear history keeps the events behind statuses still held',
   {
-    tag: ['@nightly', '@isolated', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'clearStatusHistory (status.service.ts:792) deletes every service event, including those behind statuses open incidents still hold, so uptime reads operational for services that are down; see QUARANTINE.md',
-    },
+    tag: ['@nightly', '@isolated'],
   },
   async ({ marker }) => {
     const held = await createService(admin, `${marker} Held`)

@@ -29,3 +29,11 @@ export const postOwnerAssigned = decl(
   { webhook: true, notification: 'post_owner_assigned', activity: A },
   S
 )
+
+/**
+ * The team's decision on a held post. Notification-only: it tells the post's
+ * author and stays off the webhook surface. The moderation service writes the
+ * audit row itself, so `audit` stays off here.
+ */
+export const postApproved = decl('post.approved', 'post', { notification: 'post_moderated' }, S)
+export const postRejected = decl('post.rejected', 'post', { notification: 'post_moderated' }, S)

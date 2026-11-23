@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { assertApiScope, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { serializePublicComponent, serializePublicIncident } from './-serialize'
 
@@ -15,6 +15,7 @@ export const Route = createFileRoute('/api/v1/status/summary')({
       GET: async ({ request }) => {
         try {
           const auth = await withApiKeyAuth(request)
+          assertApiScope(auth, 'read:feedback')
 
           const { getStatusPageSnapshot } = await import('@/lib/server/domains/status')
           const { getStatusSettings } =

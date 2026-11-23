@@ -33,7 +33,8 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     title: 'Branding',
     description: 'Theme mode and the light and dark colors, font and radius.',
     permission: PERMISSIONS.SETTINGS_BRANDING,
-    href: '/admin/settings/portal',
+    // Edited on the Customise page, which Settings > Portal leads to.
+    href: '/admin/settings/portal/customise',
   },
   portal: {
     id: 'portal',

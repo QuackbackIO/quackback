@@ -3,7 +3,7 @@
  * delete, columns, and who may open it.
  *
  * Journeys: RMP-A-01, RMP-A-02, RMP-A-03, RMP-A-04, RMP-A-07, RMP-A-09,
- * RMP-A-10, RMP-A-11, RMP-A-14, RMP-A-15, RMP-A-16 (quarantined), RMP-A-18,
+ * RMP-A-10, RMP-A-11, RMP-A-14, RMP-A-15, RMP-A-16, RMP-A-18,
  * RMP-A-20, RMP-A-21.
  *
  * Every roadmap a test makes carries its marker and is soft-deleted
@@ -623,14 +623,7 @@ test(
 
 test(
   'RMP-A-16 deleting the selected first roadmap moves the board to another roadmap',
-  {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'roadmap-sidebar.tsx handleDelete re-selects roadmaps[0] from the list captured before the delete, which is the deleted roadmap (see QUARANTINE.md)',
-    },
-  },
+  { tag: '@nightly' },
   async ({ asPerson, playwright, people, marker }) => {
     const rm = await roadmapApi(playwright, people)
     const status = await rm.status(marker)

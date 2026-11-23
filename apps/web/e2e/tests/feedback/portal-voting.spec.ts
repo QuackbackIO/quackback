@@ -289,10 +289,13 @@ test.describe('portal voting', () => {
 
       await cass.page.goto(postPath(dupe))
       await expect(cass.page.getByText(/merged into/i).first()).toBeVisible()
-      // The merged page's button is inert: a click records nothing.
+      // The merged page's button is disabled: a click records nothing.
       const inert = cass.page.getByTestId('vote-button').first()
       await expect(inert).toHaveClass(/cursor-not-allowed/)
-      await inert.click()
+      await expect(inert).toBeDisabled()
+      await expect(inert).toHaveAttribute('aria-disabled', 'true')
+      // Disabled: Playwright would wait for it to enable, so dispatch the click.
+      await inert.dispatchEvent('click')
       await cass.page.waitForTimeout(500)
       expect(await votesOf(canonical.uuid)).toEqual([cass.principalUuid])
       expect(await votesOf(dupe.uuid)).toEqual([])
@@ -353,10 +356,8 @@ test.describe('portal voting', () => {
             { postId: id }
           )
         ).value
-      expect(await perms()).toMatchObject({
-        canEdit: false,
-        editReason: 'Cannot edit posts that have received votes',
-      })
+      // The author's own vote does not lock their post (D13).
+      expect(await perms()).toMatchObject({ canEdit: true, canDelete: true })
       const off = await fbFn<{ voted: boolean; voteCount: number }>(
         cass.request,
         'publicPosts',

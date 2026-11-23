@@ -195,12 +195,7 @@ test(
 test(
   'STA-A-53 every row of a large import is listed across pages',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'listStatusSubscriptions pages on created_at < cursor with no id tiebreak (status.subscription.ts:210, :236); one import shares one created_at, so page 2 drops the rest; see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ marker }) => {
     const people: MintedCustomer[] = []

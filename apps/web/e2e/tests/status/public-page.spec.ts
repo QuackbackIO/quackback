@@ -396,12 +396,7 @@ test('STA-P-14 uptime bars', { tag: '@core' }, async ({ page, marker }) => {
 test(
   'STA-P-15 uptime follows a status that has no history row',
   {
-    tag: ['@nightly', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'createStatusComponent writes no status_component_events row for a non-operational initial status (status.components.ts:176), and uptime starts from operational when no event exists; see QUARANTINE.md',
-    },
+    tag: '@nightly',
   },
   async ({ marker }) => {
     const svc = await createService(admin, `${marker} Born down`, { status: 'major_outage' })

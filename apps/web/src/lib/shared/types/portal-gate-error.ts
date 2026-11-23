@@ -13,6 +13,14 @@ export interface PortalAccessGateError {
   reason: 'unauthenticated' | 'unauthorized'
   workspaceName: string
   logoUrl: string | null
+  /**
+   * The wide logo when the portal header shows it (header_display_mode
+   * 'custom_logo'), shown alone in place of the square logo and the name.
+   * Optional: older serialized payloads omit it.
+   */
+  wideLogoUrl?: string | null
+  /** The wide logo's dark mode version, shown in its place where the portal is dark. */
+  wideLogoDarkUrl?: string | null
   themeStyles: string
   customCss: string
   /**

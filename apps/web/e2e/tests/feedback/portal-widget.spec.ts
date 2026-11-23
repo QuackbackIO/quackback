@@ -134,12 +134,7 @@ test.describe('widget feedback', () => {
   test(
     'FBP-W-12 the widget counts agree with the public profile: no held posts, no votes on deleted posts',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B29: runGetUserStats counts held posts, votes on soft-deleted posts and every undeleted comment',
-      },
+      tag: '@nightly',
     },
     async ({ request, marker }) => {
       const board = await createBoard(marker)
@@ -233,12 +228,7 @@ test.describe('widget feedback', () => {
     test(
       'FBP-W-07 a board with a required custom field tells the widget visitor what is missing',
       {
-        tag: ['@core', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B28: the widget composer never sends customFields, the server refuses the required field and the widget shows "Network error. Please try again."',
-        },
+        tag: ['@core', '@isolated'],
       },
       async ({ page, marker }) => {
         await withSettings(WIDGET_ON, async () => {
@@ -256,12 +246,7 @@ test.describe('widget feedback', () => {
     test(
       'FBP-W-07 a held widget post is confirmed as waiting for review',
       {
-        tag: ['@core', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B07: the widget success view says "Your post has been submitted." for a held post and the widget has no pending hint',
-        },
+        tag: ['@core', '@isolated'],
       },
       async ({ page, marker }) => {
         await withSettings(WIDGET_ON, async () => {
@@ -269,7 +254,13 @@ test.describe('widget feedback', () => {
           const { widget } = await identifiedWidget(page, marker)
           await submitInWidget(widget, board, `${marker} held in widget`)
           await expect(widget.getByText('Thanks for your feedback!')).toBeVisible()
-          await expect(widget.getByText(/review/i).first()).toBeVisible()
+          // The kept-mounted views hold other text; ask for the success line itself.
+          await expect(
+            widget.getByText(
+              'Your post is waiting for review. Others will see it once the team approves it.'
+            )
+          ).toBeVisible()
+          await expect(widget.getByText('Your post has been submitted.')).toHaveCount(0)
         })
       }
     )

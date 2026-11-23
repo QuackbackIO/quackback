@@ -220,12 +220,7 @@ test.describe('REST portal users', () => {
   test(
     'API-R-140 a malformed segmentIds filter is a clean 4xx, not a 500',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'segmentIds is not validated and reaches inArray on a typeid column: 500 (routes/api/v1/users/index.ts:41-44, users/user.service.ts:306-313)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people }) => {
       const admin = await keyApi(playwright, baseURL, {
@@ -303,12 +298,7 @@ test.describe('REST portal users', () => {
   test(
     'API-R-141 a missing portal user says "Portal user not found"',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'notFoundResponse appends " not found" to "Portal user not found": "Portal user not found not found" (routes/api/v1/users/$principalId.ts:46)',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people }) => {
       const admin = await keyApi(playwright, baseURL, {
@@ -625,12 +615,7 @@ test.describe('REST portal users', () => {
   test(
     'API-R-148 deleting a portal user clears the visitor email on their conversations',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'removePortalUser re-attributes conversations to the deleted-user placeholder before clearing visitor_email by the old principal id, so the email is never cleared (domains/users/user.service.ts:494-499)',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const admin = await keyApi(playwright, baseURL, {
@@ -764,12 +749,7 @@ test.describe('REST portal users', () => {
   test(
     'API-R-150 a malformed id on the principal card is a clean 4xx',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The raw id is queried against a typeid column outside any try: 500 (routes/api/v1/users/$principalId.card.ts:53)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, newTeammate }) => {
       const mate = await newTeammate({ roleKey: 'manager' })
@@ -1005,12 +985,7 @@ test.describe('REST segment members', () => {
   test(
     'API-R-155 a malformed id is listed in failed and a non-JSON body is a 400',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A malformed principal id reaches inArray on a typeid column and a non-JSON body throws outside zod: both 500 (routes/api/v1/segments/$slug.members.ts:38-41, :71)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const admin = await keyApi(playwright, baseURL, {

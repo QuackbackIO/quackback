@@ -308,14 +308,14 @@ test.describe('portal submit', () => {
         title: `${marker} crafted bad`,
         customFields: { plan: 'Enterprise' },
       })
-      expect(bad.error).toMatchObject({ code: 'VALIDATION_ERROR' })
+      expect(bad.error).toMatchObject({ code: 'CUSTOM_FIELDS_INVALID' })
       expect(bad.error?.message).toMatch(/not a valid option/)
       const missing = await fbFn(cass.request, 'publicPosts', 'createPublicPostFn', {
         boardId: board.id,
         title: `${marker} crafted missing`,
       })
       expect(missing.error).toMatchObject({
-        code: 'VALIDATION_ERROR',
+        code: 'CUSTOM_FIELDS_INVALID',
         message: 'Your plan is required',
       })
       const extra = await fbFn(cass.request, 'publicPosts', 'createPublicPostFn', {
@@ -359,7 +359,7 @@ test.describe('portal submit', () => {
   )
 
   test(
-    'FBP-S-14 a held post: the author sees it, others do not, no post.created, toast still says submitted',
+    'FBP-S-14 a held post: the author sees it waiting for review, others do not, no post.created',
     { tag: '@core' },
     async ({ browser, marker, playwright, baseURL, people }) => {
       const board = await createBoard(marker, { access: { moderation: { signedPosts: 'on' } } })
@@ -372,9 +372,9 @@ test.describe('portal submit', () => {
         const title = `${marker} needs review`
         await startPost(page, title)
         await page.getByRole('button', { name: 'Post', exact: true }).click()
-        await expect(toastWith(page, 'Feedback submitted')).toBeVisible()
+        await expect(toastWith(page, 'Your post is waiting for review')).toBeVisible()
         await expect(cardFor(page, title)).toBeVisible()
-        await expect(cardFor(page, title).getByText('Pending review')).toBeVisible()
+        await expect(cardFor(page, title).getByText('Waiting for review')).toBeVisible()
 
         const row = await postByTitle(board, title)
         expect(row).toMatchObject({ moderation_state: 'pending', vote_count: 1 })
@@ -664,12 +664,7 @@ test.describe('portal submit', () => {
   test(
     'FBP-S-22 an anonymous session cannot upload while anonymous posting is off',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B13: /api/portal/upload accepts any session with a principal, ignoring the workspace anonymous switch',
-      },
+      tag: '@nightly',
     },
     async ({ browser, marker }) => {
       // The workspace anonymous switch is off on a fresh seed (portal_config NULL).
@@ -694,26 +689,36 @@ test.describe('portal submit', () => {
   test(
     'FBP-S-24 public post metadata is bounded',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B14: createPublicPostSchema.metadata is an unbounded string map stored as widget_metadata',
-      },
+      tag: '@nightly',
     },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
       const cass = await portalCustomer(browser, marker)
-      const metadata: Record<string, string> = {}
+      const metadata: Record<string, string> = {
+        ['x'.repeat(101)]: 'long key',
+        long: 'v'.repeat(1001),
+      }
       for (let i = 0; i < 2000; i++) metadata[`k${i}`] = 'v'.repeat(200)
       const res = await fbFn(cass.request, 'publicPosts', 'createPublicPostFn', {
         boardId: board.id,
         title: `${marker} heavy metadata`,
         metadata,
       })
-      // 2,000 keys of 200 characters (400 KB) must be refused.
-      expect(res.error).toBeDefined()
-      expect(await postByTitle(board, `${marker} heavy metadata`)).toBeNull()
+      // 2,000 keys of 200 characters (400 KB): the post is taken, and only the
+      // first 50 entries within bounds are stored.
+      expect(res.error).toBeUndefined()
+      const row = await postByTitle(board, `${marker} heavy metadata`)
+      expect(row).not.toBeNull()
+      const stored = (
+        typeof row!.widget_metadata === 'string'
+          ? JSON.parse(row!.widget_metadata as string)
+          : row!.widget_metadata
+      ) as Record<string, string>
+      expect(Object.keys(stored)).toHaveLength(50)
+      expect(stored.k0).toBe('v'.repeat(200))
+      expect(stored.k50).toBeUndefined()
+      expect(stored.long).toBeUndefined()
+      expect(Object.keys(stored).every((k) => k.length <= 100)).toBe(true)
     }
   )
 
@@ -730,14 +735,7 @@ test.describe('portal submit', () => {
 
   test(
     'FBP-S-14 the confirmation of a held post tells the author it awaits review',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B07: a held post gets the same "Feedback submitted" toast as a published one, with no hint it waits for review',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const { page } = await postHeld(browser, marker)
       await expect(page.locator('[data-sonner-toast]').first()).toContainText(/review/i)
@@ -746,18 +744,14 @@ test.describe('portal submit', () => {
 
   test(
     "FBP-S-14 the held post's panel does not tell its author that customers cannot see it",
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B06: inline-moderation-actions renders the moderator copy "Customers cannot see this post yet." to the author',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const { page, title } = await postHeld(browser, marker)
       const card = cardFor(page, title)
-      await expect(card.getByText('Pending review')).toBeVisible()
+      await expect(card.getByText('Waiting for review')).toBeVisible()
+      await expect(
+        card.getByText('Only you can see this post until the team reviews it.')
+      ).toBeVisible()
       await expect(card.getByText('Customers cannot see this post yet.')).toHaveCount(0)
     }
   )
@@ -830,12 +824,7 @@ test.describe('portal submit', () => {
     test(
       'FBP-S-06 an anonymous comment is refused with the same code as an anonymous post or vote',
       {
-        tag: ['@core', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B04: comments throw ANONYMOUS_NOT_ENABLED while posts and votes throw ANONYMOUS_NOT_ALLOWED for the same rule',
-        },
+        tag: ['@core', '@isolated'],
       },
       async ({ browser, marker }) => {
         await withSettings(ANON_OFF, async () => {
@@ -895,12 +884,7 @@ test.describe('portal submit', () => {
     test(
       'FBP-S-07 the anonymous post cap answers as a rate limit, and the composer says so',
       {
-        tag: ['@nightly', '@isolated', '@quarantine'],
-        annotation: {
-          type: 'quarantine',
-          description:
-            'FBP-B04: RATE_LIMITED is thrown as a ValidationError (400) and the composer shows the generic retry line',
-        },
+        tag: ['@nightly', '@isolated'],
       },
       async ({ browser, marker }) => {
         await withSettings(ANON_ON, async () => {

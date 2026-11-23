@@ -26,7 +26,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/columns')({
     handlers: {
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
           const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
           const { getRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
           return successResponse((await getRoadmap(roadmapId)).columns)

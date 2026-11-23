@@ -202,12 +202,7 @@ test.describe('merging a lead', () => {
   test(
     'PPL-U-31 merging a lead that voted the same post as the user leaves one vote counted',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'mergeLeadIntoUser deletes the colliding lead vote without decrementing posts.vote_count (principal-repoint.ts); see QUARANTINE.md',
-      },
+      tag: '@core',
     },
     async ({ browser, playwright, marker }) => {
       const admin = await personApi(playwright, 'admin')
@@ -633,12 +628,7 @@ test.describe('removing a person', () => {
   test(
     'PPL-U-43 removing a voter withdraws their vote from the post count',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'removePortalUser lets post_votes cascade without decrementing posts.vote_count (user.service.ts removePortalUser); see QUARANTINE.md',
-      },
+      tag: '@core',
     },
     async ({ browser, playwright, marker }) => {
       const board = await seedBoard(marker)

@@ -294,6 +294,37 @@ describe('createPost mention dispatch', () => {
     expect(call.actor).toMatchObject({ principalId: authorPrincipal })
   })
 
+  it("names the teammate who wrote a post on a customer's behalf as the mentioner", async () => {
+    const { createPost } = await import('../post.service')
+    const customer = 'principal_customer' as unknown as PrincipalId
+    const teammate = 'principal_teammate' as unknown as PrincipalId
+    await createPost(
+      {
+        boardId: 'board_b' as unknown as BoardId,
+        title: 'Filed for a customer',
+        content: 'Body',
+        contentJson: docWithMention() as unknown as import('@/lib/server/db').TiptapContent,
+        statusId: 'post_status_open' as unknown as PostStatusId,
+      },
+      {
+        principalId: customer,
+        displayName: 'Cass',
+        actor: {
+          principalId: teammate,
+          role: 'admin',
+          principalType: 'user',
+          segmentIds: new Set(),
+        },
+      }
+    )
+
+    expect(syncPostMentions).toHaveBeenCalledTimes(1)
+    const call = syncPostMentions.mock.calls[0][0]
+    // The post (and its event) is the customer's; the text is the teammate's.
+    expect(call.actor).toMatchObject({ principalId: customer })
+    expect(call.mentionerPrincipalId).toBe(teammate)
+  })
+
   it('does NOT call syncPostMentions when contentJson has no mentions', async () => {
     const { createPost } = await import('../post.service')
 
@@ -310,6 +341,24 @@ describe('createPost mention dispatch', () => {
     )
 
     expect(syncPostMentions).not.toHaveBeenCalled()
+  })
+
+  it('a failure telling the people a post mentions never fails the saved post', async () => {
+    syncPostMentions.mockRejectedValueOnce(new Error('settings unavailable'))
+    const { createPost } = await import('../post.service')
+
+    await expect(
+      createPost(
+        {
+          boardId: 'board_b' as unknown as BoardId,
+          title: 'New post',
+          content: 'Body',
+          contentJson: docWithMention() as unknown as import('@/lib/server/db').TiptapContent,
+          statusId: 'post_status_open' as unknown as PostStatusId,
+        },
+        { principalId: 'principal_author' as unknown as PrincipalId }
+      )
+    ).resolves.toMatchObject({ id: 'post_new' })
   })
 })
 
@@ -397,5 +446,19 @@ describe('updatePost mention dispatch', () => {
     )
 
     expect(syncPostMentions).not.toHaveBeenCalled()
+  })
+
+  it('a failure reconciling mentions never fails the saved edit', async () => {
+    updateReturningContentJson = docWithMention()
+    syncPostMentions.mockRejectedValueOnce(new Error('settings unavailable'))
+    const { updatePost } = await import('../post.service')
+
+    await expect(
+      updatePost(
+        'post_update' as unknown as import('@quackback/ids').PostId,
+        { contentJson: docWithMention() as unknown as import('@/lib/server/db').TiptapContent },
+        { principalId: 'principal_actor' as unknown as PrincipalId }
+      )
+    ).resolves.toMatchObject({ id: 'post_update' })
   })
 })

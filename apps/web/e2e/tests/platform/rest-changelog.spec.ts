@@ -206,13 +206,7 @@ test.describe('REST changelog: reads', () => {
   test(
     'API-R-106 a malformed cursor is refused as bad input, not a server error',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'A malformed cursor reaches the typeid column and the driver throws: 500 INTERNAL_ERROR ' +
-          '(apps/web/src/routes/api/v1/changelog/index.ts:41, changelog.query.ts:72)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people }) => {
       const { api } = await adminApi(playwright, baseURL, people)
@@ -531,7 +525,7 @@ test.describe('REST changelog: update and delete', () => {
         (await jobRows(`changelog-publish--${scheduled.id}`)).length === 0 ? true : null
       )
 
-      // 4: a draft published at a past date is announced once, as its author.
+      // 4: a draft published at a past date is announced once, as whoever published it.
       const draft = await createEntry(api, { title: `${marker} draft`, content: 'Draft' })
       const past = '2024-05-01T12:00:00.000Z'
       const pub = await expectJson(await patch(draft.id, { publishedAt: past }), 200)
@@ -539,8 +533,8 @@ test.describe('REST changelog: update and delete', () => {
       await waitForEventHandled(draft.id, { type: 'changelog.published' })
       const events = await eventRows(draft.id, 'changelog.published')
       expect(events).toHaveLength(1)
-      expect(events[0].actor_id).toBe(principalId)
-      expect(events[0].actor_id).not.toBe(otherPrincipal)
+      expect(events[0].actor_id).toBe(otherPrincipal)
+      expect(events[0].actor_id).not.toBe(principalId)
 
       // 5: a future date on a draft schedules it.
       const draft2 = await createEntry(api, { title: `${marker} draft2`, content: 'Draft' })
@@ -713,13 +707,7 @@ test.describe('REST changelog: validation', () => {
   test(
     'API-R-111 a body that is not JSON is refused as bad input, not a server error',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'request.json() throws outside the domain error mapping: 500 INTERNAL_ERROR ' +
-          '(apps/web/src/routes/api/v1/changelog/index.ts:78, $entryId.ts:68)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const { api } = await adminApi(playwright, baseURL, people)

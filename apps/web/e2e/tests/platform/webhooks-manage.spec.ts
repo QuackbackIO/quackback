@@ -32,13 +32,6 @@ import {
 
 test.describe.configure({ timeout: 60_000 })
 
-const QUARANTINE_DELETED = {
-  type: 'quarantine',
-  description:
-    'API-W-09/10: webhook.service.ts getWebhookById, updateWebhook and rotateWebhookSecret ' +
-    'ignore deleted_at, so a deleted webhook still reads, updates and rotates (QUARANTINE.md)',
-}
-
 test.describe('webhooks over REST', () => {
   test(
     'API-W-01 creating a feedback webhook returns its secret once and stores it encrypted',
@@ -346,7 +339,7 @@ test.describe('webhooks over REST', () => {
 
   test(
     'API-W-09 a deleted webhook reads as not found',
-    { tag: ['@core', '@quarantine'], annotation: QUARANTINE_DELETED },
+    { tag: '@core' },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)
       try {
@@ -362,7 +355,7 @@ test.describe('webhooks over REST', () => {
 
   test(
     'API-W-10 a deleted webhook cannot be updated or rotated; a second delete is 404',
-    { tag: ['@nightly', '@quarantine'], annotation: QUARANTINE_DELETED },
+    { tag: '@nightly' },
     async ({ playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)
       try {
@@ -593,9 +586,30 @@ function rowOf(page: Page, url: string) {
     .filter({ has: page.getByText(url, { exact: true }) })
 }
 
+/*
+ * A press that lands before the tab has hydrated does nothing, so the two
+ * openers below press again until the menu or dialog is there.
+ */
 async function openRowAction(page: Page, url: string, action: 'Edit' | 'Delete') {
-  await page.getByRole('button', { name: `Actions for ${url}`, exact: true }).click()
-  await page.getByRole('menuitem', { name: action }).click()
+  const item = page.getByRole('menuitem', { name: action })
+  await expect(async () => {
+    if (!(await item.isVisible())) {
+      await page.getByRole('button', { name: `Actions for ${url}`, exact: true }).click()
+    }
+    await expect(item).toBeVisible({ timeout: 3_000 })
+  }).toPass({ timeout: 20_000 })
+  await item.click()
+}
+
+async function openNewWebhook(page: Page) {
+  const dialog = page.getByRole('dialog')
+  await expect(async () => {
+    if (!(await dialog.isVisible())) {
+      await page.getByRole('button', { name: 'New webhook' }).click()
+    }
+    await expect(dialog.getByLabel('Endpoint URL')).toBeVisible({ timeout: 3_000 })
+  }).toPass({ timeout: 20_000 })
+  return dialog
 }
 
 /** A role holding exactly `permissions`; returns its key for the newTeammate fixture. */
@@ -615,8 +629,7 @@ test.describe('webhooks in Settings > Developers', () => {
       const page = await asPerson('admin')
       try {
         await page.goto(WEBHOOKS_TAB)
-        await page.getByRole('button', { name: 'New webhook' }).click()
-        const dialog = page.getByRole('dialog')
+        const dialog = await openNewWebhook(page)
         const submit = dialog.getByRole('button', { name: 'Create webhook' })
         await expect(submit).toBeDisabled()
         await dialog.getByLabel('Endpoint URL').fill(url)
@@ -664,8 +677,7 @@ test.describe('webhooks in Settings > Developers', () => {
     async ({ asPerson, marker }) => {
       const page = await asPerson('admin')
       await page.goto(WEBHOOKS_TAB)
-      await page.getByRole('button', { name: 'New webhook' }).click()
-      const dialog = page.getByRole('dialog')
+      const dialog = await openNewWebhook(page)
       await dialog.getByRole('checkbox', { name: 'Subscribe to New Post Created events' }).click()
       for (const url of [
         sink.url(marker).replace('https://', 'http://'),
@@ -718,34 +730,37 @@ test.describe('webhooks in Settings > Developers', () => {
   test(
     "API-W-22 saving an unrelated edit keeps a failing webhook's failure count",
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'API-W-22: edit-webhook-dialog.tsx always sends status "active", and ' +
-          'webhook.service.ts updateWebhook resets failureCount/lastError for it (QUARANTINE.md)',
-      },
+      tag: '@core',
     },
     async ({ asPerson, playwright, baseURL, people, marker }) => {
       const api = await adminApi(playwright, baseURL, people, marker)
+      // Scoped to a board nobody posts on: a delivery of another test's post
+      // would succeed and reset the counters this test asserts on.
+      const board = await newBoard(api, marker)
       const page = await asPerson('admin')
       try {
-        await withHook(api, marker, ['post.created'], async (hook) => {
-          await setHookCounters(hook.id, { failureCount: 12, lastError: 'HTTP 500' })
-          await page.goto(WEBHOOKS_TAB)
-          await openRowAction(page, hook.url as string, 'Edit')
-          const dialog = page.getByRole('dialog')
-          await dialog.getByRole('checkbox', { name: 'Subscribe to New Comment events' }).click()
-          await dialog.getByRole('button', { name: 'Save changes' }).click()
-          await expect(dialog).toBeHidden()
-          await expect
-            .poll(async () => (await getHook(api, hook.id)).events)
-            .toEqual(['post.created', 'comment.created'])
-          expect(await getHook(api, hook.id)).toMatchObject({
-            failureCount: 12,
-            lastError: 'HTTP 500',
-          })
-        })
+        await withHook(
+          api,
+          marker,
+          ['post.created'],
+          async (hook) => {
+            await setHookCounters(hook.id, { failureCount: 12, lastError: 'HTTP 500' })
+            await page.goto(WEBHOOKS_TAB)
+            await openRowAction(page, hook.url as string, 'Edit')
+            const dialog = page.getByRole('dialog')
+            await dialog.getByRole('checkbox', { name: 'Subscribe to New Comment events' }).click()
+            await dialog.getByRole('button', { name: 'Save changes' }).click()
+            await expect(dialog).toBeHidden()
+            await expect
+              .poll(async () => (await getHook(api, hook.id)).events)
+              .toEqual(['post.created', 'comment.created'])
+            expect(await getHook(api, hook.id)).toMatchObject({
+              failureCount: 12,
+              lastError: 'HTTP 500',
+            })
+          },
+          [board.id]
+        )
       } finally {
         await api.dispose()
       }
@@ -948,8 +963,7 @@ test.describe('webhooks in Settings > Developers', () => {
         'aria-selected',
         'true'
       )
-      await b.getByRole('button', { name: 'New webhook' }).click()
-      const dialog = b.getByRole('dialog')
+      const dialog = await openNewWebhook(b)
       await dialog.getByLabel('Endpoint URL').fill(sink.url(marker))
       await dialog.getByRole('checkbox', { name: 'Subscribe to New Post Created events' }).click()
       await dialog.getByRole('button', { name: 'Create webhook' }).click()

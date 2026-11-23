@@ -1,10 +1,11 @@
 /**
  * The author's own edit and delete of a post, and the refusals.
  *
- * Owner question (FBP-B09, not asserted): with default settings a fresh post
- * carries its author's vote, so its author can neither edit nor delete it
- * until they unvote. These tests drive the documented path (unvote first)
- * and the refusals; whether that default is intended is for the owner.
+ * D13: a customer can edit or delete their own post until the team acts on it
+ * (a status change off the default, a public team reply, a merge), and once
+ * the team has acted the window stays closed. Their own auto-vote and other
+ * customers' comments leave it open; another customer's vote closes delete
+ * only, so their vote is not lost.
  *
  * Journeys: FBP-S-17 FBP-S-18 FBP-S-19 FBP-S-20
  */
@@ -38,7 +39,7 @@ interface Perms {
   deleteReason?: string
 }
 
-/** A post the customer wrote through the portal, then unvoted (count 0). */
+/** A post the customer wrote through the portal, still carrying their auto-vote. */
 async function ownPost(cass: PortalCustomer, board: TestBoard, title: string) {
   const created = await fbFn<{ id: string }>(cass.request, 'publicPosts', 'createPublicPostFn', {
     boardId: board.id,
@@ -46,9 +47,16 @@ async function ownPost(cass: PortalCustomer, board: TestBoard, title: string) {
     content: 'first words',
   })
   const id = created.value?.id as string
-  await fbFn(cass.request, 'publicPosts', 'toggleVoteFn', { postId: id })
   return { id, uuid: uuid(id), title, board }
 }
+
+/** A public reply from a teammate: the team has acted on the post. */
+const teamReply = (post: { uuid: string }, teammateUuid: string) =>
+  seedComment(post as Parameters<typeof seedComment>[0], {
+    content: 'Thanks, we are on it',
+    principalUuid: teammateUuid,
+    isTeamMember: true,
+  })
 
 const perms = async (cass: Pick<PortalCustomer, 'request'>, postId: string) =>
   (await fbFn<Perms>(cass.request, 'publicPosts', 'getPostPermissionsFn', { postId })).value
@@ -63,6 +71,8 @@ test.describe('portal author actions', () => {
       const cass = await portalCustomer(browser, marker, { suffix: 'author' })
       const other = await portalCustomer(browser, marker, { suffix: 'other' })
       const stranger = await mintCustomer({ email: `${marker}-s@customers.example` })
+      const teammate = await mintCustomer({ email: `${marker}-t@customers.example` })
+      await supportDb()`UPDATE principal SET role = 'member' WHERE id = ${teammate.principalUuid}`
       const edit = (who: PortalCustomer, postId: string, title = `${marker} edited`) =>
         fbFn(who.request, 'publicPosts', 'userEditPostFn', { postId, title, content: 'x' })
 
@@ -75,16 +85,24 @@ test.describe('portal author actions', () => {
       // Reviewed by the team (status moved off the default).
       const reviewed = await ownPost(cass, board, `${marker} reviewed`)
       await supportDb()`UPDATE posts SET status_id = ${(await status('planned')).uuid} WHERE id = ${reviewed.uuid}`
-      // Voted by someone else.
+      // Replied to by the team.
+      const replied = await ownPost(cass, board, `${marker} replied`)
+      await teamReply(replied, teammate.principalUuid)
+      // Voted by someone else: that does not close the window.
       const voted = await ownPost(cass, board, `${marker} voted`)
       await seedVotes({ ...voted }, [stranger.principalUuid])
+      expect(await perms(cass, voted.id)).toMatchObject({
+        canEdit: true,
+        canDelete: false,
+        deleteReason: 'Cannot delete posts other people have voted on',
+      })
       // Deleted.
       const deleted = await ownPost(cass, board, `${marker} deleted`)
       await supportDb()`UPDATE posts SET deleted_at = now() WHERE id = ${deleted.uuid}`
 
       for (const [post, reason] of [
         [reviewed, 'Cannot edit posts that have been reviewed by the team'],
-        [voted, 'Cannot edit posts that have received votes'],
+        [replied, 'Cannot edit posts the team has replied to'],
       ] as const) {
         expect((await perms(cass, post.id))?.editReason, post.title).toBe(reason)
         expect((await edit(cass, post.id)).error, post.title).toMatchObject({
@@ -125,6 +143,8 @@ test.describe('portal author actions', () => {
       try {
         const cass = await portalCustomer(browser, marker, { suffix: 'author' })
         const other = await portalCustomer(browser, marker, { suffix: 'other' })
+        const teammate = await mintCustomer({ email: `${marker}-t@customers.example` })
+        await supportDb()`UPDATE principal SET role = 'member' WHERE id = ${teammate.principalUuid}`
         const post = await ownPost(cass, board, `${marker} to delete`)
         const keep = await ownPost(cass, board, `${marker} keep`)
         // Not someone else's.
@@ -162,16 +182,28 @@ test.describe('portal author actions', () => {
         expect(
           (await fbFn(cass.request, 'publicPosts', 'userDeletePostFn', { postId: post.id })).error
         ).toBeDefined()
-        // A post with a vote from someone else cannot be deleted.
+        // Another customer's vote closes delete, so their vote is not lost.
         const voted = await ownPost(cass, board, `${marker} voted`)
         await seedVotes({ ...voted }, [other.principalUuid])
         expect(
           (await fbFn(cass.request, 'publicPosts', 'userDeletePostFn', { postId: voted.id })).error
         ).toMatchObject({
           code: 'DELETE_NOT_ALLOWED',
-          message: 'Cannot delete posts that have received votes',
+          message: 'Cannot delete posts other people have voted on',
         })
         expect((await postRow(voted.uuid)).deleted_at).toBeNull()
+        // A post the team replied to cannot be deleted, even once the reply is gone.
+        const replied = await ownPost(cass, board, `${marker} replied`)
+        const reply = await teamReply(replied, teammate.principalUuid)
+        await supportDb()`UPDATE post_comments SET deleted_at = now() WHERE id = ${reply.uuid}`
+        expect(
+          (await fbFn(cass.request, 'publicPosts', 'userDeletePostFn', { postId: replied.id }))
+            .error
+        ).toMatchObject({
+          code: 'DELETE_NOT_ALLOWED',
+          message: 'Cannot delete posts the team has replied to',
+        })
+        expect((await postRow(replied.uuid)).deleted_at).toBeNull()
       } finally {
         await unsubscribe(api, hook)
       }
@@ -179,7 +211,7 @@ test.describe('portal author actions', () => {
   )
 
   test(
-    'FBP-S-17 the author of a fresh post gets no post menu until they take their vote back',
+    'FBP-S-17 the author of a fresh post can edit and delete it despite their own vote',
     { tag: '@core' },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
@@ -194,19 +226,12 @@ test.describe('portal author actions', () => {
         }
       )
       const id = created.value?.id as string
-      expect(await perms(cass, id)).toMatchObject({
-        canEdit: false,
-        canDelete: false,
-        editReason: 'Cannot edit posts that have received votes',
-      })
+      expect((await postRow(uuid(id))).vote_count).toBe(1)
+      expect(await perms(cass, id)).toMatchObject({ canEdit: true, canDelete: true })
       await cass.page.goto(postPath({ id, board }))
       await expect(
         cass.page.getByRole('heading', { level: 1, name: `${marker} fresh` })
       ).toBeVisible()
-      await expect(cass.page.getByRole('button', { name: 'Post actions' })).toHaveCount(0)
-
-      await fbFn(cass.request, 'publicPosts', 'toggleVoteFn', { postId: id })
-      await cass.page.reload()
       const menu = cass.page.getByRole('button', { name: 'Post actions' })
       await expect(async () => {
         await menu.click()
@@ -223,19 +248,14 @@ test.describe('portal author actions', () => {
   )
 
   test(
-    'FBP-S-17 the author edit of an unvoted, uncommented post succeeds instead of erroring',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'new: hasCommentsFromOthers compares post_comments.principal_id to a principal TypeID in raw sql, so Postgres rejects it and every allowed author edit answers 500',
-      },
-    },
+    'FBP-S-17 the author edits their post until the team replies, whoever else comments',
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const board = await createBoard(marker)
       const cass = await portalCustomer(browser, marker, { suffix: 'author' })
       const stranger = await mintCustomer({ email: `${marker}-s@customers.example` })
+      const teammate = await mintCustomer({ email: `${marker}-t@customers.example` })
+      await supportDb()`UPDATE principal SET role = 'member' WHERE id = ${teammate.principalUuid}`
       const post = await ownPost(cass, board, `${marker} draft title`)
       const res = await fbFn<{ title: string }>(cass.request, 'publicPosts', 'userEditPostFn', {
         postId: post.id,
@@ -244,8 +264,19 @@ test.describe('portal author actions', () => {
       })
       expect(res.error).toBeUndefined()
       expect((await postRow(post.uuid)).title).toBe(`${marker} better title`)
-      // A comment from someone else then refuses with its reason.
+      // Another customer's comment leaves the window open.
       await seedComment(post, { content: 'hello', principalUuid: stranger.principalUuid })
+      expect(
+        (
+          await fbFn(cass.request, 'publicPosts', 'userEditPostFn', {
+            postId: post.id,
+            title: `${marker} still mine`,
+            content: 'x',
+          })
+        ).error
+      ).toBeUndefined()
+      // A team reply closes it, with its reason.
+      await teamReply(post, teammate.principalUuid)
       expect(
         (
           await fbFn(cass.request, 'publicPosts', 'userEditPostFn', {
@@ -256,7 +287,7 @@ test.describe('portal author actions', () => {
         ).error
       ).toMatchObject({
         code: 'EDIT_NOT_ALLOWED',
-        message: 'Cannot edit posts that have comments from other users',
+        message: 'Cannot edit posts the team has replied to',
       })
     }
   )

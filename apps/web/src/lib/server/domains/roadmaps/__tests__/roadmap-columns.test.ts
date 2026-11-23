@@ -76,47 +76,33 @@ describe.skipIf(!fixture.available)('roadmap single-column paths (real DB)', () 
     })
   })
 
-  // Root cause: createRoadmapColumn has no duplicate-status check
-  // (apps/web/src/lib/server/domains/roadmaps/roadmap.service.ts:339), unlike
-  // validateColumns on the bulk path, so the insert reaches the
-  // roadmap_columns_roadmap_status_unique index and surfaces as a raw database
-  // error. See apps/web/e2e/QUARANTINE.md.
-  it.fails(
-    'RMP-A-12 refuses a second column for a status the roadmap already has (quarantined: createRoadmapColumn skips the duplicate-status validation)',
-    async () => {
-      const { roadmap, planned } = await seedColumnRoadmap()
+  it('RMP-A-12 refuses a second column for a status the roadmap already has', async () => {
+    const { roadmap, planned } = await seedColumnRoadmap()
 
-      await expect(
-        createRoadmapColumn({
-          roadmapId: roadmap.id,
-          statusId: planned,
-          name: 'Planned again',
-          color: '#333333',
-        })
-      ).rejects.toMatchObject({
-        code: 'VALIDATION_ERROR',
-        message: 'Each status can appear only once in a roadmap',
+    await expect(
+      createRoadmapColumn({
+        roadmapId: roadmap.id,
+        statusId: planned,
+        name: 'Planned again',
+        color: '#333333',
       })
-    }
-  )
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'Each status can appear only once in a roadmap',
+    })
+  })
 
-  // Root cause: updateRoadmapColumn trims the name but never rejects an empty
-  // result (apps/web/src/lib/server/domains/roadmaps/roadmap.service.ts:358);
-  // the zod layer only checks min(1) before trimming. See apps/web/e2e/QUARANTINE.md.
-  it.fails(
-    'RMP-A-12 refuses renaming a column to whitespace (quarantined: updateRoadmapColumn stores an empty name)',
-    async () => {
-      const { roadmap } = await seedColumnRoadmap()
-      const columnId = roadmap.columns[0].id
+  it('RMP-A-12 refuses renaming a column to whitespace', async () => {
+    const { roadmap } = await seedColumnRoadmap()
+    const columnId = roadmap.columns[0].id
 
-      await expect(updateRoadmapColumn(columnId, { name: '   ' })).rejects.toMatchObject({
-        code: 'VALIDATION_ERROR',
-      })
-      const [row] = await testDb
-        .select({ name: roadmapColumns.name })
-        .from(roadmapColumns)
-        .where(eq(roadmapColumns.id, columnId))
-      expect(row.name).toBe('Planned')
-    }
-  )
+    await expect(updateRoadmapColumn(columnId, { name: '   ' })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    })
+    const [row] = await testDb
+      .select({ name: roadmapColumns.name })
+      .from(roadmapColumns)
+      .where(eq(roadmapColumns.id, columnId))
+    expect(row.name).toBe('Planned')
+  })
 })

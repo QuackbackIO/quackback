@@ -11,7 +11,6 @@ import {
   gte,
   isNull,
   desc,
-  lt,
   or,
   ilike,
   sql,
@@ -19,7 +18,12 @@ import {
   principal,
   user,
 } from '@/lib/server/db'
-import type { PrincipalId, StatusComponentId, StatusSubscriptionId } from '@quackback/ids'
+import {
+  isTypeId,
+  type PrincipalId,
+  type StatusComponentId,
+  type StatusSubscriptionId,
+} from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
@@ -201,14 +205,18 @@ export async function listStatusSubscriptions(params: {
   const { cursor, limit = 20, search } = params
   const conditions = []
 
-  if (cursor) {
-    const cursorRow = await db.query.statusSubscriptions.findFirst({
-      where: eq(statusSubscriptions.id, cursor as StatusSubscriptionId),
-      columns: { createdAt: true },
-    })
-    if (cursorRow) {
-      conditions.push(lt(statusSubscriptions.createdAt, cursorRow.createdAt))
-    }
+  // Keyset on (created_at, id): one import inserts every row in one
+  // transaction, so they share a created_at, and paging on created_at alone
+  // skipped the rest of them after the first page. Compared in SQL, at the
+  // column's own (microsecond) precision, which a JS Date would round off.
+  if (cursor && isTypeId(cursor, 'status_sub')) {
+    const cursorRow = db
+      .select({ createdAt: statusSubscriptions.createdAt, id: statusSubscriptions.id })
+      .from(statusSubscriptions)
+      .where(eq(statusSubscriptions.id, cursor as StatusSubscriptionId))
+    conditions.push(
+      sql`(${statusSubscriptions.createdAt}, ${statusSubscriptions.id}) < (${cursorRow})`
+    )
   }
 
   const term = search?.trim()
@@ -233,7 +241,7 @@ export async function listStatusSubscriptions(params: {
     .innerJoin(principal, eq(statusSubscriptions.principalId, principal.id))
     .leftJoin(user, eq(principal.userId, user.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(statusSubscriptions.createdAt))
+    .orderBy(desc(statusSubscriptions.createdAt), desc(statusSubscriptions.id))
     .limit(limit + 1)
 
   const hasMore = rows.length > limit

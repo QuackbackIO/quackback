@@ -30,7 +30,7 @@ import {
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
-import { sql, isNull } from 'drizzle-orm'
+import { sql, isNull, or, desc } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
@@ -43,6 +43,7 @@ import {
 } from '@/lib/server/events/dispatch'
 import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
@@ -55,7 +56,10 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { startOfUtcMonth } from '@/lib/shared/utils/date'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
-import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
+import {
+  CUSTOM_FIELDS_INVALID,
+  validatePostCustomFieldValues,
+} from '@/lib/shared/post-custom-fields'
 import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { logger } from '@/lib/server/logger'
@@ -171,7 +175,15 @@ export async function createPost(
       ? db
           .select()
           .from(postStatuses)
-          .where(and(eq(postStatuses.slug, 'open'), isNull(postStatuses.deletedAt)))
+          // The status marked default, as the portal and admin dialog use;
+          // the open slug only when no status is marked.
+          .where(
+            and(
+              isNull(postStatuses.deletedAt),
+              or(eq(postStatuses.isDefault, true), eq(postStatuses.slug, 'open'))
+            )
+          )
+          .orderBy(desc(postStatuses.isDefault))
           .limit(1)
           .then((rows) => rows[0])
       : db.query.postStatuses.findFirst({
@@ -192,7 +204,9 @@ export async function createPost(
   if (boardCustomFields.length > 0) {
     const parsed = validatePostCustomFieldValues(boardCustomFields, input.customFields ?? {})
     if (!parsed.ok) {
-      throw new ValidationError('VALIDATION_ERROR', parsed.errors[0].message)
+      // Its own code, so a composer that loaded the board before its fields
+      // changed can say so and fetch them again.
+      throw new ValidationError(CUSTOM_FIELDS_INVALID, parsed.errors[0].message)
     }
     customFieldValues = parsed.values
   }
@@ -219,13 +233,13 @@ export async function createPost(
     : 'published'
   let holdReason: ReturnType<typeof contentHoldReason> = null
 
-  // Determine statusId - either from input or use default "open" status
+  // Determine statusId - either from input or the default status
   let statusId = input.statusId
   if (!statusId) {
     if (!statusResult) {
       throw new ValidationError(
         'VALIDATION_ERROR',
-        'Default "open" status not found. Please ensure post statuses are configured for this organization.'
+        'No default status found. Please ensure post statuses are configured for this organization.'
       )
     }
     statusId = statusResult.id
@@ -347,7 +361,9 @@ export async function createPost(
 
   if (!options?.skipDispatch) {
     // Auto-subscribe the author to their own post. Runs even when held for
-    // moderation so the author receives notifications on approval/rejection.
+    // moderation, so once approved the author follows the thread. The
+    // approval or rejection notice itself reaches the author directly from
+    // the post.approved / post.rejected events (moderation.service.ts).
     await subscribeToPost(author.principalId, post.id, 'author')
 
     createActivity({
@@ -372,6 +388,8 @@ export async function createPost(
         },
         board: { slug: board.slug, name: board.name },
         author,
+        // On a teammate's create for a customer, the teammate wrote the text.
+        writerPrincipalId: author.actor?.principalId ?? author.principalId,
       })
     }
   }
@@ -449,6 +467,17 @@ export async function updatePost(
   if (input.content !== undefined) {
     if (input.content.length > 10000) {
       throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
+    }
+  }
+
+  // A post's owner is a teammate: refuse a customer (or nobody) before writing.
+  if (input.ownerPrincipalId && input.ownerPrincipalId !== existingPost.ownerPrincipalId) {
+    const owner = await db.query.principal.findFirst({
+      where: eq(principalTable.id, input.ownerPrincipalId),
+      columns: { role: true },
+    })
+    if (!owner || !isTeamMember(owner.role)) {
+      throw new ValidationError('INVALID_OWNER', 'A post owner must be a teammate')
     }
   }
 
@@ -675,15 +704,21 @@ export async function updatePost(
   // was part of the update — a title-only edit must not clobber existing rows.
   if (input.contentJson !== undefined || input.content !== undefined) {
     const contentJson = updatedPost.contentJson
-    await syncPostMentions({
-      postId: updatedPost.id,
-      postTitle: updatedPost.title,
-      postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
-      boardId: updatedPost.boardId,
-      mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
-      excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
-      actor: buildEventActor(actor),
-    })
+    // The edit is already saved: a failure reconciling its mentions is logged,
+    // never turned into a failed request.
+    try {
+      await syncPostMentions({
+        postId: updatedPost.id,
+        postTitle: updatedPost.title,
+        postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
+        boardId: updatedPost.boardId,
+        mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
+        excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
+        actor: buildEventActor(actor),
+      })
+    } catch (error) {
+      log.error({ err: error, post_id: updatedPost.id }, 'post mention reconcile failed')
+    }
   }
 
   return updatedPost

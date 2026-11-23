@@ -248,12 +248,7 @@ test.describe('editing articles', () => {
   test(
     'HC-A-15 emptying the description in the editor clears it',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B12: article-modal.tsx sends description undefined for an empty field, which updateArticle reads as unchanged',
-      },
+      tag: '@core',
     },
     async ({ asPerson, marker, playwright }) => {
       const hc = await hcApi(playwright)
@@ -335,12 +330,7 @@ test.describe('editing articles', () => {
   test(
     'HC-A-20 an unknown article id in the URL says the article was not found',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B18: use-url-modal.ts opens the dialog for any ?article= value and article-modal.tsx waits for the article forever (spinner, no not-found state)',
-      },
+      tag: '@nightly',
     },
     async ({ asPerson }) => {
       const admin = await asPerson('admin')

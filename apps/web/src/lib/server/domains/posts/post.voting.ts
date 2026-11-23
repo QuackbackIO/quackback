@@ -19,7 +19,7 @@ import {
 import { createId, fromUuid, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { relatedPostIdsSql } from './post.merge-ids'
 import { getExecuteRows } from '@/lib/server/utils'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import { notTestPrincipal } from '@/lib/server/test-data'
@@ -109,6 +109,31 @@ async function emitPostVotedEvent(
  * @param principalId - Principal ID of the voter (required)
  * @returns Result containing vote status and new count, or an error
  */
+/**
+ * The vote toggle's answer for a blocked person (blocking.ts), or null for
+ * anyone else. A blocked person may take back a vote they gave, since that is
+ * leaving rather than taking part; with no vote to take back, the `BLOCKED`
+ * refusal stands. Asked before the toggle by every caller acting in the
+ * person's own name (portal, widget, MCP).
+ *
+ * @throws ForbiddenError (`BLOCKED`) when the person is blocked and has no vote here
+ */
+export async function blockedVoteToggle(
+  postId: PostId,
+  principalId: PrincipalId
+): Promise<VoteResult | null> {
+  const { assertNotBlocked } = await import('@/lib/server/domains/principals/blocking')
+  try {
+    await assertNotBlocked(principalId)
+    return null
+  } catch (refusal) {
+    if (!(refusal instanceof ForbiddenError)) throw refusal
+    const taken = await removeVote(postId, principalId).catch(() => null)
+    if (!taken?.removed) throw refusal
+    return { voted: false, voteCount: taken.voteCount }
+  }
+}
+
 export async function voteOnPost(postId: PostId, principalId: PrincipalId): Promise<VoteResult> {
   const open = await planOpenBoardsSql()
   const postUuid = toUuid(postId)

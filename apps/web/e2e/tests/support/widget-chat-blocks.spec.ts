@@ -388,15 +388,25 @@ test.describe('widget attachments and email', () => {
   test(
     'CUS-W-43 the legacy media upload needs a session and a form body',
     { tag: '@nightly' },
-    async ({ request }) => {
-      const visitor = await mintVisitor()
+    async ({ request, marker }) => {
       const none = await request.post('/api/widget/upload', { data: 'x' })
       expect(none.status()).toBe(401)
+      // Since cae1ebdb15 (#1229) an anonymous session uploads only while the
+      // workspace takes anonymous posts, which this suite leaves off.
+      const anonymous = await mintVisitor()
+      const refused = await request.post('/api/widget/upload', {
+        headers: { authorization: `Bearer ${anonymous.token}`, 'content-type': 'text/plain' },
+        data: 'not a form',
+      })
+      expect(refused.status()).toBe(403)
+      expect(await refused.json()).toEqual({ error: 'Anonymous interaction is not enabled' })
+      const identified = await mintVisitor({ email: `${marker}-upload@customers.example` })
       const bad = await request.post('/api/widget/upload', {
-        headers: { authorization: `Bearer ${visitor.token}`, 'content-type': 'text/plain' },
+        headers: { authorization: `Bearer ${identified.token}`, 'content-type': 'text/plain' },
         data: 'not a form',
       })
       expect(bad.status()).toBe(400)
+      expect(await bad.json()).toEqual({ error: 'Invalid request body' })
     }
   )
 

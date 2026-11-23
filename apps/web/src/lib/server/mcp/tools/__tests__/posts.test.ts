@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { checkedAgainstOutputSchema } from './output-schema-check'
 import type { CallToolResult } from '@modelcontextprotocol/server'
 
 const mockUpdatePost = vi.fn()
@@ -11,6 +12,11 @@ vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: vi.fn(),
   addVoteOnBehalf: vi.fn(),
   removeVote: vi.fn(),
+  blockedVoteToggle: vi.fn(async () => null),
+}))
+// No one here is blocked; blocked-person-tools.db.test.ts drives the guard.
+vi.mock('@/lib/server/domains/principals/blocking', () => ({
+  assertNotBlocked: vi.fn(async () => undefined),
 }))
 vi.mock('@/lib/server/domains/posts/post.merge', () => ({
   mergePost: vi.fn(),
@@ -36,8 +42,8 @@ type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 function collect(auth: McpAuthContext): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const fakeServer = {
-    registerTool: (name: string, _c: unknown, handler: Handler) => {
-      handlers.set(name, handler)
+    registerTool: (name: string, config: unknown, handler: Handler) => {
+      handlers.set(name, checkedAgainstOutputSchema(config, handler))
     },
   }
   registerPostTools(fakeServer as never, auth)

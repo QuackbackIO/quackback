@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { assertApiReadAccess, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
@@ -9,7 +9,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { serializeIncidentDetails } from '../-serialize'
+import { serializeIncidentDetails, STATUS_PAGE_READ_PERMISSIONS } from '../-serialize'
 import {
   STATUS_COMPONENT_STATUSES,
   STATUS_INCIDENT_IMPACTS,
@@ -34,6 +34,9 @@ const createIncidentSchema = z.object({
     .array(affectedComponentSchema)
     .min(1, 'At least one affected component is required'),
   body: z.string().min(1, 'Update body is required'),
+  // A maintenance window created "scheduled", or "completed" without a
+  // backfill, needs both bounds; one already under way may leave its end
+  // open. The domain refuses the rest (VALIDATION_ERROR, a 400).
   scheduledStartAt: z.string().datetime().nullable().optional(),
   scheduledEndAt: z.string().datetime().nullable().optional(),
   autoStart: z.boolean().optional(),
@@ -56,7 +59,8 @@ export const Route = createFileRoute('/api/v1/status/incidents/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request)
+          const auth = await withApiKeyAuth(request)
+          assertApiReadAccess(auth, 'read:feedback', STATUS_PAGE_READ_PERMISSIONS)
 
           const url = new URL(request.url)
           const kindParam = url.searchParams.get('kind')

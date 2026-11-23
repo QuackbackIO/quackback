@@ -165,12 +165,7 @@ test(
 test(
   'HC-F-05 a signed-out visitor who flips Yes to No is counted once',
   {
-    tag: ['@core', '@quarantine'],
-    annotation: {
-      type: 'quarantine',
-      description:
-        'HC-B2: recordArticleFeedback skips the existing-vote lookup when there is no principal and always inserts, so a flip adds one helpful and one not-helpful vote',
-    },
+    tag: '@core',
   },
   async ({ page, marker, playwright }) => {
     const article = await seed(playwright, marker)

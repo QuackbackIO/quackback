@@ -197,12 +197,7 @@ test.describe('the widget Help tab', { tag: '@isolated' }, () => {
   test(
     'HC-W-10 the first widget vote of a fresh visitor confirms it',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'New (HC-W-10): the vote is stored, but the footer keeps "Was this helpful?" after a fresh visitor\'s first vote; the session minted by ensureSession appears to remount the article view and drop the vote state',
-      },
+      tag: '@core',
     },
     async ({ page, marker, playwright }) => {
       const hc = await hcApi(playwright)

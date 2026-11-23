@@ -320,12 +320,7 @@ test.describe('articles over REST', () => {
   test(
     'HC-A-16 a whitespace-only title or category name is refused on update',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B13: updateArticleSchema / updateCategorySchema check min(1) before trimming; the services store an empty string',
-      },
+      tag: '@core',
     },
     async ({ playwright, marker }) => {
       const hc = await hcApi(playwright)
@@ -405,12 +400,7 @@ test.describe('categories over REST', () => {
   test(
     'HC-A-76 a key without help_center.manage cannot read drafts or private categories',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'HC-B3: REST GET article list, article, category list and category call withApiKeyAuth(request) with no permission and read at team scope',
-      },
+      tag: '@core',
     },
     async ({ playwright, marker }) => {
       const hc = await hcApi(playwright)

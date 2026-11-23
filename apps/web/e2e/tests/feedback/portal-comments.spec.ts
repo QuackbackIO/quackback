@@ -196,12 +196,7 @@ test.describe('portal comments', () => {
   test(
     'FBP-C-03 with the anonymous switch off, an anonymous comment is refused with the code votes and posts use',
     {
-      tag: ['@core', '@isolated', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B04: comments.ts:84 throws ANONYMOUS_NOT_ENABLED; votes and posts throw ANONYMOUS_NOT_ALLOWED',
-      },
+      tag: ['@core', '@isolated'],
     },
     async ({ browser, marker }) => {
       test.skip(!ISOLATED, ISOLATED_SKIP)
@@ -489,14 +484,7 @@ test.describe('portal comments', () => {
 
   test(
     'FBP-C-09 the author of a held comment is not told that customers cannot see it',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B06: inline-moderation-actions.tsx:39-42 shows moderator copy to the author (comment-thread.tsx:808)',
-      },
-    },
+    { tag: '@core' },
     async ({ browser, marker }) => {
       const board = await createBoard(marker, { access: { moderation: { comments: 'on' } } })
       const post = await seedPost(board, { title: `${marker} post` })
@@ -507,7 +495,10 @@ test.describe('portal comments', () => {
       await cass.page.goto(postPath(post))
       const el = commentEl(cass.page, row.typeId)
       await expect(el).toContainText(text)
-      await expect(el.getByText(/pending|review/i).first()).toBeVisible()
+      await expect(el.getByText('Waiting for review')).toBeVisible()
+      await expect(
+        el.getByText('Only you can see this comment until the team reviews it.')
+      ).toBeVisible()
       await expect(el.getByText(/Customers cannot see/)).toHaveCount(0)
     }
   )
@@ -581,12 +572,7 @@ test.describe('portal comments', () => {
   test(
     'FBP-C-11 after a teammate replies, the author is no longer offered Edit or Delete',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'FBP-B17: comment-thread.tsx:436-437 shows Edit/Delete to the author regardless of the team-reply lock',
-      },
+      tag: '@core',
     },
     async ({ browser, people, marker }) => {
       const board = await createBoard(marker)

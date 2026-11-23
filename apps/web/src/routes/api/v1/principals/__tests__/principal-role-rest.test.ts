@@ -131,3 +131,50 @@ describe('DELETE /api/v1/principals/:principalId', () => {
     expect(mockRemoveTeamMember.mock.calls[0][4]).toEqual({ granterRole: 'member' })
   })
 })
+
+describe('a personal key and the person it acts for', () => {
+  const keyMadeBy = (creatorId: string, kind: 'personal' | 'workspace' = 'personal') => ({
+    ...AUTH_CONTEXT,
+    apiKey: { id: 'api_key_01jz000000000000000000test', kind, createdById: creatorId },
+    role: 'admin',
+  })
+
+  it("refuses to change its own creator's role, as the app refuses a self change", async () => {
+    mockWithApiKeyAuth.mockResolvedValue(keyMadeBy(TARGET))
+
+    const res = await PATCH({
+      request: request('PATCH', { role: 'member' }),
+      params: { principalId: TARGET },
+    })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({
+      error: { code: 'FORBIDDEN', message: 'You cannot change your own role' },
+    })
+    expect(mockUpdateMemberRole).not.toHaveBeenCalled()
+  })
+
+  it('refuses to remove its own creator from the team', async () => {
+    mockWithApiKeyAuth.mockResolvedValue(keyMadeBy(TARGET))
+
+    const res = await DELETE({ request: request('DELETE'), params: { principalId: TARGET } })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({
+      error: { code: 'FORBIDDEN', message: 'You cannot remove yourself from the team' },
+    })
+    expect(mockRemoveTeamMember).not.toHaveBeenCalled()
+  })
+
+  it('a workspace key belongs to nobody, so the admin who made it can be changed with it', async () => {
+    mockWithApiKeyAuth.mockResolvedValue(keyMadeBy(TARGET, 'workspace'))
+
+    const res = await PATCH({
+      request: request('PATCH', { role: 'member' }),
+      params: { principalId: TARGET },
+    })
+
+    expect(res.status).toBe(200)
+    expect(mockUpdateMemberRole).toHaveBeenCalledOnce()
+  })
+})

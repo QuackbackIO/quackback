@@ -95,6 +95,7 @@ export function CsvImportSection() {
           <p className="text-xs text-muted-foreground">
             {result.imported} of {result.total} email{result.total === 1 ? '' : 's'} subscribed.
             {result.skipped > 0 && ` ${result.skipped} had no matching account.`}
+            {result.optedOut > 0 && ` ${result.optedOut} had unsubscribed and stay unsubscribed.`}
           </p>
           <Button variant="outline" size="sm" onClick={reset}>
             Import another file

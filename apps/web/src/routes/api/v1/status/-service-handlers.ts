@@ -12,7 +12,7 @@
  * Not a route itself (the `-` prefix opts it out of file-based routing).
  */
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { assertApiReadAccess, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
@@ -23,7 +23,7 @@ import {
 import { parseTypeId, parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { NotFoundError } from '@/lib/shared/errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { serializeStatusComponent } from './-serialize'
+import { serializeStatusComponent, STATUS_PAGE_READ_PERMISSIONS } from './-serialize'
 import { STATUS_COMPONENT_STATUSES, parseNullableTypeId } from './-validation'
 import type { StatusComponentId, StatusComponentGroupId, SegmentId } from '@quackback/ids'
 import type { StatusComponentRow } from '@/lib/server/domains/status'
@@ -76,7 +76,8 @@ async function findComponentRow(
  */
 export async function listStatusComponentsHandler({ request }: { request: Request }) {
   try {
-    await withApiKeyAuth(request)
+    const auth = await withApiKeyAuth(request)
+    assertApiReadAccess(auth, 'read:feedback', STATUS_PAGE_READ_PERMISSIONS)
 
     const { listStatusComponentGroupsWithComponents, listUngroupedStatusComponents } =
       await import('@/lib/server/domains/status')
@@ -131,6 +132,7 @@ export async function createStatusComponentHandler({ request }: { request: Reque
       status: parsed.data.status,
       showUptime: parsed.data.showUptime,
       segmentIds,
+      source: 'api',
     })
 
     return createdResponse(serializeStatusComponent(component))
@@ -171,7 +173,8 @@ function serviceError(error: unknown, noun: ServiceNoun): Response {
  */
 export async function getStatusComponentHandler({ request, id, noun }: ServiceRequest) {
   try {
-    await withApiKeyAuth(request)
+    const auth = await withApiKeyAuth(request)
+    assertApiReadAccess(auth, 'read:feedback', STATUS_PAGE_READ_PERMISSIONS)
 
     const componentId = parseServiceId(id, noun)
 

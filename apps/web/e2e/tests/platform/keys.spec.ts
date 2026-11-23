@@ -611,7 +611,7 @@ test.describe('Scopes on the non-support resources', () => {
   )
 
   test(
-    'API-K-24 a chat-only key: refused on gated feedback reads, allowed on bare ones',
+    'API-K-24 a chat-only key: refused on every feedback and status page read',
     { tag: '@core' },
     async ({ playwright, baseURL, people }) => {
       const chat = await keyApi(playwright, baseURL, {
@@ -622,6 +622,10 @@ test.describe('Scopes on the non-support resources', () => {
         ['/api/v1/posts', 'post.view_private'],
         ['/api/v1/users', 'people.view'],
         ['/api/v1/changelog', 'changelog.view_draft'],
+        ['/api/v1/boards', 'post.view_private'],
+        ['/api/v1/roadmaps', 'post.view_private'],
+        ['/api/v1/tags', 'tag.view'],
+        ['/api/v1/statuses', 'status.view'],
       ]) {
         await expectForbidden(
           await chat.api.get(path),
@@ -629,16 +633,20 @@ test.describe('Scopes on the non-support resources', () => {
         )
       }
       for (const path of [
-        '/api/v1/boards',
-        '/api/v1/tags',
-        '/api/v1/statuses',
-        '/api/v1/roadmaps',
-        '/api/v1/help-center/articles',
+        '/api/v1/status/services',
+        '/api/v1/status/incidents',
         '/api/v1/status/summary',
       ]) {
-        const res = await chat.api.get(path)
-        expect(res.status(), `${path}: ${await res.text()}`).toBe(200)
+        await expectForbidden(
+          await chat.api.get(path),
+          "This API key is missing the 'read:feedback' scope"
+        )
       }
+      // Help center reads need read:article, even for what is public.
+      await expectForbidden(
+        await chat.api.get('/api/v1/help-center/articles'),
+        "This API key is missing the 'read:article' scope"
+      )
       await chat.api.dispose()
     }
   )
@@ -913,12 +921,7 @@ test.describe('Error envelope, pagination and repeats', () => {
   test(
     'API-K-34 a garbage cursor never answers 500',
     {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'posts, changelog, status incidents and help center articles pass an undecodable cursor to their service, which throws: 500 (routes/api/v1/posts/index.ts:48, changelog/index.ts, status/incidents/index.ts, help-center/articles/index.ts:75)',
-      },
+      tag: '@core',
     },
     async ({ playwright, baseURL, people }) => {
       const owner = await ownerKey(playwright, baseURL, people.people.admin.email)
@@ -933,12 +936,7 @@ test.describe('Error envelope, pagination and repeats', () => {
   test(
     'API-K-35 a users cursor replayed with a different limit continues where it stopped',
     {
-      tag: ['@nightly', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'The users route turns the offset cursor into a page number, so a different limit repeats or skips rows (routes/api/v1/users/index.ts:47-48)',
-      },
+      tag: '@nightly',
     },
     async ({ playwright, baseURL, people, marker }) => {
       const owner = await ownerKey(playwright, baseURL, people.people.admin.email)

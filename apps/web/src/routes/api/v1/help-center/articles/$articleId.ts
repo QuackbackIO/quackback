@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import {
+  helpCenterApiAccess,
+  assertArticleOpenToKey,
+} from '@/lib/server/domains/help-center/help-center-api-access'
+
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -25,7 +30,7 @@ import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const updateArticleBody = z.object({
   categoryId: z.string().optional(),
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   slug: z.string().max(200).optional(),
   description: z.string().max(300).optional(),
@@ -75,10 +80,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request)
+          const access = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
+          // A draft, or an article in a private or gated category, needs
+          // help_center.manage.
+          await assertArticleOpenToKey(access, articleId)
           const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {
