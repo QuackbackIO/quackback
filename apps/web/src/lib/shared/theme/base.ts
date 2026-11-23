@@ -6,6 +6,21 @@
  * load the engine.
  */
 
+/**
+ * The colours a theme may draw other than as picked (a button fill deepened
+ * for white words, pale text darkened to read), each with the variable that
+ * keeps the one picked. A theme carries that variable only while the two
+ * differ; the picked one is what the editor shows and what expansion works
+ * from (expandTheme). Never written into the live theme CSS.
+ */
+export const PICKED_KEYS = {
+  primary: 'pickedPrimary',
+  foreground: 'pickedForeground',
+  card: 'pickedCard',
+  muted: 'pickedMuted',
+  mutedForeground: 'pickedMutedForeground',
+} as const
+
 /** Every variable a theme may carry. Anything else on the object is derived. */
 export const MINIMAL_THEME_VARIABLE_KEYS = [
   'primary',
@@ -24,27 +39,8 @@ export const MINIMAL_THEME_VARIABLE_KEYS = [
   'fontSans',
   'fontHeading',
   'radius',
-  'pickedPrimary',
-  'pickedForeground',
-  'pickedCard',
-  'pickedMuted',
-  'pickedMutedForeground',
+  ...Object.values(PICKED_KEYS),
 ] as const
-
-/**
- * The colours a theme may draw other than as picked (a button fill deepened
- * for white words, pale text darkened to read), each with the variable that
- * keeps the one picked. A theme carries that variable only while the two
- * differ; the picked one is what the editor shows and what expansion works
- * from (expandTheme). Never written into the live theme CSS.
- */
-export const PICKED_KEYS = {
-  primary: 'pickedPrimary',
-  foreground: 'pickedForeground',
-  card: 'pickedCard',
-  muted: 'pickedMuted',
-  mutedForeground: 'pickedMutedForeground',
-} as const
 
 export type PickableKey = keyof typeof PICKED_KEYS
 
