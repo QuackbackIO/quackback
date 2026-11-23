@@ -85,6 +85,12 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: vi.fn().mockReturnValue(null),
 }))
 
+// Portal access has its own suite (portal-access-recipients.db.test.ts); here
+// the portal is public, so it lets every mentioned person through.
+vi.mock('@/lib/server/domains/settings/portal-access.recipients', () => ({
+  principalsWithPortalAccess: async (ids: readonly string[]) => new Set(ids),
+}))
+
 vi.mock('../hook-context', () => ({
   buildHookContext: vi.fn().mockResolvedValue({
     workspaceName: 'Test Workspace',
