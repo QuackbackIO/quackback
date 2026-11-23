@@ -42,7 +42,7 @@ export function RoadmapTabs({ roadmaps, selectedId, onSelect }: RoadmapTabsProps
               className={cn(
                 'rounded-full text-sm px-3 py-1 whitespace-nowrap transition-colors shrink-0',
                 isActive
-                  ? 'bg-foreground/10 text-foreground font-medium'
+                  ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               )}
             >

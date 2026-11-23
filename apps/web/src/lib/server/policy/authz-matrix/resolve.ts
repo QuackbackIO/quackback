@@ -11,6 +11,7 @@
  * consume it, so they can never disagree about the surface set.
  */
 import { ALL_PERMISSIONS, PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import type { ApiKeyScope } from '@/lib/shared/api-key-scopes'
 import { scanAuthzSurfaces } from './scan'
 import {
   ALIAS_RESOLUTIONS,
@@ -33,6 +34,8 @@ export type ResolvedAuthz =
   | { type: 'mcp_entry' }
   /** A key authenticates; a runtime check authorizes against a closed set of candidate permissions (field-scoped write). */
   | { type: 'dynamic_permission'; permissions: readonly PermissionKey[] }
+  /** A key holding `scope` whose creator holds one of `permissions` (none listed = any teammate). */
+  | { type: 'scoped_read'; scope: ApiKeyScope; permissions: readonly PermissionKey[] }
   /** An inline decision gated on role (`admin`, or `team` = admin|member), optionally mirroring a permission. */
   | { type: 'role_gate'; bar: 'admin' | 'team'; permission?: PermissionKey }
 
@@ -134,6 +137,23 @@ export function resolveSurfaces(srcRoot: string): ResolveResult {
           continue
         }
         surfaces.push({ ...base, authz: { type: 'dynamic_permission', permissions: perms } })
+        continue
+      }
+      if (cls.intent === 'SCOPED_READ') {
+        const perms = cls.resolvesToAny ?? []
+        const unknown = perms.filter((p) => !PERMISSION_SET.has(p))
+        if (!cls.scope || unknown.length > 0) {
+          errors.push(
+            `${g.file}:${g.line} SCOPED_READ gate '${key}' has ${
+              !cls.scope ? 'no scope' : `unknown permissions (${unknown.join(', ')})`
+            }`
+          )
+          continue
+        }
+        surfaces.push({
+          ...base,
+          authz: { type: 'scoped_read', scope: cls.scope, permissions: perms },
+        })
         continue
       }
       const authz: ResolvedAuthz =

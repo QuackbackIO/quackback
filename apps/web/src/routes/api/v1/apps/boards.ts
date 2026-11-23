@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { handleDomainError } from '@/lib/server/domains/api/responses'
-import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/boards')({
   server: {
@@ -11,7 +12,7 @@ export const Route = createFileRoute('/api/v1/apps/boards')({
 
       GET: async ({ request }) => {
         try {
-          const auth = await withApiKeyAuth(request)
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
           const { listPublicBoardsWithStats } =
             await import('@/lib/server/domains/boards/board.public')
 
@@ -32,7 +33,7 @@ export const Route = createFileRoute('/api/v1/apps/boards')({
             })),
           })
         } catch (error) {
-          return handleDomainError(error)
+          return withCors(handleDomainError(error))
         }
       },
     },

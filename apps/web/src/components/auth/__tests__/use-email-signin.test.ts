@@ -98,3 +98,32 @@ describe('useEmailSignin.verify wording', () => {
     expect(result.current.error).toBe(copy)
   })
 })
+
+describe('useEmailSignin.verify when the sign-in limit refuses the code', () => {
+  // `/sign-in/email-otp` answers a spent sign-in budget with 429 `rate_limited`.
+  // The code may be right; saying it is wrong sends the person off to re-read
+  // the email, when the only thing that helps is waiting.
+  it.each([
+    [
+      'the app limiter',
+      {
+        status: 429,
+        code: 'rate_limited',
+        message: 'Too many sign-in attempts. Please wait a moment and try again.',
+      },
+    ],
+    ['a bare 429', { status: 429, message: 'Too many requests. Please try again later.' }],
+  ])('says to wait, not that the code is wrong (%s)', async (_label, error) => {
+    hoisted.emailOtp.mockResolvedValue({ data: null, error })
+    const { result } = renderHook(
+      () => useEmailSignin({ callbackUrl: '/onboarding', onSuccess: vi.fn() }),
+      { wrapper }
+    )
+    await act(async () => {
+      await result.current.verify('someone@example.com', '123456')
+    })
+    expect(result.current.error).toBe(
+      'Too many sign-in attempts. Please wait a moment and try again.'
+    )
+  })
+})

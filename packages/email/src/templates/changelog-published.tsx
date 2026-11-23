@@ -86,6 +86,7 @@ export function ChangelogPublishedEmail({
       <NotificationFooter
         reason="You received this email because you're subscribed to changelog updates."
         unsubscribeUrl={unsubscribeUrl}
+        unsubscribeLabel="Unsubscribe from the changelog"
         preferencesUrl={preferencesUrl}
       />
     </EmailLayout>

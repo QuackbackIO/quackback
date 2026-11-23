@@ -210,7 +210,8 @@ function TranslationForm({
       await upsertArticleTranslationFn({
         data: { articleId, locale: locale as SupportedLocale, title, description, content },
       })
-      if (status === 'untranslated') setStatus('draft')
+      // Saving is a draft: a published translation goes offline until published again.
+      setStatus('draft')
       onSaved()
     } catch (err) {
       setError(errorText(err, 'Could not save the translation'))

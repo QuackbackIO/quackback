@@ -6,13 +6,13 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 299. Migrations with destructive DDL: 39.
+Migrations scanned: 303. Migrations with destructive DDL: 41.
 
 | Kind | Occurrences |
 | --- | --- |
 | DROP COLUMN | 23 |
 | DROP TABLE | 21 |
-| DROP CONSTRAINT | 18 |
+| DROP CONSTRAINT | 22 |
 | RENAME COLUMN | 15 |
 | RENAME TO (table) | 14 |
 | SET NOT NULL | 4 |
@@ -62,6 +62,8 @@ Migrations scanned: 299. Migrations with destructive DDL: 39.
 | 0288_kb_translations_dutch_search.sql | DROP COLUMN kb_article_translations.search_vector | annotated (safe-after 0.13.2) |
 | 0294_workspace_copilot.sql | DROP CONSTRAINT conversation_messages.conversation_messages_parent_check | annotated (safe-after 0.13.2) |
 | 0302_approvals_foundation.sql | DROP CONSTRAINT assistant_pending_actions.assistant_pending_actions_parent_check | annotated (safe-after 0.14.1) |
+| 0320_roadmap_slug_live_only.sql | DROP CONSTRAINT roadmaps.roadmaps_slug_unique | annotated (safe-after 0.15.0) |
+| 0321_live_taxonomy_unique.sql | DROP CONSTRAINT boards.boards_slug_unique; DROP CONSTRAINT post_statuses.post_statuses_slug_unique; DROP CONSTRAINT post_tags.post_tags_name_unique | annotated (safe-after 0.15.0) |
 
 ## Grandfathered (29)
 

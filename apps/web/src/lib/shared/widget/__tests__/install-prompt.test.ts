@@ -66,7 +66,9 @@ describe('buildWidgetLoaderSnippet', () => {
     expect(snippet).not.toMatch(/^\s*\/\//m)
     expect(snippet).not.toContain('identify')
     // Still a working script when an email client joins it into one line.
-    expect(() => new Function(snippet.replace(/<\/?script>/gi, '').replace(/\n/g, ' '))).not.toThrow()
+    expect(
+      () => new Function(snippet.replace(/<\/?script>/gi, '').replace(/\n/g, ' '))
+    ).not.toThrow()
   })
 })
 
@@ -90,7 +92,13 @@ describe('isTestSiteHost', () => {
   })
 
   it('leaves live sites alone', () => {
-    for (const host of ['acme.com', 'www.acme.com', 'app.acme.io', 'developer.acme.com', 'devices.shop'])
+    for (const host of [
+      'acme.com',
+      'www.acme.com',
+      'app.acme.io',
+      'developer.acme.com',
+      'devices.shop',
+    ])
       expect(isTestSiteHost(host), host).toBe(false)
   })
 })

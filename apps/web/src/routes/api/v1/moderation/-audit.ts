@@ -6,6 +6,7 @@
  */
 import type { ApiAuthContext } from '@/lib/server/domains/api/auth'
 import type { ModerationAudit } from '@/lib/server/domains/moderation'
+import type { PrincipalId } from '@quackback/ids'
 
 export function moderationAuditFromApiAuth(
   auth: ApiAuthContext,
@@ -18,6 +19,15 @@ export function moderationAuditFromApiAuth(
       type: 'service',
       authMethod: 'api_key',
     },
+    principalId: auth.principalId,
+    // A personal key acts for its creator, so an author who moderates their
+    // own post through their key is not told about it. A workspace key acts
+    // for nobody (its createdById is only an audit record): an automation on
+    // it moderating its creator's post still tells them.
+    onBehalfOfPrincipalId:
+      auth.apiKey.kind === 'personal'
+        ? ((auth.apiKey.createdById as PrincipalId | null) ?? null)
+        : null,
     headers,
     metadata: { apiKeyId: auth.apiKey.id },
   }

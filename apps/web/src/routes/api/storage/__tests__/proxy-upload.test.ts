@@ -127,4 +127,103 @@ describe('PUT /api/storage/* (proxy upload)', () => {
       expect.any(String)
     )
   })
+
+  describe('portal fonts', () => {
+    const FONT_KEY = 'fonts/2026/10/abc-brand.woff2'
+    const WOFF2 = new Uint8Array([0x77, 0x4f, 0x46, 0x32, 0, 0, 0, 0])
+    const font = (over: { key?: string; ct?: string; body?: Uint8Array } = {}) =>
+      handleProxyUpload({
+        request: makeRequest({
+          key: over.key ?? FONT_KEY,
+          ct: over.ct ?? 'font/woff2',
+          body: (over.body ?? WOFF2) as BodyInit,
+        }),
+      })
+
+    it('stores a font whose name, type and signature agree', async () => {
+      const res = await font()
+      expect(res.status).toBe(200)
+      expect(mockUploadObject).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects a font type whose bytes are something else', async () => {
+      expect((await font({ body: PNG_BYTES })).status).toBe(400)
+      expect(mockUploadObject).not.toHaveBeenCalled()
+    })
+
+    it('rejects a font outside fonts/ or with another extension', async () => {
+      expect((await font({ key: 'avatars/2026/10/abc-brand.woff2' })).status).toBe(400)
+      expect((await font({ key: 'fonts/2026/10/abc-brand.ttf' })).status).toBe(400)
+      expect(mockUploadObject).not.toHaveBeenCalled()
+    })
+
+    it('rejects a font over its format cap', async () => {
+      const big = new Uint8Array(400 * 1024 + 1)
+      big.set(WOFF2)
+      expect((await font({ body: big })).status).toBe(413)
+      expect(mockUploadObject).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe('PUT /api/storage/* (an SVG wide logo)', () => {
+  const SVG_KEY = 'header-logos/2026/11/abc-wordmark.svg'
+  const SVG_CT = 'image/svg+xml'
+  const encode = (text: string) => new TextEncoder().encode(text)
+  const hostile =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 10" onload="alert(1)">' +
+    '<script>alert(2)</script><foreignObject><div>x</div></foreignObject>' +
+    '<image href="https://evil.test/x.png"/><path d="M0 0h40v10H0z" fill="#123456"/></svg>'
+
+  const stored = () => {
+    const call = mockUploadObject.mock.calls[0] as unknown as [string, Uint8Array, string]
+    return { key: call[0], text: new TextDecoder().decode(call[1]), ct: call[2] }
+  }
+
+  it('stores the sanitised markup, not the bytes sent', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: SVG_KEY, ct: SVG_CT, body: encode(hostile) }),
+    })
+    expect(res.status).toBe(200)
+    const { key, text, ct } = stored()
+    expect(key).toBe(SVG_KEY)
+    expect(ct).toBe(SVG_CT)
+    expect(text).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 10"><path d="M0 0h40v10H0z" fill="#123456"/></svg>'
+    )
+  })
+
+  it('refuses an SVG outside header-logos/', async () => {
+    for (const key of ['logos/2026/11/abc-mark.svg', 'avatars/x.svg', 'files/header-logos/x.svg']) {
+      mockUploadObject.mockClear()
+      const res = await handleProxyUpload({
+        request: makeRequest({ key, ct: SVG_CT, body: encode(hostile) }),
+      })
+      expect(res.status, key).toBe(400)
+      expect(mockUploadObject, key).not.toHaveBeenCalled()
+    }
+  })
+
+  it('refuses markup the sanitiser cannot read, saying why in words for people', async () => {
+    for (const body of ['<html><script>x</script></html>', '<svg viewBox="0 0 1 1"><g>', '']) {
+      mockUploadObject.mockClear()
+      const res = await handleProxyUpload({
+        request: makeRequest({ key: SVG_KEY, ct: SVG_CT, body: encode(body) }),
+      })
+      expect(res.status, body).toBe(400)
+      expect(await res.json(), body).toEqual({
+        code: 'SVG_NOT_SAFE',
+        error: "This SVG can't be used. Try a PNG or a simpler SVG.",
+      })
+      expect(mockUploadObject, body).not.toHaveBeenCalled()
+    }
+  })
+
+  it('refuses a raster image signed as an SVG', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: SVG_KEY, ct: SVG_CT, body: PNG_BYTES }),
+    })
+    expect(res.status).toBe(400)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
 })

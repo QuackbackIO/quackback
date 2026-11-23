@@ -24,7 +24,10 @@ const hoisted = vi.hoisted(() => ({
 }))
 
 vi.mock('../auth-helpers', () => ({
-  requireAuth: vi.fn(async () => ({ principal: { id: 'principal_1', role: 'admin' } })),
+  requireAuth: vi.fn(async () => ({
+    principal: { id: 'principal_1', role: 'admin' },
+    user: { email: 'sam@acme.example' },
+  })),
 }))
 vi.mock('@/lib/server/auth/session', () => ({ getSession: vi.fn() }))
 vi.mock('@/lib/server/db', async (importOriginal) => {

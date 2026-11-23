@@ -102,6 +102,47 @@ export function notificationText(n: NotificationTextSource, intl: IntlShape): No
           { name }
         ),
       }
+    case 'comment_mentioned':
+      if (!name) return stored
+      return {
+        ...stored,
+        title: intl.formatMessage(
+          {
+            id: 'portal.notifications.text.commentMentioned',
+            defaultMessage: '{name} mentioned you in a comment',
+          },
+          { name }
+        ),
+      }
+    case 'post_moderated': {
+      const approved = p.moderationDecision === 'approved'
+      if (!approved && p.moderationDecision !== 'rejected') return stored
+      const comment = p.moderatedItem === 'comment'
+      if (!comment && p.moderatedItem !== 'post') return stored
+      let title: string
+      if (comment) {
+        title = approved
+          ? intl.formatMessage({
+              id: 'portal.notifications.text.commentApproved',
+              defaultMessage: 'Your comment is now public',
+            })
+          : intl.formatMessage({
+              id: 'portal.notifications.text.commentRejected',
+              defaultMessage: 'Your comment was not published',
+            })
+      } else {
+        title = approved
+          ? intl.formatMessage({
+              id: 'portal.notifications.text.postApproved',
+              defaultMessage: 'Your post is now public',
+            })
+          : intl.formatMessage({
+              id: 'portal.notifications.text.postRejected',
+              defaultMessage: 'Your post was not published',
+            })
+      }
+      return { ...stored, title }
+    }
     case 'changelog_published':
       if (!p.changelogTitle) return stored
       return {

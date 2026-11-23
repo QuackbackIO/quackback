@@ -4,6 +4,7 @@ import { integrationFetch } from '@/lib/server/integrations/sync/transport'
  */
 
 import { logger } from '@/lib/server/logger'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 
 const log = logger.child({ component: 'linear' })
 
@@ -56,7 +57,7 @@ export async function exchangeLinearCode(
     throw new Error('Linear credentials not configured')
   }
 
-  const tokenResponse = await fetch(`${LINEAR_API}/oauth/token`, {
+  const tokenResponse = await providerFetch(`${LINEAR_API}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -80,7 +81,7 @@ export async function exchangeLinearCode(
   }
 
   // Get organization info via GraphQL
-  const orgResponse = await fetch(`${LINEAR_API}/graphql`, {
+  const orgResponse = await providerFetch(`${LINEAR_API}/graphql`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${tokens.access_token}`,
@@ -169,7 +170,7 @@ export async function revokeLinearToken(
 
     if (!clientId || !clientSecret) return
 
-    await fetch(`${LINEAR_API}/oauth/revoke`, {
+    await providerFetch(`${LINEAR_API}/oauth/revoke`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({

@@ -276,6 +276,9 @@ export const session = pgTable(
     userAgent: text('user_agent'),
     // Session audience: dashboard | widget | portal. Only dashboard may satisfy team/permission gates.
     scope: text('scope').notNull().default('dashboard'),
+    // Issued by a password sign-in while two-factor is required and the person
+    // has not enrolled: it may only finish enrolment or sign out.
+    twoFactorPending: boolean('two_factor_pending').notNull().default(false),
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),

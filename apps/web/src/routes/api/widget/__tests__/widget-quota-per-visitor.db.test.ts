@@ -42,7 +42,10 @@ vi.mock('@/lib/server/auth', () => ({
   auth: {
     api: {
       getSession: vi.fn(async ({ headers }: { headers: Headers }) =>
-        headers.get('authorization') ? { user: { id: 'user_visitor' }, session: {} } : null
+        headers.get('authorization')
+          ? // A well-formed id with no principal row: an anonymous visitor.
+            { user: { id: (await import('@quackback/ids')).createId('user') }, session: {} }
+          : null
       ),
     },
   },

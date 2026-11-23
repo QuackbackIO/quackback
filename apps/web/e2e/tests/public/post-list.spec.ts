@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 
 test.describe('Public Post List', () => {
   test.beforeEach(async ({ page }) => {
@@ -804,6 +804,31 @@ test.describe('Post List - Filter Result Verification', () => {
 // Sort Order Verification
 // ---------------------------------------------------------------------------
 
+const TIME_AGO = /^(?:now|(\d+) (second|minute|hour|day|month|year)s? ago)$/
+
+/** The English TimeAgo label on a post card. */
+async function timeAgoLabel(card: Locator): Promise<string> {
+  const label = card.getByText(TIME_AGO)
+  await expect(label).toHaveCount(1)
+  return ((await label.textContent()) ?? '').trim()
+}
+
+/** A TimeAgo label as an age in milliseconds ("now" is 0). */
+function ageMs(label: string): number {
+  const match = TIME_AGO.exec(label)
+  expect(match, `a TimeAgo label: ${label}`).not.toBeNull()
+  if (!match![1]) return 0
+  const unitMs = {
+    second: 1_000,
+    minute: 60_000,
+    hour: 3_600_000,
+    day: 86_400_000,
+    month: 2_629_800_000,
+    year: 31_557_600_000,
+  }[match![2] as 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year']
+  return Number(match![1]) * unitMs
+}
+
 test.describe('Post List - Sort Order Verification', () => {
   test('"New" sort: first post was created more recently than the second post', async ({
     page,
@@ -881,33 +906,13 @@ test.describe('Post List - Sort Order Verification', () => {
     const count = await postCards.count()
     test.skip(count < 2, 'Need at least 2 posts to verify sort order')
 
-    // TimeAgo component renders strings like "about 2 hours ago", "3 days ago".
-    // Capture the first two time-ago strings and verify the first is not older than the second.
-    // Strategy: "X minutes/hours ago" is newer than "X days/months ago".
-    // Note: .post-card is on the same element as [data-post-id], not a descendant.
-    const timeAgoSpans = page.locator('[data-post-id] span.text-muted-foreground\\/70')
-    const firstTimeAgo = (await timeAgoSpans.nth(0).textContent())?.trim() ?? ''
-    const secondTimeAgo = (await timeAgoSpans.nth(1).textContent())?.trim() ?? ''
-
-    // Both should be non-empty relative time strings
-    expect(firstTimeAgo.length).toBeGreaterThan(0)
-    expect(secondTimeAgo.length).toBeGreaterThan(0)
-
-    // Simple ordering heuristic: if the first contains "minutes" or "hours" and
-    // the second contains "days" or "months", the first is definitely more recent.
-    // Otherwise we just verify the strings are present (sort is server-side and trusted).
-    const firstIsMinutesOrHours = /minutes|hours|seconds/.test(firstTimeAgo)
-    const secondIsDaysOrMore = /days|months|years/.test(secondTimeAgo)
-
-    if (firstIsMinutesOrHours && secondIsDaysOrMore) {
-      // First post is clearly more recent — verified
-      expect(firstIsMinutesOrHours).toBe(true)
-    } else {
-      // Both are in the same time-unit range; the list is still in new order per server.
-      // Just confirm that non-empty relative timestamps are shown on both cards.
-      expect(firstTimeAgo.length).toBeGreaterThan(0)
-      expect(secondTimeAgo.length).toBeGreaterThan(0)
-    }
+    // Each card's age is its TimeAgo label ("now", "5 minutes ago", "3 days
+    // ago"), found by its words rather than its styling (#1236 changed the
+    // class). The label only grows with age, so in "New" order the first
+    // card is never older than the second.
+    const firstAge = ageMs(await timeAgoLabel(postCards.nth(0)))
+    const secondAge = ageMs(await timeAgoLabel(postCards.nth(1)))
+    expect(firstAge).toBeLessThanOrEqual(secondAge)
   })
 })
 

@@ -142,8 +142,8 @@ describe('settings autosave hooks', () => {
     expect(body('useUpdatePortalConfig')).toContain('...AUTOSAVE')
   })
 
-  it('tags the branding theme save as an autosave that names server reasons', () => {
-    expect(body('useSaveBrandingTheme')).toContain('...AUTOSAVE')
+  it('tags the portal publish as an autosave that names server reasons', () => {
+    expect(body('usePublishPortalCustomisation')).toContain('...AUTOSAVE')
   })
 
   it('leaves explicit actions untagged', () => {

@@ -38,8 +38,14 @@ export function HelpCenterArticleFeedback({
     try {
       // The vote lands on the click, before any typing: a visitor who never
       // writes a word still counts, and the reason stays optional.
+      // Sending back the vote already cast turns a changed mind into a change
+      // of that vote, rather than a second vote, for a signed-out visitor too.
       const result = await recordArticleFeedbackFn({
-        data: { articleId: articleId as KbArticleId, helpful },
+        data: {
+          articleId: articleId as KbArticleId,
+          helpful,
+          ...(feedbackId ? { replacesFeedbackId: feedbackId } : {}),
+        },
       })
       setFeedback(newFeedback)
       setFeedbackId((result.feedbackId as KbArticleFeedbackId) ?? null)

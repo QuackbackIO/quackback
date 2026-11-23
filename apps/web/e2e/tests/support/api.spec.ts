@@ -138,15 +138,20 @@ test.describe('REST conversations: reads', () => {
       expect(second.data.map((c: { id: string }) => c.id)).toEqual([ids[0]])
       expect(second.meta.pagination.hasMore).toBe(false)
 
-      // limit=0 and limit=abc fall back to the default (20, so all three); 1000 clamps to 100.
-      for (const limit of ['0', 'abc', '1000']) {
-        const page = await expectJson(
+      // limit=0 and limit=abc are refused since e55b30d532 (#1198); 1000 clamps to 100.
+      for (const limit of ['0', 'abc']) {
+        const refused = await expectJson(
           await api.get(`/api/v1/conversations?${q}&limit=${limit}`),
-          200
+          400
         )
-        expect(page.data, `limit=${limit}`).toHaveLength(3)
-        expect(page.meta.pagination.hasMore).toBe(false)
+        expect(refused.error, `limit=${limit}`).toEqual({
+          code: 'VALIDATION_ERROR',
+          message: 'limit must be a whole number of 1 or more',
+        })
       }
+      const clamped = await expectJson(await api.get(`/api/v1/conversations?${q}&limit=1000`), 200)
+      expect(clamped.data).toHaveLength(3)
+      expect(clamped.meta.pagination.hasMore).toBe(false)
       const all = await expectJson(await api.get('/api/v1/conversations?limit=1000'), 200)
       expect(all.data.length).toBeLessThanOrEqual(100)
       await api.dispose()

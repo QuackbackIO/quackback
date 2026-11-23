@@ -26,7 +26,13 @@ import {
   principal,
   userSegments,
 } from '@/lib/server/db'
-import { type PostCommentId, type PostId, type PrincipalId, type SegmentId } from '@quackback/ids'
+import {
+  type BoardId,
+  type PostCommentId,
+  type PostId,
+  type PrincipalId,
+  type SegmentId,
+} from '@quackback/ids'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import {
@@ -35,6 +41,7 @@ import {
   isTeamActor,
   postViewFilter,
   type Actor,
+  type BoardShape,
 } from '@/lib/server/policy'
 
 /**
@@ -132,7 +139,8 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
  */
 export async function principalsWhoCanViewPost(
   postId: PostId,
-  principalIds: PrincipalId[]
+  principalIds: PrincipalId[],
+  options: { includeDeletedPost?: boolean } = {}
 ): Promise<Set<PrincipalId>> {
   if (principalIds.length === 0) return new Set()
 
@@ -144,7 +152,15 @@ export async function principalsWhoCanViewPost(
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+    .where(
+      and(
+        eq(posts.id, postId),
+        // A rejected post is soft-deleted but still pending: its author may be
+        // told about it as long as they could see it where it was held.
+        options.includeDeletedPost ? undefined : isNull(posts.deletedAt),
+        isNull(boards.deletedAt)
+      )
+    )
     .limit(1)
   const post = postRows[0]
   if (!post) return new Set()
@@ -265,13 +281,18 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
  * Throws NotFoundError on every deny path so the response shape is
  * uniform — denied callers can't probe existence by varying inputs.
  */
-export async function assertCommentViewable(commentId: PostCommentId, actor: Actor): Promise<void> {
+export async function assertCommentViewable(
+  commentId: PostCommentId,
+  actor: Actor
+): Promise<{ boardId: BoardId; boardReadOnly: boolean; access: BoardShape['access'] }> {
   const rows = await db
     .select({
       isPrivate: postComments.isPrivate,
       postModerationState: posts.moderationState,
       postPrincipalId: posts.principalId,
       access: boards.access,
+      boardId: boards.id,
+      boardReadOnly: boards.readOnly,
     })
     .from(postComments)
     .innerJoin(posts, eq(postComments.postId, posts.id))
@@ -317,4 +338,5 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
   if (row.isPrivate && !isTeamActor(actor)) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment ${commentId} not found`)
   }
+  return { boardId: row.boardId, boardReadOnly: row.boardReadOnly, access: row.access }
 }

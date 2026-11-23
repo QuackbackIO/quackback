@@ -30,6 +30,7 @@ function compiledWhere(callIndex: number): string {
 
 const mockFeedbackFindFirst = vi.fn()
 const mockFeedbackFindMany = vi.fn()
+const mockArticleFindFirst = vi.fn()
 
 /** Rows the guarded reason UPDATE reports back; [] models "no row matched". */
 let updateReturningRows: unknown[] = []
@@ -43,7 +44,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
         findMany: (...args: unknown[]) => mockFeedbackFindMany(...args),
       },
       helpCenterCategories: { findFirst: vi.fn() },
-      helpCenterArticles: { findFirst: vi.fn(), findMany: vi.fn() },
+      helpCenterArticles: {
+        findFirst: (...args: unknown[]) => mockArticleFindFirst(...args),
+        findMany: vi.fn(),
+      },
       principal: { findFirst: vi.fn() },
     },
     insert: vi.fn(() => {
@@ -94,6 +98,7 @@ beforeEach(async () => {
   updateReturningRows = []
   mockFeedbackFindFirst.mockResolvedValue(null)
   mockFeedbackFindMany.mockResolvedValue([])
+  mockArticleFindFirst.mockResolvedValue({ id: 'kb_article_1' })
 
   const mod = await import('../help-center.article-feedback.service')
   recordArticleFeedback = mod.recordArticleFeedback

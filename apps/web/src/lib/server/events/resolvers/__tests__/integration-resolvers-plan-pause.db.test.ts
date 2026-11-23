@@ -127,3 +127,32 @@ describe.skipIf(!fixture.available)('integration resolvers and the plan limits p
     expect(push).toHaveLength(expected)
   })
 })
+
+describe.skipIf(!fixture.available)('notification-only events never reach an integration', () => {
+  it('a mapping naming a comment mention gets nothing, private or not', async () => {
+    const { post, board } = await seed()
+    setFeatureState('included', 'integrations')
+    const [linear] = await testDb.select({ id: integrations.id }).from(integrations).limit(1)
+    await testDb.insert(integrationEventMappings).values({
+      integrationId: linear.id,
+      eventType: 'comment.mentioned',
+      actionType: 'send_message',
+      enabled: true,
+      actionConfig: { channelId: 'team_1' },
+    })
+
+    expect(integrationResolver.interestedIn('comment.mentioned')).toBe(false)
+    for (const isPrivate of [true, false]) {
+      const targets = await integrationResolver.resolve(
+        event('comment.mentioned', post.id, {
+          postId: post.id,
+          boardId: board.id,
+          commentId: createId('post_comment'),
+          isPrivate,
+          excerpt: 'internal words',
+        })
+      )
+      expect(targets).toEqual([])
+    }
+  })
+})

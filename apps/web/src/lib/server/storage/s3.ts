@@ -347,7 +347,7 @@ interface S3Command {
 
 /** S3 client instance with the `send` method we use. */
 interface S3ClientInstance {
-  send(command: S3Command): Promise<unknown>
+  send(command: S3Command, options?: { abortSignal?: AbortSignal }): Promise<unknown>
   destroy(): void
 }
 
@@ -525,7 +525,8 @@ export interface WorkspaceStorage {
     downloadName?: string,
     contentType?: string
   ): Promise<string>
-  remove(key: string): Promise<void>
+  /** `signal` aborts the request, so a caller can bound how long a delete may hang. */
+  remove(key: string, options?: { signal?: AbortSignal }): Promise<void>
 }
 
 /**
@@ -641,11 +642,14 @@ function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorag
       return getSignedUrl(client, command, { expiresIn })
     },
 
-    async remove(key) {
+    async remove(key, options) {
       const Key = objectName(key)
       const client = await getS3Client(connection)
       const { DeleteObjectCommand } = await getS3Module()
-      await client.send(new DeleteObjectCommand({ Bucket: connection.bucket, Key }))
+      await client.send(
+        new DeleteObjectCommand({ Bucket: connection.bucket, Key }),
+        options?.signal ? { abortSignal: options.signal } : undefined
+      )
     },
   }
 }
@@ -977,6 +981,8 @@ const PUBLIC_STORAGE_PREFIXES = new Set([
   'changelog-images',
   'comment-images',
   'favicons',
+  // Uploaded portal fonts, loaded by every visitor.
+  'fonts',
   'header-logos',
   'help-center',
   'link-previews',
@@ -1538,8 +1544,9 @@ export async function getS3Object(key: string, range?: string): Promise<S3Object
  * Delete an object from S3.
  *
  * @param key - Storage key (path within bucket) to delete
+ * @param options.signal - Aborts the request (for example `AbortSignal.timeout(ms)`)
  */
-export async function deleteObject(key: string): Promise<void> {
+export async function deleteObject(key: string, options?: { signal?: AbortSignal }): Promise<void> {
   const storage = await currentWorkspaceStorage()
-  await storage.remove(key)
+  await storage.remove(key, options)
 }

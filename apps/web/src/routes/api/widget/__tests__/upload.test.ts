@@ -22,6 +22,26 @@ vi.mock('@/lib/server/utils/rate-bucket', () => ({
   bucketRetryAfter: (...args: unknown[]) => mockBucketRetryAfter(...args),
 }))
 
+const mockFindPrincipal = vi.fn()
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: { query: { principal: { findFirst: (...args: unknown[]) => mockFindPrincipal(...args) } } },
+}))
+
+const gate = vi.hoisted(() => ({
+  allowAnonymous: true,
+  canSubmit: false as boolean | undefined,
+}))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getPortalConfig: vi.fn(async () => ({ features: { allowAnonymous: gate.allowAnonymous } })),
+}))
+vi.mock('@/lib/server/test-customer-feedback', () => ({
+  resolveTestFeedbackActor: vi.fn(async (actor: object) => ({
+    ...actor,
+    ...(gate.canSubmit === undefined ? {} : { testFeedback: { canSubmit: gate.canSubmit } }),
+  })),
+}))
+
 import { auth } from '@/lib/server/auth'
 import { isS3Usable, uploadObject } from '@/lib/server/storage/s3'
 import { handleWidgetUpload } from '../upload'
@@ -56,6 +76,81 @@ describe('POST /api/widget/upload', () => {
     mockGetSettings.mockResolvedValue({ id: 'settings_1' })
     mockIncrementBucket.mockResolvedValue({ count: 1 })
     mockBucketRetryAfter.mockResolvedValue(42)
+    mockFindPrincipal.mockResolvedValue({ role: 'user', blockedAt: null })
+    gate.allowAnonymous = true
+    gate.canSubmit = undefined
+  })
+
+  describe('with anonymous interaction off', () => {
+    const anonymous = { id: 'principal_anon', type: 'anonymous', role: 'user', blockedAt: null }
+
+    it('refuses an anonymous session and stores nothing', async () => {
+      gate.allowAnonymous = false
+      authAs()
+      mockFindPrincipal.mockResolvedValueOnce(anonymous)
+      const res = await handleWidgetUpload({
+        request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+      })
+      expect(res.status).toBe(403)
+      expect(uploadObject).not.toHaveBeenCalled()
+      expect(mockIncrementBucket).not.toHaveBeenCalled()
+    })
+
+    it('still lets an identified widget user upload', async () => {
+      gate.allowAnonymous = false
+      authAs()
+      mockFindPrincipal.mockResolvedValueOnce({ ...anonymous, type: 'user' })
+      vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/widget-media/a.jpg')
+      const res = await handleWidgetUpload({
+        request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+      })
+      expect(res.status).toBe(200)
+    })
+
+    it("lets a teammate's test customer upload only while it may still post", async () => {
+      gate.allowAnonymous = false
+      gate.canSubmit = true
+      authAs()
+      mockFindPrincipal.mockResolvedValueOnce(anonymous)
+      vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/widget-media/a.jpg')
+      const ok = await handleWidgetUpload({
+        request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+      })
+      expect(ok.status).toBe(200)
+
+      gate.canSubmit = false
+      authAs()
+      mockFindPrincipal.mockResolvedValueOnce(anonymous)
+      const refused = await handleWidgetUpload({
+        request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+      })
+      expect(refused.status).toBe(403)
+    })
+  })
+
+  it('refuses a blocked person with the typed BLOCKED refusal and stores nothing', async () => {
+    authAs()
+    mockFindPrincipal.mockResolvedValueOnce({ role: 'user', blockedAt: new Date() })
+    const res = await handleWidgetUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({
+      error: "You can't post, vote or comment here.",
+      code: 'BLOCKED',
+    })
+    expect(uploadObject).not.toHaveBeenCalled()
+    expect(mockIncrementBucket).not.toHaveBeenCalled()
+  })
+
+  it('lets a teammate upload even with a block left on their row', async () => {
+    authAs()
+    mockFindPrincipal.mockResolvedValueOnce({ role: 'member', blockedAt: new Date() })
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/widget-media/a.jpg')
+    const res = await handleWidgetUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg'), 'token'),
+    })
+    expect(res.status).toBe(200)
   })
 
   it('returns 401 when there is no valid widget session', async () => {

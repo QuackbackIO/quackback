@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { parseCursor, parseLimit } from '@/lib/server/domains/api/request'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeMessage } from './-serialize'
@@ -21,11 +22,8 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/mess
           )
 
           const url = new URL(request.url)
-          const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(
-            100,
-            Math.max(1, parseInt(url.searchParams.get('limit') ?? '30', 10) || 30)
-          )
+          const cursor = parseCursor(url)
+          const limit = parseLimit(url, { fallback: 30 })
           const includeInternal = url.searchParams.get('includeInternal') === 'true'
 
           const { assertConversationVisible } =

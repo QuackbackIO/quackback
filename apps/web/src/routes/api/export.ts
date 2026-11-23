@@ -44,10 +44,10 @@ export const Route = createFileRoute('/api/export')({
               return Response.json({ error: 'Invalid board ID format' }, { status: 400 })
             }
             boardId = boardIdParam as BoardId
-            // Verify board exists (throws NotFoundError if not found)
-            try {
-              await getBoardById(boardId)
-            } catch {
+            // Verify the board exists and is not deleted (getBoardById throws
+            // NotFoundError when there is no such board)
+            const board = await getBoardById(boardId).catch(() => null)
+            if (!board || board.deletedAt) {
               return Response.json({ error: 'Board not found' }, { status: 400 })
             }
           }

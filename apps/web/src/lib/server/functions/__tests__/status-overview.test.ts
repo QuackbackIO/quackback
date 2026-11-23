@@ -38,7 +38,7 @@ vi.mock('@/lib/server/domains/status', () => ({
   getStatusSubscriptionCounts: vi.fn().mockResolvedValue({ active: 0, total: 0 }),
   countStatusSubscriptionsSince: vi.fn().mockResolvedValue(0),
   countStatusIncidentsSince: vi.fn().mockResolvedValue(0),
-  deriveTopLevelStatus: vi.fn().mockReturnValue('operational'),
+  getVisitorTopLevelStatus: vi.fn().mockResolvedValue('operational'),
   getUptimeSeries: vi.fn().mockResolvedValue([]),
 }))
 

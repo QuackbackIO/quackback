@@ -4,7 +4,7 @@
  * Handles exporting posts to CSV.
  */
 
-import { db, posts, postStatuses, and, inArray, desc, isNull } from '@/lib/server/db'
+import { db, boards, posts, postStatuses, and, eq, inArray, desc, isNull } from '@/lib/server/db'
 import { type BoardId } from '@quackback/ids'
 import type { PostForExport } from './post.types'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -16,14 +16,14 @@ import { realEmail } from '@/lib/shared/anonymous-email'
  * @returns Result containing posts for export or an error
  */
 export async function listPostsForExport(boardId: BoardId | undefined): Promise<PostForExport[]> {
-  // Get board IDs - either specific board or all boards
-  const allBoardIds = boardId
-    ? [boardId]
-    : (
-        await db.query.boards.findMany({
-          columns: { id: true },
-        })
-      ).map((b) => b.id)
+  // Live board IDs: the one asked for, or every board. A deleted board's
+  // posts are never exported.
+  const allBoardIds = (
+    await db.query.boards.findMany({
+      columns: { id: true },
+      where: and(boardId ? eq(boards.id, boardId) : undefined, isNull(boards.deletedAt)),
+    })
+  ).map((b) => b.id)
 
   if (allBoardIds.length === 0) {
     return []
@@ -84,24 +84,22 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
   const statusMap = new Map(statusDetails.map((s) => [s.id, { name: s.name, color: s.color }]))
 
   // Transform to export format
-  return rawPosts.map(
-    (post): PostForExport => ({
-      id: post.id,
-      title: post.title,
-      content: post.content,
-      statusId: post.statusId,
-      voteCount: post.voteCount,
-      authorName: post.author?.displayName ?? null,
-      authorEmail: realEmail(post.author?.user?.email),
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
-      board: {
-        id: post.board.id,
-        name: post.board.name,
-        slug: post.board.slug,
-      },
-      tags: post.tags.map((pt) => pt.tag),
-      statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
-    })
-  )
+  return rawPosts.map((post): PostForExport => ({
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    statusId: post.statusId,
+    voteCount: post.voteCount,
+    authorName: post.author?.displayName ?? null,
+    authorEmail: realEmail(post.author?.user?.email),
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    board: {
+      id: post.board.id,
+      name: post.board.name,
+      slug: post.board.slug,
+    },
+    tags: post.tags.map((pt) => pt.tag),
+    statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
+  }))
 }
