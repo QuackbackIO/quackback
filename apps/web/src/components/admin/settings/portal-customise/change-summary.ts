@@ -20,6 +20,7 @@ import {
   SAME_AS_TEXT,
   darkKeyOf,
   shownName,
+  showsWide,
   type PortalDraft,
 } from './portal-draft'
 
@@ -248,7 +249,16 @@ export function summariseChange(before: PortalDraft, after: PortalDraft): Change
       section: 'header',
     })
   }
-  if (before.logo.wideKey !== after.logo.wideKey || before.logo.mode !== after.logo.mode) {
+  if (before.logo.wideKey !== after.logo.wideKey) {
+    lines.push({ text: 'Logo updated', target: 'logo', section: 'header' })
+  } else if (showsWide(before) !== showsWide(after)) {
+    // The same logo, the header's other choice: named as its tiles are.
+    lines.push({
+      text: showsWide(after) ? 'Header now shows the logo' : 'Header now shows the icon and name',
+      target: 'logo',
+      section: 'header',
+    })
+  } else if (before.logo.mode !== after.logo.mode) {
     lines.push({ text: 'Logo updated', target: 'logo', section: 'header' })
   } else if (darkKeyOf(before) !== darkKeyOf(after)) {
     lines.push({

@@ -13,6 +13,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import { BUTTON_SHAPES } from '@/lib/shared/schemas/settings'
 import { helpCenterHeaderLinkSchema } from '@/lib/shared/schemas/help-center'
 import { BRANDING_FONTS, type BrandingFontId } from '@/lib/shared/theme/fonts'
+import { CARD_STYLES } from '@/lib/shared/theme/types'
 import type { PortalNavItemConfig } from '@/lib/server/domains/settings'
 
 /** The corner stops the Font and shape section offers, in rem. */
@@ -27,19 +28,33 @@ export const BRANDING_FONT_IDS = BRANDING_FONTS.map((font) => font.id) as [
 /** Six-digit lowercase-or-uppercase hex: the only colour form a patch carries. */
 const hexColour = z.string().regex(/^#[0-9a-fA-F]{6}$/)
 
-/** A header bar back on Auto, where it is the page's own colour. */
-export const HEADER_AUTO = 'auto'
+/**
+ * A colour back on Auto: the header bar is the page's own colour again, the
+ * background the unbranded one, the text the one that reads on the background.
+ */
+export const COLOUR_AUTO = 'auto'
+
+/** Headings back in the text font: a word, never null (see the header colour). */
+export const SAME_AS_TEXT_FONT = 'same_as_text'
+
+/** What the header shows: the uploaded logo alone, or the icon with the name beside it. */
+export const HEADER_SHOWS = ['logo', 'icon_and_name'] as const
+export type HeaderShows = (typeof HEADER_SHOWS)[number]
+
+/** The colour a patch sets, or "auto" to put it back on Auto. */
+const colourOrAuto = z.union([hexColour, z.literal(COLOUR_AUTO)])
 
 const palettePatchSchema = z
   .object({
     main: hexColour.optional(),
-    background: hexColour.optional(),
-    text: hexColour.optional(),
     /**
-     * The header bar. A word clears it, never null: a model that fills every
-     * optional field with null would otherwise clear it without being asked.
+     * Background, text and the header bar may go back on Auto. A word clears
+     * them, never null: a model that fills every optional field with null
+     * would otherwise clear them without being asked.
      */
-    header: z.union([hexColour, z.literal(HEADER_AUTO)]).optional(),
+    background: colourOrAuto.optional(),
+    text: colourOrAuto.optional(),
+    header: colourOrAuto.optional(),
   })
   .strict()
 
@@ -59,6 +74,9 @@ export const portalDraftPatchSchema = z
       .strict()
       .optional(),
     font: z.enum(BRANDING_FONT_IDS).optional(),
+    /** The font of titles and headings, or "same_as_text" for the text font. */
+    headingFont: z.enum([...BRANDING_FONT_IDS, SAME_AS_TEXT_FONT]).optional(),
+    cardStyle: z.enum(CARD_STYLES).optional(),
     corners: z
       .union(
         CORNER_STOPS.map((stop) => z.literal(stop)) as [
@@ -68,6 +86,10 @@ export const portalDraftPatchSchema = z
       )
       .optional(),
     buttonShape: z.enum(BUTTON_SHAPES).optional(),
+    /** The name in the header; empty puts the workspace's name back. */
+    portalName: z.string().max(100).optional(),
+    /** Showing the logo needs one uploaded: the editor ignores it otherwise. */
+    headerShows: z.enum(HEADER_SHOWS).optional(),
     tabs: z
       .object({
         /** Ids to put first, in this order; the rest keep their order after them. */

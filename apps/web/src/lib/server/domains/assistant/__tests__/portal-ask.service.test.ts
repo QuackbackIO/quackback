@@ -73,6 +73,12 @@ function draft(overrides: Partial<AskDraftContext> = {}): AskDraftContext {
     buttonShape: 'pill',
     corners: 0.5,
     font: 'inter',
+    headingFont: 'same_as_text',
+    cardStyle: 'border',
+    portalName: 'Acme',
+    workspaceName: 'Acme',
+    headerShows: 'icon_and_name',
+    hasLogo: false,
     colours: { light: { main: '#2563eb', background: '#ffffff' }, dark: {} },
     tabs: [
       { id: 'feedback', type: 'feedback', enabled: true },
@@ -262,7 +268,7 @@ describe('askPortalCustomise: the model', () => {
     await askPortalCustomise({ request: OPEN_REQUEST, draft: draft() })
     const { schema } = mockStructuredChat.mock.calls[0]![0]
     expect(PORTAL_ASK_EXAMPLES.length).toBeGreaterThanOrEqual(3)
-    expect(PORTAL_ASK_EXAMPLES.length).toBeLessThanOrEqual(6)
+    expect(PORTAL_ASK_EXAMPLES.length).toBeLessThanOrEqual(8)
     for (const example of PORTAL_ASK_EXAMPLES) {
       expect(schema.safeParse(example.output).success, example.request).toBe(true)
     }
@@ -339,6 +345,57 @@ describe('askPortalCustomise: the model', () => {
       outcome: 'refused',
       handled: 'refused',
       reply: 'Feedback is always on.',
+    })
+  })
+
+  it('teaches headings, cards, the portal name and what the header shows', async () => {
+    mockStructuredChat.mockImplementation(async () => ({ patch: { cardStyle: 'flat' } }))
+    const answer = await askPortalCustomise({ request: OPEN_REQUEST, draft: draft() })
+    expect(answer).toMatchObject({
+      outcome: 'patch',
+      patch: { cardStyle: 'flat' },
+      reply: 'Cards are flat now.',
+    })
+    const prompt = mockStructuredChat.mock.calls[0]![0].systemPrompts.join('\n')
+    for (const field of ['headingFont', 'cardStyle', 'portalName', 'headerShows']) {
+      expect(prompt).toContain(`- ${field}:`)
+    }
+    const taught = new Set(PORTAL_ASK_EXAMPLES.flatMap((e) => Object.keys(e.output.patch ?? {})))
+    for (const field of ['headingFont', 'cardStyle', 'portalName', 'headerShows']) {
+      expect(taught.has(field), field).toBe(true)
+    }
+    const user = mockStructuredChat.mock.calls[0]![0].messages[0]!.content
+    expect(user).toContain('"hasLogo":false')
+  })
+
+  it('drops headings, cards, name and header choices the draft already has', async () => {
+    mockStructuredChat.mockImplementation(async () => ({
+      patch: {
+        headingFont: 'same_as_text',
+        cardStyle: 'border',
+        portalName: '',
+        headerShows: 'icon_and_name',
+        corners: 1,
+      },
+    }))
+    const answer = await askPortalCustomise({ request: 'round corners', draft: draft() })
+    if (answer.outcome !== 'patch') throw new Error('unreachable')
+    expect(answer.patch).toEqual({ corners: 1 })
+  })
+
+  it('says to upload a logo first when showing it is all the model would change', async () => {
+    mockStructuredChat.mockImplementation(async () => ({ patch: { headerShows: 'logo' } }))
+    const request = 'put our brand mark up top instead of the name'
+    expect(await askPortalCustomise({ request, draft: draft() })).toEqual({
+      outcome: 'refused',
+      handled: 'refused',
+      reply: 'Upload a logo first, then the header can show it.',
+    })
+    const withLogo = await askPortalCustomise({ request, draft: draft({ hasLogo: true }) })
+    expect(withLogo).toMatchObject({
+      outcome: 'patch',
+      patch: { headerShows: 'logo' },
+      reply: 'The header shows your logo now.',
     })
   })
 

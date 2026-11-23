@@ -12,6 +12,12 @@ function ctx(overrides: Partial<AskDraftContext> = {}): AskDraftContext {
     buttonShape: 'pill',
     corners: 0.5,
     font: 'inter',
+    headingFont: 'same_as_text',
+    cardStyle: 'border',
+    portalName: 'Acme',
+    workspaceName: 'Acme',
+    headerShows: 'icon_and_name',
+    hasLogo: false,
     colours: {
       light: { main: '#2563eb', background: '#ffffff', text: '#0a0a0a' },
       dark: { main: '#2563eb', background: '#0a0a0a', text: '#fafafa' },
@@ -236,5 +242,60 @@ describe('answerLocally: theme mode, undo, fonts and websites', () => {
     ]) {
       expect(answerLocally(request, ctx()), request).toBeNull()
     }
+  })
+})
+
+describe('answerLocally: headings, cards and the header', () => {
+  it('sets the headings font by name, or back to the text font', () => {
+    expect(patchOf('use Lora for headings')).toEqual({ headingFont: 'lora' })
+    expect(patchOf('Playfair Display for the titles')).toEqual({ headingFont: 'playfair' })
+    expect(patchOf('set the headings font to Merriweather')).toEqual({
+      headingFont: 'merriweather',
+    })
+    expect(patchOf('make the headings match the text')).toEqual({ headingFont: 'same_as_text' })
+    expect(answerLocally('use Lora for headings', ctx())).toMatchObject({
+      reply: 'Headings are now in Lora.',
+    })
+    // The text font is still its own request.
+    expect(patchOf('use Lora')).toEqual({ font: 'lora' })
+    expect(answerLocally('use Comic Sans for headings', ctx())).toBeNull()
+  })
+
+  it('sets the card style', () => {
+    expect(patchOf('flat cards')).toEqual({ cardStyle: 'flat' })
+    expect(patchOf('give the cards a shadow')).toEqual({ cardStyle: 'shadow' })
+    expect(patchOf('make the cards bordered')).toEqual({ cardStyle: 'border' })
+    expect(answerLocally('give the cards a shadow', ctx())).toMatchObject({
+      reply: 'Cards have a shadow now.',
+    })
+    expect(answerLocally('make the cards pop', ctx())).toBeNull()
+  })
+
+  it('names the portal, keeping the casing typed', () => {
+    expect(patchOf('Call the portal Acme Ideas')).toEqual({ portalName: 'Acme Ideas' })
+    expect(patchOf('rename the portal to "Northwind Feedback"')).toEqual({
+      portalName: 'Northwind Feedback',
+    })
+    expect(patchOf('change the portal name to Plans')).toEqual({ portalName: 'Plans' })
+    // A tab rename still renames the tab.
+    expect(patchOf('rename the roadmap to Plans')).toEqual({
+      tabs: { changes: [{ id: 'roadmap', label: 'Plans' }] },
+    })
+  })
+
+  it('shows the logo only when there is one, or the icon and name', () => {
+    expect(patchOf('show the icon and name')).toEqual({ headerShows: 'icon_and_name' })
+    expect(patchOf('show just our logo in the header', ctx({ hasLogo: true }))).toEqual({
+      headerShows: 'logo',
+    })
+    expect(answerLocally('show the logo', ctx({ hasLogo: false }))).toEqual({
+      outcome: 'refused',
+      handled: 'local',
+      reply: 'Upload a logo first, then the header can show it.',
+    })
+    // A tab is still shown by name.
+    expect(patchOf('hide the roadmap')).toEqual({
+      tabs: { changes: [{ id: 'roadmap', enabled: false }] },
+    })
   })
 })
