@@ -427,10 +427,11 @@ export async function sweepApproachingTicketSlaBreaches(
  */
 export async function sweepTicketSlaBreachTriggers(
   at: Date = new Date(),
-  ticketIds?: TicketId[]
+  ticketIds?: TicketId[],
+  notBefore?: Date
 ): Promise<TicketSlaTimerTriggerCandidate[]> {
   const candidates: TicketSlaTimerTriggerCandidate[] = []
-  const floorIso = breachTriggerFloor(at).toISOString()
+  const floorIso = breachTriggerFloor(at, notBefore).toISOString()
   await scanTicketSlaCandidates(
     at,
     (nowIso) => sql`(
@@ -442,7 +443,7 @@ export async function sweepTicketSlaBreachTriggers(
     (applied, dueAt) => {
       if (applied.resolvedAt) return false
       if (applied.resolutionBreachTriggerFiredAt) return false
-      return isRecentBreach(dueAt, at)
+      return isRecentBreach(dueAt, at, notBefore)
     },
     async (row, applied, dueAt) => {
       const target = await resolveTicketTriggerTarget(row.id)

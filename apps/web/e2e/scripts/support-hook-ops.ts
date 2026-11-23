@@ -37,6 +37,22 @@ import type {
 import type { Actor } from '@/lib/server/policy/types'
 import type { Role } from '@/lib/shared/roles'
 
+/**
+ * A backdated SLA stands for history: the workspace was already running this
+ * build when it was applied. The breach sweep never fires before the
+ * workspace's first tick on this build (slaBreachEventsSince), so move that
+ * first tick back to `at` when it is later, or a fresh e2e database whose first
+ * sweep runs after the backdated deadline would never fire the breach.
+ */
+async function sweepingSince(at: Date): Promise<void> {
+  const { kvGet, kvSet } = await import('@/lib/server/kv/pg-kv')
+  const { SLA_BREACH_EVENTS_SINCE_KEY } =
+    await import('@/lib/server/domains/workflows/workflow-sweep')
+  const since = await kvGet<string>(SLA_BREACH_EVENTS_SINCE_KEY)
+  if (since && new Date(since) <= at) return
+  await kvSet(SLA_BREACH_EVENTS_SINCE_KEY, at.toISOString(), 10 * 365 * 24 * 60 * 60)
+}
+
 async function principalFor(
   email: string
 ): Promise<{ id: PrincipalId; role: string; name: string }> {
@@ -224,6 +240,7 @@ async function run(args: Args): Promise<unknown> {
         timeToCloseTargetSecs: (args.timeToCloseSecs as number | undefined) ?? null,
       })
       const at = new Date(Date.now() - Number(args.appliedMinutesAgo ?? 0) * 60_000)
+      await sweepingSince(at)
       const applied = await applySlaToConversation(
         args.conversationId as ConversationId,
         policy.id as SlaPolicyId,
@@ -239,6 +256,7 @@ async function run(args: Args): Promise<unknown> {
         timeToResolveTargetSecs: Number(args.timeToResolveSecs),
       })
       const at = new Date(Date.now() - Number(args.appliedMinutesAgo ?? 0) * 60_000)
+      await sweepingSince(at)
       const applied = await applySlaToTicket(
         args.ticketId as TicketId,
         policy.id as SlaPolicyId,
