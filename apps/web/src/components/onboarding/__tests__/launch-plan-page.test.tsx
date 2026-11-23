@@ -14,11 +14,21 @@ const hoisted = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
-    <a href={to} {...props}>
+  Link: ({
+    to,
+    search,
+    children,
+    ...props
+  }: {
+    to: string
+    search?: Record<string, string>
+    children: ReactNode
+  }) => (
+    <a href={search ? `${to}?${new URLSearchParams(search)}` : to} {...props}>
       {children}
     </a>
   ),
+  useNavigate: () => vi.fn(),
 }))
 vi.mock('@/lib/client/queries/admin', () => ({
   adminQueries: {
@@ -96,12 +106,12 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Launch plan page', () => {
-  it('leads with the three-step path and its one count, then everything else under Later', () => {
+  it('leads with the path and its one count, then everything else under Later', () => {
     mount()
     expect(screen.getByRole('heading', { level: 1, name: 'Launch plan' })).toBeVisible()
-    expect(screen.getByText('Step 2 of 3')).toBeVisible()
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '3')
+    expect(screen.getByText('Step 3 of 4')).toBeVisible()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '3')
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '4')
     const live = row('Your board is live')
     expect(within(live).getByText('Done')).toBeTruthy()
     expect(within(live).getByRole('link', { name: 'Review' })).toHaveAttribute(
@@ -116,7 +126,109 @@ describe('Launch plan page', () => {
       within(row('Share your board link')).getByRole('button', { name: 'Copy board link' })
     ).toBeVisible()
     expect(screen.getByRole('heading', { level: 2, name: 'Later' })).toBeVisible()
-    expect(within(row('Add your logo')).getByText('Done')).toBeVisible()
+    // The finished brand step is on the path, never under Later.
+    const brand = row('Make it look like your brand')
+    expect(within(brand).getByText('Done')).toBeVisible()
+    const later = screen.getByRole('heading', { level: 2, name: 'Later' }).closest('section')!
+    expect(within(later).queryByText('Make it look like your brand')).toBeNull()
+  })
+
+  describe('the brand step', () => {
+    const EDITOR = '/admin/settings/portal/customise'
+    const fresh: LaunchStatus = { ...status, hasBranding: false, brandDomain: 'acme.example' }
+
+    it('is second on the path with one import, a quiet link, and Skip at the end of its row', async () => {
+      hoisted.status = fresh
+      mount()
+      expect(screen.getByText('Step 2 of 4')).toBeVisible()
+      const brand = row('Make it look like your brand')
+      expect(brand.nextElementSibling).toBe(row('Share your board link'))
+      expect(within(brand).getByText('Your portal looks like you')).toBeVisible()
+      expect(within(brand).getByRole('link', { name: 'Import from acme.example' })).toHaveAttribute(
+        'href',
+        `${EDITOR}?import=acme.example`
+      )
+      expect(within(brand).getByRole('link', { name: 'or customise it yourself' })).toHaveAttribute(
+        'href',
+        EDITOR
+      )
+      expect(brand).not.toHaveTextContent(/Use the logo|Find logo|Upload a logo/)
+      // Sharing, on the same path, still has no Skip.
+      expect(
+        within(row('Share your board link')).queryByRole('button', { name: /^Skip/ })
+      ).toBeNull()
+      fireEvent.click(
+        within(brand).getByRole('button', { name: 'Skip Make it look like your brand' })
+      )
+      await waitFor(() =>
+        expect(hoisted.resolutions).toEqual([
+          { data: { taskId: 'customize-branding', resolution: 'dismissed' } },
+        ])
+      )
+    })
+
+    it('asks for the website after a personal email, with Import off until one is typed', () => {
+      hoisted.status = { ...fresh, brandDomain: null }
+      mount()
+      const brand = row('Make it look like your brand')
+      const field = within(brand).getByRole('textbox', { name: 'Your website' })
+      expect(field).toHaveAttribute('placeholder', 'yourcompany.com')
+      expect(within(brand).getByRole('button', { name: 'Import' })).toBeDisabled()
+      fireEvent.change(field, { target: { value: 'widgets.example' } })
+      expect(within(brand).getByRole('button', { name: 'Import' })).toBeEnabled()
+      expect(within(brand).getByRole('button', { name: /^Skip/ })).toBeVisible()
+    })
+
+    it('says a finished brand was imported, or customised, and links back to the editor', () => {
+      hoisted.status = { ...status, brandImportedFrom: 'acme.example' }
+      mount()
+      let brand = row('Make it look like your brand')
+      expect(within(brand).getByText('Imported from acme.example')).toBeVisible()
+      expect(within(brand).queryByText('Your portal looks like you')).toBeNull()
+      expect(within(brand).getByRole('link', { name: 'Edit in Customise' })).toHaveAttribute(
+        'href',
+        EDITOR
+      )
+      expect(within(brand).queryByRole('button', { name: /^Skip/ })).toBeNull()
+      cleanup()
+      hoisted.status = { ...status, brandImportedFrom: null }
+      mount()
+      brand = row('Make it look like your brand')
+      expect(within(brand).getByText('Customised')).toBeVisible()
+      expect(within(brand).getByRole('link', { name: 'Edit in Customise' })).toBeVisible()
+    })
+
+    it('is a plain Later row with Start and Skip for a team-only board', () => {
+      hoisted.status = { ...fresh, goals: ['product_feedback'], feedbackPrivate: true }
+      mount()
+      expect(screen.getByText('Step 2 of 3')).toBeVisible()
+      const later = screen.getByRole('heading', { level: 2, name: 'Later' }).closest('section')!
+      const brand = within(later).getByText('Make it look like your brand').closest('li')!
+      expect(within(brand).getByRole('link', { name: 'Start' })).toHaveAttribute('href', EDITOR)
+      expect(within(brand).getByRole('button', { name: /^Skip/ })).toBeVisible()
+      expect(within(brand).queryByRole('link', { name: /Import from/ })).toBeNull()
+      expect(within(brand).queryByRole('textbox')).toBeNull()
+    })
+
+    it('shows no actions to someone who may not open Customise', () => {
+      hoisted.status = {
+        ...fresh,
+        permissions: {
+          settingsManage: true,
+          boardManage: true,
+          memberManage: true,
+          brandingManage: false,
+          integrationManage: true,
+          helpCenterManage: true,
+          assistantManage: true,
+        },
+      }
+      mount()
+      const brand = row('Make it look like your brand')
+      expect(within(brand).getByText(/Ask a workspace admin/)).toBeVisible()
+      expect(within(brand).queryByRole('link')).toBeNull()
+      expect(within(brand).queryByRole('textbox')).toBeNull()
+    })
   })
 
   it('leaves out a step setup did itself', () => {
@@ -199,7 +311,7 @@ describe('Launch plan page', () => {
       memberCount: 2,
     }
     mount()
-    expect(screen.getByText('Step 3 of 3')).toBeVisible()
+    expect(screen.getByText('Step 4 of 4')).toBeVisible()
     expect(within(row('A customer creates a post')).getByText('Next')).toBeVisible()
   })
 
@@ -217,7 +329,7 @@ describe('Launch plan page', () => {
         features: { ...status.features!, [module]: false },
       }
       mount()
-      expect(screen.getByText('Step 2 of 3')).toBeVisible()
+      expect(screen.getByText('Step 3 of 4')).toBeVisible()
       expect(
         within(row('Share your board link')).getByRole('button', { name: 'Copy board link' })
       ).toBeVisible()

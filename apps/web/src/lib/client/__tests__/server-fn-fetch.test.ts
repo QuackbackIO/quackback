@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { UNEXPECTED_ERROR_MESSAGE } from '@/lib/shared/error-reference'
 import { describeError } from '@/lib/shared/describe-error'
+import { STALE_BUILD_HEADER, STALE_BUILD_MESSAGE } from '@/lib/shared/stale-build'
 import { serverFnFetch } from '../server-fn-fetch'
 
 function answer(response: Response) {
@@ -16,8 +18,8 @@ const json = (body: unknown, status: number, headers: Record<string, string> = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('serverFnFetch', () => {
-  it('fails a call to a function the running server no longer has', async () => {
-    // What a production build answers for an unknown server function id.
+  it('fails a call the server failed before reaching the function', async () => {
+    // What a production build answers for a failure outside any function.
     answer(json({ status: 500, unhandled: true, message: 'HTTPError' }, 500))
     const error = await serverFnFetch('/_serverFn/removed').then(
       () => null,
@@ -61,5 +63,83 @@ describe('serverFnFetch', () => {
     const init = { method: 'POST', body: '{}' }
     await serverFnFetch('/_serverFn/x', init)
     expect(fetch).toHaveBeenCalledWith('/_serverFn/x', init)
+  })
+})
+
+describe('serverFnFetch on a call from an older build', () => {
+  const reload = vi.fn()
+  const stale = () =>
+    new Response(STALE_BUILD_MESSAGE, {
+      status: 409,
+      headers: { 'content-type': 'text/plain', [STALE_BUILD_HEADER]: '1' },
+    })
+
+  beforeEach(() => {
+    sessionStorage.clear()
+    reload.mockReset()
+    vi.stubGlobal('location', { ...window.location, reload })
+  })
+
+  it('reloads the page once and fails the call', async () => {
+    answer(stale())
+    await expect(serverFnFetch('/_serverFn/old')).rejects.toThrow(STALE_BUILD_MESSAGE)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('reloads once when several calls fail together', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => stale())
+    )
+    const calls = [1, 2, 3].map(() => serverFnFetch('/_serverFn/old').catch((e: unknown) => e))
+    for (const error of await Promise.all(calls)) {
+      expect((error as Error).message).toBe(STALE_BUILD_MESSAGE)
+    }
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reload again right after a reload, and shows the error instead', async () => {
+    answer(stale())
+    await serverFnFetch('/_serverFn/old').catch(() => {})
+    // The page after the reload still gets the stale answer.
+    answer(stale())
+    const error = await serverFnFetch('/_serverFn/old').then(
+      () => null,
+      (e: unknown) => e
+    )
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(describeError(error, "Couldn't load inbox", { team: true, online: true })).toEqual({
+      title: 'Quackback was updated',
+      description: 'Reload to keep working.',
+      action: 'reload',
+    })
+  })
+
+  it('reloads again for a later update', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    answer(stale())
+    await serverFnFetch('/_serverFn/old').catch(() => {})
+    now.mockReturnValue(1_000_000 + 60 * 60 * 1000)
+    answer(stale())
+    await serverFnFetch('/_serverFn/older').catch(() => {})
+    expect(reload).toHaveBeenCalledTimes(2)
+    now.mockRestore()
+  })
+
+  it('does not reload when the tab cannot remember that it did', async () => {
+    const blocked = () => {
+      throw new Error('storage disabled')
+    }
+    vi.stubGlobal('sessionStorage', { getItem: blocked, setItem: blocked })
+    answer(stale())
+    await expect(serverFnFetch('/_serverFn/old')).rejects.toThrow(STALE_BUILD_MESSAGE)
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('passes on a 409 the function itself answered', async () => {
+    const conflict = json({ ok: false }, 409)
+    answer(conflict)
+    await expect(serverFnFetch('/_serverFn/x')).resolves.toBe(conflict)
+    expect(reload).not.toHaveBeenCalled()
   })
 })

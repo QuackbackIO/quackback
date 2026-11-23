@@ -401,6 +401,10 @@ export async function updateMemberRole(
         knownUserId: targetMember.userId,
         assignRoleId: opts?.assignRoleId,
         assignGrantedBy: actingPrincipalId,
+        // Choosing plain Member is an explicit choice of the Member preset, so
+        // a custom (or other preset) assignment does not survive a
+        // member-to-member save.
+        resetAssignment: newRole === 'member' && !opts?.assignRoleId,
       })
     }
 

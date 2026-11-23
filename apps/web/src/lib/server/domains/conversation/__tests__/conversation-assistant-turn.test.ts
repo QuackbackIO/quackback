@@ -100,6 +100,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),
   publishConversationOnlyEvent: vi.fn(),
+  publishConversationOnlyEventAsync: vi.fn(async () => {}),
 }))
 const mockWriteActivitySnapshot = vi.hoisted(() => vi.fn(async () => {}))
 const mockClearActivitySnapshot = vi.hoisted(() => vi.fn(async () => {}))
@@ -743,9 +744,9 @@ describe('runAssistantTurnForConversation hand-off on a filed proposal', () => {
 
 describe('runAssistantTurnForConversation preview retraction (invalidated attempt)', () => {
   async function publishedEvents(): Promise<Array<Record<string, unknown>>> {
-    const { publishConversationOnlyEvent } =
+    const { publishConversationOnlyEventAsync } =
       await import('@/lib/server/realtime/conversation-channels')
-    return vi.mocked(publishConversationOnlyEvent).mock.calls.map(([, e]) => e as never)
+    return vi.mocked(publishConversationOnlyEventAsync).mock.calls.map(([, e]) => e as never)
   }
 
   it('retracts a streamed answer on retry and stays preview-silent for the rest of the turn', async () => {
@@ -790,6 +791,36 @@ describe('runAssistantTurnForConversation preview retraction (invalidated attemp
     const deltas = (await publishedEvents()).filter((e) => e.kind === 'assistant_delta')
     expect(deltas.length).toBeGreaterThan(0)
     expect(deltas.every((e) => (e.text as string).length > 0)).toBe(true)
+  })
+})
+
+describe('runAssistantTurnForConversation turn signal order', () => {
+  it('publishes each signal after the last, and all of them before the reply', async () => {
+    const { publishConversationOnlyEventAsync } =
+      await import('@/lib/server/realtime/conversation-channels')
+    const published: string[] = []
+    // The first publish (the 'thinking' status) is the slow one, as when its
+    // NOTIFY waits for a busy pooled connection while the next goes straight out.
+    let first = true
+    vi.mocked(publishConversationOnlyEventAsync).mockImplementation(async (_id, event) => {
+      if (first) {
+        first = false
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      }
+      const label = event.kind === 'assistant_delta' ? `delta:${event.text}` : event.kind
+      // Whether the reply row was already written when this signal went out.
+      published.push(insertedMessages.length > 0 ? `${label} (after reply)` : label)
+    })
+    assistantMock.runAssistantTurn.mockImplementation(
+      async (input: { onActivity: (a: unknown) => void; onTextDelta: (d: string) => void }) => {
+        input.onActivity({ kind: 'thinking' })
+        input.onTextDelta('Here is your answer.')
+        return answered({ text: 'Here is your answer.' })
+      }
+    )
+    await runAssistantTurnForConversation(CONV)
+    expect(published).toEqual(['assistant_activity', 'delta:Here is your answer.'])
+    expect(insertedMessages).toHaveLength(1)
   })
 })
 

@@ -11,6 +11,7 @@ import {
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const updateUserSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -43,7 +44,7 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
           const user = await getPortalUserDetail(principalId)
 
           if (!user) {
-            return notFoundResponse('Portal user not found')
+            return notFoundResponse('Portal user')
           }
 
           return successResponse({
@@ -96,7 +97,7 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
             'principal ID'
           )
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateUserSchema.safeParse(body)
 
           if (!parsed.success) {

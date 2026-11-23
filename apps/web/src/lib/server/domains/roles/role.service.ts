@@ -157,8 +157,8 @@ export async function listRoles(): Promise<RoleWithMeta[]> {
   })
 }
 
-export async function loadRole(roleId: RoleId) {
-  const [role] = await db.select().from(roles).where(eq(roles.id, roleId)).limit(1)
+export async function loadRole(roleId: RoleId, exec: Executor = db) {
+  const [role] = await exec.select().from(roles).where(eq(roles.id, roleId)).limit(1)
   if (!role) throw new NotFoundError('ROLE_NOT_FOUND', 'Role not found')
   return role
 }
@@ -241,10 +241,12 @@ export async function createRole(
   }
 
   const id = generateId('role') as RoleId
+  // Read the plan before the transaction: it comes from the shared pool, which
+  // must not be asked for a second connection while the transaction holds one.
+  const limits = await getTierLimits()
   await db.transaction(async (tx) => {
     // Serialize concurrent creates so the tier-cap count can't be raced past.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(7061637)`)
-    const limits = await getTierLimits()
     await enforceCountLimit({
       limit: limits.maxCustomRoles,
       currentCount: async () => {

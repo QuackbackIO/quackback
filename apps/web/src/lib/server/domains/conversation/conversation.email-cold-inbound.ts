@@ -60,6 +60,7 @@ import {
 import type { ConversationAuthorInput } from './conversation.types'
 import { activeTestOwnerOf, isTestCustomer } from '@/lib/server/test-data'
 import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
+import { singleLineSubject } from '@quackback/email/subject'
 
 export interface ColdInboundResolution {
   action: 'attach' | 'create'
@@ -226,7 +227,7 @@ export async function createEmailConversation(input: {
         source: 'email',
         channelAccountId,
         status: quarantine ? 'closed' : 'open',
-        subject: parsed.subject?.slice(0, 200) ?? null,
+        subject: parsed.subject != null ? singleLineSubject(parsed.subject).slice(0, 200) : null,
         lastMessagePreview: (content || (attachments[0] ? attachments[0].name : '')).slice(0, 200),
         lastMessageAt: now,
         // The customer is waiting on the first reply from the moment it lands.

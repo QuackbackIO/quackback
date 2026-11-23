@@ -19,6 +19,7 @@
 import { db, postMentions, principal, eq, and, inArray } from '@/lib/server/db'
 import { dispatchPostMentioned, type EventActor } from '../../events/dispatch'
 import type { BoardId, PostId, PrincipalId } from '@quackback/ids'
+import { isTeamMember } from '@/lib/shared/roles'
 
 export interface SyncPostMentionsInput {
   postId: PostId
@@ -29,11 +30,40 @@ export interface SyncPostMentionsInput {
   /** Per-principal excerpt (paragraph text containing the mention) for email body. */
   excerptByPrincipalId: Map<PrincipalId, string>
   actor: EventActor
+  /**
+   * Who wrote the text, when that is not the event's actor: a teammate who
+   * creates a post on a customer's behalf. Defaults to the actor.
+   */
+  mentionerPrincipalId?: PrincipalId
+}
+
+/**
+ * A teammate, or a service principal (API key, integration) acting for the
+ * team. Only they may mention someone, in a post or a comment.
+ */
+export function mentionerMayMention(row: { type: string; role: string | null }): boolean {
+  if (row.type === 'service') return true
+  return row.type === 'user' && isTeamMember(row.role)
 }
 
 export async function syncPostMentions(input: SyncPostMentionsInput): Promise<void> {
   const { postId, postTitle, postUrl, boardId, mentionedIds, actor } = input
   const actorPrincipalId = actor.principalId as PrincipalId | undefined
+
+  // Only a teammate, an API key or an integration may mention someone. The
+  // portal editor offers customers no mentions, so a customer's or anonymous
+  // visitor's mention node is a crafted request: their save leaves the
+  // mentions as they were (no new notice, and a teammate's rows stay).
+  const mentionerId = input.mentionerPrincipalId ?? actorPrincipalId
+  if (mentionerId) {
+    const [mentioner] = (
+      await db
+        .select({ id: principal.id, type: principal.type, role: principal.role })
+        .from(principal)
+        .where(inArray(principal.id, [mentionerId]))
+    ).filter((r) => r.id === mentionerId)
+    if (!mentioner || !mentionerMayMention(mentioner)) return
+  }
 
   // Server-side eligibility validation (defense against tampered clients).
   const eligibleIds: Set<PrincipalId> = new Set()
@@ -43,6 +73,7 @@ export async function syncPostMentions(input: SyncPostMentionsInput): Promise<vo
       .from(principal)
       .where(inArray(principal.id, Array.from(mentionedIds)))
     for (const r of rows) {
+      if (!mentionedIds.has(r.id as PrincipalId)) continue
       if (r.type === 'user' && ['admin', 'member', 'user'].includes(r.role ?? '')) {
         eligibleIds.add(r.id as PrincipalId)
       }

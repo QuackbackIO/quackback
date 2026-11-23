@@ -70,6 +70,18 @@ export async function changeStatus(
 
   const previousStatusName = prevStatus?.name ?? 'Open'
 
+  // Re-picking the current status is not a change: no activity, no event,
+  // so no subscriber is told the post moved from Open to Open.
+  if (existingPost.statusId === statusId) {
+    return {
+      ...existingPost,
+      boardSlug: board.slug,
+      previousStatus: previousStatusName,
+      newStatus: newStatus.name,
+      enteredComplete: false,
+    }
+  }
+
   // Update the post status
   const [updatedPost] = await db
     .update(posts)

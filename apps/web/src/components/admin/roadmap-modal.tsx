@@ -166,7 +166,11 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
 
         {/* Pinned comment section */}
         {post.pinnedComment && (
-          <PinnedCommentSection comment={post.pinnedComment} workspaceName="Team" />
+          <PinnedCommentSection
+            comment={post.pinnedComment}
+            workspaceName="Team"
+            comments={portalPost.comments}
+          />
         )}
 
         {/* Comments section */}

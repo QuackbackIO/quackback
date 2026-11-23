@@ -67,6 +67,7 @@ export const approvePostFn = createServerFn({ method: 'POST' })
     const auth = await requireTeamAuth()
     await approvePost(data.postId as PostId, {
       actor: actorFromAuth(auth),
+      principalId: auth.principal.id,
       headers: getRequestHeaders(),
     })
     return { ok: true }
@@ -78,6 +79,7 @@ export const approveCommentFn = createServerFn({ method: 'POST' })
     const auth = await requireTeamAuth()
     await approveComment(data.commentId as PostCommentId, {
       actor: actorFromAuth(auth),
+      principalId: auth.principal.id,
       headers: getRequestHeaders(),
     })
     return { ok: true }
@@ -89,6 +91,7 @@ export const rejectCommentFn = createServerFn({ method: 'POST' })
     const auth = await requireTeamAuth()
     await rejectComment(data.commentId as PostCommentId, data.reason, {
       actor: actorFromAuth(auth),
+      principalId: auth.principal.id,
       headers: getRequestHeaders(),
     })
     return { ok: true }
@@ -100,6 +103,7 @@ export const rejectPostFn = createServerFn({ method: 'POST' })
     const auth = await requireTeamAuth()
     await rejectPost(data.postId as PostId, data.reason, {
       actor: actorFromAuth(auth),
+      principalId: auth.principal.id,
       headers: getRequestHeaders(),
     })
     return { ok: true }

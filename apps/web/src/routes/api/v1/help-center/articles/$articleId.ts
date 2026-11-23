@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import {
+  helpCenterApiAccess,
+  assertArticleOpenToKey,
+} from '@/lib/server/domains/help-center/help-center-api-access'
+
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
@@ -20,11 +25,12 @@ import {
 } from '@/lib/server/domains/help-center/help-center.service'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
-import type { KbArticleId, PrincipalId } from '@quackback/ids'
+import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const updateArticleBody = z.object({
   categoryId: z.string().optional(),
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   slug: z.string().max(200).optional(),
   description: z.string().max(300).optional(),
@@ -74,10 +80,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request)
+          const access = helpCenterApiAccess(await withApiKeyAuth(request))
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
+          // A draft, or an article in a private or gated category, needs
+          // help_center.manage.
+          await assertArticleOpenToKey(access, articleId)
           const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {
@@ -93,7 +102,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
           const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateArticleBody.safeParse(body)
 
           if (!parsed.success) {
@@ -108,7 +117,15 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
             'author ID'
           )
 
-          const { publishedAt: _, authorId: __, ...updateData } = parsed.data
+          const { publishedAt: _, authorId: __, ...fields } = parsed.data
+          const updateData = {
+            ...fields,
+            categoryId: parseOptionalTypeId<KbCategoryId>(
+              fields.categoryId,
+              'kb_category',
+              'category ID'
+            ),
+          }
           // authorPrincipalId is included because reassigning the author requires
           // the same updateArticle call even when no other fields change.
           const hasUpdates =

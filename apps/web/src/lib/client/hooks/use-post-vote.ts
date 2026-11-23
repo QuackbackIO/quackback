@@ -34,6 +34,8 @@ interface UsePostVoteOptions {
    * lands correctly and the optimistic update reflects immediately).
    */
   getAuthHeaders?: () => Record<string, string>
+  /** Called after a refused vote is rolled back, so the caller can say why. */
+  onError?: (error: Error) => void
 }
 
 interface UsePostVoteReturn {
@@ -59,6 +61,7 @@ export function usePostVote({
   voteCount,
   enabled = true,
   getAuthHeaders,
+  onError,
 }: UsePostVoteOptions): UsePostVoteReturn {
   const queryClient = useQueryClient()
 
@@ -101,12 +104,13 @@ export function usePostVote({
     )
 
     voteMutation.mutate(postId, {
-      onError: () => {
+      onError: (error) => {
         // Revert on error
         queryClient.setQueryData<number>(
           voteCountKeys.byPost(postId),
           (old) => (old ?? voteCount) + (newVoted ? -1 : 1)
         )
+        onError?.(error)
       },
       onSuccess: (data) => {
         // Sync with server truth

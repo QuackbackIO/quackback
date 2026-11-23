@@ -1,4 +1,10 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
+import {
+  portalWideLogoDarkUrl,
+  portalWideLogoUrl,
+  WIDE_LOGO_CLASS,
+} from '@/lib/shared/portal-wide-logo'
+import { WideLogo } from '@/components/public/wide-logo'
 import { Link } from '@tanstack/react-router'
 import { useRouteContext } from '@tanstack/react-router'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
@@ -13,7 +19,8 @@ interface PortalBrandMarkProps {
 /**
  * Brand mark for the public-portal auth pages. Renders the org logo +
  * name above the form so these pages read as part of the portal rather
- * than an isolated generic auth shell.
+ * than an isolated generic auth shell, or the wide logo alone when the
+ * portal header shows it.
  *
  * Reads `settings.brandingData` from the route context — the root
  * loader populates this for every portal request, so no extra fetch
@@ -26,8 +33,27 @@ export function PortalBrandMark({ variant = 'stack' }: PortalBrandMarkProps) {
       (context as { settings?: { brandingData?: SettingsBrandingData } }).settings?.brandingData,
   })
   const name = branding?.name ?? 'Quackback'
-  const logo = branding?.headerLogoUrl ?? branding?.logoUrl ?? null
+  const wideLogo = portalWideLogoUrl(branding)
+  // The square logo, as the portal header shows it. A wide logo cropped to a
+  // square is unreadable, so it is used only when there is no square one.
+  const logo = branding?.logoUrl ?? branding?.headerLogoUrl ?? null
   const initial = nameInitial(name)
+
+  if (wideLogo) {
+    // A wordmark carries the name, so it stands alone, as in the portal header.
+    return (
+      <Link to="/" className="inline-flex items-center">
+        <WideLogo
+          src={wideLogo}
+          darkSrc={portalWideLogoDarkUrl(branding)}
+          alt={name}
+          className={
+            variant === 'row' ? WIDE_LOGO_CLASS : 'h-12 w-auto max-w-[240px] object-contain'
+          }
+        />
+      </Link>
+    )
+  }
 
   if (variant === 'row') {
     return (

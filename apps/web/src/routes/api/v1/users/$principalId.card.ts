@@ -11,7 +11,7 @@
  * fallback).
  */
 import { createFileRoute } from '@tanstack/react-router'
-import type { PrincipalId, UserId } from '@quackback/ids'
+import { isValidTypeId, type PrincipalId, type UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, principal, user, eq } from '@/lib/server/db'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
@@ -50,6 +50,9 @@ export async function handlePrincipalCard({
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  if (!isValidTypeId(params.principalId, 'principal')) {
+    return Response.json({ error: 'Invalid principal ID format' }, { status: 400 })
+  }
   const targetId = params.principalId as PrincipalId
   const [row] = await db
     .select({

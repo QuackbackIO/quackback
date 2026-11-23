@@ -13,7 +13,7 @@ vi.mock('../portal-access', () => ({
   resolvePortalAccessForRequest: vi.fn().mockResolvedValue({ granted: true, reason: 'public' }),
 }))
 vi.mock('@/lib/server/domains/changelog/changelog.audience', () => ({
-  isChangelogAudienceGranted: vi.fn().mockResolvedValue(true),
+  isChangelogOpenTo: vi.fn().mockResolvedValue(true),
 }))
 vi.mock('@/lib/server/domains/changelog/changelog.public', () => ({
   getPublicChangelogById: (...a: unknown[]) => mockGetPublicChangelogById(...a),

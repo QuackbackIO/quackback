@@ -20,8 +20,6 @@ import {
   dismissTourOfferFn,
 } from '@/lib/server/functions/onboarding-progress'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
-import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
-import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
 import {
   launchPath,
   launchPlanLeadsHome,
@@ -161,21 +159,6 @@ export function HomeGettingStarted({
     if (planShown) lastStep.current = path.next
   })
   const announcement = useInPlaceChange(area, view)
-  // The lookup starts only while its notice has a live launch plan to sit in.
-  const branding = useAutomaticWebsiteBranding({ enabled: planShown })
-  const brandingShown =
-    branding.status?.status === 'applied' ||
-    (branding.status?.status === 'offered' && branding.status.canUse)
-  const brandingNotice = brandingShown && (
-    <AutomaticBrandingNotice
-      status={branding.status}
-      pending={branding.pending}
-      error={branding.error}
-      onUndo={branding.undo}
-      onAccept={branding.accept}
-      onDismiss={branding.dismiss}
-    />
-  )
 
   return (
     <>
@@ -184,7 +167,6 @@ export function HomeGettingStarted({
           <HomeNextStep
             status={statusQuery.data}
             portalUrl={portalUrl}
-            brandingNotice={brandingNotice}
             pending={resolutionMutation.isPending}
             onCreateBoard={() => setCreateBoardOpen(true)}
           />
