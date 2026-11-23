@@ -1238,12 +1238,14 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       // The events also drive the SLA emails and webhooks, so no workflow is
       // needed for the scans to run.
       expect(sweepApproachingSlaBreaches).toHaveBeenCalledWith(DEFAULT_BREACH_LEAD_MINUTES, now)
-      expect(sweepSlaBreachTriggers).toHaveBeenCalledWith(now)
+      // The breach scans never look before this workspace's first tick on this
+      // build, which is this one (slaBreachEventsSince).
+      expect(sweepSlaBreachTriggers).toHaveBeenCalledWith(now, now)
       expect(sweepApproachingTicketSlaBreaches).toHaveBeenCalledWith(
         DEFAULT_BREACH_LEAD_MINUTES,
         now
       )
-      expect(sweepTicketSlaBreachTriggers).toHaveBeenCalledWith(now)
+      expect(sweepTicketSlaBreachTriggers).toHaveBeenCalledWith(now, undefined, now)
     })
 
     it('resolves the widest breachLeadMinutes across live approaching_breach workflows and dispatches each scanned candidate, claiming the marker after the enqueue', async () => {
