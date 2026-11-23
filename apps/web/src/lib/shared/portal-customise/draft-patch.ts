@@ -86,8 +86,12 @@ export const portalDraftPatchSchema = z
       )
       .optional(),
     buttonShape: z.enum(BUTTON_SHAPES).optional(),
-    /** The name in the header; empty puts the workspace's name back. */
-    portalName: z.string().max(100).optional(),
+    /**
+     * The name in the header. Never empty: a model that fills every field
+     * would otherwise clear a name nobody asked about. The workspace's own
+     * name puts it back.
+     */
+    portalName: z.string().min(1).max(100).regex(/\S/).optional(),
     /** Showing the logo needs one uploaded: the editor ignores it otherwise. */
     headerShows: z.enum(HEADER_SHOWS).optional(),
     tabs: z

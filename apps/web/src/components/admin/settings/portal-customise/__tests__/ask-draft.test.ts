@@ -313,14 +313,13 @@ describe('Ask on headings, cards and the header', () => {
     expect(summariseDraftForAsk(next).cardStyle).toBe('shadow')
   })
 
-  it('names the portal; empty or the workspace name puts the workspace name back', () => {
+  it('names the portal; the workspace name puts the workspace name back', () => {
     const named = applyDraftPatch(withLogo(), { portalName: '  Acme Ideas ' })
     expect(named.headerName).toBe('Acme Ideas')
     expect(summariseDraftForAsk(named)).toMatchObject({
       portalName: 'Acme Ideas',
       workspaceName: 'Acme',
     })
-    expect(applyDraftPatch(named, { portalName: '' }).headerName).toBe('')
     expect(applyDraftPatch(named, { portalName: 'Acme' }).headerName).toBe('')
   })
 

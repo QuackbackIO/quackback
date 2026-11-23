@@ -113,7 +113,7 @@ You can change only these settings:
 - font: the text font, one of ${BRANDING_FONT_IDS.join(', ')}. A request about "the font" means this one.
 - headingFont: the font of titles, headings and the portal name, one of the fonts above, or "${SAME_AS_TEXT_FONT}" to use the text font. Only when the request is about headings or titles.
 - cardStyle: how posts, panels and the welcome stand off the page: "border", "shadow" or "flat".
-- portalName: the name in the header (at most 100 characters); "" puts the workspace's name back. Emails and sign-in keep the workspace's name.
+- portalName: the name in the header (1 to 100 characters). To put the workspace's own name back, send workspaceName from the current settings. Emails and sign-in keep the workspace's name.
 - headerShows: "logo" (the uploaded logo alone) or "icon_and_name" (the icon with the name beside it). "logo" only when hasLogo is true; logos are uploaded, never made here.
 - corners: corner radius in rem, one of ${CORNER_STOPS.join(', ')}.
 - buttonShape: "pill" or "corners" (buttons match the corner radius).
@@ -194,7 +194,7 @@ export function withoutEchoes(
   if (out.cardStyle === shown.cardStyle) delete out.cardStyle
   if (out.headerShows === shown.headerShows) delete out.headerShows
   if (out.portalName !== undefined) {
-    const name = out.portalName.trim() || shown.workspaceName
+    const name = out.portalName.trim()
     if (name === shown.portalName) delete out.portalName
   }
   if (

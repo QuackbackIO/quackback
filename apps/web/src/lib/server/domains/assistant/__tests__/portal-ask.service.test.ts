@@ -373,7 +373,7 @@ describe('askPortalCustomise: the model', () => {
       patch: {
         headingFont: 'same_as_text',
         cardStyle: 'border',
-        portalName: '',
+        portalName: 'Acme',
         headerShows: 'icon_and_name',
         corners: 1,
       },

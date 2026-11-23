@@ -161,9 +161,7 @@ export function replyForPatch(patch: PortalDraftPatch): string {
   }
   if (patch.cardStyle) return CARD_STYLE_REPLIES[patch.cardStyle]
   if (patch.portalName !== undefined) {
-    return patch.portalName.trim()
-      ? `Portal name is now ${patch.portalName.trim()}.`
-      : 'Portal name is the workspace name again.'
+    return `Portal name is now ${patch.portalName.trim()}.`
   }
   if (patch.headerShows) {
     return patch.headerShows === 'logo'

@@ -43,11 +43,13 @@ describe('portalDraftPatchSchema', () => {
     for (const patch of [
       { colours: { light: { background: 'auto', text: 'auto' } } },
       { headingFont: 'same_as_text' },
-      { portalName: '' },
       { headerShows: 'icon_and_name' },
     ]) {
       expect(portalDraftPatchSchema.safeParse(patch).success, JSON.stringify(patch)).toBe(true)
     }
+    // An empty name would clear one nobody asked about: refused, not taken as "put back".
+    expect(portalDraftPatchSchema.safeParse({ portalName: '' }).success).toBe(false)
+    expect(portalDraftPatchSchema.safeParse({ portalName: '   ' }).success).toBe(false)
   })
 
   it.each([
