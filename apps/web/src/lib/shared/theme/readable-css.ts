@@ -9,7 +9,8 @@
  * and the server need what is here.
  */
 import { expandTheme, type MinimalThemeVariables } from './expand'
-import { variableMap, withStandIns } from './generator'
+import { variableMap } from './base'
+import { withStandIns } from './stand-ins'
 import type { ThemeMode, ThemeVariables } from './types'
 
 /** Reverse lookup: CSS variable name → ThemeVariables key */
