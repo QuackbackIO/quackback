@@ -32,8 +32,8 @@ export function AdvancedCssSection({
         gradient header, need the Business plan.
       </p>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Links and counts use <code>--primary-ink</code>, a shade of the main colour kept readable.
-        Setting it yourself overrides that.
+        Links and counts use <code>--primary-ink</code>, a readable shade of the main colour.
+        Setting it yourself overrides that, and counts as your own rule.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button
