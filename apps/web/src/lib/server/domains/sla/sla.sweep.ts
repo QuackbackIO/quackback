@@ -342,16 +342,20 @@ export async function sweepOverdueSlaBreaches(
  *  keeps every tick's candidate set to recent breaches. */
 export const SLA_BREACH_TRIGGER_LOOKBACK_MS = 24 * 60 * 60_000
 
-/** The oldest due date the breach trigger still fires for at `at`. */
-export function breachTriggerFloor(at: Date): Date {
-  return new Date(at.getTime() - SLA_BREACH_TRIGGER_LOOKBACK_MS)
+/** The oldest due date the breach trigger still fires for at `at`: the
+ *  lookback, or `notBefore` when that is later (see
+ *  slaBreachEventsSince in workflow-sweep.ts). */
+export function breachTriggerFloor(at: Date, notBefore?: Date): Date {
+  const lookback = at.getTime() - SLA_BREACH_TRIGGER_LOOKBACK_MS
+  return new Date(notBefore ? Math.max(lookback, notBefore.getTime()) : lookback)
 }
 
 /** Whether a clock due at `dueAt` has breached by `at`, recently enough for
- *  the breach trigger to fire (see SLA_BREACH_TRIGGER_LOOKBACK_MS). */
-export function isRecentBreach(dueAt: string, at: Date): boolean {
+ *  the breach trigger to fire (see SLA_BREACH_TRIGGER_LOOKBACK_MS), and not
+ *  before `notBefore`. */
+export function isRecentBreach(dueAt: string, at: Date, notBefore?: Date): boolean {
   const dueMs = new Date(dueAt).getTime()
-  return at.getTime() > dueMs && dueMs >= breachTriggerFloor(at).getTime()
+  return at.getTime() > dueMs && dueMs >= breachTriggerFloor(at, notBefore).getTime()
 }
 
 /** One (conversation, clock) pair a timer-trigger scan found eligible and
@@ -473,10 +477,11 @@ export async function sweepApproachingSlaBreaches(
  * (workflow-sweep.ts) to dispatch.
  */
 export async function sweepSlaBreachTriggers(
-  at: Date = new Date()
+  at: Date = new Date(),
+  notBefore?: Date
 ): Promise<SlaTimerTriggerCandidate[]> {
   const candidates: SlaTimerTriggerCandidate[] = []
-  const floorIso = breachTriggerFloor(at).toISOString()
+  const floorIso = breachTriggerFloor(at, notBefore).toISOString()
   await scanSlaClockCandidates(
     at,
     (nowIso) => sql`(
@@ -496,7 +501,7 @@ export async function sweepSlaBreachTriggers(
     (clock, applied, dueAt) => {
       if (applied[clock.settledField]) return false
       if (applied[clock.breachMarkerField]) return false
-      return isRecentBreach(dueAt, at)
+      return isRecentBreach(dueAt, at, notBefore)
     },
     async (row, applied, clock, dueAt) => {
       candidates.push({
