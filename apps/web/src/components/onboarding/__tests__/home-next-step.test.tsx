@@ -18,6 +18,7 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
+  useNavigate: () => vi.fn(),
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useBaseUrl: () => 'https://acme.example.com',
@@ -40,7 +41,7 @@ const status: LaunchStatus = {
   publicBoardId: 'board_1',
   publicBoardPath: '/?board=feedback',
   memberCount: 1,
-  hasBranding: false,
+  hasBranding: true,
   goals: ['product_feedback', 'customer_support'],
   features: {
     supportInbox: true,
@@ -52,7 +53,7 @@ const status: LaunchStatus = {
   },
 }
 
-function mount(input: LaunchStatus = status, notice?: ReactNode) {
+function mount(input: LaunchStatus = status) {
   const client = new QueryClient()
   client.setQueryData(['admin', 'onboarding'], input)
   return render(
@@ -61,7 +62,6 @@ function mount(input: LaunchStatus = status, notice?: ReactNode) {
         <HomeNextStep
           status={input}
           portalUrl="https://acme.example.com"
-          brandingNotice={notice}
           pending={false}
           onCreateBoard={() => {}}
         />
@@ -100,9 +100,10 @@ describe("Home's launch plan card", () => {
   it('is one card: the path, with the current step open and its one action', () => {
     mount()
     const card = screen.getByRole('region', { name: 'Share your board link' })
-    expect(card).toHaveTextContent('Launch plan · Step 2 of 3')
+    expect(card).toHaveTextContent('Launch plan · Step 3 of 4')
     expect(rows(card)).toEqual([
       { step: 'Your board is live', state: 'done' },
+      { step: 'Customised', state: 'done' },
       { step: 'Share your board link', state: 'current' },
       { step: 'A customer creates a post', state: 'waiting' },
     ])
@@ -139,13 +140,12 @@ describe("Home's launch plan card", () => {
       'Put Messenger on your site',
       'Publish your first article',
       'Publish your first update',
-      'Add your logo',
       'Invite your team',
       'Connect an integration',
     ])
     const later = screen.getByText(/^Later:/)
     expect(later.textContent).toBe(
-      'Later: Put Messenger on your site, publish your first article, publish your first update, and 3 more'
+      'Later: Put Messenger on your site, publish your first article, publish your first update, and 2 more'
     )
     expect(within(later).getByRole('link', { name: 'Put Messenger on your site' })).toHaveAttribute(
       'href',
@@ -169,17 +169,15 @@ describe("Home's launch plan card", () => {
         },
       },
     })
-    expect(screen.getByText(/^Later:/).textContent).toBe(
-      'Later: Add your logo and connect an integration'
-    )
+    expect(screen.getByText(/^Later:/).textContent).toBe('Later: Connect an integration')
   })
 
   it('offers sharing the board again once only the first win is left', () => {
     mount({ ...status, publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z' })
     const card = screen.getByRole('region', { name: 'A customer creates a post' })
-    expect(card).toHaveTextContent('Launch plan · Step 3 of 3')
+    expect(card).toHaveTextContent('Launch plan · Step 4 of 4')
     expect(card).toHaveTextContent('Your own tests never count.')
-    expect(rows(card).map((row) => row.state)).toEqual(['done', 'done', 'current'])
+    expect(rows(card).map((row) => row.state)).toEqual(['done', 'done', 'done', 'current'])
     expect(actions(card)).toEqual(['Copy board link'])
   })
 
@@ -256,7 +254,7 @@ describe("Home's launch plan card", () => {
         features: { ...status.features!, [module]: false },
       })
       const card = screen.getByRole('region', { name: 'Share your board link' })
-      expect(card).toHaveTextContent('Launch plan · Step 2 of 3')
+      expect(card).toHaveTextContent('Launch plan · Step 3 of 4')
       cleanup()
     }
   })
@@ -269,19 +267,15 @@ describe("Home's launch plan card", () => {
     expect(card.className).not.toMatch(/shadow-/)
   })
 
-  it('keeps the automatic logo notice beside the portal snapshot', () => {
-    mount(status, <button type="button">Undo</button>)
-    const card = screen.getByRole('region', { name: 'Share your board link' })
-    expect(within(card).getByRole('button', { name: 'Undo' })).toBeVisible()
-  })
-
   it('joins the Later line the way each language does', () => {
     cleanup()
     const client = new QueryClient()
     const short: LaunchStatus = {
       ...status,
       goals: ['product_feedback'],
-      features: { ...status.features!, supportInbox: false, integrations: false, changelog: false },
+      feedbackPrivate: true,
+      hasBranding: false,
+      features: { ...status.features!, supportInbox: false, integrations: false },
     }
     client.setQueryData(['admin', 'onboarding'], short)
     render(
@@ -292,9 +286,72 @@ describe("Home's launch plan card", () => {
       </IntlProvider>
     )
     // German keeps its capitals and joins with "und".
-    // Branding comes before invites, so the logo is first and the team last.
-    expect(screen.getByText(/^Später:/).textContent).toMatch(/^Später: Logo hinzufügen und /)
+    expect(screen.getByText(/^Später:/).textContent).toBe(
+      'Später: Erstes Update veröffentlichen und Lass es nach deiner Marke aussehen'
+    )
     // The region says which language it is in; the admin document stays English.
     expect(screen.getByText(/^Später:/).closest('[lang]')).toHaveAttribute('lang', 'de')
+  })
+
+  describe('the brand step', () => {
+    const fresh: LaunchStatus = { ...status, hasBranding: false, brandDomain: 'acme.example' }
+    const EDITOR = '/admin/settings/portal/customise'
+
+    it('is Next for a customer-facing goal, before sharing, with one import and a quiet link', () => {
+      mount(fresh)
+      const card = screen.getByRole('region', { name: 'Make it look like your brand' })
+      expect(card).toHaveTextContent('Launch plan · Step 2 of 4')
+      expect(rows(card)).toEqual([
+        { step: 'Your board is live', state: 'done' },
+        { step: 'Make it look like your brand', state: 'current' },
+        { step: 'Share your board link', state: 'waiting' },
+        { step: 'A customer creates a post', state: 'waiting' },
+      ])
+      expect(card).toHaveTextContent('Bring in your logo, colours and font from your website.')
+      const step = card.querySelector<HTMLElement>('[data-state="current"]')!
+      expect(within(step).getByRole('link', { name: 'Import from acme.example' })).toBeVisible()
+      expect(within(step).getByRole('link', { name: 'or customise it yourself' })).toHaveAttribute(
+        'href',
+        EDITOR
+      )
+      // Home never offers Skip, the old logo offer or the Find logo form.
+      expect(within(step).queryByRole('button')).toBeNull()
+      expect(card).not.toHaveTextContent(/Skip|Use the logo|Find logo/)
+      expect(screen.getByText(/^Later:/).textContent).not.toMatch(/brand/i)
+    })
+
+    it('asks for the website after a personal email, with Import off until one is typed', () => {
+      mount({ ...fresh, brandDomain: null })
+      const card = screen.getByRole('region', { name: 'Make it look like your brand' })
+      const field = within(card).getByRole('textbox', { name: 'Your website' })
+      expect(within(card).getByRole('button', { name: 'Import' })).toBeDisabled()
+      fireEvent.change(field, { target: { value: 'widgets.example' } })
+      expect(within(card).getByRole('button', { name: 'Import' })).toBeEnabled()
+      expect(actions(card)).toEqual(['Import'])
+    })
+
+    it('says where a finished brand came from, with a way back to the editor', () => {
+      mount({ ...fresh, hasBranding: true, brandImportedFrom: 'acme.example' })
+      const card = screen.getByRole('region', { name: 'Share your board link' })
+      expect(card).toHaveTextContent('Launch plan · Step 3 of 4')
+      expect(rows(card)[1]).toEqual({ step: 'Imported from acme.example', state: 'done' })
+      const done = card.querySelectorAll<HTMLElement>('[data-state="done"]')[1]!
+      expect(within(done).getByRole('link', { name: 'Edit in Customise' })).toHaveAttribute(
+        'href',
+        EDITOR
+      )
+    })
+
+    it('stays in the Later line, under its new name, for a team-only board', () => {
+      mount({ ...fresh, goals: ['product_feedback'], feedbackPrivate: true })
+      const card = screen.getByRole('region', { name: 'Invite your team' })
+      expect(card).toHaveTextContent('Launch plan · Step 2 of 3')
+      expect(rows(card).map((row) => row.step)).not.toContain('Make it look like your brand')
+      const later = screen.getByText(/^Later:/)
+      expect(
+        within(later).getByRole('link', { name: /make it look like your brand/i })
+      ).toHaveAttribute('href', EDITOR)
+      expect(within(card).queryByRole('link', { name: /Import from/ })).toBeNull()
+    })
   })
 })

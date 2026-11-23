@@ -11,6 +11,7 @@ import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { z as zType } from 'zod'
 import type { ConversationId, ConversationTagId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const tagSchema = z.object({
   tagId: z.string().min(1),
@@ -26,7 +27,7 @@ async function parseTagRequest(request: Request, conversationIdRaw: string): Pro
     'conversation',
     'conversation ID'
   )
-  const parsed = tagSchema.safeParse(await request.json().catch(() => null))
+  const parsed = tagSchema.safeParse(await readJsonBody(request))
   if (!parsed.success) {
     return { ok: false, error: parsed.error }
   }

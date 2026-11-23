@@ -38,11 +38,18 @@ export type InboxFilterFacet = 'status' | 'board' | 'tags' | 'segments' | 'respo
 const RESTORABLE_DELETED_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
- * Team-member comment exists. Raw SQL table/column names — Drizzle's
- * relational query builder rewrites `${postComments.postId}` onto the outer
- * posts alias, producing `"posts"."post_id"`.
+ * What counts as a team response: a live, public, published team comment.
+ * A private internal note or a team comment still held for moderation is not
+ * one, since the author cannot read it.
  */
-const teamResponseExistsSql = sql`EXISTS (SELECT 1 FROM post_comments WHERE post_comments.post_id = ${posts.id} AND post_comments.is_team_member = true AND post_comments.deleted_at IS NULL)`
+const TEAM_RESPONSE_COMMENT = sql`post_comments.is_team_member = true AND post_comments.is_private = false AND post_comments.moderation_state <> 'pending' AND post_comments.deleted_at IS NULL`
+
+/**
+ * Team response exists. Raw SQL table/column names — Drizzle's relational
+ * query builder rewrites `${postComments.postId}` onto the outer posts alias,
+ * producing `"posts"."post_id"`.
+ */
+const teamResponseExistsSql = sql`EXISTS (SELECT 1 FROM post_comments WHERE post_comments.post_id = ${posts.id} AND ${TEAM_RESPONSE_COMMENT})`
 
 function restorableDeletedConditions() {
   const thirtyDaysAgo = new Date(Date.now() - RESTORABLE_DELETED_MS).toISOString()
@@ -191,9 +198,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     if (responded === 'responded') {
       conditions.push(teamResponseExistsSql)
     } else if (responded === 'unresponded') {
-      conditions.push(
-        sql`NOT EXISTS (SELECT 1 FROM post_comments WHERE post_comments.post_id = ${posts.id} AND post_comments.is_team_member = true AND post_comments.deleted_at IS NULL)`
-      )
+      conditions.push(sql`NOT ${teamResponseExistsSql}`)
     }
   }
 
@@ -381,7 +386,7 @@ export async function countInboxFilterFacets(
   // Select-list SQL on a single-table query renders `${posts.id}` as a bare
   // "id", which the subquery binds to post_comments.id, so the outer column
   // is written out raw here.
-  const teamResponseExistsInSelect = sql`exists (select 1 from post_comments where post_comments.post_id = posts.id and post_comments.is_team_member = true and post_comments.deleted_at is null)`
+  const teamResponseExistsInSelect = sql`exists (select 1 from post_comments where post_comments.post_id = posts.id and ${TEAM_RESPONSE_COMMENT})`
   const teamRespondedFilter = sql<number>`count(*) filter (where ${teamResponseExistsInSelect})::int`
   const teamUnrespondedFilter = sql<number>`count(*) filter (where not ${teamResponseExistsInSelect})::int`
 

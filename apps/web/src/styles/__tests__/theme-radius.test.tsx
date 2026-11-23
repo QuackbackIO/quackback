@@ -25,7 +25,9 @@ describe('theme radius', () => {
         </Tabs>
       </>
     )
-    expect(classesOf(container.querySelector('[data-slot="button"]'))).toContain('rounded-item')
+    const button = classesOf(container.querySelector('[data-slot="button"]'))
+    expect(button).toContain('rounded-[var(--radius-button)]')
+    expect(button).not.toContain('rounded-item')
     expect(classesOf(container.querySelector('[data-slot="badge"]'))).toContain('rounded-item')
     expect(classesOf(container.querySelector('[data-slot="tabs-list"]'))).toContain('rounded-item')
     expect(classesOf(container.querySelector('[data-slot="tabs-trigger"]'))).toContain(

@@ -124,17 +124,25 @@ Anonymous visitors are made by the widget itself (`/e2e/widget?persona=anon`).
 
 ## The test-only seams and their gate
 
-The sweep runner, the webhook sink allowance and the presence switch exist in
-the app (`src/lib/server/e2e-harness/`) and are open only when
+These exist in the app (`src/lib/server/e2e-harness/`) and are open only when
 `E2E_HARNESS=1` **and** `BASE_URL` is a loopback host (`localhost`,
 `*.localhost`, `127.x`, `::1`) **and** the install is not the pooled fleet. A
-real deployment has a public `BASE_URL`, so a stray flag still finds them
-closed: the routes answer 404, the SSRF guard refuses the sink, and the
-presence flag does nothing. Unit tests pin each refusal
-(`src/lib/server/e2e-harness/__tests__`,
-`src/routes/api/__tests__/e2e-harness-routes.test.ts`,
-`src/lib/server/content/__tests__/ssrf-guard-e2e-sink.test.ts`,
-`src/lib/client/hooks/__tests__/use-admin-presence.test.ts`).
+real deployment has a public `BASE_URL`, so a stray flag still finds every one
+of them closed.
+
+| Seam                      | What it opens                                                                                                                        | Closed (a real deployment)                                 | Unit tests pinning the refusal                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Sweep runner              | `POST /api/e2e/sweep` runs one background sweep now                                                                                  | 404                                                        | `routes/api/__tests__/e2e-harness-routes.test.ts`, `e2e-harness/__tests__/sweeps.test.ts`                                               |
+| Webhook sink allowance    | the SSRF guard lets outgoing webhooks reach `E2E_WEBHOOK_SINK_HOST` (https, `*.localhost`, loopback only)                            | the guard refuses the sink as private                      | `content/__tests__/ssrf-guard-e2e-sink.test.ts`, `e2e-harness/__tests__/webhook-sink.test.ts`                                           |
+| Presence switch           | `GET /api/e2e/presence` probe; `?e2e-presence=1` turns presence on in automated browsers                                             | 404; the flag does nothing                                 | `e2e-harness-routes.test.ts`, `lib/client/hooks/__tests__/use-admin-presence.test.ts`                                                   |
+| Provider fake host map    | `providerFetch` (every Slack, Discord, Linear, GitHub and Jira request) and `slackClient()` go to `E2E_PROVIDER_FAKE_URL` (loopback) | the request goes to the real provider, arguments untouched | `e2e-harness/__tests__/provider-fake.test.ts`, `integrations/__tests__/provider-fetch.test.ts`, `slack/server/__tests__/client.test.ts` |
+| OIDC fake allowance       | identity-provider URLs (save, discovery, token, userinfo, JWKS) may reach `E2E_OIDC_FAKE_HOST` (https, `*.localhost`, loopback only) | the guard refuses it as private; other callers always do   | `content/__tests__/ssrf-guard-e2e-oidc.test.ts`, `e2e-harness/__tests__/oidc-fake.test.ts`                                              |
+| Integration connect route | `POST /api/e2e/integrations/connect` connects an integration with a test token through the app's install path (`saveIntegration`)    | 404                                                        | `e2e-harness-routes.test.ts`                                                                                                            |
+
+The provider fake, the OIDC fake and the connect route are used by the product
+suite (`e2e/tests/product/README.md`, "Stand-ins and seams"). This suite does
+not start those stand-ins; a support test that reaches a provider fails fast
+rather than calling the real one.
 
 ## CI
 
@@ -147,3 +155,6 @@ presence flag does nothing. Unit tests pin each refusal
   `@quarantine`. To run it on a PR that touches no support path, add the label
   and re-run the CI workflow (the label is read when the job runs).
 - `support-core-report` merges the shard reports and fails if no test ran.
+
+Quarantine entries and nightly failures follow the rules in
+[the product suite README](../product/README.md#quarantine-and-nightly-failures).

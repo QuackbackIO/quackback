@@ -83,6 +83,8 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 vi.mock('../registered-providers', () => ({
   getRegisteredOidcProviderIds: vi.fn(async () => new Set()),
+  // Single sign-on live (or not set up): email links are exactly as stored.
+  getSsoSignInState: async () => ({ ssoLive: true, providersConfigured: false }),
 }))
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.quackback.io' } }))
 
@@ -101,7 +103,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   // The steady state: somebody owns this workspace, nobody can claim it by
   // arriving, and its admin has closed self-service sign-ups.
-  hoisted.getWorkspaceSettings.mockResolvedValue({ authConfig: { openSignup: false } })
+  hoisted.getWorkspaceSettings.mockResolvedValue({
+    authConfig: { openSignup: false, oauth: { magicLink: true } },
+  })
   hoisted.userFindFirst.mockResolvedValue(null)
   hoisted.invitationFindFirst.mockResolvedValue(null)
   hoisted.findHumanAdmin.mockResolvedValue({ id: 'principal_owner' })
@@ -132,7 +136,9 @@ describe('requestEmailSignin — openSignup, in front of the mint', () => {
   // one fact flipped: if this does not record a row for the stranger, then
   // "minted nothing" above was a statement about the harness, not the gate.
   it('mints a redeemable row for that same stranger once sign-ups are open', async () => {
-    hoisted.getWorkspaceSettings.mockResolvedValue({ authConfig: { openSignup: true } })
+    hoisted.getWorkspaceSettings.mockResolvedValue({
+      authConfig: { openSignup: true, oauth: { magicLink: true } },
+    })
 
     await requestEmailSignin({ email: STRANGER, callbackURL: '/' })
 

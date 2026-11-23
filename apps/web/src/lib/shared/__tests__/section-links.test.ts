@@ -221,3 +221,33 @@ describe('compactSectionLinks and expandSectionLinks', () => {
     expect(expandSectionLinks(undefined, undefined)).toBeNull()
   })
 })
+
+describe('changelog on its own host', () => {
+  const ownHost = () =>
+    origins({ map: { changelog: { hostname: 'news.acme.com', verifiedAt: VERIFIED } } })
+
+  it('CHG-P-27 links the changelog home, entries and feed at its own host', () => {
+    expect(sectionUrl('changelog', '/changelog', ownHost())).toBe('https://news.acme.com/')
+    expect(sectionUrl('changelog', '/changelog/changelog_1', ownHost())).toBe(
+      'https://news.acme.com/changelog/changelog_1'
+    )
+    expect(portalPageUrl('/changelog/changelog_1', ownHost())).toBe(
+      'https://news.acme.com/changelog/changelog_1'
+    )
+    expect(sectionsOnPrimary(ownHost())).not.toContain('changelog')
+  })
+
+  it('CHG-P-27 builds the canonical URL of a changelog page on its own host', () => {
+    const context = {
+      baseUrl: PRIMARY,
+      sectionLinks: compactSectionLinks({
+        origins: ownHost(),
+        hostOrigin: PRIMARY,
+        baseUrl: PRIMARY,
+      }),
+    }
+    expect(pageCanonical('changelog', '/changelog/changelog_1', context)).toBe(
+      'https://news.acme.com/changelog/changelog_1'
+    )
+  })
+})

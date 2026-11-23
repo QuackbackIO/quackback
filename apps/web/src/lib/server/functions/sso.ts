@@ -835,7 +835,7 @@ export const fetchDiscoveryScopesFn = createServerFn({ method: 'POST' })
       // Same SSRF guard the connection test uses: validated, IP-pinned, no
       // redirects, so an admin-supplied URL cannot probe the internal network.
       const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-      const res = await safeFetch(data.discoveryUrl, { timeoutMs: 5000 })
+      const res = await safeFetch(data.discoveryUrl, { timeoutMs: 5000, allowE2eOidcFake: true })
       if (!res.ok) return { scopesSupported: null }
       const doc = (await res.json()) as { scopes_supported?: unknown }
       if (!Array.isArray(doc.scopes_supported)) return { scopesSupported: null }

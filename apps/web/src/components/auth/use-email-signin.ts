@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { defineMessages, useIntl } from 'react-intl'
 import { authClient } from '@/lib/client/auth-client'
+import { AUTH_BLOCK_MESSAGES } from '@/lib/shared/auth-block-messages'
 
 interface UseEmailSigninOptions {
   /** Where the magic link should land after a successful click. */
@@ -108,6 +109,12 @@ export function useEmailSignin({
       if (result.error) {
         // The auth library's own wording ("Invalid OTP") never reaches people.
         const code = result.error.code
+        // The sign-in limit refused the attempt before the code was checked, so
+        // the code may well be right: say to wait, in the words the send uses.
+        if (code === 'rate_limited' || result.error.status === 429) {
+          setError(AUTH_BLOCK_MESSAGES.rate_limited)
+          return
+        }
         setError(
           intl.formatMessage(
             code === 'OTP_EXPIRED'

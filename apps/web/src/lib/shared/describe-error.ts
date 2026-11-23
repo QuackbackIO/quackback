@@ -15,6 +15,7 @@ import {
   errorReferenceOf,
   splitErrorReference,
 } from '@/lib/shared/error-reference'
+import { STALE_BUILD_MESSAGE } from '@/lib/shared/stale-build'
 
 export interface ErrorNotice {
   title: string
@@ -94,7 +95,8 @@ export function describeError(
     }
   }
 
-  if (REPLACED_BY_UPDATE.test(message)) {
+  // The server, or the browser, saying this page was built before an update.
+  if (REPLACED_BY_UPDATE.test(message) || message === STALE_BUILD_MESSAGE) {
     if (!audience.team) return quiet
     return {
       title: 'Quackback was updated',

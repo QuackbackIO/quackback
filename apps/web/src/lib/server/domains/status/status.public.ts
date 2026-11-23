@@ -27,7 +27,7 @@ import {
 } from '@/lib/server/db'
 import { isTypeId, type StatusComponentId, type StatusIncidentId } from '@quackback/ids'
 import { canViewStatusComponent, statusComponentViewFilter } from '@/lib/server/policy/status'
-import type { Actor } from '@/lib/server/policy/types'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import { deriveTopLevelStatus, deriveUptimeDays } from './status.calc'
 import {
@@ -39,6 +39,7 @@ import {
   visibleIncidentFilter,
 } from './status.projection'
 import type {
+  StatusComponentStatus,
   StatusPageSnapshot,
   PublicStatusComponent,
   PublicStatusComponentGroup,
@@ -199,6 +200,24 @@ export async function getStatusPageSnapshot(
     recentIncidents: recentIncidents_grouped,
     recentWindow: { start: recentWindowStart, days: RECENT_INCIDENTS_WINDOW_DAYS },
   }
+}
+
+/**
+ * The top-level status an anonymous visitor sees: the public page's own
+ * `topLevel.status`, without building the rest of the page. Gated services
+ * and those the plan hides don't count.
+ */
+export async function getVisitorTopLevelStatus(): Promise<StatusComponentStatus> {
+  const [rows, planVisible] = await Promise.all([
+    db
+      .select({ id: statusComponents.id, status: statusComponents.status })
+      .from(statusComponents)
+      .where(and(isNull(statusComponents.deletedAt), statusComponentViewFilter(ANONYMOUS_ACTOR))),
+    planVisibleComponentIds(),
+  ])
+  return deriveTopLevelStatus(
+    rows.filter((c) => planVisible === null || planVisible.includes(c.id)).map((c) => c.status)
+  )
 }
 
 function groupByUtcDay(

@@ -9,7 +9,18 @@
  * - Validation
  */
 
-import { db, eq, and, isNull, inArray, sql, posts, postStatuses, asc } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  isNull,
+  inArray,
+  sql,
+  posts,
+  postStatuses,
+  roadmapColumns,
+  asc,
+} from '@/lib/server/db'
 import { toUuid, type PostStatusId } from '@quackback/ids'
 import { assertHexColor, positionCaseSql } from '@/lib/server/utils'
 import {
@@ -64,9 +75,9 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
   }
   assertHexColor(input.color, 'Color must be in hex format (e.g., #3b82f6)')
 
-  // Check if slug already exists (moved outside transaction for HTTP-driver compatibility)
+  // Check if a live status has the slug (a deleted status frees its slug)
   const existingStatus = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.slug, input.slug),
+    where: and(eq(postStatuses.slug, input.slug), isNull(postStatuses.deletedAt)),
   })
   if (existingStatus) {
     throw new ConflictError('DUPLICATE_SLUG', `A status with slug '${input.slug}' already exists`)
@@ -101,7 +112,7 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
   log.debug({ status_id: id }, 'update status')
   // Get existing status (moved outside transaction for HTTP-driver compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.id, id),
+    where: and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)),
   })
   if (!existingStatus) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
@@ -123,6 +134,15 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
     assertHexColor(input.color, 'Color must be in hex format (e.g., #3b82f6)')
   }
 
+  // The workspace always keeps one default: it moves by marking another
+  // status default, never by unsetting the current one.
+  if (input.isDefault === false && existingStatus.isDefault) {
+    throw new ConflictError(
+      'CANNOT_UNSET_DEFAULT',
+      'Cannot unset the default status. Mark another status as default instead.'
+    )
+  }
+
   // If setting as default, use atomic operation to prevent race conditions
   if (input.isDefault === true) {
     await setStatusAsDefaultAtomic(id)
@@ -134,6 +154,10 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
   if (input.color !== undefined) updateData.color = input.color
   if (input.showOnRoadmap !== undefined) updateData.showOnRoadmap = input.showOnRoadmap
   if (input.isDefault === false) updateData.isDefault = false
+
+  // Nothing left to write (only ignored fields, or only isDefault: true, which
+  // the atomic swap above already applied): answer the row as it now stands.
+  if (Object.keys(updateData).length === 0) return getStatusById(id)
 
   // Update the status
   const [updatedStatus] = await db
@@ -152,7 +176,9 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
 /**
  * Soft delete a status
  *
- * Sets deletedAt timestamp instead of removing the row.
+ * Sets deletedAt timestamp instead of removing the row, and takes the
+ * status's column off every roadmap in the same transaction: a deleted status
+ * disappears everywhere, so no roadmap keeps a column nobody can fill or edit.
  */
 export async function deleteStatus(id: PostStatusId): Promise<void> {
   log.debug({ status_id: id }, 'delete status')
@@ -186,16 +212,19 @@ export async function deleteStatus(id: PostStatusId): Promise<void> {
     )
   }
 
-  // Soft delete the status by setting deletedAt
-  const deleteResult = await db
-    .update(postStatuses)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)))
-    .returning()
+  await db.transaction(async (tx) => {
+    const deleteResult = await tx
+      .update(postStatuses)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)))
+      .returning({ id: postStatuses.id })
 
-  if (deleteResult.length === 0) {
-    throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
-  }
+    if (deleteResult.length === 0) {
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
+    }
+
+    await tx.delete(roadmapColumns).where(eq(roadmapColumns.statusId, id))
+  })
 }
 
 /**
@@ -203,7 +232,7 @@ export async function deleteStatus(id: PostStatusId): Promise<void> {
  */
 export async function getStatusById(id: PostStatusId): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.id, id),
+    where: and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)),
   })
   if (!status) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
@@ -292,7 +321,7 @@ export async function getDefaultStatus(): Promise<Status | null> {
  */
 export async function getStatusBySlug(slug: string): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.slug, slug),
+    where: and(eq(postStatuses.slug, slug), isNull(postStatuses.deletedAt)),
   })
   if (!status) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with slug '${slug}' not found`)

@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, boolean, integer, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, integer, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
 import { STATUS_CATEGORIES, type StatusCategory } from '../types'
 
@@ -10,7 +11,7 @@ export const postStatuses = pgTable(
   {
     id: typeIdWithDefault('post_status')('id').primaryKey(),
     name: text('name').notNull(),
-    slug: text('slug').notNull().unique(),
+    slug: text('slug').notNull(),
     color: text('color').notNull().default('#6b7280'),
     category: text('category', { enum: STATUS_CATEGORIES }).notNull().default('active'),
     position: integer('position').notNull().default(0),
@@ -21,7 +22,10 @@ export const postStatuses = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    // Note: post_statuses_slug_unique constraint already provides uniqueness; no separate index needed
+    // Unique among live statuses only: a deleted status frees its slug.
+    uniqueIndex('post_statuses_slug_unique')
+      .on(table.slug)
+      .where(sql`deleted_at IS NULL`),
     index('post_statuses_position_idx').on(table.category, table.position),
     index('post_statuses_deleted_at_idx').on(table.deletedAt),
   ]

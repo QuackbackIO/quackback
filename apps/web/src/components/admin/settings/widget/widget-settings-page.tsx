@@ -1085,8 +1085,8 @@ function HomeCustomizationCard({
 
         <SettingRows className="border-t border-border/50 pt-4">
           <SettingRow
-            label="Workspace logo"
-            description="Show your logo in the Home header (set under General)."
+            label="Workspace icon"
+            description="Show your icon in the Home header (set under General)."
             htmlFor="home-show-logo"
             control={
               <Switch

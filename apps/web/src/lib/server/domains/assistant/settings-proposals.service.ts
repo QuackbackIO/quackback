@@ -284,12 +284,12 @@ export async function undoSettingsChangesInTransaction(
         effect.beforePresent
       )
   }
-  if (values.has('name')) await assertNotManaged('workspace.name')
+  if (values.has('name')) await assertNotManaged('workspace.name', tx)
   if (values.has('brandingConfig')) {
     const restored = (values.get('brandingConfig') ?? {}) as BrandingConfig
     if (restored.light !== undefined || restored.dark !== undefined) {
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
-      await assertTierFeature('customColors', 'Custom colours')
+      await assertTierFeature('customColors', 'Custom colours', tx)
     }
   }
   const patch: Partial<typeof settings.$inferInsert> = {}

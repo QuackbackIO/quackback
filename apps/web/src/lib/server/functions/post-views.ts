@@ -2,7 +2,8 @@
  * Server functions for saved feedback-inbox views.
  *
  * Listing needs only post.view_private (any teammate who can see the inbox);
- * creating / deleting a view is gated by post.edit (triage capability). Views
+ * creating a view is gated by post.edit (triage capability), and a view can be
+ * deleted only by its author (or, when shared, by an admin). Views
  * are workspace-shared; the running of a view (filters → inbox state) happens
  * client-side, so these endpoints only store + serve the definitions.
  */
@@ -44,8 +45,11 @@ export const createPostViewFn = createServerFn({ method: 'POST' })
 export const deletePostViewFn = createServerFn({ method: 'POST' })
   .validator(viewIdSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.POST_EDIT })
+    const ctx = await requireAuth({ permission: PERMISSIONS.POST_EDIT })
     const { deleteView } = await import('@/lib/server/domains/post-views/post-views.service')
-    await deleteView(data.viewId as PostViewId)
+    await deleteView(data.viewId as PostViewId, {
+      principalId: ctx.principal.id,
+      isAdmin: ctx.principal.role === 'admin',
+    })
     return { ok: true }
   })

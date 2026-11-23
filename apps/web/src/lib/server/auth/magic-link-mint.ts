@@ -13,6 +13,26 @@ interface MintOptions {
   /** Override the default 10-minute expiry. Used by long-lived
    *  "claim this workspace" invitations. */
   expiresInSeconds?: number
+  /**
+   * `'email-signin'` for a link a person asked for by typing their address,
+   * the one the "Email magic link" method governs. Its token carries
+   * {@link EMAIL_SIGNIN_TOKEN_PREFIX} so the verify side can refuse it once the
+   * method is off. Every other link (invitations, recovery codes, the claim)
+   * is a grant the workspace made, and verifies whatever the method says.
+   */
+  purpose?: 'email-signin'
+}
+
+/**
+ * Marks a self-service sign-in link's token. Outside the token alphabet
+ * (letters only), so no other mint can produce it, and a token cannot be
+ * re-marked without changing it, which makes it a different, unknown token.
+ */
+const EMAIL_SIGNIN_TOKEN_PREFIX = 'es-'
+
+/** Whether a magic-link token is one a person asked for by typing their address. */
+export function isEmailSigninToken(token: unknown): boolean {
+  return typeof token === 'string' && token.startsWith(EMAIL_SIGNIN_TOKEN_PREFIX)
 }
 
 const DEFAULT_EXPIRES_IN_SECONDS = 10 * 60
@@ -71,7 +91,8 @@ export async function mintMagicLinkUrl(
   opts: MintOptions
 ): Promise<{ url: string; token: string; sealedAddress: string }> {
   const auth = await getAuth()
-  const token = generateRandomString(32, 'a-z', 'A-Z')
+  const random = generateRandomString(32, 'a-z', 'A-Z')
+  const token = opts.purpose === 'email-signin' ? `${EMAIL_SIGNIN_TOKEN_PREFIX}${random}` : random
   const expiresInSeconds = opts.expiresInSeconds ?? DEFAULT_EXPIRES_IN_SECONDS
 
   // `$context` is a PromiseLike on the real BA instance; the test mock

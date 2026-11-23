@@ -52,6 +52,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       // A lifecycle write locks and re-reads the incident row first.
       chain.where = () =>
         Object.assign(Promise.resolve([]), {
+          orderBy: async () => [],
           for: async () => {
             const row = await mockIncidentFindFirst()
             return row ? [row] : []

@@ -7,7 +7,11 @@
  */
 
 import type { HookHandler, HookResult } from '../hook-types'
-import type { EventData, EventPostMentionedData } from '../types'
+import {
+  isModerationDecisionEventType,
+  type EventData,
+  type EventPostMentionedData,
+} from '../types'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { CreateNotificationInput, NotificationType } from '@/lib/server/domains/notifications'
 import type { PrincipalId, PostId, PostCommentId, ConversationMessageId } from '@quackback/ids'
@@ -59,6 +63,10 @@ export interface NotificationConfig {
   requesterAuthorName?: string
   // post.mentioned: who mentioned the recipient, resolved by getMentionTargets
   mentionerName?: string | null
+  // post.approved / post.rejected / comment.approved / comment.rejected,
+  // resolved by getModerationDecisionTargets
+  decision?: 'approved' | 'rejected'
+  item?: 'post' | 'comment'
   preview?: string
   // ticket.status_changed (WO-3 slice 4) — labels resolved by the target
   // resolver (getTicketStatusChangedTargets), never carried on the event
@@ -217,6 +225,17 @@ export const notificationHook: HookHandler = {
   },
 }
 
+/** The stored English title of a moderation-decision bell (the portal words it again). */
+function moderationDecisionTitle(
+  item: 'post' | 'comment',
+  decision: 'approved' | 'rejected'
+): string {
+  if (item === 'comment') {
+    return decision === 'approved' ? 'Your comment is now public' : 'Your comment was not published'
+  }
+  return decision === 'approved' ? 'Your post is now public' : 'Your post was not published'
+}
+
 /**
  * Build notification inputs for all subscribers based on event type
  */
@@ -298,6 +317,43 @@ function buildNotifications(
       body: truncate(data.postTitle, 150),
       postId: data.postId as PostId,
       metadata: { postUrl: data.postUrl, excerpt: data.excerpt, actorName },
+    }))
+  }
+
+  if (event.type === 'comment.mentioned') {
+    const data = event.data
+    const actorName =
+      config.mentionerName?.trim() ||
+      (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+      'Anonymous user'
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'comment_mentioned' as NotificationType,
+      title: `${actorName} mentioned you in a comment`,
+      body: truncate(data.postTitle, 150),
+      postId: data.postId as PostId,
+      commentId: data.commentId as PostCommentId,
+      metadata: { postUrl: data.postUrl, excerpt: data.excerpt, actorName },
+    }))
+  }
+
+  if (isModerationDecisionEventType(event.type)) {
+    const { decision, item, commentId } = config
+    if (!decision || !item || !postTitle) return []
+    // A rejected item is gone, so its row carries no post to open.
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'post_moderated' as NotificationType,
+      title: moderationDecisionTitle(item, decision),
+      body: truncate(postTitle, 150),
+      ...(decision === 'approved' ? { postId, commentId } : {}),
+      metadata: {
+        postTitle,
+        boardSlug,
+        postUrl,
+        moderationDecision: decision,
+        moderatedItem: item,
+      },
     }))
   }
 

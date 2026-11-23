@@ -40,9 +40,18 @@ vi.mock('@/lib/server/storage/s3', () => ({
     key ? `https://cdn.example.com/${key}` : null,
 }))
 
+import { createId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db } from '@/lib/server/db'
 import { handlePrincipalCard } from '../$principalId.card'
+
+// The card validates the id format, so the targets need real principal ids.
+const ids = {
+  jane: createId('principal'),
+  stale: createId('principal'),
+  oauth: createId('principal'),
+  missing: createId('principal'),
+}
 
 const callerPrincipal = mockPrincipal({ type: 'user' })
 const anonymousCaller = mockPrincipal({ type: 'anonymous' })
@@ -83,7 +92,7 @@ describe('GET /api/v1/users/:principalId/card', () => {
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(callerPrincipal)
     const targetCreatedAt = new Date('2024-01-15T08:00:00.000Z')
     mockTargetRow({
-      id: 'principal_jane',
+      id: ids.jane,
       displayName: 'Jane Doe',
       avatarUrl: null,
       avatarKey: 'avatars/jane.png',
@@ -95,13 +104,13 @@ describe('GET /api/v1/users/:principalId/card', () => {
 
     const res = await handlePrincipalCard({
       request: makeRequest(),
-      params: { principalId: 'principal_jane' },
+      params: { principalId: ids.jane },
     })
 
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body).toEqual({
-      principalId: 'principal_jane',
+      principalId: ids.jane,
       displayName: 'Jane Doe',
       // avatarKey wins over avatarUrl when present
       avatarUrl: 'https://cdn.example.com/avatars/jane.png',
@@ -117,7 +126,7 @@ describe('GET /api/v1/users/:principalId/card', () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(callerPrincipal)
     mockTargetRow({
-      id: 'principal_stale',
+      id: ids.stale,
       displayName: 'Stale Principal',
       avatarUrl: null,
       avatarKey: null,
@@ -129,7 +138,7 @@ describe('GET /api/v1/users/:principalId/card', () => {
 
     const res = await handlePrincipalCard({
       request: makeRequest(),
-      params: { principalId: 'principal_stale' },
+      params: { principalId: ids.stale },
     })
 
     const body = await res.json()
@@ -140,7 +149,7 @@ describe('GET /api/v1/users/:principalId/card', () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(callerPrincipal)
     mockTargetRow({
-      id: 'principal_oauth',
+      id: ids.oauth,
       displayName: 'OAuth User',
       avatarUrl: null,
       avatarKey: null,
@@ -152,7 +161,7 @@ describe('GET /api/v1/users/:principalId/card', () => {
 
     const res = await handlePrincipalCard({
       request: makeRequest(),
-      params: { principalId: 'principal_oauth' },
+      params: { principalId: ids.oauth },
     })
 
     const body = await res.json()
@@ -166,10 +175,24 @@ describe('GET /api/v1/users/:principalId/card', () => {
 
     const res = await handlePrincipalCard({
       request: makeRequest(),
-      params: { principalId: 'principal_missing' },
+      params: { principalId: ids.missing },
     })
 
     expect(res.status).toBe(404)
+  })
+
+  it('returns 400 for a malformed principal id without querying it', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(callerPrincipal)
+
+    const res = await handlePrincipalCard({
+      request: makeRequest(),
+      params: { principalId: 'not-an-id' },
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'Invalid principal ID format' })
+    expect(selectChain.limit).not.toHaveBeenCalled()
   })
 
   it('returns 403 when no session cookie is present', async () => {
@@ -177,7 +200,7 @@ describe('GET /api/v1/users/:principalId/card', () => {
 
     const res = await handlePrincipalCard({
       request: makeRequest(),
-      params: { principalId: 'principal_jane' },
+      params: { principalId: ids.jane },
     })
 
     expect(res.status).toBe(403)
@@ -190,7 +213,7 @@ describe('GET /api/v1/users/:principalId/card', () => {
 
     const res = await handlePrincipalCard({
       request: makeRequest(),
-      params: { principalId: 'principal_jane' },
+      params: { principalId: ids.jane },
     })
 
     expect(res.status).toBe(403)

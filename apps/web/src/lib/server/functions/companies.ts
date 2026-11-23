@@ -207,7 +207,8 @@ export const createCompanyFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.COMPANY_MANAGE })
     log.info({ name: data.name }, 'create company')
-    return serializeCompany(await createCompany(data))
+    // A teammate made it in the admin; only API callers get the 'api' default.
+    return serializeCompany(await createCompany({ ...data, source: 'manual' }))
   })
 
 export const updateCompanyFn = createServerFn({ method: 'POST' })

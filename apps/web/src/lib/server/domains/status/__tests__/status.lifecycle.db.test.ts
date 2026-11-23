@@ -186,6 +186,21 @@ describe('status lifecycle (Postgres)', () => {
       ).rejects.toThrow('An affected service has been deleted. Choose the services again.')
     })
 
+    it('tells an editor naming a service that never existed so, not that it was deleted', async () => {
+      const api = await service('API')
+      const incident = await openIncident([{ componentId: api, componentStatus: 'major_outage' }])
+
+      await expect(
+        updateIncident(incident.id, {
+          title: 'Elevated errors',
+          affectedComponents: [
+            { componentId: api, componentStatus: 'major_outage' },
+            { componentId: createId('status_component'), componentStatus: 'major_outage' },
+          ],
+        })
+      ).rejects.toThrow('An affected service does not exist.')
+    })
+
     it('maintenance auto-complete still completes the window and restores the rest', async () => {
       const db = await service('Database')
       const api = await service('API')
@@ -251,6 +266,24 @@ describe('status lifecycle (Postgres)', () => {
       await expect(attempt).rejects.toThrow(
         'An affected service has been deleted. Choose the services again.'
       )
+      expect(await testDb.query.statusIncidents.findMany()).toEqual([])
+    })
+
+    it('rejects a service that never existed as unknown, not deleted, and writes nothing', async () => {
+      const attempt = createIncident(
+        {
+          kind: 'incident',
+          title: 'Errors',
+          status: 'investigating',
+          body: 'Looking into it.',
+          affectedComponents: [
+            { componentId: createId('status_component'), componentStatus: 'major_outage' },
+          ],
+        },
+        { principalId: author }
+      )
+      await expect(attempt).rejects.toBeInstanceOf(ValidationError)
+      await expect(attempt).rejects.toThrow('An affected service does not exist.')
       expect(await testDb.query.statusIncidents.findMany()).toEqual([])
     })
 
@@ -626,7 +659,10 @@ describe('status lifecycle (Postgres)', () => {
     it('still sends the creation event, once, flagged as not emailed', async () => {
       const api = await service('API')
       const quiet = await openIncident([{ componentId: api, componentStatus: 'major_outage' }])
-      const window = await scheduleWindow(new Date(Date.now() + HOUR), null)
+      const window = await scheduleWindow(
+        new Date(Date.now() + HOUR),
+        new Date(Date.now() + 2 * HOUR)
+      )
 
       const actor = { type: 'service' as const, displayName: 'test' }
       expect(await notifyStatusIncidentPublished(quiet.id, actor)).toBe(false)

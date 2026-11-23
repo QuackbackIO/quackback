@@ -986,6 +986,35 @@ describe('dispatch on the ses rung', () => {
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('Unsubscribe')
   })
 
+  it('sends a reply subject taken from a multi-line message as one line', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendConversationMessageEmail({
+      to: 'customer@example.test',
+      direction: 'agent_reply',
+      senderName: 'Alex',
+      messagePreview: 'On its way.',
+      bodyHtml: '<p>On its way.</p>',
+      ctaUrl: 'https://acme.example/support/c1',
+      workspaceName: 'Acme',
+      channel: 'email',
+      conversationSubject: 'My order\r\n\r\n\thas not arrived\n',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Subject?.Data).toBe('Re: My order has not arrived')
+  })
+
+  it('never hands the provider a subject with a line break, whatever the template', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendRawEmail({
+      from: sendingAs('Support <support@platform.test>'),
+      to: 'customer@example.test',
+      subject: 'First line\r\nSecond line\tand a tab',
+      html: '<p>hi</p>',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Subject?.Data).toBe('First line Second line and a tab')
+  })
+
   it('carries RFC 8058 one-click unsubscribe headers on a changelog email', async () => {
     process.env.EMAIL_FROM = 'notifications@platform.test'
     await sendChangelogPublishedEmail({

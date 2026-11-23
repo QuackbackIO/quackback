@@ -17,6 +17,7 @@ import { randomInt } from 'node:crypto'
 import type { APIRequestContext, APIResponse } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
+import { withSettings } from '../../support/isolated-settings'
 
 const ISOLATED = process.env.E2E_SUPPORT_ISOLATED === '1'
 const ISOLATED_SKIP =
@@ -119,11 +120,18 @@ test.describe('workspace-wide widget limits', { tag: '@isolated' }, () => {
         })
       try {
         await clearBuckets('widget-upload')
-        const first = await upload()
-        expect(first.status()).toBe(400)
-        expect(await first.json()).toEqual({ error: 'Invalid request body' })
-        expect(new Set(await fire(19, upload))).toEqual(new Set([400]))
-        await expectRateLimited(await upload(), 'Too many uploads, slow down')
+        // Since cae1ebdb15 (#1229) an anonymous session uploads only while the
+        // workspace takes anonymous posts: refused before the limit counts it.
+        const refused = await upload()
+        expect(refused.status()).toBe(403)
+        expect(await refused.json()).toEqual({ error: 'Anonymous interaction is not enabled' })
+        await withSettings({ portal_config: { 'features.allowAnonymous': true } }, async () => {
+          const first = await upload()
+          expect(first.status()).toBe(400)
+          expect(await first.json()).toEqual({ error: 'Invalid request body' })
+          expect(new Set(await fire(19, upload))).toEqual(new Set([400]))
+          await expectRateLimited(await upload(), 'Too many uploads, slow down')
+        })
       } finally {
         await clearBuckets('widget-upload')
         await visitor.dispose()

@@ -30,6 +30,8 @@ import {
   roles,
   ssoVerifiedDomain,
   user,
+  type Database,
+  type Transaction,
 } from '@/lib/server/db'
 import type { IdentityProviderId, PrincipalId, RoleId } from '@quackback/ids'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -78,10 +80,13 @@ export type ProviderAdmin = {
 }
 
 /** Each role's permission keys. */
-async function permissionKeysByRole(roleIds: readonly string[]): Promise<Map<string, string[]>> {
+async function permissionKeysByRole(
+  roleIds: readonly string[],
+  exec: Database | Transaction = db
+): Promise<Map<string, string[]>> {
   const keysOf = new Map<string, string[]>()
   if (roleIds.length === 0) return keysOf
-  const rows = await db
+  const rows = await exec
     .select({ roleId: rolePermissions.roleId, key: permissions.key })
     .from(rolePermissions)
     .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
@@ -98,10 +103,11 @@ async function permissionKeysByRole(roleIds: readonly string[]): Promise<Map<str
  */
 export async function listProviderAdmins(
   id: IdentityProviderId,
-  callerPrincipalId: PrincipalId | null
+  callerPrincipalId: PrincipalId | null,
+  exec: Database | Transaction = db
 ): Promise<ProviderAdmin[]> {
   try {
-    const people = await db
+    const people = await exec
       .selectDistinct({
         principalId: principal.id,
         role: principal.role,
@@ -122,7 +128,7 @@ export async function listProviderAdmins(
       )
     if (people.length === 0) return []
 
-    const assignments = await db
+    const assignments = await exec
       .select({
         principalId: principalRoleAssignments.principalId,
         roleId: roles.id,
@@ -140,12 +146,13 @@ export async function listProviderAdmins(
         )
       )
     const assignmentOf = new Map(assignments.map((a) => [a.principalId as string, a]))
-    const keysOf = await permissionKeysByRole([
-      ...new Set(assignments.map((a) => a.roleId as string)),
-    ])
+    const keysOf = await permissionKeysByRole(
+      [...new Set(assignments.map((a) => a.roleId as string))],
+      exec
+    )
     const verifiedDomains = new Set(
       (
-        await db
+        await exec
           .select({ name: ssoVerifiedDomain.name })
           .from(ssoVerifiedDomain)
           .where(and(eq(ssoVerifiedDomain.providerId, id), isNotNull(ssoVerifiedDomain.verifiedAt)))
@@ -193,14 +200,15 @@ export async function listProviderAdmins(
 export async function syncLockoutCount(
   id: IdentityProviderId,
   mapping: unknown,
-  defaultRole: Role | null
+  defaultRole: Role | null,
+  exec: Database | Transaction = db
 ): Promise<number> {
   const role = roleMappingFor(mapping)
   if (!role?.syncOnEverySignIn || defaultRole === 'admin') return 0
   if (role.rules.some((r) => r.role === 'admin')) return 0
   const ruleRoleIds = [...new Set(role.rules.flatMap((r) => (r.roleId ? [r.roleId] : [])))]
-  const keysOf = await permissionKeysByRole(ruleRoleIds)
+  const keysOf = await permissionKeysByRole(ruleRoleIds, exec)
   if (ruleRoleIds.some((roleId) => canManageSso(keysOf.get(roleId) ?? []))) return 0
-  const people = await listProviderAdmins(id, null)
+  const people = await listProviderAdmins(id, null, exec)
   return people.filter((p) => p.canManageSso && p.atVerifiedDomain).length
 }

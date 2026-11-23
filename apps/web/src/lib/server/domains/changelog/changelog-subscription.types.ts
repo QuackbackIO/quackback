@@ -17,5 +17,7 @@ export interface ChangelogCsvImportResult {
   imported: number
   /** Rows whose email didn't match an existing user account. */
   skipped: number
+  /** Matched people who had unsubscribed; an import leaves them unsubscribed. */
+  optedOut: number
   total: number
 }
