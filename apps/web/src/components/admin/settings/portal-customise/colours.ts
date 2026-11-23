@@ -17,14 +17,8 @@ export function parseColourInput(input: string): string | null {
 }
 
 /** Hex for any stored colour, or the fallback. */
-export const hexOrNull = (colour: string | undefined) => (colour ? tryCssColorToHex(colour) : null)
-
-/** The colour picked for a role, as hex: what its hex box shows and the picker starts from. */
-export function pickedHex(palette: Palette, role: ColourRole): string | null {
-  return hexOrNull(
-    role === 'primary' || role === 'foreground' ? pickedColour(palette, role) : palette[role]
-  )
-}
+export { hexOrNull, pickedHex } from '@/lib/shared/portal-customise/picked-hex'
+import { hexOrNull, pickedHex } from '@/lib/shared/portal-customise/picked-hex'
 
 /** Why a role's colour is drawn otherwise than picked, in one line; null when it is drawn as picked. */
 export function drawnNote(palette: Palette, role: ColourRole): string | null {

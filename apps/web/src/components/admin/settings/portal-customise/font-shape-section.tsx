@@ -14,7 +14,6 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   CARD_STYLES,
-  normalizeFontSans,
   type BrandingFontId,
   type ButtonShape,
   type CardStyle,
@@ -26,53 +25,29 @@ import { uploadedFontFaces } from '@/lib/shared/theme/font-uploads'
 import { RADIO_TILE_DOT, RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/shared/utils'
 import { FontUploadDialog } from './font-upload-dialog'
-
-/** Corner stops, in rem. */
-export const CORNER_STOPS = [
-  { value: '0', label: 'Sharp' },
-  { value: '0.25', label: 'Slight' },
-  { value: '0.5', label: 'Soft' },
-  { value: '1', label: 'Round' },
-] as const
+import {
+  CORNER_STOPS,
+  fontFamilyName,
+  fontOptionOf,
+} from '@/lib/shared/portal-customise/font-shape-names'
+export {
+  CORNER_STOPS,
+  cornersName,
+  fontFamilyName,
+  fontName,
+  fontOptionOf,
+} from '@/lib/shared/portal-customise/font-shape-names'
 
 const BUTTON_SHAPES: ReadonlyArray<{ value: ButtonShape; label: string }> = [
   { value: 'pill', label: 'Pill' },
   { value: 'corners', label: 'Match corners' },
 ]
 
-/** The listed font a stack is, or null for a font outside the list. */
-export function fontOptionOf(font: string) {
-  return FONT_OPTIONS.find((f) => f.value === normalizeFontSans(font)) ?? null
-}
-
-/**
- * A font stack's first family, for a font outside the list ("Nunito"), as
- * words: a family named with no spaces reads Monzo Sans Text.
- */
-export function fontFamilyName(font: string): string {
-  const first =
-    font
-      .split(',')[0]
-      ?.trim()
-      .replace(/^["']|["']$/g, '') ?? ''
-  return first ? fontDisplayName(first) : 'System UI'
-}
-
 /** How each card style is named. */
 export const CARD_STYLE_NAMES: Record<CardStyle, string> = {
   border: 'Border',
   shadow: 'Shadow',
   flat: 'Flat',
-}
-
-/** The font's name as the closed section shows it. */
-export function fontName(font: string): string {
-  return fontOptionOf(font)?.name ?? fontFamilyName(font)
-}
-
-/** The corner radius as the closed section and the summary show it. */
-export function cornersName(rem: number): string {
-  return CORNER_STOPS.find((stop) => Number(stop.value) === rem)?.label ?? `${rem}rem`
 }
 
 /** What Headings reads while titles are set in the text font. */
