@@ -312,7 +312,7 @@ export function WidgetShell({
             <button
               type="button"
               onClick={handleGoToPortal}
-              className="flex items-center gap-1 px-2 h-8 rounded-md text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+              className="flex items-center gap-1 px-2 h-8 rounded-md text-xs font-medium text-primary-ink hover:bg-primary/10 transition-colors"
               aria-label={intl.formatMessage({
                 id: 'widget.shell.aria.goToPortal',
                 defaultMessage: 'Go to portal',
@@ -411,7 +411,7 @@ export function WidgetShell({
                       )}
                     >
                       <div className="relative">
-                        <Icon className={cn('w-5 h-5', active && 'text-primary')} />
+                        <Icon className={cn('w-5 h-5', active && 'text-primary-ink')} />
                         {tab === 'changelog' && changelogUnread > 0 && (
                           <span
                             className="absolute -top-0.5 -end-1 size-2 rounded-full bg-primary ring-2 ring-background"

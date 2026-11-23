@@ -24,6 +24,12 @@ const portal = [
   ...files(join(src, 'components/public')),
   join(src, 'components/shared/quackback-embed-card.tsx'),
 ]
+/** The support widget: the iframe app the embed script frames on customers' sites. */
+const widget = [
+  ...files(join(src, 'components/widget')),
+  ...files(join(src, 'routes/widget')),
+  join(src, 'routes/widget.tsx'),
+]
 
 describe('readable portal text', () => {
   it('clamps a colour drawn as text to a readable lightness, in light and in dark', () => {
@@ -51,10 +57,37 @@ describe('readable portal text', () => {
     // its cards (lib/shared/theme/expand.ts); --primary is the button fill.
     expect(globals).toContain('--color-primary-ink: var(--primary-ink, var(--primary));')
     const routes = files(join(src, 'routes')).filter((file) => file.includes('/_portal'))
-    for (const file of [...portal, ...routes]) {
+    for (const file of [...portal, ...routes, ...widget]) {
       const code = readFileSync(file, 'utf8')
-      expect(code, file).not.toMatch(/(?<![\w-])text-primary(?![-\w])/)
+      expect(code, file).not.toMatch(/(?<![\w-])(text|caret)-primary(?![-\w])/)
     }
+  })
+
+  it('sends text-primary left in shared components to the readable shade, overlays included', () => {
+    // Shared components (rich text, menus, dialogs) keep text-primary, and
+    // overlays portal to the body, outside the portal root. The theme writes
+    // --primary-ink on the document (:root and .dark), so a document-level
+    // rule reaches them in both modes; the admin, which declares no
+    // --primary-ink, falls back to what it drew before.
+    const rule = (selector: string, property: string, value: string) =>
+      new RegExp(
+        `${selector.replace(/[.()]/g, '\\$&')}\\s*{\\s*${property}:\\s*${value.replace(/[()]/g, '\\$&')};`
+      )
+    for (const [utility, property] of [
+      ['text-primary', 'color'],
+      ['fill-primary', 'fill'],
+      ['stroke-primary', 'stroke'],
+      ['caret-primary', 'caret-color'],
+    ]) {
+      expect(globals).toMatch(
+        rule(`html:not(.dark) .${utility}`, property, 'var(--primary-ink, var(--accent-ink))')
+      )
+      expect(globals).toMatch(
+        rule(`.dark .${utility}`, property, 'var(--primary-ink, var(--primary))')
+      )
+    }
+    // Not scoped to the portal root, which overlays sit outside of.
+    expect(globals).not.toMatch(/\[data-portal\]\s+\.text-primary/)
   })
 
   it('never fades portal text at rest below its colour (a hover or a disabled state may)', () => {

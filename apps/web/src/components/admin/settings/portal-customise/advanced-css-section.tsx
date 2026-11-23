@@ -31,6 +31,10 @@ export function AdvancedCssSection({
         The whole theme as CSS. Theme colours can be edited here on any plan. Your own rules, like a
         gradient header, need the Business plan.
       </p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Links and counts use <code>--primary-ink</code>, a shade of the main colour kept readable.
+        Setting it yourself overrides that.
+      </p>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"

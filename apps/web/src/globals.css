@@ -438,26 +438,36 @@
   }
 }
 
-/* Light: --primary is the fill gold. Type, icons, and carets use --accent-ink
-   so yellow never sits on white at ~1.5:1. Dark keeps gold as ink. */
+/* The main colour as text, icon or caret. The workspace theme (portal, widget,
+   sign-in pages) declares --primary-ink, its readable shade (4.5:1 on the page
+   and its cards), on the document in light and dark, so overlays portaled out
+   of the page root take it too. Where no theme declares it (the admin app),
+   light pages draw --accent-ink, so the gold fill never sits on white at
+   ~1.5:1, and dark pages keep the gold. */
 @layer utilities {
   html:not(.dark) .text-primary {
-    color: var(--accent-ink);
+    color: var(--primary-ink, var(--accent-ink));
   }
   html:not(.dark) .fill-primary {
-    fill: var(--accent-ink);
+    fill: var(--primary-ink, var(--accent-ink));
   }
   html:not(.dark) .stroke-primary {
-    stroke: var(--accent-ink);
+    stroke: var(--primary-ink, var(--accent-ink));
   }
   html:not(.dark) .caret-primary {
-    caret-color: var(--accent-ink);
+    caret-color: var(--primary-ink, var(--accent-ink));
   }
-  /* In the portal, light or dark, the main colour as text is the theme's
-     readable shade of it (--primary-ink, 4.5:1 on the page and its cards),
-     for the shared components (links, rich text) still drawn in text-primary. */
-  [data-portal] .text-primary {
+  .dark .text-primary {
     color: var(--primary-ink, var(--primary));
+  }
+  .dark .fill-primary {
+    fill: var(--primary-ink, var(--primary));
+  }
+  .dark .stroke-primary {
+    stroke: var(--primary-ink, var(--primary));
+  }
+  .dark .caret-primary {
+    caret-color: var(--primary-ink, var(--primary));
   }
 }
 

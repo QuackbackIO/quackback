@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { hexToOklch, oklchToHex, tryCssColorToHex } from '../colors'
 import { applyColour, type ColourRole } from '../colour-setters'
 import { expandTheme, parseOklch, unbrandedTheme, type MinimalThemeVariables } from '../expand'
+import { generateWorkspaceThemeCSS } from '../generator'
 import type { ThemeVariables } from '../types'
 
 const COLOURS = [
@@ -191,4 +192,16 @@ describe('every portal text reads at 4.5:1, whatever the colours', () => {
       expect(failed.slice(0, 10)).toEqual([])
     })
   }
+})
+
+describe('the readable shade reaches every page the theme is written to', () => {
+  it('declares --primary-ink on the document in light and dark (portal, widget and their overlays)', () => {
+    const css = generateWorkspaceThemeCSS({
+      light: { primary: '#facc15' },
+      dark: { primary: '#1e3a8a' },
+    })
+    const block = (selector: string) => css.match(new RegExp(`${selector} \\{([^}]*)\\}`))?.[1]
+    expect(block(':root')).toMatch(/--primary-ink: [^;]+;/)
+    expect(block('\\.dark')).toMatch(/--primary-ink: [^;]+;/)
+  })
 })
