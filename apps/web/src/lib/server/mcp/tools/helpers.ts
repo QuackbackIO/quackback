@@ -31,6 +31,7 @@ import {
 } from '../untrusted'
 import { recordMcpToolCall, type McpToolErrorCode } from '../tool-call-audit'
 import { TOOL_SCOPES, declaredToolScopes } from '../required-scope'
+import { TOOL_OUTPUT_SCHEMAS } from './output-schemas'
 
 const log = logger.child({ component: 'mcp-tools' })
 
@@ -272,8 +273,11 @@ export function registerTool<TArgs>(
     throw new Error(`MCP tool "${def.name}" declares a scope that differs from TOOL_SCOPES`)
   }
   const audited = def.annotations.readOnlyHint !== true
+  const outputSchema = TOOL_OUTPUT_SCHEMAS[def.name]
   const wrapped = async (args: unknown, ctx?: unknown): Promise<CallToolResult> => {
-    const { result, errorCode } = await runGuardedTool(auth, def, args as TArgs, untrusted)
+    const guarded = await runGuardedTool(auth, def, args as TArgs, untrusted)
+    const { errorCode } = guarded
+    const result = outputSchema ? withStructuredContent(guarded.result) : guarded.result
     // Every call that can change something is audited, refused ones included,
     // on the result the caller receives.
     if (audited) {
@@ -293,6 +297,7 @@ export function registerTool<TArgs>(
       title: def.title,
       description: def.description,
       inputSchema: z.object(def.schema),
+      ...(outputSchema ? { outputSchema } : {}),
       annotations: def.annotations,
       ...(scopes.length > 0
         ? { _meta: { securitySchemes: [{ type: 'oauth2', scopes: [...scopes] }] } }
@@ -300,6 +305,24 @@ export function registerTool<TArgs>(
     },
     wrapped
   )
+}
+
+/**
+ * Add the JSON body of a successful result as `structuredContent`, for a tool
+ * with an output schema. It is parsed from the text the caller receives, after
+ * the untrusted marker is added, so the two copies always agree.
+ */
+export function withStructuredContent(result: CallToolResult): CallToolResult {
+  if (result.isError) return result
+  const [first] = result.content
+  if (first?.type !== 'text') return result
+  try {
+    const body: unknown = JSON.parse(first.text)
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) return result
+    return { ...result, structuredContent: body as Record<string, unknown> }
+  } catch {
+    return result
+  }
 }
 
 /** Run a tool behind its guards, naming the outcome for the audit. */

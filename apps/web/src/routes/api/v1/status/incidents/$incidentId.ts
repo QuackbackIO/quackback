@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { assertApiReadAccess, withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
-import { serializeIncidentDetails } from '../-serialize'
+import { serializeIncidentDetails, STATUS_PAGE_READ_PERMISSIONS } from '../-serialize'
 import type { StatusIncidentId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/status/incidents/$incidentId')({
@@ -15,7 +15,8 @@ export const Route = createFileRoute('/api/v1/status/incidents/$incidentId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          const auth = await withApiKeyAuth(request)
+          assertApiReadAccess(auth, 'read:feedback', STATUS_PAGE_READ_PERMISSIONS)
 
           const incidentId = parseTypeId<StatusIncidentId>(
             params.incidentId,

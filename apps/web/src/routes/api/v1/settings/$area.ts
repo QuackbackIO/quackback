@@ -12,6 +12,7 @@ import {
   settingsCallerFromApiAuth,
   withEtag,
 } from '@/lib/server/domains/settings-registry/http'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 export const Route = createFileRoute('/api/v1/settings/$area')({
   server: {
@@ -52,7 +53,7 @@ export const Route = createFileRoute('/api/v1/settings/$area')({
             )
           let patch: unknown
           try {
-            patch = await request.json()
+            patch = await readJsonBody(request)
           } catch {
             return badRequestResponse('Request body must be a JSON object')
           }

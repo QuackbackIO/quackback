@@ -40,6 +40,9 @@ export const widgetQueryKeys = {
     all: ['widget', 'changelogs'] as const,
     bySession: (version: number) => ['widget', 'changelogs', version] as const,
   },
+  changelogLabels: {
+    bySession: (version: number) => ['widget', 'changelogLabels', version] as const,
+  },
   popularPosts: {
     list: (boardSlug: string | null, version: number) =>
       ['widget', 'posts', 'popular', 'top', boardSlug ?? 'all', version] as const,

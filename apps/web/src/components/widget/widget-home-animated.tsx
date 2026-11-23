@@ -56,6 +56,8 @@ import {
   type WidgetComposeRequest,
 } from './widget-compose'
 import { shownName } from '@/lib/shared/greeting-name'
+import type { BoardCustomField } from '@/lib/shared/db-types'
+import { useBoardFieldAnswers, WidgetBoardFields } from './widget-board-fields'
 
 interface WidgetPost {
   id: string
@@ -87,6 +89,8 @@ interface BoardInfo {
   id: string
   name: string
   slug: string
+  /** Intake fields the board asks for with each post. */
+  customFields?: BoardCustomField[]
 }
 
 export interface WidgetHomeProps {
@@ -120,6 +124,8 @@ export interface WidgetHomeProps {
     voteCount: number
     statusId: string | null
     board: { id: string; name: string; slug: string }
+    /** Held for review: only its author sees it until the team approves it. */
+    pendingReview?: boolean
   }) => void
 }
 
@@ -131,6 +137,13 @@ interface SearchResult {
 // local so this file shares no module with the lazy chunks.
 const isReadOnlyRefusal = (err: unknown): boolean =>
   err instanceof Error && err.message === "This board isn't taking new feedback right now."
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+const isBlockedRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'BLOCKED'
+// The refusal for answers that no longer fit the board's fields
+// (CUSTOM_FIELDS_INVALID in post-custom-fields.ts), matched by its code.
+const isFieldsRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'CUSTOM_FIELDS_INVALID'
 
 const SIMILAR_SEARCH_CACHE_LIMIT = 40
 /** Shorter titles match too much to be similar to anything, as in the portal composer. */
@@ -541,6 +554,10 @@ export function WidgetHomeAnimated({
   const [selectedBoardId, setSelectedBoardId] = useState(() =>
     resolveComposeBoardId(boards, undefined, defaultBoard)
   )
+  const fieldAnswers = useBoardFieldAnswers(
+    boards.find((b) => b.id === selectedBoardId)?.customFields,
+    selectedBoardId
+  )
   const composeBoardDirtyRef = useRef(false)
   const handleComposeBoardChange = useCallback((id: string) => {
     composeBoardDirtyRef.current = true
@@ -804,12 +821,15 @@ export function WidgetHomeAnimated({
     detailsRef.current = null
     setEditorContent(null)
     setError(null)
+    fieldAnswers.reset()
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const typedTitle = title.get()
     if (!typedTitle.trim() || !selectedBoardId || isSubmitting) return
+    // The server refuses a post without the board's required answers.
+    if (canPost && !fieldAnswers.check()) return
 
     setIsSubmitting(true)
     setError(null)
@@ -868,6 +888,7 @@ export function WidgetHomeAnimated({
           content: (details?.html() ?? '').trim(),
           contentJson: details?.json() as TiptapContent | undefined,
           metadata: metadata ?? undefined,
+          ...fieldAnswers.payload,
         },
         headers,
       })
@@ -899,20 +920,37 @@ export function WidgetHomeAnimated({
         voteCount: Math.max(result.voteCount ?? 0, 1),
         statusId: result.statusId ?? null,
         board: result.board,
+        pendingReview: result.pendingReview,
       })
 
       collapseForm()
     } catch (err) {
+      // The board's fields changed since the widget loaded them: fetch them
+      // again so the composer shows the questions the board asks now.
+      if (isFieldsRefusal(err)) {
+        void queryClient.invalidateQueries({ queryKey: ['widget', 'boardCapabilities'] })
+      }
       setError(
-        isReadOnlyRefusal(err)
+        isBlockedRefusal(err)
           ? intl.formatMessage({
-              id: 'widget.readOnly',
-              defaultMessage: "This board isn't taking new feedback right now.",
+              id: 'widget.blocked',
+              defaultMessage: "You can't post, vote or comment here.",
             })
-          : intl.formatMessage({
-              id: 'widget.home.form.errorNetwork',
-              defaultMessage: 'Network error. Please try again.',
-            })
+          : isReadOnlyRefusal(err)
+            ? intl.formatMessage({
+                id: 'widget.readOnly',
+                defaultMessage: "This board isn't taking new feedback right now.",
+              })
+            : isFieldsRefusal(err)
+              ? intl.formatMessage({
+                  id: 'widget.home.form.errorFieldsChanged',
+                  defaultMessage:
+                    "This board's questions may have changed. Check them and try again.",
+                })
+              : intl.formatMessage({
+                  id: 'widget.home.form.errorNetwork',
+                  defaultMessage: 'Network error. Please try again.',
+                })
       )
     } finally {
       setIsSubmitting(false)
@@ -1044,6 +1082,8 @@ export function WidgetHomeAnimated({
                       />
                     </Suspense>
                   </m.div>
+
+                  <WidgetBoardFields answers={fieldAnswers} />
 
                   <SimilarIdeas
                     title={title}

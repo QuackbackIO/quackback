@@ -18,6 +18,7 @@ import {
 import { ArticleTranslationsDialog } from './article-translations-dialog'
 import { ArticleFeedbackReasonsDialog } from './article-feedback-reasons-dialog'
 import { updateArticleSchema } from '@/lib/shared/schemas/help-center'
+import { isNotFoundError } from '@/lib/shared/errors'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import {
   useUpdateArticle,
@@ -47,8 +48,14 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
   const publishArticleMutation = usePublishArticle()
   const unpublishArticleMutation = useUnpublishArticle()
 
-  const { data: article, isLoading } = useQuery({
+  const {
+    data: article,
+    isLoading,
+    error,
+  } = useQuery({
     ...helpCenterQueries.articleDetail(articleId),
+    // An article that is not there will not appear on a retry.
+    retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 3,
   })
   const segmentsQuery = useQuery({
     queryKey: ['admin', 'segments'] as const,
@@ -123,7 +130,8 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
       {
         id: articleId,
         title: data.title,
-        description: data.description?.trim() || undefined,
+        // '' clears the description; undefined would leave it unchanged.
+        description: data.description?.trim() ?? '',
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
         categoryId: data.categoryId,
@@ -142,6 +150,21 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
   // React tree; only the article's own DOM may trigger the save shortcut.
   const handleOwnKeyDown = (e: React.KeyboardEvent) => {
     if (e.currentTarget.contains(e.target as Node)) handleKeyDown(e)
+  }
+
+  if (error && !article) {
+    return (
+      <div className="flex h-[400px] flex-col items-center justify-center gap-3 text-center">
+        <p className="text-sm text-muted-foreground">
+          {isNotFoundError(error)
+            ? 'This article no longer exists.'
+            : 'This article could not be loaded.'}
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+    )
   }
 
   if (isLoading || !article || !hasInitialized.current) {

@@ -132,6 +132,13 @@ it('stays quiet with nothing to show, and offers a retry when search fails', asy
   expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
 })
 
+it('shows the empty state, not Searching, for a page past the search depth', () => {
+  mount({ query: 'zebra', page: 99 })
+  expect(screen.queryByText('Searching…')).toBeNull()
+  expect(screen.getByText('No results for “zebra”')).toBeTruthy()
+  expect(state.calls).toEqual([])
+})
+
 it('asks for two characters before searching', () => {
   mount({ query: 'r' })
   expect(screen.getByText('Type at least two characters.')).toBeTruthy()

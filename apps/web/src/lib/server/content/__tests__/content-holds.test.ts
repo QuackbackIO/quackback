@@ -48,6 +48,15 @@ describe('contentHoldReason', () => {
     expect(contentHoldReason({ holdLinks: true }, textDoc)).toBeNull()
   })
 
+  it('never holds a link to the workspace itself (FBP-C-10)', () => {
+    const sameOrigin = JSON.parse(
+      JSON.stringify(linkDoc).replace('https://evil.example', 'https://acme.example/b/x')
+    ) as TiptapContent
+    expect(contentHoldReason({ holdLinks: true }, sameOrigin)).toBeNull()
+    // Control: the same document pointing elsewhere is held.
+    expect(contentHoldReason({ holdLinks: true }, linkDoc)).toBe('links')
+  })
+
   it('returns images+links when both match', () => {
     const both = {
       type: 'doc',

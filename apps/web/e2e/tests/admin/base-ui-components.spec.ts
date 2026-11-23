@@ -41,7 +41,7 @@ test.describe('Base UI component usability', () => {
     await expect(page.locator('[data-slot="popover-content"]')).toHaveCount(0)
   })
 
-  test('switch, select, slider, and styled links stay usable', async ({ page }) => {
+  test('switch, select, radio group, and styled links stay usable', async ({ page }) => {
     await page.goto('/admin/settings/general')
     await expect(page.getByRole('heading', { name: 'General' })).toBeVisible({ timeout: 15_000 })
     const productSwitch = page.locator('#product-changelog')
@@ -69,11 +69,16 @@ test.describe('Base UI component usability', () => {
     await expect(install).toBeVisible()
     await expect(install).not.toHaveAttribute('role', 'button')
 
-    await page.goto('/admin/settings/portal')
-    await expect(page.getByRole('heading', { name: 'Portal' })).toBeVisible({ timeout: 15_000 })
-    const slider = page.getByRole('slider')
-    await expect(slider).toBeVisible()
-    await expect(slider).toHaveAttribute('aria-valuenow')
+    // The portal's corners were the last slider; Customise sets them with a radio group.
+    await page.goto('/admin/settings/portal/customise')
+    const fontAndShape = page.getByRole('button', { name: /^Font and shape/ })
+    await waitForHydration(fontAndShape)
+    await fontAndShape.click()
+    const round = page.getByRole('radiogroup', { name: 'Corners' }).getByRole('radio', {
+      name: 'Round',
+    })
+    await round.click()
+    await expect(round).toHaveAttribute('aria-checked', 'true')
   })
 
   test('tabs, dialog, radio, and checkbox stay usable', async ({ page }) => {

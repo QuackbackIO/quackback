@@ -161,7 +161,13 @@ describe('addVoteOnBehalf', () => {
 
   it('adds a proxy vote successfully', async () => {
     mockDbExecute.mockResolvedValue([
-      { post_exists: true, board_exists: true, newly_voted: true, vote_count: 6 },
+      {
+        post_exists: true,
+        board_exists: true,
+        voter_exists: true,
+        newly_voted: true,
+        vote_count: 6,
+      },
     ])
 
     const result = await addVoteOnBehalf(
@@ -177,7 +183,13 @@ describe('addVoteOnBehalf', () => {
 
   it('returns voted: false when vote already exists (idempotent)', async () => {
     mockDbExecute.mockResolvedValue([
-      { post_exists: true, board_exists: true, newly_voted: false, vote_count: 5 },
+      {
+        post_exists: true,
+        board_exists: true,
+        voter_exists: true,
+        newly_voted: false,
+        vote_count: 5,
+      },
     ])
 
     const result = await addVoteOnBehalf(POST_ID, PRINCIPAL_ID)
@@ -204,7 +216,13 @@ describe('addVoteOnBehalf', () => {
 
   it('passes source metadata to the CTE', async () => {
     mockDbExecute.mockResolvedValue([
-      { post_exists: true, board_exists: true, newly_voted: true, vote_count: 3 },
+      {
+        post_exists: true,
+        board_exists: true,
+        voter_exists: true,
+        newly_voted: true,
+        vote_count: 3,
+      },
     ])
 
     const result = await addVoteOnBehalf(

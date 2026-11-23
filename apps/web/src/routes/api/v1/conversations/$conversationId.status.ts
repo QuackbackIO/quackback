@@ -12,6 +12,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeConversation } from './-serialize'
 import { statusEnum } from './-validation'
 import type { ConversationId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const statusSchema = z.object({
   status: statusEnum,
@@ -34,7 +35,7 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/stat
             'conversation ID'
           )
 
-          const parsed = statusSchema.safeParse(await request.json().catch(() => null))
+          const parsed = statusSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

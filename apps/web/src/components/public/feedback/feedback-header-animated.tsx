@@ -1,6 +1,7 @@
 import type { BoardId } from '@quackback/ids'
 import type { BoardPermission } from '@/lib/shared/types/boards'
-import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
+import { cn } from '@/lib/shared/utils'
+import { Suspense, lazy, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
@@ -22,7 +23,6 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
-import { BoardCustomFields } from '@/components/public/feedback/board-custom-fields'
 import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { BoardSettings } from '@/lib/shared/db-types'
@@ -72,6 +72,35 @@ export interface FeedbackHeaderProps {
 // local so this file shares no module with the lazy chunks.
 const isReadOnlyRefusal = (err: unknown): boolean =>
   err instanceof Error && err.message === "This board isn't taking new feedback right now."
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+const isBlockedRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'BLOCKED'
+// The refusal for answers that no longer fit the board's fields
+// (CUSTOM_FIELDS_INVALID in post-custom-fields.ts), matched by its code.
+const isFieldsRefusal = (err: unknown): boolean =>
+  err instanceof Error && (err as { code?: unknown }).code === 'CUSTOM_FIELDS_INVALID'
+
+/**
+ * Whole minutes to wait when the post was refused for going over the hourly
+ * limit, or null for any other failure. In the browser a typed refusal is a
+ * plain Error carrying `code` and `retryAfter` (typed-error-serialization.ts).
+ */
+function rateLimitWaitMinutes(err: unknown): number | null {
+  if (!err || typeof err !== 'object') return null
+  const { code, retryAfter } = err as { code?: unknown; retryAfter?: unknown }
+  if (code !== 'RATE_LIMITED') return null
+  const seconds = typeof retryAfter === 'number' && retryAfter > 0 ? retryAfter : 60 * 60
+  return Math.max(1, Math.ceil(seconds / 60))
+}
+
+// A board's custom fields load only for a board that has some. The widget
+// composer loads the same module lazily, so a static import here would split
+// it into a chunk of its own that every page with this composer requests.
+const BoardCustomFields = lazy(() =>
+  import('@/components/public/feedback/board-custom-fields').then((m) => ({
+    default: m.BoardCustomFields,
+  }))
+)
 
 const DETAILS_MAX_LENGTH = 10_000
 
@@ -279,10 +308,15 @@ export function FeedbackHeaderAnimated({
       onPostCreated?.(result.id, result.board.slug)
 
       toast.success(
-        intl.formatMessage({
-          id: 'portal.feedback.header.toastSubmitted',
-          defaultMessage: 'Feedback submitted',
-        }),
+        result.pendingReview
+          ? intl.formatMessage({
+              id: 'portal.feedback.header.toastPending',
+              defaultMessage: 'Your post is waiting for review',
+            })
+          : intl.formatMessage({
+              id: 'portal.feedback.header.toastSubmitted',
+              defaultMessage: 'Feedback submitted',
+            }),
         {
           action: {
             label: intl.formatMessage({
@@ -295,17 +329,44 @@ export function FeedbackHeaderAnimated({
       )
     } catch (err) {
       // The server logs why it refused the post; its message is not written
-      // for the visitor, except the neutral line for a board that takes none.
+      // for the visitor, except the neutral line for a board that takes none
+      // and the wait after posting too many.
+      const waitMinutes = rateLimitWaitMinutes(err)
+      // The board's fields changed since the page loaded them: fetch them
+      // again so the composer shows the questions the board asks now.
+      if (isFieldsRefusal(err)) {
+        void queryClient.invalidateQueries({ queryKey: ['portal', 'data'] })
+      }
       setError(
-        isReadOnlyRefusal(err)
-          ? intl.formatMessage({
-              id: 'portal.feedback.readOnly',
-              defaultMessage: "This board isn't taking new feedback right now.",
-            })
-          : intl.formatMessage({
-              id: 'portal.feedback.header.errorSubmit',
-              defaultMessage: 'Could not submit your feedback. Please try again.',
-            })
+        waitMinutes !== null
+          ? intl.formatMessage(
+              {
+                id: 'portal.feedback.header.errorRateLimited',
+                defaultMessage:
+                  'Too many posts from here in the last hour. Try again in {minutes, plural, one {# minute} other {# minutes}}.',
+              },
+              { minutes: waitMinutes }
+            )
+          : isBlockedRefusal(err)
+            ? intl.formatMessage({
+                id: 'portal.blocked',
+                defaultMessage: "You can't post, vote or comment here.",
+              })
+            : isReadOnlyRefusal(err)
+              ? intl.formatMessage({
+                  id: 'portal.feedback.readOnly',
+                  defaultMessage: "This board isn't taking new feedback right now.",
+                })
+              : isFieldsRefusal(err)
+                ? intl.formatMessage({
+                    id: 'portal.feedback.header.errorFieldsChanged',
+                    defaultMessage:
+                      "This board's questions may have changed. Check them and try again.",
+                  })
+                : intl.formatMessage({
+                    id: 'portal.feedback.header.errorSubmit',
+                    defaultMessage: 'Could not submit your feedback. Please try again.',
+                  })
       )
     }
   }
@@ -327,13 +388,15 @@ export function FeedbackHeaderAnimated({
 
   return (
     <motion.div
-      className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
+      data-qb-edit="colours"
+      // At rest the card style sets the shadow (globals.css `.portal-card`);
+      // open, the composer lifts whatever the style.
+      className={cn(
+        'portal-card border rounded-lg mb-5 overflow-hidden transition-shadow duration-200',
+        '[--portal-card-rest-shadow:0_1px_2px_0_rgb(0_0_0/0.05)]',
+        expanded && 'portal-card--lifted'
+      )}
       initial={false}
-      animate={{
-        boxShadow: expanded
-          ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-          : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-      }}
       transition={{ duration: 0.2 }}
       onKeyDown={handleKeyDown}
       // The editor renders once the header expands; hovering warms its chunk.
@@ -453,13 +516,15 @@ export function FeedbackHeaderAnimated({
                 transition={{ duration: 0.2, delay: 0.15 }}
                 className="px-4 sm:px-5 pb-4"
               >
-                <BoardCustomFields
-                  fields={boardCustomFields}
-                  values={customFieldValues}
-                  onChange={(key, value) =>
-                    setCustomFieldValues((prev) => ({ ...prev, [key]: value }))
-                  }
-                />
+                <Suspense fallback={null}>
+                  <BoardCustomFields
+                    fields={boardCustomFields}
+                    values={customFieldValues}
+                    onChange={(key, value) =>
+                      setCustomFieldValues((prev) => ({ ...prev, [key]: value }))
+                    }
+                  />
+                </Suspense>
               </motion.div>
             )}
 
@@ -635,7 +700,7 @@ function TitleInput({
         if (!expanded) onExpand()
       }}
       onFocus={() => !expanded && onExpand()}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary"
+      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground placeholder:font-normal caret-primary"
       initial={false}
       animate={{
         fontSize: expanded ? '1.25rem' : '1rem',

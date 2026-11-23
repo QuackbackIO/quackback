@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { extractCssVariables } from '../css-parser'
-import { extractMinimal } from '../expand'
-import { advancedCssRemainder, generateReadableCSS, isGeneratedThemeCss } from '../generator'
-import { themePresets } from '../presets'
+import {
+  DEFAULT_DARK_BASE,
+  DEFAULT_FONT_SANS,
+  DEFAULT_LIGHT_BASE,
+  DEFAULT_RADIUS,
+  expandTheme,
+  extractMinimal,
+} from '../expand'
+import { advancedCssRemainder, generateReadableCSS, isGeneratedThemeCss } from '../readable-css'
 import type { ThemeMode } from '../types'
 
-const lightMinimal = extractMinimal(themePresets.default.light)
-const darkMinimal = extractMinimal(themePresets.default.dark)
+// The default theme, as an unbranded workspace gets it.
+const shared = { fontSans: DEFAULT_FONT_SANS, radius: DEFAULT_RADIUS }
+const lightMinimal = extractMinimal(
+  expandTheme({ ...DEFAULT_LIGHT_BASE, ...shared }, { mode: 'light' })
+)
+const darkMinimal = extractMinimal(
+  expandTheme({ ...DEFAULT_DARK_BASE, ...shared }, { mode: 'dark' })
+)
 const THEME_MODES: ThemeMode[] = ['user', 'light', 'dark']
 
 describe('isGeneratedThemeCss', () => {
@@ -107,5 +119,81 @@ describe('extractCssVariables', () => {
   it('reads a last custom property without a trailing semicolon', () => {
     const vars = extractCssVariables(':root { --primary: oklch(0.5 0.2 250) }')
     expect(vars.light['--primary']).toBe('oklch(0.5 0.2 250)')
+  })
+})
+
+describe('button shape', () => {
+  it('emits --radius-button only for corners', async () => {
+    const { generateWorkspaceThemeCSS } = await import('../generator')
+    expect(generateWorkspaceThemeCSS({ buttonShape: 'corners' })).toContain(
+      '--radius-button: calc(var(--radius) * .75)'
+    )
+    expect(generateWorkspaceThemeCSS({ buttonShape: 'pill' })).not.toContain('--radius-button')
+    expect(generateWorkspaceThemeCSS({})).not.toContain('--radius-button')
+    expect(generateWorkspaceThemeCSS(null)).not.toContain('--radius-button')
+  })
+})
+
+describe('custom font', () => {
+  const customFont = {
+    family: 'Sohne',
+    fallback: 'lora' as const,
+    files: [
+      { key: 'fonts/2026/10/a-400.woff2', weight: 400, style: 'normal' as const },
+      { key: 'fonts/2026/10/a-700.woff2', weight: 700, style: 'normal' as const },
+    ],
+  }
+
+  it('emits an @font-face per file and puts the family first in the font stack', async () => {
+    const { generateWorkspaceThemeCSS } = await import('../generator')
+    const css = generateWorkspaceThemeCSS({ customFont })
+    expect(css.match(/@font-face/g)).toHaveLength(2)
+    expect(css).toContain('url("/api/storage/fonts/2026/10/a-400.woff2") format("woff2")')
+    expect(css).toContain('--font-sans: "Sohne", "Lora", ui-serif, Georgia, serif')
+    expect(css).toContain('html body { font-family: "Sohne", "Lora", ui-serif, Georgia, serif')
+  })
+
+  it('stacks the family ahead of the fallback in dark mode too', async () => {
+    const { generateWorkspaceThemeCSS } = await import('../generator')
+    const css = generateWorkspaceThemeCSS({ themeMode: 'user', customFont })
+    expect(css.match(/--font-sans: "Sohne"/g)!.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('leaves the stylesheet alone without a custom font', async () => {
+    const { generateWorkspaceThemeCSS } = await import('../generator')
+    expect(generateWorkspaceThemeCSS({})).not.toContain('@font-face')
+    expect(generateWorkspaceThemeCSS({})).not.toContain('Sohne')
+  })
+
+  it('refuses to write a family or key that could end the rule', async () => {
+    const { generateWorkspaceThemeCSS } = await import('../generator')
+    const bad = generateWorkspaceThemeCSS({
+      customFont: { ...customFont, family: 'A"}body{x:y' },
+    })
+    expect(bad).not.toContain('@font-face')
+    expect(bad).not.toContain('body{x:y')
+    const badKey = generateWorkspaceThemeCSS({
+      customFont: {
+        ...customFont,
+        files: [{ key: 'fonts/a").x{}.woff2', weight: 400, style: 'normal' }],
+      },
+    })
+    expect(badKey).not.toContain('@font-face')
+  })
+
+  it('gives the preview the same faces through the theme extras, and the stack apart', async () => {
+    const { themeExtrasCss, customFontStack } = await import('../generator')
+    const extras = themeExtrasCss({ customFont })
+    expect(extras.match(/@font-face/g)).toHaveLength(2)
+    expect(extras).not.toContain('--font-sans')
+    expect(customFontStack(customFont)).toBe('"Sohne", "Lora", ui-serif, Georgia, serif')
+    expect(customFontStack({ ...customFont, family: 'A"}x' })).toBeNull()
+    expect(themeExtrasCss({ customFont: { ...customFont, family: 'A"}x' } })).toBe('')
+  })
+
+  it('does not change the generated theme CSS, so it is never an Advanced CSS remainder', () => {
+    const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    expect(generated).not.toContain('Sohne')
+    expect(advancedCssRemainder(generated, generated)).toBe('')
   })
 })

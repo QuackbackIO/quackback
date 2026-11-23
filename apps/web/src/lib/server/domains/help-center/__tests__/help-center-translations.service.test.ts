@@ -148,6 +148,26 @@ describe('article translations', () => {
     expect(result.title).toBe('Titel')
   })
 
+  it('a person saving a draft takes a published translation back to draft', async () => {
+    await upsertArticleTranslation({
+      articleId: 'article_1' as KbArticleId,
+      locale: 'de',
+      title: 'Entwurf',
+      content: 'Inhalt',
+    })
+    const [{ set }] = onConflictCalls[0] as [{ set: Record<string, unknown> }]
+    expect(set.status).toBe('draft')
+  })
+
+  it('an auto-translate write leaves the status as it is', async () => {
+    await upsertArticleTranslation(
+      { articleId: 'article_1' as KbArticleId, locale: 'de', title: 'Titel', content: 'Inhalt' },
+      { source: 'auto' }
+    )
+    const [{ set }] = onConflictCalls[0] as [{ set: Record<string, unknown> }]
+    expect(set).not.toHaveProperty('status')
+  })
+
   it('sets translation status and errors when the translation does not exist', async () => {
     const result = await setArticleTranslationStatus('article_1' as KbArticleId, 'de', 'published')
     expect(result.status).toBe('published')

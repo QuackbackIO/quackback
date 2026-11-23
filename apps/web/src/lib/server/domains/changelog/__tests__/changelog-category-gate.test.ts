@@ -1,7 +1,25 @@
-import { describe, it, expect } from 'vitest'
-import type { PrincipalId, SegmentId } from '@quackback/ids'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
+import { createId, type ChangelogId, type PrincipalId, type SegmentId } from '@quackback/ids'
+
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { changelogCategories, changelogEntries, changelogEntryCategories } from '@/lib/server/db'
 import { categoryGateAllows } from '../changelog-category.service'
+import { listPublicChangelogs } from '../changelog.public'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+
+const fixture = await createDbTestFixture({
+  probe: async (db) => {
+    await db
+      .select({ id: changelogCategories.id, segmentIds: changelogCategories.segmentIds })
+      .from(changelogCategories)
+      .limit(0)
+  },
+})
 
 function userActor(segmentIds: string[]): Actor {
   return {
@@ -64,3 +82,61 @@ describe('categoryGateAllows', () => {
     expect(categoryGateAllows(categories, teamActor())).toBe(true)
   })
 })
+
+describe.skipIf(!fixture.available)(
+  'listPublicChangelogs with label-gated entries (real DB)',
+  () => {
+    beforeEach(fixture.begin)
+    afterEach(fixture.rollback)
+    afterAll(fixture.close)
+
+    const BASE = Date.parse('2026-02-01T00:00:00Z')
+    const minutes = (n: number) => new Date(BASE + n * 60_000)
+
+    // The three newest entries carry a label restricted to a segment the
+    // anonymous viewer is not in; the oldest one is open to everyone.
+    async function seedGatedNewest(): Promise<{ open: ChangelogId }> {
+      const [gate] = await testDb
+        .insert(changelogCategories)
+        .values({
+          name: `Enterprise ${createId('changelog_category')}`,
+          color: '#000000',
+          segmentIds: ['segment_enterprise'],
+        })
+        .returning()
+      const open = createId('changelog') as ChangelogId
+      await testDb
+        .insert(changelogEntries)
+        .values({ id: open, title: 'Open', content: 'body', publishedAt: minutes(0) })
+      for (let i = 1; i <= 3; i++) {
+        const id = createId('changelog') as ChangelogId
+        await testDb
+          .insert(changelogEntries)
+          .values({ id, title: `Gated ${i}`, content: 'body', publishedAt: minutes(i) })
+        await testDb
+          .insert(changelogEntryCategories)
+          .values({ changelogEntryId: id, categoryId: gate.id })
+      }
+      return { open }
+    }
+
+    it('CHG-P-05 the first page already holds the open entry behind gated ones', async () => {
+      const { open } = await seedGatedNewest()
+
+      const page = await listPublicChangelogs({ limit: 2 }, ANONYMOUS_ACTOR)
+
+      expect(page.items.map((e) => e.id)).toEqual([open])
+      expect(page.hasMore).toBe(false)
+    })
+    it('CHG-P-05 a fully gated page is not returned empty with more to load', async () => {
+      await seedGatedNewest()
+
+      const page = await listPublicChangelogs({ limit: 2 }, ANONYMOUS_ACTOR)
+
+      expect({ empty: page.items.length === 0, hasMore: page.hasMore }).not.toEqual({
+        empty: true,
+        hasMore: true,
+      })
+    })
+  }
+)

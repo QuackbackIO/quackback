@@ -13,6 +13,7 @@ import { cn } from '@/lib/shared/utils'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { NewTabHint } from '@/components/ui/button'
+import { MCP_TOOL_NAMES } from '@/lib/shared/mcp-tools'
 
 // ——————————————————————————————————————————————————
 // Client icons (Simple Icons, 24x24 viewBox)
@@ -240,31 +241,6 @@ const CLIENTS: ClientDef[] = [
   },
 ]
 
-const MCP_TOOLS = [
-  'search',
-  'get_details',
-  'triage_post',
-  'vote_post',
-  'proxy_vote',
-  'add_comment',
-  'update_comment',
-  'delete_comment',
-  'react_to_comment',
-  'create_post',
-  'delete_post',
-  'restore_post',
-  'merge_post',
-  'unmerge_post',
-  'create_changelog',
-  'update_changelog',
-  'delete_changelog',
-  'list_suggestions',
-  'accept_suggestion',
-  'dismiss_suggestion',
-  'restore_suggestion',
-  'get_post_activity',
-] as const
-
 // ——————————————————————————————————————————————————
 // Component
 // ——————————————————————————————————————————————————
@@ -470,7 +446,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
           <div className="p-4 sm:p-6 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">
-                {MCP_TOOLS.length} tools available
+                {MCP_TOOL_NAMES.length} tools available
               </span>
               <a
                 href="https://www.quackback.io/docs/mcp/reference"
@@ -484,7 +460,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               </a>
             </div>
             <div className="flex flex-wrap gap-1">
-              {MCP_TOOLS.map((tool) => (
+              {MCP_TOOL_NAMES.map((tool) => (
                 <span
                   key={tool}
                   className="text-xs font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"

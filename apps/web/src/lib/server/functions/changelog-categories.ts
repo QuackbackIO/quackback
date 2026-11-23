@@ -3,9 +3,12 @@
  */
 
 import { z } from 'zod'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { ChangelogCategoryId } from '@quackback/ids'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, getOptionalAuth, policyActorFromAuth } from './auth-helpers'
+import { resolveChangelogReader } from './changelog'
+import { isTeamActor } from '@/lib/server/policy/types'
+import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   EntityIdSchema,
@@ -41,11 +44,29 @@ const updateCategorySchema = z.object({
 const idSchema = EntityIdSchema
 const reorderSchema = ReorderIdsOpenSchema
 
-/** List categories (public: powers the widget/portal filter chips too). */
-export const listChangelogCategoriesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  log.debug('list changelog categories')
-  return await listChangelogCategories()
-})
+/**
+ * The labels a caller may see. The team gets every label with the segments it
+ * is gated to (the editor and the Labels settings card). Anyone else gets
+ * what the public changelog would show them: nothing when it is closed to
+ * them, else the labels they could see on an entry, and never which segments
+ * a label is for. The portal and widget filter chips are built from it.
+ */
+export const runListChangelogCategories = createServerOnlyFn(
+  async function runListChangelogCategories(authCtx: Awaited<ReturnType<typeof getOptionalAuth>>) {
+    log.debug('list changelog categories')
+    if (isTeamActor(await policyActorFromAuth(authCtx))) return await listChangelogCategories()
+    const reader = await resolveChangelogReader(authCtx)
+    if (!reader) return []
+    const categories = await listChangelogCategories()
+    return categories
+      .filter((category) => segmentGateAllows(reader, category.segmentIds))
+      .map((category) => ({ ...category, segmentIds: [] }))
+  }
+)
+
+export const listChangelogCategoriesFn = createServerFn({ method: 'GET' }).handler(async () =>
+  runListChangelogCategories(await getOptionalAuth())
+)
 
 export const createChangelogCategoryFn = createServerFn({ method: 'POST' })
   .validator(createCategorySchema)

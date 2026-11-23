@@ -12,6 +12,17 @@ describe('billingSessionErrorResponse', () => {
     expect(location(res)).toBe('/admin/settings/billing?billing_error=already_on_addon')
   })
 
+  it.each(['subscription_pending', 'already_subscribed', 'workspace_changed'])('maps %s', (code) => {
+    const res = billingSessionErrorResponse(new Error(code))
+    expect(res.status).toBe(303)
+    expect(location(res)).toBe(`/admin/settings/billing?billing_error=${code}`)
+  })
+
+  it('falls back to unavailable for unknown codes', () => {
+    const res = billingSessionErrorResponse(new Error('some_future_code'))
+    expect(location(res)).toBe('/admin/settings/billing?billing_error=unavailable')
+  })
+
   it('maps already_on_plan', () => {
     const res = billingSessionErrorResponse(new Error('already_on_plan'))
     expect(res.status).toBe(303)

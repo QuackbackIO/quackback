@@ -87,6 +87,9 @@ describe('event catalogue coverage', () => {
     'csat_submitted',
     'csat_comment_added',
     'voted',
+    // the team's decision on a held post or comment (moderation)
+    'approved',
+    'rejected',
     'external_status_changed',
     'subscriber_added',
     'subscriber_removed',

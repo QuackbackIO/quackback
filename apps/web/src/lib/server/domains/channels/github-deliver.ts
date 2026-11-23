@@ -8,6 +8,7 @@ import { logger } from '@/lib/server/logger'
 import { ConflictError } from '@/lib/shared/errors'
 import { parseGitHubThreadKey } from './github-thread'
 import type { AgentMessageDeliveryCtx, LifecycleDeliveryCtx, LifecycleKind } from './types'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 
 const log = logger.child({ component: 'github-channel' })
 const GITHUB_API = 'https://api.github.com'
@@ -93,11 +94,14 @@ async function postIssueComment(
   issueNumber: string,
   body: string
 ): Promise<string | null> {
-  const response = await fetch(`${GITHUB_API}/repos/${ownerRepo}/issues/${issueNumber}/comments`, {
-    method: 'POST',
-    headers: githubHeaders(accessToken),
-    body: JSON.stringify({ body }),
-  })
+  const response = await providerFetch(
+    `${GITHUB_API}/repos/${ownerRepo}/issues/${issueNumber}/comments`,
+    {
+      method: 'POST',
+      headers: githubHeaders(accessToken),
+      body: JSON.stringify({ body }),
+    }
+  )
   if (!response.ok) {
     const status = response.status
     const errorBody = await response.text()
@@ -194,7 +198,7 @@ async function patchIssueState(
   issueNumber: string,
   state: 'open' | 'closed'
 ): Promise<void> {
-  const response = await fetch(`${GITHUB_API}/repos/${ownerRepo}/issues/${issueNumber}`, {
+  const response = await providerFetch(`${GITHUB_API}/repos/${ownerRepo}/issues/${issueNumber}`, {
     method: 'PATCH',
     headers: githubHeaders(accessToken),
     body: JSON.stringify({ state }),
@@ -251,7 +255,7 @@ export async function updateGitHubIssueComment(
 ): Promise<void> {
   const target = await resolveIssueTarget(conversationId)
   if (!target.ok) throw new ConflictError('GITHUB_ISSUE_UNREACHABLE', target.error)
-  const response = await fetch(
+  const response = await providerFetch(
     `${GITHUB_API}/repos/${target.ownerRepo}/issues/comments/${githubCommentId}`,
     {
       method: 'PATCH',
@@ -278,7 +282,7 @@ export async function deleteGitHubIssueComment(
 ): Promise<void> {
   const target = await resolveIssueTarget(conversationId)
   if (!target.ok) return
-  const response = await fetch(
+  const response = await providerFetch(
     `${GITHUB_API}/repos/${target.ownerRepo}/issues/comments/${githubCommentId}`,
     { method: 'DELETE', headers: githubHeaders(target.accessToken) }
   )

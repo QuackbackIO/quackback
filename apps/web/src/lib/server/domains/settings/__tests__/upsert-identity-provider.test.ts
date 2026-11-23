@@ -139,6 +139,9 @@ vi.mock('@/lib/server/db', () => ({
 
 import { upsertIdentityProvider } from '../identity-providers.service'
 
+/** The identity-provider callers ask for the e2e OIDC fake allowance (gated in the guard). */
+const IDP_GUARD = { allowE2eOidcFake: true }
+
 // ---------------------------------------------------------------------------
 // Shared fixtures
 // ---------------------------------------------------------------------------
@@ -229,7 +232,7 @@ describe('upsertIdentityProvider — SSRF guard (Fix 5)', () => {
 
     await upsertIdentityProvider(BASE_INPUT)
 
-    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(BASE_INPUT.discoveryUrl)
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(BASE_INPUT.discoveryUrl, IDP_GUARD)
     expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
   })
 
@@ -409,7 +412,7 @@ describe('upsertIdentityProvider — manual endpoint SSRF guard (Fix 7)', () => 
       code: 'INVALID_IDP_CONFIG',
       message: expect.stringMatching(/private or loopback/i),
     })
-    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(TOKEN)
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(TOKEN, IDP_GUARD)
   })
 
   it('throws when userInfoUrl resolves to a private/loopback address', async () => {
@@ -423,7 +426,7 @@ describe('upsertIdentityProvider — manual endpoint SSRF guard (Fix 7)', () => 
     await expect(
       upsertIdentityProvider({ ...BASE_INPUT, userInfoUrl: USERINFO })
     ).rejects.toMatchObject({ code: 'INVALID_IDP_CONFIG' })
-    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(USERINFO)
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(USERINFO, IDP_GUARD)
   })
 
   it('throws when authorizationUrl resolves to a private/loopback address', async () => {
@@ -437,7 +440,7 @@ describe('upsertIdentityProvider — manual endpoint SSRF guard (Fix 7)', () => 
     await expect(
       upsertIdentityProvider({ ...BASE_INPUT, authorizationUrl: AUTHZ })
     ).rejects.toMatchObject({ code: 'INVALID_IDP_CONFIG' })
-    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(AUTHZ)
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(AUTHZ, IDP_GUARD)
   })
 
   it('still proceeds when all provided endpoints are safe', async () => {
@@ -448,7 +451,7 @@ describe('upsertIdentityProvider — manual endpoint SSRF guard (Fix 7)', () => 
       userInfoUrl: 'https://idp.example/userinfo',
     })
 
-    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith('https://idp.example/token')
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith('https://idp.example/token', IDP_GUARD)
     expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
   })
 })

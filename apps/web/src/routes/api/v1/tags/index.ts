@@ -9,6 +9,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { HexColorSchema } from '@/lib/shared/schemas/taxonomy'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const createTagSchema = z.object({
@@ -27,7 +28,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.TAG_VIEW })
 
           // Import service function
           const { listPostTags } = await import('@/lib/server/domains/post-tags/post-tag.service')
@@ -58,7 +59,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
           await withApiKeyAuth(request, { permission: PERMISSIONS.TAG_MANAGE })
 
           // Parse and validate body
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = createTagSchema.safeParse(body)
 
           if (!parsed.success) {

@@ -81,6 +81,10 @@ export const createWebhookFn = createServerFn({ method: 'POST' })
     log.debug({ url: data.url }, 'create webhook')
     const auth = await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
 
+    const { assertCanSubscribeToEvents } =
+      await import('@/lib/server/domains/webhooks/webhook-event-access')
+    assertCanSubscribeToEvents(data.events, { scopes: null, permissions: auth.permissions })
+
     const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
     const result = await createWebhook(
       {
@@ -102,7 +106,15 @@ export const updateWebhookFn = createServerFn({ method: 'POST' })
   .validator(updateWebhookSchema)
   .handler(async ({ data }) => {
     log.debug({ webhook_id: data.webhookId }, 'update webhook')
-    await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
+
+    const { assertCanUpdateWebhookEvents } =
+      await import('@/lib/server/domains/webhooks/webhook-event-access')
+    await assertCanUpdateWebhookEvents(
+      data.webhookId as WebhookId,
+      { url: data.url, events: data.events },
+      { scopes: null, permissions: auth.permissions }
+    )
 
     const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
     const webhook = await updateWebhook(data.webhookId as WebhookId, {

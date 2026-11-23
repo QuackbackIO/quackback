@@ -131,7 +131,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
 
   while (true) {
     const existingBoard = await db.query.boards.findFirst({
-      where: eq(boards.slug, slug),
+      where: and(eq(boards.slug, slug), isNull(boards.deletedAt)),
     })
     if (!existingBoard) {
       break
@@ -182,7 +182,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
 export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise<Board> {
   // Get existing board
   const existingBoard = await db.query.boards.findFirst({
-    where: eq(boards.id, id),
+    where: and(eq(boards.id, id), isNull(boards.deletedAt)),
   })
   if (!existingBoard) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
@@ -215,7 +215,7 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
     // Check uniqueness if slug is changing
     if (slug !== existingBoard.slug) {
       const existingWithSlug = await db.query.boards.findFirst({
-        where: eq(boards.slug, slug),
+        where: and(eq(boards.slug, slug), isNull(boards.deletedAt)),
       })
       if (existingWithSlug && existingWithSlug.id !== id) {
         throw new ConflictError('DUPLICATE_SLUG', `A board with slug "${slug}" already exists`)
@@ -226,7 +226,7 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
     const newSlug = slugify(input.name) || FALLBACK_BOARD_SLUG
     if (newSlug !== existingBoard.slug) {
       const existingWithSlug = await db.query.boards.findFirst({
-        where: eq(boards.slug, newSlug),
+        where: and(eq(boards.slug, newSlug), isNull(boards.deletedAt)),
       })
       if (!existingWithSlug || existingWithSlug.id === id) {
         slug = newSlug
@@ -320,7 +320,7 @@ export async function deleteBoard(id: BoardId): Promise<void> {
  */
 export async function getBoardById(id: BoardId): Promise<Board> {
   const board = await db.query.boards.findFirst({
-    where: eq(boards.id, id),
+    where: and(eq(boards.id, id), isNull(boards.deletedAt)),
   })
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
@@ -334,7 +334,7 @@ export async function getBoardById(id: BoardId): Promise<Board> {
  */
 export async function getBoardBySlug(slug: string): Promise<Board> {
   const board = await db.query.boards.findFirst({
-    where: eq(boards.slug, slug),
+    where: and(eq(boards.slug, slug), isNull(boards.deletedAt)),
   })
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with slug "${slug}" not found`)

@@ -30,6 +30,8 @@ import {
 import { adminResetTwoFactorFn } from '@/lib/server/functions/admin-reset-two-factor'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { toastError } from '@/lib/client/error-notice'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 interface MemberActionsProps {
   principalId: string
@@ -39,6 +41,8 @@ interface MemberActionsProps {
   /** Resolved workspace assignment, when it differs from the legacy mapping. */
   assignedRoleId?: string | null
   isLastAdmin: boolean
+  /** The viewer is an admin: only an admin grants Admin (role.grants.ts). */
+  canGrantAdmin: boolean
 }
 
 /** The role choice staged in the confirm dialog. */
@@ -55,6 +59,7 @@ export function MemberActions({
   memberRole,
   assignedRoleId,
   isLastAdmin,
+  canGrantAdmin,
 }: MemberActionsProps) {
   const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(false)
@@ -69,6 +74,8 @@ export function MemberActions({
 
   const canChangeRole = !(memberRole === 'admin' && isLastAdmin)
   const canRemove = !(memberRole === 'admin' && isLastAdmin)
+  // Two-factor reset and signing out everywhere are auth.manage actions.
+  const canManageAuth = usePermission(PERMISSIONS.AUTH_MANAGE)
 
   const handleRoleChange = async () => {
     if (!pendingRole) return
@@ -152,15 +159,17 @@ export function MemberActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Change role</DropdownMenuLabel>
-          <DropdownMenuItem
-            className="gap-2"
-            disabled={!canChangeRole || isCurrent({ role: 'admin' })}
-            onClick={() => setPendingRole({ role: 'admin', label: 'Admin' })}
-          >
-            <ShieldCheckIcon className="h-4 w-4" />
-            Admin
-            {isCurrent({ role: 'admin' }) && <CheckIcon className="ml-auto h-3.5 w-3.5" />}
-          </DropdownMenuItem>
+          {canGrantAdmin && (
+            <DropdownMenuItem
+              className="gap-2"
+              disabled={!canChangeRole || isCurrent({ role: 'admin' })}
+              onClick={() => setPendingRole({ role: 'admin', label: 'Admin' })}
+            >
+              <ShieldCheckIcon className="h-4 w-4" />
+              Admin
+              {isCurrent({ role: 'admin' }) && <CheckIcon className="ml-auto h-3.5 w-3.5" />}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             className="gap-2"
             disabled={!canChangeRole || isCurrent({ role: 'member' })}
@@ -188,13 +197,13 @@ export function MemberActions({
             </>
           )}
           <DropdownMenuSeparator />
-          {userId ? (
+          {userId && canManageAuth ? (
             <DropdownMenuItem onClick={() => setResetTfaDialogOpen(true)} className="gap-2">
               <ShieldExclamationIcon className="h-4 w-4" />
               Reset two-factor
             </DropdownMenuItem>
           ) : null}
-          {userId ? (
+          {userId && canManageAuth ? (
             <DropdownMenuItem onClick={() => setForceSignOutDialogOpen(true)} className="gap-2">
               <ArrowRightOnRectangleIcon className="h-4 w-4" />
               Sign out everywhere

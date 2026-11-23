@@ -12,13 +12,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { PortalUserDetail } from '@/lib/shared/types'
 import type { PrincipalId } from '@quackback/ids'
 
-const route = vi.hoisted(() => ({ sessionUserId: null as string | null }))
+const route = vi.hoisted(() => ({
+  sessionUserId: null as string | null,
+  role: 'admin',
+  permissions: undefined as string[] | undefined,
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
     const context = {
       settings: { featureFlags: { supportInbox: true } },
       session: route.sessionUserId ? { user: { id: route.sessionUserId } } : null,
+      principal: { role: route.role },
+      ...(route.permissions ? { permissions: route.permissions } : {}),
     }
     return opts?.select ? opts.select(context as never) : context
   },
@@ -150,10 +156,13 @@ beforeEach(() => {
   dialogs.add = null
   dialogs.change = null
   route.sessionUserId = null
+  route.role = 'admin'
+  route.permissions = undefined
 })
 afterEach(cleanup)
 
 function detail(user: PortalUserDetail, role = 'admin') {
+  route.role = role
   return (
     <UserDetail
       user={user}
@@ -250,7 +259,9 @@ describe('UserDetail team actions', () => {
     expect(dialogs.add).toBeNull()
   })
 
-  it('offers nothing to someone who cannot manage people', () => {
+  it('offers nothing to someone who cannot manage people or members', () => {
+    // A custom role that reads people and holds no manage key.
+    route.permissions = ['people.view']
     renderDetail(detail(BASE_USER, 'member'))
     expect(screen.queryByLabelText('More actions')).toBeNull()
   })

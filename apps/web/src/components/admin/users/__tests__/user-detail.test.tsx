@@ -21,6 +21,8 @@ vi.mock('@tanstack/react-router', () => ({
   useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
     const context = {
       settings: { featureFlags: { supportInbox: true } },
+      // An Owner: the profile controls follow its permissions.
+      principal: { role: 'admin' },
     }
     return opts?.select ? opts.select(context as never) : context
   },

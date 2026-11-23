@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
 /**
- * The portal settings page holds its live preview iframe back until
- * hydration, and its welcome message editor reports its document once it
- * mounts. Neither may re-render the page: that repaints the theme controls,
- * the navigation editor and the welcome message editor for nothing.
+ * Settings > Portal: the Design tab is a summary of what is live that leads
+ * to Customise (no drafts, no save bar), beside the Custom domains tab, each
+ * shown only to a viewer with its permission.
  */
-import { act, useEffect, type ComponentType, type ReactNode } from 'react'
+import { act, type ComponentType, type ReactNode } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
@@ -13,12 +12,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { cardRenders, previewRenders, rootContext, router, customDomainReads } = vi.hoisted(() => ({
-  cardRenders: new Map<string, number>(),
-  previewRenders: { count: 0 },
+const { summaryRows, rootContext, router, customDomainReads } = vi.hoisted(() => ({
+  summaryRows: { labels: [] as string[] },
   router: {
     search: {} as { tab?: string },
-    blocker: null as null | { enableBeforeUnload: () => boolean },
   },
   customDomainReads: { count: 0, cloud: [] as boolean[] },
   rootContext: {
@@ -45,10 +42,6 @@ vi.mock('@tanstack/react-router', async () => {
     }),
     useRouteContext: ({ select }: { select: (context: typeof rootContext) => unknown }) =>
       select(rootContext),
-    useRouter: () => ({ invalidate: vi.fn() }),
-    useBlocker: (opts: { enableBeforeUnload: () => boolean }) => {
-      router.blocker = opts
-    },
     useSearch: () => router.search,
     Link: ({
       children,
@@ -69,12 +62,10 @@ vi.mock('@tanstack/react-router', async () => {
   }
 })
 
-// The Custom domains tab: leaving for another domain is all this page needs of it.
+// The Custom domains tab: which way it was opened is all this page needs of it.
 vi.mock('@/components/admin/settings/portal-custom-domains-tab', () => ({
-  default: ({ onLeave, cloud }: { onLeave?: () => void; cloud: boolean }) => (
-    <button type="button" onClick={onLeave} data-cloud={String(cloud)}>
-      Leave for the new domain
-    </button>
+  default: ({ cloud }: { cloud: boolean }) => (
+    <div data-cloud={String(cloud)}>Custom domains tab</div>
   ),
 }))
 
@@ -92,58 +83,15 @@ vi.mock('@/lib/client/queries/portal-custom-domains', () => ({
   },
 }))
 
-vi.mock('@/lib/client/mutations/settings', () => ({
-  useUpdatePortalDesign: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useSaveBrandingTheme: () => ({ mutateAsync: vi.fn(), isPending: false }),
-}))
-
-vi.mock('@/lib/client/hooks/use-image-upload', () => ({
-  useImageUpload: () => ({ upload: vi.fn() }),
-}))
-
-vi.mock('@/components/ui/rich-text-editor', () => ({
-  RichTextEditor: ({
-    value,
-    onDocumentChange,
-  }: {
-    value: unknown
-    onDocumentChange: (document: { json(): unknown }) => void
-  }) => {
-    const report = (doc: unknown) => onDocumentChange({ json: () => doc })
-    // The real editor reports its (unchanged) document once it has mounted.
-    useEffect(() => report(JSON.parse(JSON.stringify(value))), [])
+// The summary card: its thumbnail is an iframe of the live portal.
+vi.mock('@/components/admin/settings/portal-customise/summary-card', () => ({
+  PortalSummaryCard: ({ summary }: { summary: { label: string }[] }) => {
+    summaryRows.labels = summary.map((row) => row.label)
     return (
-      <button
-        data-testid="rich-text-editor"
-        onClick={() =>
-          report({
-            type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
-          })
-        }
-      />
-    )
-  },
-}))
-
-vi.mock('@/components/admin/upgrade', () => ({ UpgradeModal: () => null }))
-
-vi.mock('@/components/admin/settings/settings-card', () => ({
-  SettingsCard: ({ title, children }: { title?: string; children?: ReactNode }) => {
-    cardRenders.set(title ?? '', (cardRenders.get(title ?? '') ?? 0) + 1)
-    return (
-      <section>
-        <h2>{title}</h2>
-        {children}
+      <section data-testid="portal-summary">
+        <a href="/admin/settings/portal/customise">Customise</a>
       </section>
     )
-  },
-}))
-
-vi.mock('@/components/admin/settings/branding/portal-preview', () => ({
-  PortalPreview: () => {
-    previewRenders.count++
-    return <div data-testid="portal-preview" />
   },
 }))
 
@@ -154,20 +102,20 @@ function seededClient() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   queryClient.setQueryData(['settings', 'branding'], { themeMode: 'user' })
   queryClient.setQueryData(['settings', 'logo'], { url: null })
+  queryClient.setQueryData(['settings', 'headerLogo'], null)
   queryClient.setQueryData(['settings', 'customCss'], '')
   queryClient.setQueryData(['settings', 'portalConfig', 'page'], {})
   return queryClient
 }
 
 afterEach(() => {
-  cardRenders.clear()
-  previewRenders.count = 0
+  summaryRows.labels = []
   document.body.innerHTML = ''
   rootContext.permissions = ['settings.branding', 'settings.manage']
   router.search = {}
 })
 
-describe('portal settings page hydration', () => {
+describe('portal settings page', () => {
   async function hydratePage() {
     const html = renderToString(
       <IntlProvider locale="en" defaultLocale="en">
@@ -176,12 +124,9 @@ describe('portal settings page hydration', () => {
         </QueryClientProvider>
       </IntlProvider>
     )
-    expect(html).not.toContain('portal-preview')
-
     const container = document.createElement('div')
     container.innerHTML = html
     document.body.appendChild(container)
-    cardRenders.clear()
 
     await act(async () => {
       hydrateRoot(
@@ -197,33 +142,22 @@ describe('portal settings page hydration', () => {
     return container
   }
 
-  it('renders each settings card once and mounts the preview after hydrating', async () => {
+  it('shows what is live and the way into Customise, with nothing to save', async () => {
     const container = await hydratePage()
-
-    expect(container.querySelector('[data-testid="portal-preview"]')).toBeTruthy()
-    expect(previewRenders.count).toBe(1)
-
-    expect([...cardRenders.keys()]).toEqual(['Appearance', 'Navigation', 'Welcome message'])
-    for (const [title, renders] of cardRenders) {
-      expect({ title, renders }).toEqual({ title, renders: 1 })
-    }
-    // Nothing is unsaved: the save bar stays hidden.
+    expect(container.querySelector('[data-testid="portal-summary"]')).toBeTruthy()
+    expect(summaryRows.labels.length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'Customise' })).toHaveAttribute(
+      'href',
+      '/admin/settings/portal/customise'
+    )
     expect(container.querySelector('[data-slot="draft-bar"]')).toBeNull()
+    expect(container).toHaveTextContent('Workspace name')
   })
 
-  it('gives settings.branding alone the look, the tabs and the welcome message, all of which it saves', async () => {
+  it('gives settings.branding alone the same summary', async () => {
     rootContext.permissions = ['settings.branding']
     const container = await hydratePage()
-    expect([...cardRenders.keys()]).toEqual(['Appearance', 'Navigation', 'Welcome message'])
-    expect(container.querySelector('[data-testid="portal-preview"]')).toBeTruthy()
-  })
-
-  it('takes an edit to the welcome message as an unsaved change', async () => {
-    const container = await hydratePage()
-    act(() => {
-      fireEvent.click(container.querySelector('[data-testid="rich-text-editor"]')!)
-    })
-    expect(container.querySelector('[data-slot="draft-bar"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="portal-summary"]')).toBeTruthy()
   })
 
   it('shows no tab bar to a viewer without settings.custom_domain', async () => {
@@ -237,8 +171,8 @@ describe('portal settings page hydration', () => {
     const container = await hydratePage()
     const bar = container.querySelector('nav[aria-label="Portal"]')
     expect(bar?.textContent).toBe('DesignCustom domains')
-    // Design is open: its cards are on the page.
-    expect([...cardRenders.keys()]).toContain('Welcome message')
+    // Design is open: its summary is on the page.
+    expect(container.querySelector('[data-testid="portal-summary"]')).toBeTruthy()
   })
 
   it('reads the Custom domains tab ahead when the pointer or focus reaches its tab', async () => {
@@ -262,31 +196,6 @@ describe('portal settings page hydration', () => {
     fireEvent.mouseEnter(screen.getByRole('link', { name: 'Design' }))
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(customDomainReads.count).toBe(1)
-  })
-
-  it('drops the unsaved-changes guard when the Custom domains tab leaves for another domain', async () => {
-    rootContext.permissions = ['settings.branding', 'settings.manage', 'settings.custom_domain']
-    const queryClient = seededClient()
-    const page = () => (
-      <IntlProvider locale="en" defaultLocale="en">
-        <QueryClientProvider client={queryClient}>
-          <PortalPage />
-        </QueryClientProvider>
-      </IntlProvider>
-    )
-    const { rerender } = render(page())
-    act(() => {
-      fireEvent.click(screen.getByTestId('rich-text-editor'))
-    })
-    expect(router.blocker?.enableBeforeUnload()).toBe(true)
-
-    // The drafts wait on Design while the admin is on Custom domains.
-    router.search = { tab: 'custom-domains' }
-    rerender(page())
-    expect(router.blocker?.enableBeforeUnload()).toBe(true)
-
-    fireEvent.click(await screen.findByText('Leave for the new domain'))
-    expect(router.blocker?.enableBeforeUnload()).toBe(false)
   })
 
   it('loads the Custom domains tab the Cloud way on a pooled workspace whose projection has not landed', async () => {
@@ -331,7 +240,7 @@ describe('portal settings page hydration', () => {
       // ...and opened the Cloud way.
       router.search = { tab: 'custom-domains' }
       rerender(page())
-      const tab = await screen.findByText('Leave for the new domain')
+      const tab = await screen.findByText('Custom domains tab')
       expect(tab.getAttribute('data-cloud')).toBe('true')
     } finally {
       rootContext.sectionDomainsCloud = false

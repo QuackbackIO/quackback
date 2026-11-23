@@ -106,6 +106,7 @@ import {
   resolveMessageContent,
 } from '@/lib/server/messages/message-core'
 import { newestCustomerVisibleMessage, previewOfStoredMessage } from './conversation.preview'
+import { singleLineSubject } from '@quackback/email/subject'
 import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
 import {
   notifyVisitorMessage,
@@ -534,7 +535,7 @@ export async function sendVisitorMessage(
           visitorPrincipalId: author.principalId,
           channel: 'messenger',
           status: fixedSpamSignal ? 'closed' : 'open',
-          subject: preview(content || fallbackLabel, attachments),
+          subject: preview(singleLineSubject(content) || fallbackLabel, attachments),
           ...(testOwner ? { assignedAgentPrincipalId: testOwner } : {}),
           // The Spam-view shape autoFileConversationAsSpam writes, in the
           // insert so the thread is never open.
@@ -889,7 +890,7 @@ export async function startAgentConversation(
         // The composer owns the thread from the start — it lands in "Mine".
         assignedAgentPrincipalId: agent.principalId,
         status: 'open',
-        subject: preview(content || fallbackLabel, attachments),
+        subject: preview(singleLineSubject(content) || fallbackLabel, attachments),
       })
       .returning()
 

@@ -63,8 +63,8 @@ describe('evaluateDynamicSegment', () => {
       updatedAt: new Date('2024-01-01T00:00:00Z'),
     })
     mockDeleteReturning.mockResolvedValue([
-      { principalId: 'principal_a' },
-      { principalId: 'principal_b' },
+      { principalId: 'principal_a', addedBy: 'dynamic' },
+      { principalId: 'principal_b', addedBy: 'dynamic' },
     ])
     mockNotifyUserSyncIntegrations.mockResolvedValue(undefined)
 

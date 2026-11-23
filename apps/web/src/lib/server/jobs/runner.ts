@@ -834,10 +834,10 @@ export async function runScheduleTick(
     live.add(stateKey)
     const { slot, nextDueAt: next } = scheduleView(state, pattern, now)
     const seen = state.seen.get(stateKey)
-    if (seen === undefined) {
+    if (seen === undefined && !def.runOnFirstPass) {
       // First pass for THIS scheduler: adopt the current slot, do not run it.
       if (slot) state.seen.set(stateKey, slot.getTime())
-    } else if (slot && slot.getTime() > seen) {
+    } else if (slot && (seen === undefined || slot.getTime() > seen)) {
       attempted += 1
       const result = await enqueueJob({
         queue: def.name,

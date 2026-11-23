@@ -120,3 +120,21 @@ describe('canonicalizeImageMime', () => {
     expect(canonicalizeImageMime('image/x-icon')).toBe('image/x-icon')
   })
 })
+
+describe('sniffFontFormat', () => {
+  it('reads woff2, woff, otf and ttf signatures', async () => {
+    const { sniffFontFormat } = await import('../magic-bytes')
+    expect(sniffFontFormat(bytes(0x77, 0x4f, 0x46, 0x32, 0, 0))).toBe('woff2')
+    expect(sniffFontFormat(bytes(0x77, 0x4f, 0x46, 0x46, 0, 0))).toBe('woff')
+    expect(sniffFontFormat(bytes(0x4f, 0x54, 0x54, 0x4f, 0, 0))).toBe('otf')
+    expect(sniffFontFormat(bytes(0x00, 0x01, 0x00, 0x00, 0, 0))).toBe('ttf')
+    expect(sniffFontFormat(bytes(0x74, 0x72, 0x75, 0x65, 0, 0))).toBe('ttf')
+  })
+
+  it('returns null for anything else', async () => {
+    const { sniffFontFormat } = await import('../magic-bytes')
+    expect(sniffFontFormat(Buffer.from('<html><script>'))).toBeNull()
+    expect(sniffFontFormat(bytes(0x89, 0x50, 0x4e, 0x47))).toBeNull()
+    expect(sniffFontFormat(new Uint8Array())).toBeNull()
+  })
+})

@@ -76,7 +76,7 @@ describe.skipIf(!fixture.available)('post-views.service (real DB, rolled back)',
   it('a soft-deleted view leaves every listing', async () => {
     const author = await seedTeammate()
     const id = await createView({ name: 'Gone', filters: {}, isShared: true }, author)
-    await deleteView(id)
+    await deleteView(id, { principalId: author, isAdmin: false })
     expect((await listViewsForPrincipal(author)).map((v) => v.id)).not.toContain(id)
   })
 })

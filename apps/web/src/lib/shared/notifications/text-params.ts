@@ -15,6 +15,10 @@ export interface NotificationTextParams {
   ticketTitle?: string
   stageLabel?: string
   previousStageLabel?: string
+  /** post_moderated: 'approved' or 'rejected'. */
+  moderationDecision?: string
+  /** post_moderated: 'post' or 'comment'. */
+  moderatedItem?: string
   isTeamMember?: boolean
 }
 
@@ -28,6 +32,8 @@ const TEXT_PARAM_KEYS = [
   'ticketTitle',
   'stageLabel',
   'previousStageLabel',
+  'moderationDecision',
+  'moderatedItem',
 ] as const
 
 /**
