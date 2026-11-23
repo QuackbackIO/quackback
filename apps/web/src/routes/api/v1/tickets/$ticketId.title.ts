@@ -11,6 +11,7 @@ import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeTicket } from './-serialize'
 import type { TicketId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const titleSchema = z.object({
   title: z.string().trim().min(1).max(300),
@@ -25,7 +26,7 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/title')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_SET_STATUS })
           const ticketId = parseTypeId<TicketId>(params.ticketId, 'ticket', 'ticket ID')
 
-          const parsed = titleSchema.safeParse(await request.json().catch(() => null))
+          const parsed = titleSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,
