@@ -36,6 +36,7 @@ import {
   type Edge,
   type EdgeProps,
   type EdgeTypes,
+  type FitViewOptions,
   type Node,
   type NodeProps,
   type NodeTypes,
@@ -393,6 +394,10 @@ const PlusEdge = memo(function PlusEdge({
   )
 })
 
+// Padding is a per-side share of the viewport. 5.4% matches the old unitless
+// 0.12 (the flow took 1 / 1.12 of the viewport); bare numbers now mean pixels.
+const FIT_VIEW_OPTIONS = { padding: '5.4%', maxZoom: 0.95 } satisfies FitViewOptions
+
 const NODE_TYPES: NodeTypes = { step: StepNode, rule: RuleNode, add: AddNode, end: EndNode }
 const EDGE_TYPES: EdgeTypes = { plus: PlusEdge }
 
@@ -445,12 +450,14 @@ function CanvasInner({
       onNodesChange={onNodesChange}
       nodeTypes={NODE_TYPES}
       edgeTypes={EDGE_TYPES}
-      onInit={() => fitView({ padding: 0.12, maxZoom: 0.95 })}
+      onInit={() => fitView(FIT_VIEW_OPTIONS)}
       fitView
-      fitViewOptions={{ padding: 0.12, maxZoom: 0.95 }}
+      fitViewOptions={FIT_VIEW_OPTIONS}
       minZoom={0.25}
       maxZoom={1.75}
       nodesConnectable={false}
+      // v13 raises a clicked edge above the cards by default; keep wires under them.
+      elevateEdgesOnSelect={false}
       panOnScroll
       zoomOnScroll={false}
       proOptions={{ hideAttribution: true }}
