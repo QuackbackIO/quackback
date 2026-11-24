@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { defineMessages, useIntl } from 'react-intl'
+import { defineMessage, defineMessages, useIntl, type MessageValue } from 'react-intl'
 import { useRouter } from '@tanstack/react-router'
 import { DomainAccessPicker } from '@/components/domain-access-picker'
 import { Button } from '@/components/ui/button'
@@ -52,10 +52,10 @@ const m = defineMessages({
       'The key can only do what you select. Read and write includes lookup in that area.',
   },
   expires: { id: 'portal.settings.apiKeys.expires', defaultMessage: 'Expires' },
-  expiresOn: {
+  expiresOn: defineMessage<{ date: MessageValue }>({
     id: 'portal.settings.apiKeys.expiresOn',
     defaultMessage: 'The key stops working on {date}.',
-  },
+  }),
   neverExpires: {
     id: 'portal.settings.apiKeys.neverExpiresHint',
     defaultMessage: 'The key works until you revoke it or leave the workspace.',

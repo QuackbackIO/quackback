@@ -2,7 +2,8 @@
  * A dark main colour on a dark page: filled buttons must stand off the page
  * as a control does (3:1, WCAG 1.4.11). In dark mode a main colour that does
  * not is lightened (OKLCH lightness, same hue) just until it does, and the
- * words on the button still read (white at 3:1 or more, else dark ink).
+ * words on the button still read at 4.5:1: white on a fill white was made
+ * for (the fill darkened as far as that takes), else dark ink.
  */
 import { describe, expect, it } from 'vitest'
 import { tryCssColorToHex } from '../colors'
@@ -24,12 +25,18 @@ describe('the words on a filled button', () => {
   const inkOn = (primary: string, mode: 'light' | 'dark') =>
     expandTheme({ primary }, { mode }).primaryForeground!
 
-  it('stay white on mid-tone brands where white reaches 3:1, in pure white', () => {
-    // Near-white falls short of 4.5:1 on each; pure white reaches 3:1 (3.75 to 4.47).
+  it('stay white on mid-tone brands, the fill darkened just until white reads at 4.5:1', () => {
+    // White falls short of 4.5:1 on each as given (3.75 to 4.47), never of 3:1.
     for (const primary of ['#0d9488', '#059669', '#0284c7', '#6366f1']) {
+      expect(contrastRatio('#ffffff', primary)).toBeGreaterThanOrEqual(3)
+      expect(contrastRatio('#ffffff', primary)).toBeLessThan(4.5)
       for (const mode of modes) {
-        expect(inkOn(primary, mode)).toBe('#ffffff')
-        expect(contrastRatio('#ffffff', primary)).toBeGreaterThanOrEqual(3)
+        const theme = expandTheme({ primary }, { mode })
+        expect(theme.primaryForeground).toBe('#ffffff')
+        expect(contrastRatio('#ffffff', theme.primary!)).toBeGreaterThanOrEqual(4.5)
+        // The smallest darkening that does it: under 4.7:1, same hue.
+        expect(contrastRatio('#ffffff', theme.primary!)).toBeLessThan(4.7)
+        expect(apart(hue(theme.primary!), hue(primary))).toBeLessThan(6)
       }
     }
   })
@@ -49,15 +56,12 @@ describe('the words on a filled button', () => {
     expect(expandTheme({}, { mode: 'light' }).primaryForeground).toBe(NEAR_BLACK)
   })
 
-  it('are the better of white and dark on every grey, and never under 3:1', () => {
+  it('read at 4.5:1 on every grey, the fill changed only where white words needed it', () => {
     for (let v = 0; v <= 255; v += 5) {
       const grey = `#${v.toString(16).padStart(2, '0').repeat(3)}`
-      const ink = inkOn(grey, 'light')
-      const got = contrastRatio(ink, grey)
-      expect(got).toBeGreaterThanOrEqual(3)
-      if (contrastRatio('#ffffff', grey) < 3) {
-        expect(got).toBeGreaterThanOrEqual(contrastRatio('#ffffff', grey))
-      }
+      const theme = expandTheme({ primary: grey }, { mode: 'light' })
+      expect(contrastRatio(theme.primaryForeground!, theme.primary!)).toBeGreaterThanOrEqual(4.5)
+      if (theme.primary !== grey) expect(theme.primaryForeground).toBe('#ffffff')
     }
   })
 })
@@ -79,8 +83,10 @@ describe('a dark main colour in dark mode', () => {
     for (const background of ['#0a0a0a', '#1e1f22', '#2b2d42', '#313338']) {
       for (const primary of [navy, '#1a1a2e', '#4a0d0d', '#0b3d2e', '#3b0764', '#5c4400']) {
         const dark = darkOf(primary, background)
+        expect(contrastRatio(dark.primaryForeground, dark.primary)).toBeGreaterThanOrEqual(4.5)
+        // The button as drawn stands off the page: on a dark grey page where
+        // no white-worded shade of it does, it goes on to one dark words read on.
         expect(contrastRatio(dark.primary, background)).toBeGreaterThanOrEqual(3)
-        expect(contrastRatio(dark.primaryForeground, dark.primary)).toBeGreaterThanOrEqual(3)
       }
     }
   })

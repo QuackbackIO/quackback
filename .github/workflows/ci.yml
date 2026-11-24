@@ -49,6 +49,9 @@ jobs:
       # The embeddable widget's eager JavaScript (bytes, chunk count, and
       # libraries that must stay lazy) against its budget.
       - run: bun run --cwd apps/web check:widget-bundle
+      # Every import in a browser chunk must be another chunk: a Node built-in
+      # or package name left in one makes the browser refuse the chunk.
+      - run: bun run --cwd apps/web check:client-imports
       - run: bun run --filter @quackback/web typecheck
       - run: bun run --cwd packages/widget typecheck
       - run: bun run --cwd packages/widget test

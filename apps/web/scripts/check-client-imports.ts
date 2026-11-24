@@ -1,0 +1,72 @@
+/**
+ * Guard the browser bundle against imports a browser cannot load.
+ *
+ * Every chunk under .output/public/assets must import only other chunks
+ * (`./x.js`). A bare specifier left in a chunk (`node:url`, `crypto`, a
+ * package name) means the bundler externalised it: the browser then refuses
+ * the whole chunk, and every page that lazily loads it fails with "Failed to
+ * fetch dynamically imported module". The build itself passes, so nothing but
+ * the browser notices.
+ *
+ * Import protection in vite.config.ts refuses Node built-ins at build time;
+ * this check reads the built output, so it also catches anything that reaches
+ * the browser by another route (an `external` build option, a plugin, a
+ * dependency). Imports are read with Bun's parser, so code samples inside
+ * strings (the webhook guide's `import crypto from "node:crypto"`) do not count.
+ * A relative import must also name a file that exists. A dynamic import whose
+ * specifier is computed at runtime cannot be read statically and is not checked;
+ * the build emits none for browser code.
+ *
+ * Run after `bun run build`:
+ *   bun run check:client-imports
+ */
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+
+const ASSETS_DIR = process.argv[2] ?? join(import.meta.dirname, '..', '.output', 'public', 'assets')
+const PUBLIC_DIR = dirname(ASSETS_DIR)
+
+if (!existsSync(ASSETS_DIR)) {
+  console.error(`check-client-imports: ${ASSETS_DIR} not found. Run \`bun run build\` first.`)
+  process.exit(2)
+}
+
+/**
+ * Why a chunk's import would fail in the browser, or null when it loads: a
+ * sibling chunk that exists, an absolute path under the public directory that
+ * exists, or a full URL.
+ */
+function problemWith(spec: string, chunkDir: string): string | null {
+  if (/^(?:https?:|data:)/i.test(spec)) return null
+  if (spec.startsWith('./') || spec.startsWith('../')) {
+    return existsSync(resolve(chunkDir, spec.split(/[?#]/)[0])) ? null : 'no such file'
+  }
+  if (spec.startsWith('/')) {
+    return existsSync(join(PUBLIC_DIR, spec.split(/[?#]/)[0])) ? null : 'no such file'
+  }
+  return 'not a URL the browser can fetch'
+}
+
+const transpiler = new Bun.Transpiler({ loader: 'js' })
+const files = readdirSync(ASSETS_DIR).filter((f) => f.endsWith('.js'))
+const problems: string[] = []
+
+for (const file of files) {
+  const source = readFileSync(join(ASSETS_DIR, file), 'utf8')
+  for (const { path, kind } of transpiler.scanImports(source)) {
+    const problem = problemWith(path, ASSETS_DIR)
+    if (problem) problems.push(`  ${file}: ${kind} "${path}" (${problem})`)
+  }
+}
+
+if (problems.length > 0) {
+  console.error(
+    `check-client-imports: ${problems.length} browser chunk import(s) the browser cannot load:\n` +
+      problems.join('\n') +
+      '\n\nKeep server-only modules (and Node built-ins) out of code the browser loads. ' +
+      'The build output above names the importer; vite.config.ts import protection explains the trace.'
+  )
+  process.exit(1)
+}
+
+console.log(`check-client-imports: ${files.length} browser chunks, every import loadable.`)

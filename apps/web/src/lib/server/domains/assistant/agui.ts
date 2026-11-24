@@ -21,8 +21,14 @@ import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
  *  post-commit failures (pre-commit failures re-dial invisibly). */
 const ENGINE_LIFECYCLE_TYPES = new Set(['RUN_STARTED', 'RUN_FINISHED', 'RUN_ERROR'])
 
+/**
+ * The OpenAI-compatible adapter streams a reasoning model's thinking as
+ * REASONING_* chunks since @tanstack/ai-openai 1.0 (0.x dropped it). No
+ * client renders it, and on Ask AI the wire is public, so it stays
+ * server-side like before.
+ */
 export function isWireForwardable(chunk: StreamChunk): boolean {
-  return !ENGINE_LIFECYCLE_TYPES.has(chunk.type)
+  return !ENGINE_LIFECYCLE_TYPES.has(chunk.type) && !chunk.type.startsWith('REASONING_')
 }
 
 export interface WireRunIds {

@@ -120,4 +120,40 @@ describe('measureHeaderBand', () => {
     ).toBeNull()
     expect(read('<p>No logo here</p>').band).toBeNull()
   })
+  describe('a see-through bar laid over the band below it', () => {
+    /** A transparent header placed over the page's opening block, which is its sibling. */
+    const over = (heroStyle: string, heroRect = '0,0,1440,600', heroInner = '') =>
+      `<header data-rect="0,0,1440,80">${LOGO}<nav>${MENU}</nav></header>` +
+      `<section data-rect="${heroRect}" style="${heroStyle}"><h1 data-rect="200,40,800,80">Chat, together</h1>${heroInner}</section>` +
+      '<main data-rect="600,0,1440,2000"><p>Body copy.</p></main>'
+
+    it('takes the solid band behind the bar as the header', () => {
+      const { first, band: found } = read(over('background-color: rgb(88, 101, 242)'))
+      expect(first).toBeNull()
+      expect(found).toEqual({ bg: 'rgb(88, 101, 242)', text: 'rgb(255, 255, 255)', tall: true })
+    })
+
+    it.each([
+      ['a gradient', over('background-image: linear-gradient(rgb(88, 101, 242), rgb(10, 20, 30))')],
+      ['a photo', over('background-color: rgb(88, 101, 242); background-image: url(hero.jpg)')],
+      [
+        'a picture covering it',
+        over(
+          'background-color: rgb(88, 101, 242)',
+          undefined,
+          '<img data-rect="0,0,1440,500" src="https://acme.example/hero.jpg" alt="">'
+        ),
+      ],
+      [
+        'a block taller than a screen (the page)',
+        over('background-color: rgb(88, 101, 242)', '0,0,1440,1600'),
+      ],
+      [
+        'a block that starts below the bar',
+        over('background-color: rgb(88, 101, 242)', '80,0,1440,600'),
+      ],
+    ])('has none when the block behind is %s', (_why, html) => {
+      expect(read(html).band).toBeNull()
+    })
+  })
 })
