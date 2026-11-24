@@ -244,10 +244,10 @@ describe('following a post by hand', () => {
 })
 
 describe('subscribeToPostFn', () => {
-  it('always records a self subscription as manual, whatever reason the client sends', async () => {
+  it("stores the caller's own reason", async () => {
     mockRequireAuth.mockResolvedValue({ principal: { id: 'principal_me' } })
-    await handlersByIndex[1]({ data: { postId: 'post_abc123', reason: 'author', level: 'all' } })
-    expect(mockSubscribeToPost).toHaveBeenCalledWith('principal_me', 'post_abc123', 'manual', {
+    await handlersByIndex[1]({ data: { postId: 'post_abc123', reason: 'vote', level: 'all' } })
+    expect(mockSubscribeToPost).toHaveBeenCalledWith('principal_me', 'post_abc123', 'vote', {
       level: 'all',
     })
   })
