@@ -11,6 +11,7 @@ import {
   NODE_BUILTIN_SPECIFIER,
 } from './src/lib/server/policy/client-import-protection'
 import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
+import { routePreloadsFromDirectImports } from './src/lib/build/route-preloads'
 import { serverWorkers } from './src/lib/build/server-workers'
 
 /**
@@ -258,6 +259,9 @@ export default defineConfig(({ mode }) => {
       // A route's chunks import the chunk of the route they render under, so
       // what a layout shares with its pages stays in the layout's chunk.
       routeChunksImportTheirParent(path.resolve(__dirname, 'src/routeTree.gen.ts')),
+      // A page preloads its route chunks and their direct imports, as under
+      // Start 1.168, not every chunk they reach (see route-preloads.ts).
+      routePreloadsFromDirectImports(),
     ].filter(Boolean) as PluginOption[],
   }
 })
