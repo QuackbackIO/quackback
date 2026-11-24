@@ -168,7 +168,7 @@ const priorityRankExpr = priorityRankSql(tickets.priority)
  * conversation sort, so the keyset cursor only ever needs two columns.
  */
 export interface TicketSortDescriptor {
-  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'dueAt' | 'slaDueAt' | 'id'
+  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'slaDueAt' | 'id' | 'dueAt'
   direction: 'asc' | 'desc'
 }
 
@@ -180,14 +180,14 @@ export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSort
       return { primary: 'createdAt', direction: 'desc' }
     case 'priority':
       return { primary: 'priorityRank', direction: 'desc' }
-    case 'due':
-      // Soonest due first, tickets without a due date last (NULLS LAST).
-      return { primary: 'dueAt', direction: 'asc' }
     case 'sla':
       return { primary: 'slaDueAt', direction: 'asc' }
     case 'waiting':
       // No waiting clock on a ticket: id order keeps the cursor stable.
       return { primary: 'id', direction: 'asc' }
+    case 'due':
+      // Soonest due first, tickets without a due date last (NULLS LAST).
+      return { primary: 'dueAt', direction: 'asc' }
     case 'recent':
     default:
       return { primary: 'updatedAt', direction: 'desc' }
@@ -209,14 +209,14 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
   switch (d.primary) {
     case 'priorityRank':
       return [desc(priorityRankExpr), idTie]
-    case 'dueAt':
-      // ASC NULLS LAST is the btree default — tickets_due_at_id_idx serves it.
-      return [sql`${tickets.dueAt} ASC NULLS LAST`, idTie]
     case 'slaDueAt':
       // Soonest breach first; rows with no open SLA clock sit at the end.
       return [sql`${ticketSlaDueExpr} ASC NULLS LAST`, idTie]
     case 'id':
       return [idTie]
+    case 'dueAt':
+      // ASC NULLS LAST is the btree default — tickets_due_at_id_idx serves it.
+      return [sql`${tickets.dueAt} ASC NULLS LAST`, idTie]
     case 'createdAt':
       return [d.direction === 'asc' ? asc(tickets.createdAt) : desc(tickets.createdAt), idTie]
     case 'updatedAt':
@@ -247,19 +247,6 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
       }
       return buildKeysetCondition([rankCol, idTie])
     }
-    case 'dueAt': {
-      // due_at ASC NULLS LAST, id ASC — the same NULLS-LAST boundary shape as
-      // conversation.query.ts's waiting sort: a cursor in the NULL tail only
-      // precedes later NULL rows (by id); otherwise later dates OR the whole
-      // NULL tail.
-      const dueCol: KeysetColumn = t.dueAt
-        ? {
-            equal: eq(tickets.dueAt, t.dueAt),
-            strict: or(gt(tickets.dueAt, t.dueAt), isNull(tickets.dueAt))!,
-          }
-        : { equal: isNull(tickets.dueAt), strict: undefined }
-      return buildKeysetCondition([dueCol, idTie])
-    }
     case 'slaDueAt': {
       // ticketSlaDueExpr ASC NULLS LAST, id ASC. A cursor in the NULL tail is
       // followed only by later NULL rows (by id); otherwise later deadlines and
@@ -278,6 +265,19 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
     }
     case 'id':
       return buildKeysetCondition([idTie])
+    case 'dueAt': {
+      // due_at ASC NULLS LAST, id ASC — the same NULLS-LAST boundary shape as
+      // conversation.query.ts's waiting sort: a cursor in the NULL tail only
+      // precedes later NULL rows (by id); otherwise later dates OR the whole
+      // NULL tail.
+      const dueCol: KeysetColumn = t.dueAt
+        ? {
+            equal: eq(tickets.dueAt, t.dueAt),
+            strict: or(gt(tickets.dueAt, t.dueAt), isNull(tickets.dueAt))!,
+          }
+        : { equal: isNull(tickets.dueAt), strict: undefined }
+      return buildKeysetCondition([dueCol, idTie])
+    }
     case 'createdAt': {
       const col =
         d.direction === 'asc'
