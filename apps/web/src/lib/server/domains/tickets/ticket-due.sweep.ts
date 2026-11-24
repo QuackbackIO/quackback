@@ -63,8 +63,8 @@ export function dueAlertEventId(kind: TicketDueAlertKind, ticketId: string, dueA
 }
 
 /**
- * The `tickets_due_alert_pending_idx` partial-index predicate (migration
- * 0324), VERBATIM, so the planner proves the index applies via a literal
+ * The `tickets_due_alert_pending_idx` partial-index predicate
+ * (CONCURRENT_INDEX_SPECS), VERBATIM, so the planner proves the index applies via a literal
  * clause match: open, live tickets with a due date whose overdue alert has
  * not fired for that date yet.
  */
