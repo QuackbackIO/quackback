@@ -39,6 +39,7 @@ import { widgetChangelogListQuery } from '@/components/widget/widget-changelog-q
 import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query'
 import { widgetFetchBoardCapabilitiesFn } from '@/lib/server/functions/widget/posts'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
+import { getWidgetPortalOriginFn } from '@/lib/server/functions/widget/portal-origin'
 import { widgetListPublicArticlesFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -160,7 +161,7 @@ export const Route = createFileRoute('/widget/')({
     // (name + image only), so the anonymous SSR baseline is correct for everyone.
     let team: { name: string; avatarUrl: string | null }[] = []
     let showPoweredBy = true
-    const [portalData, { getBaseUrl }] = await Promise.all([
+    const [portalData, portalOrigin] = await Promise.all([
       feedbackProductEnabled
         ? queryClient.ensureQueryData(
             portalQueries.portalData({
@@ -170,8 +171,7 @@ export const Route = createFileRoute('/widget/')({
             })
           )
         : Promise.resolve(emptyPortalData),
-      // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import; stripped from the client graph
-      import('@/lib/server/config'),
+      getWidgetPortalOriginFn(),
       // Presence is workspace-global (not visitor-specific), so the anonymous SSR
       // baseline value is exactly correct for every visitor — seed the shared
       // presence query so the Messenger online/offline strip paints right
@@ -318,7 +318,7 @@ export const Route = createFileRoute('/widget/')({
       // The portal's own origin (BASE_URL env), resolved server-side so the
       // widget handoff URL always points at the portal host — not at the widget
       // iframe origin, which may differ in self-hosted deployments.
-      portalOrigin: getBaseUrl(),
+      portalOrigin,
       showPoweredBy,
     }
   },
