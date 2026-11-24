@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   consentClientIdentity,
   describeRedirectUri,
+  verifiedClientUri,
 } from '@/lib/server/auth/consent-client-identity'
 import { clientIdMetadataHost, isClientIdMetadataUrlAllowed } from '@/lib/server/auth/cimd'
 
@@ -134,5 +135,32 @@ describe('isClientIdMetadataUrlAllowed', () => {
     expect(clientIdMetadataHost('https://chatgpt.com/oauth/client.json')).toBe('chatgpt.com')
     expect(clientIdMetadataHost('http://chatgpt.com/x')).toBeNull()
     expect(clientIdMetadataHost('abc')).toBeNull()
+  })
+})
+
+describe('verifiedClientUri', () => {
+  const verified = { verified: true as const, host: 'client.example.com', redirect: null }
+
+  it('keeps a link on the host the client_id proves', () => {
+    expect(verifiedClientUri('https://client.example.com/about', verified)).toBe(
+      'https://client.example.com/about'
+    )
+  })
+
+  it('drops a link on any other host, even a subdomain', () => {
+    expect(verifiedClientUri('https://bank.example/login', verified)).toBeNull()
+    expect(verifiedClientUri('https://www.client.example.com/', verified)).toBeNull()
+  })
+
+  it('drops a link that is not https, or not a URL', () => {
+    expect(verifiedClientUri('http://client.example.com/', verified)).toBeNull()
+    expect(verifiedClientUri('not a url', verified)).toBeNull()
+    expect(verifiedClientUri(42, verified)).toBeNull()
+  })
+
+  it('never keeps a link for a client whose identity is unverified', () => {
+    expect(
+      verifiedClientUri('https://client.example.com/', { verified: false, redirect: null })
+    ).toBeNull()
   })
 })

@@ -3,7 +3,8 @@
  * preview's outlines both come from this comparison of the draft before and
  * after a change, so they say what happened, never what a model said it did.
  */
-import { expandTheme, tryCssColorToHex } from '@/lib/shared/theme'
+import { tryCssColorToHex } from '@/lib/shared/theme'
+import { expandTheme } from '@/lib/shared/theme/expand'
 import { type ColourMode, type ColourRole } from '@/lib/shared/theme/colour-setters'
 import { luminance } from '@/lib/shared/theme/colour-setters'
 import type { PreviewEditTarget } from '@/components/public/preview-draft-context'
@@ -11,6 +12,7 @@ import type { PortalNavItemConfig } from '@/lib/shared/types/settings'
 import { tabDisplayName } from '@/lib/shared/portal-customise/ask'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { colourName } from './colour-name'
+import { pickedHex } from './colours'
 import type { SectionId } from './pages'
 import {
   draftFontName,
@@ -20,6 +22,7 @@ import {
   SAME_AS_TEXT,
   darkKeyOf,
   shownName,
+  showsWide,
   type PortalDraft,
 } from './portal-draft'
 
@@ -66,8 +69,8 @@ function colourLines(before: PortalDraft, after: PortalDraft): ChangeLine[] {
   for (const { role, label, target } of COLOURS) {
     const now = sides.map((side) => ({
       side,
-      was: hexOf(draftPalette(before, side)[role]),
-      hex: hexOf(draftPalette(after, side)[role]),
+      was: pickedHex(draftPalette(before, side), role),
+      hex: pickedHex(draftPalette(after, side), role),
     }))
     const changed = now.filter(({ was, hex }) => was !== hex)
     if (changed.length === 0) continue
@@ -248,7 +251,16 @@ export function summariseChange(before: PortalDraft, after: PortalDraft): Change
       section: 'header',
     })
   }
-  if (before.logo.wideKey !== after.logo.wideKey || before.logo.mode !== after.logo.mode) {
+  if (before.logo.wideKey !== after.logo.wideKey) {
+    lines.push({ text: 'Logo updated', target: 'logo', section: 'header' })
+  } else if (showsWide(before) !== showsWide(after)) {
+    // The same logo, the header's other choice: named as its tiles are.
+    lines.push({
+      text: showsWide(after) ? 'Header now shows the logo' : 'Header now shows the icon and name',
+      target: 'logo',
+      section: 'header',
+    })
+  } else if (before.logo.mode !== after.logo.mode) {
     lines.push({ text: 'Logo updated', target: 'logo', section: 'header' })
   } else if (darkKeyOf(before) !== darkKeyOf(after)) {
     lines.push({

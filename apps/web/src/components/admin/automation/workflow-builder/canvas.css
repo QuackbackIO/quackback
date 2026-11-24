@@ -55,3 +55,10 @@
   border-color: var(--primary) !important;
   color: var(--foreground) !important;
 }
+
+/* React Flow follows the page theme (it reads the .dark/.light class), and its
+ * dark theme paints the pane #141414. Keep it transparent so the canvas shows
+ * the wrapper's bg-muted/20 tint in both themes. */
+.qbwf-canvas .react-flow {
+  --xy-background-color: transparent;
+}

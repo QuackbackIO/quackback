@@ -19,7 +19,7 @@ function WidgetHomeFallback() {
           <div className="rounded-lg border border-border bg-card overflow-hidden">
             <div className="flex items-center gap-2.5 px-3 py-2.5">
               <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                <PencilIcon className="w-3.5 h-3.5 text-primary" />
+                <PencilIcon className="w-3.5 h-3.5 text-primary-ink" />
               </div>
               <input
                 type="text"

@@ -180,7 +180,7 @@ function SelectControl({ field, id, value, onChange, invalid }: SelectControlPro
             className={cn(
               'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
               isSelected
-                ? 'border-primary bg-primary/10 font-medium text-primary'
+                ? 'border-primary bg-primary/10 font-medium text-primary-ink'
                 : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
             )}
           >

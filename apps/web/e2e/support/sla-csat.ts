@@ -655,11 +655,37 @@ export async function waitForSlaEvent(
 }
 
 /** Move a stamp's due fields into the past (or anywhere): `{ firstResponseDueAt: date }`. */
+/**
+ * Move the workspace's first breach-sweep tick (slaBreachEventsSince,
+ * workflow-sweep.ts) back to `iso` when it is later. The breach sweep never
+ * fires for a clock due before that tick, so a journey that backdates a
+ * deadline on a fresh database, whose first sweep has not run yet or ran after
+ * that deadline, would otherwise never see the breach. Single-workspace jobs
+ * run with no workspace scope, so the key lives in the `_` namespace.
+ */
+async function sweepingSinceAtMost(iso: string): Promise<void> {
+  await supportDb()`
+    INSERT INTO kv_store (workspace_key, key, value, expires_at)
+    VALUES ('_', 'sla:breach-events-since', to_jsonb(${iso}::text), now() + interval '10 years')
+    ON CONFLICT (workspace_key, key) DO UPDATE
+      SET value = CASE
+            WHEN kv_store.expires_at > now() AND (kv_store.value #>> '{}') <= ${iso}
+            THEN kv_store.value ELSE EXCLUDED.value END,
+          expires_at = EXCLUDED.expires_at`
+}
+
 export async function setStampFields(
   table: 'conversations' | 'tickets',
   uuid: string,
   fields: Record<string, string | null>
 ): Promise<void> {
+  // A deadline moved into the past stands for history: the sweep was already
+  // running then.
+  const pastDeadlines = Object.entries(fields)
+    .filter(([key, value]) => key.endsWith('DueAt') && value && value < new Date().toISOString())
+    .map(([, value]) => value as string)
+    .sort()
+  if (pastDeadlines.length > 0) await sweepingSinceAtMost(pastDeadlines[0])
   const sql = supportDb()
   const patch = sql.json(fields)
   const rows =

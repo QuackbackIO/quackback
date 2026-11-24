@@ -96,6 +96,9 @@ vi.mock('@/components/admin/settings/portal-customise/summary-card', () => ({
 }))
 
 const { Route } = await import('@/routes/admin/settings.portal')
+const { settingsQueries } = await import('@/lib/client/queries/settings')
+const { portalSummary } = await import('@/lib/shared/portal-customise/summary')
+const { portalGatedTypes } = await import('@/lib/shared/portal-customise/gated-types')
 const PortalPage = (Route as unknown as { options: { component: ComponentType } }).options.component
 
 function seededClient() {
@@ -105,6 +108,19 @@ function seededClient() {
   queryClient.setQueryData(['settings', 'headerLogo'], null)
   queryClient.setQueryData(['settings', 'customCss'], '')
   queryClient.setQueryData(['settings', 'portalConfig', 'page'], {})
+  // The summary is built on the server (fetchPortalSummaryFn); the page reads its rows.
+  queryClient.setQueryData(
+    settingsQueries.portalSummary(portalGatedTypes(rootContext.settings, rootContext.session))
+      .queryKey,
+    portalSummary({
+      theme: { themeMode: 'user' },
+      customCss: '',
+      portal: {},
+      logoUrl: null,
+      headerLogo: null,
+      gatedTypes: new Set(),
+    })
+  )
   return queryClient
 }
 
