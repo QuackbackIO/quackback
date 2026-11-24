@@ -509,7 +509,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/github": {
       "dbQueries": 8,
-      "htmlKB": 66.3
+      "htmlKB": 70.7
     },
     "sweep:ui:admin:/admin/settings/channels/github": {
       "dbQueries": 8,
