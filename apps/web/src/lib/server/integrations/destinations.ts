@@ -100,6 +100,19 @@ export async function listDestinations(
 }
 
 /**
+ * The switched-on destinations of a connection whose provider serves several
+ * (GitHub repositories); none for a provider that serves one.
+ */
+export async function enabledDestinations(integration: {
+  id: IntegrationId
+  integrationType: string
+}): Promise<IntegrationDestination[]> {
+  const multiple = (await definitionOf(integration.integrationType))?.destination?.multiple
+  if (!multiple) return []
+  return (await listDestinations(integration.id, multiple.kind)).filter((d) => d.enabled)
+}
+
+/**
  * The names of every destination a connection serves, for matching a link's
  * scope to its repository (see `linkTarget`). Empty for a provider without
  * destination rows, whose links all belong to `config.channelId`.
