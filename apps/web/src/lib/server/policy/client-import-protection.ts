@@ -29,10 +29,11 @@ export const CLIENT_PROTECTED_SPECIFIERS = [
  * `fs/promises`).
  *
  * A browser cannot load them. Vite swaps each one for an empty stub, so the
- * build passes and the chunk breaks later: an import of `node:url` reached the
- * admin roadmap through config.ts and the browser refused to load the chunk at
- * all ("Failed to fetch dynamically imported module"). Code that runs in both
- * environments uses the web platform's equivalent instead.
+ * build passes and the chunk breaks later: the browser refuses any chunk that
+ * still imports one, and every page that lazily loads it fails with "Failed to
+ * fetch dynamically imported module". A server module reachable from the
+ * client (config.ts, through the comment renderer) is enough to carry one in.
+ * Code that runs in both environments uses the web platform's equivalent.
  */
 export const NODE_BUILTIN_SPECIFIER = new RegExp(
   `^(?:node:|(?:${builtinModules.filter((m) => !m.startsWith('_')).join('|')})(?:/|$))`

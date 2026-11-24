@@ -5,15 +5,14 @@
  * (`./x.js`). A bare specifier left in a chunk (`node:url`, `crypto`, a
  * package name) means the bundler externalised it: the browser then refuses
  * the whole chunk, and every page that lazily loads it fails with "Failed to
- * fetch dynamically imported module". That happened on 2026-11-24: an
- * `external: [/^node:/]` build option let config.ts carry `import "node:url"`
- * into the admin roadmap's comment renderer.
+ * fetch dynamically imported module". The build itself passes, so nothing but
+ * the browser notices.
  *
  * Import protection in vite.config.ts refuses Node built-ins at build time;
  * this check reads the built output, so it also catches anything that reaches
- * the browser by another route (a new `external`, a plugin, a dependency).
- * Imports are read with Bun's parser, so code samples inside strings (the
- * webhook guide's `import crypto from "node:crypto"`) do not count.
+ * the browser by another route (an `external` build option, a plugin, a
+ * dependency). Imports are read with Bun's parser, so code samples inside
+ * strings (the webhook guide's `import crypto from "node:crypto"`) do not count.
  *
  * Run after `bun run build`:
  *   bun run check:client-imports
@@ -24,7 +23,7 @@ import { join } from 'node:path'
 const ASSETS_DIR = process.argv[2] ?? join(import.meta.dirname, '..', '.output', 'public', 'assets')
 
 if (!existsSync(ASSETS_DIR)) {
-  console.error(`check-client-imports: ${ASSETS_DIR} not found — run \`bun run build\` first.`)
+  console.error(`check-client-imports: ${ASSETS_DIR} not found. Run \`bun run build\` first.`)
   process.exit(2)
 }
 

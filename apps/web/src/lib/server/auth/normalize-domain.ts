@@ -67,9 +67,9 @@ export function emailDomain(email: string | undefined | null): string | null {
  * for SSO. Validates AND normalises in one step via the transformer;
  * downstream callers always see the canonical lowercase ASCII form.
  *
- * Lives here with the server's other domain rules. `normalizeDomain` no
- * longer needs `node:url` (see `@/lib/shared/domain-to-ascii`), so a client
- * import would load, but nothing in the browser validates SSO domains.
+ * Lives here with the server's other domain rules. `normalizeDomain` itself
+ * runs in either environment (see `@/lib/shared/domain-to-ascii`), but SSO
+ * domains are only ever validated on the server.
  */
 export const verifiableDomain = z
   .string()

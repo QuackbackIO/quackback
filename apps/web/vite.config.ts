@@ -174,10 +174,11 @@ export default defineConfig(({ mode }) => {
       // render profiler (`bun perf/bench.ts --renders`). Never for a release.
       ...(process.env.PERF_UNMINIFIED === '1' && { minify: false }),
       rolldownOptions: {
-        // No `external: [/^node:/]` here. It once hid Node built-ins that
-        // reached client chunks: the browser then refused the whole chunk
-        // ("Failed to fetch dynamically imported module"). Import protection
-        // below now fails the build on any built-in the client imports.
+        // Node built-ins are deliberately not marked external. An external
+        // `node:` import stays in a client chunk as written, and the browser
+        // then refuses the whole chunk ("Failed to fetch dynamically imported
+        // module") while the build passes. Import protection below fails the
+        // build on any built-in the client imports instead.
         // NO manualChunks pinning — deliberately. Directory-pinned chunks
         // (route-<segment>, components-admin-<section>) looked tidy but broke
         // code-splitting app-wide: rolldown places modules shared between a
