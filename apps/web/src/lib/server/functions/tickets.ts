@@ -29,12 +29,7 @@ import {
   TICKET_STAGES,
   CONVERSATION_PRIORITIES,
 } from '@/lib/shared/db-types'
-import {
-  validateTicketIntakeValues,
-  coerceTicketTypeId,
-  INBOX_ONLY_TICKET_SORTS,
-  TICKET_SORTS,
-} from '@/lib/shared/tickets'
+import { validateTicketIntakeValues, coerceTicketTypeId, TICKET_SORTS } from '@/lib/shared/tickets'
 import { TICKET_DUE_FILTERS } from '@/lib/shared/ticket-due'
 import type {
   AssignTicketInput,
@@ -83,7 +78,7 @@ const listTicketsSchema = z.object({
   // Only the tickets the caller watches.
   watching: z.boolean().optional(),
   search: z.string().optional(),
-  sort: z.enum([...TICKET_SORTS, ...INBOX_ONLY_TICKET_SORTS]).optional(),
+  sort: z.enum(TICKET_SORTS).optional(),
   // Due-date filter: overdue, due within 24 hours, or no due date.
   due: z.enum(TICKET_DUE_FILTERS).optional(),
   cursor: z.string().optional(),

@@ -119,7 +119,7 @@ export const tickets = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    // Lifecycle timestamps. first_response_at is the first public human
+    // SLA + lifecycle timestamps. first_response_at is the first public human
     // reply after the customer's first message, worked out from the message
     // rows (apps/web domains/tickets/ticket-first-response.ts), never stamped
     // by a status, assignee or priority change;
