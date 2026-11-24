@@ -2,7 +2,7 @@ import { syncScopeFor } from '@/lib/server/integrations/sync/identity'
 import {
   destinationSends,
   destinationTarget,
-  listDestinations,
+  enabledDestinations,
   outboundTarget,
 } from '@/lib/server/integrations/destinations'
 import { syncSourceForActor } from '@/lib/server/integrations/sync/eligibility'
@@ -127,12 +127,9 @@ export async function listLinkableTrackers(): Promise<LinkableTrackerDTO[]> {
     const definition = getIntegration(row.integrationType)
     const issues = definition?.issues
     if (!issues?.parseRef && !issues?.create) continue
-    const multiple = definition?.destination?.multiple
-    const destinations = multiple
-      ? (await listDestinations(row.id, multiple.kind))
-          .filter(destinationSends)
-          .map((d) => ({ id: d.id as string, name: d.externalId }))
-      : []
+    const destinations = (await enabledDestinations(row))
+      .filter(destinationSends)
+      .map((d) => ({ id: d.id as string, name: d.externalId }))
     trackers.push({
       integrationType: row.integrationType,
       name: providerName(row.integrationType),
@@ -289,10 +286,7 @@ export async function linkTicketToIssue(
 
   const config = (integration.config ?? {}) as Record<string, unknown>
   const definition = getIntegration(integrationType)
-  const multiple = definition?.destination?.multiple
-  const destinations = multiple
-    ? (await listDestinations(integration.id, multiple.kind)).filter((d) => d.enabled)
-    : []
+  const destinations = await enabledDestinations(integration)
   const ref = parseRef(
     issueRef,
     config,
@@ -306,10 +300,8 @@ export async function linkTicketToIssue(
   }
   const destination = destinations.find((d) => d.id === ref.destinationId)
   if (destinationId && destination?.id !== destinationId) {
-    throw new ValidationError(
-      'REPO_MISMATCH',
-      `The issue belongs to a different ${multiple?.label.toLowerCase() ?? 'destination'}`
-    )
+    const noun = definition?.destination?.multiple?.label.toLowerCase() ?? 'destination'
+    throw new ValidationError('REPO_MISMATCH', `The issue belongs to a different ${noun}`)
   }
   const target = destination ? destinationTarget(destination) : { channelId: config.channelId }
 
