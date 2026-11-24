@@ -1,6 +1,9 @@
 /**
  * GitLab inbound webhook handler.
  * Receives issue state change events for two-way status sync.
+ * Authentication: shared secret in the `X-Gitlab-Token` header.
+ * Issue numbers (`iid`) are only unique within a project, and the webhook can be
+ * registered on a group, so events from other projects are ignored.
  */
 
 import { timingSafeEqual } from 'crypto'
@@ -28,9 +31,14 @@ export const gitlabInboundHandler: InboundWebhookHandler = {
     return true
   },
 
-  async parseStatusChange(body: string): Promise<InboundWebhookResult | null> {
+  async parseStatusChange(
+    body: string,
+    config: Record<string, unknown>
+  ): Promise<InboundWebhookResult | null> {
     const payload = JSON.parse(body) as {
       object_kind?: string
+      project?: { id?: number | string }
+      changes?: { state_id?: unknown }
       object_attributes?: {
         iid?: number
         action?: string
@@ -42,8 +50,14 @@ export const gitlabInboundHandler: InboundWebhookHandler = {
     if (!payload.object_attributes?.iid) return null
 
     const { action, state, iid } = payload.object_attributes
-    if (action !== 'update' && action !== 'close' && action !== 'reopen') return null
-    if (!state) return null
+    const stateChanged =
+      action === 'close' ||
+      action === 'reopen' ||
+      (action === 'update' && !!payload.changes?.state_id)
+    if (!stateChanged || !state) return null
+
+    const configuredProject = typeof config.channelId === 'string' ? config.channelId : null
+    if (configuredProject && String(payload.project?.id ?? '') !== configuredProject) return null
 
     // Map GitLab states: opened, closed
     const statusMap: Record<string, string> = {
