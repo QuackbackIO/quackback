@@ -67,6 +67,7 @@ import {
   linkedCustomerTicketDueAtSql,
   linkedCustomerTicketDueSql,
   loadLinkedCustomerTicketDueAt,
+  customerListedThreadSql,
   pairTicketWatchedBySql,
   participantThreadAccessSql,
 } from '@/lib/server/messages/pair-link'
@@ -833,6 +834,33 @@ export async function listConversationsForVisitor(
   side: MessageSenderType = 'agent',
   options: { ticketActivity?: boolean } = {}
 ): Promise<VisitorConversationListItem[]> {
+  const rows = await listVisitorRows(
+    visitorPrincipalId,
+    eq(conversations.visitorPrincipalId, visitorPrincipalId),
+    limit,
+    options
+  )
+  // Small N per user, so per-row DTO building is fine.
+  return Promise.all(
+    rows.map(async (r) => ({
+      ...(await conversationToDTO(r.conversation, side)),
+      activityAt: r.activityAt.toISOString(),
+    }))
+  )
+}
+
+/**
+ * The rows behind a customer's conversation list, newest activity first:
+ * those `where` admits, each with its customer ticket when `principalId` is its
+ * requester. A shared ticket thread (someone else's ticket) joins no ticket,
+ * so it sorts by its last message.
+ */
+async function listVisitorRows(
+  visitorPrincipalId: PrincipalId,
+  where: SQL,
+  limit: number,
+  options: { ticketActivity?: boolean }
+) {
   const select = (activityAt: SQL<Date>) =>
     db
       .select({ conversation: conversations, activityAt, pairedTicketId: tickets.id })
@@ -854,7 +882,7 @@ export async function listConversationsForVisitor(
           isNull(tickets.deletedAt)
         )
       )
-      .where(eq(conversations.visitorPrincipalId, visitorPrincipalId))
+      .where(where)
       .orderBy(desc(activityAt), desc(conversations.id))
       .limit(limit)
 
@@ -878,13 +906,7 @@ export async function listConversationsForVisitor(
       )
     )
   }
-  // Small N per user, so per-row DTO building is fine.
-  return Promise.all(
-    rows.map(async (r) => ({
-      ...(await conversationToDTO(r.conversation, side)),
-      activityAt: r.activityAt.toISOString(),
-    }))
-  )
+  return rows
 }
 
 /** How a customer reaches a conversation: as its visitor, or as a customer
@@ -970,36 +992,27 @@ export async function listConversationsForCustomer(
   limit = 50,
   options: { ticketActivity?: boolean } = {}
 ): Promise<{ conversations: VisitorConversationListItem[]; sharedIds: ConversationId[] }> {
-  const [own, sharedRows] = await Promise.all([
-    listConversationsForVisitor(principalId, limit, 'visitor', options),
-    db
-      .select()
-      .from(conversations)
-      .where(
-        and(
-          ne(conversations.visitorPrincipalId, principalId),
-          participantThreadAccessSql(principalId)
-        )
-      )
-      .orderBy(desc(conversations.lastMessageAt), desc(conversations.id))
-      .limit(limit),
-  ])
-  if (sharedRows.length === 0) return { conversations: own, sharedIds: [] }
-  const shared = await Promise.all(
-    sharedRows.map(async (c) => ({
-      ...(await participantConversationToDTO(c, principalId)),
-      activityAt: c.lastMessageAt.toISOString(),
+  // One query for both halves: a customer with nothing shared pays nothing
+  // extra for sharing.
+  const rows = await listVisitorRows(
+    principalId,
+    customerListedThreadSql(principalId),
+    limit,
+    options
+  )
+  const listed = await Promise.all(
+    rows.map(async (r) => ({
+      ...(r.conversation.visitorPrincipalId === principalId
+        ? await conversationToDTO(r.conversation, 'visitor')
+        : await participantConversationToDTO(r.conversation, principalId)),
+      activityAt: r.activityAt.toISOString(),
     }))
   )
-  const merged = [...own, ...shared]
-    .sort((x, y) => y.activityAt.localeCompare(x.activityAt) || y.id.localeCompare(x.id))
-    .slice(0, limit)
-  const sharedIds = new Set(sharedRows.map((c) => c.id))
   return {
-    conversations: merged,
-    sharedIds: merged
-      .filter((c) => sharedIds.has(c.id as ConversationId))
-      .map((c) => c.id as ConversationId),
+    conversations: listed,
+    sharedIds: rows
+      .filter((r) => r.conversation.visitorPrincipalId !== principalId)
+      .map((r) => r.conversation.id as ConversationId),
   }
 }
 
