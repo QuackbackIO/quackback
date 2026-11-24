@@ -6,7 +6,10 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
-import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-import-protection'
+import {
+  CLIENT_PROTECTED_SPECIFIERS,
+  NODE_BUILTIN_SPECIFIER,
+} from './src/lib/server/policy/client-import-protection'
 import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
 import { serverWorkers } from './src/lib/build/server-workers'
 
@@ -171,10 +174,10 @@ export default defineConfig(({ mode }) => {
       // render profiler (`bun perf/bench.ts --renders`). Never for a release.
       ...(process.env.PERF_UNMINIFIED === '1' && { minify: false }),
       rolldownOptions: {
-        // TanStack Router SSR code imports node builtins (node:stream, node:async_hooks)
-        // that end up in the client bundle. Mark node: imports as external since they're
-        // SSR-only code paths that never execute in the browser.
-        external: [/^node:/],
+        // No `external: [/^node:/]` here. It once hid Node built-ins that
+        // reached client chunks: the browser then refused the whole chunk
+        // ("Failed to fetch dynamically imported module"). Import protection
+        // below now fails the build on any built-in the client imports.
         // NO manualChunks pinning — deliberately. Directory-pinned chunks
         // (route-<segment>, components-admin-<section>) looked tidy but broke
         // code-splitting app-wide: rolldown places modules shared between a
@@ -247,7 +250,7 @@ export default defineConfig(({ mode }) => {
         },
         importProtection: {
           behavior: { dev: 'error', build: 'error' },
-          client: { specifiers: [...CLIENT_PROTECTED_SPECIFIERS] },
+          client: { specifiers: [...CLIENT_PROTECTED_SPECIFIERS, NODE_BUILTIN_SPECIFIER] },
         },
       }),
       viteReact(),

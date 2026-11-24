@@ -1,4 +1,4 @@
-import { domainToASCII } from 'node:url'
+import { domainToASCII } from '@/lib/shared/domain-to-ascii'
 import { z } from 'zod'
 
 /**
@@ -13,7 +13,7 @@ const RESERVED_SUFFIXES = ['.test', '.example', '.invalid', '.localhost']
  *
  * Rules:
  *  - Trim and strip a single trailing dot (`acme.com.` → `acme.com`).
- *  - Run through `URL.domainToASCII` so IDN labels become punycode.
+ *  - Run through `domainToASCII` so IDN labels become punycode.
  *  - Lowercase the ASCII form.
  *  - Reject single-label hostnames (must contain at least one dot).
  *  - Reject IP literals (v4 dotted-quad, v6 colons).
@@ -67,11 +67,9 @@ export function emailDomain(email: string | undefined | null): string | null {
  * for SSO. Validates AND normalises in one step via the transformer;
  * downstream callers always see the canonical lowercase ASCII form.
  *
- * Lives here (server-only) rather than in `lib/shared/schemas/auth.ts`
- * because `normalizeDomain` depends on `node:url`, which Vite externalises
- * for browser builds. Importing the shared schemas file from a client
- * component would otherwise pull this transitive dependency into the
- * client bundle and fail at runtime.
+ * Lives here with the server's other domain rules. `normalizeDomain` no
+ * longer needs `node:url` (see `@/lib/shared/domain-to-ascii`), so a client
+ * import would load, but nothing in the browser validates SSO domains.
  */
 export const verifiableDomain = z
   .string()

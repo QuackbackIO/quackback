@@ -1,3 +1,5 @@
+import { builtinModules } from 'node:module'
+
 /**
  * Bare package specifiers the client environment must never import.
  *
@@ -22,7 +24,24 @@ export const CLIENT_PROTECTED_SPECIFIERS = [
   'heic-convert',
 ] as const
 
+/**
+ * Node's built-in modules, `node:`-prefixed or bare (`node:url`, `crypto`,
+ * `fs/promises`).
+ *
+ * A browser cannot load them. Vite swaps each one for an empty stub, so the
+ * build passes and the chunk breaks later: an import of `node:url` reached the
+ * admin roadmap through config.ts and the browser refused to load the chunk at
+ * all ("Failed to fetch dynamically imported module"). Code that runs in both
+ * environments uses the web platform's equivalent instead.
+ */
+export const NODE_BUILTIN_SPECIFIER = new RegExp(
+  `^(?:node:|(?:${builtinModules.filter((m) => !m.startsWith('_')).join('|')})(?:/|$))`
+)
+
 /** True for a protected package or any of its subpaths (`pino/file`, `@quackback/db/x`). */
 export function isClientProtectedSpecifier(spec: string): boolean {
-  return CLIENT_PROTECTED_SPECIFIERS.some((p) => spec === p || spec.startsWith(`${p}/`))
+  return (
+    NODE_BUILTIN_SPECIFIER.test(spec) ||
+    CLIENT_PROTECTED_SPECIFIERS.some((p) => spec === p || spec.startsWith(`${p}/`))
+  )
 }
