@@ -901,6 +901,7 @@ test.describe('ticket events', () => {
             ...TICKET_REF_KEYS,
             'companyId',
             'createdAt',
+            'dueAt',
             'requesterPrincipalId',
             'resolvedAt',
             'sla',
