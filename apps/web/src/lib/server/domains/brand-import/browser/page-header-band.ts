@@ -60,33 +60,38 @@ export function measureHeaderBand(): PageHeaderBand | null {
     return near ? stops[0]! : null
   }
   const mark = kept.getBoundingClientRect()
-  for (let at = kept.parentElement; at && at !== document.body; at = at.parentElement) {
-    const shade = painted(at) ? plainGradient(cs(at).backgroundImage) : null
-    if (painted(at) && !shade) return null
-    const fill = shade ?? cs(at).backgroundColor
-    const r = at.getBoundingClientRect()
-    if (!solid(fill) || r.width < innerWidth * 0.5) continue
-    // An ordinary bar is the measurement's to take, and it did or would not.
-    if (r.height <= BAR_MAX_HEIGHT) return null
-    if (r.height > BAND_MAX_HEIGHT || r.top > BAND_MAX_TOP) return null
+  const MEDIA = /^(?:img|picture|video|canvas|iframe|svg|object|embed)$/i
+  /** A band's one colour: a solid fill or a plain gradient, else null (a picture, a real gradient). */
+  const fillOf = (el: Element): string | null => {
+    const shade = painted(el) ? plainGradient(cs(el).backgroundImage) : null
+    if (painted(el) && !shade) return null
+    const fill = shade ?? cs(el).backgroundColor
+    return solid(fill) ? fill : null
+  }
+  /** Whether no photo, video, drawing or painted box covers a real share of `band`, the logo's own boxes aside. */
+  const clearOfMedia = (band: Element): boolean => {
+    const r = band.getBoundingClientRect()
     const area = r.width * r.height
     let scanned = 0
-    for (const el of at.querySelectorAll('*')) {
-      if (scanned++ > 2500) return null
+    for (const el of band.querySelectorAll('*')) {
+      if (scanned++ > 2500) return false
       if (el === kept || kept.contains(el) || el.contains(kept)) {
         // A box round the logo may be painted too: a layer over the whole band.
-        if (el.contains(kept) && el !== kept && painted(el)) return null
+        if (el.contains(kept) && el !== kept && painted(el)) return false
         continue
       }
-      const media = /^(?:img|picture|video|canvas|iframe|svg|object|embed)$/i.test(el.tagName)
-      if (!media && !painted(el)) continue
+      if (!MEDIA.test(el.tagName) && !painted(el)) continue
       const box = el.getBoundingClientRect()
-      if (box.width * box.height >= MEDIA_SHARE * area) return null
+      if (box.width * box.height >= MEDIA_SHARE * area) return false
     }
+    return true
+  }
+  /** The menu's ink on the logo's row within `scope`, or null when fewer than a menu's links sit there. */
+  const menuInk = (scope: Element): { text?: string } | null => {
     const row = mark.top + mark.height / 2
     const inks = new Map<string, number>()
     let menu = 0
-    for (const link of at.querySelectorAll('a, button')) {
+    for (const link of scope.querySelectorAll('a, button')) {
       if (link.contains(kept) || !(link.textContent || '').trim()) continue
       const box = link.getBoundingClientRect()
       if (box.width === 0 || Math.abs(box.top + box.height / 2 - row) > ROW_REACH) continue
@@ -96,7 +101,50 @@ export function measureHeaderBand(): PageHeaderBand | null {
     }
     if (menu < MENU_LINKS) return null
     const text = [...inks].sort((a, b) => b[1] - a[1])[0]?.[0]
-    return { bg: fill, ...(text ? { text } : {}), tall: true }
+    return text ? { text } : {}
   }
-  return null
+  const isBand = (r: DOMRect) =>
+    r.width >= innerWidth * 0.5 && r.height <= BAND_MAX_HEIGHT && r.top <= BAND_MAX_TOP
+
+  // The band the logo and the menu sit in. The bar is the outermost
+  // bar-shaped box round the logo: the header, not the logo's own link.
+  let bar: Element | null = null
+  let pastBar = false
+  for (let at = kept.parentElement; at && at !== document.body; at = at.parentElement) {
+    const r = at.getBoundingClientRect()
+    if (r.height > BAR_MAX_HEIGHT) pastBar = true
+    else if (!pastBar && r.width >= innerWidth * 0.5) bar = at
+    if (painted(at) && !plainGradient(cs(at).backgroundImage)) return null
+    const fill = fillOf(at)
+    if (!fill || r.width < innerWidth * 0.5) continue
+    // An ordinary bar is the measurement's to take, and it did or would not.
+    if (r.height <= BAR_MAX_HEIGHT) return null
+    if (!isBand(r) || !clearOfMedia(at)) return null
+    const ink = menuInk(at)
+    return ink ? { bg: fill, ...ink, tall: true } : null
+  }
+
+  // A see-through bar laid over the band below it (a header placed over the
+  // page's opening block): the band behind the bar is what a visitor sees as
+  // the header. Taken by the same rules, from the block that lies under the
+  // middle of the bar and is no part of it, the smallest such block winning.
+  if (!bar) return null
+  const barBox = bar.getBoundingClientRect()
+  const middle = barBox.top + barBox.height / 2
+  let behind: { el: Element; fill: string; area: number } | null = null
+  let scanned = 0
+  for (const el of document.body.querySelectorAll('*')) {
+    if (scanned++ > 2500) break
+    if (el === bar || bar.contains(el) || el.contains(bar)) continue
+    const r = el.getBoundingClientRect()
+    if (r.top > middle || r.top + r.height < middle || r.height <= BAR_MAX_HEIGHT) continue
+    if (!isBand(r)) continue
+    const fill = fillOf(el)
+    if (!fill) continue
+    const area = r.width * r.height
+    if (!behind || area < behind.area) behind = { el, fill, area }
+  }
+  if (!behind || !clearOfMedia(behind.el)) return null
+  const ink = menuInk(bar)
+  return ink ? { bg: behind.fill, ...ink, tall: true } : null
 }

@@ -2,8 +2,9 @@
  * The static reader: the site's HTML and stylesheets, read without running
  * anything (site/site-read.ts), as a `BrandRead`. It names the theme colour,
  * fonts (with the files its own `@font-face` rules serve), colour candidates
- * and logo; page and text colours and corner radii need a rendered page, so
- * it leaves those out.
+ * and logo, and the page, text, header and button colours its stylesheets
+ * give the elements its markup names. A rendered page reads those better,
+ * so the browser reader's win where both have one.
  */
 import type { BrandRead, Hex } from '@/lib/shared/theme/brand-import'
 import type { BrandReader } from './readers'
@@ -54,10 +55,11 @@ function siteIcon(site: SiteRead): BrandRead['icon'] {
 function styleOf(style: PageStyle | null): Pick<BrandRead, 'page' | 'button' | 'card'> {
   if (!style) return {}
   const page =
-    style.background || style.text
+    style.background || style.text || style.header
       ? {
           ...(style.background ? { background: style.background as Hex | 'transparent' } : {}),
           ...(style.text ? { text: style.text as Hex } : {}),
+          ...(style.header ? { header: style.header as Hex } : {}),
         }
       : undefined
   const button: BrandRead['button'] = style.button

@@ -3,7 +3,9 @@
  * history covers it all, one comparison says what changed, and one publish
  * sends it. Plain functions; usePortalEditor holds the state.
  */
-import { expandTheme, tryCssColorToHex } from '@/lib/shared/theme'
+import { tryCssColorToHex } from '@/lib/shared/theme'
+import { expandTheme } from '@/lib/shared/theme/expand'
+import { PICKED_KEYS } from '@/lib/shared/theme/base'
 import {
   applyColour,
   resetColour,
@@ -449,6 +451,7 @@ const COLOUR_KEYS = [
   'mutedForeground',
   'border',
   'header',
+  ...Object.values(PICKED_KEYS),
 ] as const
 
 const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
