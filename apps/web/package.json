@@ -18,6 +18,7 @@
     "test:e2e:support": "playwright test -c playwright.support.config.ts",
     "test:e2e:product": "playwright test -c playwright.product.config.ts",
     "check:widget-bundle": "bun scripts/check-widget-bundle.ts",
+    "check:client-imports": "bun scripts/check-client-imports.ts",
     "check:server-fn-manifest": "bun scripts/check-server-fn-manifest.ts",
     "perf:setup": "bun perf/setup-db.ts",
     "perf": "bun perf/bench.ts",
