@@ -3154,3 +3154,30 @@ describe('MCP plan gate and the plan limits pause', () => {
     }
   )
 })
+
+describe('createJsonMcpHandler', () => {
+  it("builds the handler without the SDK's JSON-mode notice, and passes later warnings on", async () => {
+    const { createJsonMcpHandler } = await import('../handler')
+    const original = console.warn
+    const seen: unknown[][] = []
+    console.warn = (...data: unknown[]) => void seen.push(data)
+    try {
+      // The factory only runs per call, never at construction.
+      const handler = createJsonMcpHandler((() => undefined) as never, { responseMode: 'json' })
+      await handler.close()
+      console.warn('after construction')
+    } finally {
+      console.warn = original
+    }
+    expect(seen.flat().some((d) => String(d).includes("responseMode: 'json'"))).toBe(false)
+    expect(seen).toEqual([['after construction']])
+  })
+
+  it('restores console.warn after building', async () => {
+    const { createJsonMcpHandler } = await import('../handler')
+    const original = console.warn
+    const handler = createJsonMcpHandler((() => undefined) as never, { responseMode: 'json' })
+    await handler.close()
+    expect(console.warn).toBe(original)
+  })
+})
