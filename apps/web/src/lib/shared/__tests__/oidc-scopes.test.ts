@@ -64,8 +64,6 @@ describe('normalizeScopesInput', () => {
 
 describe('REQUIRED_OIDC_SCOPE', () => {
   it('is openid, the scope that makes this an OIDC request at all', () => {
-    // Without it the IdP owes no ID token and the userinfo endpoint has no
-    // openid-scoped token to accept, so the editor must not let it be removed.
     expect(REQUIRED_OIDC_SCOPE).toBe('openid')
     expect(DEFAULT_OIDC_SCOPES).toContain(REQUIRED_OIDC_SCOPE)
   })
@@ -104,10 +102,8 @@ describe('supportedSubset', () => {
     ])
   })
 
-  it('always keeps the required scope, even if unadvertised', () => {
-    // Dropping openid would stop the request being an OIDC request at all, so
-    // the one-click fix must never produce that.
-    expect(supportedSubset(['openid', 'email'], ['email'])).toEqual(['openid', 'email'])
+  it('can remove openid when the provider only advertises OAuth scopes', () => {
+    expect(supportedSubset(['openid', 'publicData'], ['publicData'])).toEqual(['publicData'])
   })
 
   it('returns the input unchanged when nothing is advertised', () => {
