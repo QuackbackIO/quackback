@@ -679,6 +679,7 @@ test.describe('portal support: what the customer receives and is refused', () =>
           'resolvedAt',
           'createdAt',
           'updatedAt',
+          'dueAt',
           'customAttributes',
           'lastMessagePreview',
         ].sort()
