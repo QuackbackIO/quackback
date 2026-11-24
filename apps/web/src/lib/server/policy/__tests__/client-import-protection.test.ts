@@ -19,7 +19,9 @@ describe('NODE_BUILTIN_SPECIFIER', () => {
   )
 
   it('refuses any node: specifier, built-in or not, since no browser loads one', () => {
-    expect(NODE_BUILTIN_SPECIFIER.test('node:anything')).toBe(true)
+    for (const spec of ['node:anything', 'node:', 'node:fs\n']) {
+      expect(NODE_BUILTIN_SPECIFIER.test(spec)).toBe(true)
+    }
   })
 
   it('feeds isClientProtectedSpecifier', () => {
