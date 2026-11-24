@@ -50,8 +50,9 @@ async function serve(
 }
 
 describe('resolveWorkspaceAndContinue', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    ;(await import('../unknown-host-log')).resetUnknownHostLog()
     delete process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN
     delete process.env.QUACKBACK_SAAS_RAILWAY_ORIGIN
     delete process.env.QUACKBACK_SAAS_EDGE_SECRET
