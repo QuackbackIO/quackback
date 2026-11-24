@@ -1,15 +1,20 @@
 /**
- * The HTTP runtime prints any non-HTTP error that escapes a request with a
- * bare console.error, which Bun renders as a multi-line dump. These tests drive
- * the framework's real request handler, and where it matters the real request
+ * The framework prints any error that escapes the server entry with a bare
+ * console.error, which Bun renders as a multi-line dump. These tests drive the
+ * framework's real server entry, and where it matters the real request
  * boundary inside it, so they fail if the print moves or changes shape, or if
- * the boundary stops telling the runtime log what it already logged.
+ * the boundary or the entry stops telling the console wrapper what it already
+ * logged.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { requestHandler } from '@tanstack/react-start/server'
+import { createServerEntry } from '@tanstack/react-start/server'
 import { createLogger } from '@/lib/server/logger'
 import { handleRequestWithContext } from '@/lib/server/middleware/request-context'
-import { installRuntimeErrorLog, isClientDisconnect } from '@/lib/server/runtime-error-log'
+import {
+  installRuntimeErrorLog,
+  isClientDisconnect,
+  withRuntimeErrorLog,
+} from '@/lib/server/runtime-error-log'
 
 function capture() {
   const lines: string[] = []
@@ -20,22 +25,32 @@ function capture() {
   return { log, records: () => lines.map((l) => JSON.parse(l)) }
 }
 
-/** A console stand-in, so the test never patches the real one. */
+/** A console stand-in, so the test never patches the real one for long. */
 function fakeConsole() {
   const printed: unknown[][] = []
   return { printed, target: { error: (...args: unknown[]) => void printed.push(args) } }
 }
 
-/** Run one request through the framework with the given console.error. */
+type Handler = (request: Request) => Promise<Response>
+
+/**
+ * Run one request through the framework's server entry with the given
+ * console.error, wrapped as server.ts wraps it unless `wrap` is false.
+ */
 async function runThroughFramework(
   target: { error: (...args: unknown[]) => void },
-  handler: (request: Request) => Promise<Response>,
-  request = new Request('http://localhost/admin/feedback')
+  handler: Handler,
+  {
+    log,
+    wrap = true,
+    request = new Request('http://localhost/admin/feedback'),
+  }: { log?: ReturnType<typeof capture>['log']; wrap?: boolean; request?: Request } = {}
 ): Promise<Response> {
   const original = console.error
   console.error = (...args: unknown[]) => target.error(...args)
   try {
-    return await requestHandler(handler)(request, {} as never)
+    const entry = createServerEntry({ fetch: wrap ? withRuntimeErrorLog(handler, log) : handler })
+    return await entry.fetch(request)
   } finally {
     console.error = original
   }
@@ -43,11 +58,33 @@ async function runThroughFramework(
 
 const closed = () => new DOMException('The connection was closed.', 'AbortError')
 
-describe('installRuntimeErrorLog', () => {
+describe('the framework print this module intercepts', () => {
+  it('is a single-argument console.error of the raw escaped error', async () => {
+    // Pins the shape the console wrapper relies on. If the framework starts
+    // wrapping, cloning or annotating the error, this fails.
+    const { printed, target } = fakeConsole()
+    const boom = new TypeError('cannot read properties of undefined')
+
+    const res = await runThroughFramework(
+      target,
+      async () => {
+        throw boom
+      },
+      { wrap: false }
+    )
+
+    expect(res.status).toBe(500)
+    expect(printed).toHaveLength(1)
+    expect(printed[0]).toHaveLength(1)
+    expect(printed[0][0]).toBe(boom)
+  })
+})
+
+describe('withRuntimeErrorLog + installRuntimeErrorLog', () => {
   it('drops the dump for a client disconnect the request boundary saw', async () => {
     const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
     const controller = new AbortController()
     const reason = closed()
 
@@ -62,7 +99,10 @@ describe('installRuntimeErrorLog', () => {
             throw reason
           },
         }) as never,
-      new Request('http://localhost/admin/feedback', { signal: controller.signal })
+      {
+        log: cap.log,
+        request: new Request('http://localhost/admin/feedback', { signal: controller.signal }),
+      }
     )
 
     expect(res.status).toBe(500)
@@ -77,7 +117,7 @@ describe('installRuntimeErrorLog', () => {
     // done, so this throw never passes through the boundary's catch.
     const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
     const controller = new AbortController()
 
     await runThroughFramework(
@@ -91,22 +131,54 @@ describe('installRuntimeErrorLog', () => {
         controller.abort(closed())
         throw request.signal.reason
       },
-      new Request('http://localhost/admin/feedback', { signal: controller.signal })
+      {
+        log: cap.log,
+        request: new Request('http://localhost/admin/feedback', { signal: controller.signal }),
+      }
     )
 
     expect(printed).toEqual([])
     expect(cap.records().some((r) => r.level === 'error')).toBe(false)
   })
 
+  it('drops a disconnect the framework raises before any middleware has run', async () => {
+    // The start handler checks the signal before the middleware chain, so the
+    // request boundary never runs for this request at all.
+    const cap = capture()
+    const { printed, target } = fakeConsole()
+    installRuntimeErrorLog({ target })
+    const controller = new AbortController()
+    controller.abort(closed())
+
+    await runThroughFramework(
+      target,
+      async (request) => {
+        request.signal.throwIfAborted()
+        return new Response('unreachable')
+      },
+      {
+        log: cap.log,
+        request: new Request('http://localhost/admin/feedback', { signal: controller.signal }),
+      }
+    )
+
+    expect(printed).toEqual([])
+    expect(cap.records()).toEqual([])
+  })
+
   it('logs an AbortError that is not a client disconnect', async () => {
     // e.g. our own cancelled outbound fetch escaping a route.
     const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
 
-    await runThroughFramework(target, async () => {
-      throw new DOMException('This operation was aborted', 'AbortError')
-    })
+    await runThroughFramework(
+      target,
+      async () => {
+        throw new DOMException('This operation was aborted', 'AbortError')
+      },
+      { log: cap.log }
+    )
 
     expect(printed).toEqual([])
     const records = cap.records()
@@ -118,19 +190,22 @@ describe('installRuntimeErrorLog', () => {
   it('logs any other escaped error as one structured line', async () => {
     const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
 
-    await runThroughFramework(target, async () => {
-      throw new TypeError('cannot read properties of undefined')
-    })
+    const res = await runThroughFramework(
+      target,
+      async () => {
+        throw new TypeError('cannot read properties of undefined')
+      },
+      { log: cap.log }
+    )
 
+    expect(res.status).toBe(500)
     expect(printed).toEqual([])
     const records = cap.records()
     expect(records).toHaveLength(1)
     expect(records[0].level).toBe('error')
     expect(records[0].msg).toBe('unhandled request error')
-    expect(records[0].status).toBe(500)
-    // The original error, not the runtime's wrapper around it.
     expect(records[0].err.type).toBe('TypeError')
     expect(records[0].err.message).toBe('cannot read properties of undefined')
   })
@@ -138,7 +213,7 @@ describe('installRuntimeErrorLog', () => {
   it('does not log again an error the request boundary already logged', async () => {
     const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
 
     await runThroughFramework(
       target,
@@ -149,7 +224,8 @@ describe('installRuntimeErrorLog', () => {
           next: async () => {
             throw new Error('kaboom')
           },
-        }) as never
+        }) as never,
+      { log: cap.log }
     )
 
     expect(printed).toEqual([])
@@ -162,39 +238,40 @@ describe('installRuntimeErrorLog', () => {
     // wrapper (the install guard lives on the console), so both must read one set.
     const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
 
     vi.resetModules()
     const reloaded = await import('@/lib/server/runtime-error-log')
     const boom = new Error('kaboom')
     reloaded.noteLoggedAtBoundary(boom)
 
-    await runThroughFramework(target, async () => {
-      throw boom
-    })
+    await runThroughFramework(
+      target,
+      async () => {
+        throw boom
+      },
+      { log: cap.log }
+    )
 
     expect(printed).toEqual([])
     expect(cap.records()).toEqual([])
   })
 
   it('passes every other console.error call through untouched', () => {
-    const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
 
     const plain = new Error('library failure')
     target.error('Error in SSR cleanup:', plain)
     target.error(plain)
 
     expect(printed).toEqual([['Error in SSR cleanup:', plain], [plain]])
-    expect(cap.records()).toEqual([])
   })
 
   it('wraps the target only once', () => {
-    const cap = capture()
     const { printed, target } = fakeConsole()
-    installRuntimeErrorLog({ log: cap.log, target })
-    installRuntimeErrorLog({ log: cap.log, target })
+    installRuntimeErrorLog({ target })
+    installRuntimeErrorLog({ target })
 
     target.error('once')
     expect(printed).toEqual([['once']])

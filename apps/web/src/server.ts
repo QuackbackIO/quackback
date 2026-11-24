@@ -2,7 +2,7 @@ import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
 import { assertBootConfigurationOrExit } from '@/lib/server/boot-config'
 import { logStartupBanner } from '@/lib/server/startup'
 import { finishResponse } from '@/lib/server/finish-response'
-import { installRuntimeErrorLog } from '@/lib/server/runtime-error-log'
+import { installRuntimeErrorLog, withRuntimeErrorLog } from '@/lib/server/runtime-error-log'
 
 // FIRST, and above the warmup below on purpose. A misconfigured process must
 // refuse before it opens a single socket, and the warmup opens several. This
@@ -42,7 +42,7 @@ installRuntimeErrorLog()
 export default createServerEntry({
   // The framework's final response, finished (body-end hooks, compression)
   // out here rather than in request middleware: see finish-response.ts.
-  async fetch(request) {
-    return finishResponse(request, await handler.fetch(request))
-  },
+  fetch: withRuntimeErrorLog(async (request: Request) =>
+    finishResponse(request, await handler.fetch(request))
+  ),
 })

@@ -22,11 +22,7 @@ import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 import { formatServerTiming, openRequestMetrics } from '@/lib/server/request-metrics'
 import { onResponseBodyEnd } from '@/lib/server/response-hooks'
-import {
-  isClientDisconnect,
-  noteClientDisconnectOf,
-  noteLoggedAtBoundary,
-} from '@/lib/server/runtime-error-log'
+import { isClientDisconnect, noteLoggedAtBoundary } from '@/lib/server/runtime-error-log'
 
 /**
  * Health probe path. Hit every few seconds by the platform's healthcheck,
@@ -75,10 +71,6 @@ export async function handleRequestWithContext<T extends NextResult>({
   const pathname = new URL(request.url).pathname
   const route = `${request.method} ${pathname}`
   const start = performance.now()
-
-  // The framework may rethrow a disconnect after this boundary has returned;
-  // mark it so the runtime's own print of it is dropped (runtime-error-log.ts).
-  noteClientDisconnectOf(request)
 
   return runWithLogContext({ request_id: requestId, route }, async () => {
     const metrics = openRequestMetrics()!
