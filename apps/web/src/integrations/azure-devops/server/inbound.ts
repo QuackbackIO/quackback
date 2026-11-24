@@ -14,23 +14,7 @@ import type {
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
 import { getWorkItemStatus, type WorkItemStatus } from '@/integrations/azure-devops/server/api'
-
-/** Organization name from `https://dev.azure.com/{org}/` or `https://{org}.visualstudio.com/`. */
-function organizationFromBaseUrl(baseUrl: unknown): string | null {
-  if (typeof baseUrl !== 'string') return null
-  try {
-    const url = new URL(baseUrl)
-    if (url.hostname === 'dev.azure.com') {
-      return url.pathname.split('/').filter(Boolean)[0]?.toLowerCase() ?? null
-    }
-    if (url.hostname.endsWith('.visualstudio.com')) {
-      return url.hostname.slice(0, -'.visualstudio.com'.length).toLowerCase()
-    }
-  } catch {
-    return null
-  }
-  return null
-}
+import { organizationFromUrl } from '@/integrations/azure-devops/server/url'
 
 function lowerCaseString(value: unknown): string | null {
   return typeof value === 'string' && value ? value.toLowerCase() : null
@@ -86,7 +70,9 @@ export const azureDevOpsInboundHandler: InboundWebhookHandler = {
     const stateField = resource.fields?.['System.State']
     if (!stateField?.newValue) return null
 
-    const organization = organizationFromBaseUrl(payload.resourceContainers?.account?.baseUrl)
+    const organization = lowerCaseString(
+      organizationFromUrl(payload.resourceContainers?.account?.baseUrl)
+    )
     const configuredOrganization =
       typeof config.organizationName === 'string' ? config.organizationName.toLowerCase() : null
     if (organization && configuredOrganization && organization !== configuredOrganization) {

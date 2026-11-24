@@ -9,6 +9,7 @@ import type {
   AzureDevOpsProject,
   AzureDevOpsWorkItemType,
 } from '@/integrations/azure-devops/server/api'
+import { organizationFromUrl } from '@/integrations/azure-devops/server/url'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ValidationError } from '@/lib/shared/errors'
 
@@ -22,20 +23,14 @@ const connectSchema = z.object({
  * Supports: https://dev.azure.com/{org} or https://{org}.visualstudio.com
  */
 function parseOrganizationName(organizationUrl: string): string {
-  const url = new URL(organizationUrl)
-  if (url.hostname === 'dev.azure.com') {
-    const segments = url.pathname.split('/').filter(Boolean)
-    if (segments.length === 0)
-      throw new ValidationError('INVALID_ORGANIZATION_URL', 'Organization name not found in URL')
-    return segments[0]
+  const organization = organizationFromUrl(organizationUrl)
+  if (!organization) {
+    throw new ValidationError(
+      'INVALID_ORGANIZATION_URL',
+      'Invalid Azure DevOps URL. Use https://dev.azure.com/{org} or https://{org}.visualstudio.com'
+    )
   }
-  if (url.hostname.endsWith('.visualstudio.com')) {
-    return url.hostname.replace('.visualstudio.com', '')
-  }
-  throw new ValidationError(
-    'INVALID_ORGANIZATION_URL',
-    'Invalid Azure DevOps URL. Use https://dev.azure.com/{org} or https://{org}.visualstudio.com'
-  )
+  return organization
 }
 
 export const connectAzureDevOpsFn = createServerFn({ method: 'POST' })
