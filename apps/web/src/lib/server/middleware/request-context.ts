@@ -23,6 +23,7 @@ import { runWithLogContext } from '@/lib/server/log-context'
 import { formatServerTiming, openRequestMetrics } from '@/lib/server/request-metrics'
 import { onResponseBodyEnd } from '@/lib/server/response-hooks'
 import { isClientDisconnect, noteLoggedAtBoundary } from '@/lib/server/runtime-error-log'
+import { hideFromClient } from './server-fn-log'
 
 /**
  * Health probe path. Hit every few seconds by the platform's healthcheck,
@@ -59,13 +60,17 @@ interface NextResult {
 export async function handleRequestWithContext<T extends NextResult>({
   request,
   next,
+  handlerType = 'router',
   log = logger,
   serverTiming = process.env.QUACKBACK_SERVER_TIMING === '1',
+  production = process.env.NODE_ENV === 'production',
 }: {
   request: Request
   next: () => Promise<T>
+  handlerType?: 'serverFn' | 'router'
   log?: AppLogger
   serverTiming?: boolean
+  production?: boolean
 }): Promise<T> {
   const requestId = deriveRequestId(request)
   const pathname = new URL(request.url).pathname
@@ -128,24 +133,41 @@ export async function handleRequestWithContext<T extends NextResult>({
       return result
     } catch (err) {
       const durationMs = Math.round(performance.now() - start)
-      const fields = { err, duration_ms: durationMs, db_queries: metrics.dbQueries }
+      const disconnected = isClientDisconnect(err, request)
+      // Start answers a server-function call whose request middleware threw by
+      // serializing the error into the reply, so it never passes the function
+      // middleware that hides technical messages (server-fn-log.ts). Apply the
+      // same rule here. A thrown Response is the framework's answer, not a
+      // failure, and a disconnect has no one left to answer.
+      const { error: shown, reference } =
+        handlerType === 'serverFn' && !disconnected && !(err instanceof Response)
+          ? hideFromClient(err, { production })
+          : { error: err, reference: null }
+      const fields = {
+        err,
+        duration_ms: durationMs,
+        db_queries: metrics.dbQueries,
+        ...(reference ? { error_ref: reference } : {}),
+      }
       // A client that closes the connection mid-request surfaces as the
       // request signal's AbortError. Nothing failed on our side, so it is an
       // access-log line rather than an error. Any other AbortError (our own
       // cancelled work) is a failure like any other.
-      if (isClientDisconnect(err, request)) log.info(fields, 'request aborted by client')
+      if (disconnected) log.info(fields, 'request aborted by client')
       else log.error(fields, 'request failed')
-      // Log once here at the boundary, then rethrow unchanged so the
-      // framework's error handling still runs. The runtime's own print of the
-      // same error is suppressed (see runtime-error-log.ts).
+      // Log once here at the boundary, then rethrow so the framework's error
+      // handling still runs. The runtime's own print of the same error (or of
+      // the sentence standing in for it) is suppressed (runtime-error-log.ts).
       noteLoggedAtBoundary(err)
-      throw err
+      noteLoggedAtBoundary(shown)
+      throw shown
     }
   })
 }
 
-export const requestContextMiddleware = createMiddleware().server(({ next, request }) =>
-  // Wrap next() so its (awaitable) result is a real Promise; T then infers
-  // from the framework's own result type, keeping the return type aligned.
-  handleRequestWithContext({ request, next: () => Promise.resolve(next()) })
+export const requestContextMiddleware = createMiddleware().server(
+  ({ next, request, handlerType }) =>
+    // Wrap next() so its (awaitable) result is a real Promise; T then infers
+    // from the framework's own result type, keeping the return type aligned.
+    handleRequestWithContext({ request, handlerType, next: () => Promise.resolve(next()) })
 )

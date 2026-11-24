@@ -11,6 +11,7 @@ import { getLogContext } from '@/lib/server/log-context'
 import { createLogger } from '@/lib/server/logger'
 import { countingQueryLogger } from '@/lib/server/request-metrics'
 import { finishResponse } from '@/lib/server/finish-response'
+import { UNEXPECTED_ERROR_MESSAGE, errorReferenceOf } from '@/lib/shared/error-reference'
 
 function capture() {
   const lines: string[] = []
@@ -338,5 +339,52 @@ describe('handleRequestWithContext', () => {
 
     const failed = cap.records().find((r) => r.msg === 'request failed')
     expect(failed?.level).toBe('error')
+  })
+
+  describe('a server-function call its request middleware failed', () => {
+    const secret = new Error('password authentication failed for user "tenant_7f3a"')
+    const fail = (
+      opts: Partial<Parameters<typeof handleRequestWithContext>[0]>,
+      error: unknown = secret
+    ) =>
+      handleRequestWithContext({
+        request: new Request('http://localhost/_serverFn/abc', { method: 'POST' }),
+        handlerType: 'serverFn',
+        production: true,
+        next: async () => {
+          throw error
+        },
+        ...opts,
+      }).then(
+        () => undefined,
+        (thrown: unknown) => thrown
+      )
+
+    it('answers a plain sentence in production and logs its reference beside the real error', async () => {
+      const cap = capture()
+      const thrown = (await fail({ log: cap.log })) as Error
+      expect(thrown.message).not.toContain('tenant_7f3a')
+      expect(thrown.message.startsWith(UNEXPECTED_ERROR_MESSAGE)).toBe(true)
+      const failed = cap.records().find((r) => r.msg === 'request failed')
+      expect(failed?.err?.message).toContain('tenant_7f3a')
+      expect(failed?.error_ref).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)
+      expect(failed?.error_ref).toBe(errorReferenceOf(thrown))
+    })
+
+    it('rethrows the real error outside production', async () => {
+      const cap = capture()
+      expect(await fail({ log: cap.log, production: false })).toBe(secret)
+    })
+
+    it('leaves page and API requests to the framework', async () => {
+      const cap = capture()
+      expect(await fail({ log: cap.log, handlerType: 'router' })).toBe(secret)
+    })
+
+    it('passes a thrown response through as the answer', async () => {
+      const cap = capture()
+      const response = new Response('moved', { status: 409 })
+      expect(await fail({ log: cap.log }, response)).toBe(response)
+    })
   })
 })
