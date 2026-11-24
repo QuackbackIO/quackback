@@ -243,6 +243,60 @@ describe('workspace pool cache', () => {
     expect(ended).toEqual([expect.stringContaining('/t1')])
   })
 
+  it('never closes a pool while a sweep or job holds it, even between queries', async () => {
+    const cache = await loadCache()
+    await cache.acquireWorkspacePool(descriptor('t1'))
+
+    // A fleet sweep that waits on an AI provider between plain queries runs no
+    // transaction, so nothing else marks its pool as in use.
+    let finish!: () => void
+    const held = cache.holdWorkspacePool(
+      't1',
+      () => new Promise<void>((resolve) => (finish = resolve))
+    )
+
+    expect(await cache.sweepIdlePools(Date.now() + 60_000)).toBe(0)
+    expect(ended).toHaveLength(0)
+
+    finish()
+    await held
+    // Letting go counts as use, so the window restarts from it.
+    expect(await cache.sweepIdlePools(Date.now())).toBe(0)
+    expect(await cache.sweepIdlePools(Date.now() + 60_000)).toBe(1)
+    expect(ended).toEqual([expect.stringContaining('/t1')])
+  })
+
+  it('lets go of a held pool when the work throws', async () => {
+    const cache = await loadCache()
+    await cache.acquireWorkspacePool(descriptor('t1'))
+    await expect(
+      cache.holdWorkspacePool('t1', async () => {
+        throw new Error('sweep failed')
+      })
+    ).rejects.toThrow('sweep failed')
+    expect(await cache.sweepIdlePools(Date.now() + 60_000)).toBe(1)
+  })
+
+  it('does not pick a held pool as the LRU victim', async () => {
+    vi.stubEnv('WORKSPACE_POOL_MAX_ENTRIES', '2')
+    const cache = await loadCache()
+    await cache.acquireWorkspacePool(descriptor('t1'))
+    await cache.acquireWorkspacePool(descriptor('t2'))
+
+    let finish!: () => void
+    const held = cache.holdWorkspacePool(
+      't1',
+      () => new Promise<void>((resolve) => (finish = resolve))
+    )
+    await cache.acquireWorkspacePool(descriptor('t3'))
+
+    // t1 is the least recently used, but a sweep is running on it: t2 goes.
+    expect(ended).toEqual([expect.stringContaining('/t2')])
+    finish()
+    await held
+    await cache.closeAllWorkspacePools()
+  })
+
   it('evicts the least recently used pool when the cap is exceeded', async () => {
     vi.stubEnv('WORKSPACE_POOL_MAX_ENTRIES', '2')
     const cache = await loadCache()

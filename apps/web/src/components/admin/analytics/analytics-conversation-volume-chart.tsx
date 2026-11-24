@@ -2,10 +2,9 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
   type ChartConfig,
 } from '@/components/ui/chart'
+import { ChartLegend, ChartLegendContent } from '@/components/ui/chart-legend'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { cn } from '@/lib/shared/utils'
 import {
