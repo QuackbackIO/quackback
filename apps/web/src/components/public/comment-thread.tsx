@@ -684,7 +684,7 @@ function CommentItem({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
-                    className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary/15 text-primary cursor-default"
+                    className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary/15 text-primary-ink cursor-default"
                     aria-label={intl.formatMessage(
                       {
                         id: 'portal.commentThread.teamBadgeAria',
@@ -739,7 +739,7 @@ function CommentItem({
               </Badge>
             )}
             {isPinned && (
-              <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+              <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary-ink border-0">
                 <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
                 {intl.formatMessage({
                   id: 'portal.commentThread.pinnedBadge',

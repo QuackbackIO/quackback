@@ -391,7 +391,7 @@ function TitleInput({
         onType(e.target.value)
       }}
       onFocus={onFocus}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary"
+      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary-ink"
       initial={false}
       animate={{
         fontSize: expanded ? '1rem' : '0.875rem',
@@ -1017,7 +1017,7 @@ export function WidgetHomeAnimated({
                     transition={{ duration: 0.2 }}
                     className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"
                   >
-                    <PencilIcon className="w-3.5 h-3.5 text-primary" />
+                    <PencilIcon className="w-3.5 h-3.5 text-primary-ink" />
                   </m.div>
                 )}
               </AnimatePresence>

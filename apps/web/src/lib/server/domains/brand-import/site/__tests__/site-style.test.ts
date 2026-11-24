@@ -29,8 +29,36 @@ describe('pageElements', () => {
         },
       ],
       cards: [{ tag: 'div', classes: ['product-card'], attrs: { class: 'product-card' } }],
+      header: [],
       dark: false,
     })
+  })
+
+  it('finds the header and the first elements inside it, before the main content', () => {
+    const els = pageElements(
+      page(
+        `<div class="topbar">Free shipping</div>
+         <header class="site-header"><div class="wrap"><a class="logo"><img src="l.png"></a><nav></nav><ul></ul></div></header>
+         <main><header class="post-header">Not this one</header></main>`
+      )
+    )
+    // Containers only: the logo link paints itself, not the bar.
+    expect(els.header.map((e) => e.classes[0] ?? e.tag)).toEqual([
+      'site-header',
+      'wrap',
+      'nav',
+      'ul',
+    ])
+  })
+
+  it('takes a bar named by its class when the page has no header element', () => {
+    const els = pageElements(page('<div id="masthead"><div class="inner"></div></div><p>Hi</p>'))
+    expect(els.header.map((e) => e.attrs.id ?? e.classes[0])).toEqual(['masthead', 'inner'])
+  })
+
+  it('never takes a header inside the main content, or one past it', () => {
+    expect(pageElements(page('<main><header>Article</header></main>')).header).toEqual([])
+    expect(pageElements(page('<p>Hi</p><main></main><header>Late</header>')).header).toEqual([])
   })
 
   it('never takes a consent banner button for one of the page', () => {
@@ -161,6 +189,30 @@ describe('readPageStyle', () => {
       readPageStyle(['body{margin:0}'], pageElements(page('')), { themeColour: '#08090a' })
         .background
     ).toBe('transparent')
+  })
+
+  it('reads the header bar fill, on the header or a wrapper inside it, through custom properties', () => {
+    const html = (body: string) => page(body)
+    const style = (body: string, css: string) =>
+      readPageStyle([css], pageElements(html(body))).header
+    expect(style('<header class="hd"></header>', '.hd{background:#052962}')).toBe('#052962')
+    expect(
+      style(
+        '<header><div class="bar"></div></header>',
+        ':root{--brand:#005eb8} header{background:transparent} .bar{background-color:var(--brand)}'
+      )
+    ).toBe('#005eb8')
+    expect(style('<header></header>', 'body{background:#fff}')).toBeNull()
+    // A skip link's fill is the link's, never the bar's.
+    expect(
+      style('<header><a class="skip-link btn">Skip</a></header>', '.btn{background:#0969da}')
+    ).toBeNull()
+    // The markup's own fill wins: a style attribute, or the old bgcolor.
+    expect(style('<header style="background-color: #ff6600"></header>', '')).toBe('#ff6600')
+    expect(style('<header><table><tr><td bgcolor="#ff6600"></td></tr></table></header>', '')).toBe(
+      '#ff6600'
+    )
+    expect(style('<p>No header</p>', 'p{background:#000}')).toBeNull()
   })
 
   it('reads a card radius', () => {

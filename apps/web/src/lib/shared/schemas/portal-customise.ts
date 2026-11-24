@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { variableMap } from '@/lib/shared/theme/generator'
+import { variableMap } from '@/lib/shared/theme/base'
 import { CARD_STYLES } from '@/lib/shared/theme/types'
 import { BUTTON_SHAPES, customCssSchema, customFontSchema } from '@/lib/shared/schemas/settings'
 import { updatePortalConfigSchema } from '@/lib/shared/schemas/portal-config'
