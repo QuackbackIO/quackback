@@ -1,3 +1,5 @@
+import { builtinModules } from 'node:module'
+
 /**
  * Bare package specifiers the client environment must never import.
  *
@@ -22,7 +24,26 @@ export const CLIENT_PROTECTED_SPECIFIERS = [
   'heic-convert',
 ] as const
 
+/**
+ * Node's built-in modules, `node:`-prefixed or bare (`node:url`, `crypto`,
+ * `fs/promises`). Bare names match exactly: `punycode/punycode.js` is the npm
+ * package, not the built-in.
+ *
+ * A browser cannot load them. Vite swaps each one for an empty stub, so the
+ * build passes and the chunk breaks later: the browser refuses any chunk that
+ * still imports one, and every page that lazily loads it fails with "Failed to
+ * fetch dynamically imported module". A server module reachable from the
+ * client (config.ts, through the comment renderer) is enough to carry one in.
+ * Code that runs in both environments uses the web platform's equivalent.
+ */
+export const NODE_BUILTIN_SPECIFIER = new RegExp(
+  `^(?:node:.+|${builtinModules.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
+)
+
 /** True for a protected package or any of its subpaths (`pino/file`, `@quackback/db/x`). */
 export function isClientProtectedSpecifier(spec: string): boolean {
-  return CLIENT_PROTECTED_SPECIFIERS.some((p) => spec === p || spec.startsWith(`${p}/`))
+  return (
+    NODE_BUILTIN_SPECIFIER.test(spec) ||
+    CLIENT_PROTECTED_SPECIFIERS.some((p) => spec === p || spec.startsWith(`${p}/`))
+  )
 }
