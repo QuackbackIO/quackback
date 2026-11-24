@@ -95,14 +95,26 @@ export function isSlaBreachSweepDue(): Promise<boolean> {
 }
 
 export async function runSlaBreachSweep(): Promise<void> {
-  const result = await sweepOverdueSlaBreaches()
+  await runSlaBreachSweepAt(new Date())
+}
+
+/**
+ * One pass with an explicit clock. The queue runs it at the wall clock; the
+ * e2e sweep runner passes a later instant so a test need not wait for a
+ * deadline to fall due.
+ */
+export async function runSlaBreachSweepAt(
+  at: Date
+): Promise<{ recorded: number; ticketRecorded: number }> {
+  const result = await sweepOverdueSlaBreaches(at)
   // The ticket-anchored TTR twin — same per-minute tick, same exactly-once
   // marker discipline on its own stamp.
-  const ticketResult = await sweepOverdueTicketSlaBreaches()
+  const ticketResult = await sweepOverdueTicketSlaBreaches(at)
   if (result.recorded > 0 || ticketResult.recorded > 0) {
     log.debug(
       { recorded: result.recorded, ticketRecorded: ticketResult.recorded },
       'sla-breach-sweep run complete'
     )
   }
+  return { recorded: result.recorded, ticketRecorded: ticketResult.recorded }
 }

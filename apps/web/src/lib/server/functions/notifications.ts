@@ -5,7 +5,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { NotificationId } from '@quackback/ids'
-import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { requireAuth, policyActorFromAuth, teamActorFromAuth } from './auth-helpers'
 import {
   getNotificationsForMember,
   getUnreadCount,
@@ -79,6 +79,8 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
         // can route the requester to the portal thread and agents to the
         // admin inbox. Absent on pre-watchers rows.
         const audience = n.metadata?.audience
+        // A section's custom domain bell names the section (section-domains-notify).
+        const section = n.metadata?.section
         return {
           id: n.id,
           principalId: n.principalId,
@@ -94,6 +96,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
           actorName: typeof actorName === 'string' ? actorName : null,
           actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
           audience: audience === 'admin' || audience === 'portal' ? audience : null,
+          section: typeof section === 'string' ? section : null,
           params: notificationTextParams(n.metadata),
           readAt: n.readAt?.toISOString() ?? null,
           archivedAt: n.archivedAt?.toISOString() ?? null,
@@ -113,7 +116,10 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'get unread count')
   const auth = await requireAuth()
-  const count = await getUnreadCount(auth.principal.id)
+  // The same visibility rule the list uses, so the badge leaves out the bells
+  // it redacts. A teammate who sees private posts needs no segment lookup.
+  const actor = teamActorFromAuth(auth) ?? (await policyActorFromAuth(auth))
+  const count = await getUnreadCount(auth.principal.id, actor)
   return { count }
 })
 

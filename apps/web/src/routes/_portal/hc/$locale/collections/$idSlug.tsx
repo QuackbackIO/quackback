@@ -12,11 +12,12 @@ import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/j
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { Avatar } from '@/components/ui/avatar'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
+import { helpCenterHeadPortal } from '@/components/help-center/help-center-head'
 import {
-  helpCenterAbsoluteUrl,
-  helpCenterHeadPortal,
-} from '@/components/help-center/help-center-head'
-import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+  useBaseUrl,
+  useSectionLinks,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 const MAX_ARTICLES_SHOWN = 8
 const AUTHOR_COLORS = [
@@ -54,11 +55,10 @@ export const Route = createFileRoute('/_portal/hc/$locale/collections/$idSlug')(
   head: ({ loaderData, params, matches }) => {
     if (!loaderData) return {}
     const { category } = loaderData
-    const { workspaceName, baseUrl } = helpCenterHeadPortal(matches)
+    const { workspaceName, helpUrl } = helpCenterHeadPortal(matches)
     const pageTitle = `${category.name} - ${workspaceName}`
     const description = category.description || undefined
-    const canonicalUrl = helpCenterAbsoluteUrl(
-      baseUrl,
+    const canonicalUrl = helpUrl(
       hcCollectionPath({
         locale: params.locale,
         urlId: category.urlId,
@@ -121,7 +121,7 @@ function ArticleRow({
     >
       <DocumentTextIcon className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors mt-0.5" />
       <div className="flex-1 min-w-0">
-        <span className="block text-sm text-foreground group-hover:text-primary transition-colors font-medium">
+        <span className="block text-sm text-foreground group-hover:text-primary-ink transition-colors font-medium">
           {title}
         </span>
         {description && (
@@ -139,7 +139,7 @@ function ArticleRow({
           />
         </span>
       )}
-      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary transition-colors mt-0.5" />
+      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary-ink transition-colors mt-0.5" />
     </Link>
   )
 }
@@ -149,7 +149,9 @@ function CollectionPage() {
   const { locale } = Route.useParams()
   const { category, articles, allCategories, subcategories } = Route.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
-  const baseUrl = useBaseUrl()
+  // Structured data names the help center's own host once it has one.
+  const requestBaseUrl = useBaseUrl()
+  const baseUrl = useSectionLinks()?.origins.help ?? requestBaseUrl
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 

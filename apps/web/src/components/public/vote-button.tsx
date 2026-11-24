@@ -2,8 +2,14 @@ import { useRef } from 'react'
 import { useIntl } from 'react-intl'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
+import { toast } from 'sonner'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
 
 interface VoteButtonProps {
   postId: PostId
@@ -26,6 +32,8 @@ interface VoteButtonProps {
   pill?: boolean
   /** Static display with no interactivity */
   readonly?: boolean
+  /** The board is read-only: the count shows and voting is closed. */
+  closed?: boolean
 }
 
 export function VoteButton({
@@ -38,15 +46,27 @@ export function VoteButton({
   compact = false,
   pill = false,
   readonly = false,
+  closed = false,
 }: VoteButtonProps): React.ReactElement {
   const intl = useIntl()
+  // A blocked person's vote is refused; say why, in their language.
+  const sayIfBlocked = (err: unknown) => {
+    if (!isBlockedRefusal(err)) return
+    toast.error(
+      intl.formatMessage({
+        id: 'portal.blocked',
+        defaultMessage: "You can't post, vote or comment here.",
+      })
+    )
+  }
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
     voteCount: initialVoteCount,
-    enabled: !readonly,
+    enabled: !readonly && !closed,
+    onError: sayIfBlocked,
   })
 
-  const displayCount = readonly ? initialVoteCount : voteCount
+  const displayCount = readonly || closed ? initialVoteCount : voteCount
   const isHandlingRef = useRef(false)
 
   async function handleClick(): Promise<void> {
@@ -71,7 +91,7 @@ export function VoteButton({
     handleVote()
   }
 
-  const isInteractive = !readonly && !disabled && !noAccessReason
+  const isInteractive = !readonly && !closed && !disabled && !noAccessReason
 
   const sharedClassName = cn(
     'relative flex items-center justify-center',
@@ -85,7 +105,7 @@ export function VoteButton({
     isInteractive && 'group transition-colors duration-200 cursor-pointer',
     isInteractive &&
       (hasVoted
-        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
+        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-primary-ink'
         : 'border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80'),
     (readonly || disabled) && 'border-border/50',
     isInteractive && isPending && 'opacity-70 cursor-wait',
@@ -110,12 +130,31 @@ export function VoteButton({
       className={cn(
         'font-semibold tabular-nums',
         compact || pill ? 'text-xs' : 'text-sm',
-        isInteractive && hasVoted ? 'text-post-card-voted' : 'text-foreground'
+        isInteractive && hasVoted ? 'text-primary-ink' : 'text-foreground'
       )}
     >
       {displayCount}
     </span>
   )
+
+  if (closed) {
+    return (
+      <div
+        data-testid="vote-button"
+        aria-label={intl.formatMessage(
+          {
+            id: 'portal.postCard.vote.ariaClosed',
+            defaultMessage: '{count, plural, one {# vote} other {# votes}}, voting closed',
+          },
+          { count: initialVoteCount }
+        )}
+        className={cn(sharedClassName, 'cursor-not-allowed opacity-60')}
+      >
+        {chevron}
+        {count}
+      </div>
+    )
+  }
 
   if (readonly) {
     return (
@@ -153,11 +192,11 @@ export function VoteButton({
             )
       }
       aria-pressed={hasVoted}
-      aria-disabled={noAccessReason ? true : undefined}
+      aria-disabled={disabled || noAccessReason ? true : undefined}
       title={noAccessReason}
       className={sharedClassName}
       onClick={handleClick}
-      disabled={isPending}
+      disabled={isPending || disabled}
     >
       {chevron}
       {count}

@@ -3,7 +3,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 
-const SUMMARIES = { sending: [], signIn: [], helpCenterDomain: null, added: [] }
+const SUMMARIES = { sending: [], signIn: [], sectionDomains: null, added: [] }
 const DETAIL = { name: 'acme.io', added: true, inUse: false }
 const loadDomainSummaries = vi.fn()
 const getDomain = vi.fn()

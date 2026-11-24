@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { baseUrlOverride } from '@/lib/server/base-url-override'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 
 const log = logger.child({ component: 'config' })
@@ -285,6 +286,11 @@ const configSchema = z
      */
     userContentUrl: z.string().optional(),
 
+    // Browser reader sidecar (optional): Import your brand renders sites with it.
+    // Never refuses a start: a bad value only leaves Import on its static reader.
+    browserUrl: z.string().optional(),
+    browserToken: z.string().optional(),
+
     // AI (optional)
     openaiApiKey: z.string().optional(),
     openaiBaseUrl: z.string().optional(),
@@ -309,9 +315,6 @@ const configSchema = z
 
     // Telemetry (optional)
     disableTelemetry: envBoolean,
-
-    // Automatic website branding for new workspaces (optional)
-    disableAutomaticBranding: envBoolean,
 
     // Product analytics for the admin app (optional, off unless a key is set)
     posthogKey: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -472,6 +475,10 @@ function buildConfigFromEnv(): unknown {
     s3Proxy: env('S3_PROXY'),
     userContentUrl: env('USER_CONTENT_URL'),
 
+    // Browser reader
+    browserUrl: env('QUACKBACK_BROWSER_URL'),
+    browserToken: env('QUACKBACK_BROWSER_TOKEN'),
+
     // AI
     openaiApiKey: env('OPENAI_API_KEY'),
     openaiBaseUrl: env('OPENAI_BASE_URL'),
@@ -496,9 +503,6 @@ function buildConfigFromEnv(): unknown {
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
-
-    // Automatic website branding
-    disableAutomaticBranding: env('DISABLE_AUTOMATIC_BRANDING'),
 
     // Product analytics
     posthogKey: env('POSTHOG_KEY'),
@@ -589,7 +593,7 @@ export const config = {
    * `BASE_URL` exactly as before.
    */
   get baseUrl() {
-    return getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
+    return baseUrlOverride() ?? configuredBaseUrl()
   },
   get port() {
     return loadConfig().port
@@ -744,6 +748,15 @@ export const config = {
     return parseUserContentOrigin(cfg.userContentUrl) ?? undefined
   },
 
+  // Browser reader
+  /** The browser reader sidecar's base URL; Import reads statically without it. */
+  get browserUrl() {
+    return loadConfig().browserUrl
+  },
+  get browserToken() {
+    return loadConfig().browserToken
+  },
+
   // AI
   get openaiApiKey() {
     return loadConfig().openaiApiKey
@@ -809,12 +822,6 @@ export const config = {
   // Telemetry
   get disableTelemetry() {
     return loadConfig().disableTelemetry
-  },
-
-  // Automatic website branding: true stops the first-run lookup of the
-  // administrator's company website.
-  get disableAutomaticBranding() {
-    return loadConfig().disableAutomaticBranding
   },
 
   /**
@@ -903,6 +910,16 @@ export const config = {
 export function validateRuntimeConfig(): void {
   if (isBuildTime()) return
   loadConfig()
+}
+
+/**
+ * The workspace's own configured origin, ignoring a per-request override (a
+ * paused custom domain). For anything built once and cached past the request
+ * that built it, such as the auth instance, so an override never outlives the
+ * request that set it.
+ */
+export function configuredBaseUrl(): string {
+  return getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
 }
 
 /**

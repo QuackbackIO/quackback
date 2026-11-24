@@ -61,3 +61,14 @@ export function resolveWorkspaceModeration(
   if (axis === 'anonPosts') return ws === 'all' || ws === 'anonymous' ? 'on' : 'off'
   return ws === 'all' || ws === 'authenticated' ? 'on' : 'off'
 }
+
+/**
+ * How many days after an item was submitted its author still gets an email
+ * about the team's decision on it. Clearing a queue that built up for months
+ * would otherwise email every author at once, spammers included, about things
+ * they have long forgotten. An age rule rather than a release date, so a
+ * self-hosted install that upgrades later skips its own old backlog too. The
+ * in-app notification still goes: it is quiet, and only seen by someone who
+ * comes back.
+ */
+export const MODERATION_DECISION_EMAIL_MAX_AGE_DAYS = 14

@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { EmailChannelPage } from '@/components/admin/settings/email-channel-page'
@@ -23,16 +23,20 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
   },
   loader: async ({ context }) => {
     const { permissions, queryClient } = context
-    assertRoutePermission(permissions, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
+    assertSettingsPageAccess(permissions, '/admin/settings/channels/email')
     const [{ channelSettingsQueries: channels }, { emailChannelConfigQuery }] = await Promise.all([
       import('@/lib/client/queries/channel-settings'),
       import('@/lib/client/queries/channel-accounts'),
     ])
     // Every card's read is warmed with the page so it renders complete from
-    // the document. A miss leaves a card to its own fetch, as before.
+    // the document. A miss leaves a card to its own fetch, as before. The
+    // spam filter cards' read needs settings.manage, which this page does
+    // not, so those cards show only for a viewer with it.
     const ensure = readBatch(queryClient)
     await Promise.all([
-      ensure(settingsQueries.spamFilterConfig()),
+      permissions?.includes(PERMISSIONS.SETTINGS_MANAGE)
+        ? ensure(settingsQueries.spamFilterConfig())
+        : undefined,
       warmQuery(ensure, emailChannelConfigQuery()),
       warmQuery(ensure, channels.emailAutoAck()),
       warmQuery(ensure, channels.emailActivity()),

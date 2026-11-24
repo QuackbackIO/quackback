@@ -21,8 +21,11 @@ vi.mock('@/lib/server/domains/conversation/sync-conversation-mentions', () => ({
 }))
 
 const isAnyAgentOnlineSpy = vi.fn().mockResolvedValue(false)
+const onlineAgentIds = vi.fn().mockResolvedValue([])
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: () => isAnyAgentOnlineSpy(),
+  listOnlineAgentIds: () => onlineAgentIds(),
+  readAvailableAgentIds: () => onlineAgentIds(),
 }))
 
 import { notificationHook } from '../handlers/notification'
@@ -35,6 +38,7 @@ beforeEach(() => {
   markNotifiedSpy.mockClear()
   isAnyAgentOnlineSpy.mockClear()
   isAnyAgentOnlineSpy.mockResolvedValue(false)
+  onlineAgentIds.mockReset().mockResolvedValue([])
 })
 
 describe('notificationHook — post.mentioned', () => {
@@ -100,6 +104,41 @@ describe('notificationHook — post.mentioned', () => {
       expect.objectContaining({
         title: 'Bea mentioned you in a post',
         metadata: expect.objectContaining({ actorName: 'Bea' }),
+      }),
+    ])
+  })
+
+  it('a comment mention is a comment_mentioned notice anchored to the comment', async () => {
+    const event = {
+      id: 'evt-comment-mention',
+      type: 'comment.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_mentioner' },
+      data: {
+        postId: 'post_123',
+        postTitle: 'My post',
+        postUrl: 'https://example.com/posts/post_123',
+        commentId: 'comment_9',
+        isPrivate: false,
+        mentionedPrincipalId: 'principal_target',
+        mentioningPrincipalId: 'principal_mentioner',
+        excerpt: 'Over to you',
+      },
+    } as EventData
+
+    await notificationHook.run(
+      event,
+      { principalIds: ['principal_target' as never] },
+      { mentionerName: 'Bea' }
+    )
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_target',
+        type: 'comment_mentioned',
+        title: 'Bea mentioned you in a comment',
+        body: 'My post',
+        postId: 'post_123',
+        commentId: 'comment_9',
       }),
     ])
   })
@@ -545,6 +584,29 @@ describe('notificationHook — ticket.replied (watchers)', () => {
     ])
   })
 
+  it("names the author on the requester's row as their thread does, and the event's name for the team", async () => {
+    const target: NotificationTarget = {
+      principalIds: ['principal_requester' as never, 'principal_agent_1' as never],
+    }
+    await notificationHook.run(makeEvent(), target, {
+      ...config,
+      authorName: 'ops-bot',
+      requesterAuthorName: 'Acme Support',
+    })
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_requester',
+        title: 'Acme Support replied on Cannot log in',
+        metadata: expect.objectContaining({ actorName: 'Acme Support', audience: 'portal' }),
+      }),
+      expect.objectContaining({
+        principalId: 'principal_agent_1',
+        title: 'ops-bot replied on Cannot log in',
+        metadata: expect.objectContaining({ actorName: 'ops-bot', audience: 'admin' }),
+      }),
+    ])
+  })
+
   it('drops a principal whose matrix turns ticket_replied inApp off (per-type preference)', async () => {
     prefsSpy.mockResolvedValueOnce(
       new Map([
@@ -558,6 +620,83 @@ describe('notificationHook — ticket.replied (watchers)', () => {
     const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
     expect(batch).toHaveLength(1)
     expect(batch[0]).toMatchObject({ principalId: 'principal_requester' })
+  })
+})
+
+describe('notificationHook — ticket.replied from the customer (presence gate)', () => {
+  // A customer message on a ticket's conversation, as a live chat sends many.
+  function customerReply(): EventData {
+    return {
+      id: 'evt-ticket-replied-2',
+      type: 'ticket.replied',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_requester' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        messageId: 'conversation_message_2',
+        content: 'Still broken for me',
+        attachments: null,
+        senderType: 'visitor',
+        title: 'Cannot log in',
+        authorName: 'Riley',
+        requesterPrincipalId: 'principal_requester',
+      },
+    } as EventData
+  }
+  const config = {
+    ticketId: 'ticket_1',
+    title: 'Cannot log in',
+    authorName: 'Riley',
+    preview: 'Still broken for me',
+    requesterPrincipalId: 'principal_requester',
+  }
+  const watchers: NotificationTarget = {
+    principalIds: ['principal_agent_1' as never, 'principal_agent_2' as never],
+  }
+
+  it('holds the bell back while a watching teammate is online', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_agent_2'])
+    const result = await notificationHook.run(customerReply(), watchers, config)
+    expect(result.success).toBe(true)
+    expect(batchSpy).not.toHaveBeenCalled()
+  })
+
+  it('holds the bell back while presence cannot be read', async () => {
+    onlineAgentIds.mockResolvedValue(null)
+    await notificationHook.run(customerReply(), watchers, config)
+    expect(batchSpy).not.toHaveBeenCalled()
+  })
+
+  it('bells the watchers when the only teammate online is not watching', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_someone_else'])
+    await notificationHook.run(customerReply(), watchers, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch.map((n) => n.principalId)).toEqual(['principal_agent_1', 'principal_agent_2'])
+  })
+
+  it('never holds back a teammate reply, which is the customer’s own news', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_agent_2'])
+    const agentReply = customerReply()
+    ;(agentReply.data as unknown as Record<string, unknown>).senderType = 'agent'
+    agentReply.actor = { type: 'user', principalId: 'principal_agent_1' } as EventData['actor']
+    await notificationHook.run(
+      agentReply,
+      { principalIds: ['principal_requester' as never, 'principal_agent_2' as never] },
+      config
+    )
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch.map((n) => n.principalId)).toEqual(['principal_requester', 'principal_agent_2'])
+  })
+
+  it('keeps the requester’s own row when a teammate is online (only teammates are held back)', async () => {
+    onlineAgentIds.mockResolvedValue(['principal_agent_1'])
+    await notificationHook.run(
+      customerReply(),
+      { principalIds: ['principal_requester' as never, 'principal_agent_1' as never] },
+      config
+    )
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch.map((n) => n.principalId)).toEqual(['principal_requester'])
   })
 })
 
@@ -922,8 +1061,9 @@ describe('notificationHook — message.created', () => {
     ])
   })
 
-  it('gates out (success:true, no batch) a non-first message while an agent is online', async () => {
+  it('gates out (success:true, no batch) a non-first message while a recipient is online', async () => {
     isAnyAgentOnlineSpy.mockResolvedValue(true)
+    onlineAgentIds.mockResolvedValue(['principal_member'])
 
     const result = await notificationHook.run(makeEvent(false), target, {
       ...config,
@@ -931,6 +1071,29 @@ describe('notificationHook — message.created', () => {
     })
     expect(result).toEqual({ success: true })
     expect(result.shouldRetry).toBeUndefined()
+    expect(batchSpy).not.toHaveBeenCalled()
+  })
+
+  it('bells the team for a non-first message when the only agent online is not a recipient', async () => {
+    isAnyAgentOnlineSpy.mockResolvedValue(true)
+    onlineAgentIds.mockResolvedValue(['principal_elsewhere'])
+
+    const result = await notificationHook.run(makeEvent(false), target, {
+      ...config,
+      isFirstMessage: false,
+    })
+    expect(result.success).toBe(true)
+    expect(batchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('gates out a non-first message when presence cannot be read', async () => {
+    onlineAgentIds.mockResolvedValue(null)
+
+    const result = await notificationHook.run(makeEvent(false), target, {
+      ...config,
+      isFirstMessage: false,
+    })
+    expect(result).toEqual({ success: true })
     expect(batchSpy).not.toHaveBeenCalled()
   })
 

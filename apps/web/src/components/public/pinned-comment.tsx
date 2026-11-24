@@ -19,14 +19,14 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
           className="h-10 w-10 ring-2 ring-background shadow-md"
           src={comment.avatarUrl}
           name={comment.authorName}
-          fallbackClassName="text-sm bg-primary/20 text-primary font-semibold"
+          fallbackClassName="text-sm bg-primary/20 text-primary-ink font-semibold"
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-sm font-semibold text-foreground">
               {comment.authorName || workspaceName}
             </span>
-            <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+            <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary-ink border-0">
               <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
               <FormattedMessage id="portal.pinnedComment.pinnedBadge" defaultMessage="Pinned" />
             </Badge>
@@ -36,7 +36,7 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
           <CommentContent
             content={comment.content}
             contentJson={comment.contentJson ?? null}
-            className="text-sm text-foreground/90 leading-relaxed"
+            className="text-sm text-foreground leading-relaxed"
           />
         </div>
       </div>

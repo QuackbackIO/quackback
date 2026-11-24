@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
+import { SETTINGS_PAGE_ACCESS } from '@/lib/shared/settings-page-access'
 import { buildNavSections, isNavModule, navSectionsFor } from '../settings-nav-sections'
 
 const FLAGS = { supportInbox: true, supportTickets: true }
@@ -20,8 +21,8 @@ describe('settings nav Domains row', () => {
       {
         label: 'Domains',
         to: '/admin/settings/domains',
-        anyOf: DOMAINS_PAGE_PERMISSIONS,
-        overview: { owner: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN },
+        gate: SETTINGS_PAGE_ACCESS['/admin/settings/domains'],
+        overview: { owner: PERMISSIONS.SETTINGS_MANAGE },
       },
     ])
     const labels = workspace.items.map((item) => item.label)
@@ -37,6 +38,23 @@ describe('settings nav Domains row', () => {
     for (const permission of DOMAINS_PAGE_PERMISSIONS) {
       expect(workspaceLabels([permission]), permission).toContain('Domains')
     }
+  })
+
+  it('keeps custom domains on Portal, which opens to a holder of settings.custom_domain alone', () => {
+    const workspace = buildNavSections(FLAGS).find((s) => s.label === 'Workspace')!
+    expect(workspace.items.find((item) => item.label === 'Portal')).toEqual({
+      label: 'Portal',
+      to: '/admin/settings/portal',
+      gate: [[PERMISSIONS.SETTINGS_BRANDING], [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]],
+    })
+    expect(workspaceLabels([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toContain('Portal')
+    expect(workspaceLabels([PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.SETTINGS_MANAGE])).toContain(
+      'Portal'
+    )
+    // Its Design tab reads what it shows of the portal config with settings.branding alone.
+    expect(workspaceLabels([PERMISSIONS.SETTINGS_BRANDING])).toContain('Portal')
+    expect(workspaceLabels([PERMISSIONS.SETTINGS_MANAGE])).not.toContain('Portal')
+    expect(workspace.items.map((item) => item.label)).not.toContain('Custom domains')
   })
 
   it('is hidden from a viewer who holds none of them', () => {

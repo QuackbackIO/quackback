@@ -10,6 +10,7 @@ vi.mock('@quackback/email', () => ({
   sendNoteMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendStatusIncidentPublishedEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendStatusMaintenanceScheduledEmail: vi.fn().mockResolvedValue({ sent: true }),
+  sendModerationDecisionEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
 /**
@@ -33,6 +34,13 @@ const { emailBudgetAvailable } = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   emailBudgetAvailable: () => emailBudgetAvailable(),
+}))
+
+const { recordSkippedBroadcast } = vi.hoisted(() => ({
+  recordSkippedBroadcast: vi.fn(async (_eventId: string): Promise<boolean | null> => null),
+}))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.broadcasts', () => ({
+  recordSkippedBroadcast: (eventId: string) => recordSkippedBroadcast(eventId),
 }))
 
 /**
@@ -72,6 +80,7 @@ import {
   sendNoteMentionEmail,
   sendStatusIncidentPublishedEmail,
   sendStatusMaintenanceScheduledEmail,
+  sendModerationDecisionEmail,
 } from '@quackback/email'
 import type {
   EmailTarget,
@@ -181,6 +190,8 @@ describe('emailHook', () => {
         postUrl: 'https://example.com/post/1',
         previousStatus: 'open',
         newStatus: 'in_progress',
+        // No isPostAuthor on the config (a job queued before it existed): a follower.
+        isPostAuthor: false,
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
@@ -208,6 +219,7 @@ describe('emailHook', () => {
         commenterName: 'Commenter',
         commentPreview: 'Hello',
         isTeamMember: true,
+        isPostAuthor: false,
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
@@ -263,6 +275,57 @@ describe('emailHook', () => {
       })
 
       expect(result).toEqual({ success: true })
+      expect(mockChangelogPublishedEmail).not.toHaveBeenCalled()
+    })
+
+    it('records a skipped broadcast and warns once per broadcast, not per recipient', async () => {
+      emailLog.warn.mockClear()
+      recordSkippedBroadcast.mockReset()
+      recordSkippedBroadcast.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+      emailBudgetAvailable.mockResolvedValue(false)
+      const event = {
+        id: 'evt-broadcast-1',
+        type: 'changelog.published',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'user', displayName: 'Test User' },
+      } as EventData
+      const config = { workspaceName: 'TestWorkspace', changelogTitle: 'May', changelogUrl: 'u' }
+
+      await emailHook.run(event, baseTarget, config)
+      await emailHook.run(event, baseTarget, config)
+
+      expect(recordSkippedBroadcast).toHaveBeenCalledTimes(2)
+      expect(recordSkippedBroadcast).toHaveBeenCalledWith('evt-broadcast-1')
+      const warned = emailLog.warn.mock.calls.filter(
+        ([fields]) => (fields as { broadcast_skipped?: boolean }).broadcast_skipped === true
+      )
+      expect(warned).toHaveLength(1)
+      expect(warned[0][0]).toMatchObject({
+        event_type: 'changelog.published',
+        event_id: 'evt-broadcast-1',
+      })
+    })
+
+    it('warns on every delivery when the skipped broadcast cannot be recorded', async () => {
+      emailLog.warn.mockClear()
+      recordSkippedBroadcast.mockReset()
+      recordSkippedBroadcast.mockResolvedValue(null)
+      emailBudgetAvailable.mockResolvedValue(false)
+      const event = {
+        id: 'evt-broadcast-2',
+        type: 'changelog.published',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'user', displayName: 'Test User' },
+      } as EventData
+      const config = { workspaceName: 'TestWorkspace', changelogTitle: 'May', changelogUrl: 'u' }
+
+      await emailHook.run(event, baseTarget, config)
+      await emailHook.run(event, baseTarget, config)
+
+      const warned = emailLog.warn.mock.calls.filter(
+        ([fields]) => (fields as { broadcast_skipped?: boolean }).broadcast_skipped === true
+      )
+      expect(warned).toHaveLength(2)
       expect(mockChangelogPublishedEmail).not.toHaveBeenCalled()
     })
 
@@ -482,6 +545,35 @@ describe('emailHook — post.mentioned', () => {
       // `workspaceName` (platform-display-name.test.ts).
       fromDisplayName: undefined,
     })
+  })
+
+  it('a comment mention links to the comment the target resolved', async () => {
+    mockPostMentionEmail.mockClear()
+    mockPostMentionEmail.mockResolvedValue({ sent: true })
+
+    const event = {
+      id: 'evt-comment-mention',
+      type: 'comment.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: { ...mentionData, commentId: 'comment_9', isPrivate: false },
+    } as unknown as EventData
+
+    const result = await emailHook.run(event, baseTarget, {
+      ...baseConfig,
+      postUrl: 'https://example.com/p/123#comment-comment_9',
+      mentionerName: 'Bea',
+    })
+
+    expect(result).toEqual({ success: true })
+    expect(mockPostMentionEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mentionerName: 'Bea',
+        postTitle: 'Why we should add dark mode',
+        excerpt: 'Hey @alice, what do you think?',
+        postUrl: 'https://example.com/p/123#comment-comment_9',
+      })
+    )
   })
 
   it('names the mentioner the target resolved, as the relayed event carries no name', async () => {
@@ -776,6 +868,8 @@ describe('emailHook: feedback, changelog and status senders', () => {
     'changelog.published': vi.mocked(sendChangelogPublishedEmail),
     'status.incident_created': vi.mocked(sendStatusIncidentPublishedEmail),
     'status.maintenance_scheduled': vi.mocked(sendStatusMaintenanceScheduledEmail),
+    'post.approved': vi.mocked(sendModerationDecisionEmail),
+    'comment.rejected': vi.mocked(sendModerationDecisionEmail),
   } as const
   const event = (type: string) =>
     ({
@@ -849,4 +943,42 @@ describe('emailHook: feedback, changelog and status senders', () => {
       )
     }
   )
+})
+
+describe('emailHook: the team decision on a held item', () => {
+  const mock = vi.mocked(sendModerationDecisionEmail)
+  const event = (type: string) =>
+    ({
+      id: 'evt-moderation',
+      type,
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_mod' },
+      data: {},
+    }) as unknown as EventData
+
+  beforeEach(() => {
+    mock.mockReset().mockResolvedValue({ sent: true })
+    permittedSendingIdentity.mockReset().mockImplementation(async (from) => from)
+  })
+
+  it('sends what was decided on which item, with the unsubscribe link', async () => {
+    const result = await emailHook.run(event('post.rejected'), baseTarget, {
+      workspaceName: 'Acme',
+      item: 'post',
+      decision: 'rejected',
+      postTitle: 'Dark mode',
+      preferencesUrl: 'https://p/settings/preferences',
+    })
+    expect(result).toEqual({ success: true })
+    expect(mock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'user@example.com',
+        item: 'post',
+        decision: 'rejected',
+        postTitle: 'Dark mode',
+        postUrl: undefined,
+        unsubscribeUrl: 'https://example.com/unsubscribe',
+      })
+    )
+  })
 })

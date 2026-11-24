@@ -78,6 +78,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
           }),
         },
         postComments: { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+        principal: { findFirst: vi.fn().mockResolvedValue(undefined) },
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
@@ -553,5 +554,69 @@ describe('createComment — a post merged into another', () => {
       { skipDispatch: true }
     )
     expect(insertedComments).toHaveLength(1)
+  })
+})
+
+describe('createComment — a post the caller cannot see answers like a missing one', () => {
+  beforeEach(() => {
+    insertedComments.length = 0
+    vi.clearAllMocks()
+  })
+
+  async function mockPost(overrides: {
+    moderationState?: string
+    view?: string
+    locked?: boolean
+  }) {
+    const { db } = await import('@/lib/server/db')
+    vi.mocked(db.query.posts.findFirst).mockResolvedValueOnce({
+      id: 'post_p',
+      title: 'P',
+      boardId: 'board_b',
+      statusId: 'post_status_open',
+      isCommentsLocked: overrides.locked ?? false,
+      moderationState: overrides.moderationState ?? 'published',
+      principalId: 'principal_someone_else',
+      board: {
+        id: 'board_b',
+        slug: 'b',
+        deletedAt: null,
+        access: {
+          view: overrides.view ?? 'anonymous',
+          vote: 'anonymous',
+          comment: 'anonymous',
+          submit: 'anonymous',
+          segments: { view: [], vote: [], comment: [], submit: [] },
+          moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+        },
+      },
+    } as unknown as Awaited<ReturnType<typeof db.query.posts.findFirst>>)
+  }
+
+  async function commentAsCustomer() {
+    const { createComment } = await import('../comment.service')
+    return createComment(
+      { postId: 'post_p' as unknown as PostId, content: 'Hi' },
+      { principalId: 'principal_uv' as unknown as PrincipalId, role: 'user' },
+      portalActor,
+      { skipDispatch: true }
+    )
+  }
+
+  it("answers POST_NOT_FOUND for someone else's held post", async () => {
+    await mockPost({ moderationState: 'pending' })
+    await expect(commentAsCustomer()).rejects.toMatchObject({ code: 'POST_NOT_FOUND' })
+    expect(insertedComments).toHaveLength(0)
+  })
+
+  it('answers POST_NOT_FOUND for a post on a team-only board', async () => {
+    await mockPost({ view: 'team' })
+    await expect(commentAsCustomer()).rejects.toMatchObject({ code: 'POST_NOT_FOUND' })
+    expect(insertedComments).toHaveLength(0)
+  })
+
+  it('still answers FORBIDDEN when the post is visible but locked', async () => {
+    await mockPost({ locked: true })
+    await expect(commentAsCustomer()).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
 })

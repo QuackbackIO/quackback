@@ -6,10 +6,9 @@
  * Status changes + assignment need an id-discovery tool first; a later slice.
  */
 
-import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { TicketId, TicketTypeId, PrincipalId, CompanyId } from '@quackback/ids'
 import type {
   TicketType,
@@ -19,6 +18,7 @@ import type {
 } from '@/lib/server/db'
 import type { TicketSort } from '@/lib/server/domains/tickets/ticket.types'
 import type { McpAuthContext } from '../types'
+import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
 import { getBaseUrl } from '@/lib/server/config'
 import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -64,17 +64,6 @@ function withAttachmentsSummary(content: string, attachments: ConversationAttach
   return `${content}\n\nAttachments:\n${lines.join('\n')}`
 }
 
-/** A link change touches both tickets, so the caller must be able to see each one. */
-async function assertBothEndsVisible(
-  trackerTicketId: TicketId,
-  ticketId: TicketId,
-  actor: Actor
-): Promise<void> {
-  const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
-  await assertTicketVisible(trackerTicketId, actor)
-  await assertTicketVisible(ticketId, actor)
-}
-
 export function registerTicketTools(server: McpServer, auth: McpAuthContext) {
   registerTool<{
     type?: TicketType
@@ -87,6 +76,7 @@ export function registerTicketTools(server: McpServer, auth: McpAuthContext) {
     limit?: number
   }>(server, auth, {
     name: 'list_tickets',
+    title: 'List tickets',
     permissions: [PERMISSIONS.TICKET_VIEW],
     description: `List support tickets. Filter by type, registry ticket-type, internal status category, customer-facing stage, requester, or company; sort and cap with limit. A service key sees every ticket; a human caller sees the tickets their role can view.
 
@@ -164,8 +154,9 @@ Examples:
     cursor?: string
   }>(server, auth, {
     name: 'get_ticket',
+    title: 'Get ticket',
     permissions: [PERMISSIONS.TICKET_VIEW],
-    description: `Get a ticket and its most recent thread messages, oldest-first. For a conversation-linked customer ticket the thread is the pair's shared thread (the conversation's messages plus the ticket's own legacy/internal rows). Set includeInternal to also return internal teammate notes.
+    description: `Get a ticket and its most recent thread messages, oldest-first. For a conversation-linked customer ticket the thread is the pair's shared thread (the conversation's messages plus the ticket's own legacy/internal rows). Set includeInternal to also return internal teammate notes and assignment notices, which customers never see.
 
 Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     schema: {
@@ -174,7 +165,7 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
         .boolean()
         .optional()
         .default(false)
-        .describe('Include internal teammate notes'),
+        .describe('Include internal teammate notes and assignment notices'),
       cursor: z
         .string()
         .optional()
@@ -184,17 +175,18 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     scope: 'read:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { assertTicketVisible, getTicket } =
-        await import('@/lib/server/domains/tickets/ticket.service')
+      const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+      const { ticketRowToDTO } = await import('@/lib/server/domains/tickets/ticket.dto')
       const { listTicketMessages } =
         await import('@/lib/server/domains/tickets/ticket-message.service')
       const ticketId = args.ticketId as TicketId
       // The same visibility list_tickets applies: a teammate scoped to their
       // own and their teams' tickets gets NotFound for anyone else's, never
-      // its thread or internal notes.
-      await assertTicketVisible(ticketId, mcpAgentActor(auth))
+      // its thread or internal notes. Checked once; the DTO and the thread
+      // then load together.
+      const row = await assertTicketVisible(ticketId, mcpAgentActor(auth))
       const [dto, page] = await Promise.all([
-        getTicket(ticketId),
+        ticketRowToDTO(row),
         listTicketMessages(ticketId, {
           before: args.cursor,
           includeInternal: args.includeInternal ?? false,
@@ -255,6 +247,7 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     companyId?: string
   }>(server, auth, {
     name: 'create_ticket',
+    title: 'Create ticket',
     permissions: [PERMISSIONS.TICKET_CREATE],
     description: `Open a support ticket. type is customer (a requester's request), back_office (an internal task), or tracker (an umbrella others link to). Pass ticketTypeId to file under a workspace-defined registry type instead — its category then determines type (discover ids via list_tickets' ticketType field). A description opens the thread. Returns the created ticket.
 
@@ -271,7 +264,7 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
       title: z.string().min(1).max(300).describe('Short summary'),
       description: z
         .string()
-        .max(10000)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
         .optional()
         .describe(`Opening message body (optional). ${TICKET_MARKDOWN_DESCRIBE}`),
       priority: z.enum(TICKET_PRIORITIES).optional().describe('Triage priority (default none)'),
@@ -325,6 +318,7 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
 
   registerTool<{ ticketId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'reply_to_ticket',
+    title: 'Reply to ticket',
     permissions: [PERMISSIONS.TICKET_REPLY],
     description: `Post a reply on a ticket thread (visible to the requester). On a conversation-linked customer ticket the reply lands on the pair's shared thread — the linked conversation — whose first-response machinery owns response timing; on an unlinked ticket the first reply stamps the ticket's first-response time.
 
@@ -336,7 +330,7 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
       content: z
         .string()
         .min(1)
-        .max(10000)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
         .describe(`Reply text, visible to the requester. ${TICKET_MARKDOWN_DESCRIBE}`),
       fileIds: z
         .array(z.string())
@@ -350,9 +344,8 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
     handler: async (args) => {
       const { sendTicketMessage } =
         await import('@/lib/server/domains/tickets/ticket-message.service')
-      const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+      // The service answers NotFound for a ticket outside the caller's scope.
       const actor = mcpAgentActor(auth)
-      await assertTicketVisible(args.ticketId as TicketId, actor)
       const { message } = await sendTicketMessage(actor, {
         ticketId: args.ticketId as TicketId,
         content: args.content,
@@ -369,6 +362,7 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
 
   registerTool<{ ticketId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'add_ticket_note',
+    title: 'Add internal ticket note',
     permissions: [PERMISSIONS.TICKET_NOTE],
     description: `Add an internal note to a ticket thread. Never visible to the requester — only the support team sees it.
 
@@ -380,7 +374,7 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
       content: z
         .string()
         .min(1)
-        .max(10000)
+        .max(MAX_CONVERSATION_MESSAGE_LENGTH)
         .describe(`Internal note text (team-only). ${TICKET_MARKDOWN_DESCRIBE}`),
       fileIds: z
         .array(z.string())
@@ -393,9 +387,8 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
     teamOnly: true,
     handler: async (args) => {
       const { addTicketNote } = await import('@/lib/server/domains/tickets/ticket-message.service')
-      const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+      // The service answers NotFound for a ticket outside the caller's scope.
       const actor = mcpAgentActor(auth)
-      await assertTicketVisible(args.ticketId as TicketId, actor)
       const { message } = await addTicketNote(actor, {
         ticketId: args.ticketId as TicketId,
         content: args.content,
@@ -412,6 +405,7 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
 
   registerTool<{ trackerTicketId: string; ticketId: string }>(server, auth, {
     name: 'link_ticket',
+    title: 'Link ticket to tracker',
     permissions: [PERMISSIONS.TICKET_ASSIGN],
     description: `Link a customer ticket to a tracker so the tracker's stage changes cascade onto it. The tracker must be type "tracker" and the ticket type "customer"; a customer ticket belongs to at most one tracker. Returns the tracker's linked tickets.
 
@@ -428,7 +422,6 @@ Example: link_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "ticket
         await import('@/lib/server/domains/tickets/ticket-links.service')
       const trackerTicketId = args.trackerTicketId as TicketId
       const actor = mcpAgentActor(auth)
-      await assertBothEndsVisible(trackerTicketId, args.ticketId as TicketId, actor)
       await linkTicketToTracker(trackerTicketId, args.ticketId as TicketId, actor)
       return jsonResult({
         trackerTicketId,
@@ -439,6 +432,7 @@ Example: link_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "ticket
 
   registerTool<{ trackerTicketId: string; ticketId: string }>(server, auth, {
     name: 'unlink_ticket',
+    title: 'Unlink ticket from tracker',
     permissions: [PERMISSIONS.TICKET_ASSIGN],
     description: `Remove a customer ticket from a tracker. Returns the tracker's remaining linked tickets.
 
@@ -455,7 +449,6 @@ Example: unlink_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "tick
         await import('@/lib/server/domains/tickets/ticket-links.service')
       const trackerTicketId = args.trackerTicketId as TicketId
       const actor = mcpAgentActor(auth)
-      await assertBothEndsVisible(trackerTicketId, args.ticketId as TicketId, actor)
       await unlinkTicketFromTracker(trackerTicketId, args.ticketId as TicketId, actor)
       return jsonResult({
         trackerTicketId,

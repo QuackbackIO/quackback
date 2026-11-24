@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockAuth = vi.fn()
 const mockListTickets = vi.fn()
-const mockGetTicket = vi.fn()
+const mockGetTicketForActor = vi.fn()
 const mockAssertVisible = vi.fn()
 const mockListMessages = vi.fn()
 
@@ -14,7 +14,7 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: (...a: unknown[]) => mockListTickets(...a),
-  getTicket: (...a: unknown[]) => mockGetTicket(...a),
+  getTicketForActor: (...a: unknown[]) => mockGetTicketForActor(...a),
   assertTicketVisible: (...a: unknown[]) => mockAssertVisible(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
@@ -115,8 +115,7 @@ describe('GET /api/v1/tickets', () => {
 
 describe('GET /api/v1/tickets/:id', () => {
   it('returns the serialized ticket', async () => {
-    mockAssertVisible.mockResolvedValue({ id: TICKET_ID })
-    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockGetTicketForActor.mockResolvedValue(ticketDTO)
     const res = await getHandler(DetailRoute)({
       request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
       params: { ticketId: TICKET_ID },
@@ -124,6 +123,28 @@ describe('GET /api/v1/tickets/:id', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toMatchObject({ id: TICKET_ID, reference: '#42' })
+  })
+
+  it("carries the ticket's SLA, or null when none applies", async () => {
+    const sla = {
+      policyName: 'Standard',
+      timeToResolveDueAt: '2026-07-05T00:00:00.000Z',
+      resolvedAt: null,
+      paused: false,
+    }
+    mockGetTicketForActor.mockResolvedValueOnce({ ...ticketDTO, sla })
+    const withSla = await getHandler(DetailRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
+      params: { ticketId: TICKET_ID },
+    })
+    expect((await withSla.json()).data.sla).toEqual(sla)
+
+    mockGetTicketForActor.mockResolvedValueOnce({ ...ticketDTO, sla: null })
+    const withoutSla = await getHandler(DetailRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
+      params: { ticketId: TICKET_ID },
+    })
+    expect((await withoutSla.json()).data).toHaveProperty('sla', null)
   })
 
   it("checks the ticket against the key's own scope, and 404s one its creator cannot see", async () => {
@@ -134,17 +155,32 @@ describe('GET /api/v1/tickets/:id', () => {
       scopePrincipalId: 'principal_creator',
     })
     const { NotFoundError } = await import('@/lib/shared/errors')
-    mockAssertVisible.mockRejectedValue(new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found'))
+    mockGetTicketForActor.mockRejectedValue(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
     const res = await getHandler(DetailRoute)({
       request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
       params: { ticketId: TICKET_ID },
     })
     expect(res.status).toBe(404)
-    expect(mockAssertVisible).toHaveBeenCalledWith(
+    expect((await res.json()).error).toEqual({ code: 'NOT_FOUND', message: 'Ticket not found' })
+    expect(mockGetTicketForActor).toHaveBeenCalledWith(
       TICKET_ID,
       expect.objectContaining({ principalType: 'service', scopePrincipalId: 'principal_creator' })
     )
-    expect(mockGetTicket).not.toHaveBeenCalled()
+  })
+
+  it('says the ticket was not found once, whatever id the domain names', async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockGetTicketForActor.mockRejectedValue(
+      new NotFoundError('TICKET_NOT_FOUND', `Ticket ${TICKET_ID} not found`)
+    )
+    const res = await getHandler(DetailRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(404)
+    expect((await res.json()).error.message).toBe('Ticket not found')
   })
 
   it('rejects a malformed ticket id before hitting the domain', async () => {
@@ -153,7 +189,7 @@ describe('GET /api/v1/tickets/:id', () => {
       params: { ticketId: 'not-a-typeid' },
     })
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(mockGetTicket).not.toHaveBeenCalled()
+    expect(mockGetTicketForActor).not.toHaveBeenCalled()
   })
 })
 

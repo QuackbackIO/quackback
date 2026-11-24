@@ -334,6 +334,30 @@ export async function sweepOverdueSlaBreaches(
 // practice.
 // ---------------------------------------------------------------------------
 
+/** How far back the breach trigger looks. The sla.breached event (and its
+ *  email and webhook) fires on every workspace, listening workflow or not, so
+ *  a clock that breached long before the sweep first looked at it (history
+ *  from before the event always fired, or a worker that was down for days) is
+ *  left alone rather than replayed as a burst of stale alerts. The bound also
+ *  keeps every tick's candidate set to recent breaches. */
+export const SLA_BREACH_TRIGGER_LOOKBACK_MS = 24 * 60 * 60_000
+
+/** The oldest due date the breach trigger still fires for at `at`: the
+ *  lookback, or `notBefore` when that is later (see
+ *  slaBreachEventsSince in workflow-sweep.ts). */
+export function breachTriggerFloor(at: Date, notBefore?: Date): Date {
+  const lookback = at.getTime() - SLA_BREACH_TRIGGER_LOOKBACK_MS
+  return new Date(notBefore ? Math.max(lookback, notBefore.getTime()) : lookback)
+}
+
+/** Whether a clock due at `dueAt` has breached by `at`, recently enough for
+ *  the breach trigger to fire (see SLA_BREACH_TRIGGER_LOOKBACK_MS), and not
+ *  before `notBefore`. */
+export function isRecentBreach(dueAt: string, at: Date, notBefore?: Date): boolean {
+  const dueMs = new Date(dueAt).getTime()
+  return at.getTime() > dueMs && dueMs >= breachTriggerFloor(at, notBefore).getTime()
+}
+
 /** One (conversation, clock) pair a timer-trigger scan found eligible and
  *  which workflow-sweep.ts turns into a dispatchSlaApproachingBreach /
  *  dispatchSlaBreached call. The candidate is scanned WITHOUT its fire-once
@@ -448,30 +472,36 @@ export async function sweepApproachingSlaBreaches(
  * above: different marker field, so whichever of the per-minute reporting
  * sweep or this 5-minute trigger sweep runs first never blocks the other. No
  * lead time: this fires the instant `now >= due`, same as
- * sweepOverdueSlaBreaches's own breach detection. Returns the candidates for
- * the caller (workflow-sweep.ts) to dispatch.
+ * sweepOverdueSlaBreaches's own breach detection, for clocks that breached
+ * within SLA_BREACH_TRIGGER_LOOKBACK_MS. Returns the candidates for the caller
+ * (workflow-sweep.ts) to dispatch.
  */
 export async function sweepSlaBreachTriggers(
-  at: Date = new Date()
+  at: Date = new Date(),
+  notBefore?: Date
 ): Promise<SlaTimerTriggerCandidate[]> {
   const candidates: SlaTimerTriggerCandidate[] = []
+  const floorIso = breachTriggerFloor(at, notBefore).toISOString()
   await scanSlaClockCandidates(
     at,
     (nowIso) => sql`(
           ((${conversations.slaApplied} ->> 'firstResponseDueAt') < ${nowIso}
+            AND (${conversations.slaApplied} ->> 'firstResponseDueAt') >= ${floorIso}
             AND (${conversations.slaApplied} ->> 'firstResponseAt') IS NULL
             AND (${conversations.slaApplied} ->> 'firstResponseBreachTriggerFiredAt') IS NULL)
           OR ((${conversations.slaApplied} ->> 'nextResponseDueAt') < ${nowIso}
+            AND (${conversations.slaApplied} ->> 'nextResponseDueAt') >= ${floorIso}
             AND (${conversations.slaApplied} ->> 'nextResponseAt') IS NULL
             AND (${conversations.slaApplied} ->> 'nextResponseBreachTriggerFiredAt') IS NULL)
           OR ((${conversations.slaApplied} ->> 'timeToCloseDueAt') < ${nowIso}
+            AND (${conversations.slaApplied} ->> 'timeToCloseDueAt') >= ${floorIso}
             AND (${conversations.slaApplied} ->> 'resolvedAt') IS NULL
             AND (${conversations.slaApplied} ->> 'resolutionBreachTriggerFiredAt') IS NULL)
         )`,
     (clock, applied, dueAt) => {
       if (applied[clock.settledField]) return false
       if (applied[clock.breachMarkerField]) return false
-      return at.getTime() > new Date(dueAt).getTime()
+      return isRecentBreach(dueAt, at, notBefore)
     },
     async (row, applied, clock, dueAt) => {
       candidates.push({

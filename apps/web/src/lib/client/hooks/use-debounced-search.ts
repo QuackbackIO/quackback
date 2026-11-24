@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface UseDebouncedSearchOptions {
   /** The externally-controlled search value (e.g., from URL or parent state) */
@@ -18,23 +18,34 @@ export function useDebouncedSearch({
   onChange,
   delay = 300,
 }: UseDebouncedSearchOptions) {
-  const [value, setValue] = useState(externalValue || '')
+  const [value, setLocalValue] = useState(externalValue || '')
   const onChangeRef = useRef(onChange)
   const externalRef = useRef(externalValue)
+  // The newest input value, typed or synced. A debounce timer writes only the
+  // value it was scheduled for, and only while that is still the newest: a
+  // timer can fire after an external reset has committed but before the
+  // re-render that would cancel it, and must not undo the reset.
+  const latestRef = useRef(value)
   useEffect(() => {
     onChangeRef.current = onChange
     externalRef.current = externalValue
   })
 
+  const setValue = useCallback((next: string) => {
+    latestRef.current = next
+    setLocalValue(next)
+  }, [])
+
   // Sync input when external value changes (e.g., clear filters)
   useEffect(() => {
-    setValue(externalValue || '')
+    latestRef.current = externalValue || ''
+    setLocalValue(externalValue || '')
   }, [externalValue])
 
   // Debounce local value before updating external
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (value !== (externalRef.current || '')) {
+      if (value === latestRef.current && value !== (externalRef.current || '')) {
         onChangeRef.current(value || undefined)
       }
     }, delay)

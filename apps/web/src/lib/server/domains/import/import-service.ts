@@ -32,9 +32,15 @@ import {
   type PrincipalId,
 } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
+import {
+  loadClosedBoards,
+  refuseRowsOnClosedBoards,
+  refuseUpdatesOnClosedBoards,
+} from './import-board-guard'
 import type { ImportInput, ImportResult, ImportRowError, ImportVoterRecord } from './types'
 import { ImportUserResolver } from './user-resolver'
 import { BATCH_SIZE, IMPORT_LINK_TYPE, loadRowContext, resolveRows } from './import-row-resolver'
+import { assertImportWithinPlanLimits } from './import-plan-limits'
 
 /** integration_type/sourceType tag on post_votes rows this pipeline creates. */
 const VOTE_SOURCE_TYPE = 'import'
@@ -154,8 +160,10 @@ export async function processBatch(
   // schema-default access/settings, mirroring tag auto-creation below).
   // Direct inserts — deliberately not createBoard/createStatusFn, so bulk
   // imports don't fan out board/status events per row.
+  // While boards are read-only no board is created: a new one is not kept open.
+  const closed = await loadClosedBoards(ctx)
   for (const [slug, name] of boardsToCreate) {
-    if (ctx.boardMap.has(slug)) continue
+    if (closed.open !== null || ctx.boardMap.has(slug)) continue
     const id = createId('board')
     await db.insert(boards).values({ id, name, slug })
     ctx.boardMap.set(slug, { id, slug })
@@ -196,6 +204,8 @@ export async function processBatch(
     }
   }
 
+  refuseRowsOnClosedBoards(validRows, ctx, closed, result)
+
   // Idempotence: match rows carrying a source_id against prior import links.
   const sourceIds = validRows.map(({ row }) => row.sourceId).filter((id): id is string => !!id)
   const existingLinks =
@@ -215,6 +225,9 @@ export async function processBatch(
   const toUpdate = validRows.filter(
     ({ row }) => row.sourceId && existingBySourceId.has(row.sourceId)
   )
+
+  // A post already on a read-only board keeps its content and votes.
+  await refuseUpdatesOnClosedBoards(toUpdate, existingBySourceId, ctx, closed, result)
 
   // Pre-generate IDs for all new tags (no interactive transaction)
   const tagsToCreateArray = Array.from(tagsToCreate)
@@ -237,7 +250,8 @@ export async function processBatch(
   // Rows whose source_id has no entry here fall back to vote-count backfill.
   const votersBySourceId = new Map<string, { principalId: PrincipalId; createdAt: Date | null }[]>()
   if (voters) {
-    for (const { row } of validRows) {
+    // Only rows that will be written: a refused row creates no one.
+    for (const { row } of [...toInsert, ...toUpdate]) {
       if (!row.sourceId) continue
       const rowVoters = voters[row.sourceId]
       if (!rowVoters?.length) continue
@@ -269,7 +283,7 @@ export async function processBatch(
       content: row.content,
       statusId: row.statusId,
       principalId: row.principalId,
-      voteCount: rowVoters ? rowVoters.length : row.voteCount,
+      voteCount: rowVoters ? rowVoters.length : (row.voteCount ?? 0),
       createdAt: row.createdAt,
       updatedAt: row.createdAt,
     }
@@ -341,17 +355,19 @@ export async function processBatch(
 
   // Update rows matched by source_id: re-import overwrites content/status/
   // votes and replaces the tag set (including the batch tag) rather than
-  // creating a duplicate post.
+  // creating a duplicate post. A blank status or vote_count cell keeps what
+  // the post has; only a value in the row overwrites it.
   for (const { row } of toUpdate) {
     const postId = existingBySourceId.get(row.sourceId!)!
     const rowVoters = row.sourceId ? votersBySourceId.get(row.sourceId) : undefined
+    const voteCount = rowVoters ? rowVoters.length : row.voteCount
     await db
       .update(posts)
       .set({
         title: row.title,
         content: row.content,
-        statusId: row.statusId,
-        voteCount: rowVoters ? rowVoters.length : row.voteCount,
+        ...(row.statusGiven && { statusId: row.statusId }),
+        ...(voteCount !== null && { voteCount }),
         updatedAt: new Date(),
       })
       .where(eq(posts.id, postId))
@@ -419,6 +435,7 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
   }
 
   const rows = parseCSV(data.csvContent)
+  await assertImportWithinPlanLimits(data, rows)
   let result: ImportResult = {
     imported: 0,
     updated: 0,

@@ -74,6 +74,8 @@ export function insufficientScopeChallenge(input: {
   batch?: boolean
   /** Shorthand for a single `tools/call`. */
   requestId?: string | number | null
+  /** A 2026-07-28 request: its tool results carry `resultType`. */
+  modern?: boolean
 }): Response {
   const missing = orderScopes(input.missing)
   const needed = [
@@ -99,6 +101,7 @@ export function insufficientScopeChallenge(input: {
           result: {
             content: [{ type: 'text', text: description }],
             isError: true,
+            ...(input.modern ? { resultType: 'complete' } : {}),
             _meta: challenge,
           },
         }

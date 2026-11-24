@@ -72,6 +72,28 @@ export const SYSTEM_THEME_SCRIPT =
   'd.classList.add(t);d.style.colorScheme=t}catch(e){}})()'
 
 /**
+ * The theme provider's props for one document.
+ *
+ * Only `forcedTheme` changes when the visitor moves between a portal that
+ * forces a theme and a page that does not (the admin): `defaultTheme` and
+ * `enableSystem` stay the same for the life of the document. next-themes reads
+ * those two once, when it mounts, so a value that differed by route would
+ * outlive the route that set it. With system resolution off, a later `system`
+ * theme lands on <html> as a literal `system` class and the page shows light.
+ * The default is the visitor's own preference, never the forced theme, which
+ * would otherwise become their stored theme.
+ */
+export function documentThemeProviderProps({
+  forcedTheme,
+  themeCookie,
+}: {
+  forcedTheme: 'light' | 'dark' | undefined
+  themeCookie: Theme | undefined
+}): { defaultTheme: Theme; enableSystem: boolean; forcedTheme: 'light' | 'dark' | undefined } {
+  return { defaultTheme: themeCookie ?? 'system', enableSystem: true, forcedTheme }
+}
+
+/**
  * Resolve the `class` and `color-scheme` to put on the SSR-rendered <html> so
  * the first paint already matches the chosen theme. Skipping this leaves the
  * browser painting its default (light) canvas during load — a white flash
@@ -100,54 +122,50 @@ export function resolveDocumentTheme(
 // ============================================================================
 // Theme Types & Utilities
 // ============================================================================
+//
+// Only what a page needs to show its theme. Every page's script holds this
+// barrel (the document theme above), and a module re-exported here ships with
+// it whole. What only the editors use is imported from its own module:
+// './colour-setters', './readable-css', './css-parser', './brand-import',
+// './font-names', './font-loader', './heading-font-loader'.
 
 export type {
   ThemeVariables,
   ThemeConfig,
-  ThemePreset,
   CoreThemeVariable,
   ThemeMode,
+  ButtonShape,
+  CardStyle,
+  HeadingScope,
 } from './types'
-export { CORE_THEME_VARIABLES } from './types'
+export { CORE_THEME_VARIABLES, CARD_STYLES } from './types'
+export type { CustomFont, CustomFontFile } from './font-uploads'
 
 export type { MinimalThemeVariables, MinimalThemeConfig } from './expand'
-export {
-  expandTheme,
-  extractMinimal,
-  unbrandedTheme,
-  DEFAULT_FONT_SANS,
-  DEFAULT_DARK_BASE,
-  DEFAULT_LIGHT_BASE,
-  parseOklch,
-  formatOklch,
-  adjustHue,
-  computeContrastForeground,
-  generateChartColors,
-} from './expand'
-
-// The presets are not re-exported here: building them runs at import time, so
-// a barrel re-export would put every palette in the entry chunk. The branding
-// screens import them from './presets' directly.
-
-export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
+// The theme engine (expand.ts, generator.ts) is never re-exported here: this
+// barrel ships with every page, and those modules would ship whole with it.
+// Import them from their own modules.
+export { DEFAULT_FONT_SANS, normalizeFontSans } from './base'
 
 export {
-  generateThemeCSS,
-  generateWorkspaceThemeCSS,
-  generateReadableCSS,
-  isGeneratedThemeCss,
-  advancedCssRemainder,
-  parseCssToMinimal,
-  replaceCssVar,
-  parseThemeConfig,
-  serializeThemeConfig,
-  normalizeFontSans,
-} from './generator'
-
-export type { ParsedCssVariables } from './css-parser'
-export { extractCssVariables } from './css-parser'
+  hexToOklch,
+  oklchToHex,
+  cssColorToHex,
+  tryCssColorToHex,
+  isValidHex,
+  isValidOklch,
+} from './colors'
 
 export type { BrandingFontId } from './fonts'
-export { BRANDING_FONTS, fontIdForValue, resolveBrandingFontId, readFontSans } from './fonts'
+export {
+  BRANDING_FONTS,
+  fontIdForValue,
+  resolveBrandingFontId,
+  resolveHeadingFontId,
+  readFontSans,
+  readConfigFontSans,
+  readConfigFontHeading,
+} from './fonts'
 
-export { loadBrandingFont } from './font-loader'
+// The font loaders are not re-exported here: only the branded surfaces load a
+// font (through useBrandingFont and useHeadingFont), and the admin does not.

@@ -2,7 +2,7 @@
   "name": "@quackback/widget",
   "version": "0.1.6",
   "license": "MIT",
-  "description": "Official SDK for the Quackback feedback widget. Embed Quackback in your app.",
+  "description": "Official SDK for the Quackback widget: feedback, live chat and help articles in your app.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -41,7 +41,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "react": "^19"
+    "react": "^18 || ^19"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -53,7 +53,7 @@
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "happy-dom": "^20.14.5",
+    "happy-dom": "^21.0.4",
     "react-dom": "^19.3.0",
     "tsup": "^9.0.0",
     "react": "^19.3.0"
@@ -63,7 +63,7 @@
     "url": "git+https://github.com/QuackbackIO/quackback.git",
     "directory": "packages/widget"
   },
-  "homepage": "https://quackback.io/docs/widget",
+  "homepage": "https://quackback.io/install",
   "bugs": "https://github.com/QuackbackIO/quackback/issues",
   "keywords": [
     "quackback",

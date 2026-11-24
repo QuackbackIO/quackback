@@ -261,3 +261,72 @@ describe('handleEmailDeliveryWebhook — SNS signature gate', () => {
     expect(applyDeliveryEvent).not.toHaveBeenCalled()
   })
 })
+
+// CUS-E-04: the transport refusals and outcomes of the delivery events route.
+describe('handleEmailDeliveryWebhook — refusals and outcomes', () => {
+  const bounce = { type: 'email.bounced', data: { email_id: 're_456' } }
+
+  it('falls back to the inbound signing secret when no events secret is set', async () => {
+    delete process.env.EMAIL_EVENTS_SIGNING_SECRET
+    process.env.EMAIL_INBOUND_SIGNING_SECRET = SECRET
+    const res = await handleEmailDeliveryWebhook(authedRequest(bounce))
+    expect(res.status).toBe(200)
+    expect(applyDeliveryEvent).toHaveBeenCalledWith(bounce)
+  })
+
+  it('401s a missing or wrong token without reading the body', async () => {
+    for (const token of [null, 'not-the-secret', `${SECRET}x`]) {
+      const res = await handleEmailDeliveryWebhook(authedRequest(bounce, { token }))
+      expect(res.status, String(token)).toBe(401)
+      expect(await res.text()).toBe('Invalid signature')
+    }
+    const bearer = await handleEmailDeliveryWebhook(
+      authedRequest(bounce, { token: 'not-the-secret', bearer: true })
+    )
+    expect(bearer.status).toBe(401)
+    expect(applyDeliveryEvent).not.toHaveBeenCalled()
+  })
+
+  it('413s a body over 256 KB and 400s a body that is not JSON', async () => {
+    const big = await handleEmailDeliveryWebhook(authedRequest('x'.repeat(256 * 1024 + 1)))
+    expect(big.status).toBe(413)
+    const notJson = await handleEmailDeliveryWebhook(authedRequest('not json'))
+    expect(notJson.status).toBe(400)
+    expect(await notJson.text()).toBe('Invalid JSON')
+    expect(applyDeliveryEvent).not.toHaveBeenCalled()
+  })
+
+  it('502s when the SNS signing certificate cannot be fetched', async () => {
+    const res = await handleEmailDeliveryWebhook(authedRequest(signedNotification()), {
+      fetchCert: async () => {
+        throw new Error('network down')
+      },
+    })
+    expect(res.status).toBe(502)
+    expect(await res.text()).toBe('Certificate fetch failed')
+    expect(applyDeliveryEvent).not.toHaveBeenCalled()
+  })
+
+  it('502s when a verified subscription cannot be confirmed', async () => {
+    const res = await handleEmailDeliveryWebhook(authedRequest(signedConfirmation()), {
+      fetchCert,
+      confirmSubscribeUrl: async () => {
+        throw new Error('confirm failed')
+      },
+    })
+    expect(res.status).toBe(502)
+    expect(await res.text()).toBe('Confirm failed')
+  })
+
+  it('answers ignored when no email_log row matched, and 500 when recording throws', async () => {
+    applyDeliveryEvent.mockResolvedValueOnce(false)
+    const ignored = await handleEmailDeliveryWebhook(authedRequest(bounce))
+    expect(ignored.status).toBe(200)
+    expect(await ignored.json()).toEqual({ status: 'ignored' })
+
+    applyDeliveryEvent.mockRejectedValueOnce(new Error('db down'))
+    const failed = await handleEmailDeliveryWebhook(authedRequest(bounce))
+    expect(failed.status).toBe(500)
+    expect(await failed.text()).toBe('Failed')
+  })
+})

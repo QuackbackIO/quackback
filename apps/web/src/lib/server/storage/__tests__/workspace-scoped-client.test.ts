@@ -43,6 +43,8 @@ vi.mock('@/lib/server/db', () => ({
  * of the scope-straddle a first version of these tests could not see.
  */
 const sent: Array<{ Bucket: string; Key: string; via: string }> = []
+/** The options each sent command went out with, in the same order as `sent`. */
+const sentOptions: Array<{ abortSignal?: AbortSignal } | undefined> = []
 /** Every command that was presigned rather than sent. */
 const presigned: Array<{ Bucket: string; Key: string }> = []
 /** The credentials each client was constructed with. */
@@ -55,8 +57,12 @@ vi.mock('@aws-sdk/client-s3', () => ({
     clientCredentials.push(cfg.credentials)
     const via = cfg.credentials.accessKeyId
     return {
-      send: async (command: { input: { Bucket: string; Key: string } }) => {
+      send: async (
+        command: { input: { Bucket: string; Key: string } },
+        options?: { abortSignal?: AbortSignal }
+      ) => {
         sent.push({ ...command.input, via })
+        sentOptions.push(options)
         return {
           Body: { transformToWebStream: () => new ReadableStream() },
           ContentType: 'image/png',
@@ -110,6 +116,7 @@ const nameFor = (workspaceKey: string, key: string) =>
 
 beforeEach(() => {
   sent.length = 0
+  sentOptions.length = 0
   presigned.length = 0
   clientCredentials.length = 0
   mockConfig.s3Proxy = false
@@ -138,6 +145,16 @@ describe('every command is namespaced', () => {
     ])
     // Uploads no longer presign a PUT. Reads still do.
     expect(presigned.map((c) => c.Key)).toEqual([nameFor('workspace-alpha', PUBLIC_KEY)])
+  })
+
+  it('hands a delete its abort signal, so a caller can bound a hung request', async () => {
+    const controller = new AbortController()
+    await withWorkspace('workspace-alpha', () =>
+      deleteObject(PUBLIC_KEY, { signal: controller.signal })
+    )
+
+    expect(sent.map((c) => c.Key)).toEqual([nameFor('workspace-alpha', PUBLIC_KEY)])
+    expect(sentOptions[0]?.abortSignal).toBe(controller.signal)
   })
 
   it('cannot collide two workspaces on one key in one bucket', async () => {

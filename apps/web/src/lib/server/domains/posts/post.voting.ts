@@ -19,12 +19,16 @@ import {
 import { createId, fromUuid, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { relatedPostIdsSql } from './post.merge-ids'
 import { getExecuteRows } from '@/lib/server/utils'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { dispatchPostVoted } from '@/lib/server/events/dispatch'
 import type { VoteResult } from './post.types'
+import {
+  BoardReadOnlyError,
+  planOpenBoardsSql,
+} from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
 const log = logger.child({ component: 'post-voting' })
 
@@ -105,7 +109,33 @@ async function emitPostVotedEvent(
  * @param principalId - Principal ID of the voter (required)
  * @returns Result containing vote status and new count, or an error
  */
+/**
+ * The vote toggle's answer for a blocked person (blocking.ts), or null for
+ * anyone else. A blocked person may take back a vote they gave, since that is
+ * leaving rather than taking part; with no vote to take back, the `BLOCKED`
+ * refusal stands. Asked before the toggle by every caller acting in the
+ * person's own name (portal, widget, MCP).
+ *
+ * @throws ForbiddenError (`BLOCKED`) when the person is blocked and has no vote here
+ */
+export async function blockedVoteToggle(
+  postId: PostId,
+  principalId: PrincipalId
+): Promise<VoteResult | null> {
+  const { assertNotBlocked } = await import('@/lib/server/domains/principals/blocking')
+  try {
+    await assertNotBlocked(principalId)
+    return null
+  } catch (refusal) {
+    if (!(refusal instanceof ForbiddenError)) throw refusal
+    const taken = await removeVote(postId, principalId).catch(() => null)
+    if (!taken?.removed) throw refusal
+    return { voted: false, voteCount: taken.voteCount }
+  }
+}
+
 export async function voteOnPost(postId: PostId, principalId: PrincipalId): Promise<VoteResult> {
+  const open = await planOpenBoardsSql()
   const postUuid = toUuid(postId)
   const principalUuid = toUuid(principalId)
   const voteId = toUuid(createId('post_vote'))
@@ -132,6 +162,12 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       WHERE id = (SELECT board_id FROM post_check)
         AND deleted_at IS NULL
     ),
+    board_closed AS (
+      SELECT (read_only OR (${open} IS NOT NULL AND NOT (id = ANY(${open})))) AS closed
+      FROM ${boards}
+      WHERE id = (SELECT board_id FROM post_check)
+        AND deleted_at IS NULL
+    ),
     existing AS (
       SELECT id FROM ${postVotes}
       WHERE principal_id = ${principalUuid}::uuid
@@ -150,6 +186,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       WHERE NOT EXISTS (SELECT 1 FROM existing)
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
+        AND NOT COALESCE((SELECT closed FROM board_closed), false)
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING id
     ),
@@ -184,7 +221,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       EXISTS(SELECT 1 FROM board_check) as board_exists,
       EXISTS(SELECT 1 FROM inserted) as newly_voted,
       COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count,
-      (SELECT id FROM post_check) as resolved_post_id
+      (SELECT id FROM post_check) as resolved_post_id,
+      (COALESCE((SELECT closed FROM board_closed), false) AND NOT EXISTS (SELECT 1 FROM existing)) as blocked
   `)
 
   type VoteResultRow = {
@@ -193,6 +231,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     newly_voted: boolean
     vote_count: number
     resolved_post_id: string | null
+    blocked: boolean
   }
   const rows = getExecuteRows<VoteResultRow>(result)
   const row = rows[0]
@@ -204,6 +243,10 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
   if (!row?.board_exists) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board not found for post ${postId}`)
   }
+
+  // Only adding a vote is refused on a read-only board; a voter can still
+  // take their own back, as removeVote allows.
+  if (row.blocked) throw new BoardReadOnlyError()
 
   // newly_voted = true means we inserted a vote (user now has vote)
   // newly_voted = false means we deleted a vote (user no longer has vote)
@@ -239,6 +282,7 @@ export async function addVoteOnBehalf(
   addedByPrincipalId?: PrincipalId,
   createdAt?: Date
 ): Promise<VoteResult> {
+  const open = await planOpenBoardsSql()
   const postUuid = toUuid(postId)
   const principalUuid = toUuid(principalId)
   const voteId = toUuid(createId('post_vote'))
@@ -249,13 +293,8 @@ export async function addVoteOnBehalf(
   const addedByUuid = addedByPrincipalId ? toUuid(addedByPrincipalId) : null
   const createdAtSql = createdAt ? sql`${createdAt.toISOString()}::timestamptz` : sql`NOW()`
 
-  // Single atomic CTE: validate post/board, insert vote (never delete), update count, auto-subscribe
-  const result = await db.execute<{
-    post_exists: boolean
-    board_exists: boolean
-    newly_voted: boolean
-    vote_count: number
-  }>(sql`
+  // Single atomic CTE: validate post/board/voter, insert vote (never delete), update count, auto-subscribe
+  const result = await db.execute(sql`
     WITH post_check AS (
       SELECT c.id, c.board_id, c.vote_count
       FROM ${posts} p
@@ -269,11 +308,22 @@ export async function addVoteOnBehalf(
       WHERE id = (SELECT board_id FROM post_check)
         AND deleted_at IS NULL
     ),
+    board_closed AS (
+      SELECT (read_only OR (${open} IS NOT NULL AND NOT (id = ANY(${open})))) AS closed
+      FROM ${boards}
+      WHERE id = (SELECT board_id FROM post_check)
+        AND deleted_at IS NULL
+    ),
+    voter_check AS (
+      SELECT 1 FROM ${principal} WHERE id = ${principalUuid}::uuid
+    ),
     inserted AS (
       INSERT INTO ${postVotes} (id, post_id, principal_id, source_type, source_external_url, added_by_principal_id, created_at, updated_at)
       SELECT ${voteId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
+        AND EXISTS (SELECT 1 FROM voter_check)
+        AND NOT COALESCE((SELECT closed FROM board_closed), false)
         AND NOT EXISTS (
           SELECT 1 FROM ${postVotes}
           WHERE principal_id = ${principalUuid}::uuid
@@ -301,15 +351,19 @@ export async function addVoteOnBehalf(
     SELECT
       EXISTS(SELECT 1 FROM post_check) as post_exists,
       EXISTS(SELECT 1 FROM board_check) as board_exists,
+      EXISTS(SELECT 1 FROM voter_check) as voter_exists,
       EXISTS(SELECT 1 FROM inserted) as newly_voted,
-      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count
+      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count,
+      COALESCE((SELECT closed FROM board_closed), false) as blocked
   `)
 
   type VoteResultRow = {
     post_exists: boolean
     board_exists: boolean
+    voter_exists: boolean
     newly_voted: boolean
     vote_count: number
+    blocked: boolean
   }
   const rows = getExecuteRows<VoteResultRow>(result)
   const row = rows[0]
@@ -321,6 +375,12 @@ export async function addVoteOnBehalf(
   if (!row?.board_exists) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board not found for post ${postId}`)
   }
+
+  if (!row.voter_exists) {
+    throw new NotFoundError('PRINCIPAL_NOT_FOUND', `Voter with ID ${principalId} not found`)
+  }
+
+  if (row.blocked) throw new BoardReadOnlyError()
 
   return { voted: row.newly_voted, voteCount: row.vote_count ?? 0 }
 }

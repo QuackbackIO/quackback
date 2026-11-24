@@ -1,4 +1,5 @@
 import type { ExternalStatusItem } from '@/lib/server/integrations/types'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 
 /** Fetch Linear workflow states for the status-mapping UI (team-scoped when configured). */
 export async function fetchLinearStatuses(params: {
@@ -10,7 +11,7 @@ export async function fetchLinearStatuses(params: {
     ? `{ team(id: "${teamId}") { states { nodes { id name } } } }`
     : '{ workflowStates { nodes { id name } } }'
 
-  const response = await fetch('https://api.linear.app/graphql', {
+  const response = await providerFetch('https://api.linear.app/graphql', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${params.accessToken}`,

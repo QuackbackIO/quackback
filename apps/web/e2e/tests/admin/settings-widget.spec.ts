@@ -38,7 +38,7 @@ test.describe('Admin Widget Settings', () => {
   test('shows Layout controls', async ({ page }) => {
     await expect(page.getByText('Layout')).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Button position')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('Default board')).toBeVisible()
+    await expect(page.getByText('Default board', { exact: true })).toBeVisible()
   })
 
   test('shows install status inside Visibility', async ({ page }) => {

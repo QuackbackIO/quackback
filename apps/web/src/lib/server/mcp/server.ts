@@ -5,28 +5,98 @@
  * Resources are inlined here (one service call each).
  */
 
-import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/server'
 import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { isTeamMember } from '@/lib/shared/roles'
 import { RESOURCE_SCOPES } from './required-scope'
 import { registerTools } from './tools'
+import { mcpMemberActor } from './tools/helpers'
 import type { McpAuthContext, McpScope } from './types'
 import { MCP_SERVER_INSTRUCTIONS } from './untrusted'
 
 type ResourceUri = keyof typeof RESOURCE_SCOPES
 
+/**
+ * How long a 2026-07-28 client may reuse a cacheable result (`ttlMs`). The
+ * tool and resource lists and the discover result only change when a new
+ * version is deployed, and every caller gets the same list, so five minutes
+ * costs at most a few minutes' lag after an upgrade while sparing clients a
+ * list fetch (57 KB of tools) per conversation. Resource reads return live
+ * workspace data (boards, statuses, members) that an admin can edit at any
+ * time, so they keep a short minute. Every hint is `private`: the endpoint is
+ * authenticated and each instance serves one workspace, so no shared cache
+ * should hold a result. 2025-era responses never carry these fields.
+ */
+const LIST_TTL_MS = 5 * 60 * 1000
+const READ_TTL_MS = 60 * 1000
+
+export const MCP_CACHE_HINTS = {
+  'server/discover': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'tools/list': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'resources/list': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'resources/templates/list': { ttlMs: LIST_TTL_MS, cacheScope: 'private' },
+  'resources/read': { ttlMs: READ_TTL_MS, cacheScope: 'private' },
+} as const
+
+/** The app version, reported as `serverInfo.version`; `dev` outside a build. */
+export function mcpServerVersion(): string {
+  return typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'
+}
+
 export function createMcpServer(auth: McpAuthContext): McpServer {
   const server = new McpServer(
+    { name: 'quackback', version: mcpServerVersion() },
     {
-      name: 'quackback',
-      version: '1.0.0',
-    },
-    { instructions: MCP_SERVER_INSTRUCTIONS }
+      instructions: MCP_SERVER_INSTRUCTIONS,
+      cacheHints: MCP_CACHE_HINTS,
+      // The lists only change on deploy and every request is served stateless,
+      // so there is never a change to announce. Saying so keeps 2026 clients
+      // from holding a `subscriptions/listen` stream open for nothing.
+      capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
+    }
   )
 
   registerTools(server, auth)
+  listSecuritySchemesAtTopLevel(server)
   registerResources(server, auth)
 
   return server
+}
+
+type ListedTool = { _meta?: { securitySchemes?: unknown }; [key: string]: unknown }
+type RequestHandler = (request: unknown, ctx: unknown) => Promise<{ tools: ListedTool[] }>
+
+/**
+ * List each tool's `securitySchemes` as a top-level field as well as in
+ * `_meta`. OpenAI's Apps SDK reads the top-level field and documents the
+ * `_meta` copy as a "back-compat mirror for clients that only read `_meta`".
+ * The SDK's `tools/list` emits a fixed set of fields, so this wraps its
+ * handler rather than replacing it: the enabled filter, the converted
+ * schemas and the 2026 cache hints stay the SDK's.
+ *
+ * The SDK has no public way to read a registered handler, hence the
+ * `_requestHandlers` access. If an SDK upgrade moves it, this throws on the
+ * first server built, and `protocol-eras.test.ts` fails, rather than the
+ * field quietly disappearing.
+ */
+export function listSecuritySchemesAtTopLevel(server: McpServer): void {
+  const handlers = (server.server as unknown as { _requestHandlers?: Map<string, RequestHandler> })
+    ._requestHandlers
+  const list = handlers?.get('tools/list')
+  if (!handlers || !list) {
+    throw new Error('MCP SDK: no tools/list handler to wrap for top-level securitySchemes')
+  }
+  handlers.set('tools/list', async (request, ctx) => {
+    const result = await list(request, ctx)
+    return {
+      ...result,
+      tools: result.tools.map((tool) =>
+        tool._meta?.securitySchemes
+          ? { ...tool, securitySchemes: tool._meta.securitySchemes }
+          : tool
+      ),
+    }
+  })
 }
 
 /**
@@ -40,7 +110,7 @@ function scopeGated(
   fn: ReadResourceCallback
 ): ReadResourceCallback {
   const scope: McpScope = RESOURCE_SCOPES[resourceUri]
-  return async (uri, extra) => {
+  return async (uri, ctx) => {
     if (!hasApiScope(auth.scopes, scope)) {
       return {
         contents: [
@@ -52,7 +122,7 @@ function scopeGated(
         ],
       }
     }
-    return fn(uri, extra)
+    return fn(uri, ctx)
   }
 }
 
@@ -69,14 +139,31 @@ function jsonResource(name: string, data: unknown): Awaited<ReturnType<ReadResou
   }
 }
 
+/** The refusal a team-only resource gives a caller without a team role. */
+function teamOnlyResource(uri: ResourceUri): Awaited<ReturnType<ReadResourceCallback>> {
+  return {
+    contents: [
+      {
+        uri,
+        mimeType: 'text/plain',
+        text: 'Error: This resource requires a team member (admin or member) role.',
+      },
+    ],
+  }
+}
+
 export function registerResources(server: McpServer, auth: McpAuthContext) {
-  server.resource(
+  server.registerResource(
     'boards',
     'quackback://boards',
-    { description: 'List all boards' },
+    { description: 'List the boards you can see' },
     scopeGated(auth, 'quackback://boards', async () => {
-      const { listBoards } = await import('@/lib/server/domains/boards/board.service')
-      const boards = await listBoards()
+      // A portal user sees the boards the portal shows them, not team-only ones.
+      const boards = isTeamMember(auth.role)
+        ? await (await import('@/lib/server/domains/boards/board.service')).listBoards()
+        : await (
+            await import('@/lib/server/domains/boards/board.public')
+          ).listPublicBoardsWithStats(await mcpMemberActor(auth))
       return jsonResource(
         'boards',
         boards.map((b) => ({ id: b.id, name: b.name, slug: b.slug }))
@@ -84,7 +171,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'statuses',
     'quackback://statuses',
     { description: 'List all statuses' },
@@ -98,13 +185,17 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'tags',
     'quackback://tags',
-    { description: 'List all tags' },
+    { description: 'List the tags you can see' },
     scopeGated(auth, 'quackback://tags', async () => {
-      const { listPostTags } = await import('@/lib/server/domains/post-tags/post-tag.service')
-      const tags = await listPostTags()
+      // Internal tags are team-only; a portal user sees the public ones.
+      const { listPostTags, listPublicPostTags } =
+        await import('@/lib/server/domains/post-tags/post-tag.service')
+      const tags = isTeamMember(auth.role)
+        ? await listPostTags()
+        : await listPublicPostTags(await mcpMemberActor(auth))
       return jsonResource(
         'tags',
         tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))
@@ -112,13 +203,17 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'roadmaps',
     'quackback://roadmaps',
-    { description: 'List all roadmaps' },
+    { description: 'List the roadmaps you can see' },
     scopeGated(auth, 'quackback://roadmaps', async () => {
-      const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
-      const roadmaps = await listRoadmaps()
+      // A portal user sees the roadmaps the portal shows them, not team ones.
+      const { listRoadmaps, listPublicRoadmaps } =
+        await import('@/lib/server/domains/roadmaps/roadmap.service')
+      const roadmaps = isTeamMember(auth.role)
+        ? await listRoadmaps()
+        : await listPublicRoadmaps(await mcpMemberActor(auth))
       return jsonResource(
         'roadmaps',
         roadmaps.map((r) => ({ id: r.id, name: r.name, slug: r.slug }))
@@ -126,11 +221,13 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'members',
     'quackback://members',
-    { description: 'List all team members (emails stripped)' },
+    { description: 'List all team members (emails stripped; team only)' },
     scopeGated(auth, 'quackback://members', async () => {
+      // The roster is team-only: the portal never lists teammates.
+      if (!isTeamMember(auth.role)) return teamOnlyResource('quackback://members')
       const { listTeamMembers } = await import('@/lib/server/domains/principals/principal.service')
       const members = await listTeamMembers()
       return jsonResource(
@@ -140,7 +237,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
     })
   )
 
-  server.resource(
+  server.registerResource(
     'help-center-categories',
     'quackback://help-center/categories',
     { description: 'List all help center categories with article counts' },
@@ -160,18 +257,7 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
       // Team-only, matching the article search/get_details tools: the raw
       // category list includes private and segment-gated categories, which
       // must not leak to an OAuth portal user holding the read:article scope.
-      const { isTeamMember } = await import('@/lib/shared/roles')
-      if (!isTeamMember(auth.role)) {
-        return {
-          contents: [
-            {
-              uri: 'quackback://help-center/categories',
-              mimeType: 'text/plain',
-              text: 'Error: This resource requires a team member (admin or member) role.',
-            },
-          ],
-        }
-      }
+      if (!isTeamMember(auth.role)) return teamOnlyResource('quackback://help-center/categories')
       const { listCategories } =
         await import('@/lib/server/domains/help-center/help-center.service')
       const categories = await listCategories()

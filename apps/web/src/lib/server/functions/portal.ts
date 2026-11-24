@@ -11,10 +11,10 @@ import {
   type PostTagId,
   type UserId,
 } from '@quackback/ids'
-import type { BoardSettings, BoardAccess } from '@/lib/server/db'
+import type { BoardAccess } from '@/lib/server/db'
 // Pure helper + its type, imported through the client-safe re-export so suites
 // that mock '@/lib/server/db' don't have to stub them.
-import { resolveReplyPolicy, type ReplyPolicy } from '@/lib/shared/db-types'
+import { resolveReplyPolicy, type BoardCustomField, type ReplyPolicy } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy'
 import {
   getOptionalAuth,
@@ -67,6 +67,11 @@ import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
 
+import { serializePublicBoard } from '@/lib/server/domains/boards/board.serialize'
+import type { BoardPermission } from '@/lib/shared/types/boards'
+import { isBoardOpenFor } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
+import { openBoardIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
+
 const log = logger.child({ component: 'portal' })
 
 // Schemas
@@ -108,14 +113,24 @@ const fetchPortalDataSchema = z.object({
  */
 async function buildBoardPermissions(
   actor: Actor,
-  boards: ReadonlyArray<{ id: string; access: BoardAccess }>,
+  boards: ReadonlyArray<{ id: string; access: BoardAccess; readOnly?: boolean }>,
   allowAnonymous: boolean
-): Promise<Record<string, { canSubmit: boolean; canVote: boolean }>> {
+): Promise<Record<string, BoardPermission>> {
   const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-  const map: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+  const open = await openBoardIds()
+  const caps = new Map(
+    boards.map((b) => [b.id, boardCapabilitiesForActor(actor, b.access, allowAnonymous)])
+  )
+  // A read-only board (set by an admin, or frozen by the plan) shows its posts
+  // and takes nothing.
+  const isClosed = (b: { id: string; readOnly?: boolean }) =>
+    !!b.readOnly || (open !== null && !open.includes(b.id))
+  const map: Record<string, BoardPermission> = {}
   for (const b of boards) {
-    const caps = boardCapabilitiesForActor(actor, b.access, allowAnonymous)
-    map[b.id] = { canSubmit: caps.canSubmit, canVote: caps.canVote }
+    const c = caps.get(b.id)!
+    map[b.id] = isClosed(b)
+      ? { canSubmit: false, canVote: false, readOnly: true }
+      : { canSubmit: c.canSubmit, canVote: c.canVote }
   }
   return map
 }
@@ -252,6 +267,8 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         commentCount: post.commentCount,
         tags: post.tags,
         board: post.board,
+        // The author's own held post is in the feed; the card marks it pending.
+        moderationState: post.moderationState,
         changelogEntry: post.changelogEntry,
       })),
       hasMore: postsResult.hasMore,
@@ -369,7 +386,16 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
   // so the UI never advertises a vote/comment CTA the board's tier rejects
   // (#191). canSubmit is unused on the detail view.
   const { boardCapabilitiesForActor, canCommentOnPost } = await import('@/lib/server/policy')
-  const { canVote } = boardCapabilitiesForActor(actor, result.boardAccess, allowAnonymous)
+  const boardReadOnly = !(await isBoardOpenFor(
+    result.board.id as BoardId,
+    result.boardManualReadOnly ?? false
+  ))
+  const { canVote: tierCanVote } = boardCapabilitiesForActor(
+    actor,
+    result.boardAccess,
+    allowAnonymous
+  )
+  const canVote = tierCanVote && !boardReadOnly
   // canComment is per-POST: on an author-only board the reply right turns on
   // this post's own author, which the board-level capability can't see. View
   // is already proven (getPublicPostDetail returned a row for this actor), so
@@ -385,7 +411,7 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
 
   // Drop boardAccess (server-only — used above to compute the booleans) so
   // the board's segment ids never reach the client.
-  const { boardAccess: _boardAccess, ...serializable } = result
+  const { boardAccess: _boardAccess, boardManualReadOnly: _manual, ...serializable } = result
   return {
     ...serializable,
     contentJson: result.contentJson ?? {},
@@ -400,7 +426,9 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
     mergeInfo,
     mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
     canVote,
-    canComment,
+    canComment: canComment && !boardReadOnly,
+    // Sent only when set: every open board's page stays the bytes it was.
+    ...(boardReadOnly ? { boardReadOnly: true as const } : {}),
     // The board's reply rule, so a denied viewer can be told WHY the composer
     // is closed ("only the author and the team can reply") instead of getting
     // the generic no-access notice. Safe to expose: it is a public property of
@@ -579,13 +607,6 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
  * boardPermissions / boardCapabilitiesForActor and never reads board.access,
  * so shipping it would leak segmentation structure (#191).
  */
-function serializePublicBoard<B extends { access: unknown; settings: unknown }>({
-  access: _access,
-  ...board
-}: B) {
-  return { ...board, settings: (board.settings ?? {}) as BoardSettings }
-}
-
 function serializePublicRoadmap(r: Awaited<ReturnType<typeof listPublicRoadmaps>>[number]) {
   return {
     id: r.id,
@@ -739,12 +760,19 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
     log.debug({ post_id: data.postId }, 'get comments section data')
     // replyPolicy rides the denied shape too, so the response type stays one
     // object rather than a union the client has to narrow before reading it.
-    const denied = {
+    const denied: {
+      isMember: false
+      isTeamMember: false
+      canComment: false
+      boardReadOnly?: true
+      user: undefined
+      replyPolicy: ReplyPolicy
+    } = {
       isMember: false,
       isTeamMember: false,
       canComment: false,
       user: undefined,
-      replyPolicy: 'anyone' as ReplyPolicy,
+      replyPolicy: 'anyone',
     }
     const postId = data.postId as PostId
 
@@ -800,11 +828,17 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
     const isMember = !!(ctx?.user && ctx?.principal)
     const isTeamMember =
       isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
+    const boardReadOnly = !(await isBoardOpenFor(
+      commentContext.boardId as BoardId,
+      commentContext.boardReadOnly ?? false
+    ))
 
     return {
       isMember,
       isTeamMember,
-      canComment,
+      canComment: canComment && !boardReadOnly,
+      // Sent only when set: every open board's page stays the bytes it was.
+      ...(boardReadOnly ? { boardReadOnly: true as const } : {}),
       user: isMember
         ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
         : undefined,
@@ -845,23 +879,41 @@ export const runFetchBoardCapabilities = createServerOnlyFn(
       permissions: await buildBoardPermissions(actor, boards, allowAnonymous),
       // Same visitor-visible list as the permissions map, so identify can
       // surface segment/members boards the anonymous SSR seed omitted.
-      boards: boards.map((board): WidgetVisibleBoard => ({
-        id: String(board.id),
-        name: board.name,
-        slug: board.slug,
-      })),
+      boards: boards.map(toWidgetVisibleBoard),
     }
   }
 )
 
 export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+  const empty: Record<string, BoardPermission> = {}
   const access = await resolvePortalAccessForRequest()
   if (!access.granted) return { permissions: empty, boards: [] as WidgetVisibleBoard[] }
   return runFetchBoardCapabilities(await getOptionalAuth())
 })
 
-export type WidgetVisibleBoard = { id: string; name: string; slug: string }
+export type WidgetVisibleBoard = {
+  id: string
+  name: string
+  slug: string
+  /** The board's intake fields, sent only when it declares some. */
+  customFields?: BoardCustomField[]
+}
+
+/** A board as the widget composer lists it, with the fields its form asks for. */
+export function toWidgetVisibleBoard(board: {
+  id: string
+  name: string
+  slug: string
+  settings?: { customFields?: BoardCustomField[] } | null
+}): WidgetVisibleBoard {
+  const customFields = board.settings?.customFields ?? []
+  return {
+    id: String(board.id),
+    name: board.name,
+    slug: board.slug,
+    ...(customFields.length > 0 ? { customFields } : {}),
+  }
+}
 
 // The first page of several columns of one board, under the same filters.
 const getPublicRoadmapColumnsSchema = getPublicRoadmapPostsSchema

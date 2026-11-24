@@ -835,7 +835,7 @@ export const fetchDiscoveryScopesFn = createServerFn({ method: 'POST' })
       // Same SSRF guard the connection test uses: validated, IP-pinned, no
       // redirects, so an admin-supplied URL cannot probe the internal network.
       const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-      const res = await safeFetch(data.discoveryUrl, { timeoutMs: 5000 })
+      const res = await safeFetch(data.discoveryUrl, { timeoutMs: 5000, allowE2eOidcFake: true })
       if (!res.ok) return { scopesSupported: null }
       const doc = (await res.json()) as { scopes_supported?: unknown }
       if (!Array.isArray(doc.scopes_supported)) return { scopesSupported: null }
@@ -856,6 +856,17 @@ export const fetchDiscoveryScopesFn = createServerFn({ method: 'POST' })
  * failure reads as a function returning someone else's shape, not as an
  * ordering problem. Append here; do not insert above.
  */
+/**
+ * Whether single sign-on works right now (`isSsoLive`): the plan includes it,
+ * or plan limits keep a provider set up before a drop signing in until the
+ * grace ends. The plan's entitlement alone says neither.
+ */
+export const getSsoLiveFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+  const { isSsoLive } = await import('@/lib/server/auth/registered-providers')
+  return isSsoLive()
+})
+
 /**
  * How many identities sign in through this provider. `deleteIdentityProviderFn`
  * refuses while any exist (removal would orphan them), so the Remove control

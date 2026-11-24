@@ -48,8 +48,10 @@ import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackb
 import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { withEmailProxyHint } from '@/lib/server/content/email-image-proxy'
-import { isAnyAgentOnline, isPrincipalOnline } from '@/lib/server/realtime/presence'
-import { buildHookContext } from '@/lib/server/events/hook-context'
+import { isPrincipalOnline, readAvailableAgentIds } from '@/lib/server/realtime/presence'
+import { buildHookContext, type HookContext } from '@/lib/server/events/hook-context'
+import { hookOrigins } from '@/lib/server/events/hook-origins'
+import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './conversation.recipient'
 import {
@@ -70,6 +72,7 @@ import {
 } from './conversation.email-attachments'
 import { logger } from '@/lib/server/logger'
 import { testOwnerOf } from '@/lib/server/test-data'
+import { inScopeRecipients } from '@/lib/server/domains/notifications/recipient-scope'
 import { conversationTestDelivery } from './conversation.test-delivery'
 
 const log = logger.child({ component: 'conversation-notify' })
@@ -223,23 +226,23 @@ async function loadConversationMailContext(conversationId: ConversationId): Prom
  * so the selection is unit-tested directly.
  */
 export function visitorConversationLink(
-  portalBaseUrl: string,
+  origins: SectionOrigins,
   conversationId: ConversationId,
   portalSupportEnabled: boolean
 ): string {
-  const base = portalBaseUrl.replace(/\/$/, '')
+  const id = encodeURIComponent(conversationId)
   return portalSupportEnabled
-    ? `${base}/support/${encodeURIComponent(conversationId)}`
-    : `${base}/widget/?c=${encodeURIComponent(conversationId)}`
+    ? sectionUrl('support', `/support/${id}`, origins)
+    : `${origins.primary}/widget/?c=${id}`
 }
 
 /** Resolve the visitor-facing conversation link with the current gate state. */
 async function resolveVisitorConversationLink(
-  portalBaseUrl: string,
+  ctx: HookContext,
   conversationId: ConversationId
 ): Promise<string> {
   const { isPortalSupportEnabled } = await import('@/lib/server/domains/settings/settings.support')
-  return visitorConversationLink(portalBaseUrl, conversationId, await isPortalSupportEnabled())
+  return visitorConversationLink(hookOrigins(ctx), conversationId, await isPortalSupportEnabled())
 }
 
 /**
@@ -262,23 +265,35 @@ export async function notifyVisitorMessage(opts: {
     // A test thread alerts only the teammate who owns its test customer.
     const testOwner = await testOwnerOf(opts.conversation.visitorPrincipalId)
 
-    const agentsOnline = await isAnyAgentOnline()
-    // Avoid email spam: only email the team on the first message of a
-    // conversation, or when nobody is around to see it live. This gate is
-    // redundant with the `!agentsOnline` check below for every case except
-    // the fast escape it buys (skip the team query entirely) — kept exactly
-    // as it was before the bell moved out, to not perturb email behavior.
+    // Avoid email spam: email only when nobody who can see the conversation
+    // is around to see it live. Presence is read once, counting only
+    // teammates with a live inbox who are not set to Away: Away with a tab
+    // open is not watching. Nobody around skips the check; otherwise only
+    // those teammates are judged, so an agent who cannot see the
+    // conversation never silences the teammates who can. An
+    // unreadable presence store counts as someone online (no alert), so an
+    // outage cannot turn every message into an email.
     //
-    // Deliberate small skew: presence is now checked at TWO different
-    // moments — here, at request time, for the email; and again inside the
-    // notification hook, at worker time, for the bell (its own anti-spam
-    // gate: `!cfg.isFirstMessage && isAnyAgentOnline()`). Never try to unify
-    // them — the bell's check intentionally runs later, off the request path.
-    if (!opts.isFirstMessage && agentsOnline) return
+    // Deliberate small skew: presence is checked at TWO different moments —
+    // here, at request time, for the email; and again inside the notification
+    // hook, at worker time, for the bell (its own anti-spam gate, over the
+    // same in-scope recipients). Never try to unify them — the bell's check
+    // intentionally runs later, off the request path.
+    const online = await readAvailableAgentIds()
+    if (online === null) return
+    if (online.length > 0) {
+      const watching = await inScopeRecipients(
+        { kind: 'conversation', id: opts.conversation.id },
+        online
+      )
+      if (watching.length > 0) return
+    }
 
-    const team = await db
+    const teammates = await db
       .select({
         principalId: principal.id,
+        type: principal.type,
+        role: principal.role,
         email: user.email,
         contactEmail: principal.contactEmail,
         name: user.name,
@@ -292,59 +307,78 @@ export async function notifyVisitorMessage(opts: {
           testOwner ? eq(principal.id, testOwner) : undefined
         )
       )
+    // Only the teammates whose scope holds the conversation, read by id:
+    // `opts.conversation` is the row from before routing ran, so a first
+    // message would otherwise miss the teammate routing just chose.
+    const inScope = new Set(
+      await inScopeRecipients(
+        { kind: 'conversation', id: opts.conversation.id },
+        teammates.map((t) => ({ id: t.principalId, type: t.type, role: t.role }))
+      )
+    )
+    // Each teammate's own email settings: "Pause all email" and the New
+    // message email switch (the same matrix key the bell for this message
+    // rides). No stored preferences means the defaults, which allow it.
+    const { batchGetNotificationPreferences } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    const { shouldNotify } = await import('@/lib/server/domains/subscriptions/notification-matrix')
+    const visible = teammates.filter((t) => inScope.has(t.principalId))
+    const prefs = await batchGetNotificationPreferences(visible.map((t) => t.principalId))
+    const team = visible.filter((t) => {
+      const own = prefs.get(t.principalId)
+      return own ? shouldNotify(own, 'chat_message', 'email') : true
+    })
 
     if (team.length === 0) return
 
     const body = previewOf(opts.content)
 
-    // Email the team only when no agent is online to handle it live.
-    if (!agentsOnline) {
-      const ctx = await buildHookContext()
-      if (!ctx) return
-      const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
-      const { sendConversationMessageEmail } = await import('@quackback/email')
-      const { teamThreadRootMessageId, mintTeamOutboundMessageId } =
-        await import('@/lib/server/domains/conversation/conversation.email-channel')
-      const teamRoot = teamThreadRootMessageId(opts.conversation.id)
-      // Contact class: the only link is an /admin/inbox URL, which carries no
-      // capability — the session does. So a teammate reachable only via their
-      // contact address is correctly included, which the old truthiness filter
-      // on the account address would have dropped.
-      // Both address fields came back with the team query, so the recipient is
-      // decided from rows already in hand rather than by a second round trip.
-      const { contactRecipientFrom, mailContact } = await import('@/lib/server/email/recipient')
-      const resolvedBody = await resolvedMessageBody(
-        opts.content,
-        opts.contentJson,
-        opts.attachments,
-        { trustedSender: await isVerifiedVisitorSender(opts.conversation) }
-      )
-      await Promise.allSettled(
-        team
-          .flatMap((t) => {
-            const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
-            return to ? [{ ...t, to }] : []
+    // Email the team: no teammate who can see it is online to handle it live.
+    const ctx = await buildHookContext()
+    if (!ctx) return
+    const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
+    const { sendConversationMessageEmail } = await import('@quackback/email')
+    const { teamThreadRootMessageId, mintTeamOutboundMessageId } =
+      await import('@/lib/server/domains/conversation/conversation.email-channel')
+    const teamRoot = teamThreadRootMessageId(opts.conversation.id)
+    // Contact class: the only link is an /admin/inbox URL, which carries no
+    // capability — the session does. So a teammate reachable only via their
+    // contact address is correctly included, which the old truthiness filter
+    // on the account address would have dropped.
+    // Both address fields came back with the team query, so the recipient is
+    // decided from rows already in hand rather than by a second round trip.
+    const { contactRecipientFrom, mailContact } = await import('@/lib/server/email/recipient')
+    const resolvedBody = await resolvedMessageBody(
+      opts.content,
+      opts.contentJson,
+      opts.attachments,
+      { trustedSender: await isVerifiedVisitorSender(opts.conversation) }
+    )
+    await Promise.allSettled(
+      team
+        .flatMap((t) => {
+          const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
+          return to ? [{ ...t, to }] : []
+        })
+        .map((t) =>
+          mailContact(sendConversationMessageEmail, t.to, {
+            direction: 'visitor_message',
+            senderName: opts.authorName,
+            messagePreview: body,
+            bodyHtml: resolvedBody.bodyHtml,
+            attachments: resolvedBody.attachments,
+            ctaUrl,
+            workspaceName: ctx.workspaceName,
+            logoUrl: ctx.logoUrl ?? undefined,
+            isFirstMessage: opts.isFirstMessage,
+            conversationSubject: opts.conversation.subject,
+            messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
+            inReplyTo: teamRoot ?? undefined,
+            references: teamRoot ? [teamRoot] : undefined,
+            conversationId: opts.conversation.id,
           })
-          .map((t) =>
-            mailContact(sendConversationMessageEmail, t.to, {
-              direction: 'visitor_message',
-              senderName: opts.authorName,
-              messagePreview: body,
-              bodyHtml: resolvedBody.bodyHtml,
-              attachments: resolvedBody.attachments,
-              ctaUrl,
-              workspaceName: ctx.workspaceName,
-              logoUrl: ctx.logoUrl ?? undefined,
-              isFirstMessage: opts.isFirstMessage,
-              conversationSubject: opts.conversation.subject,
-              messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
-              inReplyTo: teamRoot ?? undefined,
-              references: teamRoot ? [teamRoot] : undefined,
-              conversationId: opts.conversation.id,
-            })
-          )
-      )
-    }
+        )
+    )
   } catch (err) {
     log.warn({ err }, 'notify visitor message failed')
   }
@@ -438,6 +472,9 @@ export async function sendVisitorConversationEmail(opts: {
   recipient: string
   direction: 'agent_reply' | 'agent_started'
   senderName: string
+  /** `senderName` is the support team's, not a person's: the From and the
+   *  copy speak as the team, with no "X from" in front. */
+  senderIsTeam?: boolean
   content: string
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
@@ -477,7 +514,8 @@ export async function sendVisitorConversationEmail(opts: {
   // every channel: a widget or messenger reply that reaches the customer's inbox
   // is still a person answering them, and an unnamed address reads as a robot.
   const resolved = await resolveConversationSender(opts.conversationId)
-  const asAgent = (sendsAs: string) => agentReplyDisplayName(opts.senderName, sendsAs)
+  const asAgent = (sendsAs: string) =>
+    opts.senderIsTeam ? sendsAs : agentReplyDisplayName(opts.senderName, sendsAs)
   const from = senderFrom(resolved, opts.ctx.workspaceName, asAgent)
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const resolvedBody = await resolvedMessageBody(opts.content, opts.contentJson, opts.attachments)
@@ -491,6 +529,7 @@ export async function sendVisitorConversationEmail(opts: {
         to: opts.recipient,
         direction: opts.direction,
         senderName: opts.senderName,
+        senderIsTeam: opts.senderIsTeam,
         // The truncated preview backs the subject/preheader; the full body is
         // carried by bodyHtml so the recipient reads the whole reply inline.
         messagePreview: previewOf(opts.content),
@@ -550,6 +589,8 @@ export async function notifyAgentReply(opts: {
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
   agentName: string
+  /** `agentName` is the support team's (an API key's message): see AgentMessageDeliveryCtx. */
+  agentIsTeam?: boolean
   /** Pre-chat email captured on the conversation, if any. */
   capturedEmail?: string | null
   /** The channel this conversation is currently conducted on. REQUIRED, not
@@ -589,7 +630,30 @@ export async function notifyAgentReply(opts: {
       ? delivery.recipient
       : resolveReplyRecipient(visitor, visitor?.contactEmail, opts.capturedEmail)
     if (delivery.test && !recipient) return
-    if (!recipient) {
+    // On a customer ticket's conversation this email is the customer's only
+    // copy of the reply (the ticket reply email leaves them out), so it keeps
+    // the ticket's email settings: "Ticket replies" off or "Stop watching"
+    // means no email. A thread-addressed channel still posts: that is the
+    // thread itself, not an email about it.
+    const ticketEmail = delivery.test
+      ? null
+      : await import('@/lib/server/domains/tickets/ticket-reply-email')
+    const ticketId = ticketEmail
+      ? await ticketEmail.requesterTicketForConversation(
+          opts.conversationId,
+          opts.visitorPrincipalId
+        )
+      : null
+    const wanted =
+      !ticketEmail ||
+      !ticketId ||
+      (await ticketEmail.requesterWantsReplyEmail(ticketId, opts.visitorPrincipalId))
+    if (!wanted) {
+      log.debug(
+        { conversation_id: opts.conversationId, ticket_id: ticketId },
+        'agent reply email off by the ticket settings'
+      )
+    } else if (!recipient) {
       // The visitor is unreachable — surface it instead of dropping silently
       // (the inbox can flag conversations with no reply-to address). `channel`
       // discriminates the two severities: on messenger the widget's unread
@@ -608,10 +672,10 @@ export async function notifyAgentReply(opts: {
     // when enabled, else the widget messenger view). The thread is surfaced from
     // the visitor's own session (or a re-identify in the host app), so the URL
     // only navigates — it carries no capability of its own.
-    const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
+    const ctaUrl = await resolveVisitorConversationLink(ctx, opts.conversationId)
     const adapter = requireChannelAdapter(opts.channel)
     const threadAddressed = getChannelDescriptor(opts.channel)?.addressing === 'thread'
-    if (recipient || threadAddressed) {
+    if ((recipient && wanted) || threadAddressed) {
       await adapter.deliverAgentMessage({
         conversationId: opts.conversationId,
         messageId: opts.messageId,
@@ -619,6 +683,7 @@ export async function notifyAgentReply(opts: {
         content: opts.content,
         contentJson: opts.contentJson,
         agentName: opts.agentName,
+        senderIsTeam: opts.agentIsTeam,
         recipient: recipient ?? '',
         ctaUrl,
         workspaceName: ctx.workspaceName,
@@ -651,6 +716,7 @@ export async function notifyAgentReply(opts: {
             content: opts.content,
             contentJson: opts.contentJson,
             agentName: opts.agentName,
+            senderIsTeam: opts.agentIsTeam,
             recipient: participant.email,
             ctaUrl,
             workspaceName: ctx.workspaceName,
@@ -687,6 +753,8 @@ export async function notifyConversationStarted(opts: {
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
   agentName: string
+  /** `agentName` is the support team's (an API key's message): see AgentMessageDeliveryCtx. */
+  agentIsTeam?: boolean
   messageId?: ConversationMessageId
   attachments?: ConversationAttachment[]
 }): Promise<void> {
@@ -716,7 +784,7 @@ export async function notifyConversationStarted(opts: {
 
     const ctx = await buildHookContext()
     if (!ctx) return
-    const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
+    const ctaUrl = await resolveVisitorConversationLink(ctx, opts.conversationId)
     await requireChannelAdapter(channel).deliverAgentMessage({
       conversationId: opts.conversationId,
       messageId: opts.messageId,
@@ -724,6 +792,7 @@ export async function notifyConversationStarted(opts: {
       content: opts.content,
       contentJson: opts.contentJson,
       agentName: opts.agentName,
+      senderIsTeam: opts.agentIsTeam,
       recipient: recipient ?? '',
       ctaUrl,
       workspaceName: ctx.workspaceName,
@@ -782,6 +851,8 @@ export async function notifyCsatRequestEmail(
     )
       return
     const visitorPrincipalId = conv.visitorPrincipalId
+    const { getsAutomatedEmail } = await import('@/lib/server/domains/principals/blocking')
+    if (!(await getsAutomatedEmail(visitorPrincipalId))) return
 
     const [visitor] = await db
       .select({ type: principal.type, email: user.email, contactEmail: principal.contactEmail })
@@ -792,6 +863,13 @@ export async function notifyCsatRequestEmail(
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, null)
     const threadAddressed = getChannelDescriptor(conv.channel)?.addressing === 'thread'
     if (!recipient && !threadAddressed) return
+    // An automated request, so "Pause all email" holds the email back. A
+    // thread-addressed channel posts in the thread itself, which is not email.
+    if (!threadAddressed) {
+      const { hasPausedAllEmail } =
+        await import('@/lib/server/domains/subscriptions/subscription.service')
+      if (await hasPausedAllEmail(visitorPrincipalId)) return
+    }
 
     const ctx = await buildHookContext()
     if (!ctx) return

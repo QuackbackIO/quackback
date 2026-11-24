@@ -56,11 +56,15 @@ const composerProbe = vi.hoisted(() => ({
 // ride with it in the meantime.
 const threadProbe = vi.hoisted(() => ({
   gate: null as null | Promise<void>,
+  /** When set, the conversation thread read fails with this error. */
+  fail: null as null | Error,
   linkFetches: 0,
   translationEnabled: [] as boolean[],
   overAllowanceNotice: null as string | null,
   panelOnChanged: [] as unknown[],
   remeasure: () => {},
+  /** Fields the mocked thread read lays over the default conversation. */
+  conversation: {} as Partial<ConversationDTO>,
 }))
 
 const routeContextState = {
@@ -160,9 +164,11 @@ vi.mock('@/components/admin/conversation/conversation-tags-editor', () => ({
   },
 }))
 vi.mock('@/components/admin/conversation/status-control', () => ({
-  StatusControl: () => {
+  StatusControl: ({ status, endReason }: { status: string; endReason?: string | null }) => {
     countRender('status')
-    return null
+    return (
+      <span data-testid="status-control" data-status={status} data-end-reason={endReason ?? ''} />
+    )
   },
 }))
 // The detail panel renders whenever the thread does, so it doubles as the
@@ -239,8 +245,10 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
       placeholder,
       editorRef,
       onDocumentChange,
+      mentionItem,
     }: {
       placeholder?: string
+      mentionItem?: { kind: string; id: string }
       editorRef?: React.RefObject<{ focus: () => void; clear?: () => void } | null>
       onDocumentChange?: (document: { json(): unknown; html(): string; markdown(): string }) => void
     }) => {
@@ -256,7 +264,15 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
         focus: () => areaRef.current?.focus(),
         clear: () => {},
       }))
-      return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
+      return (
+        <textarea
+          ref={areaRef}
+          data-testid="editor"
+          data-mention-item={mentionItem ? `${mentionItem.kind}:${mentionItem.id}` : undefined}
+          placeholder={placeholder}
+          readOnly
+        />
+      )
     },
   }
 })
@@ -295,9 +311,13 @@ vi.mock('@/lib/client/hooks/use-file-upload', () => ({
   useAgentFileUpload: () => ({ upload: vi.fn() }),
 }))
 const addFiles = vi.fn()
+/** Files staged in the composer tray; tests stage some per render. */
+const staged = vi.hoisted(() => ({ items: [] as unknown[] }))
+const toastSpy = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }))
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), toastSpy) }))
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
-    items: [],
+    items: staged.items,
     attachments: [],
     addFiles,
     remove: vi.fn(),
@@ -334,6 +354,7 @@ const {
   mockTicketLink,
   mockTicketStatuses,
   mockProvenanceCount,
+  mockTrackerLinks,
 } = vi.hoisted(() => {
   const mockTicket = {
     id: 'ticket_1',
@@ -398,7 +419,10 @@ const {
   // How many conversations the open ticket was opened from — decides whether
   // the composer offers to share a note at all.
   const mockProvenanceCount = { value: 0 }
+  // A tracker's links: the tickets the viewer can see, and a count of the rest.
+  const mockTrackerLinks = { value: { linked: [] as unknown[], hiddenCount: 0 } }
   return {
+    mockTrackerLinks,
     mockTicket,
     mockTicketThread,
     mockTicketVariants,
@@ -446,6 +470,16 @@ vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
       queryKey: ['ticket-provenance-conversations', id],
       queryFn: () => Promise.resolve({ count: mockProvenanceCount.value }),
     }),
+    links: (id: string) => ({
+      queryKey: ['ticket-links', id],
+      queryFn: () =>
+        Promise.resolve({
+          tracker: null,
+          trackerHidden: false,
+          linked: mockTrackerLinks.value.linked,
+          hiddenCount: mockTrackerLinks.value.hiddenCount,
+        }),
+    }),
   },
 }))
 vi.mock('@/lib/client/queries/conversation-inbox', () => ({
@@ -454,9 +488,13 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
       queryKey: ['conv-thread', id],
       queryFn: async () => {
         if (threadProbe.gate) await threadProbe.gate
+        if (threadProbe.fail) throw threadProbe.fail
         return {
           hasMore: false,
-          conversation: makeConversation({ id: id as ConversationDTO['id'] }),
+          conversation: makeConversation({
+            id: id as ConversationDTO['id'],
+            ...threadProbe.conversation,
+          }),
           messages: [] as AgentConversationMessageDTO[],
         }
       },
@@ -467,9 +505,13 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
 import { AgentConversationThread } from '../agent-conversation-thread'
 import type { ThreadComposerHandle } from '../agent-conversation-thread'
 import { setConversationStatusFn } from '@/lib/server/functions/conversation'
-import { setTicketStatusFn } from '@/lib/server/functions/tickets'
+import { sendTicketMessageFn, setTicketStatusFn } from '@/lib/server/functions/tickets'
 
 afterEach(() => {
+  staged.items = []
+  threadProbe.fail = null
+  threadProbe.conversation = {}
+  mockTrackerLinks.value = { linked: [], hiddenCount: 0 }
   mockTicketLink.value = null
   mockTicketStatuses.value = []
   mockProvenanceCount.value = 0
@@ -555,6 +597,9 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     )
     const editor = await screen.findByTestId('editor')
     expect(editor).toHaveAttribute('placeholder', 'Add an internal note for your team…')
+    // Ticket notes store no mentions, but the picker still marks who cannot
+    // see this ticket.
+    expect(editor).toHaveAttribute('data-mention-item', 'ticket:ticket_tracker')
     expect(screen.queryByText('Reply')).not.toBeInTheDocument()
     expect(screen.queryByText('Note')).not.toBeInTheDocument()
   })
@@ -614,12 +659,204 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     expect(share).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('an empty back-office ticket says there are no notes, not to message a requester', async () => {
+    mockTicketVariants['ticket_bo_empty'] = { type: 'back_office' }
+    mockProvenanceCount.value = 0
+    const saved = mockTicketThread.messages
+    mockTicketThread.messages = []
+    try {
+      renderThread({ kind: 'ticket', id: 'ticket_bo_empty' })
+      expect(await screen.findByText('No notes yet')).toBeInTheDocument()
+      expect(screen.queryByText(/requester/i)).toBeNull()
+    } finally {
+      mockTicketThread.messages = saved
+    }
+  })
+
+  it('an empty customer ticket still invites the first message to the requester', async () => {
+    const saved = mockTicketThread.messages
+    mockTicketThread.messages = []
+    try {
+      renderThread({ kind: 'ticket', id: 'ticket_1' })
+      expect(
+        await screen.findByText('No replies yet. Send the first message to the requester.')
+      ).toBeInTheDocument()
+    } finally {
+      mockTicketThread.messages = saved
+    }
+  })
+
   it('renders the ticket header controls + type badge', async () => {
     renderThread({ kind: 'ticket', id: 'ticket_1' })
     expect(await screen.findByTestId('ticket-type-badge')).toHaveTextContent('customer')
     expect(screen.getByTestId('ticket-status-control')).toBeInTheDocument()
     expect(screen.getByTestId('ticket-assignee-control')).toBeInTheDocument()
     expect(screen.getByTestId('ticket-priority-control')).toBeInTheDocument()
+  })
+})
+
+describe('AgentConversationThread — tracker Reply all mode', () => {
+  function renderTracker(composerRef?: React.RefObject<ThreadComposerHandle | null>) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['ticket-detail', 'ticket_tracker'], {
+      ...mockTicket,
+      id: 'ticket_tracker',
+      type: 'tracker',
+    })
+    client.setQueryData(['ticket-thread', 'ticket_tracker'], mockTicketThread)
+    mockTicketVariants.ticket_tracker = { type: 'tracker' }
+    return render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'ticket', id: 'ticket_tracker' } as never}
+          targetMessageId={null}
+          onChanged={vi.fn()}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+          composerRef={composerRef}
+        />
+      </QueryClientProvider>
+    )
+  }
+
+  async function chooseReplyAll() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Note' }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Reply all' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('editor')).not.toHaveAttribute(
+        'placeholder',
+        'Add an internal note for your team…'
+      )
+    )
+  }
+
+  afterEach(() => {
+    delete mockTicketVariants.ticket_tracker
+  })
+
+  it('offers Note (the default) and Reply all to a teammate who may reply', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    const editor = await screen.findByTestId('editor')
+    expect(editor).toHaveAttribute('placeholder', 'Add an internal note for your team…')
+    fireEvent.click(await screen.findByRole('button', { name: 'Note' }))
+    expect(await screen.findByRole('menuitemradio', { name: 'Reply all' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitemradio', { name: 'Reply' })).not.toBeInTheDocument()
+  })
+
+  it('keeps a tracker note-only for a teammate without ticket.reply', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.note']
+    renderTracker()
+    await screen.findByTestId('editor')
+    expect(screen.queryByRole('button', { name: 'Note' })).not.toBeInTheDocument()
+  })
+
+  it('asks for a reply to every linked ticket, not to a requester the tracker lacks', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    await chooseReplyAll()
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'placeholder',
+      "Reply to every linked ticket's requester…"
+    )
+  })
+
+  it('has no attach button in Reply all mode, and keeps it for a note', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    expect(await screen.findByRole('button', { name: 'Attach files' })).toBeInTheDocument()
+    await chooseReplyAll()
+    expect(screen.queryByRole('button', { name: 'Attach files' })).not.toBeInTheDocument()
+  })
+
+  it('says how many linked tickets the reply reaches and how many you cannot access', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    mockTrackerLinks.value = { linked: [{ id: 'ticket_a' }], hiddenCount: 2 }
+    renderTracker()
+    await chooseReplyAll()
+    expect(
+      await screen.findByText("3 linked tickets · includes 2 you can't access")
+    ).toBeInTheDocument()
+  })
+
+  it('shows no count line when every linked ticket is visible', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    mockTrackerLinks.value = { linked: [{ id: 'ticket_a' }], hiddenCount: 0 }
+    renderTracker()
+    await chooseReplyAll()
+    expect(screen.queryByText(/you can't access/)).not.toBeInTheDocument()
+  })
+
+  it('the reply shortcut keeps Note and says why when files are staged', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    staged.items = [{ id: 'f1', name: 'acme.png', status: 'done' }]
+    const composerRef = createRef<ThreadComposerHandle>()
+    renderTracker(composerRef)
+    await screen.findByRole('button', { name: 'Note' })
+    act(() => composerRef.current?.focusComposer('reply'))
+    expect(toastSpy.error).toHaveBeenCalledWith(
+      "Reply all can't include files. Remove them to switch."
+    )
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'placeholder',
+      'Add an internal note for your team…'
+    )
+  })
+
+  it('keeps Note and says why when files are staged and Reply all is chosen', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    staged.items = [{ id: 'f1', name: 'acme.png', status: 'done' }]
+    renderTracker()
+    fireEvent.click(await screen.findByRole('button', { name: 'Note' }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Reply all' }))
+    expect(toastSpy.error).toHaveBeenCalledWith(
+      "Reply all can't include files. Remove them to switch."
+    )
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'placeholder',
+      'Add an internal note for your team…'
+    )
+  })
+
+  it('stages no pasted file in Reply all mode, and says why', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    await chooseReplyAll()
+    const file = new File(['x'], 'acme.png', { type: 'image/png' })
+    const box = document.querySelector('[data-inbox-composer]') as HTMLElement
+    fireEvent.paste(box, { clipboardData: { files: [file] } })
+    expect(addFiles).not.toHaveBeenCalled()
+    expect(toastSpy.error).toHaveBeenCalledWith("Reply all can't include files.")
+  })
+
+  it('sends a Reply all as a reply-all on the tracker', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    vi.mocked(sendTicketMessageFn).mockResolvedValue({
+      message: mockTicketThread.messages[0],
+    } as never)
+    renderTracker()
+    await chooseReplyAll()
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    act(() =>
+      composerProbe.onChange?.(
+        {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Fixed' }] }],
+        },
+        '<p>Fixed</p>',
+        'Fixed'
+      )
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }))
+    await waitFor(() =>
+      expect(sendTicketMessageFn).toHaveBeenCalledWith({
+        data: expect.objectContaining({ ticketId: 'ticket_tracker', replyAll: true }),
+      })
+    )
   })
 })
 
@@ -631,6 +868,29 @@ describe('AgentConversationThread — conversation kind unaffected', () => {
     expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
     expect(screen.getByTestId('inbox-detail-panel')).toBeInTheDocument()
     expect(screen.getByTestId('composer-ai-actions')).toHaveAttribute('data-active-mode', 'reply')
+  })
+})
+
+describe('AgentConversationThread — a conversation the server answers NotFound for', () => {
+  it('shows "Conversation not found" with no Close and no reply box', async () => {
+    threadProbe.fail = Object.assign(new Error('Conversation not found'), {
+      code: 'CONVERSATION_NOT_FOUND',
+      statusCode: 404,
+    })
+    renderThread({ kind: 'conversation', id: 'conversation_hidden' })
+    expect(await screen.findByTestId('empty-state')).toHaveTextContent('Conversation not found')
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument()
+  })
+
+  it('does not show the not-found state for any other failure', async () => {
+    threadProbe.fail = Object.assign(new Error('Something went wrong on our side.'), {
+      reference: 'ABCD-1234',
+    })
+    renderThread({ kind: 'conversation', id: 'conversation_broken' })
+    // Wait for the read to settle, then check the pane did not claim NotFound.
+    await screen.findByRole('button', { name: 'Reply' })
+    expect(screen.queryByText('Conversation not found')).not.toBeInTheDocument()
   })
 })
 
@@ -869,6 +1129,19 @@ describe('AgentConversationThread — composer focus handle', () => {
     const note = screen.getByTestId('editor')
     expect(note).toHaveAttribute('placeholder', 'Add an internal note for your team…')
     expect(document.activeElement).toBe(note)
+  })
+
+  it('the note editor checks mentions against the open conversation; the reply editor does not', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const reply = await screen.findByTestId('editor')
+    expect(reply).not.toHaveAttribute('data-mention-item')
+
+    act(() => composerRef.current?.focusComposer('note'))
+
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'data-mention-item',
+      'conversation:conversation_1'
+    )
   })
 
   it('marks the composer box so the inbox Escape binding can find it from the editor', async () => {
@@ -1211,6 +1484,16 @@ describe('AgentConversationThread: triage controls beside the detail panel', () 
 
     expect(screen.getByTestId('priority-control')).toBeInTheDocument()
     expect(panel).toHaveAttribute('data-visible', 'false')
+  })
+})
+
+describe('AgentConversationThread: a spam-ended thread below the inline panel width', () => {
+  it("hands the header's status control the spam marker, so it offers restore", async () => {
+    threadProbe.conversation = { status: 'closed', endReason: 'spam', spamReason: 'burst_rate' }
+    renderThread({ kind: 'conversation', id: 'conversation_spam' }, { detailPanelShown: false })
+    const control = await screen.findByTestId('status-control')
+    await waitFor(() => expect(control).toHaveAttribute('data-status', 'closed'))
+    expect(control).toHaveAttribute('data-end-reason', 'spam')
   })
 })
 

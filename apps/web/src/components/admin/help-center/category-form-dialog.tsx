@@ -315,6 +315,9 @@ export function CategoryFormDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // This dialog portals out of the article form, but React still bubbles the
+    // submit through the component tree to that outer form.
+    e.stopPropagation()
     const trimmedName = name.trim()
     const trimmedDesc = description.trim()
     if (!trimmedName) return

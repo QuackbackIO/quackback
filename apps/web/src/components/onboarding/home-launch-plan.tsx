@@ -20,8 +20,6 @@ import {
   dismissTourOfferFn,
 } from '@/lib/server/functions/onboarding-progress'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
-import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
-import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
 import {
   launchPath,
   launchPlanLeadsHome,
@@ -52,9 +50,13 @@ function useInPlaceChange(area: RefObject<HTMLDivElement | null>, view: AreaView
   const shown = useRef(view?.key)
   const [announcement, setAnnouncement] = useState('')
   useEffect(() => {
+    const inside = (node: EventTarget | null) => area.current?.contains(node as Node) ?? false
     const track = (event: FocusEvent) => {
-      focusInside.current = area.current?.contains(event.target as Node) ?? false
+      focusInside.current = inside(event.target)
     }
+    // Focus can land in the plan before this effect runs (the effect runs
+    // after paint), and that focusin is never heard, so start from where it is.
+    focusInside.current = inside(document.activeElement)
     document.addEventListener('focusin', track)
     return () => document.removeEventListener('focusin', track)
   }, [area])
@@ -157,21 +159,6 @@ export function HomeGettingStarted({
     if (planShown) lastStep.current = path.next
   })
   const announcement = useInPlaceChange(area, view)
-  // The lookup starts only while its notice has a live launch plan to sit in.
-  const branding = useAutomaticWebsiteBranding({ enabled: planShown })
-  const brandingShown =
-    branding.status?.status === 'applied' ||
-    (branding.status?.status === 'offered' && branding.status.canUse)
-  const brandingNotice = brandingShown && (
-    <AutomaticBrandingNotice
-      status={branding.status}
-      pending={branding.pending}
-      error={branding.error}
-      onUndo={branding.undo}
-      onAccept={branding.accept}
-      onDismiss={branding.dismiss}
-    />
-  )
 
   return (
     <>
@@ -180,7 +167,6 @@ export function HomeGettingStarted({
           <HomeNextStep
             status={statusQuery.data}
             portalUrl={portalUrl}
-            brandingNotice={brandingNotice}
             pending={resolutionMutation.isPending}
             onCreateBoard={() => setCreateBoardOpen(true)}
           />

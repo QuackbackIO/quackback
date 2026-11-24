@@ -4,7 +4,7 @@
  * REST PATCH). Kept beside the role service but in its own module so the
  * service stays within size bounds.
  */
-import { db } from '@/lib/server/db'
+import { db, type Database, type Transaction } from '@/lib/server/db'
 import type { RoleId } from '@quackback/ids'
 import { SYSTEM_ROLES, type PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
@@ -22,19 +22,20 @@ import { loadRole, permissionKeysForRole } from './role.service'
  */
 export async function assertGrantableRole(
   roleId: RoleId,
-  granter: readonly PermissionKey[]
-): Promise<{ id: RoleId; key: string; name: string }> {
-  const role = await loadRole(roleId)
+  granter: readonly PermissionKey[],
+  exec: Database | Transaction = db
+): Promise<{ id: RoleId; key: string; name: string; isSystem: boolean }> {
+  const role = await loadRole(roleId, exec)
   if (role.key === SYSTEM_ROLES.OWNER) {
     throw new ForbiddenError('FORBIDDEN', 'Grant Owner by promoting to admin instead')
   }
-  const targetKeys = await permissionKeysForRole(db, role.id)
+  const targetKeys = await permissionKeysForRole(exec, role.id)
   assertWithinCeiling(
     [...targetKeys],
     new Set(granter),
     "You can't grant a role with permissions you don't hold"
   )
-  return { id: role.id, key: role.key, name: role.name }
+  return { id: role.id, key: role.key, name: role.name, isSystem: role.isSystem }
 }
 
 /**

@@ -23,6 +23,8 @@ import {
   CONNECTOR_MAX_RESPONSE_BYTES,
   CONNECTOR_REQUEST_TIMEOUT_MS,
 } from '@/lib/shared/assistant/connectors'
+import { isE2eWebhookSinkUrl, isLoopbackAddress } from '@/lib/server/e2e-harness/webhook-sink'
+import { isE2eOidcFakeUrl } from '@/lib/server/e2e-harness/oidc-fake'
 
 const ALLOWED_SCHEMES = new Set(['http:', 'https:'])
 
@@ -143,6 +145,18 @@ export function isPrivateAddress(addr: string): boolean {
   return isPrivateIpv4(addr)
 }
 
+/**
+ * The e2e host allowances a caller may ask for. Each has no effect unless the
+ * e2e harness gate is open and the URL is exactly the configured stand-in.
+ */
+export interface E2eAllowance {
+  /**
+   * Identity-provider URLs only (discovery, token, userinfo, JWKS): let the
+   * one e2e OIDC provider fake through (see e2e-harness/oidc-fake.ts).
+   */
+  allowE2eOidcFake?: boolean
+}
+
 export type UrlSafetyResult =
   | { safe: true; address: string; family: 4 | 6 }
   | { safe: false; reason: 'scheme-rejected' | 'ssrf-rejected' | 'dns-error' }
@@ -154,7 +168,11 @@ export type UrlSafetyResult =
  * caller should use this address to pin the fetch connection (e.g. via a
  * custom agent lookup function) to close the DNS rebinding TOCTOU window.
  */
-export async function checkUrlSafety(url: string): Promise<UrlSafetyResult> {
+export async function checkUrlSafety(
+  url: string,
+  opts: E2eAllowance = {}
+): Promise<UrlSafetyResult> {
+  if (opts.allowE2eOidcFake && isE2eOidcFakeUrl(url)) return checkE2eLoopbackSafety(url)
   if (!isSafeScheme(url)) {
     return { safe: false, reason: 'scheme-rejected' }
   }
@@ -188,6 +206,26 @@ export async function checkUrlSafety(url: string): Promise<UrlSafetyResult> {
   }
 }
 
+/**
+ * The check for an e2e stand-in host (the webhook sink, the OIDC provider
+ * fake; see e2e-harness/): the named host must resolve, and every address it
+ * resolves to must be loopback. Any other private range is still refused.
+ */
+async function checkE2eLoopbackSafety(url: string): Promise<UrlSafetyResult> {
+  let addresses: Array<{ address: string; family: number }>
+  try {
+    addresses = await lookup(new URL(url).hostname, { all: true })
+  } catch {
+    return { safe: false, reason: 'dns-error' }
+  }
+  if (addresses.length === 0) return { safe: false, reason: 'dns-error' }
+  if (!addresses.every((entry) => isLoopbackAddress(entry.address))) {
+    return { safe: false, reason: 'ssrf-rejected' }
+  }
+  const pinned = addresses[0]
+  return { safe: true, address: pinned.address, family: pinned.family === 6 ? 6 : 4 }
+}
+
 /** Thrown by `safeFetch` when the target URL fails SSRF validation. */
 export class SsrfError extends Error {
   constructor(public readonly reason: 'scheme-rejected' | 'ssrf-rejected' | 'dns-error') {
@@ -212,7 +250,7 @@ export class TimeoutError extends Error {
   }
 }
 
-export interface SafeFetchInit {
+export interface SafeFetchInit extends E2eAllowance {
   method?: string
   headers?: Record<string, string>
   /** Request body for POST/PUT. */
@@ -229,6 +267,12 @@ export interface SafeFetchInit {
    *   must not act on a partial body (e.g. image rehosting).
    */
   onOverflow?: 'truncate' | 'error'
+  /**
+   * Outgoing webhooks only: let the one e2e webhook sink host through. Has no
+   * effect unless the e2e harness gate is open and the URL is exactly the
+   * configured sink (see e2e-harness/webhook-sink.ts). No other caller sets it.
+   */
+  allowE2eWebhookSink?: boolean
 }
 
 const DEFAULT_TIMEOUT_MS = 5000
@@ -256,7 +300,10 @@ const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024
  * underlying error on network failure / timeout.
  */
 export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<Response> {
-  const safety = await checkUrlSafety(url)
+  const safety =
+    init.allowE2eWebhookSink && isE2eWebhookSinkUrl(url)
+      ? await checkE2eLoopbackSafety(url)
+      : await checkUrlSafety(url, { allowE2eOidcFake: init.allowE2eOidcFake })
   if (!safety.safe) throw new SsrfError(safety.reason)
 
   const parsed = new URL(url)

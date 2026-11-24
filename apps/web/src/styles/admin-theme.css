@@ -83,7 +83,7 @@
   --chart-4: #1d9999;
   --border: #e8e5dc;
   --input: #8a887f;
-  --ring: #111111;
+  --ring: var(--muted-foreground);
   --metric-posts: #111111;
   --metric-votes: #111111;
   --metric-comments: #111111;
@@ -98,12 +98,13 @@
   --sidebar-accent: #ffffff;
   --sidebar-accent-foreground: #111111;
   --sidebar-border: #e8e5dc;
-  --sidebar-ring: #111111;
+  --sidebar-ring: var(--muted-foreground);
   --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius: 0.5rem;
   --radius-item: 8px;
+  --radius-button: 8px;
   --radius-field: 8px;
   --radius-panel: 12px;
   --letter-spacing: 0em;
@@ -133,8 +134,7 @@
   --chrome-active-text: #111111;
   --chrome-active-icon: #111111;
   --chrome-pane-active-background: #f7f6f2;
-  --chrome-focus: #111111;
-  --focus-halo: 0 0 0 5px #f7cc29;
+  --chrome-focus: var(--muted-foreground);
   --duck: #f7cc29;
   --duck-ink: #111111;
   --block: #111111;
@@ -181,7 +181,7 @@
   --metric-visits: #f2f2f2;
   --border: #2a2a2a;
   --input: #767676;
-  --ring: #f2f2f2;
+  --ring: var(--muted-foreground);
   --sidebar: #121212;
   --sidebar-foreground: #f2f2f2;
   --sidebar-primary: #f2f2f2;
@@ -189,7 +189,7 @@
   --sidebar-accent: #1b1b1b;
   --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: #2a2a2a;
-  --sidebar-ring: #f2f2f2;
+  --sidebar-ring: var(--muted-foreground);
   --shadow-sm: 0 0 0 1px #2a2a2a;
   --shadow: 0 0 0 1px #2a2a2a;
   --shadow-md: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
@@ -211,22 +211,22 @@
   --chrome-active-text: #f2f2f2;
   --chrome-active-icon: #f7cc29;
   --chrome-pane-active-background: #222222;
-  --chrome-focus: #f2f2f2;
+  --chrome-focus: var(--muted-foreground);
   --block: #222222;
   --block-ink: #f2f2f2;
   --scrim: rgba(0, 0, 0, 0.75);
 }
 
-/* The site focus ring: an ink outline with a duck halo. It replaces the ring-* box-shadow
-   focus styles under the admin. */
+/* The focus ring: a 2px muted grey outline, offset 2px, with no halo. Never ink, duck or a
+   brand colour. It replaces the ring-* box-shadow focus styles under the admin. */
 :root:has([data-admin-shell]) :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-  box-shadow: var(--focus-halo);
+  box-shadow: none;
 }
 
 /* In the work canvas, rows, tiles and tabs sit flush with the edge of clipping panels and the
-   canvas itself clips, so an offset ring and halo were cut to a sliver. Focus there is a 2px ink
+   canvas itself clips, so an offset ring was cut to a sliver. Focus there is a 2px grey
    outline drawn inside the element. Compact controls (buttons, switches, checkboxes, radios) sit
    in padded rows and keep the full ring, which an inset outline would lose in an ink fill. The
    rail, side panes and popovers keep the ring everywhere. Fields, menu rows and options are
@@ -270,9 +270,9 @@
   box-shadow: none;
 }
 
-/* Text fields take a quieter focus: their own edge becomes a 2px ink edge, with no offset
-   outline and no halo. The full ring stacked on a bordered field read as three rings, and a
-   duck glow over the dark sheet turned olive. Buttons and links keep the ink-and-duck ring. */
+/* Text fields take a quieter focus: their own edge becomes a 2px grey edge, with no offset
+   outline. The full ring stacked on a bordered field read as three rings. Buttons and links
+   keep the offset ring. */
 :root:has([data-admin-shell])
   :is(
     input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']),
@@ -285,10 +285,12 @@
   box-shadow: 0 0 0 1px var(--ring);
 }
 
-/* Fields with no edge of their own (the command palette's search, the editor body) sit
-   inside a panel that already shows where focus is. */
+/* Fields with no edge of their own (the command palette's search, the editor body, a field
+   marked data-bare-field inside a bordered box) sit inside a panel or box that already shows
+   where focus is. input[data-bare-field] ties the text-field rule above, so this rule wins by
+   coming after it. */
 :root:has([data-admin-shell])
-  :is([data-slot='command-input'], [contenteditable='true']):focus-visible {
+  :is([data-slot='command-input'], [contenteditable='true'], input[data-bare-field]):focus-visible {
   outline: none;
   box-shadow: none;
 }
@@ -423,6 +425,17 @@
 :root:has([data-admin-shell]) [data-slot='progress-fill'][data-level='full'] {
   box-shadow: inset 0 0 0 1px var(--foreground);
 }
+/* A bar past a limit: the destructive fill on its own tint, never the duck. */
+:root:has([data-admin-shell]) [data-slot='progress'][data-tone='over'] {
+  background: color-mix(in oklab, var(--destructive) 15%, transparent);
+}
+:root:has([data-admin-shell]) [data-slot='progress-fill'][data-level='over'] {
+  background: var(--destructive);
+}
+/* A count past a cap that needs no action (posts): a quiet grey. */
+:root:has([data-admin-shell]) [data-slot='progress-fill'][data-level='muted'] {
+  background: var(--muted-foreground);
+}
 
 /* VoteButton, voted: a duck edge and tint with ink text, as on the website's product demo. */
 :root:has([data-admin-shell]) .post-card__vote--voted {
@@ -492,5 +505,161 @@
 @media (min-width: 640px) {
   :root:has([data-admin-shell]) [data-slot='alert-dialog-content'] {
     max-width: 400px;
+  }
+}
+
+/* Import overlay: the brand kit over the Customise preview while Import reads a website.
+   A faint band drifts down the preview on a loop; the card's empty rows shimmer, then fill.
+   Everything that loops moves by `translate` or `opacity` alone, so it runs on the compositor
+   and never repaints the preview under it: no backdrop filter, no blend mode. */
+:root:has([data-admin-shell]) .import-scan {
+  background: rgb(255 255 255 / 0.06);
+  animation: import-fade-in 0.4s ease-out both;
+}
+:root:has([data-admin-shell]) .import-scan::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 30%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(255 255 255 / 0.2) 42%,
+    rgb(120 170 255 / 0.13) 50%,
+    rgb(255 255 255 / 0.2) 58%,
+    transparent
+  );
+  will-change: translate;
+  animation: import-sweep 3.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+/* The card keeps its own size however far the frame is scaled down. */
+:root:has([data-admin-shell]) .import-kit {
+  transform-origin: bottom left;
+  scale: calc(1 / var(--preview-scale, 1));
+  animation: import-kit-in 0.3s ease-out both;
+}
+:root:has([data-admin-shell]) .import-kit-leaving {
+  animation: import-kit-out 0.3s ease-in both;
+}
+:root:has([data-admin-shell]) .import-kit-dots::after {
+  content: '';
+  animation: import-dots 1.4s steps(1) infinite;
+}
+:root:has([data-admin-shell]) .import-kit-slot {
+  position: relative;
+  overflow: hidden;
+  background: var(--border);
+}
+:root:has([data-admin-shell]) .import-kit-slot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--popover) 60%, transparent) 50%,
+    transparent
+  );
+  animation: import-shimmer 1.3s linear infinite;
+}
+:root:has([data-admin-shell]) .import-kit-found {
+  animation: import-fade-up 0.35s ease-out both;
+}
+:root:has([data-admin-shell]) .import-kit-swatch {
+  animation: import-pop 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+/* The preview has changed underneath: a soft ring on the frame, once. */
+:root:has([data-admin-shell]) .import-reveal {
+  box-shadow: inset 0 0 0 3px color-mix(in oklab, var(--ring) 45%, transparent);
+  animation: import-ring 1.1s ease-out both;
+}
+@keyframes import-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes import-sweep {
+  from {
+    translate: 0 -105%;
+  }
+  to {
+    translate: 0 340%;
+  }
+}
+@keyframes import-kit-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+@keyframes import-kit-out {
+  to {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+@keyframes import-dots {
+  0% {
+    content: '';
+  }
+  25% {
+    content: '.';
+  }
+  50% {
+    content: '..';
+  }
+  75% {
+    content: '...';
+  }
+}
+@keyframes import-shimmer {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 100% 0;
+  }
+}
+@keyframes import-fade-up {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+@keyframes import-pop {
+  from {
+    scale: 0;
+  }
+}
+@keyframes import-ring {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* Reduced motion: a still tint and the card; the rows still fill, without movement. */
+@media (prefers-reduced-motion: reduce) {
+  :root:has([data-admin-shell]) .import-scan,
+  :root:has([data-admin-shell]) .import-kit,
+  :root:has([data-admin-shell]) .import-kit-found,
+  :root:has([data-admin-shell]) .import-kit-swatch {
+    animation: none;
+  }
+  :root:has([data-admin-shell]) .import-scan::before,
+  :root:has([data-admin-shell]) .import-kit-slot::after,
+  :root:has([data-admin-shell]) .import-reveal {
+    display: none;
+  }
+  :root:has([data-admin-shell]) .import-kit-leaving {
+    animation: none;
+    opacity: 0;
+  }
+  :root:has([data-admin-shell]) .import-kit-dots::after {
+    content: '...';
+    animation: none;
   }
 }

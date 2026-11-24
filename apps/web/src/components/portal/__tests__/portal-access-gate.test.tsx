@@ -124,6 +124,43 @@ describe('PortalAccessGate — decorative backdrop', () => {
   })
 })
 
+describe('PortalAccessGate: the wide logo', () => {
+  const WIDE = '/api/storage/header-logos/2026/11/abc-wordmark.svg'
+  const SQUARE = '/api/storage/logos/2026/11/abc-mark.png'
+
+  it('shows the logo’s dark mode version on the card and in the backdrop, for a dark portal', () => {
+    const DARK = '/api/storage/header-logos/2026/11/abc-wordmark-dark.svg'
+    render(
+      <PortalAccessGate {...baseProps} logoUrl={SQUARE} wideLogoUrl={WIDE} wideLogoDarkUrl={DARK} />
+    )
+    const [light, dark] = screen.getAllByRole('img', { name: 'Acme' })
+    expect(light).toHaveAttribute('src', WIDE)
+    expect(light!.className).toMatch(/dark:hidden/)
+    expect(dark).toHaveAttribute('src', DARK)
+    expect(dark!.className).toMatch(/dark:block/)
+    const backdrop = screen.getByTestId('portal-gate-backdrop')
+    expect(backdrop.querySelector(`img[src="${DARK}"]`)?.className).toMatch(/dark:block/)
+  })
+
+  it('shows the wide logo on the card and in the backdrop header, without the name there', () => {
+    render(<PortalAccessGate {...baseProps} logoUrl={SQUARE} wideLogoUrl={WIDE} />)
+    const card = screen.getByRole('img', { name: 'Acme' })
+    expect(card).toHaveAttribute('src', WIDE)
+    expect(card.className).toMatch(/\bobject-contain\b/)
+    expect(card.className).toMatch(/\bw-auto\b/)
+    const backdrop = screen.getByTestId('portal-gate-backdrop')
+    expect(backdrop.querySelector(`img[src="${WIDE}"]`)).not.toBeNull()
+    expect(backdrop.querySelector(`img[src="${SQUARE}"]`)).toBeNull()
+    expect(backdrop.textContent).not.toContain('Acme')
+  })
+
+  it('shows the square logo and the name without one', () => {
+    render(<PortalAccessGate {...baseProps} logoUrl={SQUARE} />)
+    expect(screen.getByRole('img', { name: 'Acme' })).toHaveAttribute('src', SQUARE)
+    expect(screen.getByTestId('portal-gate-backdrop').textContent).toContain('Acme')
+  })
+})
+
 describe('PortalAccessGate — callbackUrl', () => {
   it('navigates to callbackUrl after a successful sign-in', async () => {
     render(<PortalAccessGate {...baseProps} callbackUrl="/admin" />)

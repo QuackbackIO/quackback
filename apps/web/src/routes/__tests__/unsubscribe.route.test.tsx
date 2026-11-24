@@ -76,13 +76,60 @@ describe('/unsubscribe', () => {
     )
   })
 
-  it('shows the expired state for a used or expired token without trying to spend it', async () => {
-    fns.preview.mockResolvedValue({ status: 'error', error: 'invalid' })
+  it('shows the expired state for an expired token without trying to spend it', async () => {
+    fns.preview.mockResolvedValue({ status: 'error', error: 'expired' })
 
     await openPage(TOKEN)
 
     expect(screen.getByRole('heading', { name: 'This link has expired' })).toBeTruthy()
     expect(screen.queryByRole('button')).toBeNull()
+    expect(fns.process).not.toHaveBeenCalled()
+  })
+
+  it('says a used link was already used, not that it expired', async () => {
+    fns.preview.mockResolvedValue({ status: 'error', error: 'used' })
+
+    await openPage(TOKEN)
+
+    expect(screen.getByRole('heading', { name: 'This link was already used' })).toBeTruthy()
+    expect(screen.queryByText(/expired/)).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('never calls a link that was never issued expired', async () => {
+    fns.preview.mockResolvedValue({ status: 'error', error: 'invalid' })
+
+    await openPage(TOKEN)
+
+    expect(screen.getByRole('heading', { name: 'This link is not valid' })).toBeTruthy()
+    expect(screen.queryByText(/expired/)).toBeNull()
+  })
+
+  it('shows the used state when the link was spent between opening and confirming', async () => {
+    fns.preview.mockResolvedValue({ status: 'confirm', action: 'unsubscribe_post' })
+    fns.process.mockResolvedValue({ success: false, error: 'used' })
+
+    await openPage(TOKEN)
+    fireEvent.click(screen.getByRole('button', { name: 'Unsubscribe' }))
+
+    expect(await screen.findByRole('heading', { name: 'This link was already used' })).toBeTruthy()
+  })
+
+  it('a post unsubscribe does not promise that only email stops: the bell stops too', async () => {
+    fns.preview.mockResolvedValue({
+      status: 'confirm',
+      action: 'unsubscribe_post',
+      postTitle: 'Dark mode',
+    })
+    fns.process.mockResolvedValue({ success: true, action: 'unsubscribe_post' })
+
+    await openPage(TOKEN)
+    expect(screen.getByRole('heading', { name: 'Unsubscribe from this post?' })).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/email/i)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unsubscribe' }))
+    expect(await screen.findByText('Done')).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/email/i)
   })
 
   it('never calls the server for a malformed token', async () => {

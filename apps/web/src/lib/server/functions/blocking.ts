@@ -20,7 +20,8 @@ export const getPersonBlockStatusFn = createServerFn({ method: 'GET' })
     return getBlockStatus(data.principalId as PrincipalId)
   })
 
-/** Block a person: reject their future messages and re-registration. */
+/** Block a person: reject their future messages and re-registration, and stop
+ *  automated email to them. A teammate's own reply still reaches them. */
 export const blockPersonFn = createServerFn({ method: 'POST' })
   .validator(principalIdSchema)
   .handler(async ({ data }) => {

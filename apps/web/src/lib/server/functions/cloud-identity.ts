@@ -15,6 +15,7 @@ import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-pro
 import { provenZoneProofsAccepted } from '@/lib/server/control-plane/proven-zone-proofs'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { logger } from '@/lib/server/logger'
+import { usedForLabel, type PortalSection } from '@/lib/shared/custom-domains'
 
 export { platformLabelFromHostname }
 
@@ -106,6 +107,25 @@ export const hasCustomDomainEntitlementFn = createServerFn({ method: 'GET' }).ha
   return hasEntitlement('customDomain')
 })
 
+/** A change to a custom domain refused, with words written for the page. */
+export interface CustomDomainRefusal {
+  ok: false
+  code: 'CUSTOM_DOMAIN_USED_BY_SECTION'
+  message: string
+}
+
+/**
+ * The section whose hostname `hostname` is, if any, ready or not. Making it
+ * the primary domain would make the primary domain that section's host too.
+ */
+async function sectionUsing(hostname: string): Promise<PortalSection | null> {
+  const [{ getSectionDomains }, { sectionOfHost }] = await Promise.all([
+    import('@/lib/server/domains/settings/section-domains.service'),
+    import('@/lib/shared/section-domains'),
+  ])
+  return sectionOfHost(hostname, await getSectionDomains('fresh'))
+}
+
 export const mutateCloudCustomDomainFn = createServerFn({ method: 'POST' })
   .validator(customDomainInputSchema)
   .handler(async ({ data }) => {
@@ -114,6 +134,18 @@ export const mutateCloudCustomDomainFn = createServerFn({ method: 'POST' })
     if (!current) throw new Error('Cloud workspace identity is not enabled')
     const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
     if (data.action === 'add') await requireEntitlement('customDomain')
+
+    if (data.action === 'makePrimary') {
+      const section = await sectionUsing(data.hostname)
+      if (section) {
+        const refusal: CustomDomainRefusal = {
+          ok: false,
+          code: 'CUSTOM_DOMAIN_USED_BY_SECTION',
+          message: `${usedForLabel(section)} uses this domain. Remove it there first.`,
+        }
+        return refusal
+      }
+    }
 
     const mightChangeOrigin = data.action === 'makePrimary' || data.action === 'remove'
     let transferToken: string | null = null
@@ -155,6 +187,7 @@ export const mutateCloudCustomDomainFn = createServerFn({ method: 'POST' })
       )
     }
     return {
+      ok: true as const,
       projection: verified.projection,
       transferToken: originChanged ? transferToken : null,
     }

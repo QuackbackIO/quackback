@@ -27,11 +27,11 @@ import {
   conversationMessageMentions,
   conversationMessageReactions,
   conversationMessageFlags,
-  user,
   userSegments,
   segments,
   assistantInvolvements,
   ticketConversations,
+  tickets,
   type Conversation,
   type ConversationMessage,
   type PostSuggestion,
@@ -40,6 +40,7 @@ import {
   type TranslatedFromMetadata,
 } from '@/lib/server/db'
 import {
+  isValidTypeId,
   toUuid,
   type ConversationId,
   type PrincipalId,
@@ -61,6 +62,7 @@ import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
+import { customerVisibleMessageSql } from '@/lib/server/messages/customer-audience'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { isTestThreadSql } from './conversation.test-data'
 import { testOwnerOf } from '@/lib/server/test-data'
@@ -75,11 +77,14 @@ import {
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { conversationRelevanceSql } from './conversation-relevance'
 import type { SQL } from 'drizzle-orm'
-import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
+import {
+  loadAuthors,
+  loadAuthorAudiences,
+  fallbackAuthor,
+  type AuthorAudiences,
+} from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
-import { supportContactName } from '@/lib/shared/support-contact-name'
-import { displayAssistantName } from '@/lib/shared/assistant/config'
 import { truncate } from '@/lib/shared/utils/string'
 import type { Channel } from '@/lib/shared/channels'
 import { keywordInContext, type TermSegment } from '@/lib/shared/utils/keyword-context'
@@ -154,13 +159,15 @@ export async function resolveAuthorAudiences(input: {
   principalId: PrincipalId
   displayName?: string | null
   avatarUrl?: string | null
-}): Promise<{ publicAuthor: ConversationAuthorDTO; supportAuthor: ConversationAuthorDTO }> {
+}): Promise<AuthorAudiences> {
   const views = await loadAuthorAudiences([input.principalId])
   const view = views.get(input.principalId)
   if (!view) {
     return {
       publicAuthor: fallbackAuthor(input.principalId),
       supportAuthor: authorFromInput(input),
+      customerAuthor: fallbackAuthor(input.principalId),
+      shownAsTeam: false,
     }
   }
   return view
@@ -290,13 +297,11 @@ export async function enrichMessageForAgent(
  * flag first, each with a preview + the parent thread it belongs to (a
  * conversation OR a ticket — exactly one of `conversationId`/`ticketId` is set
  * on the DTO) so the list can link straight to it. Soft-deleted messages are
- * skipped. Two branches, unioned in memory and re-sorted by flag time: the
- * conversation branch is unchanged; the ticket branch additionally applies
- * `ticketFilter(actor)` (unlike the conversation branch, which trusts the
- * flag ownership alone — flagging is per-agent already, but a ticket's
- * visibility can narrow further by team/assignment, so a flag on a ticket the
- * viewer no longer has access to quietly drops out of their feed rather than
- * leaking a peek at it).
+ * skipped. Two branches, unioned in memory and re-sorted by flag time, each
+ * scoped by its row filter (`conversationFilter(actor)`, `ticketFilter(actor)`):
+ * flagging is per-agent already, but an item's visibility can narrow by team or
+ * assignment, so a flag on an item the viewer can no longer see quietly drops
+ * out of their feed rather than leaking a peek at it.
  *
  * CONVERGENCE PHASE 3 (justified single-parent branches): this is a
  * per-MESSAGE feed with per-parent provenance, not a thread read — a flagged
@@ -324,9 +329,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         conversationId: conversationMessages.conversationId,
         content: conversationMessages.content,
         senderType: conversationMessages.senderType,
-        authorPublicName: principal.displayName,
-        authorIsAssistant: sql<boolean>`${principal.serviceMetadata}->>'integrationType' = 'assistant'`,
-        authorAccountName: user.name,
+        authorPrincipalId: conversationMessages.principalId,
         visitorPrincipalId: conversations.visitorPrincipalId,
         flaggedAt: conversationMessageFlags.flaggedAt,
       })
@@ -338,9 +341,10 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
           isNull(conversationMessages.deletedAt)
         )
       )
-      .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
-      .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
-      .leftJoin(user, eq(user.id, principal.userId))
+      .innerJoin(
+        conversations,
+        and(eq(conversations.id, conversationMessages.conversationId), conversationFilter(actor))
+      )
       .where(eq(conversationMessageFlags.principalId, viewerPrincipalId))
       .orderBy(desc(conversationMessageFlags.flaggedAt))
       .limit(100),
@@ -350,9 +354,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         ticketId: conversationMessages.ticketId,
         content: conversationMessages.content,
         senderType: conversationMessages.senderType,
-        authorPublicName: principal.displayName,
-        authorIsAssistant: sql<boolean>`${principal.serviceMetadata}->>'integrationType' = 'assistant'`,
-        authorAccountName: user.name,
+        authorPrincipalId: conversationMessages.principalId,
         ticketTitle: tickets.title,
         ticketNumber: tickets.number,
         flaggedAt: conversationMessageFlags.flaggedAt,
@@ -366,38 +368,38 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         )
       )
       .innerJoin(tickets, and(eq(tickets.id, conversationMessages.ticketId), ticketFilter(actor)))
-      .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
-      .leftJoin(user, eq(user.id, principal.userId))
       .where(eq(conversationMessageFlags.principalId, viewerPrincipalId))
       .orderBy(desc(conversationMessageFlags.flaggedAt))
       .limit(100),
   ])
 
-  const visitorNames = await loadAuthors(
-    conversationRows.map((r) => r.visitorPrincipalId),
+  // One batched read names every author and visitor as the inbox does: the
+  // account name, a personal key's creator, an API key with its "via API" mark.
+  const names = await loadAuthors(
+    [
+      ...conversationRows.map((r) => r.visitorPrincipalId),
+      ...conversationRows.map((r) => r.authorPrincipalId),
+      ...ticketRows.map((r) => r.authorPrincipalId),
+    ],
     { preferAccountName: true }
   )
   const flaggedAuthor = (row: {
-    authorAccountName: string | null
-    authorPublicName: string | null
-    authorIsAssistant: boolean | null
+    authorPrincipalId: PrincipalId | null
     senderType: string
-  }) =>
-    supportContactName({
-      accountName: row.authorAccountName,
-      publicName:
-        row.authorIsAssistant && row.authorPublicName
-          ? displayAssistantName(row.authorPublicName)
-          : row.authorPublicName,
-      fallback: row.senderType === 'agent' ? 'Agent' : 'Visitor',
-    })
+  }): Pick<FlaggedMessageDTO, 'authorName' | 'authorViaApi'> => {
+    const author = row.authorPrincipalId ? names.get(row.authorPrincipalId) : undefined
+    return {
+      authorName: author?.displayName ?? (row.senderType === 'agent' ? 'Agent' : 'Visitor'),
+      ...(author?.viaApi ? { authorViaApi: true } : {}),
+    }
+  }
   const fromConversations: FlaggedMessageDTO[] = conversationRows.map((r) => ({
     messageId: r.messageId,
     conversationId: r.conversationId,
     ticketId: null,
     preview: truncate(r.content, 120),
-    authorName: flaggedAuthor(r),
-    conversationLabel: visitorNames.get(r.visitorPrincipalId)?.displayName ?? 'Visitor',
+    ...flaggedAuthor(r),
+    conversationLabel: names.get(r.visitorPrincipalId)?.displayName ?? 'Visitor',
     flaggedAt: r.flaggedAt.toISOString(),
   }))
   const fromTickets: FlaggedMessageDTO[] = ticketRows.map((r) => ({
@@ -405,7 +407,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
     conversationId: null,
     ticketId: r.ticketId,
     preview: truncate(r.content, 120),
-    authorName: flaggedAuthor(r),
+    ...flaggedAuthor(r),
     conversationLabel: `#${r.ticketNumber} · ${r.ticketTitle}`,
     flaggedAt: r.flaggedAt.toISOString(),
   }))
@@ -620,8 +622,9 @@ export async function conversationToDTO(
   const [authors, unread, tagMap] = await Promise.all([
     loadAuthors(
       [conversation.visitorPrincipalId, conversation.assignedAgentPrincipalId],
-      // Visitors keep the public name. Agents see the account name.
-      side === 'agent' ? { preferAccountName: true } : undefined
+      // Visitors keep the public name (an API key shows as the support team).
+      // Agents see the account name.
+      side === 'agent' ? { preferAccountName: true } : { forCustomer: true }
     ),
     unreadCountFor(conversation, side),
     side === 'agent'
@@ -710,21 +713,19 @@ export interface LinkedConversationSummary {
   status: ConversationStatus
 }
 
-/** Conversations linked to a post (the other direction of conversation.convert). */
+/** Conversations linked to a post (the other direction of conversation.convert),
+ *  only those the actor can see. */
 export async function getLinkedConversationsForPost(
-  postId: PostId
+  postId: PostId,
+  actor: Actor
 ): Promise<LinkedConversationSummary[]> {
-  const rows = await db
-    .select({
-      conversationId: conversations.id,
-      subject: conversations.subject,
-      status: conversations.status,
-    })
+  // Deliberately NO join to integrations: a 'live_chat' link has a null
+  // integrationId. The externalId holds the conversation's TypeID as text, so
+  // the links are read first and the conversations then by id (a text column
+  // cannot join the uuid primary key).
+  const links = await db
+    .select({ externalId: postExternalLinks.externalId })
     .from(postExternalLinks)
-    // Deliberately NO innerJoin(integrations): a 'live_chat' link has a null
-    // integrationId, so joining integrations would silently drop every conversation
-    // link. The externalId IS the conversation id for these rows.
-    .innerJoin(conversations, eq(postExternalLinks.externalId, conversations.id))
     .where(
       and(
         eq(postExternalLinks.postId, postId),
@@ -732,6 +733,18 @@ export async function getLinkedConversationsForPost(
         eq(postExternalLinks.status, 'active')
       )
     )
+  const conversationIds = links
+    .map((l) => l.externalId)
+    .filter((id): id is ConversationId => isValidTypeId(id, 'conversation'))
+  if (conversationIds.length === 0) return []
+  const rows = await db
+    .select({
+      conversationId: conversations.id,
+      subject: conversations.subject,
+      status: conversations.status,
+    })
+    .from(conversations)
+    .where(and(inArray(conversations.id, conversationIds), conversationFilter(actor)))
   return rows.map((r) => ({
     conversationId: r.conversationId as ConversationId,
     subject: r.subject,
@@ -756,7 +769,7 @@ export async function getActiveConversationForVisitor(
 /**
  * View result for a specific conversation a visitor asked for (history row /
  * ?c= deep link). Returns no conversation when the row is missing or not owned
- * by this visitor — existence is hidden, matching canViewConversation. A closed
+ * by this visitor — existence is hidden, as assertConversationVisible hides it. A closed
  * thread is surfaced read-only, exactly like the active-conversation path.
  */
 export function resolveVisitorConversation(
@@ -782,24 +795,87 @@ export async function getConversationForVisitor(
   return resolveVisitorConversation(row ?? null, visitorPrincipalId)
 }
 
+/** A row of the customer's own Messages list: the conversation plus the time
+ *  the list sorts on and shows (see `listConversationsForVisitor`). */
+export type VisitorConversationListItem = ConversationDTO & { activityAt: string }
+
 /**
  * All of a visitor's conversations, newest-first. `side` controls the DTO
  * audience: 'agent' for the admin user profile (default), 'visitor' for the
  * visitor browsing their own history in the widget (drops agent-only fields).
+ *
+ * Each row carries `activityAt`, the time the list sorts on and the row shows.
+ * It is `lastMessageAt`, except with `ticketActivity` on: a conversation paired
+ * with one of the visitor's own customer tickets uses the LATER of
+ * `lastMessageAt` and that ticket's requester-visible update time
+ * (`requesterUpdatedAtSql`, the key the Tickets tab sorts on), so a ticket that
+ * was just resolved, or was just opened on an old conversation, sits where the
+ * Tickets tab puts it. The pair is matched exactly as the row's ticket chip is
+ * (`getRequesterTicketSummaries`: customer pair, requester = this visitor, not
+ * deleted), so the time never comes from a ticket the row does not show. Read
+ * only: `conversations.last_message_at` itself is unchanged.
+ *
+ * Not paged (one `limit`), so no cursor has to follow the key; the id breaks
+ * ties so equal times keep a stable order.
  */
 export async function listConversationsForVisitor(
   visitorPrincipalId: PrincipalId,
   limit = 50,
-  side: MessageSenderType = 'agent'
-): Promise<ConversationDTO[]> {
-  const rows = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.visitorPrincipalId, visitorPrincipalId))
-    .orderBy(desc(conversations.lastMessageAt))
-    .limit(limit)
+  side: MessageSenderType = 'agent',
+  options: { ticketActivity?: boolean } = {}
+): Promise<VisitorConversationListItem[]> {
+  const select = (activityAt: SQL<Date>) =>
+    db
+      .select({ conversation: conversations, activityAt, pairedTicketId: tickets.id })
+      .from(conversations)
+      .leftJoin(
+        ticketConversations,
+        and(
+          eq(ticketConversations.conversationId, conversations.id),
+          eq(ticketConversations.ticketType, 'customer')
+        )
+      )
+      // Unaliased `tickets`: requesterUpdatedAtSql reads the outer row by that
+      // name. The unique customer pair per conversation keeps this one row each.
+      .leftJoin(
+        tickets,
+        and(
+          eq(tickets.id, ticketConversations.ticketId),
+          eq(tickets.requesterPrincipalId, visitorPrincipalId),
+          isNull(tickets.deletedAt)
+        )
+      )
+      .where(eq(conversations.visitorPrincipalId, visitorPrincipalId))
+      .orderBy(desc(activityAt), desc(conversations.id))
+      .limit(limit)
+
+  let rows = await select(
+    sql<Date>`${conversations.lastMessageAt}`.mapWith(conversations.lastMessageAt)
+  )
+  // The ticket-aware order costs a status read and per-row subqueries, so it
+  // runs only when it can change something: a row on this page has a ticket,
+  // or the page is full and a paired conversation could sit past it. A visitor
+  // with no tickets (most of them, and every teammate) stays at one query.
+  const mayHaveTickets = rows.length === limit || rows.some((r) => r.pairedTicketId !== null)
+  if (options.ticketActivity && mayHaveTickets) {
+    const { loadCustomerVisibleStatusIds, requesterUpdatedAtSql } =
+      await import('@/lib/server/domains/tickets/requester-ticket.dto')
+    const ticketUpdatedAt = requesterUpdatedAtSql(await loadCustomerVisibleStatusIds())
+    // GREATEST skips nulls: an unpaired row (no joined ticket) keeps its
+    // lastMessageAt.
+    rows = await select(
+      sql<Date>`GREATEST(${conversations.lastMessageAt}, ${ticketUpdatedAt})`.mapWith(
+        conversations.lastMessageAt
+      )
+    )
+  }
   // Small N per user, so per-row DTO building is fine.
-  return Promise.all(rows.map((c) => conversationToDTO(c, side)))
+  return Promise.all(
+    rows.map(async (r) => ({
+      ...(await conversationToDTO(r.conversation, side)),
+      activityAt: r.activityAt.toISOString(),
+    }))
+  )
 }
 
 /**
@@ -879,6 +955,51 @@ export async function findBackfillCursor(
   return row ?? null
 }
 
+/**
+ * The messages a reconnecting SSE client missed after `lastEventId`, oldest
+ * first, as DTOs. Mirrors listMessages: soft-deleted rows are skipped, the
+ * composite (created_at, id) keyset keeps same-microsecond siblings, and a
+ * customer (no `includeInternal`) gets the customer audience only, since
+ * publish-time channel separation does not cover this DB read. Empty when
+ * the cursor is not a message of this conversation.
+ */
+export async function listMissedMessagesForBackfill(
+  conversationId: ConversationId,
+  lastEventId: string,
+  opts: { includeInternal: boolean }
+): Promise<ConversationMessageDTO[]> {
+  const cursor = await findBackfillCursor(conversationId, lastEventId)
+  if (!cursor) return []
+  const missed = await db
+    .select()
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        isNull(conversationMessages.deletedAt),
+        opts.includeInternal ? undefined : customerVisibleMessageSql(),
+        or(
+          gt(conversationMessages.createdAt, cursor.createdAt),
+          and(
+            eq(conversationMessages.createdAt, cursor.createdAt),
+            gt(conversationMessages.id, cursor.id)
+          )
+        )
+      )
+    )
+    .orderBy(conversationMessages.createdAt, conversationMessages.id)
+  const authors = await loadAuthors(
+    missed.map((m) => m.principalId),
+    { preferAccountName: opts.includeInternal, forCustomer: true }
+  )
+  return missed.map((m) =>
+    toMessageDTO(
+      m,
+      m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null
+    )
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Convergence Phase 0 — pair thread (scratchpad/convergence-design.md,
 // mechanics appendix "Read (Phase 0)"). pair-thread.service.ts (tickets
@@ -890,12 +1011,22 @@ export async function findBackfillCursor(
 
 /**
  * The CUSTOMER ticket linked to a conversation, or null. At most one can
- * exist (0150's partial unique index; 0214's makes the pair 1:1).
+ * exist (0150's partial unique index; 0214's makes the pair 1:1). Only a
+ * ticket the viewer's ticket filter admits counts: a hidden pair's thread,
+ * internal notes included, never merges into the conversation.
  */
-async function resolvePairTicketId(conversationId: ConversationId): Promise<TicketId | null> {
+async function resolveVisiblePairTicketId(
+  conversationId: ConversationId,
+  viewer: Actor
+): Promise<TicketId | null> {
+  const [{ tickets }, { ticketFilter }] = await Promise.all([
+    import('@/lib/server/db'),
+    import('@/lib/server/policy/tickets'),
+  ])
   const [link] = await db
     .select({ ticketId: ticketConversations.ticketId })
     .from(ticketConversations)
+    .innerJoin(tickets, and(eq(tickets.id, ticketConversations.ticketId), ticketFilter(viewer)))
     .where(
       and(
         eq(ticketConversations.conversationId, conversationId),
@@ -942,8 +1073,9 @@ function compareMessagesNewestFirst(a: ConversationMessage, b: ConversationMessa
  * pagination, returned oldest-first for rendering. `before` is a message id
  * cursor (fetch messages older than it).
  *
- * CONVERGENCE PHASE 0: agent surfaces pass `includeLinkedTicket` so a linked
- * CUSTOMER ticket's legacy ticket-parented rows render inline — one shared
+ * CONVERGENCE PHASE 0: agent surfaces pass `linkedTicketViewer` so a linked
+ * CUSTOMER ticket's legacy ticket-parented rows render inline, when that
+ * viewer may open the ticket — one shared
  * thread per pair (the agent conversation view of a pair; the ticket-side
  * twin is pair-thread.service.ts's loader, and the merge contract is the
  * same). The ticket parent's page is fetched with the same (created_at, id)
@@ -962,15 +1094,16 @@ export async function listMessages(
     before?: string
     limit?: number
     includeInternal?: boolean
-    includeLinkedTicket?: boolean
+    /** Merge the paired customer ticket's rows when this viewer can see it. */
+    linkedTicketViewer?: Actor
     /** Agent surfaces show the account name. Posts and the visitor widget do not. */
     preferAccountName?: boolean
   }
 ): Promise<MessagePage> {
   const limit = Math.min(opts?.limit ?? MESSAGE_PAGE_SIZE, 100)
 
-  const linkedTicketId = opts?.includeLinkedTicket
-    ? await resolvePairTicketId(conversationId)
+  const linkedTicketId = opts?.linkedTicketViewer
+    ? await resolveVisiblePairTicketId(conversationId, opts.linkedTicketViewer)
     : null
 
   // Composite keyset cursor on (created_at, id): two messages can share a
@@ -991,8 +1124,9 @@ export async function listMessages(
       and(
         eq(conversationMessages.conversationId, conversationId),
         isNull(conversationMessages.deletedAt),
-        // Visitors never see internal notes; agents pass includeInternal.
-        opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
+        // Visitors never see internal rows or team-only notices; agents pass
+        // includeInternal.
+        opts?.includeInternal ? undefined : customerVisibleMessageSql(),
         cursor
           ? or(
               lt(conversationMessages.createdAt, cursor.createdAt),
@@ -1018,7 +1152,7 @@ export async function listMessages(
           and(
             eq(conversationMessages.ticketId, linkedTicketId),
             isNull(conversationMessages.deletedAt),
-            opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
+            opts?.includeInternal ? undefined : customerVisibleMessageSql(),
             cursor
               ? or(
                   lt(conversationMessages.createdAt, cursor.createdAt),
@@ -1046,8 +1180,10 @@ export async function listMessages(
       page.map((m) => m.principalId),
       {
         // Agent threads (internal notes, or an explicit ask) show the account
-        // name. The visitor widget leaves this off and keeps the public name.
+        // name. The visitor widget leaves this off and keeps the public name,
+        // with an API key shown as the support team.
         preferAccountName: opts?.preferAccountName ?? !!opts?.includeInternal,
+        forCustomer: true,
       }
     ),
     assistantPrincipalIdOnce(),
@@ -1113,7 +1249,7 @@ export async function listConversationMessagesForGrounding(
       and(
         eq(conversationMessages.conversationId, conversationId),
         isNull(conversationMessages.deletedAt),
-        opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false)
+        opts?.includeInternal ? undefined : customerVisibleMessageSql()
       )
     )
     .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))
@@ -1612,7 +1748,7 @@ export async function listConversationsForAgent(
   // Keyset cursor = the previous page's last conversation id. Re-read the exact
   // row from the DB rather than trusting a client-supplied string, so the sort's
   // ordering columns (which vary per sort) + ties are handled deterministically
-  // (mirrors listMessages). An unknown id → first page, and a malformed cursor
+  // (mirrors listMessages). An unknown or hidden id → first page, and a malformed cursor
   // can no longer reach a date parse / 500 the list. Relevance-ordered pages
   // additionally need the cursor row's score, recomputed by the same expression.
   let cursor: Conversation | null = null
@@ -1621,7 +1757,9 @@ export async function listConversationsForAgent(
     const [row] = await db
       .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
       .from(conversations)
-      .where(eq(conversations.id, filter.before as ConversationId))
+      // Scoped like the page: a cursor on a conversation the actor cannot see
+      // reads like an unknown one (the first page), and its text is never scored.
+      .where(and(eq(conversations.id, filter.before as ConversationId), conversationFilter(actor)))
       .limit(1)
     if (row) {
       cursor = row.row

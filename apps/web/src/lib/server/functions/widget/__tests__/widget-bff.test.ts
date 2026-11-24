@@ -61,12 +61,15 @@ const hoisted = vi.hoisted(() => {
     unwatchMyTicket: vi.fn(),
     getPublicChangelog: vi.fn(),
     listPublicChangelogs: vi.fn(),
+    listChangelogCategories: vi.fn(),
     getUserStats: vi.fn(),
     listPublicCategoriesForLocale: vi.fn(),
     listPublicArticlesForCategoryLocale: vi.fn(),
     getPublicArticleBySlugForLocale: vi.fn(),
     recordArticleFeedback: vi.fn(),
+    countPublicArticleView: vi.fn(),
     listPublicArticles: vi.fn(),
+    resolveHelpPublicReader: vi.fn(),
     resolveHelpPublicViewer: vi.fn(),
     serializeCategory: vi.fn((c: unknown) => c),
     serializeArticle: vi.fn((a: unknown) => a),
@@ -126,10 +129,15 @@ vi.mock('@/lib/server/functions/changelog', () => ({
   runGetPublicChangelog: hoisted.run.getPublicChangelog,
   runListPublicChangelogs: hoisted.run.listPublicChangelogs,
 }))
+vi.mock('@/lib/server/functions/changelog-categories', () => ({
+  runListChangelogCategories: hoisted.run.listChangelogCategories,
+}))
 vi.mock('@/lib/server/functions/user', () => ({
   runGetUserStats: hoisted.run.getUserStats,
 }))
 vi.mock('@/lib/server/functions/help-center', () => ({
+  assertHelpCenterOpenToRequest: vi.fn(async () => undefined),
+  resolveHelpPublicReader: hoisted.run.resolveHelpPublicReader,
   resolveHelpPublicViewer: hoisted.run.resolveHelpPublicViewer,
   serializeCategory: hoisted.run.serializeCategory,
   serializeArticle: hoisted.run.serializeArticle,
@@ -145,6 +153,13 @@ vi.mock('@/lib/server/domains/help-center/help-center.article.query', () => ({
 }))
 vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
   recordArticleFeedback: hoisted.run.recordArticleFeedback,
+  countPublicArticleView: hoisted.run.countPublicArticleView,
+}))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers({ 'x-forwarded-for': '203.0.113.7' }),
+}))
+vi.mock('@/lib/server/domains/api/rate-limit', () => ({
+  getClientIp: (headers: Headers) => headers.get('x-forwarded-for') ?? 'unknown',
 }))
 vi.mock('@/lib/shared/widget/article-ref', () => ({ canonicalArticleTypeId: () => null }))
 vi.mock('@/lib/shared/widget/article-locale', () => ({
@@ -190,13 +205,18 @@ import {
   widgetWatchMyTicketFn,
   widgetUnwatchMyTicketFn,
 } from '../tickets'
-import { widgetGetPublicChangelogFn, widgetListPublicChangelogsFn } from '../changelog'
+import {
+  widgetGetPublicChangelogFn,
+  widgetListChangelogCategoriesFn,
+  widgetListPublicChangelogsFn,
+} from '../changelog'
 import { widgetGetUserStatsFn } from '../user'
 import {
   widgetListPublicCategoriesFn,
   widgetListPublicArticlesForCategoryFn,
   widgetResolvePublicArticleRefFn,
   widgetRecordArticleFeedbackFn,
+  widgetRecordArticleViewFn,
   widgetListPublicArticlesFn,
 } from '../help'
 
@@ -215,6 +235,7 @@ beforeEach(() => {
     new Error('Access denied: Widget sessions cannot access this resource')
   )
   hoisted.getOptionalAuth.mockResolvedValue(null)
+  hoisted.run.resolveHelpPublicReader.mockResolvedValue({ principalId: 'principal_widget' })
   hoisted.run.resolveHelpPublicViewer.mockResolvedValue({ principalId: 'principal_widget' })
   hoisted.run.serializeCategory.mockImplementation((c: unknown) => c)
   hoisted.run.serializeArticle.mockImplementation((a: unknown) => a)
@@ -231,6 +252,7 @@ beforeEach(() => {
     notHelpfulCount: 0,
   })
   hoisted.run.recordArticleFeedback.mockResolvedValue('feedback_1')
+  hoisted.run.countPublicArticleView.mockResolvedValue(true)
   hoisted.run.getUserStats.mockResolvedValue({ ideas: 0, votes: 0, comments: 0 })
 })
 
@@ -399,6 +421,10 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
       call: () => widgetListPublicChangelogsFn({ data: {} }),
     },
     {
+      name: 'widgetListChangelogCategoriesFn',
+      call: () => widgetListChangelogCategoriesFn(),
+    },
+    {
       name: 'widgetListPublicCategoriesFn',
       call: () => widgetListPublicCategoriesFn({ data: {} }),
     },
@@ -419,6 +445,10 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
       name: 'widgetListPublicArticlesFn',
       call: () => widgetListPublicArticlesFn({ data: {} }),
     },
+    {
+      name: 'widgetRecordArticleViewFn',
+      call: () => widgetRecordArticleViewFn({ data: { articleId: 'article_1' } }),
+    },
   ]
 
   it.each(optional)('$name uses getOptionalWidgetAuth and not site auth', async ({ call }) => {
@@ -432,6 +462,19 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
     hoisted.getOptionalWidgetAuth.mockResolvedValue(null)
     await expect(call()).resolves.toBeDefined()
     expectWidgetAuthOnly()
+  })
+})
+
+describe('widgetRecordArticleViewFn', () => {
+  it('counts the open through the shared, rate-limited view count, as the widget viewer', async () => {
+    await widgetRecordArticleViewFn({ data: { articleId: 'article_1' } })
+    const viewer = await hoisted.run.resolveHelpPublicViewer.mock.results[0]?.value
+    expect(hoisted.run.resolveHelpPublicViewer).toHaveBeenCalledWith(WIDGET_CTX)
+    expect(hoisted.run.countPublicArticleView).toHaveBeenCalledWith(
+      'article_1',
+      '203.0.113.7',
+      viewer
+    )
   })
 })
 

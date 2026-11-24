@@ -27,7 +27,10 @@ vi.mock('@tanstack/react-start', () => ({
   },
 }))
 
+const STUB_ACTOR = vi.hoisted(() => ({ principalId: 'principal_1' }))
+
 const hoisted = vi.hoisted(() => ({
+  assertConversationVisible: vi.fn(async () => ({})),
   requireAuth: vi.fn(),
   listWorkflows: vi.fn(),
   getWorkflow: vi.fn(),
@@ -36,7 +39,16 @@ const hoisted = vi.hoisted(() => ({
   hasActiveCustomerFacingRun: vi.fn(),
 }))
 
-vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
+vi.mock('@/lib/server/functions/auth-helpers', () => ({
+  requireAuth: hoisted.requireAuth,
+  policyActorFromAuth: async () => STUB_ACTOR,
+}))
+// The per-item conversation check: visible unless a test says otherwise. Real
+// scope is covered by conversation-visibility-functions.db.test.ts.
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
+}))
 vi.mock('@/lib/server/domains/workflows/workflow.service', () => ({
   listWorkflows: hoisted.listWorkflows,
   getWorkflow: hoisted.getWorkflow,
@@ -62,7 +74,28 @@ vi.mock('@/lib/server/domains/workflows/dispatcher.guards', () => ({
   hasActiveCustomerFacingRun: hoisted.hasActiveCustomerFacingRun,
 }))
 
-import { listRunnableWorkflowsFn, runWorkflowManuallyFn } from '../workflows'
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
+
+// The derivation itself is covered by domains/webhooks/__tests__/signing.test.ts.
+vi.mock('@/lib/server/domains/webhooks/signing', () => ({
+  workflowWebhookSecret: (url: string) => `whsec_for:${url}`,
+}))
+
+import {
+  getWorkflowWebhookSecretFn,
+  listRunnableWorkflowsFn,
+  runWorkflowManuallyFn,
+} from '../workflows'
+import {
+  FEATURE_STATES,
+  runsWithoutPlanGate,
+  setFeatureState,
+} from '@/lib/server/domains/plan-limits/__tests__/feature-states'
 
 function makeWorkflow(extra: Partial<Workflow> = {}): Workflow {
   return {
@@ -116,7 +149,46 @@ describe('listRunnableWorkflowsFn', () => {
   })
 })
 
+describe('runWorkflowManuallyFn and the plan limits pause', () => {
+  it.each(FEATURE_STATES)('in the %s state', async (state) => {
+    setFeatureState(state, 'workflows')
+    hoisted.getWorkflow.mockResolvedValue(makeWorkflow())
+    hoisted.resolveConditionContext.mockResolvedValue(ctx)
+    hoisted.runWorkflow.mockResolvedValue({ id: 'workflow_run_1', state: 'done' })
+
+    const result = await runWorkflowManuallyFn({
+      data: { workflowId: 'workflow_1', conversationId: 'conversation_1' },
+    })
+
+    if (runsWithoutPlanGate(state)) {
+      expect(result).toEqual({ ok: true, runId: 'workflow_run_1', state: 'done' })
+    } else {
+      expect(result).toEqual({ ok: false, reason: 'not_live' })
+      expect(hoisted.runWorkflow).not.toHaveBeenCalled()
+    }
+    setFeatureState('tierOff')
+  })
+})
+
 describe('runWorkflowManuallyFn', () => {
+  it('a conversation the caller cannot see is NotFound before any read, and no run starts', async () => {
+    hoisted.assertConversationVisible.mockRejectedValueOnce(
+      Object.assign(new Error('Conversation not found'), { statusCode: 404 })
+    )
+    hoisted.getWorkflow.mockResolvedValue(makeWorkflow({ class: 'customer_facing' }))
+
+    await expect(
+      runWorkflowManuallyFn({
+        data: { workflowId: 'workflow_1', conversationId: 'conversation_1' },
+      })
+    ).rejects.toMatchObject({ statusCode: 404 })
+
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith('conversation_1', STUB_ACTOR)
+    expect(hoisted.hasActiveCustomerFacingRun).not.toHaveBeenCalled()
+    expect(hoisted.resolveConditionContext).not.toHaveBeenCalled()
+    expect(hoisted.runWorkflow).not.toHaveBeenCalled()
+  })
+
   it('gates on conversation.reply', async () => {
     hoisted.getWorkflow.mockResolvedValue(makeWorkflow())
     hoisted.resolveConditionContext.mockResolvedValue(ctx)
@@ -237,5 +309,28 @@ describe('runWorkflowManuallyFn', () => {
         data: { workflowId: 'workflow_1', conversationId: 'conversation_1' },
       })
     ).rejects.toThrow('boom')
+  })
+})
+
+describe('getWorkflowWebhookSecretFn', () => {
+  it('gives whoever can edit workflows the secret for the URL', async () => {
+    const result = await getWorkflowWebhookSecretFn({
+      data: { url: 'https://hooks.example.com/a' },
+    })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'workflow.manage' })
+    expect(result).toEqual({ secret: 'whsec_for:https://hooks.example.com/a' })
+  })
+
+  it('reveals nothing to someone who cannot edit workflows', async () => {
+    hoisted.requireAuth.mockRejectedValue(new Error('Forbidden'))
+    await expect(
+      getWorkflowWebhookSecretFn({ data: { url: 'https://hooks.example.com/a' } })
+    ).rejects.toThrow('Forbidden')
+  })
+
+  it('refuses a URL a webhook step could not send to', async () => {
+    await expect(
+      getWorkflowWebhookSecretFn({ data: { url: 'http://hooks.example.com/a' } })
+    ).rejects.toThrow()
   })
 })

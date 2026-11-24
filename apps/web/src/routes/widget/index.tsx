@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import {
@@ -38,6 +39,7 @@ import { widgetChangelogListQuery } from '@/components/widget/widget-changelog-q
 import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query'
 import { widgetFetchBoardCapabilitiesFn } from '@/lib/server/functions/widget/posts'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
+import { getWidgetPortalOriginFn } from '@/lib/server/functions/widget/portal-origin'
 import { widgetListPublicArticlesFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -152,14 +154,14 @@ export const Route = createFileRoute('/widget/')({
       posts: { items: [], hasMore: false },
       statuses: [],
       votedPostIds: [],
-      boardPermissions: {} as Record<string, { canSubmit: boolean; canVote: boolean }>,
+      boardPermissions: {} as Record<string, BoardPermission>,
     }
     let topArticles: { slug: string; title: string }[] = []
     // Teammate-avatar cluster for the Home header. Workspace-global and public-safe
     // (name + image only), so the anonymous SSR baseline is correct for everyone.
     let team: { name: string; avatarUrl: string | null }[] = []
     let showPoweredBy = true
-    const [portalData, { getBaseUrl }] = await Promise.all([
+    const [portalData, portalOrigin] = await Promise.all([
       feedbackProductEnabled
         ? queryClient.ensureQueryData(
             portalQueries.portalData({
@@ -169,8 +171,7 @@ export const Route = createFileRoute('/widget/')({
             })
           )
         : Promise.resolve(emptyPortalData),
-      // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import; stripped from the client graph
-      import('@/lib/server/config'),
+      getWidgetPortalOriginFn(),
       // Presence is workspace-global (not visitor-specific), so the anonymous SSR
       // baseline value is exactly correct for every visitor — seed the shared
       // presence query so the Messenger online/offline strip paints right
@@ -262,6 +263,9 @@ export const Route = createFileRoute('/widget/')({
         id: b.id as string,
         name: b.name,
         slug: b.slug,
+        // The fields the composer asks for on this board (same as the live
+        // capabilities list), sent only when the board declares some.
+        ...(b.settings.customFields?.length ? { customFields: b.settings.customFields } : {}),
       })),
       orgSlug: settings?.slug ?? '',
       // Per-board submit/vote capability for the request actor, server-computed
@@ -314,7 +318,7 @@ export const Route = createFileRoute('/widget/')({
       // The portal's own origin (BASE_URL env), resolved server-side so the
       // widget handoff URL always points at the portal host — not at the widget
       // iframe origin, which may differ in self-hosted deployments.
-      portalOrigin: getBaseUrl(),
+      portalOrigin,
       showPoweredBy,
     }
   },
@@ -344,6 +348,8 @@ interface SuccessPost {
   voteCount: number
   statusId: string | null
   board: { id: string; name: string; slug: string }
+  /** Held for review: only its author sees it until the team approves it. */
+  pendingReview?: boolean
 }
 
 /**
@@ -470,6 +476,9 @@ function WidgetPage() {
   const [conversationTarget, setConversationTarget] = useState<ConversationId | 'new' | null>(
     resumeConversationId ? (resumeConversationId as ConversationId) : null
   )
+  // Whether a reply can reach this visitor by email, as the open thread
+  // reports it. The header's away badge promises email only then.
+  const [canReplyByEmail, setCanReplyByEmail] = useState(false)
   // A host's `open({ view: 'chat', body })`. The nonce remounts the messenger
   // so a draft sent while it is already open still lands in the composer.
   const [messengerDraft, setMessengerDraft] = useState<{ nonce: number; body: string } | null>(null)
@@ -887,6 +896,7 @@ function WidgetPage() {
         <div className="min-w-0 ps-1">
           <ConversationPresenceBadge
             available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
+            canReplyByEmail={canReplyByEmail}
             // When office hours are configured, the badge tells the visitor up
             // front when the team is back; the thread body only says so once
             // they have typed.
@@ -986,6 +996,7 @@ function WidgetPage() {
             // A fresh thread exists to be typed into; a resumed one to be read.
             // Mobile hosts skip it — the software keyboard would cover the thread.
             autofocusComposer={conversationTarget === 'new' && !hostIsMobile}
+            onReplyByEmailChange={setCanReplyByEmail}
           />
         </ViewTransition>
       )}
@@ -1188,7 +1199,7 @@ function SuccessView({
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 shrink-0">
-          <CheckCircleIcon className="w-4.5 h-4.5 text-primary" />
+          <CheckCircleIcon className="w-4.5 h-4.5 text-primary-ink" />
         </div>
         <div>
           <p className="text-sm font-semibold text-foreground">
@@ -1198,10 +1209,17 @@ function SuccessView({
             />
           </p>
           <p className="text-[11px] text-muted-foreground">
-            <FormattedMessage
-              id="widget.success.subtitle"
-              defaultMessage="Your post has been submitted."
-            />
+            {post.pendingReview ? (
+              <FormattedMessage
+                id="widget.success.pendingSubtitle"
+                defaultMessage="Your post is waiting for review. Others will see it once the team approves it."
+              />
+            ) : (
+              <FormattedMessage
+                id="widget.success.subtitle"
+                defaultMessage="Your post has been submitted."
+              />
+            )}
           </p>
         </div>
       </div>

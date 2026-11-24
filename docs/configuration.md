@@ -32,6 +32,21 @@ If your proxy sets one authoritative client-IP header, such as nginx with `proxy
 
 Use `/api/health/live` for process liveness and `/api/health/ready` for traffic readiness. Readiness checks PostgreSQL, the exact bundled migration ledger, and whether a worker-role process is actually running the job worker.
 
+### Browser reader
+
+Import your brand (Portal > Customise) reads a website's HTML and CSS. To match a brand more closely, run the optional browser reader sidecar, which renders the page in a headless browser and measures its colours, buttons, corners, fonts and logo. Without it, Import uses the HTML and CSS reader and says what it could not read.
+
+| Variable                  | Default | Description                                                                             |
+| ------------------------- | ------: | --------------------------------------------------------------------------------------- |
+| `QUACKBACK_BROWSER_URL`   |   unset | The sidecar's base URL, such as `http://browser:3200`.                                  |
+| `QUACKBACK_BROWSER_TOKEN` |   unset | A shared token of 16 characters or more. Set the same value on the app and the sidecar. |
+
+Both must be set for Import to use the sidecar. With production Compose, set `QUACKBACK_BROWSER_TOKEN` in `.env` and start it with `docker compose -f docker-compose.prod.yml --profile browser up -d`; Compose sets the URL and pulls the published image, `ghcr.io/quackbackio/quackback-browser`, at the same tag as the app (`QUACKBACK_TAG`). To build it yourself instead, run `docker compose -f docker-compose.prod.yml --profile browser build browser`, or `docker build -f docker/browser/Dockerfile -t quackback-browser .` from the repository root. Compose runs it on a network of its own that only the app joins, so it cannot reach the database or storage, as a non-root user with Chromium's sandbox on. The sandbox needs the seccomp profile in `docker/browser/seccomp-chromium.json` (Docker's default profile plus `clone` and `unshare`); with `docker run`, pass `--security-opt seccomp=docker/browser/seccomp-chromium.json`. Every request a page makes is checked against the same private-address rules as the app's own fetches. It reads one page at a time, keeps no cookies or storage between reads, and identifies itself as `QuackbackBrandReader`, which sites can name in robots.txt. The app checks robots.txt before asking it.
+
+### Portal logos and fonts
+
+Portal > Customise uploads a wide logo (SVG, PNG or WebP) and font files (WOFF2, WOFF, TTF or OTF) to the configured file storage, so both need S3-compatible storage. An SVG logo is rebuilt from an allowlist on upload, and only the rebuilt file is stored. Wide logos and fonts are always served through the app's own `/api/storage` route rather than by a redirect to the bucket, so the bucket needs no CORS rules for them. An upload waits in the editor's draft until Publish; the `staged-upload-sweep` job deletes uploads that were never published a day later, and never a file the settings still name.
+
 For optional email, storage, AI, authentication, and integration settings, see [`.env.example`](../.env.example).
 
 ## Setting up without a browser
@@ -45,7 +60,7 @@ curl -X POST https://feedback.example.com/api/v1/setup \
   -d '{"workspaceName":"Acme","adminEmail":"you@example.com","adminName":"You"}'
 ```
 
-The response creates the workspace and its first admin, and includes that admin's first API key. It is shown once, so store it. The admin has no password; they can sign in later with an emailed link or code once email is configured. The endpoint exists only while the install has no admin. After that it answers `404` and the token opens nothing, so you can remove `SETUP_TOKEN`. If `adminEmail` already has an account, it is promoted only when its address is verified (otherwise `409`), and its sessions are ended. It is rate limited, every attempt is logged, and setup and refused attempts are written to the audit log.
+The response creates the workspace and its first admin, and includes the workspace's first API key. It is shown once, so store it. It is a workspace key with the Owner role and every scope, recorded as made by the admin, so replies sent with it count as automated, never as the admin's own, and do not meet response targets. Because it is a workspace key, it keeps working after the first admin leaves: once setup is done, rotate it or revoke it under Settings → Developers → Keys. The admin has no password; they can sign in later with an emailed link or code once email is configured. The endpoint exists only while the install has no admin. After that it answers `404` and the token opens nothing, so you can remove `SETUP_TOKEN`. If `adminEmail` already has an account, it is promoted only when its address is verified (otherwise `409`), and its sessions are ended. It is rate limited, every attempt is logged, and setup and refused attempts are written to the audit log.
 
 ## Signing in headless clients
 

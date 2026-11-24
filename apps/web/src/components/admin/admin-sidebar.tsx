@@ -1,6 +1,8 @@
 import { LaunchPlanDock, LaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
 import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
 import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-limits.notice'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
@@ -8,7 +10,7 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { htmlLangDir } from '@/lib/shared/document-locale'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 import { railControlClass } from '@/components/admin/rail-item'
-import { useMemo, useState, type ComponentType } from 'react'
+import { lazy, Suspense, useMemo, useState, type ComponentType } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import {
@@ -55,6 +57,7 @@ import {
   canOpenSettings,
 } from '@/components/admin/settings/settings-nav-sections'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { ENTITY_ICONS } from '@/components/admin/entity-icon'
@@ -94,7 +97,16 @@ interface AdminSidebarProps {
   latestVersion?: LatestVersionResult | null
   /** A running trial shows here quietly until its last days. */
   planNotice?: PlanNotice | null
+  /** The plan limits state, only with plan billing on; null otherwise. */
+  planLimits?: PlanLimitsPage | PlanLimitsNotice | null
 }
+
+/** The plan limits line, in the banner's chunk, which only a workspace with plan billing loads. */
+const PlanLimitsQuietLive = lazy(() =>
+  import('@/components/admin/plan-limits/plan-limits-banner').then((module) => ({
+    default: module.PlanLimitsQuietLive,
+  }))
+)
 
 type RailIcon = ComponentType<{ className?: string }>
 
@@ -184,9 +196,19 @@ const RAIL_ITEMS: RailItem[] = [
   { label: 'Users', labelId: 'admin.nav.users', href: '/admin/users', icon: UsersIcon },
 ]
 
-/** The rail items a viewer sees: the products that are on. */
-export function buildRailItems(flags: Partial<FeatureFlags> | undefined): RailItem[] {
-  return RAIL_ITEMS.filter((item) => !item.product || isProductEnabled(flags, item.product))
+/**
+ * The rail items a viewer sees: the products that are on, and the pages the
+ * viewer can open (the same check the pages themselves make).
+ */
+export function buildRailItems(
+  flags: Partial<FeatureFlags> | undefined,
+  permissions: ReadonlySet<string> | readonly string[]
+): RailItem[] {
+  return RAIL_ITEMS.filter(
+    (item) =>
+      (!item.product || isProductEnabled(flags, item.product)) &&
+      canOpenAdminPage(permissions, item.href)
+  )
 }
 
 /**
@@ -299,7 +321,12 @@ function MobileNavLink({
   )
 }
 
-export function AdminSidebar({ initialUserData, latestVersion, planNotice }: AdminSidebarProps) {
+export function AdminSidebar({
+  initialUserData,
+  latestVersion,
+  planNotice,
+  planLimits,
+}: AdminSidebarProps) {
   const intl = useIntl()
   const router = useRouter()
   const onNotificationsPage = useRouterState({
@@ -328,7 +355,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const orgLogo = branding?.logoUrl ?? branding?.headerLogoUrl ?? '/logo.png'
   const orgName = branding?.name ?? 'Quackback'
 
-  const railItems = buildRailItems(flags)
+  const railItems = buildRailItems(flags, permissions)
   // Posts and comments waiting for review. Shown on Feedback when there are any.
   const feedbackEnabled = isProductEnabled(flags, 'feedback')
   const canReviewPosts = usePermission(PERMISSIONS.POST_APPROVE)
@@ -373,7 +400,8 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const siblingsQuery = useQuery({
     queryKey: ['admin', 'owner-workspaces'],
     queryFn: () => listOwnerWorkspacesFn(),
-    enabled: Boolean(billingEnabled),
+    // The list needs settings.manage; anyone else would only be refused.
+    enabled: Boolean(billingEnabled) && permissions.has(PERMISSIONS.SETTINGS_MANAGE),
   })
   const siblings = siblingsQuery.data ?? []
 
@@ -437,6 +465,11 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
             <div className="flex flex-col gap-0.5 px-2">
               {/* Mounted only for a notice, so a page without one renders nothing here. */}
               {planNotice && <PlanNoticeQuiet notice={planNotice} />}
+              {planLimits ? (
+                <Suspense fallback={null}>
+                  <PlanLimitsQuietLive initial={planLimits} />
+                </Suspense>
+              ) : null}
               <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings &&
@@ -664,6 +697,11 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
               ))}
               <div className="h-px bg-border/40 my-4" />
               <PlanNoticeQuiet notice={planNotice ?? null} />
+              {planLimits ? (
+                <Suspense fallback={null}>
+                  <PlanLimitsQuietLive initial={planLimits} />
+                </Suspense>
+              ) : null}
               <div onClickCapture={() => setMobileMenuOpen(false)}>
                 <LaunchPlanDock />
               </div>

@@ -13,6 +13,7 @@ import {
 import { mcp } from '@better-auth/mcp'
 import { oauthDeviceAuthorization } from '@better-auth/oauth-provider'
 import { betterAuthMcpResource } from './mcp-plugin-resource'
+import { mcpCimdPlugin } from './cimd'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
@@ -24,12 +25,15 @@ import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { guardBetterAuthUserCreation } from './signup-policy'
 import { assignSessionScope } from './session-audience'
+import { shouldIssuePendingSession } from './two-factor-pending'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { accountDisplayName } from '@/lib/shared/greeting-name'
-import { workspaceAuthTrustedOrigins } from './trusted-origins'
+import { CONSENT_START_PATH } from '@/lib/shared/oauth-consent-query'
+import { authTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
 import { reconcileMcpOauthClientScopes } from './reconcile-mcp-oauth-client-scopes'
 import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
+import { runWithoutBaseUrlOverride } from '@/lib/server/base-url-override'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -212,7 +216,7 @@ async function createAuth() {
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders, socialProviderConfig } = await import('./auth-providers')
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { isSsoLive } = await import('./registered-providers')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { listIdentityProviders, getIdentityProviderCredentials } =
     await import('@/lib/server/domains/settings/identity-providers.service')
@@ -225,14 +229,18 @@ async function createAuth() {
   const trustedProviders: string[] = []
   const genericOAuthConfigs: GenericOAuthConfig[] = []
 
-  // Tier limits + workspace settings are independent reads — fire them
+  // Single sign-on liveness + workspace settings are independent reads — fire them
   // together to avoid stacking Redis round-trips on every auth-instance
   // rebuild. workspaceSettings still drives the social-provider surface
   // filter below; OIDC config now comes from the identity_provider list.
-  const [tierLimits, workspaceSettings] = await Promise.all([
-    getTierLimits(),
-    getWorkspaceSettings(),
-  ])
+  // The instance keeps the plan it was built on until the next version change.
+  // Plan limits read the plan from the same settings copy that carried that
+  // version, so a plan written by another process is the one built on.
+  const [ssoLive, workspaceSettings] = await Promise.all([isSsoLive(), getWorkspaceSettings()])
+  // The workspace's registration switch, for both ways a new OAuth app
+  // registers: the DCR endpoint and a client metadata document (CIMD).
+  const allowClientRegistration =
+    workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true
 
   // OIDC providers (single sign-on + portal custom OIDC) are registered
   // from the identity_provider list — the single source of truth. Each
@@ -252,7 +260,11 @@ async function createAuth() {
   const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
   const fetchJson = async (url: string, headers?: Record<string, string>) => {
     try {
-      const res = await safeFetch(url, { ...(headers ? { headers } : {}), timeoutMs: 5000 })
+      const res = await safeFetch(url, {
+        ...(headers ? { headers } : {}),
+        timeoutMs: 5000,
+        allowE2eOidcFake: true,
+      })
       if (!res.ok) return null
       const body: unknown = await res.json()
       return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
@@ -300,7 +312,7 @@ async function createAuth() {
   const oidcConfigs = await buildGenericOAuthConfigs({
     providers: providerRows,
     creds: getIdentityProviderCredentials,
-    tierAllowsOidc: tierLimits.features.customOidcProvider,
+    tierAllowsOidc: ssoLive,
     baseUrl: config.baseUrl,
     discovery: (discoveryUrl) => fetchJson(discoveryUrl),
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
@@ -495,7 +507,7 @@ async function createAuth() {
     baseURL,
 
     // https://better-auth.com/docs/reference/security#dynamic-origin-list
-    trustedOrigins: async (request) => workspaceAuthTrustedOrigins(request),
+    trustedOrigins: async (request) => authTrustedOrigins(request),
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and
@@ -566,6 +578,10 @@ async function createAuth() {
       updateAge: 60 * 60 * 24, // Update session every 24 hours
       additionalFields: {
         scope: { type: 'string', required: false, input: false, defaultValue: 'dashboard' },
+        // A password session issued while two-factor is required and the
+        // person has not enrolled (two-factor-pending.ts). Defaults to false,
+        // so the session enrolment creates is an ordinary one.
+        twoFactorPending: { type: 'boolean', required: false, input: false, defaultValue: false },
       },
     },
 
@@ -654,7 +670,19 @@ async function createAuth() {
       },
       session: {
         create: {
-          before: assignSessionScope,
+          before: async (sessionData, context) => {
+            const scoped = await assignSessionScope(sessionData, context)
+            if (!(await shouldIssuePendingSession(sessionData, context))) return scoped
+            return { data: { ...(scoped?.data ?? sessionData), twoFactorPending: true } }
+          },
+        },
+        update: {
+          // A carried session's family rows move with its expiry
+          // (section-session-family.ts).
+          after: async (updated) => {
+            const { followSessionExpiry } = await import('./section-session-family')
+            await followSessionExpiry(updated)
+          },
         },
       },
     },
@@ -733,20 +761,19 @@ async function createAuth() {
       // register both). Tokens are audience-bound to `/api/mcp`.
       mcp({
         loginPage: '/auth/login',
-        consentPage: '/oauth/consent',
+        consentPage: CONSENT_START_PATH,
         resource: mcpResourceIdentifier,
-        allowDynamicClientRegistration:
-          workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
+        allowDynamicClientRegistration: allowClientRegistration,
         allowUnauthenticatedClientRegistration: true,
         scopes: [...MCP_AS_SCOPES],
-        // Fallback when DCR omits `scope`. The register interceptor still
-        // persists the full AS allow-list on the client row so step-up works.
-        clientRegistrationDefaultScopes: [
-          'openid',
-          'profile',
-          'email',
-          ...API_KEY_SCOPES.filter((s) => s.startsWith('read:')),
-        ],
+        // Baseline capability set stored on every dynamically registered (DCR)
+        // and discovered (CIMD) client: Better Auth persists the union of this
+        // and `clientRegistrationAllowedScopes`. The full catalogue, so a later
+        // step-up authorize can ask for writes. What a token may do stays
+        // bounded by the person's consent. CIMD clients never reach the
+        // register interceptor in `routes/api/auth/$.ts`, so this is what
+        // sets theirs.
+        clientRegistrationDefaultScopes: [...MCP_AS_SCOPES],
         clientRegistrationAllowedScopes: [...MCP_AS_SCOPES],
         resources: [
           {
@@ -772,6 +799,15 @@ async function createAuth() {
           }
         },
       }),
+
+      // Client ID Metadata Documents: an MCP client may use an HTTPS URL as
+      // its client_id instead of registering. Must follow `mcp()`. DCR above
+      // stays for clients without CIMD. The workspace's registration switch
+      // covers both: when it is off, no new CIMD client is accepted and
+      // `client_id_metadata_document_supported` is not advertised, while
+      // clients stored earlier keep working. See ./cimd.ts for the fetch
+      // transport and policy.
+      mcpCimdPlugin({ allowNewClients: allowClientRegistration }),
 
       // RFC 8628 device authorization grant on the same OAuth server: a
       // headless client asks `/device/code`, the person approves the code at
@@ -951,7 +987,9 @@ function retryClientScopeReconcile(): void {
 function buildAuth(): Promise<AuthInstance> {
   const inFlight = authBuilds.get(AUTH_CACHE_KEY)
   if (inFlight) return inFlight
-  const build: Promise<AuthInstance> = createAuth()
+  // Built from the configured origin: the instance outlives this request, so
+  // a per-request base URL override must not leak into it.
+  const build: Promise<AuthInstance> = runWithoutBaseUrlOverride(() => createAuth())
     .then((built) => {
       // A reset while this was building means it was built from a config that
       // has since changed: serve it to the callers already waiting on it, but

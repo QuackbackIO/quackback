@@ -53,6 +53,30 @@ const INLINE_EXTENSIONS: Record<string, string> = {
 /** The Content-Security-Policy a download carries, in case it is opened anyway. */
 export const DOWNLOAD_CSP = "sandbox; default-src 'none'"
 
+/**
+ * Wide logos may be SVG. The upload route sanitises an SVG before storing it,
+ * and only under this prefix, so here (and only here) an SVG is shown inline,
+ * still under the sandbox policy.
+ */
+export const SVG_LOGO_PREFIX = 'header-logos/'
+export const SVG_TYPE = 'image/svg+xml'
+
+function isInlineSvg(key: string, contentType: string): boolean {
+  return (
+    key.startsWith(SVG_LOGO_PREFIX) && contentType.split(';')[0]!.trim().toLowerCase() === SVG_TYPE
+  )
+}
+
+/**
+ * Keys always served from this origin rather than by redirect. The redirect
+ * does not see the stored type, so it would make a header logo SVG a download;
+ * and a portal font is fetched in CORS mode by @font-face, so it must come from
+ * this origin rather than wherever the bucket answers.
+ */
+export function forcesProxy(key: string): boolean {
+  return key.startsWith(SVG_LOGO_PREFIX) || key.startsWith('fonts/')
+}
+
 const MAX_DOWNLOAD_NAME_CHARS = 255
 
 export function isInlineType(contentType: string): boolean {
@@ -114,6 +138,7 @@ export function downloadHeaders(name: string): Record<string, string> {
 /** Headers that make a proxied response a download, unless its type is safe inline. */
 export function servedFileHeaders(key: string, contentType: string): Record<string, string> {
   if (isInlineType(contentType)) return {}
+  if (isInlineSvg(key, contentType)) return { 'Content-Security-Policy': DOWNLOAD_CSP }
   return {
     'Content-Disposition': `attachment; filename="${downloadFileName(key)}"`,
     'Content-Security-Policy': DOWNLOAD_CSP,

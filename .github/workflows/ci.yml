@@ -6,9 +6,12 @@ on:
   pull_request:
   schedule:
     - cron: '17 3 * * *'
+  # Lets a maintainer run the nightly-only e2e jobs on any branch.
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # The event name keeps a push to main from cancelling the nightly run.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -46,6 +49,9 @@ jobs:
       # The embeddable widget's eager JavaScript (bytes, chunk count, and
       # libraries that must stay lazy) against its budget.
       - run: bun run --cwd apps/web check:widget-bundle
+      # Every import in a browser chunk must be another chunk: a Node built-in
+      # or package name left in one makes the browser refuse the chunk.
+      - run: bun run --cwd apps/web check:client-imports
       - run: bun run --filter @quackback/web typecheck
       - run: bun run --cwd packages/widget typecheck
       - run: bun run --cwd packages/widget test
@@ -94,6 +100,14 @@ jobs:
         if: matrix.shard == 1
         run: bun run db:check-drift
       - run: bun run test --run --shard=${{ matrix.shard }}/4 --reporter=dot --reporter=github-actions
+      # The suite runs under Node. Production runs Bun, and the CIMD fetch
+      # transport's SSRF pin depends on Bun's node:https honouring a custom
+      # lookup, so that one file runs again under Bun.
+      - name: CIMD fetch transport under Bun
+        if: matrix.shard == 1
+        env:
+          CIMD_TRANSPORT_EXPECT_BUN: '1'
+        run: bun --bun node_modules/vitest/vitest.mjs run apps/web/src/lib/server/auth/__tests__/cimd-transport.test.ts
 
   # Single check name so existing "test" required-status wiring still matches.
   test:
@@ -132,7 +146,7 @@ jobs:
         run: echo "127.0.0.1 acme.localhost" | sudo tee -a /etc/hosts
       - run: bun install --frozen-lockfile
       # The dev server loads env from the repo-root .env (bun --env-file) and
-      # the e2e db-helpers spawn scripts through `dotenv -e ../../.env`, so
+      # the e2e db-helpers spawn scripts through `bun --env-file=../../.env`, so
       # materialize one for CI.
       - name: Write .env for the dev server and e2e scripts
         run: |
@@ -331,10 +345,20 @@ jobs:
             exit 1
           fi
 
+  # The whole Playwright suite, nightly and on demand (Actions > CI > Run
+  # workflow). Six shards on separate runners, each with its own database,
+  # migrate, seed and dev server, so no shard waits on another and every one
+  # finishes well inside its time limit. Quarantined tests (@quarantine, see
+  # apps/web/e2e/QUARANTINE.md) are left out here and run in e2e-quarantine.
   e2e-full:
-    if: github.event_name == 'schedule'
+    name: e2e-full (${{ matrix.shard }}/6)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -355,13 +379,38 @@ jobs:
       - name: Map acme.localhost to loopback
         run: echo "127.0.0.1 acme.localhost" | sudo tee -a /etc/hosts
       - run: bun install --frozen-lockfile
+      # Storage settings let conversation uploads work (see QUARANTINE.md).
       - name: Write .env for the dev server and e2e scripts
         run: |
           cat > .env <<EOF
           DATABASE_URL=$DATABASE_URL
           SECRET_KEY=$SECRET_KEY
           BASE_URL=$BASE_URL
+          S3_ENDPOINT=http://localhost:9000
+          S3_BUCKET=quackback-e2e
+          S3_REGION=us-east-1
+          S3_ACCESS_KEY_ID=minioadmin
+          S3_SECRET_ACCESS_KEY=minioadmin
+          S3_FORCE_PATH_STYLE=true
+          S3_PROXY=true
           EOF
+      # S3-compatible object storage, the docker-compose image. A service
+      # container cannot take the `server /data` command, so start it here.
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun --env-file=.env apps/web/e2e/scripts/ensure-storage-bucket.ts
       - run: bun run --filter @quackback/widget build
       - run: bun run db:migrate
       - run: bun run db:seed
@@ -377,5 +426,1039 @@ jobs:
           if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
             echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
           fi
-      - run: ./node_modules/.bin/playwright test
+      # Playwright starts the dev server itself (webServer in
+      # playwright.config.ts). Each shard runs the setup project (admin sign-in)
+      # when any of its tests need it. One retry: a test that needs more is
+      # flaky and belongs in the quarantine. The global timeout stops the run
+      # before the job limit, so Playwright still writes its report.
+      - name: Run shard ${{ matrix.shard }} of 6
         working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright test --shard=${{ matrix.shard }}/6 \
+            --grep-invert @quarantine --retries=1 --global-timeout=1200000
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: e2e-full-blob-${{ matrix.shard }}
+          path: apps/web/blob-report
+          retention-days: 7
+
+  # Merges the six shard reports into one HTML report and writes the result,
+  # with every failed and flaky test, to the job summary. Runs even when a
+  # shard fails or is cancelled, so a bad night still leaves a report.
+  e2e-full-report:
+    needs: e2e-full
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: e2e-full-blob-*
+          path: apps/web/all-blob-reports
+          merge-multiple: true
+      - name: Merge shard reports
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-full-results.json
+        run: ./node_modules/.bin/playwright merge-reports --reporter html,json ./all-blob-reports
+      - name: Write the job summary
+        working-directory: apps/web
+        run: bun e2e/scripts/summarize-report.ts e2e-full-results.json "e2e-full" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: e2e-full-report
+          path: apps/web/playwright-report
+          retention-days: 14
+      # The nightly-triage job reads failing tests from this JSON.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: e2e-full-results-json
+          path: apps/web/e2e-full-results.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Runs only the quarantined tests, so the list in apps/web/e2e/QUARANTINE.md
+  # shows each night which still fail and which could come back. It never
+  # fails the workflow.
+  e2e-quarantine:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      SECRET_KEY: e2e-full-secret-key-for-ci-only-at-least-32-chars
+      BASE_URL: http://acme.localhost:3000
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - name: Map acme.localhost to loopback
+        run: echo "127.0.0.1 acme.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      # Storage settings let conversation uploads work (see QUARANTINE.md).
+      - name: Write .env for the dev server and e2e scripts
+        run: |
+          cat > .env <<EOF
+          DATABASE_URL=$DATABASE_URL
+          SECRET_KEY=$SECRET_KEY
+          BASE_URL=$BASE_URL
+          S3_ENDPOINT=http://localhost:9000
+          S3_BUCKET=quackback-e2e
+          S3_REGION=us-east-1
+          S3_ACCESS_KEY_ID=minioadmin
+          S3_SECRET_ACCESS_KEY=minioadmin
+          S3_FORCE_PATH_STYLE=true
+          S3_PROXY=true
+          EOF
+      # S3-compatible object storage, the docker-compose image. A service
+      # container cannot take the `server /data` command, so start it here.
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun --env-file=.env apps/web/e2e/scripts/ensure-storage-bucket.ts
+      - run: bun run --filter @quackback/widget build
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      - name: Run the quarantined tests
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-quarantine-results.json
+        run: |
+          ./node_modules/.bin/playwright test --grep @quarantine --pass-with-no-tests \
+            --retries=0 --global-timeout=1200000 --reporter=list,json || true
+          bun e2e/scripts/summarize-report.ts e2e-quarantine-results.json \
+            "Quarantined e2e tests (see apps/web/e2e/QUARANTINE.md)" --all >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Support module e2e suite (apps/web/playwright.support.config.ts). Runs on a
+  # PRODUCTION build with its own environment (apps/web/e2e/support/support.env)
+  # and local stand-ins: Mailpit, object storage, a fake AI server and an https
+  # webhook sink. See apps/web/e2e/tests/support/README.md.
+  # ---------------------------------------------------------------------------
+
+  # The every-PR support set: tests tagged @smoke, one runner, two workers.
+  support-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mailpit:
+        image: axllent/mailpit:v1.29.5
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # The workspace host for the app and the webhook sink's name.
+      - name: Map test hostnames to loopback
+        run: echo "127.0.0.1 acme.localhost webhook-sink.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      # S3-compatible object storage, the docker-compose image. A service
+      # container cannot take the `server /data` command, so start it here.
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun run --filter @quackback/widget build
+      - run: bun run build
+        env:
+          SKIP_ENV_VALIDATION: true
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      # Playwright starts the production server, the fake AI and the sink
+      # (webServer in playwright.support.config.ts).
+      - name: Run support @smoke
+        working-directory: apps/web
+        run: |
+          main=0
+          ./node_modules/.bin/playwright test -c playwright.support.config.ts --project support \
+            --grep @smoke --grep-invert @quarantine --global-timeout=720000 || main=$?
+          # The smoke specs that need the workspace to themselves, after the rest.
+          serial=0
+          SUPPORT_BLOB_DIR=blob-report-serial SUPPORT_BLOB_FILE_NAME=report-serial.zip \
+            ./node_modules/.bin/playwright test -c playwright.support.config.ts --project support-serial \
+            --grep @smoke --grep-invert @quarantine --pass-with-no-tests --global-timeout=300000 || serial=$?
+          mkdir -p blob-report
+          mv blob-report-serial/*.zip blob-report/ 2>/dev/null || true
+          test "$main" = 0 && test "$serial" = 0
+      - name: Server log
+        if: failure()
+        run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: support-smoke-report
+          path: |
+            apps/web/blob-report
+            apps/web/e2e/.auth/support/app.log
+          retention-days: 7
+
+  # Decides whether a pull request runs support-core: it touches support code
+  # or the suite, or carries the run-support-e2e label. Labels are read from
+  # the API when the job runs, so after adding the label, re-run the workflow.
+  support-changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      support: ${{ steps.detect.outputs.support }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # A failed lookup only means the label cannot turn the job on; the
+          # path check below still runs.
+          labels=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name' || true)
+          if printf '%s\n' "$labels" | grep -qx 'run-support-e2e'; then
+            echo "support=true" >> "$GITHUB_OUTPUT"
+            echo 'Label run-support-e2e is set.'
+            exit 0
+          fi
+          support_paths='^(apps/web/src/lib/server/domains/(conversation|conversation-attributes|conversation-views|tickets|inbox|sla|office-hours|notifications|teams|macros|workflows|assistant|subscriptions|channel-accounts|channels)/|apps/web/src/lib/server/(realtime|events|jobs|email|e2e-harness)/|apps/web/src/routes/(admin/inbox|admin/tickets|_portal/support|widget|api/widget|api/chat|api/e2e|api/v1/conversations|api/v1/tickets)|apps/web/src/components/(admin/inbox|conversation|widget|notifications)/|apps/web/e2e/(support|tests/support|scripts)/|apps/web/playwright[.]support[.]config[.]ts|packages/(email|widget)/|[.]github/workflows/ci[.]yml)'
+          # Three dots: what this branch changed since it left main, not what
+          # main changed since.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          if printf '%s\n' "$changed" | grep -Eq "$support_paths"; then
+            echo "support=true" >> "$GITHUB_OUTPUT"
+            echo 'Support paths changed:'
+            printf '%s\n' "$changed" | grep -E "$support_paths" | head -20
+          else
+            echo "support=false" >> "$GITHUB_OUTPUT"
+            echo 'No support paths changed and no run-support-e2e label.'
+          fi
+
+  # The wider support set: four shards, two workers each; every shard has its
+  # own runner, database, build and stand-ins. PRs (see support-changes) and
+  # main run @smoke and @core; nightly and manual runs run everything except
+  # @quarantine.
+  support-core:
+    name: support-core (${{ matrix.shard }}/4)
+    needs: support-changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.support-changes.outputs.support == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mailpit:
+        image: axllent/mailpit:v1.29.5
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # The workspace host for the app and the webhook sink's name.
+      - name: Map test hostnames to loopback
+        run: echo "127.0.0.1 acme.localhost webhook-sink.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      # S3-compatible object storage, the docker-compose image. A service
+      # container cannot take the `server /data` command, so start it here.
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun run --filter @quackback/widget build
+      - run: bun run build
+        env:
+          SKIP_ENV_VALIDATION: true
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      - name: Run shard ${{ matrix.shard }} of 4
+        working-directory: apps/web
+        env:
+          FULL_RUN: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          grep_args=(--grep '@smoke|@core')
+          if [ "$FULL_RUN" = 'true' ]; then grep_args=(); fi
+          # A shard can be empty while the suite is small; the report job
+          # fails the run when no shard ran a test.
+          main=0
+          ./node_modules/.bin/playwright test -c playwright.support.config.ts \
+            --project support --shard=${{ matrix.shard }}/4 "${grep_args[@]}" \
+            --grep-invert @quarantine --pass-with-no-tests --global-timeout=1200000 || main=$?
+          # Then the specs that need the workspace to themselves (routing on,
+          # nobody online), one at a time, once nothing else is running.
+          serial=0
+          SUPPORT_BLOB_DIR=blob-report-serial SUPPORT_BLOB_FILE_NAME=report-serial-${{ matrix.shard }}.zip \
+            ./node_modules/.bin/playwright test -c playwright.support.config.ts \
+            --project support-serial --shard=${{ matrix.shard }}/4 "${grep_args[@]}" \
+            --grep-invert @quarantine --pass-with-no-tests --global-timeout=600000 || serial=$?
+          mkdir -p blob-report
+          mv blob-report-serial/*.zip blob-report/ 2>/dev/null || true
+          test "$main" = 0 && test "$serial" = 0
+      - name: Server log
+        if: failure()
+        run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: support-core-blob-${{ matrix.shard }}
+          path: apps/web/blob-report
+          retention-days: 7
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: support-core-server-log-${{ matrix.shard }}
+          path: apps/web/e2e/.auth/support/app.log
+          retention-days: 7
+
+  # Merges the support-core shard reports, writes the job summary, and fails
+  # when no test ran at all (every shard empty means a broken grep, not a pass).
+  support-core-report:
+    needs: support-core
+    if: ${{ !cancelled() && needs.support-core.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: support-core-blob-*
+          path: apps/web/all-blob-reports
+          merge-multiple: true
+      - name: Merge shard reports
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: support-core-results.json
+        run: ./node_modules/.bin/playwright merge-reports --reporter html,json ./all-blob-reports
+      - name: Write the job summary
+        working-directory: apps/web
+        run: |
+          bun e2e/scripts/summarize-report.ts support-core-results.json "support-core" \
+            --fail-if-empty >> "$GITHUB_STEP_SUMMARY"
+      - name: Every shard passed
+        run: test "${{ needs.support-core.result }}" = "success"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: support-core-report
+          path: apps/web/playwright-report
+          retention-days: 14
+      # The nightly-triage job reads failing tests from this JSON.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: support-core-results-json
+          path: apps/web/support-core-results.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Support tests tagged @isolated turn on a workspace-wide switch that would
+  # change every other test's behaviour (the AI agent answering every widget
+  # message, the cold-mail auto-acknowledgement, abandoned-journey auto-close),
+  # so the shared shards skip them and they run here on a database of their
+  # own (E2E_SUPPORT_ISOLATED=1). One worker: the isolated tests share that
+  # database and flip workspace settings, so two at once would see each
+  # other's flips. Gated like support-core; PRs and main run @smoke and @core,
+  # nightly and manual runs run all but @quarantine.
+  support-isolated:
+    needs: support-changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.support-changes.outputs.support == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mailpit:
+        image: axllent/mailpit:v1.29.5
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: Map test hostnames to loopback
+        run: echo "127.0.0.1 acme.localhost webhook-sink.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun run --filter @quackback/widget build
+      - run: bun run build
+        env:
+          SKIP_ENV_VALIDATION: true
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      - name: Run support @isolated
+        working-directory: apps/web
+        env:
+          E2E_SUPPORT_ISOLATED: '1'
+          FULL_RUN: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          tier=(--grep '@isolated.*@(smoke|core)|@(smoke|core).*@isolated')
+          if [ "$FULL_RUN" = 'true' ]; then tier=(--grep @isolated); fi
+          ./node_modules/.bin/playwright test -c playwright.support.config.ts \
+            "${tier[@]}" --grep-invert @quarantine --workers=1 --pass-with-no-tests --global-timeout=1200000
+      - name: Server log
+        if: failure()
+        run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: support-isolated-report
+          path: |
+            apps/web/blob-report
+            apps/web/e2e/.auth/support/app.log
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Product e2e suite (apps/web/playwright.product.config.ts): feedback,
+  # roadmap, changelog, status page, help center, people and the platform
+  # around them. Same harness, production build, environment and stand-ins as
+  # the support suite. See apps/web/e2e/tests/product/README.md.
+  # ---------------------------------------------------------------------------
+
+  # The every-PR product set: tests tagged @smoke, one runner, two workers.
+  product-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mailpit:
+        image: axllent/mailpit:v1.29.5
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # The workspace host for the app and the webhook sink's name.
+      - name: Map test hostnames to loopback
+        run: echo "127.0.0.1 acme.localhost webhook-sink.localhost oidc-fake.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      # S3-compatible object storage, the docker-compose image. A service
+      # container cannot take the `server /data` command, so start it here.
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun run --filter @quackback/widget build
+      - run: bun run build
+        env:
+          SKIP_ENV_VALIDATION: true
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      # Playwright starts the production server, the fake AI and the sink
+      # (webServer in playwright.product.config.ts).
+      - name: Run product @smoke
+        working-directory: apps/web
+        run: |
+          main=0
+          ./node_modules/.bin/playwright test -c playwright.product.config.ts --project product \
+            --grep @smoke --grep-invert @quarantine --global-timeout=720000 || main=$?
+          # The smoke specs that need the workspace to themselves, after the rest.
+          serial=0
+          PRODUCT_BLOB_DIR=blob-report-serial PRODUCT_BLOB_FILE_NAME=report-serial.zip \
+            ./node_modules/.bin/playwright test -c playwright.product.config.ts --project product-serial \
+            --grep @smoke --grep-invert @quarantine --pass-with-no-tests --global-timeout=300000 || serial=$?
+          mkdir -p blob-report
+          mv blob-report-serial/*.zip blob-report/ 2>/dev/null || true
+          test "$main" = 0 && test "$serial" = 0
+      - name: Server log
+        if: failure()
+        run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: product-smoke-report
+          path: |
+            apps/web/blob-report
+            apps/web/e2e/.auth/support/app.log
+          retention-days: 7
+
+  # Decides whether a pull request runs product-core: it touches product code
+  # or the suite, or carries the run-product-e2e label. Labels are read from
+  # the API when the job runs, so after adding the label, re-run the workflow.
+  product-changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      product: ${{ steps.detect.outputs.product }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # A failed lookup only means the label cannot turn the job on; the
+          # path check below still runs.
+          labels=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name' || true)
+          if printf '%s\n' "$labels" | grep -qx 'run-product-e2e'; then
+            echo "product=true" >> "$GITHUB_OUTPUT"
+            echo 'Label run-product-e2e is set.'
+            exit 0
+          fi
+          product_paths='^(apps/web/src/lib/server/domains/(posts|boards|statuses|post-tags|post-views|comments|merge-suggestions|moderation|import|export|sentiment|summary|embeddings|roadmaps|changelog|status|help-center|users|companies|company-attributes|segments|user-attributes|attribute-definitions|principals|roles|webhooks|api-keys|analytics|onboarding|plan-limits|settings|subscriptions|notifications|activity)/|apps/web/src/lib/server/(functions|integrations|mcp|policy|auth|e2e-harness|email|events|jobs)/|apps/web/src/integrations/|apps/web/src/routes/(admin/(feedback|moderation|roadmap|changelog|status|help-center|users|analytics|settings)|_portal/(index|roadmap|changelog|status|hc|settings|notifications|u[.])|_portal[.]b[.]|changelog/|status/|hc/|help|api/v1/|api/(portal|mcp|e2e|import|export))|apps/web/src/components/(admin/(feedback|roadmap|changelog|status|help-center|users|segments|settings)|help-center|portal|public|settings|integrations)/|apps/web/e2e/(product|support|scripts|utils|tests/(status|feedback|roadmap|changelog|help-center|people|platform|product))/|apps/web/playwright[.]product[.]config[.]ts|packages/(email|db)/|[.]github/workflows/ci[.]yml)'
+          # Three dots: what this branch changed since it left main, not what
+          # main changed since.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          if printf '%s\n' "$changed" | grep -Eq "$product_paths"; then
+            echo "product=true" >> "$GITHUB_OUTPUT"
+            echo 'Product paths changed:'
+            printf '%s\n' "$changed" | grep -E "$product_paths" | head -20
+          else
+            echo "product=false" >> "$GITHUB_OUTPUT"
+            echo 'No product paths changed and no run-product-e2e label.'
+          fi
+
+  # The wider product set: four shards, two workers each; every shard has its
+  # own runner, database, build and stand-ins. PRs (see product-changes) and
+  # main run @smoke and @core; nightly and manual runs run everything except
+  # @quarantine.
+  product-core:
+    name: product-core (${{ matrix.shard }}/4)
+    needs: product-changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.product-changes.outputs.product == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mailpit:
+        image: axllent/mailpit:v1.29.5
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # The workspace host for the app and the webhook sink's name.
+      - name: Map test hostnames to loopback
+        run: echo "127.0.0.1 acme.localhost webhook-sink.localhost oidc-fake.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      # S3-compatible object storage, the docker-compose image. A service
+      # container cannot take the `server /data` command, so start it here.
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun run --filter @quackback/widget build
+      - run: bun run build
+        env:
+          SKIP_ENV_VALIDATION: true
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      - name: Run shard ${{ matrix.shard }} of 4
+        working-directory: apps/web
+        env:
+          FULL_RUN: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          grep_args=(--grep '@smoke|@core')
+          if [ "$FULL_RUN" = 'true' ]; then grep_args=(); fi
+          # A shard can be empty while the suite is small; the report job
+          # fails the run when no shard ran a test.
+          main=0
+          ./node_modules/.bin/playwright test -c playwright.product.config.ts \
+            --project product --shard=${{ matrix.shard }}/4 "${grep_args[@]}" \
+            --grep-invert @quarantine --pass-with-no-tests --global-timeout=1200000 || main=$?
+          # Then the specs that need the workspace to themselves (routing on,
+          # nobody online), one at a time, once nothing else is running.
+          serial=0
+          PRODUCT_BLOB_DIR=blob-report-serial PRODUCT_BLOB_FILE_NAME=report-serial-${{ matrix.shard }}.zip \
+            ./node_modules/.bin/playwright test -c playwright.product.config.ts \
+            --project product-serial --shard=${{ matrix.shard }}/4 "${grep_args[@]}" \
+            --grep-invert @quarantine --pass-with-no-tests --global-timeout=600000 || serial=$?
+          mkdir -p blob-report
+          mv blob-report-serial/*.zip blob-report/ 2>/dev/null || true
+          test "$main" = 0 && test "$serial" = 0
+      - name: Server log
+        if: failure()
+        run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: product-core-blob-${{ matrix.shard }}
+          path: apps/web/blob-report
+          retention-days: 7
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: product-core-server-log-${{ matrix.shard }}
+          path: apps/web/e2e/.auth/support/app.log
+          retention-days: 7
+
+  # Merges the product-core shard reports, writes the job summary, and fails
+  # when no test ran at all (every shard empty means a broken grep, not a pass).
+  product-core-report:
+    needs: product-core
+    if: ${{ !cancelled() && needs.product-core.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: product-core-blob-*
+          path: apps/web/all-blob-reports
+          merge-multiple: true
+      - name: Merge shard reports
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: product-core-results.json
+        run: ./node_modules/.bin/playwright merge-reports --reporter html,json ./all-blob-reports
+      - name: Write the job summary
+        working-directory: apps/web
+        run: |
+          bun e2e/scripts/summarize-report.ts product-core-results.json "product-core" \
+            --fail-if-empty >> "$GITHUB_STEP_SUMMARY"
+      - name: Every shard passed
+        run: test "${{ needs.product-core.result }}" = "success"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: product-core-report
+          path: apps/web/playwright-report
+          retention-days: 14
+      # The nightly-triage job reads failing tests from this JSON.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: product-core-results-json
+          path: apps/web/product-core-results.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Product tests tagged @isolated turn on a workspace-wide switch that would
+  # change every other test's behaviour (a private portal, anonymous posting
+  # off, moderation on, a sign-in method off), so the shared shards skip them
+  # and they run here on a database of their own (E2E_SUPPORT_ISOLATED=1, the
+  # harness's flag). One worker: the isolated tests share that
+  # database and flip workspace settings, so two at once would see each
+  # other's flips. Gated like product-core; PRs and main run @smoke and @core,
+  # nightly and manual runs run all but @quarantine.
+  product-isolated:
+    needs: product-changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.product-changes.outputs.product == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mailpit:
+        image: axllent/mailpit:v1.29.5
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: Map test hostnames to loopback
+        run: echo "127.0.0.1 acme.localhost webhook-sink.localhost oidc-fake.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      - name: Start object storage
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 \
+            server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs storage
+          exit 1
+      - run: bun run --filter @quackback/widget build
+      - run: bun run build
+        env:
+          SKIP_ENV_VALIDATION: true
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      - name: Run product @isolated
+        working-directory: apps/web
+        env:
+          E2E_SUPPORT_ISOLATED: '1'
+          FULL_RUN: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          tier=(--grep '@isolated.*@(smoke|core)|@(smoke|core).*@isolated')
+          if [ "$FULL_RUN" = 'true' ]; then tier=(--grep @isolated); fi
+          ./node_modules/.bin/playwright test -c playwright.product.config.ts \
+            "${tier[@]}" --grep-invert @quarantine --workers=1 --pass-with-no-tests --global-timeout=1200000
+      - name: Server log
+        if: failure()
+        run: tail -n 300 apps/web/e2e/.auth/support/app.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: product-isolated-report
+          path: |
+            apps/web/blob-report
+            apps/web/e2e/.auth/support/app.log
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Nightly triage: after a scheduled run on main, record the result in one
+  # GitHub issue, "Nightly e2e failures". A failed night opens the issue (or
+  # comments on the open one) with the run, the failed jobs and the failing
+  # tests read from the Playwright reports. A green night comments only when
+  # the issue is open; it never opens one. Never runs on pull requests.
+  # e2e-quarantine never fails the run, so it is not counted.
+  # ---------------------------------------------------------------------------
+  nightly-triage:
+    needs:
+      - e2e-smoke
+      - e2e-full
+      - e2e-full-report
+      - e2e-quarantine
+      - support-smoke
+      - support-core
+      - support-core-report
+      - support-isolated
+      - product-smoke
+      - product-core
+      - product-core-report
+      - product-isolated
+    if: always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && github.repository == 'QuackbackIO/quackback'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      # Merged JSON reports from the sharded jobs.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          pattern: '*-results-json'
+          path: apps/web/nightly-reports
+          merge-multiple: true
+      # Blob reports the smoke and isolated jobs upload when they fail. The
+      # HTML *-report folders come too; only blob zips (report*.zip) are read.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          pattern: '*-report'
+          path: apps/web/nightly-blobs
+      - name: Turn the blob reports into JSON
+        working-directory: apps/web
+        run: |
+          mkdir -p nightly-reports
+          for dir in nightly-blobs/*/; do
+            [ -d "$dir" ] || continue
+            label=$(basename "$dir")
+            label=${label%-report}
+            mkdir -p "nightly-zips/$label"
+            find "$dir" -maxdepth 2 -name 'report*.zip' -exec cp {} "nightly-zips/$label/" \;
+            if ls "nightly-zips/$label"/*.zip > /dev/null 2>&1; then
+              PLAYWRIGHT_JSON_OUTPUT_NAME="nightly-reports/$label.json" \
+                ./node_modules/.bin/playwright merge-reports --reporter json "nightly-zips/$label" \
+                || echo "::warning::could not merge the $label blob report"
+            fi
+          done
+          ls -l nightly-reports
+      - name: Summarise the night
+        id: summary
+        working-directory: apps/web
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          printf '%s' "$NEEDS" > nightly-needs.json
+          RUN_DATE=$(date -u +%F) bun e2e/scripts/nightly-failures.ts \
+            nightly-needs.json nightly-reports nightly-comment.md >> "$GITHUB_OUTPUT"
+          cat nightly-comment.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Open or update the Nightly e2e failures issue
+        working-directory: apps/web
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          STATUS: ${{ steps.summary.outputs.status }}
+        run: |
+          title='Nightly e2e failures'
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty')
+          case "$STATUS" in
+            failed)
+              if [ -z "$number" ]; then
+                url=$(gh issue create --title "$title" \
+                  --body 'Each failed scheduled e2e run on main adds a comment here. A green night comments too while this is open. Close it when the failures are fixed or quarantined (see apps/web/e2e/QUARANTINE.md).')
+                number=${url##*/}
+              fi
+              gh issue comment "$number" --body-file nightly-comment.md
+              ;;
+            green)
+              if [ -n "$number" ]; then
+                gh issue comment "$number" --body-file nightly-comment.md
+              fi
+              ;;
+            *)
+              echo "Run status: $STATUS; nothing posted."
+              ;;
+          esac

@@ -50,7 +50,7 @@ export function shownProofSource(
 const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'email-sending': 'email sending',
   sso: 'single sign-on',
-  'web-address': 'a web address',
+  'web-address': 'a custom domain',
   domain: 'domain verification',
 }
 

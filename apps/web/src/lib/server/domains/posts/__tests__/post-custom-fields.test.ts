@@ -209,6 +209,12 @@ describe('createPost custom fields', () => {
     expect(insertedRows.posts).toHaveLength(0)
   })
 
+  it('refuses with its own code, so a composer can tell the fields changed', async () => {
+    await expect(createPost(baseInput(), AUTHOR)).rejects.toMatchObject({
+      code: 'CUSTOM_FIELDS_INVALID',
+    })
+  })
+
   it('rejects when a required field is blank whitespace', async () => {
     await expect(createPost(baseInput({ use_case: '   ' }), AUTHOR)).rejects.toThrow(
       /Use case is required/

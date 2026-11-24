@@ -11,7 +11,7 @@
  * "Feature Requests" and "feature-requests" are the same board.
  */
 import { z } from 'zod'
-import { db, postStatuses, eq } from '@/lib/server/db'
+import { db, boards, postStatuses, postTags, and, eq, isNull } from '@/lib/server/db'
 import { slugify } from '@/lib/shared/utils/slugify'
 import type { BoardId, PrincipalId, PostTagId, PostStatusId } from '@quackback/ids'
 import type { ImportRowError } from './types'
@@ -56,11 +56,13 @@ export const csvRowSchema = z
       .string()
       .optional()
       .transform((val) => parseCsvEmailVerified(val)),
+    // A blank cell is undefined, not 0: a re-import keeps the post's stored
+    // count, and a new post starts at 0. An explicit 0 writes 0.
     vote_count: z
       .string()
       .optional()
       .transform((val) => {
-        if (!val) return 0
+        if (!val?.trim()) return undefined
         const num = parseInt(val, 10)
         return isNaN(num) || num < 0 ? 0 : num
       }),
@@ -92,12 +94,15 @@ export interface ProcessedRow {
   boardId: BoardId
   boardSlug: string | null
   statusId: PostStatusId | null
+  /** Whether the status came from the row's cell (false: blank, so the default). */
+  statusGiven: boolean
   status: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
   statusLabel: string | null
   authorName: string | null
   authorEmail: string | null
   isNewAuthor: boolean
-  voteCount: number
+  /** The vote_count cell, or null when it was blank. */
+  voteCount: number | null
   createdAt: Date
   tagNames: string[]
   principalId: PrincipalId
@@ -127,14 +132,23 @@ export interface RowContext {
   boardMap: Map<string, { id: BoardId; slug: string }>
   /** Lowercase board name -> slug. */
   boardNames: Map<string, string>
+  /** Boards an admin has set read-only. */
+  readOnlyBoardIds: Set<string>
 }
 
+/**
+ * Lookups read live rows only: a row naming a deleted board, status or tag
+ * gets a fresh live one (their slugs and names are unique among live rows),
+ * never the deleted row.
+ */
 export async function loadRowContext(): Promise<RowContext> {
   const defaultStatus = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.isDefault, true),
+    where: and(eq(postStatuses.isDefault, true), isNull(postStatuses.deletedAt)),
   })
 
-  const existingStatuses = await db.query.postStatuses.findMany()
+  const existingStatuses = await db.query.postStatuses.findMany({
+    where: isNull(postStatuses.deletedAt),
+  })
   const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
   const statusNames = new Map(existingStatuses.map((s) => [s.name.toLowerCase(), s.slug]))
   const nextActiveStatusPosition =
@@ -143,16 +157,20 @@ export async function loadRowContext(): Promise<RowContext> {
       -1
     ) + 1
 
-  const existingTags = await db.query.postTags.findMany()
+  const existingTags = await db.query.postTags.findMany({ where: isNull(postTags.deletedAt) })
   const tagMap = new Map<string, { id: PostTagId }>(
     existingTags.map((t) => [t.name.toLowerCase(), { id: t.id as PostTagId }])
   )
 
-  const existingBoards = await db.query.boards.findMany()
+  const existingBoards = await db.query.boards.findMany({ where: isNull(boards.deletedAt) })
   const boardMap = new Map(
     existingBoards.map((b) => [b.slug, { id: b.id as BoardId, slug: b.slug }])
   )
   const boardNames = new Map(existingBoards.map((b) => [b.name.toLowerCase(), b.slug]))
+
+  const readOnlyBoardIds = new Set<string>(
+    existingBoards.filter((b) => b.readOnly).map((b) => b.id)
+  )
 
   return {
     defaultStatusId: (defaultStatus?.id ?? null) as PostStatusId | null,
@@ -162,6 +180,7 @@ export async function loadRowContext(): Promise<RowContext> {
     tagMap,
     boardMap,
     boardNames,
+    readOnlyBoardIds,
   }
 }
 
@@ -241,17 +260,20 @@ export async function resolveRows(
     let statusLabel: string | null = null
     let status: { id: PostStatusId; category: string; slug: string; name: string } | undefined
     let pendingStatusSlug: string | null = null
+    let statusGiven = false
     if (row.status) {
       const matchedSlug = matchExistingSlug(row.status, ctx.statusMap, ctx.statusNames)
       if (matchedSlug) {
         status = ctx.statusMap.get(matchedSlug)
         statusId = status!.id
         statusLabel = status!.name
+        statusGiven = true
       } else {
         const slug = slugify(row.status)
         if (slug) {
           pendingStatusSlug = slug
           statusId = null
+          statusGiven = true
           statusLabel = row.status.trim()
           if (!statusesToCreate.has(slug)) statusesToCreate.set(slug, row.status.trim())
         }
@@ -312,12 +334,13 @@ export async function resolveRows(
         boardId,
         boardSlug,
         statusId,
+        statusGiven,
         status: legacyStatusFor(status),
         statusLabel,
         authorName: row.author_name || null,
         authorEmail: row.author_email || null,
         isNewAuthor,
-        voteCount: row.vote_count,
+        voteCount: row.vote_count ?? null,
         createdAt: row.created_at,
         tagNames,
         principalId,

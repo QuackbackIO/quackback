@@ -1,4 +1,6 @@
 import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
+import { PermissionDeniedPage } from '@/components/shared/error-page'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -13,7 +15,7 @@ import type {
   TicketStatusId,
 } from '@quackback/ids'
 import { coerceTicketTypeId } from '@/lib/shared/tickets'
-import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import { conversationIdOf, type ConversationPriority } from '@/lib/shared/conversation/types'
 import {
   isConversationSort,
   defaultConversationSort,
@@ -100,6 +102,13 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
+import { itemRefId } from '@/lib/client/conversation/inbox-cache'
+import { coalescedJitter } from '@/lib/client/coalesced-jitter'
+import { createOwnSendEchoHold } from '@/components/conversation/thread-echo'
+import {
+  createInboxRemovalHandler,
+  settleOpenItemAfterScopeChange,
+} from '@/lib/client/conversation/inbox-removal'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -108,7 +117,7 @@ import {
   type InboxItemDTO,
   type InboxTriageFacet,
 } from '@/lib/shared/inbox/items'
-import { listCompaniesFn } from '@/lib/server/functions/companies'
+import { inboxCompaniesQueryOptions, useInboxCompanies } from '@/lib/client/queries/inbox-companies'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
@@ -124,7 +133,12 @@ import {
   isProductEnabled,
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
-import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useFeatureFlag,
+  usePermissions,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
 import { TestViewHeader } from '@/components/admin/conversation/test-view-header'
 
@@ -230,6 +244,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // still reaches this route (§2.3 decision log): the shell renders with
     // conversation affordances hidden.
     if (!flags?.supportInbox && !flags?.supportTickets) return {}
+    if (!canOpenAdminPage(context.permissions ?? [], '/admin/inbox')) return {}
     const { queryClient } = context
     // No loaderDeps (so filter/selection changes do not remount the outlet),
     // which also means the loader is not given the validateSearch result.
@@ -237,7 +252,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // so `?q=123` is a string, `?c=` maps onto `i`, and rejected facets
     // never reach the prefetch queries.
     const search = validateInboxSearch(location.search as Record<string, unknown>)
-    const nav = navFromSearch(search)
+    const nav = navFromSearch(search, { conversations: !!flags?.supportInbox })
     const facet: InboxTriageFacet = search.status ?? 'open'
     const priority = search.priority ?? 'all'
     const searchTerm = (search.q ?? '').trim()
@@ -254,6 +269,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // page — each is caught independently and the component's useQuery still
     // fetches client-side.
     const warm = (p: Promise<unknown>) => p.catch(() => undefined)
+    const canRead = (permission: PermissionKey) => (context.permissions ?? []).includes(permission)
     const ref = search.i ? inboxItemRefFromId(search.i) : null
     let listPrefetch: Promise<unknown> | undefined
     if (skipListPrefetch) {
@@ -304,13 +320,14 @@ export const Route = createFileRoute('/admin/inbox')({
       warm(queryClient.ensureQueryData(conversationInboxQueries.segmentCounts())),
       warm(queryClient.ensureQueryData(conversationInboxQueries.views())),
       warm(queryClient.ensureQueryData(inboxQueries.counts())),
-      warm(queryClient.ensureQueryData(inboxTeamsQueryOptions())),
-      warm(
-        queryClient.ensureQueryData({
-          queryKey: ['admin', 'companies'],
-          queryFn: () => listCompaniesFn(),
-        })
-      ),
+      // The roster and the company picker need permissions an inbox-only
+      // custom role may lack; the server would only refuse them.
+      canRead(PERMISSIONS.MEMBER_VIEW)
+        ? warm(queryClient.ensureQueryData(inboxTeamsQueryOptions()))
+        : undefined,
+      canRead(PERMISSIONS.COMPANY_VIEW)
+        ? warm(queryClient.ensureQueryData(inboxCompaniesQueryOptions()))
+        : undefined,
       warm(queryClient.ensureQueryData(conversationAttributeQueries.live())),
       // The status catalogue backs every ticket-kind row's badge, not just a
       // tickets-scoped view, so it's warmed whenever tickets are on at all.
@@ -340,10 +357,15 @@ export const Route = createFileRoute('/admin/inbox')({
  */
 function InboxRoute() {
   const settings = useWorkspaceSettings()
+  const permissions = usePermissions()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox && !flags?.supportTickets) {
     return <Navigate to={getFirstEnabledAdminProductPath(flags)} />
   }
+  // A viewer who can list neither conversations nor tickets gets the
+  // no-access state (as AdminPageGate renders it, without its extra chunk).
+  if (!canOpenAdminPage(permissions, '/admin/inbox'))
+    return <PermissionDeniedPage fullPage={false} />
   return <InboxPage />
 }
 
@@ -361,11 +383,6 @@ function splitByKind(ids: Iterable<string>): {
     else if (ref?.kind === 'ticket') ticketIds.push(ref.id)
   }
   return { conversationIds, ticketIds }
-}
-
-/** The stable string id of any unified inbox row. */
-function itemRefId(item: InboxItemDTO): string {
-  return item.kind === 'conversation' ? item.conversation.id : item.ticket.id
 }
 
 /**
@@ -410,6 +427,12 @@ function patchTicketInInboxLists(queryClient: QueryClient, ticket: TicketDTO): v
   )
 }
 
+/** The longest this tab's own send holds its echo, should it never settle. */
+const THREAD_ECHO_HOLD_MS = 5_000
+
+/** The most a refetch after a scope change is delayed, to spread the load. */
+const SCOPE_REFETCH_JITTER_MS = 2_000
+
 function InboxPage() {
   const queryClient = useQueryClient()
   const navigate = Route.useNavigate()
@@ -452,16 +475,21 @@ function InboxPage() {
   // custom saved view. Scopes are mutually exclusive; precedence custom > team >
   // tag > segment > view. Status/priority chips refine WITHIN a built-in scope;
   // Mentions + custom views are self-contained so those chips are hidden.
+  // A tickets-only workspace never lands on a conversation view.
+  const conversationsEnabled = useFeatureFlag('supportInbox')
   const nav = useMemo<InboxNavItem>(
     () =>
-      navFromSearch({
-        tag: urlTag,
-        segment: urlSegment,
-        team: urlTeam,
-        viewId: urlViewId,
-        view: urlView,
-      }),
-    [urlTag, urlSegment, urlTeam, urlViewId, urlView]
+      navFromSearch(
+        {
+          tag: urlTag,
+          segment: urlSegment,
+          team: urlTeam,
+          viewId: urlViewId,
+          view: urlView,
+        },
+        { conversations: conversationsEnabled }
+      ),
+    [urlTag, urlSegment, urlTeam, urlViewId, urlView, conversationsEnabled]
   )
   // Per-scope memory: each scope (view / tag / segment, keyed by inboxNavKey)
   // remembers the item last open in it, so returning to a scope resumes where
@@ -598,11 +626,7 @@ function InboxPage() {
 
   // Company refinement: a picker in the list header + the deep-link from the
   // conversation CompanyCard. The picker only appears when companies exist.
-  const { data: companies } = useQuery({
-    queryKey: ['admin', 'companies'],
-    queryFn: () => listCompaniesFn(),
-    staleTime: 60_000,
-  })
+  const { data: companies } = useInboxCompanies()
   // A deep link can carry `?company=` into a scope that cannot filter by it.
   useEffect(() => {
     if (urlCompany && !showRefinements) updateSearch({ company: undefined })
@@ -681,11 +705,81 @@ function InboxPage() {
   // is connected, it already keeps both list surfaces current (via
   // `refreshInboxList`/the ticket row-patch below), making a parallel poll
   // redundant load (QC-3).
+  // A scope change refetches the lists and the open item. Spread over a
+  // short random delay so streams told together do not ask together; a
+  // burst of changes runs one refetch; leaving the page cancels it. The open
+  // item is the one open when it runs, since that may be the one that left.
+  const onScopeChanged = useRef(() => {})
+  onScopeChanged.current = () => {
+    refreshInboxAfterReconnect()
+    if (selectedRef) void settleOpenItemAfterScopeChange(queryClient, selectedRef)
+  }
+  const scopeRefetch = useMemo(
+    () => coalescedJitter(() => onScopeChanged.current(), SCOPE_REFETCH_JITTER_MS),
+    []
+  )
+  useEffect(() => () => scopeRefetch.cancel(), [scopeRefetch])
+
+  const removals = useMemo(
+    () => createInboxRemovalHandler(queryClient, refreshInboxCounts),
+    [queryClient, refreshInboxCounts]
+  )
+  useEffect(() => () => removals.cancel(), [removals])
+
+  // This tab's own send reaches the open thread as its response and as the
+  // stream's echo. While the send is in flight, its conversation's echo frames
+  // wait and land after the response, where they change nothing, so the thread
+  // renders once whichever arrives first (see thread-echo.ts).
+  const ownSendEcho = useMemo(
+    () =>
+      createOwnSendEchoHold({
+        isSending: (id) =>
+          queryClient.isMutating({ mutationKey: conversationKeys.agentSend(id) }) > 0,
+        onSendSettled: (id, done) => {
+          const key = conversationKeys.agentSend(id)
+          return queryClient.getMutationCache().subscribe(() => {
+            if (queryClient.isMutating({ mutationKey: key }) === 0) done()
+          })
+        },
+        flush: (id, frames) =>
+          reconcileCachedThread<AgentThreadCache>(
+            queryClient,
+            conversationKeys.agentThread(id),
+            (prev) =>
+              frames.reduce<AgentThreadCache | undefined>(
+                (acc, evt) => applyAgentThreadEvent(acc, evt, id),
+                prev
+              )
+          ),
+        timeoutMs: THREAD_ECHO_HOLD_MS,
+      }),
+    [queryClient]
+  )
+  useEffect(() => () => ownSendEcho.cancel(), [ownSendEcho])
+
   const { connected: streamConnected } = useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
-    onReconnect: refreshInboxAfterReconnect,
+    // Only after a real gap: refetching the lists and the open item on every
+    // first open would double the inbox's load cost.
+    onCatchUp: (reason) => {
+      if (reason === 'reconnect') refreshInboxAfterReconnect()
+    },
     onEvent: (evt) => {
+      // Scope events name no thread to patch. A removed item leaves every list
+      // at once and its open pane refetches into not found; a scope change
+      // refetches as a reconnect does, since lists and the open pane may all
+      // have moved.
+      if (evt.kind === 'inbox_item_removed') {
+        // The lists are patched here; only the counts need the server, once
+        // per burst (a sweep sends one removal per row).
+        removals.onRemoved(evt)
+        return
+      }
+      if (evt.kind === 'inbox_scope_changed') {
+        scopeRefetch.schedule()
+        return
+      }
       refreshIfCompanionLost(evt)
       // A ticket's live properties (status/assignee/priority/stage/type) name
       // their own cache keys precisely, so this patches them directly instead
@@ -739,23 +833,21 @@ function InboxPage() {
       // Thread caches: the open thread and any hover-prefetched (or previously
       // opened) thread for this event. Unvisited rows stay untouched. Ephemeral
       // typing / assistant frames have nothing in the cache to patch.
-      const conversationId =
-        evt.kind === 'conversation'
-          ? evt.conversation.id
-          : 'conversationId' in evt
-            ? evt.conversationId
-            : undefined
+      const conversationId = conversationIdOf(evt)
       if (
         conversationId &&
         evt.kind !== 'typing' &&
         evt.kind !== 'assistant_activity' &&
         evt.kind !== 'assistant_delta'
       ) {
-        reconcileCachedThread<AgentThreadCache>(
-          queryClient,
-          conversationKeys.agentThread(conversationId),
-          (prev) => applyAgentThreadEvent(prev, evt, conversationId)
-        )
+        // Held while this tab's own send to the conversation is in flight.
+        if (!ownSendEcho.hold(conversationId, evt)) {
+          reconcileCachedThread<AgentThreadCache>(
+            queryClient,
+            conversationKeys.agentThread(conversationId),
+            (prev) => applyAgentThreadEvent(prev, evt, conversationId)
+          )
+        }
         // A new message with files invalidates the detail panel's Files
         // section — same event, no separate read.
         if (evt.kind === 'message' && evt.message.attachments.length > 0) {

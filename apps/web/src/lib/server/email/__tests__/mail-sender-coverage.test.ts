@@ -39,6 +39,7 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   // About the workspace's own setup, to a teammate: never part of a customer
   // thread, and the domain it reports on is the one that just stopped verifying.
   sendSendingDomainAttentionEmail: 'platform',
+  sendPlanLimitsEmail: 'platform',
   // About a domain the workspace added, to a teammate: never part of a
   // customer thread.
   sendDomainAttentionEmail: 'platform',
@@ -53,6 +54,7 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   sendStatusChangeEmail: 'platform',
   sendNewCommentEmail: 'platform',
   sendPostMentionEmail: 'platform',
+  sendModerationDecisionEmail: 'platform',
   sendNoteMentionEmail: 'platform',
   sendStatusIncidentPublishedEmail: 'platform',
   sendStatusMaintenanceScheduledEmail: 'platform',

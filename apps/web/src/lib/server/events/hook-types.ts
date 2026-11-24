@@ -8,6 +8,7 @@
 
 import type { EventData } from './types'
 import type { ContactEmail } from '@/lib/server/email/recipient'
+import type { PrincipalId } from '@quackback/ids'
 
 /**
  * Result of running a hook.
@@ -119,6 +120,12 @@ export interface EmailTarget {
   email: ContactEmail
   name?: string
   unsubscribeUrl: string
+  /**
+   * The person the email is for. The delivery handler reads it at send time
+   * to hold back automated email to someone blocked since the event. Absent on
+   * a target queued before it was added.
+   */
+  principalId?: PrincipalId
 }
 
 export interface EmailConfig {
@@ -130,6 +137,8 @@ export interface EmailConfig {
   commenterName?: string
   commentPreview?: string
   isTeamMember?: boolean
+  /** The recipient wrote the post. Absent (a job queued before this field) reads as a follower. */
+  isPostAuthor?: boolean
   /** post.mentioned: who mentioned the recipient (null when unknown). */
   mentionerName?: string | null
   logoUrl?: string
@@ -140,6 +149,23 @@ export interface EmailConfig {
    *  at send. Absent = EMAIL_FROM. */
   from?: string
   /** The resolved address's sender name; used only while that address sends. */
+  fromDisplayName?: string
+}
+
+/**
+ * Email config for the team's decision on a held post or comment, built by
+ * `getModerationDecisionTargets`. A rejection carries no `postUrl`: the item
+ * is gone.
+ */
+export interface ModerationDecisionEmailConfig {
+  item: 'post' | 'comment'
+  decision: 'approved' | 'rejected'
+  postTitle: string
+  postUrl?: string
+  workspaceName: string
+  logoUrl?: string
+  preferencesUrl?: string
+  from?: string
   fromDisplayName?: string
 }
 

@@ -1,13 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
-import { adminQueries } from '@/lib/client/queries/admin'
+import {
+  useAdminBoards,
+  useAdminStatuses,
+  useAdminTags,
+  useAdminTeamMembers,
+} from '@/lib/client/hooks/use-admin-catalogues'
 import { warmFeedbackPage } from '@/lib/client/queries/feedback-page'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { errorMessage } from '@/components/shared/error-page'
+import { FeedbackLoadError } from '@/components/admin/feedback/feedback-load-error'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 
 export const Route = createFileRoute('/admin/feedback/')({
   head: adminPageHead('Feedback'),
@@ -16,7 +19,7 @@ export const Route = createFileRoute('/admin/feedback/')({
   // Client-side filter changes are handled by InboxContainer's useInboxPosts
   // (combined with its placeholderData) instead of re-running this loader —
   // mirrors the documented pattern in src/routes/_portal/index.tsx.
-  errorComponent: FeedbackErrorComponent,
+  errorComponent: FeedbackLoadError,
   loader: async ({ context }) => {
     // Protected route - user and principal are guaranteed by parent's beforeLoad auth check
     const {
@@ -32,8 +35,11 @@ export const Route = createFileRoute('/admin/feedback/')({
     }
 
     // Awaited so the document hydrates instead of racing a fire-and-forget
-    // prefetch.
-    await warmFeedbackPage(queryClient, permissions)
+    // prefetch. A viewer who cannot read posts gets the no-access state and
+    // no reads.
+    if (canOpenAdminPage(permissions, '/admin/feedback')) {
+      await warmFeedbackPage(queryClient, permissions)
+    }
 
     return {
       currentUser: {
@@ -43,26 +49,12 @@ export const Route = createFileRoute('/admin/feedback/')({
       },
     }
   },
-  component: FeedbackIndexPage,
+  component: () => (
+    <AdminPageGate page="/admin/feedback">
+      <FeedbackIndexPage />
+    </AdminPageGate>
+  ),
 })
-
-function FeedbackErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
-  const message = errorMessage(error)
-  return (
-    <div className="flex items-center justify-center min-h-[400px] p-4">
-      <Alert variant="destructive" className="max-w-2xl">
-        <ExclamationCircleIcon className="h-4 w-4" />
-        <AlertTitle>Failed to load feedback</AlertTitle>
-        <AlertDescription className="mt-2">
-          <p className="mb-4">{message}</p>
-          <Button onClick={reset} variant="outline" size="sm">
-            Try again
-          </Button>
-        </AlertDescription>
-      </Alert>
-    </div>
-  )
-}
 
 function FeedbackIndexPage() {
   const { currentUser } = Route.useLoaderData()
@@ -70,17 +62,18 @@ function FeedbackIndexPage() {
   // Read pre-fetched reference data from React Query cache. The posts list is
   // read directly by InboxContainer's own infinite `useInboxPosts` hook — which
   // shares its query definition with the loader's prefetch (QC-1) — so there's
-  // no separate suspense query for posts here.
-  const boardsQuery = useSuspenseQuery(adminQueries.boards())
-  const tagsQuery = useSuspenseQuery(adminQueries.tags())
-  const statusesQuery = useSuspenseQuery(adminQueries.statuses())
-  const membersQuery = useQuery(adminQueries.teamMembers())
+  // no separate suspense query for posts here. Each list needs a permission of
+  // its own: a viewer without it gets an empty list, not a refused request.
+  const boardsQuery = useAdminBoards()
+  const tagsQuery = useAdminTags()
+  const statusesQuery = useAdminStatuses()
+  const membersQuery = useAdminTeamMembers()
 
   return (
     <InboxContainer
-      boards={boardsQuery.data}
-      tags={tagsQuery.data}
-      statuses={statusesQuery.data}
+      boards={boardsQuery.data ?? []}
+      tags={tagsQuery.data ?? []}
+      statuses={statusesQuery.data ?? []}
       members={membersQuery.data ?? []}
       currentUser={currentUser}
     />

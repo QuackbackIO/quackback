@@ -32,15 +32,16 @@ import {
 } from '@/lib/server/domains/conversation/conversation.service'
 import {
   publishAgentConversationEvent,
-  publishConversationOnlyEvent,
+  publishConversationOnlyEventAsync,
 } from '@/lib/server/realtime/conversation-channels'
+import { conversationScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import {
   writeActivitySnapshot,
   clearActivitySnapshot,
 } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
+import { isFeatureLive } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { getLiveWorkflowReferencedAttributeKeys } from '@/lib/server/domains/workflows/workflow.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import {
@@ -137,13 +138,7 @@ export async function previewAssistantTurnForConversation(
   opts?: { surface?: 'widget' | 'workflow_step' }
 ): Promise<AssistantTurnEligibility> {
   if (!isAssistantConfigured()) return 'declined'
-  try {
-    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
-    await requireEntitlement('aiAssistant')
-  } catch (err) {
-    if (err instanceof EntitlementRequiredError) return 'declined'
-    throw err
-  }
+  if (!(await isFeatureLive('aiAssistant'))) return 'declined'
   try {
     await enforceAiTokenBudget()
   } catch (err) {
@@ -178,15 +173,11 @@ export async function runAssistantTurnForConversation(
 ): Promise<void> {
   if (!isAssistantConfigured()) return
 
-  try {
-    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
-    await requireEntitlement('aiAssistant')
-  } catch (err) {
-    if (err instanceof EntitlementRequiredError) {
-      log.info({ conversationId }, 'assistant turn skipped: ai assistant not entitled')
-      return
-    }
-    throw err
+  // The plan gate, kept live through the plan limits grace. Without it the
+  // conversation stays with the team.
+  if (!(await isFeatureLive('aiAssistant'))) {
+    log.info({ conversationId }, 'assistant turn skipped: ai assistant not on this plan')
+    return
   }
 
   try {
@@ -282,10 +273,24 @@ export async function runAssistantTurnForConversation(
   // Messenger sheet shows both sides at once. Test threads are a handful, so
   // this never churns a real inbox.
   const { isTestConversation } = await import('@/lib/server/test-data')
-  const mirrorToInbox = await isTestConversation(conversationId)
+  const testThread = await isTestConversation(conversationId)
+  // The mirror's scope envelope comes from that one read, not one per
+  // streamed fragment.
+  const mirrorScope = testThread ? conversationScopeOf(testThread) : undefined
+  // The signals go out one at a time, each after the last is published, so
+  // the widget sees them in the order they happened: a fire-and-forget publish
+  // takes whichever pooled connection is free, and the first answer fragment
+  // could otherwise overtake the 'thinking' status sent just before it (or a
+  // late fragment the final reply). A failed publish is logged and the chain
+  // carries on; the persisted reply is the durable record.
+  let turnSignals: Promise<void> = Promise.resolve()
   const publishTurnSignal = (event: ConversationStreamEvent) => {
-    publishConversationOnlyEvent(conversationId, event)
-    if (mirrorToInbox) publishAgentConversationEvent(event)
+    turnSignals = turnSignals
+      .then(() => publishConversationOnlyEventAsync(conversationId, event))
+      .catch((err: unknown) =>
+        log.warn({ err, conversationId, kind: event.kind }, 'assistant turn signal publish failed')
+      )
+    if (mirrorScope) publishAgentConversationEvent(event, mirrorScope)
   }
   // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
   // the finally below) so a subscriber that connects mid-turn can replay the
@@ -349,6 +354,8 @@ export async function runAssistantTurnForConversation(
         })
       },
     })
+    // Every streamed signal is out before the reply that replaces them.
+    await turnSignals
     // Suppressed by the engine's own silence check — nothing to persist. An
     // honest cannot-answer outcome is still a customer-visible terminal reply
     // and must be persisted; it simply must not advance resolution state.
@@ -406,6 +413,11 @@ export async function runAssistantTurnForConversation(
       // A filed proposal waits on the team even when no new handoff is needed.
       waiting: handsOff || result.proposedActions.length > 0,
       citations: persistedCitations,
+      // The model ended the conversation with a tool call before writing these
+      // words; posting them must not reopen what it just closed.
+      closedThisTurn: result.trace.toolCalls.some(
+        (call) => call.name === 'end_conversation' && call.outcome === 'executed'
+      ),
     })
 
     if (result.escalation?.mode === 'handoff') {
@@ -467,6 +479,7 @@ export async function runAssistantTurnForConversation(
     } else {
       log.error({ err, conversationId }, 'assistant turn failed; escalating to a human')
     }
+    await turnSignals
     try {
       await runAssistantFailureFloor(conversationId, assistantPrincipalId)
     } catch (floorErr) {
@@ -476,6 +489,8 @@ export async function runAssistantTurnForConversation(
       throw err
     }
   } finally {
+    // Every exit drains its signals before the snapshot is cleared.
+    await turnSignals
     await clearActivitySnapshot(conversationId)
   }
 }

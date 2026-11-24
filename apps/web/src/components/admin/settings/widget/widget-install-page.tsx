@@ -24,13 +24,19 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useMintWidgetInstallCode } from '@/lib/client/mutations/settings'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export function WidgetInstallPage() {
   const baseUrl = useBaseUrl()
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const mintInstallCode = useMintWidgetInstallCode()
+  // The install status is served only with member.view, which a custom role
+  // may lack: such a viewer gets the install steps without the live status.
+  const canReadStatus = usePermission(PERMISSIONS.MEMBER_VIEW)
   const statusQuery = useQuery({
     ...adminQueries.onboardingStatus(),
+    enabled: canReadStatus,
     // Fresh for one poll: the status the page was just delivered with is not
     // fetched again on mount, while one cached by an earlier visit is.
     staleTime: 5_000,
@@ -41,7 +47,7 @@ export function WidgetInstallPage() {
       return false
     },
   })
-  const status = statusQuery.data!
+  const status: Partial<NonNullable<typeof statusQuery.data>> = statusQuery.data ?? {}
   const presence = widgetInstallPresence({
     connected: Boolean(status.hasWidgetInstalled),
     enabled: Boolean(status.hasWidgetEnabled),
@@ -182,7 +188,7 @@ export function WidgetInstallPage() {
             title="2. Open a page on your site"
             description="After the agent finishes. Localhost is fine."
           >
-            {connectionRows}
+            {canReadStatus ? connectionRows : null}
           </SettingsCard>
 
           <SettingsCard flush>

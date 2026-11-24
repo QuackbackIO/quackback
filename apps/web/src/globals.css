@@ -101,19 +101,26 @@
     --shadow-xl: 0 16px 40px oklch(0 0 0 / 0.12);
     --shadow-2xl: 0 20px 48px oklch(0 0 0 / 0.16);
     /* Portal component variables (fallback to global values) */
-    --header-background: #ffffff;
-    --header-foreground: #0a0a0a;
-    --header-border: #e5e5e5;
+    --header-background: var(--background);
+    --header-foreground: var(--foreground);
+    --header-border: color-mix(in oklab, var(--border) 60%, var(--background));
     --post-card-background: var(--card);
-    --post-card-border: #e5e5e5;
+    --post-card-border: color-mix(in oklab, var(--border) 60%, var(--background));
     --post-card-voted-color: var(--primary);
-    --nav-active-background: #f5f5f5;
-    --nav-active-foreground: #0a0a0a;
-    --nav-inactive-color: #525252;
+    /* A colour drawn as text (a vote count, a tag) keeps its hue at a readable
+       lightness: dark enough on this light page (text-readable). */
+    --ink-l-min: 0;
+    --ink-l-max: 0.47;
+    --nav-active-background: var(--muted);
+    --nav-active-foreground: var(--foreground);
+    --nav-inactive-color: var(--muted-foreground);
+    --header-primary: var(--primary);
+    --header-primary-foreground: var(--primary-foreground);
     --portal-button-background: var(--primary);
     --portal-button-foreground: var(--primary-foreground);
     --elevated: #f5f5f5;
     --radius-item: 999px;
+    --radius-button: var(--radius-item);
     --radius-field: 0.5rem;
     --radius-panel: 0.75rem;
     /* Two-tone admin chrome: the rail sits on a tinted field and the page is a sheet on it. */
@@ -201,15 +208,20 @@
     --shadow-xl: 0 16px 40px oklch(0 0 0 / 0.55);
     --shadow-2xl: 0 20px 48px oklch(0 0 0 / 0.6);
     /* Portal component variables (fallback to global values) */
-    --header-background: #0a0a0a;
-    --header-foreground: #fafafa;
-    --header-border: #262626;
+    --header-background: var(--background);
+    --header-foreground: var(--foreground);
+    --header-border: var(--border);
     --post-card-background: var(--card);
-    --post-card-border: #262626;
+    --post-card-border: var(--border);
     --post-card-voted-color: var(--primary);
-    --nav-active-background: #222222;
-    --nav-active-foreground: #fafafa;
-    --nav-inactive-color: #a1a1a1;
+    /* Light enough on this dark page, a coloured dark page included. */
+    --ink-l-min: 0.84;
+    --ink-l-max: 1;
+    --nav-active-background: var(--muted);
+    --nav-active-foreground: var(--foreground);
+    --nav-inactive-color: var(--muted-foreground);
+    --header-primary: var(--primary);
+    --header-primary-foreground: var(--primary-foreground);
     --portal-button-background: var(--primary);
     --portal-button-foreground: var(--primary-foreground);
     --elevated: #101010;
@@ -244,6 +256,11 @@
     --color-popover-foreground: var(--popover-foreground);
     --color-primary: var(--primary);
     --color-primary-foreground: var(--primary-foreground);
+    /* The main colour as text (text-primary-ink): the readable shade the
+       workspace theme writes for the portal, widget and sign-in pages. Not
+       declared in this stylesheet, so anywhere else (the admin app) it is
+       plain --primary, as text-primary is there. */
+    --color-primary-ink: var(--primary-ink, var(--primary));
     --color-secondary: var(--secondary);
     --color-secondary-foreground: var(--secondary-foreground);
     --color-muted: var(--muted);
@@ -305,6 +322,10 @@
 
     /* Typography */
     --font-sans: var(--font-sans);
+    /* Small titles (font-heading: a post's title, the header's name): the
+       theme's headings font, else the text font; the text font too when the
+       theme keeps its headings font to page headings (--font-title). */
+    --font-heading: var(--font-title, var(--font-heading, var(--font-sans)));
     --font-mono: var(--font-mono);
     --font-serif: var(--font-serif);
 
@@ -314,6 +335,7 @@
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) * 1.5);
     --radius-item: var(--radius-item);
+    --radius-button: var(--radius-button);
     --radius-field: var(--radius-field);
     --radius-panel: var(--radius-panel);
 
@@ -416,20 +438,36 @@
   }
 }
 
-/* Light: --primary is the fill gold. Type, icons, and carets use --accent-ink
-   so yellow never sits on white at ~1.5:1. Dark keeps gold as ink. */
+/* The main colour as text, icon or caret. The workspace theme (portal, widget,
+   sign-in pages) declares --primary-ink, its readable shade (4.5:1 on the page
+   and its cards), on the document in light and dark, so overlays portaled out
+   of the page root take it too. Where no theme declares it (the admin app),
+   light pages draw --accent-ink, so the gold fill never sits on white at
+   ~1.5:1, and dark pages keep the gold. */
 @layer utilities {
   html:not(.dark) .text-primary {
-    color: var(--accent-ink);
+    color: var(--primary-ink, var(--accent-ink));
   }
   html:not(.dark) .fill-primary {
-    fill: var(--accent-ink);
+    fill: var(--primary-ink, var(--accent-ink));
   }
   html:not(.dark) .stroke-primary {
-    stroke: var(--accent-ink);
+    stroke: var(--primary-ink, var(--accent-ink));
   }
   html:not(.dark) .caret-primary {
-    caret-color: var(--accent-ink);
+    caret-color: var(--primary-ink, var(--accent-ink));
+  }
+  .dark .text-primary {
+    color: var(--primary-ink, var(--primary));
+  }
+  .dark .fill-primary {
+    fill: var(--primary-ink, var(--primary));
+  }
+  .dark .stroke-primary {
+    stroke: var(--primary-ink, var(--primary));
+  }
+  .dark .caret-primary {
+    caret-color: var(--primary-ink, var(--primary));
   }
 }
 
@@ -437,6 +475,70 @@
    reads as one link, and every other control in it sits above that layer.
    One rule here instead of positioning classes repeated on every card. */
 @layer components {
+  /* What sits on the header bar reads on its colour: the page's own colours
+     when the header is the page (the defaults), worked out for the bar when
+     the theme gives it a colour. Menus open in a portal, on the page. */
+  .portal-header {
+    --background: var(--header-background);
+    --foreground: var(--header-foreground);
+    --muted: var(--nav-active-background);
+    --muted-foreground: var(--nav-inactive-color);
+    --primary: var(--header-primary);
+    --primary-foreground: var(--header-primary-foreground);
+    color: var(--header-foreground);
+  }
+  /* Portal cards (post cards, roadmap cards, the welcome card, the composer,
+     the side panels). Each reads the theme's card style from variables the
+     theme writes only for Shadow and Flat (lib/shared/theme/card-style.ts).
+     Unset, a card keeps its own look: its edge in its own colour and
+     strength (--portal-card-edge-colour, --portal-card-edge), its own fill
+     (--portal-card-base, --portal-card-fill) and the soft shadow every card
+     has had (--portal-card-rest-shadow). On a filled (Flat)
+     card the quiet fill inside it (--portal-card-inset) is the card colour,
+     so a chosen row or a vote button still shows; otherwise it is the page's.
+     A colour drawn as text on a filled card is held a step nearer the text
+     colour than on the page (--portal-card-ink-min, -max), so it still reads. */
+  :root {
+    --portal-muted: var(--muted);
+    --portal-ink-l-min: var(--ink-l-min);
+    --portal-ink-l-max: var(--ink-l-max);
+  }
+  .portal-card {
+    --muted: var(--portal-card-inset, var(--portal-muted));
+    --ink-l-min: var(--portal-card-ink-min, var(--portal-ink-l-min));
+    --ink-l-max: var(--portal-card-ink-max, var(--portal-ink-l-max));
+    border-color: var(
+      --portal-card-border,
+      color-mix(
+        in oklab,
+        var(--portal-card-edge-colour, var(--border)) var(--portal-card-edge, 100%),
+        transparent
+      )
+    );
+    box-shadow: var(--portal-card-shadow, var(--portal-card-rest-shadow, var(--shadow-sm)));
+    background-color: var(
+      --portal-card-background,
+      color-mix(
+        in oklab,
+        var(--portal-card-base, var(--card)) var(--portal-card-fill, 100%),
+        transparent
+      )
+    );
+  }
+  /* The composer, open: lifted whatever the card style. */
+  .portal-card--lifted {
+    box-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+  /* Titles and headings take the theme's headings font, and the text font
+     when it sets none: page titles and the welcome card's headings here,
+     post titles and the header's name by the font-heading class. Words
+     people wrote in a post or an article keep the text font. */
+  [data-portal] h1:not(.prose h1),
+  [data-portal] .portal-welcome :is(h1, h2, h3) {
+    font-family: var(--font-heading, var(--font-sans));
+  }
   .post-card__link {
     outline: none;
   }
@@ -516,6 +618,12 @@ a svg,
 }
 
 /* Scrollbar utilities - tweakcn compatible */
+/* Text in a colour of its own (--ink: a brand's vote colour, a tag's), its
+   hue kept and its lightness clamped so it reads on the page in light and dark. */
+@utility text-readable {
+  color: oklch(from var(--ink, currentColor) clamp(var(--ink-l-min), l, var(--ink-l-max)) c h);
+}
+
 @utility scrollbar-none {
   scrollbar-width: none;
   -ms-overflow-style: none;

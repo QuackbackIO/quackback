@@ -24,6 +24,7 @@ import { StageChip, StageTracker } from '@/components/shared/ticket-stage'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { formatCalendarDate } from '@/lib/shared/utils/date'
+import { ticketIntakeFormQuery } from '@/lib/client/queries/visitor-ticket-form'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 
 const NO_HEADERS = (): Record<string, string> => ({})
@@ -81,9 +82,7 @@ export function TicketHeaderCard({
   // The intake form resolves stored answers back to field labels; only
   // fetched once the Details disclosure is opened.
   const { data: intakeForm } = useQuery({
-    queryKey: ['ticket-intake-form'],
-    queryFn: () => rpc.getMyTicketForm({ headers: getAuthHeaders() }),
-    staleTime: 300_000,
+    ...ticketIntakeFormQuery(rpc, getAuthHeaders),
     enabled: expanded && !!ticket.ticketType,
   })
   const { data: watchStatus } = useQuery({

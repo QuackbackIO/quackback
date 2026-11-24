@@ -30,7 +30,7 @@ import {
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
-import { sql, isNull } from 'drizzle-orm'
+import { sql, isNull, or, desc } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
@@ -43,6 +43,7 @@ import {
 } from '@/lib/server/events/dispatch'
 import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
@@ -55,15 +56,45 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { startOfUtcMonth } from '@/lib/shared/utils/date'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
-import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
+import {
+  CUSTOM_FIELDS_INVALID,
+  validatePostCustomFieldValues,
+} from '@/lib/shared/post-custom-fields'
 import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
-import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 import { resolveTestFeedbackActor } from '@/lib/server/test-customer-feedback'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { assertBoardOpen } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
 const log = logger.child({ component: 'posts' })
+
+/**
+ * Refuse a tag list the assignment insert would fail on or should not write:
+ * a repeated id, or one naming no live tag. `kept` are the tags the post
+ * already carries; they stay assignable after the tag itself is deleted, so
+ * re-sending a post's current tags never fails.
+ */
+async function assertAssignableTags(
+  tagIds: readonly PostTagId[],
+  kept: readonly PostTagId[] = []
+): Promise<void> {
+  if (new Set(tagIds).size !== tagIds.length) {
+    throw new ValidationError('VALIDATION_ERROR', 'Tag IDs must not repeat')
+  }
+  const wanted = tagIds.filter((tagId) => !kept.includes(tagId))
+  if (wanted.length === 0) return
+  const live = await db
+    .select({ id: postTags.id })
+    .from(postTags)
+    .where(and(inArray(postTags.id, wanted), isNull(postTags.deletedAt)))
+  const found = new Set(live.map((t) => t.id))
+  const missing = wanted.find((tagId) => !found.has(tagId))
+  if (missing) {
+    throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${missing} not found`)
+  }
+}
 
 /**
  * Create a new post
@@ -127,6 +158,9 @@ export async function createPost(
       },
     })
 
+  // Refuse a bad tag list before anything is written, so it leaves no post.
+  if (input.tagIds) await assertAssignableTags(input.tagIds)
+
   // Validate board exists and get status in parallel.
   // The deletedAt filter here is load-bearing: rehostExternalImages (below) uploads
   // to S3 before the locked recheck inside the transaction. Without this filter, a
@@ -141,15 +175,26 @@ export async function createPost(
       ? db
           .select()
           .from(postStatuses)
-          .where(eq(postStatuses.slug, 'open'))
+          // The status marked default, as the portal and admin dialog use;
+          // the open slug only when no status is marked.
+          .where(
+            and(
+              isNull(postStatuses.deletedAt),
+              or(eq(postStatuses.isDefault, true), eq(postStatuses.slug, 'open'))
+            )
+          )
+          .orderBy(desc(postStatuses.isDefault))
           .limit(1)
           .then((rows) => rows[0])
-      : db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId!) }),
+      : db.query.postStatuses.findFirst({
+          where: and(eq(postStatuses.id, input.statusId!), isNull(postStatuses.deletedAt)),
+        }),
   ])
 
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
   }
+  await assertBoardOpen(board.id, board.readOnly ?? false)
 
   // Validate submitted custom-field answers against the board's declared
   // fields. Unknown keys are dropped by the validator; a missing required
@@ -159,7 +204,9 @@ export async function createPost(
   if (boardCustomFields.length > 0) {
     const parsed = validatePostCustomFieldValues(boardCustomFields, input.customFields ?? {})
     if (!parsed.ok) {
-      throw new ValidationError('VALIDATION_ERROR', parsed.errors[0].message)
+      // Its own code, so a composer that loaded the board before its fields
+      // changed can say so and fetch them again.
+      throw new ValidationError(CUSTOM_FIELDS_INVALID, parsed.errors[0].message)
     }
     customFieldValues = parsed.values
   }
@@ -186,13 +233,13 @@ export async function createPost(
     : 'published'
   let holdReason: ReturnType<typeof contentHoldReason> = null
 
-  // Determine statusId - either from input or use default "open" status
+  // Determine statusId - either from input or the default status
   let statusId = input.statusId
   if (!statusId) {
     if (!statusResult) {
       throw new ValidationError(
         'VALIDATION_ERROR',
-        'Default "open" status not found. Please ensure post statuses are configured for this organization.'
+        'No default status found. Please ensure post statuses are configured for this organization.'
       )
     }
     statusId = statusResult.id
@@ -314,7 +361,9 @@ export async function createPost(
 
   if (!options?.skipDispatch) {
     // Auto-subscribe the author to their own post. Runs even when held for
-    // moderation so the author receives notifications on approval/rejection.
+    // moderation, so once approved the author follows the thread. The
+    // approval or rejection notice itself reaches the author directly from
+    // the post.approved / post.rejected events (moderation.service.ts).
     await subscribeToPost(author.principalId, post.id, 'author')
 
     createActivity({
@@ -339,6 +388,8 @@ export async function createPost(
         },
         board: { slug: board.slug, name: board.name },
         author,
+        // On a teammate's create for a customer, the teammate wrote the text.
+        writerPrincipalId: author.actor?.principalId ?? author.principalId,
       })
     }
   }
@@ -374,8 +425,10 @@ export async function updatePost(
     throw new ValidationError('VALIDATION_ERROR', 'Actor principal ID is required for post updates')
   }
 
-  // Get existing post
-  const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, id) })
+  // Get existing post; a deleted post is not found, so it cannot be edited
+  const existingPost = await db.query.posts.findFirst({
+    where: and(eq(posts.id, id), isNull(posts.deletedAt)),
+  })
   if (!existingPost) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
   }
@@ -389,7 +442,9 @@ export async function updatePost(
       ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, existingPost.statusId) })
       : null,
     statusChanged
-      ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId!) })
+      ? db.query.postStatuses.findFirst({
+          where: and(eq(postStatuses.id, input.statusId!), isNull(postStatuses.deletedAt)),
+        })
       : null,
   ])
 
@@ -415,14 +470,27 @@ export async function updatePost(
     }
   }
 
-  // Capture current tag IDs before update (for activity diff)
-  let currentTagIds: string[] = []
+  // A post's owner is a teammate: refuse a customer (or nobody) before writing.
+  if (input.ownerPrincipalId && input.ownerPrincipalId !== existingPost.ownerPrincipalId) {
+    const owner = await db.query.principal.findFirst({
+      where: eq(principalTable.id, input.ownerPrincipalId),
+      columns: { role: true },
+    })
+    if (!owner || !isTeamMember(owner.role)) {
+      throw new ValidationError('INVALID_OWNER', 'A post owner must be a teammate')
+    }
+  }
+
+  // Capture current tag IDs before update (for activity diff), and refuse a
+  // tag list the replacement would fail on before anything is written
+  let currentTagIds: PostTagId[] = []
   if (input.tagIds !== undefined) {
     const currentTags = await db
       .select({ tagId: postTagAssignments.tagId })
       .from(postTagAssignments)
       .where(eq(postTagAssignments.postId, id))
     currentTagIds = currentTags.map((t) => t.tagId)
+    await assertAssignableTags(input.tagIds, currentTagIds)
   }
 
   // Build update data
@@ -451,17 +519,31 @@ export async function updatePost(
     updateData.pinnedAt = input.pinned ? new Date() : null
   }
 
-  // Update the post only if there's data to update
-  let updatedPost: Post
-  if (Object.keys(updateData).length > 0) {
-    const [result] = await db.update(posts).set(updateData).where(eq(posts.id, id)).returning()
-    if (!result) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+  // Update the post row and replace its tags together: a failed tag insert
+  // must never leave the post with its old tags deleted.
+  const updatedPost = await db.transaction(async (tx) => {
+    let row = existingPost
+    if (Object.keys(updateData).length > 0) {
+      const [result] = await tx
+        .update(posts)
+        .set(updateData)
+        .where(and(eq(posts.id, id), isNull(posts.deletedAt)))
+        .returning()
+      if (!result) {
+        throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+      }
+      row = result
     }
-    updatedPost = result
-  } else {
-    updatedPost = existingPost
-  }
+    if (input.tagIds !== undefined) {
+      await tx.delete(postTagAssignments).where(eq(postTagAssignments.postId, id))
+      if (input.tagIds.length > 0) {
+        await tx
+          .insert(postTagAssignments)
+          .values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
+      }
+    }
+    return row
+  })
 
   // Regenerate embedding (and cascade to merge check) if title or content changed
   if (input.title !== undefined || input.content !== undefined || input.contentJson !== undefined) {
@@ -470,17 +552,6 @@ export async function updatePost(
         generatePostEmbedding(id, updatedPost.title, updatedPost.content)
       )
       .catch((err) => log.error({ err, post_id: id }, 'embedding regen failed'))
-  }
-
-  // Update tags if provided
-  if (input.tagIds !== undefined) {
-    // Remove all existing tags then add new ones if any
-    await db.delete(postTagAssignments).where(eq(postTagAssignments.postId, id))
-    if (input.tagIds.length > 0) {
-      await db
-        .insert(postTagAssignments)
-        .values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
-    }
   }
 
   if (statusChanged && newStatus) {
@@ -544,7 +615,7 @@ export async function updatePost(
           postId: updatedPost.id,
           postTitle: updatedPost.title,
           boardSlug: board.slug,
-          postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+          postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
           boardId: updatedPost.boardId,
           ownerPrincipalId: newOwner,
           previousOwnerPrincipalId: oldOwner ?? null,
@@ -563,13 +634,13 @@ export async function updatePost(
 
   // Record activity for tag changes
   if (input.tagIds !== undefined) {
-    const newTagIds = input.tagIds.map((t) => String(t))
+    const newTagIds = input.tagIds
     const added = newTagIds.filter((t) => !currentTagIds.includes(t))
     const removed = currentTagIds.filter((t) => !newTagIds.includes(t))
 
     if (added.length > 0 || removed.length > 0) {
       // Resolve all tag names in one query
-      const allChangedIds = [...added, ...removed] as PostTagId[]
+      const allChangedIds = [...added, ...removed]
       const tagRows =
         allChangedIds.length > 0
           ? await db
@@ -633,15 +704,21 @@ export async function updatePost(
   // was part of the update — a title-only edit must not clobber existing rows.
   if (input.contentJson !== undefined || input.content !== undefined) {
     const contentJson = updatedPost.contentJson
-    await syncPostMentions({
-      postId: updatedPost.id,
-      postTitle: updatedPost.title,
-      postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
-      boardId: updatedPost.boardId,
-      mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
-      excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
-      actor: buildEventActor(actor),
-    })
+    // The edit is already saved: a failure reconciling its mentions is logged,
+    // never turned into a failed request.
+    try {
+      await syncPostMentions({
+        postId: updatedPost.id,
+        postTitle: updatedPost.title,
+        postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
+        boardId: updatedPost.boardId,
+        mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
+        excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
+        actor: buildEventActor(actor),
+      })
+    } catch (error) {
+      log.error({ err: error, post_id: updatedPost.id }, 'post mention reconcile failed')
+    }
   }
 
   return updatedPost

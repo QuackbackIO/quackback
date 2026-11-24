@@ -17,6 +17,7 @@ import {
   markdownToSanitizedJson,
 } from './-validation'
 import type { TicketId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const noteSchema = z.object({
   content: messageContentSchema,
@@ -35,7 +36,7 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/note')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_NOTE })
           const ticketId = parseTypeId<TicketId>(params.ticketId, 'ticket', 'ticket ID')
 
-          const parsed = noteSchema.safeParse(await request.json().catch(() => null))
+          const parsed = noteSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,
@@ -43,10 +44,8 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/note')({
           }
 
           const actor = serviceActorFromApiAuth(auth)
-          // A personal key acts only on tickets its creator can see.
-          const { assertTicketVisible } =
-            await import('@/lib/server/domains/tickets/ticket.service')
-          await assertTicketVisible(ticketId, actor)
+          // The service answers NotFound for a ticket outside the key's
+          // scope (a personal key acts as its creator).
           const { addTicketNote } =
             await import('@/lib/server/domains/tickets/ticket-message.service')
           const { message } = await addTicketNote(actor, {

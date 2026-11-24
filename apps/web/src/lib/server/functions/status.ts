@@ -6,7 +6,7 @@
  * mutations gated by permission, public reads gated by portal access + the
  * status audience ladder (§4) + the `statusPage` feature flag.
  */
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type {
   PrincipalId,
@@ -44,7 +44,7 @@ import {
   countStatusIncidentsSince,
   countStatusSubscriptionsSince,
   startMaintenanceNow,
-  deriveTopLevelStatus,
+  getVisitorTopLevelStatus,
   listStatusIncidentTemplates,
   createStatusIncidentTemplate,
   updateStatusIncidentTemplate,
@@ -161,8 +161,33 @@ export const listStatusComponentsAdminFn = createServerFn({ method: 'GET' }).han
     listStatusComponentGroupsWithComponents(),
     listUngroupedStatusComponents(),
   ])
-  return { groups, ungrouped }
+  const planHidden = await planHiddenStatusComponents([
+    ...ungrouped,
+    ...groups.flatMap((g) => g.components),
+  ])
+  return { groups, ungrouped, planHidden }
 })
+
+/**
+ * The components the plan hides from the public page (past its cap, after the
+ * grace), with the plan's name, or null when it hides none. The admin keeps
+ * listing them, marked.
+ */
+async function planHiddenStatusComponents(
+  components: { id: StatusComponentId }[]
+): Promise<{ ids: StatusComponentId[]; planName: string | null } | null> {
+  const { getPlanLimits, visibleStatusComponentIds } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const visible = await visibleStatusComponentIds()
+  if (visible === null) return null
+  const ids = components.map((c) => c.id).filter((id) => !visible.includes(id))
+  if (ids.length === 0) return null
+  const [limits, { PLAN_CATALOGUE }] = await Promise.all([
+    getPlanLimits(),
+    import('@/lib/server/domains/settings/cloud/cloud.types'),
+  ])
+  return { ids, planName: limits.plan ? PLAN_CATALOGUE[limits.plan].name : null }
+}
 
 /** Read-only service list for the incident composers' affected-services
  *  picker. Gated on STATUS_PAGE_PUBLISH (not manage) so anyone who can report
@@ -510,7 +535,9 @@ export const getStatusUptimeAdminFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
     const actor = await policyActorFromAuth(auth)
-    return await getUptimeSeries(actor, data.componentIds as StatusComponentId[], data.windowDays)
+    return await getUptimeSeries(actor, data.componentIds as StatusComponentId[], data.windowDays, {
+      admin: true,
+    })
   })
 
 // ============================================================================
@@ -584,7 +611,8 @@ export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handle
       ? await getUptimeSeries(
           actor,
           allComponents.map((c) => c.id),
-          90
+          90,
+          { admin: true }
         )
       : []
   const allDays = uptime.flatMap((s) => s.days)
@@ -593,7 +621,9 @@ export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handle
 
   return {
     enabled: settings.enabled,
-    topLevelStatus: deriveTopLevelStatus(allComponents.map((c) => c.status)),
+    // What an anonymous visitor sees, as the banner says: gated services and
+    // those the plan hides don't count.
+    topLevelStatus: await getVisitorTopLevelStatus(),
     ungroupedComponents: ungrouped.map(leanComponent),
     groups: groups.map((g) => ({
       id: g.id,
@@ -798,7 +828,7 @@ export const updateStatusSettingsFn = createServerFn({ method: 'POST' })
 // Public Server Functions (viewer-scoped)
 // ============================================================================
 
-interface StatusPageGateResult {
+export interface StatusPageGateResult {
   available: boolean
   actor: Actor
   settings: StatusSettings
@@ -817,28 +847,32 @@ interface StatusPageGateResult {
  * Never throws; callers translate `available: false` into the shape their
  * endpoint contract expects (404 for a single-entity read, empty list/array
  * for a collection read) — mirrors `getPublicChangelogFn` / `listPublicChangelogsFn`.
+ * Subscribing asks it too (`status-subscriptions.ts`), so nobody the page
+ * turns away can follow it.
  */
-async function resolveStatusPageGate(): Promise<StatusPageGateResult> {
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    return { available: false, actor: ANONYMOUS_ACTOR, settings: DEFAULT_STATUS_SETTINGS }
+export const resolveStatusPageGate = createServerOnlyFn(
+  async function resolveStatusPageGate(): Promise<StatusPageGateResult> {
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      return { available: false, actor: ANONYMOUS_ACTOR, settings: DEFAULT_STATUS_SETTINGS }
+    }
+
+    const settings = await getStatusSettings()
+    const authCtx = await getOptionalAuth()
+    const actor = await policyActorFromAuth(authCtx)
+
+    const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+    if (!isStatusPagePublished({ statusPage: await isFeatureEnabled('statusPage') }, settings)) {
+      return { available: false, actor, settings }
+    }
+
+    if (!isStatusAudienceGranted(actor, settings)) {
+      return { available: false, actor, settings }
+    }
+
+    return { available: true, actor, settings }
   }
-
-  const settings = await getStatusSettings()
-  const authCtx = await getOptionalAuth()
-  const actor = await policyActorFromAuth(authCtx)
-
-  const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
-  if (!isStatusPagePublished({ statusPage: await isFeatureEnabled('statusPage') }, settings)) {
-    return { available: false, actor, settings }
-  }
-
-  if (!isStatusAudienceGranted(actor, settings)) {
-    return { available: false, actor, settings }
-  }
-
-  return { available: true, actor, settings }
-}
+)
 
 /** Full public status page: component tree, active incidents/maintenance,
  *  and recent history — gated per `resolveStatusPageGate`. */

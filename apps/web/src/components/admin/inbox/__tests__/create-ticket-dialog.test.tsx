@@ -182,7 +182,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it.each(['code', 'message'] as const)(
-  'localizes the protected test link conflict by %s while keeping the created ticket visible',
+  'reads the protected test link conflict by its code only (%s) while keeping the created ticket visible',
   async (kind) => {
     const onCreated = vi.fn()
     const onOpenChange = vi.fn()
@@ -217,7 +217,13 @@ it.each(['code', 'message'] as const)(
       sourceConversationId: 'conversation_acme',
     })
     await handlers.onSuccess({ id: 'ticket_acme' })
-    expect(mocks.toastWarning).toHaveBeenCalledExactlyOnceWith('Acme localized link conflict')
+    // The code arrives with the server error; a bare message, even the same
+    // words, is any other link failure.
+    expect(mocks.toastWarning).toHaveBeenCalledExactlyOnceWith(
+      kind === 'code'
+        ? 'Acme localized link conflict'
+        : "Ticket created, but couldn't link it: Test and real conversations need separate tickets."
+    )
     expect(onCreated).toHaveBeenCalledExactlyOnceWith('ticket_acme')
     expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
     expect(onChanged).toHaveBeenCalledOnce()
@@ -261,8 +267,8 @@ describe('CreateTicketDialog — Phase 4 type picker', () => {
     fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
       target: { value: 'Refund missing' },
     })
-    // The type's required text field renders as a plain input under its label.
-    const orderInput = (await screen.findByText('Order id')).parentElement!.querySelector('input')!
+    // The type's required text field renders as an input labelled by its name.
+    const orderInput = await screen.findByRole('textbox', { name: 'Order id' })
     fireEvent.change(orderInput, { target: { value: 'A-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
 
@@ -433,9 +439,7 @@ describe('CreateTicketDialog — Phase 5 copilot auto-fill', () => {
     await screen.findByText('✨ 3 suggested')
 
     // The agent edits a suggested value before saving — everything stays editable.
-    const stepsInput = (await screen.findByText('Steps to reproduce')).parentElement!.querySelector(
-      'input'
-    )!
+    const stepsInput = await screen.findByRole('textbox', { name: 'Steps to reproduce' })
     fireEvent.change(stepsInput, { target: { value: 'edited repro' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
 

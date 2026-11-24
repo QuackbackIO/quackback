@@ -1,14 +1,22 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Admin Portal Settings', () => {
-  test.beforeEach(async ({ page }) => {
+  test('Settings > Portal summarises the look and leads to Customise', async ({ page }) => {
     await page.goto('/admin/settings/portal')
-    await page.waitForLoadState('networkidle')
-  })
-
-  test('page loads and shows portal settings', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Portal' })).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('Appearance').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Look and navigation')).toBeVisible()
+    for (const label of [
+      'Header',
+      'Light and dark',
+      'Main colour',
+      'Font',
+      'Corners',
+      'Navigation',
+    ]) {
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    await page.getByRole('link', { name: 'Customise' }).click()
+    await expect(page).toHaveURL(/\/admin\/settings\/portal\/customise/)
   })
 
   test('/admin/settings/branding redirects to portal', async ({ page }) => {
@@ -17,61 +25,57 @@ test.describe('Admin Portal Settings', () => {
     await expect(page).toHaveURL(/\/admin\/settings\/portal/)
     await expect(page.getByRole('heading', { name: 'Portal' })).toBeVisible({ timeout: 10000 })
   })
+})
 
-  test('shows Appearance, Navigation, and Welcome message cards', async ({ page }) => {
-    await expect(page.getByText('Appearance').first()).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('Navigation').first()).toBeVisible()
-    await expect(page.getByText('Welcome message').first()).toBeVisible()
+test.describe('Admin Portal Customise', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/admin/settings/portal/customise')
+    await page.waitForLoadState('networkidle')
   })
 
-  test('shows Theme mode tiles', async ({ page }) => {
-    await expect(page.getByText('Theme mode')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('radio', { name: 'Light' })).toBeVisible()
-    await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
-    await expect(page.getByRole('radio', { name: 'Visitor chooses' })).toBeVisible()
+  test('shows the sections and a live preview, without the app sidebar', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Customise' })).toBeVisible({ timeout: 10000 })
+    for (const section of ['Colours', 'Font and shape', 'Header and tabs', 'Advanced CSS']) {
+      await expect(page.getByRole('button', { name: new RegExp(`^${section}`) })).toBeVisible()
+    }
+    await expect(page.locator('iframe[title="Portal preview"]')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'View portal' })).toHaveCount(0)
   })
 
-  test('shows theme preset swatches', async ({ page }) => {
-    const presetButtons = page.locator('button').filter({
-      has: page.locator('div[style*="background-color"]'),
-    })
-    expect(await presetButtons.count()).toBeGreaterThan(0)
+  test('switches theme mode in Colours', async ({ page }) => {
+    await page.getByRole('button', { name: /^Colours/ }).click()
+    const dark = page.getByRole('radio', { name: 'Dark' })
+    await dark.click()
+    await expect(dark).toBeChecked()
+    await page.getByRole('radio', { name: 'Visitor chooses' }).click()
+    await expect(page.getByRole('radio', { name: 'Visitor chooses' })).toBeChecked()
   })
 
-  test('shows font and corner roundness controls', async ({ page }) => {
-    await expect(page.getByText('Font').first()).toBeVisible()
-    await expect(page.getByText('Corner roundness')).toBeVisible()
-    await expect(page.getByRole('slider')).toBeVisible()
+  test('publish waits for a change, and leaving with one asks first', async ({ page }) => {
+    const publish = page.getByRole('button', { name: 'Publish' })
+    await expect(publish).toBeDisabled()
+    await page.getByRole('button', { name: /^Font and shape/ }).click()
+    await page.getByRole('radio', { name: 'Match corners' }).click()
+    await expect(publish).toBeEnabled()
+    await expect(page.getByText('1 change')).toBeVisible()
+
+    // Exact: the header also has "Open the live portal" (#1236).
+    await page.getByRole('link', { name: 'Portal', exact: true }).click()
+    const dialog = page.getByRole('alertdialog')
+    await expect(dialog).toContainText('Leave without publishing?')
+    await dialog.getByRole('button', { name: 'Keep editing' }).click()
+    await expect(page).toHaveURL(/\/customise/)
   })
 
-  test('shows Advanced CSS panel with tweakcn link', async ({ page }) => {
-    await expect(page.getByText('Advanced CSS')).toBeVisible({ timeout: 10000 })
-    const tweakCnLink = page.getByRole('link', { name: 'tweakcn.com' })
-    await expect(tweakCnLink).toBeVisible()
-  })
-
-  test('shows live preview with light/dark toggle', async ({ page }) => {
-    await expect(page.getByText('Live preview')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('button', { name: /^Light$/i }).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Dark$/i }).first()).toBeVisible()
-  })
-
-  test('can switch theme mode options', async ({ page }) => {
-    const visitorChooses = page.getByRole('radio', { name: 'Visitor chooses' })
-    await expect(visitorChooses).toBeVisible({ timeout: 5000 })
-    await page.getByRole('radio', { name: 'Dark' }).click()
-    await expect(page.getByRole('radio', { name: 'Dark' })).toBeChecked()
-    await visitorChooses.click()
-    await expect(visitorChooses).toBeChecked()
-  })
-
-  test('Feedback nav row is always on', async ({ page }) => {
+  test('Feedback tab is always on in Header and tabs', async ({ page }) => {
+    await page.getByRole('button', { name: /^Header and tabs/ }).click()
     await expect(page.getByText('Always on').first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('corner roundness slider is interactive', async ({ page }) => {
-    const slider = page.getByRole('slider')
-    await expect(slider).toBeVisible({ timeout: 10000 })
-    await expect(slider).toBeEnabled()
+  test('opens the CSS editor beside the preview', async ({ page }) => {
+    await page.getByRole('button', { name: /^Advanced CSS/ }).click()
+    await page.getByRole('button', { name: 'Open the CSS editor' }).click()
+    await expect(page.getByRole('link', { name: /tweakcn\.com/ })).toBeVisible()
+    await expect(page.locator('iframe[title="Portal preview"]')).toBeVisible()
   })
 })

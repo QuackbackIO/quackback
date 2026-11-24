@@ -28,6 +28,7 @@ import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { checkWidgetIdentifyRateLimit } from '@/lib/server/auth/widget-rate-limit'
 import {
   EXTERNAL_ID_KEY,
+  metadataMergeSql,
   validateAndCoerceAttributes,
 } from '@/lib/server/domains/users/user.attributes'
 import { reconcileWidgetMemberships } from '@/lib/server/domains/segments/segment-membership.service'
@@ -329,10 +330,9 @@ export const Route = createFileRoute('/api/widget/identify')({
             if (hasAttrs) {
               // Atomic JSONB merge in SQL (not a JS read/merge/write) so a
               // concurrent writer landing between the load above and this
-              // update can never be clobbered. Mirrors user.identify.ts. The
-              // `metadata` column is text-typed, so round-trip through jsonb
-              // and back to text; there are no removals on this path.
-              updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
+              // update can never be clobbered. There are no removals on
+              // this path.
+              updates.metadata = metadataMergeSql(validAttrs, [])
             }
             if (externalId && !emailUnverified && userRecord.email !== normalizedEmail) {
               // `sub` is authoritative on a verified email change. Adopt the

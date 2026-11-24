@@ -32,7 +32,7 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 }))
 
 vi.mock('@/lib/client/queries/settings', () => ({
-  settingsQueries: { portalConfig: () => ({ queryKey: ['portal'] }) },
+  settingsQueries: { portalPageConfig: () => ({ queryKey: ['portal'] }) },
 }))
 
 const { ModerationPage } = await import('@/components/admin/settings/moderation-settings-page')
@@ -73,7 +73,22 @@ describe('Moderation page', () => {
     expect(screen.getByLabelText('Signed-in posts')).toBeInTheDocument()
     expect(screen.getByLabelText('Images')).toBeInTheDocument()
     expect(screen.getByLabelText('Links')).toBeInTheDocument()
-    expect(document.querySelectorAll('[data-slot="setting-row"]')).toHaveLength(4)
+    expect(screen.getByLabelText('Email authors the decision')).toBeInTheDocument()
+    expect(document.querySelectorAll('[data-slot="setting-row"]')).toHaveLength(5)
+  })
+
+  it('has decision emails on when the workspace never set them', () => {
+    renderPage()
+    expect(screen.getByLabelText('Email authors the decision')).toBeChecked()
+  })
+
+  it('turns decision emails off for the whole workspace, keeping the approval policy', async () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('Email authors the decision'))
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ requireApproval: 'none', emailDecisions: false })
+    )
+    expect(screen.getByLabelText('Email authors the decision')).not.toBeChecked()
   })
 
   it('saves a toggle immediately and lets the autosave handler report failures', async () => {

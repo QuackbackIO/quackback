@@ -19,6 +19,7 @@ import {
 } from './settings-proposals.storage'
 export type { SettingsApplyReceipt } from './settings-proposals.storage'
 import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
+import { PICKED_KEYS } from '@/lib/shared/theme/base'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { officeHoursScheduleSchema } from '@/lib/shared/office-hours'
 import { db, eq, settings, type Database, type Transaction } from '@/lib/server/db'
@@ -114,6 +115,27 @@ function messengerEffects(row: SettingsRecord, enabled: boolean): MessengerEffec
   return effects
 }
 
+/**
+ * The stored theme without the colours kept as picked for those a patch
+ * sets: the patch's colour is the one picked now, and a kept one beside it
+ * would be drawn in its place.
+ */
+export function withoutPicksSetBy(stored: BrandingConfig, patch: BrandingConfig): BrandingConfig {
+  const out: BrandingConfig = { ...stored }
+  for (const mode of ['light', 'dark'] as const) {
+    const side = stored[mode]
+    const set = patch[mode]
+    if (!side || !set) continue
+    const next: Record<string, unknown> = { ...side }
+    for (const [key, picked] of Object.entries(PICKED_KEYS)) {
+      const value = (set as Record<string, unknown>)[key]
+      if (value !== undefined && value !== next[key] && !(picked in set)) delete next[picked]
+    }
+    out[mode] = next as BrandingConfig[typeof mode]
+  }
+  return out
+}
+
 async function writeArea(
   tx: Transaction,
   area: SettingsArea,
@@ -128,10 +150,14 @@ async function writeArea(
       // branding page saved, including values the model may not propose.
       if (Object.keys(configPatch).length > 0) {
         const row = await requireSettings(tx)
+        const brandingPatch = settingsPatchSchemas.branding.parse(configPatch) as BrandingConfig
         await updateBrandingConfig(
           deepMerge(
-            parseJsonOrNull<BrandingConfig>(row.brandingConfig) ?? {},
-            settingsPatchSchemas.branding.parse(configPatch) as BrandingConfig
+            withoutPicksSetBy(
+              parseJsonOrNull<BrandingConfig>(row.brandingConfig) ?? {},
+              brandingPatch
+            ),
+            brandingPatch
           ),
           options
         )
@@ -284,12 +310,12 @@ export async function undoSettingsChangesInTransaction(
         effect.beforePresent
       )
   }
-  if (values.has('name')) await assertNotManaged('workspace.name')
+  if (values.has('name')) await assertNotManaged('workspace.name', tx)
   if (values.has('brandingConfig')) {
     const restored = (values.get('brandingConfig') ?? {}) as BrandingConfig
     if (restored.light !== undefined || restored.dark !== undefined) {
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
-      await assertTierFeature('customColors', 'Custom colours')
+      await assertTierFeature('customColors', 'Custom colours', tx)
     }
   }
   const patch: Partial<typeof settings.$inferInsert> = {}

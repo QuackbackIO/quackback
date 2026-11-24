@@ -1,8 +1,10 @@
+import { fetchPortalSummaryFn } from '@/lib/server/functions/portal-summary'
 import { queryOptions } from '@tanstack/react-query'
 import type { IdentityProviderId, UserId } from '@quackback/ids'
 import {
   fetchBrandingConfig,
   fetchPortalConfig,
+  fetchPortalPageConfigFn,
   fetchPublicPortalConfig,
   fetchPublicAuthConfig,
   fetchAuthConfigFn,
@@ -14,11 +16,11 @@ import {
   fetchWidgetSecret,
   fetchWorkflowAbandonedAutoCloseFn,
   fetchWorkflowCloseSpamFn,
+  fetchConversationRoutingFn,
   fetchDefaultSlaPolicyFn,
   getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
-import { getHelpCenterDomainStatusFn } from '@/lib/server/functions/help-center-domain'
 import { listRedirectRulesFn } from '@/lib/server/functions/help-center-redirect-rules'
 import {
   listTeamsAdminFn,
@@ -47,6 +49,17 @@ export const settingsQueries = {
       queryKey: ['settings', 'branding'],
       queryFn: fetchBrandingConfig,
       staleTime: STALE_TIME_LONG,
+    }),
+
+  /**
+   * Settings > Portal's summary rows, built on the server. Under branding's
+   * key, so a refreshed theme refreshes it; every publish also drops it.
+   */
+  portalSummary: (gatedTypes: readonly string[]) =>
+    queryOptions({
+      queryKey: ['settings', 'branding', 'summary', [...gatedTypes].sort()],
+      queryFn: () => fetchPortalSummaryFn({ data: { gatedTypes: [...gatedTypes].sort() } }),
+      staleTime: STALE_TIME_SHORT,
     }),
 
   customCss: () =>
@@ -95,6 +108,18 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'portalConfig'],
       queryFn: fetchPortalConfig,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  /**
+   * The parts of the portal config Moderation and the Portal's Design tab
+   * show, readable with their own permissions. Under portalConfig's key, so
+   * every refresh of the portal config refreshes it too.
+   */
+  portalPageConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'portalConfig', 'page'],
+      queryFn: fetchPortalPageConfigFn,
       staleTime: STALE_TIME_LONG,
     }),
 
@@ -191,14 +216,6 @@ export const settingsQueries = {
       staleTime: STALE_TIME_LONG,
     }),
 
-  helpCenterDomainStatus: () =>
-    queryOptions({
-      queryKey: ['settings', 'helpCenterDomainStatus'],
-      queryFn: () => getHelpCenterDomainStatusFn({ data: {} }),
-      staleTime: STALE_TIME_SHORT,
-      // Only meaningful once a domain is configured -- callers gate `enabled`.
-    }),
-
   helpCenterRedirectRules: () =>
     queryOptions({
       queryKey: ['settings', 'helpCenterRedirectRules'],
@@ -217,6 +234,14 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'workflowCloseSpam'],
       queryFn: fetchWorkflowCloseSpamFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  /** The auto-assign switch on the Workflows page (routing.manage). */
+  conversationRouting: () =>
+    queryOptions({
+      queryKey: ['settings', 'conversationRouting'],
+      queryFn: () => fetchConversationRoutingFn(),
       staleTime: STALE_TIME_MEDIUM,
     }),
 

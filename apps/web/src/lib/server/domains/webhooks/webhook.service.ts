@@ -4,6 +4,7 @@
  * Shared by both API routes and admin UI server functions.
  */
 
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import crypto from 'crypto'
 import { db, webhooks, eq, and, isNull, sql } from '@/lib/server/db'
 import { createId, type PrincipalId, type WebhookId } from '@quackback/ids'
@@ -65,8 +66,12 @@ export async function createWebhook(
     throw new ValidationError('VALIDATION_ERROR', 'At least one event is required')
   }
 
-  // Check webhook limit
-  const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(webhooks)
+  // Check webhook limit. Deleting a webhook is a soft delete, so only live
+  // webhooks count; otherwise deleted ones would use up the limit for good.
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(webhooks)
+    .where(isNull(webhooks.deletedAt))
   if (count >= MAX_WEBHOOKS) {
     throw new ValidationError(
       'WEBHOOK_LIMIT_REACHED',
@@ -114,12 +119,17 @@ export async function listWebhooks(): Promise<Webhook[]> {
   return result.map(mapWebhook)
 }
 
+/** A webhook that has not been deleted; a deleted one is not found. */
+function liveWebhook(id: WebhookId) {
+  return and(eq(webhooks.id, id), isNull(webhooks.deletedAt))
+}
+
 /**
- * Get a webhook by ID
+ * Get a webhook by ID (excludes soft-deleted)
  */
 export async function getWebhookById(id: WebhookId): Promise<Webhook> {
   const webhook = await db.query.webhooks.findFirst({
-    where: eq(webhooks.id, id),
+    where: liveWebhook(id),
   })
 
   if (!webhook) {
@@ -162,20 +172,25 @@ export async function updateWebhook(id: WebhookId, input: UpdateWebhookInput): P
   if (input.boardIds !== undefined) updateData.boardIds = input.boardIds
   if (input.status !== undefined) {
     updateData.status = input.status
-    // Reset failure count when re-enabling
+    // Turning a disabled webhook back on starts its failure count afresh.
+    // Saving an active webhook as active again (any edit from the settings
+    // dialog) keeps the count, so a failing endpoint stays visible. Decided on
+    // the stored status in the same statement, so no read can go stale.
     if (input.status === 'active') {
-      updateData.failureCount = 0
-      updateData.lastError = null
+      updateData.failureCount = sql`CASE WHEN ${webhooks.status} = 'active' THEN ${webhooks.failureCount} ELSE 0 END`
+      updateData.lastError = sql`CASE WHEN ${webhooks.status} = 'active' THEN ${webhooks.lastError} ELSE NULL END`
     }
   }
 
-  const [webhook] = await db.update(webhooks).set(updateData).where(eq(webhooks.id, id)).returning()
+  const [webhook] = await db.update(webhooks).set(updateData).where(liveWebhook(id)).returning()
 
   if (!webhook) {
     throw new NotFoundError('WEBHOOK_NOT_FOUND', 'Webhook not found')
   }
 
   await cacheDel(CACHE_KEYS.ACTIVE_WEBHOOKS)
+  // An endpoint switched off may be the fix for a webhooks plan limit.
+  await invalidatePlanLimits()
   return mapWebhook(webhook)
 }
 
@@ -189,7 +204,7 @@ export async function deleteWebhook(id: WebhookId): Promise<void> {
   const [deleted] = await db
     .update(webhooks)
     .set({ deletedAt: new Date() })
-    .where(and(eq(webhooks.id, id), isNull(webhooks.deletedAt)))
+    .where(liveWebhook(id))
     .returning()
 
   if (!deleted) {
@@ -197,6 +212,7 @@ export async function deleteWebhook(id: WebhookId): Promise<void> {
   }
 
   await cacheDel(CACHE_KEYS.ACTIVE_WEBHOOKS)
+  await invalidatePlanLimits()
 }
 
 /**
@@ -218,7 +234,7 @@ export async function rotateWebhookSecret(
       secret: secretEncrypted,
       updatedAt: new Date(),
     })
-    .where(eq(webhooks.id, id))
+    .where(liveWebhook(id))
     .returning()
 
   if (!webhook) {

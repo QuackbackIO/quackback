@@ -1,11 +1,14 @@
-import { db, eq, and, conversations, emailLog, principal, user } from '@/lib/server/db'
+import { db, eq, conversations, principal, user } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { resolveReplyRecipient } from './conversation.recipient'
 import { conversationEnvelope, recordSent } from './conversation.email-envelope'
 import { visitorConversationLink } from './conversation.notify'
 import { buildHookContext } from '@/lib/server/events/hook-context'
+import { hookOrigins } from '@/lib/server/events/hook-origins'
 import { logger } from '@/lib/server/logger'
 import { ensureEmailLogSink } from '@/lib/server/email/email-log.sink'
+import { isCsatRatedOrEmailed } from './csat-request.service'
+import { getsAutomatedEmail } from '@/lib/server/domains/principals/blocking'
 
 const log = logger.child({ component: 'conversation-notify-closed' })
 
@@ -35,6 +38,7 @@ export async function notifyConversationClosed(opts: {
     if (!conv?.visitorPrincipalId) return
     if (conv.endReason === 'spam') return
     if (opts.closerPrincipalId && opts.closerPrincipalId === conv.visitorPrincipalId) return
+    if (!(await getsAutomatedEmail(conv.visitorPrincipalId))) return
 
     const [visitor] = await db
       .select({ type: principal.type, email: user.email, contactEmail: principal.contactEmail })
@@ -44,6 +48,10 @@ export async function notifyConversationClosed(opts: {
       .limit(1)
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, conv.visitorEmail)
     if (!recipient) return
+    // An automated notice, so "Pause all email" holds it back.
+    const { hasPausedAllEmail } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    if (await hasPausedAllEmail(conv.visitorPrincipalId)) return
 
     const ctx = await buildHookContext()
     if (!ctx) return
@@ -51,16 +59,20 @@ export async function notifyConversationClosed(opts: {
     const { isPortalSupportEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     const ctaUrl = visitorConversationLink(
-      ctx.portalBaseUrl,
+      hookOrigins(ctx),
       opts.conversationId,
       await isPortalSupportEnabled()
     )
 
     // Automated mail goes under the address's sender name, else the workspace's.
-    const [envelope, includeCsat] = await Promise.all([
+    // Rating links ride the close email unless the conversation is already
+    // rated or a rating email went out. An unanswered csat block in the thread
+    // does not count: the visitor may have left the widget (csat-request.service).
+    const [envelope, ratedOrEmailed] = await Promise.all([
       conversationEnvelope(opts.conversationId, ctx.workspaceName),
-      shouldAttachCsat(opts.conversationId),
+      isCsatRatedOrEmailed(opts.conversationId),
     ])
+    const includeCsat = !ratedOrEmailed
     let ratingUrls: [string, string, string, string, string] | undefined
     if (includeCsat) {
       const { mintCsatEmailToken } = await import('./csat-email-token')
@@ -90,15 +102,4 @@ export async function notifyConversationClosed(opts: {
   } catch (err) {
     log.warn({ err, conversationId: opts.conversationId }, 'notify conversation closed failed')
   }
-}
-
-async function shouldAttachCsat(conversationId: ConversationId): Promise<boolean> {
-  const [existing] = await db
-    .select({ id: emailLog.id })
-    .from(emailLog)
-    .where(
-      and(eq(emailLog.conversationId, conversationId), eq(emailLog.emailType, 'CsatRequestEmail'))
-    )
-    .limit(1)
-  return !existing
 }

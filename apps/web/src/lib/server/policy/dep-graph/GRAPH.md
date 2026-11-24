@@ -25,11 +25,12 @@ Hard rule (test-enforced, not just snapshotted): no package imports app code.
 Top-level directories of src, with lib split one level deeper; root-level files form `(root)`. The components -> lib/server edge is the TanStack Start server-function pattern, recorded as reality.
 
 Nodes (12): (root), components, integrations, lib/build, lib/client, lib/server, lib/shared, locales, routes, styles, test, types
-Edges (29):
+Edges (30):
 
 - (root) -> components
 - (root) -> lib/client
 - (root) -> lib/server
+- (root) -> lib/shared
 - components -> integrations
 - components -> lib/client
 - components -> lib/server
@@ -59,8 +60,8 @@ Edges (29):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (148):
+Nodes (57): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, brand-import, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, plan-limits, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (182):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -73,16 +74,19 @@ Edges (148):
 - api -> api-keys
 - api -> settings
 - api -> webhooks
+- api-keys -> plan-limits
 - api-keys -> principals
 - api-keys -> roles
 - assistant -> ai
 - assistant -> api
 - assistant -> boards
+- assistant -> changelog
 - assistant -> conversation
 - assistant -> conversation-attributes
 - assistant -> embeddings
 - assistant -> files
 - assistant -> help-center
+- assistant -> plan-limits
 - assistant -> post-tags
 - assistant -> posts
 - assistant -> principals
@@ -93,20 +97,25 @@ Edges (148):
 - assistant -> workflows
 - billing -> ai
 - billing -> api
+- billing -> plan-limits
 - billing -> principals
 - billing -> settings
+- boards -> plan-limits
 - boards -> posts
 - boards -> settings
+- brand-import -> settings
 - changelog -> ai
 - changelog -> embeddings
 - changelog -> settings
 - channel-accounts -> conversation
 - channel-accounts -> domain-proof
 - channel-accounts -> notifications
+- channel-accounts -> plan-limits
 - channel-accounts -> settings
 - channel-accounts -> subscriptions
 - channels -> conversation
 - comments -> activity
+- comments -> plan-limits
 - comments -> posts
 - comments -> settings
 - comments -> subscriptions
@@ -120,10 +129,12 @@ Edges (148):
 - conversation -> comments
 - conversation -> conversation-attributes
 - conversation -> files
+- conversation -> notifications
 - conversation -> posts
 - conversation -> principals
 - conversation -> settings
 - conversation -> sla
+- conversation -> subscriptions
 - conversation -> teams
 - conversation -> tickets
 - conversation -> workflows
@@ -133,6 +144,7 @@ Edges (148):
 - conversation-attributes -> settings
 - conversation-attributes -> workflows
 - domain-proof -> channel-accounts
+- domain-proof -> plan-limits
 - domain-proof -> settings
 - embeddings -> ai
 - embeddings -> merge-suggestions
@@ -141,12 +153,16 @@ Edges (148):
 - export -> users
 - files -> principals
 - help-center -> ai
-- help-center -> domain-proof
+- help-center -> api
+- help-center -> plan-limits
 - help-center -> principals
 - help-center -> settings
+- import -> plan-limits
 - import -> principals
+- import -> settings
 - inbox -> conversation
 - inbox -> tickets
+- macros -> conversation
 - macros -> settings
 - macros -> workflows
 - merge-suggestions -> ai
@@ -160,23 +176,34 @@ Edges (148):
 - onboarding -> principals
 - onboarding -> settings
 - onboarding -> users
+- plan-limits -> ai
+- plan-limits -> billing
+- plan-limits -> channel-accounts
+- plan-limits -> platform-credentials
+- plan-limits -> settings
 - posts -> activity
 - posts -> ai
 - posts -> changelog
 - posts -> embeddings
 - posts -> merge-suggestions
+- posts -> plan-limits
 - posts -> principals
 - posts -> settings
 - posts -> subscriptions
+- principals -> plan-limits
+- principals -> posts
 - principals -> roles
 - principals -> settings
 - principals -> teams
 - roadmaps -> posts
+- roles -> plan-limits
 - roles -> settings
 - sentiment -> ai
 - sentiment -> settings
 - settings -> ai
+- settings -> channel-accounts
 - settings -> domain-proof
+- settings -> plan-limits
 - settings -> platform-credentials
 - settings -> sla
 - settings-registry -> api
@@ -185,6 +212,7 @@ Edges (148):
 - settings-registry -> settings
 - sla -> office-hours
 - sla -> settings
+- status -> plan-limits
 - status -> settings
 - subscriptions -> changelog
 - subscriptions -> posts
@@ -193,26 +221,33 @@ Edges (148):
 - summary -> settings
 - tickets -> conversation
 - tickets -> files
+- tickets -> notifications
+- tickets -> plan-limits
 - tickets -> principals
 - tickets -> settings
 - tickets -> sla
+- tickets -> subscriptions
 - tickets -> teams
 - user-attributes -> attribute-definitions
+- users -> posts
 - users -> principals
+- webhooks -> plan-limits
 - webhooks -> settings
 - workflows -> assistant
 - workflows -> conversation
 - workflows -> conversation-attributes
 - workflows -> inbox
 - workflows -> office-hours
+- workflows -> plan-limits
 - workflows -> segments
 - workflows -> settings
 - workflows -> sla
 - workflows -> tickets
 - workflows -> users
+- workflows -> webhooks
 
 ### Cycles
 
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
-- activity <-> ai <-> api <-> api-keys <-> assistant <-> boards <-> changelog <-> channel-accounts <-> channels <-> comments <-> conversation <-> conversation-attributes <-> domain-proof <-> embeddings <-> files <-> help-center <-> inbox <-> merge-suggestions <-> posts <-> principals <-> roles <-> settings <-> sla <-> status <-> subscriptions <-> tickets <-> users <-> webhooks <-> workflows
+- activity <-> ai <-> api <-> api-keys <-> assistant <-> billing <-> boards <-> changelog <-> channel-accounts <-> channels <-> comments <-> conversation <-> conversation-attributes <-> domain-proof <-> embeddings <-> files <-> help-center <-> inbox <-> merge-suggestions <-> plan-limits <-> posts <-> principals <-> roles <-> settings <-> sla <-> status <-> subscriptions <-> tickets <-> users <-> webhooks <-> workflows

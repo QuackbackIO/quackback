@@ -182,6 +182,16 @@ const workspaceSenders: Record<string, Drive> = {
       workspaceName: w!,
       ...extra,
     }),
+  sendModerationDecisionEmail: (w, extra) =>
+    email.sendModerationDecisionEmail({
+      to,
+      item: 'post',
+      decision: 'approved',
+      postTitle: 'Dark mode',
+      postUrl: 'https://acme.test/p/1',
+      workspaceName: w!,
+      ...extra,
+    }),
   sendNoteMentionEmail: (w) =>
     email.sendNoteMentionEmail({
       to,
@@ -244,6 +254,18 @@ const aboutQuackbackSenders: Record<string, Drive> = {
     email.sendOnboardingNudgeEmail({ to, workspaceName: w!, ...onboardingContent }),
   sendSendingDomainAttentionEmail: (w) =>
     email.sendSendingDomainAttentionEmail({ to, domain: 'acme.test', workspaceName: w }),
+  sendPlanLimitsEmail: (w) =>
+    email.sendPlanLimitsEmail({
+      to,
+      kind: 'start',
+      workspaceName: w,
+      deadline: 'Nov 25',
+      deadlineHeading: 'Wed, Nov 25',
+      rows: [],
+      pausingFeatures: [],
+      limitsUrl: null,
+      planUrl: null,
+    }),
   sendDomainAttentionEmail: (w) =>
     email.sendDomainAttentionEmail({
       to,

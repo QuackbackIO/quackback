@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { Component, Suspense, useEffect, type ReactNode } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
 import {
@@ -14,9 +14,14 @@ import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
+import { lazyOptional } from '@/lib/client/lazy-with-preload'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
-import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
+import {
+  documentThemeProviderProps,
+  resolveDocumentTheme,
+  SYSTEM_THEME_SCRIPT,
+} from '@/lib/shared/theme'
 import { MinimalDocument } from '@/components/shared/minimal-document'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { DocumentHead, DocumentScripts } from '@/components/shared/document-head'
@@ -29,11 +34,13 @@ import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/sha
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { rssAlternateLink } from '@/lib/shared/rss-alternate'
 import { isStatusFeedReadable } from '@/lib/shared/status-settings'
+import { pageIconHref } from '@/lib/shared/workspace-icon'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
-// is replayed to it once it subscribes.
-const Toaster = lazy(() => import('@/components/ui/sonner').then((m) => ({ default: m.Toaster })))
+// is replayed to it once it subscribes. It loads on every page, so a chunk that
+// fails to load must cost the toasts, not the page.
+const Toaster = lazyOptional(() => import('@/components/ui/sonner'), 'Toaster')
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -49,6 +56,7 @@ export interface RouterContext {
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
   cloudEnabled?: boolean
+  sectionDomainsCloud?: boolean
   githubStarPrompt?: boolean
   productAnalytics?: BootstrapData['productAnalytics']
 }
@@ -136,6 +144,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         rel: 'stylesheet',
         href: appCss,
       },
+      {
+        rel: 'icon',
+        href: pageIconHref(
+          matches[matches.length - 1]?.pathname ?? '/',
+          (matches[0]?.context as RootContext | undefined)?.settings
+        ),
+      },
       rssAlternateLink(
         matches.map((match) => match.routeId),
         {
@@ -218,6 +233,11 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const acceptLanguageLocale = Route.useRouteContext({
     select: (context) => context.acceptLanguageLocale,
   })
+  // On a portal section's own hostname, the page `/` shows there; the
+  // browser router reads it off the document (section-home-rewrite.ts).
+  const sectionHome = Route.useRouteContext({
+    select: (context) => context.sectionHome ?? null,
+  })
   useSeedRootContext()
   // Portal routes can force a specific theme (light/dark) via branding config.
   // Admin and other non-portal routes always respect the user's preference.
@@ -248,9 +268,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const forcedTheme =
     searchForcedTheme ?? (isPortalRoute && themeMode !== 'user' ? themeMode : undefined)
 
-  // next-themes' inline script sets the class on <html> before first paint.
-  // We pass the resolved default so the script knows what to apply.
-  const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
+  const themeProviderProps = documentThemeProviderProps({ forcedTheme, themeCookie })
+  // What this document shows first: the forced theme, else the visitor's own.
+  const defaultTheme = forcedTheme ?? themeProviderProps.defaultTheme
 
   // ...but that script sits in <body>, after content that may paint first, so
   // when the theme is known we also commit the class and color-scheme on the
@@ -289,6 +309,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     <html
       lang={lang}
       dir={dir}
+      data-section-home={sectionHome ?? undefined}
       className={themeClass}
       style={{ colorScheme }}
       suppressHydrationWarning
@@ -300,9 +321,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       <body className="min-h-screen bg-background font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme={defaultTheme}
-          enableSystem={!forcedTheme}
-          forcedTheme={forcedTheme}
+          {...themeProviderProps}
           disableTransitionOnChange
           // Never write the shared theme cookie from a forced-theme document:
           // the widget iframe and the same-origin portal preview iframe would

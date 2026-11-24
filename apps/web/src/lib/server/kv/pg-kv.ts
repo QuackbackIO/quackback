@@ -93,6 +93,34 @@ export async function kvSet(
   `)
 }
 
+/**
+ * SET … EX, but only when `condition` holds as this statement runs. For a cache
+ * fill that must not land once what it was built from has changed. The check
+ * and the write are one statement, so a change committed before the statement
+ * starts is seen; a change still uncommitted is not, and its writer must drop
+ * the key after it commits. True iff the value was written.
+ */
+export async function kvSetIf(
+  key: string,
+  value: unknown,
+  seconds: number,
+  condition: SQL
+): Promise<boolean> {
+  const result = await db.execute(sql`
+    INSERT INTO kv_store (workspace_key, key, value, expires_at)
+    SELECT
+      ${currentWorkspaceNamespace()},
+      ${key},
+      ${JSON.stringify(value ?? null)}::jsonb,
+      now() + make_interval(secs => ${ttlSeconds(seconds)})
+    WHERE ${condition}
+    ON CONFLICT (workspace_key, key) DO UPDATE
+      SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+    RETURNING 1 AS written
+  `)
+  return getExecuteRows(result).length > 0
+}
+
 /** DEL. Variadic like the Redis helper it replaces; a no-op on an empty list. */
 export async function kvDel(...keys: string[]): Promise<void> {
   if (keys.length === 0) return
@@ -238,6 +266,17 @@ export async function kvSetMemberClaimCounted(
       liveCount: Number(row?.live_count ?? 0),
     }
   })
+}
+
+/** SCARD: how many live members the set has. */
+export async function kvSetCount(setKey: string): Promise<number> {
+  const result = await db.execute(sql`
+    SELECT count(*)::int AS n FROM kv_set_member
+    WHERE workspace_key = ${currentWorkspaceNamespace()}
+      AND set_key = ${setKey}
+      AND expires_at > now()
+  `)
+  return Number(getExecuteRows<{ n: unknown }>(result)[0]?.n ?? 0)
 }
 
 /** SADD + EXPIRE NX, as one statement. True iff the member was not already live. */

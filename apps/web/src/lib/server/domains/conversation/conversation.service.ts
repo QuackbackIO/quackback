@@ -30,8 +30,13 @@ import {
 } from '@/lib/server/db'
 import { resolveBlockReply, type BlockReplyInput, type ResolvedBlockReply } from './block-reply'
 import { isTeamMember } from '@/lib/shared/roles'
-import { conversationFilter } from '@/lib/server/policy/conversations'
-import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
+import type {
+  ConversationAttachment,
+  ConversationMessage,
+  ConversationMessageCitation,
+  Team,
+  Transaction,
+} from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import type {
@@ -41,7 +46,7 @@ import type {
   SegmentId,
   TeamId,
 } from '@quackback/ids'
-import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '@/lib/shared/errors'
 import {
   channelFromVisitorTransport,
   channelCloseSystemCopy,
@@ -52,10 +57,15 @@ import {
   canSendVisitorMessage,
   canStartConversation,
   canActAsAgent,
-  canViewConversation,
+  mayExplainVisitorRefusal,
   canDeleteMessage,
 } from '@/lib/server/policy/conversation'
-import type { Actor } from '@/lib/server/policy/types'
+import type { Actor, SystemCascadeOptions } from '@/lib/server/policy/types'
+import {
+  assertConversationVisible,
+  loadConversationForWrite,
+  loadConversationOr404,
+} from './conversation-visibility'
 import {
   HANDOFF_REASON_LABELS,
   CONVERSATION_SPAM_FILED_BY_LABELS,
@@ -67,6 +77,7 @@ import {
   type ConversationSide,
   type AgentConversationMessageDTO,
   type ConversationMessageDTO,
+  type ConversationAuthorDTO,
 } from '@/lib/shared/conversation/types'
 import {
   applyVisitorReopenStatus,
@@ -75,6 +86,8 @@ import {
   resolvedAtForStatus,
   shouldRequeueOnAgentOffline,
   unreadWatermarkFromAnchor,
+  isHeldInSpam,
+  SPAM_MARKER_CLEARED,
 } from './conversation.lifecycle'
 import {
   publishConversationEvent,
@@ -83,12 +96,17 @@ import {
   publishConversationUpdate,
   publishTyping,
 } from '@/lib/server/realtime/conversation-channels'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import { conversationScopeOf } from '@/lib/server/realtime/inbox-envelope'
+import { publishInboxRemoval } from '@/lib/server/realtime/inbox-publish'
 import {
   validateContent,
   preview,
   richMessageFallbackLabel,
   resolveMessageContent,
 } from '@/lib/server/messages/message-core'
+import { newestCustomerVisibleMessage, previewOfStoredMessage } from './conversation.preview'
+import { singleLineSubject } from '@quackback/email/subject'
 import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
 import {
   notifyVisitorMessage,
@@ -96,7 +114,7 @@ import {
   notifyConversationStarted,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
-import { resolveMessageParent } from './message-parent'
+import { assertMessageParentVisible, permissionParentOf } from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   conversationToDTO,
@@ -143,54 +161,23 @@ function systemActor(): Actor {
   }
 }
 
+/**
+ * The caller's author with the name the thread shows for it, for webhooks and
+ * workflow events. The caller's name can be stale or, for a personal API key,
+ * the key's own name where the thread shows its creator.
+ */
+function withShownName(
+  input: ConversationAuthorInput,
+  shown: Pick<ConversationAuthorDTO, 'displayName'>
+): ConversationAuthorInput {
+  return { ...input, displayName: shown.displayName ?? input.displayName }
+}
+
 /** Normalize a captured email; returns undefined when it isn't plausibly one. */
 function normalizeEmail(raw: string | undefined): string | undefined {
   const email = raw?.trim().toLowerCase() ?? ''
   if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined
   return email
-}
-
-async function loadConversationOr404(conversationId: ConversationId): Promise<Conversation> {
-  const [row] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-  if (!row) {
-    throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  }
-  return row
-}
-
-/** Whether `conversationFilter` admits the conversation for this actor. */
-async function conversationInScope(conversationId: ConversationId, actor: Actor): Promise<boolean> {
-  const [row] = await db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(and(eq(conversations.id, conversationId), conversationFilter(actor)))
-    .limit(1)
-  return !!row
-}
-
-/**
- * Read chokepoint: resolve a conversation the actor is allowed to see, or throw
- * NotFound (never Forbidden) so a non-owner can't probe conversation ids.
- */
-export async function assertConversationViewable(
-  conversationId: ConversationId,
-  actor: Actor
-): Promise<Conversation> {
-  const conversation = await loadConversationOr404(conversationId)
-  // A personal API key reads only what its creator's inbox lists. The per-item
-  // team boundary for people lands separately; a key must not wait for it.
-  if (actor.scopePrincipalId && !(await conversationInScope(conversationId, actor))) {
-    throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  }
-  const decision = canViewConversation(actor, conversation)
-  if (!decision.allowed) {
-    throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  }
-  return conversation
 }
 
 /**
@@ -210,7 +197,7 @@ export async function captureVisitorContactEmail(
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
   const email = normalizeEmail(rawEmail)
   if (!email) return { captured: false }
-  const conversation = await assertConversationViewable(conversationId, actor)
+  const conversation = await assertConversationVisible(conversationId, actor)
   await db.transaction(async (tx) => {
     // Reusable contact on the visitor principal (survives across conversations).
     await tx
@@ -289,12 +276,41 @@ export async function resolveVisitorBlockReply(
   return resolveBlockReply(belongsHere ? blockMessage : null, !!alreadyAnswered, input)
 }
 
+/**
+ * The account email a visitor has proven they own, or null. Confirmed means
+ * the account's address is verified: a sign-in through the mailbox or an
+ * identity provider, or a widget identity token the host app signed. An
+ * anonymous visitor has none, and neither does a password sign-up nobody
+ * confirmed. Read from the account, never from what the caller passed, so no
+ * channel can vouch for an address on the visitor's behalf.
+ */
+async function confirmedAccountEmail(principalId: PrincipalId): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ email: user.email, emailVerified: user.emailVerified, type: principal.type })
+      .from(principal)
+      .innerJoin(user, eq(user.id, principal.userId))
+      .where(eq(principal.id, principalId))
+      .limit(1)
+    if (!row || row.type === 'anonymous' || !row.emailVerified) return null
+    return normalizeEmail(realEmail(row.email) ?? undefined) ?? null
+  } catch (err) {
+    // Unreadable means unproven: the spam filter still runs, just untrusted.
+    log.warn({ err, principal_id: principalId }, 'confirmed account email unreadable')
+    return null
+  }
+}
+
 /** Visitor send. Starts a conversation when no conversationId is supplied. */
 export async function sendVisitorMessage(
   input: SendVisitorMessageInput,
   author: ConversationAuthorInput,
   actor: Actor,
-  contentJson?: TiptapContent | null
+  contentJson?: TiptapContent | null,
+  /** `fromTicketThread`: the ticket side wrote this message onto its pair
+   *  (ticket-message.service's redirect), and that caller decides whether it
+   *  is a ticket reply, so this send does not signal one itself. */
+  opts: { fromTicketThread?: boolean } = {}
 ): Promise<SendVisitorMessageResult> {
   // Defense in depth: every visitor-ingress channel funnels through here, so a
   // blocked visitor is refused at the shared seam even if a future channel
@@ -346,14 +362,50 @@ export async function sendVisitorMessage(
         resolveMessageContent(input.content, safeContentJson),
         attachments.length > 0 || !!fallbackLabel
       )
+  // A stored blockReply only ever comes from the server match above: one a
+  // caller supplies in metadata is dropped, so it cannot pose as a rating or
+  // keep a closed thread closed.
+  const { blockReply: _callerBlockReply, ...callerMetadata } = input.metadata ?? {}
   const messageMetadata: ConversationMessageMetadata | null = resolvedBlockReply
-    ? { ...input.metadata, ...resolvedBlockReply.metadata }
-    : (input.metadata ?? null)
+    ? { ...callerMetadata, ...resolvedBlockReply.metadata }
+    : Object.keys(callerMetadata).length > 0
+      ? callerMetadata
+      : null
+
+  // A new thread's fixed spam rules (the burst rule: one sender opening threads
+  // faster than a person types) are decided BEFORE the thread exists, so a
+  // filed thread is filed in its insert and raises nothing, like cold email a
+  // fixed rule files: no team email or bell, no created or message event (so
+  // no webhook, workflow or SLA clock), no inbox update and no routing. The
+  // sender is the visitor's own real address, else one they gave before the
+  // chat. Only the AI classifier runs after the create.
+  const spamSenderEmail = input.conversationId
+    ? null
+    : (normalizeEmail(realEmail(author.email) ?? undefined) ??
+      normalizeEmail(input.visitorEmail) ??
+      null)
+  // Only an address the visitor proved they own may match the workspace trust
+  // list. One typed before the chat still keys the burst rule, but proves
+  // nothing about who they are.
+  const trustedSpamSenderEmail = input.conversationId
+    ? null
+    : await confirmedAccountEmail(author.principalId)
+  const fixedSpamSignal = input.conversationId
+    ? null
+    : await import('./conversation.spam-filter').then((m) =>
+        m.fixedSpamSignalFor(
+          { senderEmail: spamSenderEmail, trustedSenderEmail: trustedSpamSenderEmail },
+          author.principalId
+        )
+      )
 
   let created = false
   // The conversation's status BEFORE this message, so the assistant trigger can
   // tell a genuinely reopened thread from one a human deliberately closed.
   let priorStatus: ConversationStatus | null = null
+  // A customer message on a conversation in Spam is kept, but the thread stays
+  // closed and in Spam with no alerts — see isHeldInSpam.
+  let heldInSpam = false
   const txResult = await db.transaction(async (tx) => {
     let conversation: Conversation
     if (input.conversationId) {
@@ -368,13 +420,32 @@ export async function sendVisitorMessage(
       const decision = canSendVisitorMessage(actor, existing)
       if (!decision.allowed) {
         // Hide existence from non-owners; surface the real reason otherwise.
-        if (!canViewConversation(actor, existing).allowed) {
+        if (!mayExplainVisitorRefusal(actor, existing).allowed) {
           throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
         }
         throw new ForbiddenError('FORBIDDEN', decision.reason)
       }
+      // A rating is only taken on a closed conversation. A rating tapped
+      // while it is open (or snoozed) is refused before anything is stored:
+      // a stored reply would mark the block answered, and the customer could
+      // not rate once the conversation closes. Read under the row lock, as
+      // recordCsat does, so a close or reopen that lands first wins.
+      if (resolvedBlockReply?.metadata.blockReply?.kind === 'csat') {
+        const [locked] = await tx
+          .select({ status: conversations.status })
+          .from(conversations)
+          .where(eq(conversations.id, existing.id))
+          .for('update')
+        if (locked?.status !== 'closed') {
+          throw new ConflictError(
+            CSAT_CONVERSATION_OPEN,
+            'This conversation is still open. It can be rated once it is resolved.'
+          )
+        }
+      }
       conversation = existing
       priorStatus = existing.status
+      heldInSpam = isHeldInSpam(existing)
     } else {
       const start = canStartConversation(actor)
       if (!start.allowed) throw new ForbiddenError('FORBIDDEN', start.reason)
@@ -386,9 +457,19 @@ export async function sendVisitorMessage(
         .values({
           visitorPrincipalId: author.principalId,
           channel: 'messenger',
-          status: 'open',
-          subject: preview(content || fallbackLabel, attachments),
+          status: fixedSpamSignal ? 'closed' : 'open',
+          subject: preview(singleLineSubject(content) || fallbackLabel, attachments),
           ...(testOwner ? { assignedAgentPrincipalId: testOwner } : {}),
+          // The Spam-view shape autoFileConversationAsSpam writes, in the
+          // insert so the thread is never open.
+          ...(fixedSpamSignal
+            ? {
+                resolvedAt: new Date(),
+                endReason: 'spam' as const,
+                endNote: `Auto-filed by the spam filter (${CONVERSATION_SPAM_FILED_BY_LABELS[fixedSpamSignal]})`,
+                spamReason: fixedSpamSignal,
+              }
+            : {}),
         })
         .returning()
       conversation = createdConv
@@ -420,11 +501,17 @@ export async function sendVisitorMessage(
     // a block posted on an already-closed conversation is the intended
     // post-close CSAT/button flow, not the customer reopening the thread —
     // see applyVisitorReopenStatus's doc.
-    const visitorNextStatus = applyVisitorReopenStatus(
-      conversation.status,
-      !!resolvedBlockReply,
-      getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
-    )
+    // A thread a fixed spam rule filed in its insert stays closed (resolvedAt
+    // then keeps the filing time, below), and nobody is waiting on a reply.
+    const filedInInsert = created && fixedSpamSignal !== null
+    const visitorNextStatus =
+      heldInSpam || filedInInsert
+        ? 'closed'
+        : applyVisitorReopenStatus(
+            conversation.status,
+            !!resolvedBlockReply,
+            getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
+          )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -436,14 +523,22 @@ export async function sendVisitorMessage(
         // A customer message always wakes a snoozed thread — clear the timer.
         snoozedUntil: null,
         // The customer is now waiting on a reply: start the clock if it isn't
-        // already running (the oldest unanswered message wins).
-        waitingSince: conversation.waitingSince ?? message.createdAt,
+        // already running (the oldest unanswered message wins). Nobody owes
+        // spam a reply, so a message held in Spam or a thread filed in its
+        // insert starts no clock.
+        waitingSince: filedInInsert
+          ? null
+          : heldInSpam
+            ? conversation.waitingSince
+            : (conversation.waitingSince ?? message.createdAt),
         // Keep resolvedAt consistent with the new status — a reply that reopens
         // a closed thread must clear the stale resolution timestamp. The one
         // case that stays 'closed' (the post-close matched-blockReply carve-out
         // above) must NOT bump resolvedAt to this message's time either — the
         // conversation's original resolution moment is untouched by a CSAT tap
-        // answering it after the fact.
+        // answering it after the fact. A message held in Spam keeps it too:
+        // resolvedAt is the filing time the spam retention sweep counts from,
+        // so a sender cannot keep filed spam alive by writing again.
         resolvedAt:
           visitorNextStatus === 'closed'
             ? conversation.resolvedAt
@@ -476,8 +571,19 @@ export async function sendVisitorMessage(
   })
 
   const authored = await resolveAuthorAudiences(author)
-  const visitorMessage = toMessageDTO(txResult.message, authored.publicAuthor)
+  const visitorMessage = toMessageDTO(txResult.message, authored.customerAuthor)
   const agentMessage = toMessageDTO(txResult.message, authored.supportAuthor)
+
+  // Filed to Spam by a fixed rule in the insert: the thread is kept and
+  // reviewable in the Spam view, and nothing else happens (see above).
+  if (created && fixedSpamSignal) {
+    log.info(
+      { conversation_id: txResult.conversation.id, signal: fixedSpamSignal },
+      'spam signal matched; messenger thread filed'
+    )
+    const filedDTO = await conversationToDTO(txResult.conversation, 'visitor')
+    return { conversation: filedDTO, message: visitorMessage, created }
+  }
 
   // A new conversation appears in the agent inbox; publish the agent-side DTO
   // there (publishConversationUpdate strips agent-only fields for the visitor).
@@ -488,14 +594,42 @@ export async function sendVisitorMessage(
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: visitorMessage, agent: agentMessage },
-    { conversationUpdated: created }
+    { conversationUpdated: created },
+    conversationScopeOf(txResult.conversation)
   )
+
+  // A rating given in the thread is recorded now, whether or not a workflow
+  // run waits on the block. It reads the server-matched reply, never the
+  // client payload.
+  const matchedReply = resolvedBlockReply?.metadata.blockReply
+  if (matchedReply?.kind === 'csat') {
+    // Best-effort: a refused or failed rating never fails the message it came with.
+    try {
+      await recordCsat(txResult.conversation.id, matchedReply.rating, matchedReply.comment, actor)
+    } catch (err) {
+      log.warn({ err, conversationId: txResult.conversation.id }, 'csat block rating not recorded')
+    }
+  }
 
   // A brand-new conversation: try auto-routing it to an active agent. Best-
   // effort (never blocks the send), and runs outside the transaction so a store
   // hiccup can't roll back the visitor's message.
   if (created && txResult.conversation.assignedAgentPrincipalId === null) {
     await routeUnassignedConversation(txResult.conversation)
+  }
+
+  // Held in Spam: the message is stored and shown to anyone viewing the Spam
+  // list (published above), and nothing else happens — no team email or bell,
+  // no message event (workflow triggers, webhooks, the next-response SLA
+  // re-arm), no ticket reply signal. The assistant is already skipped for a
+  // closed thread (shouldConsiderAssistant).
+  if (heldInSpam) {
+    log.info(
+      { conversation_id: txResult.conversation.id },
+      'customer message held on a conversation in spam'
+    )
+    const heldDTO = await conversationToDTO(txResult.conversation, 'visitor')
+    return { conversation: heldDTO, message: visitorMessage, created }
   }
 
   void notifyVisitorMessage({
@@ -517,17 +651,39 @@ export async function sendVisitorMessage(
   // event instead of a direct call.
   void emitMessageCreated(actor, author, txResult.message, txResult.conversation, created)
 
+  // A customer message on a conversation paired with a customer ticket is a
+  // reply on that ticket: signal ticket.replied, so the ticket's watchers get
+  // their bell and integrations their webhook (the team-wide message bell is
+  // held back on a pair for exactly this fan-out). Skipped when the ticket
+  // side wrote the message (it signals for itself), on a brand-new
+  // conversation (it cannot be paired yet), and for a rating, which answers a
+  // close rather than replying.
+  if (!created && !opts.fromTicketThread && matchedReply?.kind !== 'csat') {
+    void import('@/lib/server/domains/tickets/ticket-message.service')
+      .then((m) => m.emitPairTicketReplied(txResult.conversation.id, actor, agentMessage))
+      .catch((err) =>
+        log.warn(
+          { err, conversationId: txResult.conversation.id },
+          'pair ticket reply signal failed'
+        )
+      )
+  }
+
   // A brand-new conversation is a spam-classification candidate: the filter
   // files only obvious spam (workspace-trusted senders bypass it), and every
   // failure leaves the thread in triage. Fire-and-forget so a slow provider
-  // never delays the visitor's send.
+  // never delays the visitor's send. The fixed rules already ran before the
+  // insert; only the AI classifier is left.
   if (created) {
     void import('./conversation.spam-filter')
       .then((m) =>
         m.maybeAutoFileSpam(txResult.conversation.id, {
-          senderEmail: txResult.conversation.visitorEmail ?? null,
+          senderEmail: spamSenderEmail,
+          trustedSenderEmail: trustedSpamSenderEmail,
+          senderPrincipalId: author.principalId,
           subject: null,
           content: content || fallbackLabel,
+          signalsChecked: true,
         })
       )
       .catch((err) => log.warn({ err }, 'spam classification failed'))
@@ -649,7 +805,7 @@ export async function startAgentConversation(
         // The composer owns the thread from the start — it lands in "Mine".
         assignedAgentPrincipalId: agent.principalId,
         status: 'open',
-        subject: preview(content || fallbackLabel, attachments),
+        subject: preview(singleLineSubject(content) || fallbackLabel, attachments),
       })
       .returning()
 
@@ -689,8 +845,9 @@ export async function startAgentConversation(
   await publishConversationUpdate(agentDTO.id, agentDTO)
   publishConversationMessage(
     txResult.conversation.id,
-    { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
-    { conversationUpdated: true }
+    { visitor: toMessageDTO(txResult.message, authored.customerAuthor), agent: messageDTO },
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
 
   // Always email the first message — fire-and-forget; a delivery failure never
@@ -703,17 +860,35 @@ export async function startAgentConversation(
     // contentJson image node, so richMessageFallbackLabel is empty.
     content: content || preview(fallbackLabel, attachments),
     contentJson: safeContentJson,
-    agentName: authored.publicAuthor.displayName ?? 'Support',
+    // The name the customer's thread shows: an API key shows as the team.
+    agentName: authored.customerAuthor.displayName ?? 'Support',
+    agentIsTeam: authored.shownAsTeam,
     messageId: txResult.message.id,
     attachments,
   })
 
-  void emitConversationCreated(actor, agent, txResult.conversation)
+  // Events carry the name the customer saw (a personal key shows its creator).
+  const eventAuthor = withShownName(agent, authored.publicAuthor)
+  void emitConversationCreated(actor, eventAuthor, txResult.conversation)
   // isFirstMessage only matters for a VISITOR message (the team bell's
   // anti-spam gate) — this is an agent-composed opening message, so false.
-  void emitMessageCreated(actor, agent, txResult.message, txResult.conversation, false)
+  void emitMessageCreated(actor, eventAuthor, txResult.message, txResult.conversation, false)
 
   return { conversation: agentDTO, message: messageDTO, created: true }
+}
+
+export interface SendAgentMessageOptions extends SystemCascadeOptions {
+  /** Tell the customer about this message (email, or the conversation's own
+   *  channel). Off only for a message the customer was told about another way:
+   *  the opening message of a ticket a teammate filed for them, which the
+   *  ticket's own confirmation email announces. */
+  notifyCustomer?: boolean
+  /** The ticket side wrote this reply onto its pair and signals
+   *  `ticket.replied` itself. */
+  fromTicketThread?: boolean
+  /** A shared card (a post or ticket embed), not a reply, so it signals
+   *  nothing on the ticket. */
+  card?: boolean
 }
 
 /**
@@ -732,10 +907,14 @@ export async function sendAgentMessage(
   // translated `rawContent` into the customer's language before calling this,
   // it passes the teammate's pre-translation original here so it lands on
   // the new message's own metadata (agent-only, never sent to the visitor).
-  extraMetadata?: ConversationMessageMetadata
+  extraMetadata?: ConversationMessageMetadata,
+  opts?: SendAgentMessageOptions
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  // A conversation the actor cannot see is NotFound before anything is
+  // written, so the reply neither lands nor claims it.
+  if (!opts?.systemCascade) await assertConversationVisible(conversationId, actor)
 
   const attachments = await resolveAttachments(rawAttachments, {
     principalId: agent.principalId,
@@ -812,6 +991,9 @@ export async function sendAgentMessage(
         // Keep resolvedAt consistent with the new status (reopening clears it).
         resolvedAt: resolvedAtForStatus(agentNextStatus, message.createdAt),
         updatedAt: message.createdAt,
+        // A teammate replying to a thread in Spam has judged it real: it
+        // leaves Spam the same way Restore takes it out.
+        ...(existing.endReason === 'spam' ? SPAM_MARKER_CLEARED : {}),
       })
       .where(eq(conversations.id, conversationId))
       .returning()
@@ -832,11 +1014,24 @@ export async function sendAgentMessage(
   // strips them from the visitor's copy.
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
-  await publishConversationUpdate(conversationDTO.id, conversationDTO)
+  // A reply that claims an unassigned conversation takes it out of the
+  // Unassigned queue, so the update names it as it was: every other scoped
+  // teammate who held it gets its removal.
+  const claimed =
+    txResult.previousAgentPrincipalId == null &&
+    txResult.conversation.assignedAgentPrincipalId != null
+  await publishConversationUpdate(
+    conversationDTO.id,
+    conversationDTO,
+    claimed
+      ? conversationScopeOf({ ...txResult.conversation, assignedAgentPrincipalId: null })
+      : undefined
+  )
   publishConversationMessage(
     txResult.conversation.id,
-    { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
-    { conversationUpdated: true }
+    { visitor: toMessageDTO(txResult.message, authored.customerAuthor), agent: messageDTO },
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
 
   // P2-D.1: surface translatedFrom on the DTO returned to the sending agent,
@@ -863,22 +1058,47 @@ export async function sendAgentMessage(
     })
   }
 
-  void notifyAgentReply({
-    conversationId: txResult.conversation.id,
-    visitorPrincipalId: txResult.conversation.visitorPrincipalId,
-    // Full text, not the truncated preview — notify derives its own excerpt.
-    content: content || preview(fallbackLabel, attachments),
-    contentJson: safeContentJson,
-    agentName: authored.publicAuthor.displayName ?? 'Support',
-    capturedEmail: txResult.conversation.visitorEmail,
-    channel: txResult.conversation.channel,
-    messageId: txResult.message.id,
-    attachments,
-  })
+  if (opts?.notifyCustomer !== false)
+    void notifyAgentReply({
+      conversationId: txResult.conversation.id,
+      visitorPrincipalId: txResult.conversation.visitorPrincipalId,
+      // Full text, not the truncated preview — notify derives its own excerpt.
+      content: content || preview(fallbackLabel, attachments),
+      contentJson: safeContentJson,
+      // The name the customer's thread shows: an API key shows as the team.
+      agentName: authored.customerAuthor.displayName ?? 'Support',
+      agentIsTeam: authored.shownAsTeam,
+      capturedEmail: txResult.conversation.visitorEmail,
+      channel: txResult.conversation.channel,
+      messageId: txResult.message.id,
+      attachments,
+    })
 
   // isFirstMessage only matters for a VISITOR message — this is an agent
-  // reply, so false.
-  void emitMessageCreated(actor, agent, txResult.message, txResult.conversation, false)
+  // reply, so false. The event carries the name the customer saw.
+  void emitMessageCreated(
+    actor,
+    withShownName(agent, authored.publicAuthor),
+    txResult.message,
+    txResult.conversation,
+    false
+  )
+  // A reply on a conversation paired with a customer ticket is a reply on that
+  // ticket, whichever view it was typed in: the replier watches the ticket,
+  // the ticket counts as updated, and ticket.replied gives its watchers their
+  // bell and integrations their webhook. Off the send's own path, best-effort:
+  // the reply itself already landed. The ticket side does this for its own
+  // writes, and a shared card is not a reply.
+  if (!opts?.fromTicketThread && !opts?.card) {
+    void import('@/lib/server/domains/tickets/ticket-message.service')
+      .then((m) => m.emitPairTicketReplied(txResult.conversation.id, actor, messageDTO))
+      .catch((err) =>
+        log.warn(
+          { err, conversationId: txResult.conversation.id },
+          'pair ticket reply signal failed'
+        )
+      )
+  }
   if (
     txResult.previousAgentPrincipalId === null &&
     txResult.conversation.assignedAgentPrincipalId !== null
@@ -933,7 +1153,7 @@ export async function addAgentNote(
   // clean tree below.
   const safeContentJson = contentJson ? sanitizeTiptapContent(contentJson) : null
 
-  await loadConversationOr404(conversationId)
+  await loadConversationForWrite(conversationId, actor)
   // Insert + touch in one transaction so a note can't persist without its
   // updatedAt bump.
   const message = await db.transaction(async (tx) => {
@@ -966,8 +1186,9 @@ export async function addAgentNote(
   // broadcast below), so its DTO is shaped as an AgentConversationMessageDTO
   // like sendAgentMessage's — a fresh note has no reactions/flags/suggestion/
   // translation yet, so those are known-empty rather than re-read from the DB.
+  const noteAuthor = await resolveAuthor(agent)
   const messageDTO: AgentConversationMessageDTO = {
-    ...toMessageDTO(message, await resolveAuthor(agent)),
+    ...toMessageDTO(message, noteAuthor),
     reactions: [],
     flaggedAt: null,
     postSuggestion: null,
@@ -986,7 +1207,7 @@ export async function addAgentNote(
     conversationId,
     mentionedIds: extractMentions(safeContentJson),
     authorPrincipalId: agent.principalId,
-    authorName: agent.displayName ?? 'A teammate',
+    authorName: noteAuthor.displayName ?? agent.displayName ?? 'A teammate',
     content,
   })
 
@@ -998,7 +1219,7 @@ export async function addAgentNote(
   // conversation with this payload).
   const noteConversation = await loadConversationOr404(conversationId)
   const conversationDTO = await conversationToDTO(noteConversation, 'agent')
-  void emitMessageNoteCreated(actor, agent, message, noteConversation)
+  void emitMessageNoteCreated(actor, withShownName(agent, noteAuthor), message, noteConversation)
   return { conversation: conversationDTO, message: messageDTO }
 }
 
@@ -1008,11 +1229,12 @@ export async function setConversationStatus(
   status: ConversationStatus,
   actor: Actor,
   attribution?: SystemNoticeAttribution,
-  lifecycle?: 'closed' | 'auto_closed'
+  lifecycle?: 'closed' | 'auto_closed',
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   const previous = existing.status
   const now = new Date()
   const [updated] = await db
@@ -1025,6 +1247,9 @@ export async function setConversationStatus(
       snoozedUntil: null,
       resolvedAt: resolvedAtForStatus(status, now),
       updatedAt: now,
+      // Reopening (or snoozing) a thread in Spam takes it out of Spam, the
+      // same way Restore does. Closing it again leaves the marker alone.
+      ...(status !== 'closed' && existing.endReason === 'spam' ? SPAM_MARKER_CLEARED : {}),
     })
     .where(eq(conversations.id, conversationId))
     .returning()
@@ -1103,11 +1328,12 @@ export async function setConversationStatus(
 export async function snoozeConversation(
   conversationId: ConversationId,
   until: Date | null,
-  actor: Actor
+  actor: Actor,
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   const previous = existing.status
   const now = new Date()
   const [updated] = await db
@@ -1132,11 +1358,14 @@ export async function snoozeConversation(
  * Publishes the same inbox update + status_changed webhook a manual reopen does.
  * Driven by the snooze-sweep queue (system actor); returns the count woken.
  */
-export async function sweepDueSnoozedConversations(): Promise<{ woken: number }> {
-  const now = new Date()
+export async function sweepDueSnoozedConversations(
+  now: Date = new Date()
+): Promise<{ woken: number }> {
+  // `now` decides which timers are due; the row is stamped with the wall clock
+  // either way, so a run "as of" a later time never writes a future updatedAt.
   const due = await db
     .update(conversations)
-    .set({ status: 'open', snoozedUntil: null, updatedAt: now })
+    .set({ status: 'open', snoozedUntil: null, updatedAt: new Date() })
     .where(
       and(
         eq(conversations.status, 'snoozed'),
@@ -1176,7 +1405,7 @@ export async function endConversation(
 ): Promise<ConversationDTO> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor)
   const previous = existing.status
   const now = new Date()
   const endNote = note?.trim() ? note.trim().slice(0, MAX_END_NOTE_LENGTH) : null
@@ -1235,7 +1464,7 @@ export async function restoreConversationFromSpam(
 ): Promise<ConversationDTO> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor)
   if (existing.endReason !== 'spam') {
     throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
   }
@@ -1245,9 +1474,7 @@ export async function restoreConversationFromSpam(
     .set({
       status: 'open',
       resolvedAt: null,
-      endReason: null,
-      endNote: null,
-      spamReason: null,
+      ...SPAM_MARKER_CLEARED,
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -1315,11 +1542,14 @@ export async function deleteConversationPermanently(
 ): Promise<void> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor)
   if (existing.endReason !== 'spam') {
     throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
   }
   await db.delete(conversations).where(eq(conversations.id, conversationId))
+  // The owner and team read before the delete, so every inbox that held the
+  // row drops it now.
+  publishInboxRemoval({ kind: 'conversation', id: conversationId }, conversationScopeOf(existing))
   log.info({ conversation_id: conversationId }, 'conversation permanently deleted')
 }
 
@@ -1334,17 +1564,18 @@ export interface SystemNoticeAttribution {
 }
 
 /**
- * Insert + broadcast an author-less 'system' status event (assignment, chat
- * ended/reopened, ticket created, …). It carries senderType 'system' with no
- * principal, so it renders as a centered notice on both sides, never counts as
- * unread, and does not bump the conversation's last-message preview.
+ * Insert + broadcast an author-less 'system' status event (chat ended/reopened,
+ * ticket created, assignment, …). It carries senderType 'system' with no
+ * principal, so it renders as a centered notice, never counts as unread, and
+ * does not bump the conversation's last-message preview.
  * Best-effort: a failure here must not undo the action that already landed.
  * Exported so sibling domains (e.g. the create-ticket flow's conversation
  * announcement) can post the same shape without duplicating the insert +
  * publish plumbing.
  *
  * `internal: true` makes the event team-only for the events the customer has
- * no business hearing about (an internal task spun off their conversation):
+ * no business hearing about (an internal task spun off their conversation, an
+ * assignment, a priority change, a snooze):
  * the row is stored `isInternal`, which every visitor read path filters, and
  * the broadcast goes to the agent inbox channel ONLY — the same two-part rule
  * `addAgentNote` follows, since channel separation and the read filter each
@@ -1391,7 +1622,12 @@ export async function emitSystemMessage(
   }
 }
 
-/** "Conversation assigned to <agent>" status event (best-effort, author-less). */
+/**
+ * "Conversation assigned to <agent>" status event (best-effort, author-less,
+ * internal): who on the team holds the conversation is inbox state, not
+ * correspondence, so the row is stored isInternal and broadcast to the agent
+ * channel only. Customer reads also hide legacy public rows of this kind.
+ */
 async function emitAssignmentSystemMessage(
   conversationId: ConversationId,
   agentPrincipalId: PrincipalId,
@@ -1415,16 +1651,22 @@ async function emitAssignmentSystemMessage(
       kind: 'assigned',
       agentName: name,
     },
-    { workflowName: attribution?.workflowName }
+    { internal: true, workflowName: attribution?.workflowName }
   )
 }
 
-/** "Conversation assigned to the <team> team" status event (author-less). */
+/** "Conversation assigned to the <team> team" status event (author-less,
+ *  internal, like the agent notice above). */
 async function emitTeamAssignmentSystemMessage(
   conversationId: ConversationId,
   teamName: string
 ): Promise<void> {
-  await emitSystemMessage(conversationId, `Conversation assigned to the ${teamName} team`)
+  await emitSystemMessage(
+    conversationId,
+    `Conversation assigned to the ${teamName} team`,
+    { kind: 'team_assigned', teamName },
+    { internal: true }
+  )
 }
 
 /** Actor display name for a team-only status event; generic fallback for a
@@ -1493,6 +1735,32 @@ async function emitSnoozeSystemMessage(
  * null when routing declines (disabled / nobody active) or the row was claimed
  * concurrently — the caller then leaves it in the unassigned queue.
  */
+/**
+ * Put a conversation opened outside the visitor-message path (a cold inbound
+ * email) in the team inbox live: the agent-side conversation, then its first
+ * message, as the widget start publishes them. Routing may then assign it and
+ * publish its own update; without this, a conversation routing leaves in the
+ * Unassigned queue would appear only on a refresh.
+ */
+export async function publishConversationStarted(
+  conversation: Conversation,
+  message: ConversationMessage,
+  author: ConversationAuthorInput
+): Promise<void> {
+  const authored = await resolveAuthorAudiences(author)
+  const agentDTO = await conversationToDTO(conversation, 'agent')
+  await publishConversationUpdate(agentDTO.id, agentDTO)
+  publishConversationMessage(
+    conversation.id,
+    {
+      visitor: toMessageDTO(message, authored.customerAuthor),
+      agent: toMessageDTO(message, authored.supportAuthor),
+    },
+    { conversationUpdated: true },
+    conversationScopeOf(conversation)
+  )
+}
+
 /** Best-effort auto-assign for any channel's new-conversation path. */
 export async function routeUnassignedConversation(
   conversation: Conversation
@@ -1501,7 +1769,18 @@ export async function routeUnassignedConversation(
   return assignRoutedConversation(conversation)
 }
 
-async function assignRoutedConversation(conversation: Conversation): Promise<PrincipalId | null> {
+/**
+ * The published update names the conversation's owner and team before the
+ * claim, so every inbox that held it and no longer does gets its removal. By
+ * default that is the row as passed, still unassigned (the Unassigned queue a
+ * scoped teammate sees). A caller that cleared the assignee just before
+ * routing (the offline requeue) passes the owner it cleared instead, so the
+ * teammate who lost the conversation gets the removal.
+ */
+async function assignRoutedConversation(
+  conversation: Conversation,
+  prev: ScopedRow = conversationScopeOf(conversation)
+): Promise<PrincipalId | null> {
   // Test threads belong to the teammate trying them out; they never take a
   // colleague's routing slot.
   if (await testOwnerOf(conversation.visitorPrincipalId)) return null
@@ -1519,7 +1798,7 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
     .returning()
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
-  await publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
+  await publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'), prev)
   // Auto-routing only ever touches the agent column — the team side reports
   // no change (still-current value as its own "previous").
   void emitConversationAssigned(systemActor(), assigned, null, assigned.assignedTeamId ?? null)
@@ -1531,11 +1810,12 @@ export async function assignConversation(
   conversationId: ConversationId,
   agentPrincipalId: PrincipalId | null,
   actor: Actor,
-  attribution?: SystemNoticeAttribution
+  attribution?: SystemNoticeAttribution,
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   // Re-selecting the current assignee (or unassigning an unassigned thread) is
   // a no-op: no system message, no events, no triage-wake.
   if ((existing.assignedAgentPrincipalId ?? null) === agentPrincipalId) return existing
@@ -1566,7 +1846,7 @@ export async function assignConversation(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto, conversationScopeOf(existing))
   if (agentPrincipalId) {
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId, attribution)
   }
@@ -1596,11 +1876,12 @@ export async function assignTeam(
   conversationId: ConversationId,
   teamId: TeamId | null,
   actor: Actor,
-  attribution?: SystemNoticeAttribution
+  attribution?: SystemNoticeAttribution,
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   // Re-selecting the current team (or clearing an already-clear one) is a
   // no-op — it does not re-distribute to a member or repeat the system message.
   if ((existing.assignedTeamId ?? null) === teamId) return existing
@@ -1634,7 +1915,7 @@ export async function assignTeam(
     .returning()
 
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto, conversationScopeOf(existing))
 
   if (team) {
     await emitTeamAssignmentSystemMessage(conversationId, team.name)
@@ -1663,15 +1944,21 @@ export async function assignTeam(
 
 /**
  * Free an offline agent's unanswered conversations (see shouldRequeueOnAgentOffline
- * for the rule) and re-route each to another active agent when routing is on;
- * any that can't be routed stay in the unassigned queue. Called when an agent's
- * last live stream closes. Best-effort + system-driven (no actor): a failure
- * must not break stream teardown, and the work is idempotent.
+ * for the rule) and re-route each to another active agent; any that can't be
+ * routed stay in the unassigned queue. Called when an agent's last live stream
+ * closes. Only while conversation routing is on: with it off nothing would
+ * hand the work on, so the agent keeps what they hold (an unreadable setting
+ * counts as off). Best-effort + system-driven (no actor): a failure must not
+ * break stream teardown, and the work is idempotent.
  */
 export async function requeueUnansweredOnAgentOffline(
   agentPrincipalId: PrincipalId
 ): Promise<void> {
   try {
+    const { getConversationRouting } =
+      await import('@/lib/server/domains/settings/settings.conversation-routing')
+    if (!(await getConversationRouting()).enabled) return
+
     // A test thread stays with the teammate who owns it, online or not.
     const assigned = await db
       .select({ id: conversations.id, status: conversations.status })
@@ -1723,13 +2010,19 @@ export async function requeueUnansweredOnAgentOffline(
       .returning()
 
     // Re-route each freed conversation to another active agent (routing fires
-    // only when enabled + someone is active); any that can't be routed stay in
+    // only when someone is active); any that can't be routed stay in
     // the unassigned queue, and we just broadcast that state. One at a time (not
     // in parallel) so the load-aware strategy sees each prior assignment and
     // spreads the batch across the online team instead of piling it onto one.
     for (const conversation of updated) {
+      // The offline agent held these; the published update names them as the
+      // previous assignee so their inbox stream removes the row.
+      const prev = conversationScopeOf({
+        ...conversation,
+        assignedAgentPrincipalId: agentPrincipalId,
+      })
       // assignRoutedConversation broadcasts the assigned DTO itself on success.
-      if (await assignRoutedConversation(conversation)) continue
+      if (await assignRoutedConversation(conversation, prev)) continue
       // Not re-routed: broadcast the CURRENT row (re-read), so a reassignment
       // that landed during the await isn't clobbered by a stale "unassigned" DTO.
       const [current] = await db
@@ -1738,7 +2031,7 @@ export async function requeueUnansweredOnAgentOffline(
         .where(eq(conversations.id, conversation.id))
         .limit(1)
       if (current)
-        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'))
+        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'), prev)
     }
   } catch (err) {
     log.warn({ err }, 'requeue unanswered on agent offline failed')
@@ -1749,11 +2042,12 @@ export async function requeueUnansweredOnAgentOffline(
 export async function setConversationPriority(
   conversationId: ConversationId,
   priority: ConversationPriority,
-  actor: Actor
+  actor: Actor,
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   // A non-assignee triaging a snoozed thread wakes it back into the open queue.
   const wake = shouldWakeSnoozedOnTriage(
     existing.status,
@@ -1794,26 +2088,27 @@ export async function deleteConversationMessage(
     .from(conversationMessages)
     .where(eq(conversationMessages.id, messageId))
     .limit(1)
-  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  if (!message || (!message.conversationId && !message.ticketId)) {
+    throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  }
+  // A parent the actor cannot see answers exactly like a missing message, also
+  // for the author of the message, before any other refusal.
+  const parent = await assertMessageParentVisible(message, actor)
 
   const authored = {
     senderType: message.senderType,
     authorPrincipalId: message.principalId,
-    parent: message.conversationId ? ('conversation' as const) : ('ticket' as const),
+    parent: permissionParentOf(parent),
     isInternal: message.isInternal,
   }
 
-  if (!message.conversationId) {
+  if (parent.kind === 'ticket') {
     // Ticket-thread message: the same own-message / moderator rule as a
-    // conversation, once the actor is known to see the ticket.
-    if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    // Resolves the parent + authorizes ticket visibility (§2.5) — shared with
-    // message.actions.ts's identical resolve-then-authorize step.
-    await resolveMessageParent(message, actor)
+    // conversation.
     const decision = canDeleteMessage(actor, authored, null)
     if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
-    await db
+    const deleted = await db
       .update(conversationMessages)
       .set({
         deletedAt: new Date(),
@@ -1821,6 +2116,26 @@ export async function deleteConversationMessage(
         updatedAt: new Date(),
       })
       .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
+      .returning({ id: conversationMessages.id })
+
+    // This branch emits no message.deleted, so the ticket's first response is
+    // recomputed here: deleting the first reply moves it to the next one.
+    // Best-effort, because the delete already landed. Dynamically imported:
+    // this module imports nothing from the tickets domain.
+    // A delete that changed no row, or removed a note or a message written
+    // after the first response, cannot move it and is skipped.
+    try {
+      if (deleted.length > 0) {
+        const { syncTicketFirstResponseAfterRemoval } =
+          await import('@/lib/server/domains/tickets/ticket-first-response')
+        await syncTicketFirstResponseAfterRemoval(parent.ticketId, message)
+      }
+    } catch (err) {
+      log.warn(
+        { err, ticket_id: parent.ticketId, message_id: messageId },
+        'ticket first response recompute after a delete failed'
+      )
+    }
 
     // No realtime broadcast and no webhook here: ticket-thread update routing
     // (and its message.deleted webhook analogue) arrives with the customer
@@ -1829,17 +2144,9 @@ export async function deleteConversationMessage(
     return
   }
 
-  const conversationId = message.conversationId
-  const conversation = await loadConversationOr404(conversationId)
-
+  const { conversationId, conversation } = parent
   const decision = canDeleteMessage(actor, authored, conversation)
-  if (!decision.allowed) {
-    // Hide existence from anyone who can't even view the conversation.
-    if (!canViewConversation(actor, conversation).allowed) {
-      throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    }
-    throw new ForbiddenError('FORBIDDEN', decision.reason)
-  }
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
   if (
     conversation.channel === 'github' &&
@@ -1851,10 +2158,35 @@ export async function deleteConversationMessage(
     await deleteGitHubIssueComment(conversationId, message.metadata.githubCommentId)
   }
 
-  await db
-    .update(conversationMessages)
-    .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId, updatedAt: new Date() })
-    .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
+  // The delete and the preview it may move land together. Only a
+  // customer-visible message can be the one the preview shows (notes and
+  // system lines never write it), so only its delete recomputes it.
+  const movedPreview = await db.transaction(async (tx) => {
+    const deleted = await tx
+      .update(conversationMessages)
+      .set({
+        deletedAt: new Date(),
+        deletedByPrincipalId: actor.principalId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
+      .returning({ id: conversationMessages.id })
+    if (deleted.length === 0 || message.isInternal || message.senderType === 'system') return null
+    const latest = await newestCustomerVisibleMessage(tx, conversationId)
+    const nextPreview = latest ? previewOfStoredMessage(latest) : null
+    if (nextPreview === conversation.lastMessagePreview) return null
+    const [updated] = await tx
+      .update(conversations)
+      .set({ lastMessagePreview: nextPreview, updatedAt: new Date() })
+      .where(eq(conversations.id, conversationId))
+      .returning()
+    return updated ?? null
+  })
+  // Open inboxes get the new preview before the deletion event that makes
+  // them refetch their lists.
+  if (movedPreview) {
+    await publishConversationUpdate(conversationId, await conversationToDTO(movedPreview, 'agent'))
+  }
 
   const deletedEvent = {
     kind: 'message_deleted' as const,
@@ -1876,7 +2208,16 @@ export async function deleteConversationMessage(
   }
 }
 
-/** Record a visitor CSAT rating (1-5) on their conversation. */
+/** The code recordCsat refuses a rating with while the conversation is open. */
+export const CSAT_CONVERSATION_OPEN = 'CSAT_CONVERSATION_OPEN'
+
+/**
+ * Record a visitor CSAT rating (1-5) on their conversation. A rating rates a
+ * finished conversation, so it is accepted only once the conversation is
+ * closed: while it is open (or snoozed) the call refuses with a ConflictError
+ * coded CSAT_CONVERSATION_OPEN and writes nothing. The status is read under
+ * the same row lock as the rating, so a reopen that lands first wins.
+ */
 export async function recordCsat(
   conversationId: ConversationId,
   rating: number,
@@ -1886,7 +2227,7 @@ export async function recordCsat(
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     throw new ValidationError('VALIDATION_ERROR', 'Rating must be between 1 and 5')
   }
-  const conversation = await assertConversationViewable(conversationId, actor)
+  const conversation = await assertConversationVisible(conversationId, actor)
   // Only the visitor who owns the conversation can rate it.
   if (actor.principalId !== conversation.visitorPrincipalId) {
     throw new ForbiddenError('FORBIDDEN', 'Only the visitor can rate this conversation')
@@ -1905,6 +2246,7 @@ export async function recordCsat(
   const { updated, isFirstSubmission, commentJustAdded } = await db.transaction(async (tx) => {
     const [prev] = await tx
       .select({
+        status: conversations.status,
         csatRating: conversations.csatRating,
         csatComment: conversations.csatComment,
         csatSubmittedAt: conversations.csatSubmittedAt,
@@ -1912,6 +2254,12 @@ export async function recordCsat(
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .for('update')
+    if (prev && prev.status !== 'closed') {
+      throw new ConflictError(
+        CSAT_CONVERSATION_OPEN,
+        'This conversation is still open. It can be rated once it is resolved.'
+      )
+    }
     const [row] = await tx
       .update(conversations)
       .set({
@@ -1981,24 +2329,33 @@ function conversationSideFor(conversation: Conversation, actor: Actor): Conversa
 export async function signalTyping(conversationId: ConversationId, actor: Actor): Promise<void> {
   // Same access gate as reading the thread — prevents spoofing typing into a
   // conversation the actor can't see.
-  const conversation = await assertConversationViewable(conversationId, actor)
+  const conversation = await assertConversationVisible(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
   // The typist id rides along so the stream layer can drop the typist's own echo.
-  publishTyping(conversationId, side, new Date().toISOString(), actor.principalId)
+  publishTyping(
+    conversationId,
+    side,
+    new Date().toISOString(),
+    actor.principalId,
+    conversationScopeOf(conversation)
+  )
 }
 
 /** Mark a conversation read up to now for the actor's side of it. */
 export async function markConversationRead(
   conversationId: ConversationId,
-  actor: Actor
+  actor: Actor,
+  opts?: SystemCascadeOptions
 ): Promise<void> {
-  const conversation = await assertConversationViewable(conversationId, actor)
+  const conversation = await loadConversationForWrite(conversationId, actor, opts)
   const side = conversationSideFor(conversation, actor)
   const now = new Date()
   await db
     .update(conversations)
     .set(side === 'agent' ? { agentLastReadAt: now } : { visitorLastReadAt: now })
     .where(eq(conversations.id, conversation.id))
+  // No envelope: `conversation` was read before this write. The publish reads
+  // its owner at send time.
   publishConversationEvent(conversationId, {
     kind: 'read',
     conversationId,
@@ -2017,6 +2374,8 @@ async function applyAgentUnreadWatermark(
     .update(conversations)
     .set({ agentLastReadAt: watermark })
     .where(eq(conversations.id, conversation.id))
+  // No envelope: `conversation` is the caller's earlier read. The publish
+  // reads its owner at send time.
   publishAgentConversationEvent({
     kind: 'read',
     conversationId: conversation.id,
@@ -2039,11 +2398,12 @@ async function applyAgentUnreadWatermark(
 export async function markConversationUnreadAt(
   conversationId: ConversationId,
   anchorCreatedAt: Date,
-  actor: Actor
+  actor: Actor,
+  opts?: SystemCascadeOptions
 ): Promise<void> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const conversation = await loadConversationOr404(conversationId)
+  const conversation = await loadConversationForWrite(conversationId, actor, opts)
   await applyAgentUnreadWatermark(conversation, anchorCreatedAt)
 }
 
@@ -2059,11 +2419,12 @@ export async function markConversationUnreadAt(
 export async function markConversationUnreadFromMessage(
   conversationId: ConversationId,
   messageId: ConversationMessageId,
-  actor: Actor
+  actor: Actor,
+  opts?: SystemCascadeOptions
 ): Promise<void> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const conversation = await loadConversationOr404(conversationId)
+  const conversation = await loadConversationForWrite(conversationId, actor, opts)
   // The anchor must belong to this conversation and not be soft-deleted.
   const [message] = await db
     .select({
@@ -2143,10 +2504,22 @@ export async function isPairedWithCustomerTicket(conversationId: ConversationId)
   return !!link
 }
 
+interface AppendAssistantReplyOpts {
+  waiting: boolean
+  onlyIf?: (tx: Transaction) => Promise<boolean>
+  citations?: ConversationMessageCitation[]
+  contentJson?: TiptapContent | null
+  metadata?: ConversationMessageMetadata | null
+  /** The assistant closed this conversation earlier in the same turn
+   *  (end_conversation): its closing words leave it closed. */
+  closedThisTurn?: boolean
+}
+
 /**
  * Append a reply authored by the assistant service principal — the message-
  * append primitive for Quinn. Like an agent reply it bumps the last-message
- * preview and reopens a closed thread, but it never claims assignment (Quinn
+ * preview and reopens a closed thread (except a rating ask, or the AI agent's
+ * last words after it closed the thread itself, which leave it closed), but it never claims assignment (Quinn
  * fronts, it does not own) and it never marks the agent side read. `waiting`
  * controls the customer wait clock: an answer stops it; a hand-off restarts it
  * so the team sees a thread waiting on a human. Delivered over the normal
@@ -2160,25 +2533,35 @@ export async function isPairedWithCustomerTicket(conversationId: ConversationId)
  * sites (a plain-text answer, the handover line) are unaffected. Returns the
  * posted message's DTO so a block send can read back its id (stamped onto an
  * InputWaitCursor when the plan parks right after).
+ *
+ * `onlyIf` makes the post conditional: the conversation row is locked first,
+ * and the reply posts only when `onlyIf` returns true on that same
+ * transaction, so two concurrent conditional posts decide one after the
+ * other. A declined post writes and publishes nothing and returns null.
  */
 export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: {
-    waiting: boolean
-    citations?: ConversationMessageCitation[]
-    contentJson?: TiptapContent | null
-    metadata?: ConversationMessageMetadata | null
-  }
-): Promise<ConversationMessageDTO> {
+  opts: AppendAssistantReplyOpts & { onlyIf: NonNullable<AppendAssistantReplyOpts['onlyIf']> }
+): Promise<ConversationMessageDTO | null>
+export async function appendAssistantReply(
+  conversationId: ConversationId,
+  content: string,
+  author: ConversationAuthorInput,
+  opts: AppendAssistantReplyOpts & { onlyIf?: undefined }
+): Promise<ConversationMessageDTO>
+export async function appendAssistantReply(
+  conversationId: ConversationId,
+  content: string,
+  author: ConversationAuthorInput,
+  opts: AppendAssistantReplyOpts
+): Promise<ConversationMessageDTO | null> {
   const txResult = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
+    const select = tx.select().from(conversations).where(eq(conversations.id, conversationId))
+    const [existing] = opts.onlyIf ? await select.for('update') : await select.limit(1)
     if (!existing) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+    if (opts.onlyIf && !(await opts.onlyIf(tx))) return null
     const [message] = await tx
       .insert(conversationMessages)
       .values({
@@ -2191,10 +2574,17 @@ export async function appendAssistantReply(
         metadata: opts.metadata ?? null,
       })
       .returning()
-    const nextStatus = applyAgentReopenStatus(
-      existing.status,
-      getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
-    )
+    // A rating ask (a csat block) follows the close it rates, and the AI
+    // agent's last words follow the close it made itself: both leave a closed
+    // conversation closed, keeping when it was resolved. Every other reply
+    // reopens as the channel says.
+    const keepsStatus = opts.metadata?.block?.kind === 'csat' || opts.closedThisTurn === true
+    const nextStatus = keepsStatus
+      ? existing.status
+      : applyAgentReopenStatus(
+          existing.status,
+          getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
+        )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -2202,13 +2592,16 @@ export async function appendAssistantReply(
         lastMessagePreview: preview(content, []),
         status: nextStatus,
         waitingSince: opts.waiting ? message.createdAt : null,
-        resolvedAt: resolvedAtForStatus(nextStatus, message.createdAt),
+        resolvedAt: keepsStatus
+          ? existing.resolvedAt
+          : resolvedAtForStatus(nextStatus, message.createdAt),
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversationId))
       .returning()
     return { conversation: updated, message }
   })
+  if (!txResult) return null
 
   const authored = await resolveAuthorAudiences(author)
   const messageDTO = toMessageDTO(txResult.message, authored.supportAuthor, author.principalId)
@@ -2217,10 +2610,11 @@ export async function appendAssistantReply(
   publishConversationMessage(
     txResult.conversation.id,
     {
-      visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
+      visitor: toMessageDTO(txResult.message, authored.customerAuthor, author.principalId),
       agent: messageDTO,
     },
-    { conversationUpdated: true }
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
   // isFirstMessage only matters for a VISITOR message — this is Quinn's own
   // reply, so false.
@@ -2351,7 +2745,7 @@ export async function executeAssistantHandoff(
     kind: 'assistant_handoff',
   })
   // A live assistant.handed_off workflow owns assignment. The deterministic
-  // router stands down so the customer does not see two assignment notices.
+  // router stands down so the thread does not get two assignment notices.
   const { hasLiveWorkflowForTrigger } =
     await import('@/lib/server/domains/workflows/workflow.service')
   const routingWorkflowOwnsHandoff = await hasLiveWorkflowForTrigger('assistant.handed_off')

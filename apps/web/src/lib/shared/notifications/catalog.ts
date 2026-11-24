@@ -26,6 +26,19 @@ export interface NotificationTypeMeta {
   group: NotificationGroup
   /** Which settings surface(s) show this row. */
   surfaces: ('admin' | 'portal')[]
+  /**
+   * The channels this type is actually delivered on, when not every one.
+   * Settings render a switch only for these, so nobody toggles a channel that
+   * nothing sends. Omitted means in-app and email.
+   */
+  channels?: readonly NotificationChannel[]
+}
+
+const EMAIL_ONLY: readonly NotificationChannel[] = ['email']
+
+/** Whether a type is ever delivered on `channel`. */
+export function deliversOn(meta: NotificationTypeMeta, channel: NotificationChannel): boolean {
+  return meta.channels ? meta.channels.includes(channel) : true
 }
 
 export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
@@ -57,6 +70,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'Someone @-mentions you in a comment',
     group: 'feedback',
     surfaces: ['admin', 'portal'],
+  },
+  {
+    type: 'post_moderated',
+    label: 'Post reviewed',
+    description: 'The team publishes or declines a post or comment you wrote',
+    group: 'feedback',
+    surfaces: ['portal'],
   },
   {
     type: 'post_owner_assigned',
@@ -135,6 +155,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'Confirmation when we receive your ticket',
     group: 'support',
     surfaces: ['portal'],
+    channels: EMAIL_ONLY,
   },
   {
     type: 'sla_warning',
@@ -142,6 +163,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'An SLA clock you own is approaching breach',
     group: 'support',
     surfaces: ['admin'],
+    channels: EMAIL_ONLY,
   },
   {
     type: 'sla_breach',
@@ -149,6 +171,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'An SLA clock you own has breached',
     group: 'support',
     surfaces: ['admin'],
+    channels: EMAIL_ONLY,
   },
   {
     type: 'sending_domain_live',

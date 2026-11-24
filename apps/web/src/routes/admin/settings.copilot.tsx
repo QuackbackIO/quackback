@@ -19,8 +19,7 @@ import { DefaultErrorPage } from '@/components/shared/error-page'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { assistantQueries } from '@/lib/client/queries/assistant'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
 
 const COPILOT_TABS = ['knowledge', 'guidance'] as const
@@ -37,7 +36,7 @@ export const Route = createFileRoute('/admin/settings/copilot')({
     if (search.tab === 'actions') {
       throw redirect({ to: '/admin/settings/connectors' })
     }
-    assertRoutePermission(context.permissions, PERMISSIONS.AI_TEAMMATE_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/copilot')
   },
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(assistantQueries.settings())

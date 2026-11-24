@@ -24,6 +24,7 @@ vi.mock('@/lib/server/cache', () => ({
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
     SLACK_CHANNELS: 'slack:channels',
     REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
+    PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
   },
 }))
 
@@ -285,18 +286,24 @@ describe('getWorkspaceSettings', () => {
 
   it('queries DB and caches result on cache miss', async () => {
     mockCacheGet.mockResolvedValue(null)
-    mockFindFirst.mockResolvedValue(makeSettingsRow())
+    mockFindFirst.mockResolvedValue({ ...makeSettingsRow(), rowVersion: '4242' })
 
     const result = await getWorkspaceSettings()
 
     expect(result).not.toBeNull()
     expect(result).not.toHaveProperty('visualTheme')
     expect(mockFindFirst).toHaveBeenCalled()
+    // Filled only while the row is still the version it was read at, so a
+    // save racing this read cannot leave the old row cached.
     expect(mockCacheSet).toHaveBeenCalledWith(
       'settings:workspace',
       expect.objectContaining({ name: 'Test Workspace' }),
-      3600
+      3600,
+      { onlyIf: expect.anything() }
     )
+    // The version is not part of the settings row callers see.
+    expect(result?.settings).not.toHaveProperty('rowVersion')
+    expect(mockCacheSet.mock.calls[0][1].settings).not.toHaveProperty('rowVersion')
   })
 
   it('returns null when no settings exist (does not cache null)', async () => {
@@ -318,7 +325,11 @@ describe('invalidateSettingsCache', () => {
   it('deletes the workspace settings cache key', async () => {
     await invalidateSettingsCache()
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 })
 
@@ -334,57 +345,101 @@ describe('settings write functions invalidate cache', () => {
 
   it('updateAuthConfig invalidates cache', async () => {
     await updateAuthConfig({ oauth: { password: true } })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updatePortalConfig invalidates cache', async () => {
     await updatePortalConfig({ features: {} })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updateBrandingConfig invalidates cache', async () => {
     await updateBrandingConfig({ preset: 'custom' })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updateCustomCss invalidates cache', async () => {
     await updateCustomCss('.test { color: red; }')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updateDeveloperConfig invalidates cache', async () => {
     await updateDeveloperConfig({ mcpEnabled: true })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updateWidgetConfig invalidates cache', async () => {
     await updateWidgetConfig({ enabled: true })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updateWorkspaceName invalidates cache', async () => {
     await updateWorkspaceName('New Name')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updateHeaderDisplayMode invalidates cache', async () => {
     await updateHeaderDisplayMode('logo_only')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('updateHeaderDisplayName invalidates cache', async () => {
     await updateHeaderDisplayName('Custom Name')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('saveLogoKey invalidates cache', async () => {
     await saveLogoKey('logos/new.png')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('deleteLogoKey invalidates cache', async () => {
     await deleteLogoKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('deleteLogoKey clears the derived favicon too', async () => {
@@ -397,27 +452,47 @@ describe('settings write functions invalidate cache', () => {
 
   it('saveFaviconKey invalidates cache', async () => {
     await saveFaviconKey('favicons/new.ico')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('deleteFaviconKey invalidates cache', async () => {
     await deleteFaviconKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('saveHeaderLogoKey invalidates cache', async () => {
     await saveHeaderLogoKey('headers/new.png')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('deleteHeaderLogoKey invalidates cache', async () => {
     await deleteHeaderLogoKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('regenerateWidgetSecret invalidates cache', async () => {
     await regenerateWidgetSecret()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 })
 
@@ -441,7 +516,11 @@ describe('ensureWidgetSecret', () => {
     const secret = await ensureWidgetSecret()
     expect(secret).toMatch(/^wgt_[a-f0-9]{64}$/)
     expect(secret).toBe(stored)
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('returns the winner when the insert loses the race', async () => {

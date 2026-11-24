@@ -15,6 +15,7 @@ import { portalInvitesQueryOptions } from '@/lib/client/queries/portal-invites'
 import { parseCompanyFilterParts } from '@/lib/shared/company-filters'
 import { countCompaniesFn, listCompaniesPageFn } from '@/lib/server/functions/companies'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 /** The companies directory (the people page's Companies tab). */
 export const companiesDirectoryQueries = {
@@ -52,28 +53,33 @@ export const companiesDirectoryQueries = {
     }),
 }
 
-/** Team roles that read the companies directory (both presets hold company.view). */
-export function canReadCompanies(role: string) {
-  return role === 'admin' || role === 'member'
+/** Whether the viewer reads the companies directory: its reads need company.view. */
+export function canReadCompanies(permissions: readonly PermissionKey[]) {
+  return permissions.includes(PERMISSIONS.COMPANY_VIEW)
 }
 
 /**
  * Warm what the people page reads on every load, for its route loader: the
  * unfiltered people list, the segment and tag filters, the attribute
  * definitions, the nav badge counts and the companies directory. Each is
- * best-effort: a failed read is left to the page's own query.
+ * best-effort: a failed read is left to the page's own query. The segment
+ * filter needs segment.view, so it is warmed only for a viewer holding it.
  */
-export function warmUsersPage(queryClient: QueryClient, role: string) {
-  const companies = canReadCompanies(role)
+export function warmUsersPage(queryClient: QueryClient, permissions: readonly PermissionKey[]) {
+  const companies = canReadCompanies(permissions)
   return Promise.all([
     queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
-    queryClient.ensureQueryData(adminQueries.segments()),
+    permissions.includes(PERMISSIONS.SEGMENT_VIEW)
+      ? queryClient.ensureQueryData(adminQueries.segments())
+      : undefined,
     warmQuery(queryClient, totalUserCountOptions('users')),
     warmQuery(queryClient, totalUserCountOptions('leads')),
     warmQuery(queryClient, adminQueries.userAttributes()),
     warmQuery(queryClient, adminQueries.companyAttributes()),
     warmQuery(queryClient, userTagsQueryOptions()),
-    role === 'admin' ? warmQuery(queryClient, portalInvitesQueryOptions()) : undefined,
+    permissions.includes(PERMISSIONS.SETTINGS_MANAGE)
+      ? warmQuery(queryClient, portalInvitesQueryOptions())
+      : undefined,
     companies ? warmQuery(queryClient, companiesDirectoryQueries.count()) : undefined,
     companies
       ? queryClient

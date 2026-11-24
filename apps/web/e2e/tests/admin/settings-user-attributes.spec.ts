@@ -313,8 +313,9 @@ test.describe('Admin User Attributes Settings', () => {
     // Confirm deletion
     await confirmDialog.getByRole('button', { name: /^delete attribute$/i }).click()
 
-    // Attribute should no longer appear
-    await expect(page.getByText(attrLabel)).toBeHidden({ timeout: 10000 })
+    // The dialog closes and the attribute's row is gone
+    await expect(confirmDialog).toBeHidden({ timeout: 10000 })
+    await expect(attrRow).toHaveCount(0, { timeout: 10000 })
   })
 
   test('delete confirmation dialog can be cancelled', async ({ page }) => {

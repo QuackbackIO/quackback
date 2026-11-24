@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-// /admin redirects to /admin/feedback — all dashboard tests run on the feedback page
+// Since #388 /admin is Home (the overview). It no longer redirects to /admin/feedback.
 
 test.describe('Admin Dashboard', () => {
   test.beforeEach(async ({ page }) => {
@@ -9,12 +9,16 @@ test.describe('Admin Dashboard', () => {
   })
 
   test('page loads without error', async ({ page }) => {
-    // Should redirect to /admin/feedback
-    await expect(page).toHaveURL(/\/admin\/feedback/, { timeout: 10000 })
+    // Home's heading greets the signed-in teammate
+    await expect(page.locator('h1#home-greeting')).toBeVisible({ timeout: 10000 })
   })
 
-  test('redirects /admin to /admin/feedback', async ({ page }) => {
-    await expect(page).toHaveURL(/\/admin\/feedback/)
+  test('/admin stays on Home', async ({ page }) => {
+    await expect(page).toHaveURL(/\/admin\/?$/)
+    await expect(page.getByRole('link', { name: 'Home' }).first()).toHaveAttribute(
+      'data-active',
+      'true'
+    )
   })
 
   test('renders the admin layout without crashing', async ({ page }) => {
@@ -95,12 +99,14 @@ test.describe('Admin Sidebar Navigation', () => {
     await expect(portalLink.first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('logo links to feedback page', async ({ page }) => {
-    const logoLink = page.getByRole('link', { name: 'Quackback' }).first()
+  test('logo links to Home', async ({ page }) => {
+    // The sidebar logo shows the workspace's own logo and name (seed: Acme Corp)
+    // and leads to Home.
+    const logoLink = page.getByRole('link', { name: 'Acme Corp' }).first()
     await expect(logoLink).toBeVisible({ timeout: 10000 })
     await logoLink.click()
     await page.waitForLoadState('networkidle')
-    await expect(page).toHaveURL(/\/admin\/feedback/)
+    await expect(page).toHaveURL(/\/admin\/?$/)
   })
 })
 
@@ -145,5 +151,62 @@ test.describe('Admin Feedback Page (Dashboard Content)', () => {
     // The Feedback link should exist and have an active state
     const feedbackLink = page.getByRole('link', { name: 'Feedback' }).first()
     await expect(feedbackLink).toBeVisible()
+  })
+})
+
+test.describe('Admin tab opened before an update', () => {
+  test('a call from the older build is answered as stale and the page reloads once', async ({
+    page,
+    baseURL,
+  }) => {
+    // The server answers an id it does not have (what an older build asks
+    // for) with a marked 409, never cached, instead of a 500.
+    const answer = await page.request.post('/_serverFn/an-id-from-an-older-build', {
+      headers: {
+        'content-type': 'application/json',
+        'x-tsr-serverFn': 'true',
+        origin: new URL(baseURL!).origin,
+      },
+      data: {},
+    })
+    expect(answer.status()).toBe(409)
+    expect(answer.headers()['x-stale-build']).toBe('1')
+    expect(answer.headers()['cache-control']).toBe('no-store')
+    const message = await answer.text()
+    expect(message).toBe('This page is out of date. Reload the page to continue.')
+
+    // In the browser, every server function now gets that answer, as it would
+    // after an update. The page reloads once, and does not keep reloading.
+    await page.goto('/admin')
+    await page.waitForLoadState('networkidle')
+    await page.route('**/_serverFn/**', (route) =>
+      route.fulfill({ status: 409, headers: answer.headers(), body: message })
+    )
+    // A reload is a document request, issued the moment the page asks for it.
+    let reloads = 0
+    page.on('request', (r) => {
+      if (r.isNavigationRequest() && r.frame() === page.mainFrame()) reloads++
+    })
+
+    const reloaded = page.waitForEvent('load')
+    await page.getByRole('link', { name: 'Feedback' }).first().click()
+    await reloaded
+    expect(reloads).toBe(1)
+    await page.waitForLoadState('networkidle')
+
+    // After the reload the calls still get that answer: the call fails like
+    // any other, and the page does not reload again. The marker only survives
+    // on the same document; the pause gives a second reload time to start.
+    await page.evaluate(() => {
+      ;(window as unknown as { sameDocument?: boolean }).sameDocument = true
+    })
+    const staleAgain = page.waitForResponse((r) => r.url().includes('/_serverFn/'))
+    await page.getByRole('link', { name: 'Roadmap' }).first().click()
+    expect((await staleAgain).status()).toBe(409)
+    await page.waitForTimeout(1500)
+    expect(reloads).toBe(1)
+    expect(
+      await page.evaluate(() => (window as unknown as { sameDocument?: boolean }).sameDocument)
+    ).toBe(true)
   })
 })

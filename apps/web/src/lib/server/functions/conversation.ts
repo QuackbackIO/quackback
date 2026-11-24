@@ -61,14 +61,21 @@ import {
   assertPermission,
   policyActorFromAuth,
   hasAuthCredentials,
+  normalizePrincipalType,
   type AuthContext,
 } from './auth-helpers'
+import { isAccessDeniedError } from './auth-errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { RequesterTicketDTO, ConversationTicketSummary } from '@/lib/server/domains/tickets'
 import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
 import { ConflictError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import {
+  assertConversationVisible,
+  visibleConversationIds,
+} from '@/lib/server/domains/conversation/conversation-visibility'
+import { requireVisibleConversation } from './conversation-access'
 
 const log = logger.child({ component: 'conversation' })
 
@@ -271,6 +278,9 @@ async function assertVisitorConversationAccess(ctx: AuthContext): Promise<void> 
 
 // ── Visitor functions ────────────────────────────────────────────────────
 
+/** A rating tapped on a csat block while the conversation is open: nothing was stored. */
+export type SendRatingRefusal = { ok: false; code: 'CSAT_CONVERSATION_OPEN' }
+
 /** Send a visitor message; creates the conversation on the first message. */
 export const runSendConversationMessage = createServerOnlyFn(
   async function runSendConversationMessage(ctx: AuthContext, data: SendConversationMessageInput) {
@@ -342,24 +352,34 @@ export const runSendConversationMessage = createServerOnlyFn(
 
     const actor = await policyActorFromAuth(ctx)
 
-    const { sendVisitorMessage } =
+    const { sendVisitorMessage, CSAT_CONVERSATION_OPEN } =
       await import('@/lib/server/domains/conversation/conversation.service')
-    return await sendVisitorMessage(
-      {
-        conversationId: data.conversationId as ConversationId | undefined,
-        content: data.content,
-        attachments: data.attachments as ConversationAttachment[] | undefined,
-        blockReply: data.blockReply,
-      },
-      {
-        principalId: ctx.principal.id,
-        displayName: ctx.user.name,
-        avatarUrl: ctx.user.image,
-        email: ctx.user.email,
-      },
-      actor,
-      (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
-    )
+    try {
+      return await sendVisitorMessage(
+        {
+          conversationId: data.conversationId as ConversationId | undefined,
+          content: data.content,
+          attachments: data.attachments as ConversationAttachment[] | undefined,
+          blockReply: data.blockReply,
+        },
+        {
+          principalId: ctx.principal.id,
+          displayName: ctx.user.name,
+          avatarUrl: ctx.user.image,
+          email: ctx.user.email,
+        },
+        actor,
+        (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
+      )
+    } catch (err) {
+      // A rating tapped while the conversation is open: returned as a value
+      // (a thrown typed error reaches the client without its code), so the
+      // surface can say so and keep the rating block tappable.
+      if (err instanceof ConflictError && err.code === CSAT_CONVERSATION_OPEN) {
+        return { ok: false, code: CSAT_CONVERSATION_OPEN } satisfies SendRatingRefusal
+      }
+      throw err
+    }
   }
 )
 
@@ -431,6 +451,7 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
 ) {
   const { getMessengerConfig, getWidgetConfig } =
     await import('@/lib/server/domains/settings/settings.widget')
+  const { supportTeamName } = await import('@/lib/shared/support-contact-name')
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
   const { getSettings } = await import('./workspace')
@@ -461,8 +482,9 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     welcomeMessage: t.welcomeMessage || messengerConfig.welcomeMessage || null,
     offlineMessage: t.offlineMessage || messengerConfig.offlineMessage || null,
     // Falls back to the workspace name (as the settings help text promises)
-    // when no team name is set.
-    teamName: messengerConfig.teamName?.trim() || appSettings?.name || null,
+    // when no team name is set. The same name stands in for an API key's
+    // messages (principal-display.ts).
+    teamName: supportTeamName(messengerConfig.teamName, appSettings?.name),
     // AI-assistant display identity: fronts new conversations (greeting
     // author + thread header) when enabled. Identity only — replies still
     // come from the team until the integrated agent lands.
@@ -477,12 +499,20 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     // Whether an offline reply could actually reach this visitor by email —
     // the widget shows a non-promising offline message when false.
     canEmailVisitor: canEmailVisitor({ emailConfigured, visitorHasEmail: false }),
+    // Whether a visitor reply reopens a closed conversation. False when the
+    // workspace prevents replies to closed conversations: the send is refused
+    // (CONVERSATION_CLOSED), so the thread says to start a new one instead.
+    reopensOnReply: !messengerConfig.preventRepliesWhenClosed,
     // Whether the surfaced conversation is closed (read-only) — the widget
     // then offers "start a new conversation" instead of a composer (P1.9).
     isReadOnly: false,
     // The pair's ticket (converged Messages surface): the thread header
     // card renders when this is set. Overridden on the loaded-thread path.
     linkedTicket: null as RequesterTicketDTO | null,
+    // Whether the in-thread ticket form asks for an email. Only an anonymous
+    // visitor with no contact email on file must give one to file a ticket
+    // (the same check the create runs); everyone else is never asked.
+    ticketFormAsksEmail: true,
   }
 
   if (!enabled || !ctx?.principal) {
@@ -498,6 +528,13 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
       return { ...base, conversation: null, messages: [], hasMore: false }
     }
   }
+
+  const { requesterHasContactChannel } =
+    await import('@/lib/server/domains/tickets/requester.service')
+  base.ticketFormAsksEmail = !(await requesterHasContactChannel({
+    principalId: ctx.principal.id,
+    principalType: normalizePrincipalType(ctx.principal.type),
+  }))
 
   const target = data?.conversationId
 
@@ -592,7 +629,19 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
 
   const { listConversationsForVisitor } =
     await import('@/lib/server/domains/conversation/conversation.query')
-  const conversations = await listConversationsForVisitor(ctx.principal.id, 50, 'visitor')
+  const { isSupportTicketsEnabled } = await import('@/lib/server/domains/settings/settings.support')
+  // With tickets on, a paired row sorts and shows by its ticket's latest
+  // customer-visible change when that is later than its last message, the
+  // same time the Tickets tab uses. With tickets off no row shows a ticket,
+  // so every row keeps its last-message time.
+  // Best-effort like the enrichment below: a failed read must not break the list.
+  const ticketsEnabled = await isSupportTicketsEnabled().catch((error: unknown) => {
+    log.warn({ err: error }, 'support tickets setting read failed for the conversation list')
+    return false
+  })
+  const conversations = await listConversationsForVisitor(ctx.principal.id, 50, 'visitor', {
+    ticketActivity: ticketsEnabled,
+  })
 
   // Converged Messages surface: decorate paired rows with their ticket's
   // stage chip + reference. The row's displayed state keys off the TICKET
@@ -600,9 +649,7 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
   // Best-effort like the thread header: enrichment must not break the list.
   let linkedTickets: Record<string, ConversationTicketSummary> = {}
   try {
-    const { isSupportTicketsEnabled } =
-      await import('@/lib/server/domains/settings/settings.support')
-    if (conversations.length > 0 && (await isSupportTicketsEnabled())) {
+    if (conversations.length > 0 && ticketsEnabled) {
       const { getRequesterTicketSummaries } =
         await import('@/lib/server/domains/tickets/requester.service')
       const map = await getRequesterTicketSummaries(
@@ -663,15 +710,21 @@ export const runListConversationMessages = createServerOnlyFn(
   async function runListConversationMessages(ctx: AuthContext, data: ListMessagesInput) {
     await assertVisitorConversationAccess(ctx)
     const actor = await policyActorFromAuth(ctx)
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
     const { listMessages, enrichMessagesForAgent } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    await assertConversationViewable(data.conversationId as ConversationId, actor)
+    const conversation = await assertConversationVisible(
+      data.conversationId as ConversationId,
+      actor
+    )
+    // The thread's current status and rating ride along, so a surface that
+    // refetches to catch up (a stream that just opened, or a poll) also
+    // learns of a close or reopen it had no event for.
+    const state = { status: conversation.status, csatRating: conversation.csatRating }
     const isTeam = isTeamMember(ctx.principal.role)
     // Agents keep seeing internal notes when paging older messages; visitors never do.
     // CONVERGENCE PHASE 0: the team branch also folds the linked customer
-    // ticket's legacy rows into the page (includeLinkedTicket — see
+    // ticket's legacy rows into the page when the caller may open it
+    // (linkedTicketViewer — see
     // listMessages); the visitor branch stays conversation-only in Phase 0.
     // The agent-only `postSuggestions`/`pendingActionPointers`/`translatedFromPointers`
     // maps are pulled out here so they're consumed by the enrichment and never
@@ -681,13 +734,14 @@ export const runListConversationMessages = createServerOnlyFn(
       await listMessages(data.conversationId as ConversationId, {
         before: data.before,
         includeInternal: isTeam,
-        includeLinkedTicket: isTeam,
+        linkedTicketViewer: isTeam ? actor : undefined,
       })
     // Team members get the agent-only reaction/flag/suggestion/pending-action
     // enrichment on older messages too; the visitor path returns the clean base DTOs.
     if (isTeam) {
       return {
         ...page,
+        ...state,
         messages: await enrichMessagesForAgent(
           page.messages,
           ctx.principal.id,
@@ -697,7 +751,7 @@ export const runListConversationMessages = createServerOnlyFn(
         ),
       }
     }
-    return page
+    return { ...page, ...state }
   }
 )
 
@@ -724,9 +778,7 @@ export const exportConversationTranscriptFn = createServerFn({ method: 'GET' })
     }
     const conversationId = data.conversationId as ConversationId
     const actor = await policyActorFromAuth(ctx)
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
-    const conversation = await assertConversationViewable(conversationId, actor)
+    const conversation = await assertConversationVisible(conversationId, actor)
     const { listMessages } = await import('@/lib/server/domains/conversation/conversation.query')
 
     // Assemble the full history oldest-first. Each page (before-cursor) is a
@@ -799,16 +851,32 @@ export const sendConversationTypingFn = createServerFn({ method: 'POST' })
     return runSendConversationTyping(await requireAuth(), data)
   })
 
-/** Submit a CSAT rating for a conversation (visitor only). */
+/** What a CSAT submit answers: recorded, or refused because the conversation is open again. */
+export type SubmitCsatResult = { ok: true } | { ok: false; code: 'CSAT_CONVERSATION_OPEN' }
+
+/**
+ * Submit a CSAT rating for a conversation (visitor only). A rating is accepted
+ * only once the conversation is closed; the refusal for an open one is
+ * returned as a value (a thrown typed error reaches the client without its
+ * code), so the surface can quietly put its rating prompt away.
+ */
 export const runSubmitCsat = createServerOnlyFn(async function runSubmitCsat(
   ctx: AuthContext,
   data: CsatInput
-) {
+): Promise<SubmitCsatResult> {
   await assertVisitorConversationAccess(ctx)
   const actor = await policyActorFromAuth(ctx)
-  const { recordCsat } = await import('@/lib/server/domains/conversation/conversation.service')
-  await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
-  return { ok: true as const }
+  const { recordCsat, CSAT_CONVERSATION_OPEN } =
+    await import('@/lib/server/domains/conversation/conversation.service')
+  try {
+    await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
+  } catch (err) {
+    if (err instanceof ConflictError && err.code === CSAT_CONVERSATION_OPEN) {
+      return { ok: false, code: CSAT_CONVERSATION_OPEN }
+    }
+    throw err
+  }
+  return { ok: true }
 })
 
 export const submitCsatFn = createServerFn({ method: 'POST' })
@@ -977,7 +1045,8 @@ export const fetchAssistantInboxCountsFn = createServerFn({ method: 'GET' }).han
 export const getConversationAssistantActivityFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }): Promise<ConversationAssistantActivity | null> => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     const { loadConversationAssistantActivity } = await import('./conversation-panels')
     return loadConversationAssistantActivity(data.conversationId as ConversationId)
   })
@@ -1018,13 +1087,22 @@ const agentConversationSchema = listMessagesSchema.extend({
 export const getConversationFn = createServerFn({ method: 'GET' })
   .validator(agentConversationSchema)
   .handler(async ({ data }) => {
-    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    // A teammate refused here (no conversation.view) sees no conversation, so
+    // opening one answers NotFound like any other conversation they cannot
+    // see: the inbox shows its not-found state for exactly that answer, and
+    // for any other failure keeps the thread pane, Close and reply box open.
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW }).catch(
+      (err: unknown) => {
+        if (isAccessDeniedError(err)) {
+          throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+        }
+        throw err
+      }
+    )
     const actor = await policyActorFromAuth(ctx)
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
     const { conversationToDTO, listMessages, enrichMessagesForAgent } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    const conversation = await assertConversationViewable(
+    const conversation = await assertConversationVisible(
       data.conversationId as ConversationId,
       actor
     )
@@ -1053,7 +1131,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
       listMessages(conversation.id, {
         before: data.before,
         includeInternal: true,
-        includeLinkedTicket: true,
+        linkedTicketViewer: actor,
       }),
       requestedPanels?.length
         ? import('./conversation-panels').then((m) =>
@@ -1085,7 +1163,12 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
   .validator(agentSendSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
-    const actor = await policyActorFromAuth(ctx)
+    // Checked before the reply is translated, so a hidden conversation costs
+    // no translation and reveals nothing about its customer's language.
+    const { actor, conversation } = await requireVisibleConversation(
+      ctx,
+      data.conversationId as ConversationId
+    )
     const { sendAgentMessage } =
       await import('@/lib/server/domains/conversation/conversation.service')
 
@@ -1100,7 +1183,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
     // explicit "Send untranslated" fallback a teammate picks after a
     // TRANSLATION_FAILED error — it bypasses this block entirely.
     if (!data.skipTranslation) {
-      const { resolveOutgoingReplyTranslation } =
+      const { resolveOutgoingReplyTranslation, translationContextOf } =
         await import('@/lib/server/domains/conversation/conversation-translation.service')
       // Any failure here (AI unconfigured, unparseable/empty response)
       // throws TranslationUnavailableError, which propagates out of this
@@ -1110,6 +1193,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
         content,
         contentJson,
         teammateUserId: ctx.user.id,
+        context: translationContextOf(conversation),
       })
       content = resolved.content
       contentJson = resolved.contentJson
@@ -1266,7 +1350,9 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
   .validator(setStatusSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
-    const actor = await policyActorFromAuth(ctx)
+    // Checked before the close guard, which would otherwise name the missing
+    // fields of a conversation the caller cannot see.
+    const { actor } = await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     // Required-to-close applies ONLY here and in the bulk close — the
     // teammate inbox paths. Workflow/AI/API closes call the service directly.
     if (data.status === 'closed') {
@@ -1559,9 +1645,17 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
       }
     })()
 
+    // Every id is checked once, up front, for every action: a hidden id fails
+    // exactly as a missing one does and its action never runs. Each write
+    // still checks its own item.
+    const visible = await visibleConversationIds(data.conversationIds, actor)
     const succeeded: string[] = []
     const failed: { id: string; reason: string }[] = []
     for (const rawId of data.conversationIds) {
+      if (!visible.has(rawId as ConversationId)) {
+        failed.push({ id: rawId, reason: 'Conversation not found' })
+        continue
+      }
       try {
         await apply(rawId as ConversationId)
         succeeded.push(rawId)
@@ -1634,11 +1728,15 @@ export const removeConversationParticipantFn = createServerFn({ method: 'POST' }
 export const listConversationParticipantsFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const actor = await policyActorFromAuth(ctx)
     const { listConversationParticipants } =
       await import('@/lib/server/domains/conversation/conversation-participant.service')
     return {
-      participants: await listConversationParticipants(data.conversationId as ConversationId),
+      participants: await listConversationParticipants(
+        data.conversationId as ConversationId,
+        actor
+      ),
     }
   })
 
@@ -1655,7 +1753,8 @@ export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(a
 export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     const { getLinkedPostsForConversation } =
       await import('@/lib/server/domains/conversation/conversation.query')
     return await getLinkedPostsForConversation(data.conversationId as ConversationId)
@@ -1664,10 +1763,11 @@ export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
 export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
   .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const actor = await policyActorFromAuth(ctx)
     const { getLinkedConversationsForPost } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    return await getLinkedConversationsForPost(data.postId as PostId)
+    return await getLinkedConversationsForPost(data.postId as PostId, actor)
   })
 
 // ============================================
@@ -1686,9 +1786,7 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
 
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
-    const conversation = await assertConversationViewable(
+    const conversation = await assertConversationVisible(
       data.conversationId as ConversationId,
       actor
     )

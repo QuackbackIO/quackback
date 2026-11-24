@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { renderToString } from 'react-dom/server'
 
 type Doc = { json(): unknown; html(): string; markdown(): string }
 
@@ -371,5 +372,51 @@ describe('feedback header post composer', () => {
       await screen.findByText('Could not submit your feedback. Please try again.')
     ).toBeTruthy()
     expect(screen.queryByText(/invalid_type|expected object/)).toBeNull()
+  })
+
+  it('says how long to wait when the address has posted too many this hour', async () => {
+    // In the browser a typed refusal is a plain Error carrying code and retryAfter.
+    createPost.mockRejectedValue(
+      Object.assign(new Error('Too many posts, please try again later'), {
+        code: 'RATE_LIMITED',
+        statusCode: 429,
+        retryAfter: 1150,
+      })
+    )
+    renderHeader()
+    typeTitle('Dark mode')
+    await screen.findByTestId('editor')
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
+
+    expect(
+      await screen.findByText('Too many posts from here in the last hour. Try again in 20 minutes.')
+    ).toBeTruthy()
+    expect(screen.queryByText('Could not submit your feedback. Please try again.')).toBeNull()
+  })
+})
+
+describe('opening the composer', () => {
+  it('opens when the title field was focused before hydration', async () => {
+    const tree = (
+      <QueryClientProvider client={new QueryClient()}>
+        <IntlProvider locale="en" messages={{}} onError={() => {}}>
+          <FeedbackHeaderAnimated
+            workspaceName="Acme"
+            boards={[BOARD]}
+            defaultBoardId={BOARD.id}
+            boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
+          />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    const container = document.createElement('div')
+    container.innerHTML = renderToString(tree)
+    document.body.appendChild(container)
+    // A visitor's click on the server-rendered field, before React runs.
+    container.querySelector<HTMLInputElement>('input[aria-label="Feedback title"]')!.focus()
+
+    render(tree, { container, hydrate: true })
+
+    expect(await screen.findByTestId('editor')).toBeTruthy()
   })
 })

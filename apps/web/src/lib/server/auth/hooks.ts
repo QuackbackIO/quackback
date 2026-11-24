@@ -33,6 +33,7 @@ import {
 } from './provider-ids'
 import { AUTH_BLOCK_MESSAGES } from './redirect-errors'
 import { handleRefreshGraceHeal } from './refresh-grace'
+import { isTwoFactorPendingSession, TWO_FACTOR_PENDING_ALLOWLIST } from './two-factor-pending'
 import { captureCountryFromHeaders } from './country-capture'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
@@ -167,6 +168,27 @@ const NO_EMAIL_BEFORE_PATHS = new Set<string>([
   '/oauth2/callback/:providerId',
 ])
 
+/** Paths that start a sign-in with a provider, before any upstream redirect. */
+const OIDC_START_PATHS = new Set<string>(['/sign-in/social', '/sign-in/oauth2'])
+
+/**
+ * Refuse the start of a sign-in with an identity provider that is set up but
+ * not registered right now. The auth instance registers its providers when it
+ * is built and is rebuilt only when `auth_config_version` moves, while single
+ * sign-on can stop on the clock (a plan limits grace ending) with nothing
+ * written. Asking per request keeps the start in step with the sign-in methods
+ * the forms show.
+ */
+async function refuseUnregisteredOidcStart(
+  provider: string,
+  ctx: { redirect: (url: string) => Error }
+): Promise<void> {
+  const { getConfiguredOidcProviderIds, isSsoLive } = await import('./registered-providers')
+  if (!(await getConfiguredOidcProviderIds()).has(provider)) return
+  if (await isSsoLive()) return
+  throw ctx.redirect('/?auth=signin&error=oauth_method_not_allowed')
+}
+
 /**
  * Email-bearing paths that bring a NEW account into existence when no user
  * holds the address yet — the ones `openSignup` is about.
@@ -231,6 +253,7 @@ export async function handleSignInPreCheck(ctx: {
     log.debug({ path: ctx.path, provider }, 'sign-in pre-check')
   }
 
+  if (OIDC_START_PATHS.has(ctx.path ?? '')) await refuseUnregisteredOidcStart(provider, ctx)
   if (NO_EMAIL_BEFORE_PATHS.has(ctx.path ?? '')) return
 
   // The anonymous mint carries no email, so it can't ride the per-email
@@ -354,14 +377,36 @@ export async function handleSignInPreCheck(ctx: {
     throw ctx.redirect('/?auth=signin&callbackUrl=/admin&error=verified_domain_requires_sso')
   }
 
+  // The sign-in methods, for every address, account or not. Whether a method
+  // is on is a fact about the workspace, so refusing it here tells a caller
+  // nothing about which addresses hold accounts. It used to run only for an
+  // address with an account, which left "Password" off still creating
+  // password accounts at `/sign-up/email`, and "Email magic link" off still
+  // letting a new address redeem a code. Before `openSignup`, so a method that
+  // is off is the answer whatever the address.
+  const methodResult = await isAuthMethodAllowed(provider, role, registeredOidcIds, workspace)
+  if (!methodResult.allowed) {
+    const isTeamRole = role === 'admin' || role === 'member'
+    const errorCode = methodResult.error ?? 'auth_method_blocked'
+    // Team roles land on the unified login with a `/admin` callback (the
+    // break-glass form); the error rides as a second param via `&` — a
+    // second `?` would silently drop it. Portal roles keep the plain
+    // `/?auth=signin&error=` shape. All paths go directly to `/?auth=signin`
+    // so the auth client's detectAuthBlockRedirect can match on the
+    // error code regardless of the redirect chain.
+    throw ctx.redirect(
+      isTeamRole
+        ? `/?auth=signin&callbackUrl=/admin&error=${errorCode}`
+        : `/?auth=signin&error=${errorCode}`
+    )
+  }
+
   // `openSignup`, enforced. Only for the paths that would CREATE an account and
   // only when no user holds the address — the same exemption the policy itself
   // opens with, checked here so the common case costs no extra query.
   //
-  // Sits after hard-binding, which is the stronger statement about the same
-  // attempt and should be the one reported, and before the `!principalRow`
-  // return below — that early exit exists for exactly the brand-new sign-up
-  // this gate is about, so a gate placed after it would never run.
+  // Sits after hard-binding and the method toggles, which are the stronger
+  // statements about the same attempt and should be the ones reported.
   //
   // This redirect IS distinguishable per address: an address that holds an
   // account, or that a pending invitation names, gets the endpoint's normal
@@ -373,8 +418,7 @@ export async function handleSignInPreCheck(ctx: {
   // identically either way and mails the refusal instead.
   //
   // The PORTAL door, because nothing here names an audience and the creation
-  // does. This gate sits before the `!principalRow` return by design, so there
-  // is no role to read; the four gated paths are each reachable from the portal
+  // does. There is no account here, so there is no role to read; the four gated paths are each reachable from the portal
   // dialog and the team login alike, and the one body field that would hint —
   // `callbackURL` — is sent by none of this app's callers of them and is chosen
   // by whoever is asking, so honouring it would let a caller pick which of the
@@ -389,24 +433,38 @@ export async function handleSignInPreCheck(ctx: {
       throw ctx.redirect(`/?auth=signin&error=${SIGNUP_NOT_ALLOWED}`)
     }
   }
+}
 
-  if (!principalRow) return
-
-  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, workspace)
+/**
+ * The "Email magic link" method at `/magic-link/verify`, for the links it
+ * governs.
+ *
+ * `requestEmailSignin` refuses to send while the method is off, but a link
+ * mailed while it was on would otherwise stay redeemable for its lifetime. Only
+ * links a person asked for by typing their address are refused here
+ * (`isEmailSigninToken`): invitations, portal invites, the workspace claim and
+ * recovery-code break-glass redeem through the same endpoint, are grants the
+ * workspace made, and work whatever the method says. Same predicate as the
+ * send side, so links that stand in while single sign-on is paused still
+ * verify.
+ */
+export async function handleMagicLinkVerifyGate(ctx: {
+  path?: string
+  query?: Record<string, unknown>
+  redirect: (url: string) => Error
+}): Promise<void> {
+  if (ctx.path !== '/magic-link/verify') return
+  const { isEmailSigninToken } = await import('./magic-link-mint')
+  if (!isEmailSigninToken(ctx.query?.token)) return
+  const { isAuthMethodAllowed } = await import('./auth-restrictions')
+  const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+  const result = await isAuthMethodAllowed(
+    'magic-link',
+    'user',
+    await getRegisteredOidcProviderIds()
+  )
   if (!result.allowed) {
-    const isTeamRole = role === 'admin' || role === 'member'
-    const errorCode = result.error ?? 'auth_method_blocked'
-    // Team roles land on the unified login with a `/admin` callback (the
-    // break-glass form); the error rides as a second param via `&` — a
-    // second `?` would silently drop it. Portal roles keep the plain
-    // `/?auth=signin&error=` shape. All paths go directly to `/?auth=signin`
-    // so the auth client's detectAuthBlockRedirect can match on the
-    // error code regardless of the redirect chain.
-    throw ctx.redirect(
-      isTeamRole
-        ? `/?auth=signin&callbackUrl=/admin&error=${errorCode}`
-        : `/?auth=signin&error=${errorCode}`
-    )
+    throw ctx.redirect(`/?auth=signin&error=${result.error ?? 'magic_link_method_not_allowed'}`)
   }
 }
 
@@ -419,40 +477,86 @@ const WIDGET_AUTH_ALLOWLIST = new Set([
   '/one-time-token/verify',
 ])
 
+/**
+ * Widget-allowlisted paths that turn the caller's session into another one. A
+ * session pending two-factor enrolment must not reach them: a one-time token
+ * redeems for an ordinary session.
+ */
+const SESSION_TRADING_PATHS = new Set(['/one-time-token/generate'])
+
 type HeaderBag = { get(name: string): string | null }
 
-function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
-  if (!headers) return null
+/** The session cookie, under either name the library gives it. */
+const SESSION_COOKIE_NAME = /^(?:__Secure-)?better-auth\.session_token$/
+
+/** The stored session token in a credential value: the part before the signature. */
+function rawToken(value: string): string {
+  return value.includes('.') ? value.split('.')[0]! : value
+}
+
+/**
+ * Every session token the request carries: the Bearer, and every cookie under
+ * either session cookie name.
+ *
+ * All of them, not the one the library is expected to pick. Which it reads
+ * depends on things this gate cannot see (a Bearer whose signature fails is
+ * dropped for the cookie, and of two same-named cookies either may win), so a
+ * gate that checks one credential can be shown a decoy while the library acts
+ * on another.
+ */
+function sessionTokensFromAuthHeaders(headers: HeaderBag | undefined): string[] {
+  if (!headers) return []
+  const tokens = new Set<string>()
   const authHeader = headers.get('authorization') ?? headers.get('Authorization')
   if (authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ') {
     const token = authHeader.slice(7).trim()
-    if (token) return token.includes('.') ? token.split('.')[0]! : token
+    if (token) {
+      tokens.add(rawToken(token))
+      // The bearer plugin percent-decodes a signed token carrying '%' before it
+      // uses it, so the decoded spelling is checked too.
+      if (token.includes('.') && token.includes('%')) {
+        try {
+          tokens.add(rawToken(decodeURIComponent(token)))
+        } catch {
+          /* not decodable: the plugin keeps it as sent, which is checked above */
+        }
+      }
+    }
   }
+  // Separate Cookie headers arrive joined with ", ".
   const cookie = headers.get('cookie') ?? ''
-  for (const part of cookie.split(';')) {
+  for (const part of cookie.split(/[;,]/)) {
     const [name, ...rest] = part.trim().split('=')
-    if (name?.trim() !== 'better-auth.session_token') continue
+    // `__Secure-` on https: missing it let a cookie session past every gate here.
+    if (!SESSION_COOKIE_NAME.test(name?.trim() ?? '')) continue
     const raw = rest.join('=')
-    if (!raw) return null
+    if (!raw) continue
     let value = raw
     try {
       value = decodeURIComponent(raw)
     } catch {
       /* keep raw */
     }
-    return value.includes('.') ? value.split('.')[0]! : value
+    tokens.add(rawToken(value))
   }
-  return null
+  return [...tokens]
 }
 
 /**
- * Widget-scoped sessions may only hit the Better Auth allowlist. Portal and
- * dashboard sessions still pass; missing sessions are left to the endpoint's
- * own auth middleware.
+ * Sessions that may only reach some Better Auth endpoints, checked for every
+ * credential the request carries:
  *
- * An allowlisted path passes whatever the session is, so it returns before the
- * lookup: `/get-session` backs every authenticated request, and resolving the
- * session here as well would double its cost.
+ *  - widget-scoped sessions may only hit {@link WIDGET_AUTH_ALLOWLIST};
+ *  - a session still pending two-factor enrolment may only finish it or sign
+ *    out ({@link TWO_FACTOR_PENDING_ALLOWLIST}, `two-factor-pending.ts`).
+ *
+ * Portal and dashboard sessions still pass; missing sessions are left to the
+ * endpoint's own auth middleware.
+ *
+ * A widget-allowlisted path that cannot trade the session for another passes
+ * whatever the session is, so it returns before the lookup: `/get-session`
+ * backs every authenticated request, and resolving the session here as well
+ * would double its cost.
  */
 export async function handleWidgetAccountMutationGate(ctx: {
   path?: string
@@ -465,24 +569,40 @@ export async function handleWidgetAccountMutationGate(ctx: {
   }
 }): Promise<void> {
   const headers = ctx.headers ?? ctx.request?.headers
-  const token = sessionTokenFromAuthHeaders(headers)
-  if (token?.startsWith(TEST_CUSTOMER_SESSION_PREFIX)) {
+  const tokens = sessionTokensFromAuthHeaders(headers)
+  if (tokens.some((token) => token.startsWith(TEST_CUSTOMER_SESSION_PREFIX))) {
     throw new APIError('FORBIDDEN', { message: 'A test session only works in the test widget' })
   }
-  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
-  if (!token) return
-  const found = await ctx.context?.internalAdapter?.findSession?.(token)
-  const session =
-    typeof found === 'object' &&
-    found !== null &&
-    Object.prototype.hasOwnProperty.call(found, 'session')
-      ? (found as { session?: { scope?: unknown } }).session
-      : undefined
-  if (!session) return
-  if (toSessionScope(session.scope) !== 'widget') return
-  throw new APIError('FORBIDDEN', {
-    message: 'Widget sessions cannot access this endpoint',
-  })
+  const widgetAllowed = WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')
+  // A fresh sign-in (any path `inferProvider` names) never acts on the session
+  // the caller already holds, so a pending one does not stand in its way.
+  const pendingAllowed =
+    TWO_FACTOR_PENDING_ALLOWLIST.has(ctx.path ?? '') ||
+    inferProvider(ctx as Parameters<typeof inferProvider>[0]) !== null
+  if (widgetAllowed && !SESSION_TRADING_PATHS.has(ctx.path ?? '')) return
+  // Every credential must pass: refused if any of them is a session this path
+  // is closed to, whichever one the library ends up reading.
+  for (const token of tokens) {
+    const found = await ctx.context?.internalAdapter?.findSession?.(token)
+    const session =
+      typeof found === 'object' &&
+      found !== null &&
+      Object.prototype.hasOwnProperty.call(found, 'session')
+        ? (found as { session?: { scope?: unknown } }).session
+        : undefined
+    if (!session) continue
+    if (!pendingAllowed && isTwoFactorPendingSession(session)) {
+      throw new APIError('FORBIDDEN', {
+        code: 'two_factor_enrollment_required',
+        message: 'Set up two-factor authentication to finish signing in.',
+      })
+    }
+    if (widgetAllowed) continue
+    if (toSessionScope(session.scope) !== 'widget') continue
+    throw new APIError('FORBIDDEN', {
+      message: 'Widget sessions cannot access this endpoint',
+    })
+  }
 }
 
 export const hooksBefore = createAuthMiddleware(async (ctx) => {
@@ -491,7 +611,30 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
   // allowlist covers every Better Auth HTTP path.
   await handleRefreshGraceHeal(ctx)
   await handleSignInPreCheck(ctx as Parameters<typeof handleSignInPreCheck>[0])
+  await handleMagicLinkVerifyGate(ctx as Parameters<typeof handleMagicLinkVerifyGate>[0])
   await handleWidgetAccountMutationGate(ctx)
+  // Provider sign-in asked for on a section host runs on the primary domain,
+  // where its callback and state cookie live (section-sign-in.ts). Last, so
+  // every gate above has already passed on it.
+  if (ctx.path === '/sign-in/social' && ctx.request) {
+    const { sectionSignInMove } = await import('./section-sign-in')
+    const moved = await sectionSignInMove(ctx)
+    if (moved) return ctx.json(moved)
+  }
+  // Linking a provider asked for on a section host runs on the primary domain
+  // too, for the same reason (section-link.ts).
+  if (ctx.path === '/link-social' && ctx.request) {
+    const { sectionLinkMove } = await import('./section-link')
+    const moved = await sectionLinkMove(ctx)
+    if (moved) return ctx.json(moved)
+  }
+  // Signing out on one host ends the same sign-in on the workspace's other
+  // hosts (section-session-family.ts). Before the library ends this session,
+  // which is how the family is found.
+  if (ctx.path === '/sign-out') {
+    const { signOutHandoffFamily } = await import('./section-session-family')
+    await signOutHandoffFamily(ctx)
+  }
 })
 
 /**
@@ -743,7 +886,8 @@ export async function handleAutoProvisionAfter(
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
   const { DEFAULT_PROVISION_ROLE } = await import('@/lib/shared/sso-mapping-preview')
-  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
+  const defaultRole: Role = provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
+  let targetRole: Role = claimRole ?? defaultRole
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
@@ -770,7 +914,7 @@ export async function handleAutoProvisionAfter(
   // A rule may grant a workspace role on top of the member tier, through the
   // same assignment path custom-role invites and role changes use. Looked up
   // only once this sign-in may change the role.
-  const targetCustom = claimMatch?.roleId
+  let targetCustom = claimMatch?.roleId
     ? await grantableRuleRole(claimMatch.roleId, claimMatch.ruleIndex, provider.id)
     : null
   // A matched rule whose role cannot be granted grants nothing. First match
@@ -778,6 +922,31 @@ export async function handleAutoProvisionAfter(
   // person keeps whatever role they hold. Granting the bare tier instead would
   // hand out the member preset, which can exceed the role the admin chose.
   if (claimMatch?.roleId && !targetCustom) return
+
+  // Past the plan's custom-role cap (after the plan limits grace) a custom role
+  // goes to nobody new. Whoever already holds it keeps it. A teammate is left
+  // as they are; someone joining gets the default role instead.
+  if (targetCustom && !targetCustom.isSystem) {
+    const holds = p
+      ? (await workspaceAssignmentOf(p.id as PrincipalId))?.id === targetCustom.id
+      : false
+    const { customRolesLocked } = await import('@/lib/server/domains/roles/role.plan-lock')
+    if (!holds && (await customRolesLocked())) {
+      log.warn(
+        {
+          code: 'sso_role_rule_role_held',
+          provider_id: provider.id,
+          rule_index: claimMatch?.ruleIndex,
+          role_id: targetCustom.id,
+        },
+        'sso role rule names a custom role the plan holds; granting the default role instead'
+      )
+      if (currentRole !== 'user') return
+      targetCustom = null
+      targetRole = defaultRole
+      if (targetRole === 'user') return
+    }
+  }
 
   // Under sync the provider owns roles: a plain-member outcome (a rule with no
   // workspace role, or the default) moves a member holding another workspace
@@ -858,14 +1027,15 @@ async function grantableRuleRole(
   roleId: string,
   ruleIndex: number,
   providerId: string
-): Promise<{ id: RoleId; name: string } | null> {
+): Promise<{ id: RoleId; name: string; isSystem: boolean } | null> {
   const { db, roles, eq } = await import('@/lib/server/db')
   const [row] = await db
-    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .select({ id: roles.id, key: roles.key, name: roles.name, isSystem: roles.isSystem })
     .from(roles)
     .where(eq(roles.id, roleId as RoleId))
     .limit(1)
-  if (row && row.key !== SYSTEM_ROLES.OWNER) return { id: row.id, name: row.name }
+  if (row && row.key !== SYSTEM_ROLES.OWNER)
+    return { id: row.id, name: row.name, isSystem: row.isSystem }
   log.warn(
     {
       code: 'sso_role_rule_role_missing',
@@ -1152,6 +1322,66 @@ export async function revokeSession(ctx: SessionCtx, token: string): Promise<voi
   if (ctxWithNewSession.context && 'newSession' in ctxWithNewSession.context) {
     ctxWithNewSession.context.newSession = null
   }
+}
+
+/**
+ * Paths that are not someone proving who they are. `/sign-in/anonymous` mints
+ * a session for a brand-new anonymous person, who cannot be blocked yet.
+ * `/get-session` mints nothing: it reads the session the request already
+ * holds, and may refresh its cookie. Skipping it means a blocked person keeps a
+ * session they held before the block; every portal and widget write refuses
+ * them (blocking.ts), and ending an anonymous visitor's session would only hand
+ * them a fresh, unblocked identity.
+ */
+const NOT_A_SIGN_IN = new Set<string>(['/sign-in/anonymous', '/get-session'])
+
+/** Paths a browser navigates to (not an XHR), so the refusal is a redirect. */
+const NAVIGATED_SIGN_IN_PATHS = new Set<string>(['/callback/:id', '/oauth2/callback/:providerId'])
+
+/**
+ * A blocked person cannot sign in again (blocking.ts). Asked after the session
+ * is minted, because only then has the person proved who they are (a password,
+ * a followed link, an emailed code, a provider's assertion): refusing earlier
+ * would tell anyone who types an address that it is blocked. The new session
+ * is revoked and the refusal says no more than widget identify's blocked
+ * message. A navigated sign-in lands on the sign-in page with the code; an
+ * XHR one gets it as a 403 the auth form shows.
+ */
+export async function handleBlockedSignInAfter(ctx: {
+  path?: string
+  request?: { method?: string }
+  context?: {
+    newSession?: {
+      user?: { id?: string }
+      session?: { token?: string }
+    } | null
+  }
+  redirect: (url: string) => Error
+}): Promise<void> {
+  if (NOT_A_SIGN_IN.has(ctx.path ?? '')) return
+  const userId = ctx.context?.newSession?.user?.id
+  const token = ctx.context?.newSession?.session?.token
+  if (typeof userId !== 'string' || typeof token !== 'string') return
+
+  const { db, principal: principalTable, eq } = await import('@/lib/server/db')
+  const row = await db.query.principal.findFirst({
+    where: eq(principalTable.userId, userId as UserId),
+    columns: { id: true, role: true, blockedAt: true },
+  })
+  // A teammate is never refused here: blocking is for customers, and joining
+  // the team clears a block (principal.factory.ts).
+  const { isBlockedCustomer } = await import('@/lib/server/domains/principals/blocking')
+  if (!row || !isBlockedCustomer(row)) return
+
+  await revokeSession(ctx as unknown as SessionCtx, token)
+  log.info({ principal_id: row.id, path: ctx.path }, 'sign-in refused: the person is blocked')
+  if (ctx.request?.method === 'GET' || NAVIGATED_SIGN_IN_PATHS.has(ctx.path ?? '')) {
+    throw ctx.redirect('/?auth=signin&error=account_blocked')
+  }
+  throw new APIError('FORBIDDEN', {
+    code: 'account_blocked',
+    message: AUTH_BLOCK_MESSAGES.account_blocked,
+  })
 }
 
 export async function handleCallbackPolicyCleanup(
@@ -1797,6 +2027,14 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     log.debug({ path: ctx.path, provider: provider ?? null }, 'after-hook')
   }
 
+  // A session still pending two-factor enrolment is no session to anyone who
+  // reads one, in-process `auth.api.getSession` included; the enrolment
+  // endpoints read it through the library's own middleware, which this does
+  // not run for (two-factor-pending.ts).
+  if (ctx.path === '/get-session' && isTwoFactorPendingSession(ctx.context?.session?.session)) {
+    return ctx.json(null)
+  }
+
   // Any endpoint but a session read may have changed who the request is
   // (sign-in, sign-out, a revoked session, a changed email or password). An
   // in-process call is followed by the rest of its request, which must read
@@ -1865,6 +2103,10 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     providers,
     registeredOidcIds
   )
+  // After auto-provision, so a person the identity provider puts on the team
+  // joins it (which ends their block) before this asks; before the profile,
+  // audit and device steps, so a refused sign-in reaches none of them.
+  await handleBlockedSignInAfter(ctx as Parameters<typeof handleBlockedSignInAfter>[0])
   // After cleanup, so a revoked session changes no profile. Never throws.
   await handleProfileRefreshAfter(
     ctx as Parameters<typeof handleProfileRefreshAfter>[0],

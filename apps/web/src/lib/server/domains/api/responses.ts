@@ -7,6 +7,7 @@
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
 import { getLogContext } from '@/lib/server/log-context'
+import { parseLimit } from './request'
 
 const log = logger.child({ component: 'api' })
 
@@ -177,7 +178,7 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   BOARD_NOT_FOUND: 'Board',
   POST_NOT_FOUND: 'Post',
   COMMENT_NOT_FOUND: 'Comment',
-  TAG_NOT_FOUND: 'PostTag',
+  TAG_NOT_FOUND: 'Tag',
   STATUS_NOT_FOUND: 'Status',
   MEMBER_NOT_FOUND: 'Member',
   USER_NOT_FOUND: 'User',
@@ -196,6 +197,14 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   APPROVAL_NOT_FOUND: 'Approval',
   SETTINGS_AREA_NOT_FOUND: 'Settings area',
   SETTINGS_RECEIPT_NOT_FOUND: 'Settings receipt',
+  TICKET_NOT_FOUND: 'Ticket',
+  CONVERSATION_NOT_FOUND: 'Conversation',
+}
+
+/** A 404 message from a domain error the map above does not name: its own
+ *  message, with "not found" added only when it does not already say so. */
+function unmappedNotFoundMessage(message: string): string {
+  return /\bnot found\b/i.test(message) ? message : `${message} not found`
 }
 
 /**
@@ -229,6 +238,10 @@ export function handleDomainError(error: unknown): Response {
         return validationErrorResponse(domainError.message, details)
       }
 
+      // Clients branch on this one: the assignee is not a teammate.
+      case 'INVALID_ASSIGNEE':
+        return errorResponse(domainError.code, domainError.message, 400)
+
       case 'DUPLICATE_SLUG':
       case 'DUPLICATE_KEY':
       case 'DUPLICATE_NAME':
@@ -249,7 +262,9 @@ export function handleDomainError(error: unknown): Response {
           const s = (domainError as { statusCode: number }).statusCode
           if (s === 400) return validationErrorResponse(domainError.message)
           if (s === 403) return forbiddenResponse(domainError.message)
-          if (s === 404) return notFoundResponse(domainError.message)
+          if (s === 404) {
+            return errorResponse('NOT_FOUND', unmappedNotFoundMessage(domainError.message), 404)
+          }
           if (s === 409) return conflictResponse(domainError.message)
           // Preconditions and locks keep their own codes: a client branches on them.
           if (s === 412 || s === 423 || s === 428) {
@@ -277,11 +292,7 @@ export function parsePaginationParams(url: URL): {
   cursor?: string
   limit: number
 } {
-  const cursor = url.searchParams.get('cursor') ?? undefined
-  const limitParam = url.searchParams.get('limit')
-  const limit = Math.min(Math.max(parseInt(limitParam || '20', 10) || 20, 1), 100)
-
-  return { cursor, limit }
+  return { cursor: url.searchParams.get('cursor') ?? undefined, limit: parseLimit(url) }
 }
 
 /**

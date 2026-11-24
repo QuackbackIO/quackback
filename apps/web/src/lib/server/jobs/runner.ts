@@ -19,6 +19,8 @@
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { runWithAuditAttribution, SYSTEM_ATTRIBUTION } from '@/lib/server/audit/attribution'
+import { config } from '@/lib/server/config'
+import { withPausedCustomDomainOrigin } from '@/lib/server/domains/plan-limits/plan-limits.custom-domain'
 import {
   claimById,
   claimJobs,
@@ -220,6 +222,15 @@ function failOutcome(outcome: 'retrying' | 'failed' | 'lease-lost'): string {
  * dead while it was in fact still working, which is either a lease set too short
  * for the work or a stalled process — both worth seeing.
  */
+/** Whether this job runs for a workspace whose settings can be read. Never throws. */
+function hasWorkspaceToAsk(): boolean {
+  try {
+    return !config.isPooledTenancy || getCurrentWorkspace() !== null
+  } catch {
+    return false
+  }
+}
+
 export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 'retrying'> {
   const def = findJobDefinition(job.queue)
   if (!def) {
@@ -264,7 +275,13 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
     const handler = await resolveHandler(def)
     // A job is background work: whatever it changes is attributed to the
     // system, never to the request or tier that happened to arm the runner.
-    await runWithAuditAttribution(SYSTEM_ATTRIBUTION, () => handler(job))
+    // Links a job builds (emails, exports, notifications) name the default
+    // hostname while the workspace's custom domain is paused after the plan
+    // limits grace. A job with no workspace scope under pooled tenancy has no
+    // workspace to ask about.
+    await runWithAuditAttribution(SYSTEM_ATTRIBUTION, () =>
+      hasWorkspaceToAsk() ? withPausedCustomDomainOrigin(() => handler(job)) : handler(job)
+    )
   } catch (err) {
     clearInterval(heartbeat)
     const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
@@ -817,10 +834,10 @@ export async function runScheduleTick(
     live.add(stateKey)
     const { slot, nextDueAt: next } = scheduleView(state, pattern, now)
     const seen = state.seen.get(stateKey)
-    if (seen === undefined) {
+    if (seen === undefined && !def.runOnFirstPass) {
       // First pass for THIS scheduler: adopt the current slot, do not run it.
       if (slot) state.seen.set(stateKey, slot.getTime())
-    } else if (slot && slot.getTime() > seen) {
+    } else if (slot && (seen === undefined || slot.getTime() > seen)) {
       attempted += 1
       const result = await enqueueJob({
         queue: def.name,

@@ -38,14 +38,17 @@ import type { Actor } from '@/lib/server/policy/types'
 import { ValidationError, InternalError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import { emitTicketCreated } from './ticket.webhooks'
 import { ticketRowToDTO } from './ticket.dto'
-import { recordTicketActivity } from './ticket-activity.service'
+import { recordTicketActivityAwaited } from './ticket-activity.service'
 import { subscribeToTicket } from './ticket-subscription.service'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { resolveTicketTypeForCreate } from './ticket-type.service'
 import { resolveStage } from './ticket.lifecycle'
 import type { CreateTicketInput, TicketDTO } from './ticket.types'
+import type { PrincipalId } from '@quackback/ids'
 
 const log = logger.child({ component: 'tickets' })
 
@@ -60,12 +63,28 @@ const MAX_TITLE_LENGTH = 300
  * the create path (this module); ticket.service.ts's other mutators import it
  * from here so the tail exists exactly once.
  */
-export async function publishTicketUpdated(row: Ticket): Promise<TicketDTO> {
+export async function publishTicketUpdated(row: Ticket, prev?: ScopedRow): Promise<TicketDTO> {
   const dto = await ticketRowToDTO(row)
-  publishTicketEvent(row.id, { kind: 'ticket_updated', ticket: dto })
+  // The row is the one just written, so it is its own scope envelope. A write
+  // that can move the ticket out of someone's scope (assign) passes the owner
+  // and team it had before, so their inbox stream removes the row.
+  publishTicketEvent(
+    row.id,
+    { kind: 'ticket_updated', ticket: dto },
+    { ...ticketScopeOf(row), prev }
+  )
   return dto
 }
 
+/** How createTicketCore treats the actor beyond what the input says. */
+export interface CreateTicketCoreOptions {
+  /**
+   * Who watches the ticket as its creator. Absent: the acting principal. The
+   * agent create path names the person behind the actor instead (a personal
+   * API key's teammate) or nobody (a workspace key).
+   */
+  creatorWatcher?: PrincipalId | null
+}
 /**
  * Open a ticket WITHOUT a permission check — the caller authorizes (agent
  * TICKET_CREATE via createTicket, or requester self-creation via createMyTicket).
@@ -119,13 +138,20 @@ export async function publishTicketUpdated(row: Ticket): Promise<TicketDTO> {
  *
  * Firing `ticket.created` only after the link exists also closes the
  * ticket.created-before-link ordering race worked around in
- * workflows/event-trigger.ts's TICKET_CREATED_LINK_POLL. The SLA handoff
- * (`handoffConversationSlaToTicket`, shared with linkTicketToConversation)
- * runs for parity: a fresh backing conversation is born SLA-free, so it is a
- * no-op here by construction. Agent/back-office creates (no flag) are
- * byte-identical to before — standalone, no backing conversation.
+ * workflows/event-trigger.ts's TICKET_CREATED_LINK_POLL. The backing
+ * conversation gets the workspace default SLA inside emitConversationCreated,
+ * which intake awaits; the SLA handoff (`handoffConversationSlaToTicket`,
+ * shared with linkTicketToConversation) then reads that stamp and starts the
+ * ticket's time-to-resolve clock. An SLA that a conversation.created workflow
+ * applies runs later from the queue, after the handoff. Agent/back-office
+ * creates (no flag) are byte-identical to before — standalone, no backing
+ * conversation.
  */
-export async function createTicketCore(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
+export async function createTicketCore(
+  input: CreateTicketInput,
+  actor: Actor,
+  options: CreateTicketCoreOptions = {}
+): Promise<TicketDTO> {
   const title = input.title?.trim()
   if (!title) throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   if (title.length > MAX_TITLE_LENGTH) {
@@ -261,7 +287,8 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       // The description opens the thread. It is the requester's ask when they
       // file it themselves (senderType 'visitor'), or a teammate's summary when
       // filing on someone's behalf ('agent'). Either way it is the opening
-      // message, not a reply, so it never stamps first_response_at. PHASE 1b
+      // message, not a reply, so it is never a first response: only a reply
+      // after the customer's first message counts (ticket-first-response.ts). PHASE 1b
       // (3/3): skipped when the opening rides the redirect onto the backing
       // conversation instead (see below).
       const [opening] = await tx
@@ -284,28 +311,31 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     // The watcher set from birth, in the same transaction so the first fan-out
     // can never race past the subscription rows. The requester watches their
     // own ticket (reason 'requester'); a distinct assignee watches as
-    // 'assignee'; the creating principal watches as 'manual' when they are
-    // neither — skipped when their id resolves to no real principal row (the
-    // subscription FKs principal, so a bare/synthetic actor id could never be
-    // written). First-reason-wins ordering: requester, then assignee, then
-    // creator, with onConflictDoNothing collapsing any overlap.
+    // 'assignee'; the creator (the acting principal, unless the caller says
+    // otherwise: see CreateTicketCoreOptions) watches as 'manual' when they
+    // are neither — skipped when their id resolves to no real principal row
+    // (the subscription FKs principal, so a bare/synthetic actor id could
+    // never be written). First-reason-wins ordering: requester, then
+    // assignee, then creator, with onConflictDoNothing collapsing any overlap.
     if (input.requesterPrincipalId) {
       await subscribeToTicket(input.requesterPrincipalId, ticket.id, 'requester', { tx })
     }
     if (input.assigneePrincipalId && input.assigneePrincipalId !== input.requesterPrincipalId) {
       await subscribeToTicket(input.assigneePrincipalId, ticket.id, 'assignee', { tx })
     }
+    const creatorWatcher =
+      options.creatorWatcher === undefined ? actor.principalId : options.creatorWatcher
     if (
-      actor.principalId &&
-      actor.principalId !== input.requesterPrincipalId &&
-      actor.principalId !== input.assigneePrincipalId
+      creatorWatcher &&
+      creatorWatcher !== input.requesterPrincipalId &&
+      creatorWatcher !== input.assigneePrincipalId
     ) {
       const [creator] = await tx
         .select({ id: principal.id })
         .from(principal)
-        .where(eq(principal.id, actor.principalId))
+        .where(eq(principal.id, creatorWatcher))
         .limit(1)
-      if (creator) await subscribeToTicket(actor.principalId, ticket.id, 'manual', { tx })
+      if (creator) await subscribeToTicket(creatorWatcher, ticket.id, 'manual', { tx })
     }
     return { ticket, backingConversation }
   })
@@ -314,10 +344,11 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // table in the doc header. Order: the opening message first (so a
   // conversation.created handler dispatched below finds the full opening
   // context, the same guarantee the native messenger flow's ordering gives),
-  // then emitConversationCreated (workflows + webhooks FIRE), then the SLA
-  // handoff. The suppressed three (started-notify, auto-routing, Quinn) are
+  // then emitConversationCreated (default SLA, then workflows + webhooks
+  // FIRE), then the SLA handoff. The suppressed three (started-notify, auto-routing, Quinn) are
   // simply never invoked here; Quinn is additionally gated at the
   // conversation.service dispatch site for every later visitor message.
+  let ticket: Ticket = created.ticket
   if (created.backingConversation) {
     const backingConversation = created.backingConversation
     if (openingViaRedirect) {
@@ -325,9 +356,8 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       // Phase 1a redirect lands it on the conversation with the full write
       // pipeline (last-message denorm, wait clock, read stamps,
       // message.created, realtime). Failure-isolated: the pair already
-      // committed, so a redirect failure (e.g. the requester is
-      // messenger-blocked — a gate createMyTicket never checked pre-1b)
-      // degrades to the legacy ticket-parented opening row rather than 500ing
+      // committed, so a redirect failure (e.g. the requester was blocked
+      // after createMyTicket's own block check) degrades to the legacy ticket-parented opening row rather than 500ing
       // an intake that succeeded; the union loader reads both shapes.
       try {
         const { insertTicketMessage } = await import('./ticket-message.service')
@@ -344,8 +374,10 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
           {
             senderType: filedByRequester ? 'visitor' : 'agent',
             isInternal: false,
-            stampFirstResponse: false,
             actor,
+            // The opening is not a reply: ticket.created's confirmation is the
+            // requester's one email about a ticket a teammate filed for them.
+            notifyCustomer: false,
           }
         )
       } catch (err) {
@@ -397,7 +429,10 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     // one emission). The event author is who opened the conversation: the
     // requester on the visitor-intake paths, the filing principal on
     // agent-authored intake (the requester as last resort — every intake path
-    // has one). Fire-and-forget like every emit* call.
+    // has one). Awaited, unlike other emit* calls: it applies the workspace
+    // default SLA before it dispatches, and the handoff below must read that
+    // stamp. Both steps swallow and log their own failures, so the await
+    // never fails the intake.
     const openingPrincipalId =
       (filedByRequester ? input.requesterPrincipalId : actor.principalId) ??
       input.requesterPrincipalId!
@@ -405,20 +440,39 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       (await loadAuthors([openingPrincipalId])).get(openingPrincipalId) ??
       fallbackAuthor(openingPrincipalId)
     const { emitConversationCreated } = await import('../conversation/conversation.webhooks')
-    void emitConversationCreated(actor, author, backingConversation)
-    // SLA handoff parity with linkTicketToConversation (shared helper): a
-    // fresh backing conversation is born SLA-free, so this no-ops by
-    // construction — it exists so the intake can never drift from the link
-    // flow's handoff rule.
+    await emitConversationCreated(actor, author, backingConversation)
+    // SLA handoff, shared with linkTicketToConversation: the conversation
+    // default SLA is on the stamp now, so the ticket starts its
+    // time-to-resolve clock from the same policy. A conversation with no SLA
+    // (no default, a test customer, or a failed apply) hands nothing over.
     const { handoffConversationSlaToTicket } = await import('./ticket-conversation-link.service')
-    await handoffConversationSlaToTicket(created.ticket.id, backingConversation.id)
+    const handedOver = await handoffConversationSlaToTicket(
+      created.ticket.id,
+      backingConversation.id
+    )
+    // A handoff that stamped the ticket wrote after the create transaction, so
+    // the event, the realtime update and the returned DTO read the row again.
+    // Best effort: the ticket exists, so a failed read falls back to the
+    // transaction's row rather than failing an intake that already landed.
+    if (handedOver) {
+      try {
+        const [current] = await db.select().from(tickets).where(eq(tickets.id, created.ticket.id))
+        if (current) ticket = current
+      } catch (err) {
+        log.warn(
+          { err, ticket_id: created.ticket.id },
+          'ticket re-read after the SLA handoff failed; answering with the created row'
+        )
+      }
+    }
   }
 
   log.info({ ticket_id: created.ticket.id, type: created.ticket.type }, 'ticket created')
-  // Durable timeline record (fire-and-forget, mirrors the post-side
-  // activity log). Written after the transaction commits so a failed
-  // activity insert can never abort the creation itself.
-  recordTicketActivity({
+  // Durable timeline record (mirrors the post-side activity log). Written
+  // after the transaction commits so a failed activity insert can never abort
+  // the creation itself; a failure is only logged. Awaited, because the link
+  // step of a create from a conversation reads the creator from this row.
+  await recordTicketActivityAwaited({
     ticketId: created.ticket.id,
     principalId: actor.principalId,
     type: 'ticket.created',
@@ -428,7 +482,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // the backing conversation's side effects above — a ticket.created dispatch
   // now always finds the link, closing the ordering race
   // workflows/event-trigger.ts's TICKET_CREATED_LINK_POLL worked around.
-  void emitTicketCreated(actor, created.ticket, {
+  void emitTicketCreated(actor, ticket, {
     category: defaultStatus.category,
     stage: resolveStage(defaultStatus),
   })
@@ -436,5 +490,5 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // row, so the same 'ticket_updated' kind the update paths use below also
   // covers creation, mirroring how the conversation domain's 'conversation'
   // event has no separate created/updated split.
-  return publishTicketUpdated(created.ticket)
+  return publishTicketUpdated(ticket)
 }

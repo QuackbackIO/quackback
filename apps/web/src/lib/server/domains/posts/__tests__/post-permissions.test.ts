@@ -34,6 +34,9 @@ function createChainMock() {
 
 // Track what findFirst returns per call
 const mockFindFirst = vi.fn()
+// The row the last findFirst returned: softDeletePost re-reads it under a row
+// lock inside its transaction (SELECT ... FOR UPDATE).
+let lastPost: unknown = null
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
@@ -42,9 +45,28 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
-      transaction: vi.fn(async (work) => work({ update: vi.fn(() => createChainMock()) })),
+      transaction: vi.fn(async (work) => {
+        // The first update is the delete itself; a later one releases merged
+        // duplicates, of which these posts have none.
+        let updates = 0
+        return work({
+          update: vi.fn(() => {
+            const chain = createChainMock()
+            if (updates++ > 0) chain.returning = vi.fn().mockResolvedValue([])
+            return chain
+          }),
+          // The delete re-reads the post under a row lock (SELECT ... FOR UPDATE).
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({ for: vi.fn(async () => (lastPost ? [lastPost] : [])) })),
+            })),
+          })),
+        })
+      }),
       query: {
-        posts: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+        posts: {
+          findFirst: async (...args: unknown[]) => (lastPost = await mockFindFirst(...args)),
+        },
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'post_status_mock', isDefault: true }),
         },
@@ -52,6 +74,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         settings: { findFirst: vi.fn().mockResolvedValue(null) },
         boards: {
           findFirst: vi.fn().mockResolvedValue({ id: 'board_mock', slug: 'feedback' }),
+        },
+        principal: {
+          findFirst: vi.fn().mockResolvedValue({
+            userId: 'user_admin',
+            displayName: null,
+            user: { name: 'Ada Admin', email: 'ada@example.com' },
+          }),
         },
       },
       update: vi.fn(() => createChainMock()),
@@ -261,7 +290,11 @@ describe('post.permissions', () => {
       await softDeletePost(POST_ID, TEAM_ACTOR)
 
       expect(dispatchPostDeleted).toHaveBeenCalledWith(
-        expect.objectContaining({ principalId: TEAM_ACTOR.principalId }),
+        expect.objectContaining({
+          principalId: TEAM_ACTOR.principalId,
+          email: 'ada@example.com',
+          displayName: 'Ada Admin',
+        }),
         expect.objectContaining({ id: POST_ID, title: 'Test Post', boardSlug: 'feedback' })
       )
     })

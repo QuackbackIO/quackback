@@ -233,16 +233,18 @@ describe.skipIf(!fixture.available)('ticket-links.service (real DB, rolled back)
     await linkTicketToTracker(tracker, customer, actor)
 
     // Forward: the tracker's linked customer tickets, as DTOs.
-    const linked = await listLinkedTickets(tracker)
-    expect(linked.map((t) => t.id)).toEqual([customer])
-    expect(linked[0].type).toBe('customer')
+    const linked = await listLinkedTickets(tracker, actor)
+    expect(linked.items.map((t) => t.id)).toEqual([customer])
+    expect(linked.items[0].type).toBe('customer')
+    expect(linked.hiddenCount).toBe(0)
 
     // Reverse: the tracker a customer ticket belongs to.
-    const owner = await getTrackerForTicket(customer)
-    expect(owner?.id).toBe(tracker)
+    const owner = await getTrackerForTicket(customer, actor)
+    expect(owner.tracker?.id).toBe(tracker)
+    expect(owner.hidden).toBe(false)
     // An unlinked ticket has no tracker.
     const loner = await makeTicket('customer', actor)
-    expect(await getTrackerForTicket(loner)).toBeNull()
+    expect(await getTrackerForTicket(loner, actor)).toEqual({ tracker: null, hidden: false })
   })
 
   it('closing a tracker cascades its status onto the linked customer tickets', async () => {

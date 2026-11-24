@@ -177,6 +177,13 @@ Two properties follow, and both match what the repeatable jobs did:
   restart, not three times.
 - **No duplicate on a race.** Two replicas ticking the same slot produce one row.
 
+A scheduler's first pass adopts the slot in progress rather than running it, so a
+restart does not replay one of everything. A job that sets `runOnFirstPass` runs
+that slot instead, and the dedupe key makes it a no-op when the slot already ran.
+`page-view-partitions` sets it: a parked workspace has no loop, so its partition
+window can run out while it sleeps, and the loop that wakes it must not wait for
+the next 02:30.
+
 The runner then sleeps to the next slot rather than re-asking every second — the
 schedule is deterministic, and a tick that finds nothing is pure traffic against
 a per-workspace database.
@@ -429,6 +436,7 @@ went stale the moment a queue moved.
 | `integration-install-cleanup`   | —              | 1           | 1        | 60s   |
 | `integration-installs-backfill` | —              | 1           | 1        | 60s   |
 | `anon-sweep`                    | `0 3 * * *`    | 1           | 3        | 60s   |
+| `cimd-client-sweep`             | `45 3 * * *`   | 1           | 3        | 60s   |
 | `page-view-partitions`          | `30 2 * * *`   | 1           | 3        | 60s   |
 | `sla-breach-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
 | `snooze-sweep`                  | `* * * * *`    | 1           | 3        | 60s   |
@@ -440,6 +448,7 @@ went stale the moment a queue moved.
 | `sending-domain-recheck`        | `20 6 * * *`   | 1           | 3        | 60s   |
 | `sending-domain-watch`          | `7/10 * * * *` | 1           | 1        | 60s   |
 | `domain-ownership-watch`        | `50 6 * * *`   | 1           | 3        | 60s   |
+| `section-domains-watch`         | `55 6 * * *`   | 1           | 3        | 60s   |
 | `ses-tenant-reconcile`          | `41 * * * *`   | 1           | 3        | 60s   |
 | `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |
 | `startup-backfill`              | `15 * * * *`   | 1           | 20       | 60s   |
@@ -456,6 +465,7 @@ went stale the moment a queue moved.
 | `segment-evaluation`            | dynamic        | 2           | 3        | 60s   |
 | `file-preview`                  | —              | 2           | 2        | 120s  |
 | `file-retention`                | `40 4 * * *`   | 1           | 3        | 60s   |
+| `staged-upload-sweep`           | `50 4 * * *`   | 1           | 3        | 60s   |
 | `help-center-translate`         | —              | 1           | 3        | 120s  |
 | `help-center-translate-resume`  | `25 * * * *`   | 1           | 1        | 60s   |
 | `email-imap`                    | `* * * * *`    | 1           | 1        | 60s   |
@@ -648,7 +658,8 @@ summary's AI call. A database call that cannot be cancelled keeps running in
 the background, and its retry may overlap it, which the reactions tolerate
 because their writes are guarded on the state they read.
 
-`event-reactions` (SLA clocks, pair-ticket reopen, CSAT confirm) runs one job
+`event-reactions` (SLA clocks, pair-ticket reopen, ticket first response,
+CSAT confirm) runs one job
 at a time per worker process, claimed in enqueue order, so in the common case
 its reactions apply in event order. That is all it guarantees. The order is
 not global:
@@ -684,6 +695,10 @@ relying on it:
   the SLA was applied, read from the status changes. A settle judges its clock
   as it stood at the settle's own time and stores that deadline, so a pause
   excluded before the settle ran leaves no trace on it.
+- A customer ticket's first response is recomputed from the message rows of
+  the ticket and its paired conversation (`domains/tickets/ticket-first-response.ts`)
+  on every `message.created` and `message.deleted` of that conversation, so a
+  late, repeated or reordered reaction writes the same value.
 - The pair-ticket reopen leaves the ticket alone when its status moved after
   the message (a close, read from the row, or any move its activity log
   records; a status move and its record are written in one transaction), and
@@ -728,11 +743,6 @@ remove it. The known remaining effects:
   rollback, both would outlive it and, after a later roll-forward, exclude
   spans twice or make a newer cycle look older than its opener; step 5 of the
   runbook below strips them.
-- **A reply through an older API key reads as a person's.** Its row is stored
-  like the person's inbox reply, so the response clocks count it as a human
-  reply although its own event does not (see `sla.messages.ts`). Its own
-  reaction settles an armed next-response cycle at its time, and a later human
-  reply's reaction settles the first response at it.
 - **The history follows the order events were written.** Status changes on the
   older emit path are written to the event log without waiting, so two moves
   in quick succession can be written in the opposite order to the moves

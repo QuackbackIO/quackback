@@ -119,7 +119,10 @@ export const tickets = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    // SLA + lifecycle timestamps. first_response_at is the first agent reply;
+    // SLA + lifecycle timestamps. first_response_at is the first public human
+    // reply after the customer's first message, worked out from the message
+    // rows (apps/web domains/tickets/ticket-first-response.ts), never stamped
+    // by a status, assignee or priority change;
     // waiting_since is when the requester started waiting (drives waiting sorts);
     // due_at is the SLA target; resolved_at is set on close, cleared on reopen.
     firstResponseAt: timestamp('first_response_at', { withTimezone: true }),

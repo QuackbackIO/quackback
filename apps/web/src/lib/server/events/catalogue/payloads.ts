@@ -10,11 +10,22 @@
  * scrub. Payloads persist ~90 days in the outbox, so keep snapshots minimal.
  */
 import { z } from 'zod'
+import { BLOCK_REPLY_KINDS } from '@/lib/shared/conversation/block-reply-kinds'
 
 const id = z.string()
 const nullableStr = z.string().nullable().optional()
 
 // --- shared sub-schemas ---
+/** The team's decision on a held post or comment, addressed to its author. */
+const moderationDecision = z.looseObject({
+  postId: id,
+  postTitle: z.string(),
+  boardId: id,
+  boardSlug: z.string(),
+  authorPrincipalId: id.nullable(),
+  moderatorPrincipalId: id.nullable().optional(),
+  submittedAt: z.string().optional(),
+})
 export const postRef = z.object({ id, title: z.string(), boardId: id, boardSlug: z.string() })
 export const postData = z.object({
   id,
@@ -49,6 +60,10 @@ export const messageData = z.object({
   authorEmail: nullableStr,
   content: z.string(),
   createdAt: z.string(),
+  // The kind of conversation block the message answers ('csat', 'buttons', ...),
+  // null for every other message. Absent on events stored before the field
+  // existed, which reads the same as null.
+  blockReplyKind: z.enum(BLOCK_REPLY_KINDS).nullable().optional(),
 })
 export const ticketRef = z.object({
   id,
@@ -95,6 +110,10 @@ export const P = {
     mentioningPrincipalId: id,
     excerpt: z.string(),
   }),
+  'post.approved': moderationDecision,
+  'post.rejected': moderationDecision,
+  'comment.approved': moderationDecision.extend({ commentId: id }),
+  'comment.rejected': moderationDecision.extend({ commentId: id }),
   'post.owner_assigned': z.looseObject({
     postId: id,
     postTitle: z.string(),
@@ -110,6 +129,17 @@ export const P = {
   'comment.deleted': z.looseObject({
     comment: z.looseObject({ id, isPrivate: z.boolean().optional() }),
     post: postRef,
+  }),
+  'comment.mentioned': z.looseObject({
+    postId: id,
+    postTitle: z.string(),
+    postUrl: z.string(),
+    boardId: id.optional(),
+    commentId: id,
+    isPrivate: z.boolean(),
+    mentionedPrincipalId: id,
+    mentioningPrincipalId: id,
+    excerpt: z.string(),
   }),
   // changelog
   'changelog.published': z.looseObject({

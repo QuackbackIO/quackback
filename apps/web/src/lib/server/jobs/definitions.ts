@@ -101,6 +101,14 @@ export interface JobDefinition {
   /** Cron schedule that enqueues this job. Absent for jobs enqueued on demand. */
   cron?: string
   /**
+   * Run the slot in progress when a scheduler first sees this cron, instead of
+   * adopting it and waiting for the next one. For a daily job whose missed run
+   * costs more than a repeat: a loop started for a workspace that woke from
+   * dormancy (or after a restart) would otherwise wait up to a day. The slot's
+   * dedupe key still makes it a no-op when the slot already ran.
+   */
+  runOnFirstPass?: boolean
+  /**
    * Gate on `cron`, evaluated per tick. A false answer means the schedule is
    * inert — no row is written — rather than the job being enqueued and the
    * handler returning early, which would fill the table with no-ops.
@@ -218,8 +226,18 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/domains/principals/anon-sweep-queue').then((m) => m.runAnonSweep),
   },
   {
+    // Unconsented CIMD client rows (auth/cimd-sweep.ts). Off the 03:00 sweeps.
+    name: 'cimd-client-sweep',
+    cron: '45 3 * * *',
+    maxAttempts: 3,
+    handler: () => import('@/lib/server/auth/cimd-sweep').then((m) => m.runCimdSweep),
+  },
+  {
     name: 'page-view-partitions',
     cron: '30 2 * * *',
+    // A parked workspace has no loop, so its partition window can run out
+    // while it sleeps. The loop that wakes it must not wait for tomorrow's slot.
+    runOnFirstPass: true,
     maxAttempts: 3,
     handler: () =>
       import('@/lib/server/domains/analytics/partition-maintenance-queue').then(
@@ -355,6 +373,28 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     handler: () =>
       import('@/lib/server/domains/domain-proof/domain-ownership-watch-queue').then(
         (m) => m.runDomainOwnershipWatch
+      ),
+  },
+  {
+    // The daily re-check that each verified section hostname on a self-hosted
+    // server still reaches it: misses on two runs in a row mark it unconfirmed,
+    // so sign-in stops there while routing keeps its grace, and one still failing
+    // after the grace stops being verified. The gate is shut on Cloud, where
+    // the control plane decides when a domain is ready, before the server is
+    // set up, and without a verified section hostname, so none of those
+    // writes a daily job row. Its own minute, and capped across the fleet
+    // because each hostname costs DNS lookups and a request.
+    name: 'section-domains-watch',
+    cron: '55 6 * * *',
+    cronEnabled: () =>
+      import('@/lib/server/domains/settings/section-domains-watch-queue').then((m) =>
+        m.isSectionDomainsWatchDue()
+      ),
+    fleetConcurrency: 4,
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/settings/section-domains-watch-queue').then(
+        (m) => m.runSectionDomainsWatch
       ),
   },
   {
@@ -589,6 +629,22 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     maxAttempts: 3,
     handler: () =>
       import('@/lib/server/domains/files/files.retention').then((m) => m.runFileRetention),
+  },
+  {
+    // Removes editor uploads (wide logos, fonts) never published. Gated, so a
+    // workspace with nothing staged a day ago writes no row; offset from the
+    // other daily sweeps.
+    name: 'staged-upload-sweep',
+    cron: '50 4 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/settings/staged-upload-sweep-queue').then(
+        (m) => m.runStagedUploadSweep
+      ),
+    cronEnabled: () =>
+      import('@/lib/server/domains/settings/staged-upload-sweep-queue').then((m) =>
+        m.isStagedUploadSweepScheduled()
+      ),
   },
   {
     // Was `{help-center-translate}`. The 120s lease is the case §7.2 was built

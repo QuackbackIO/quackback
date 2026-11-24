@@ -13,6 +13,7 @@ import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-sco
 import { SELF_HOSTED_MAIL_SLUG } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import type { EventData } from '../types'
 import type { HookContext } from '../hook-context'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 // --- db: flexible chainable select() consuming a FIFO of result rows ---
 const selectQueue: unknown[][] = []
@@ -34,6 +35,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { select: (...args: unknown[]) => mockSelect(...args) },
 }))
+// The scope rule itself runs over real rows in notification-scope.db.test.ts;
+// here every recipient is in scope, so these cases test only the role and
+// actor rules each builder adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).recipientScopePassThrough()
+)
 
 // --- support flag ---
 const isSupportTicketsEnabled = vi.fn<() => Promise<boolean>>()
@@ -46,6 +53,25 @@ const getTicketNotifiableWatchers = vi.fn<() => Promise<string[]>>()
 vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
   getTicketNotifiableWatchers: () => getTicketNotifiableWatchers(),
   getTicketAgentWatchersForEvent: vi.fn().mockResolvedValue([]),
+}))
+
+// --- the requester's reply email: whether a conversation of theirs carries it,
+// and their ticket settings. Both run over real rows in
+// domains/tickets/__tests__/ticket-reply-one-email.db.test.ts; here each case
+// picks the answer. Default: a ticket with no conversation of the requester's,
+// and a requester who wants the email.
+const conversationEmailCarriesReplies = vi.fn<(...args: unknown[]) => Promise<boolean>>()
+const requesterWantsReplyEmail = vi.fn<(...args: unknown[]) => Promise<boolean>>()
+// The author as the requester's thread names it, which runs over real rows in
+// domains/tickets/__tests__/personal-key-author.db.test.ts. Default: the
+// event's name.
+const replyAuthorNameForRequester =
+  vi.fn<(messageId: unknown, fallback: string | null) => Promise<string | undefined>>()
+vi.mock('@/lib/server/domains/tickets/ticket-reply-email', () => ({
+  conversationEmailCarriesReplies: (...args: unknown[]) => conversationEmailCarriesReplies(...args),
+  requesterWantsReplyEmail: (...args: unknown[]) => requesterWantsReplyEmail(...args),
+  replyAuthorNameForRequester: (messageId: unknown, fallback: string | null) =>
+    replyAuthorNameForRequester(messageId, fallback),
 }))
 
 // --- team roster ---
@@ -108,6 +134,11 @@ beforeEach(() => {
   selectQueue.length = 0
   isSupportTicketsEnabled.mockReset().mockResolvedValue(true)
   getTicketNotifiableWatchers.mockReset().mockResolvedValue([])
+  conversationEmailCarriesReplies.mockReset().mockResolvedValue(false)
+  requesterWantsReplyEmail.mockReset().mockResolvedValue(true)
+  replyAuthorNameForRequester
+    .mockReset()
+    .mockImplementation(async (_id, fallback) => fallback ?? undefined)
   listTeamMemberPrincipalIds.mockReset().mockResolvedValue([])
   resolveTicketSender.mockReset().mockResolvedValue(null)
   inboundTicketReplyToAddress.mockReset().mockReturnValue(null)
@@ -158,7 +189,12 @@ describe('getTicketCreatedEmailTargets', () => {
     const targets = await getTicketCreatedEmailTargets(createdEvent(), context)
     expect(targets).toHaveLength(1)
     expect(targets[0].type).toBe('email')
-    expect(targets[0].target).toEqual({ email: 'req@example.com', unsubscribeUrl: '' })
+    expect(targets[0].target).toEqual({
+      email: 'req@example.com',
+      unsubscribeUrl: '',
+      // Who it is for, so the send can hold it back if they are blocked by then.
+      principalId: 'principal_requester',
+    })
     expect(targets[0].config).toMatchObject({
       kind: 'created',
       ticketLabel: '#1',
@@ -301,16 +337,35 @@ describe('getTicketRepliedEmailTargets', () => {
     ).toEqual([])
   })
 
+  it("links the requester at support's own host and the agent at the primary domain", async () => {
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    queueSelect([{ id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null }])
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    queueSelect([{ conversationId: 'conversation_1' }])
+    const onSupportHost = {
+      ...context,
+      sectionOrigins: { ...allOnPrimary('https://p'), support: 'https://support.acme.com' },
+    } as HookContext
+    const targets = await getTicketRepliedEmailTargets(repliedEvent(), onSupportHost)
+    const byEmail = Object.fromEntries(
+      targets.map((t) => [(t.target as { email: string }).email, t.config])
+    )
+    expect(byEmail['req@example.com']).toMatchObject({
+      ctaUrl: 'https://support.acme.com/support/conversation_1',
+    })
+    expect(byEmail['agent1@example.com']).toMatchObject({
+      ctaUrl: 'https://p/admin/inbox?i=ticket_1',
+    })
+  })
+
   it('emails the requester (portal CTA) and agent watchers (inbox CTA), actor excluded', async () => {
     getTicketNotifiableWatchers.mockResolvedValue([
       'principal_requester',
       'principal_agent_1',
       'principal_agent_actor',
     ])
-    queueSelect([
-      { id: 'principal_requester', email: 'req@example.com', contactEmail: null },
-      { id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null },
-    ])
+    queueSelect([{ id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null }])
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
     queueSelect([{ conversationId: 'conversation_1' }]) // the pair (requester CTA target)
     const targets = await getTicketRepliedEmailTargets(repliedEvent(), context)
     expect(targets).toHaveLength(2)
@@ -332,6 +387,24 @@ describe('getTicketRepliedEmailTargets', () => {
     expect(byEmail['agent1@example.com']).not.toHaveProperty('replyTo', expect.anything())
   })
 
+  it("names the author on the requester's copy as their thread does, and keeps the event's name for the team", async () => {
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    queueSelect([{ id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null }])
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    queueSelect([{ conversationId: 'conversation_1' }])
+    replyAuthorNameForRequester.mockResolvedValue('Acme Support')
+    const targets = await getTicketRepliedEmailTargets(
+      repliedEvent({ authorName: 'ops-bot' }),
+      context
+    )
+    const byEmail = Object.fromEntries(
+      targets.map((t) => [(t.target as { email: string }).email, t.config])
+    )
+    expect(replyAuthorNameForRequester).toHaveBeenCalledWith('conversation_message_1', 'ops-bot')
+    expect(byEmail['req@example.com']).toMatchObject({ authorName: 'Acme Support' })
+    expect(byEmail['agent1@example.com']).toMatchObject({ authorName: 'ops-bot' })
+  })
+
   it('drops a synthetic-anon requester', async () => {
     getTicketNotifiableWatchers.mockResolvedValue(['principal_requester'])
     queueSelect([
@@ -345,11 +418,29 @@ describe('getTicketRepliedEmailTargets', () => {
     expect(await getTicketRepliedEmailTargets(repliedEvent(), context)).toEqual([])
   })
 
-  it('returns [] when emailMuted / matrix denies the only recipient', async () => {
+  it("returns [] when the requester's ticket settings turn the email off", async () => {
     getTicketNotifiableWatchers.mockResolvedValue(['principal_requester'])
-    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    requesterWantsReplyEmail.mockResolvedValue(false)
+    expect(await getTicketRepliedEmailTargets(repliedEvent(), context)).toEqual([])
+    expect(requesterWantsReplyEmail).toHaveBeenCalledWith('ticket_1', 'principal_requester')
+  })
+
+  it('leaves the requester out when their conversation carries the reply, and keeps the team', async () => {
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    conversationEmailCarriesReplies.mockResolvedValue(true)
+    queueSelect([{ id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null }])
+    const targets = await getTicketRepliedEmailTargets(repliedEvent(), context)
+    expect(targets.map((t) => (t.target as { email: string }).email)).toEqual([
+      'agent1@example.com',
+    ])
+    expect(conversationEmailCarriesReplies).toHaveBeenCalledWith('ticket_1', 'principal_requester')
+  })
+
+  it('returns [] when emailMuted denies the only teammate watcher', async () => {
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_agent_1'])
+    queueSelect([{ id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null }])
     batchGetNotificationPreferences.mockResolvedValue(
-      new Map([['principal_requester', { emailMuted: true }]])
+      new Map([['principal_agent_1', { emailMuted: true }]])
     )
     expect(await getTicketRepliedEmailTargets(repliedEvent(), context)).toEqual([])
   })

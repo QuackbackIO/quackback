@@ -6,6 +6,10 @@ const mockInsert = vi.fn(() => ({ values: mockValues }))
 vi.mock('@/lib/server/db', () => ({
   db: { insert: mockInsert, select: vi.fn() },
   pageViews: {},
+  insertPageView: (
+    database: { insert: (t: unknown) => { values: (v: unknown) => unknown } },
+    values: unknown
+  ) => database.insert({}).values(values),
   visitorDevices: { deviceId: 'deviceId', principalId: 'principalId' },
   conversations: {
     id: 'id',
@@ -182,8 +186,8 @@ describe('recordPageView', () => {
     expect(mockValues).not.toHaveBeenCalled()
   })
 
-  it('swallows insert failures (missing partition) without throwing', async () => {
-    mockValues.mockRejectedValueOnce(new Error('no partition for 2026-07-01'))
+  it('swallows insert failures without throwing', async () => {
+    mockValues.mockRejectedValueOnce(new Error('connection refused'))
     await expect(recordPageView(makeRequest(validBeacon))).resolves.toBeUndefined()
   })
 })

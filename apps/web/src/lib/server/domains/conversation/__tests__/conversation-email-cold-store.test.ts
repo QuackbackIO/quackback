@@ -67,9 +67,18 @@ vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
   ensurePrincipalForUser: vi.fn(),
 }))
 
-const routeUnassignedConversation = vi.fn(async (_conversation: unknown) => null)
+/** What reached the service after the insert, in order. */
+let afterInsert: string[] = []
+const routeUnassignedConversation = vi.fn(async (_conversation: unknown) => {
+  afterInsert.push('route')
+  return null
+})
+const publishConversationStarted = vi.fn(async (..._args: unknown[]) => {
+  afterInsert.push('publish')
+})
 vi.mock('../conversation.service', () => ({
   routeUnassignedConversation: (conversation: unknown) => routeUnassignedConversation(conversation),
+  publishConversationStarted: (...args: unknown[]) => publishConversationStarted(...args),
 }))
 
 const notifyVisitorMessage = vi.fn(async (_opts: unknown) => {})
@@ -108,6 +117,8 @@ beforeEach(() => {
   insertedConversations = []
   routeUnassignedConversation.mockClear()
   notifyVisitorMessage.mockClear()
+  publishConversationStarted.mockClear()
+  afterInsert = []
 })
 
 describe('the key a cold-inbound message is filed under', () => {
@@ -158,6 +169,19 @@ describe('the key a cold-inbound message is filed under', () => {
     )
   })
 
+  it('puts an accepted conversation in the team inbox live, before routing runs', async () => {
+    // Routing publishes only when it assigns; a conversation it leaves in the
+    // Unassigned queue is live in the inbox only through this publish.
+    await store(parseRawEmail(RAW(['Message-ID: <cold-live@example.com>'])))
+    expect(publishConversationStarted).toHaveBeenCalledTimes(1)
+    expect(publishConversationStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 'email', status: 'open' }),
+      expect.objectContaining({ senderType: 'visitor', content: 'Is anyone there?' }),
+      expect.objectContaining({ principalId: 'principal_lead' })
+    )
+    expect(afterInsert).toEqual(['publish', 'route'])
+  })
+
   it('does not route quarantined mail', async () => {
     await createEmailConversation({
       parsed: parseRawEmail(RAW(['Message-ID: <spam@example.com>'])),
@@ -169,6 +193,7 @@ describe('the key a cold-inbound message is filed under', () => {
     })
     expect(routeUnassignedConversation).not.toHaveBeenCalled()
     expect(notifyVisitorMessage).not.toHaveBeenCalled()
+    expect(publishConversationStarted).not.toHaveBeenCalled()
   })
 
   it('is absent when the message offers no id at all', async () => {

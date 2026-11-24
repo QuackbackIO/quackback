@@ -9,6 +9,7 @@
  * SPEC.md Phase 2): the assistant domain's cost gate for the mid-conversation
  * attribute re-check — see that function's doc.
  */
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import { db, eq, and, isNull, inArray, asc, workflows, type Workflow } from '@/lib/server/db'
 import type { WorkflowClass, WorkflowStatus } from '@/lib/server/db'
 import type { WorkflowId, PrincipalId } from '@quackback/ids'
@@ -167,6 +168,8 @@ export async function setWorkflowStatus(id: WorkflowId, status: WorkflowStatus):
     .where(and(eq(workflows.id, id), isNull(workflows.deletedAt)))
     .returning()
   invalidateHasLiveWorkflowCache()
+  // Pausing a live workflow may be the fix for a workflows plan limit.
+  await invalidatePlanLimits()
   return row
 }
 
@@ -204,6 +207,7 @@ export async function softDeleteWorkflow(id: WorkflowId): Promise<void> {
     .set({ deletedAt: now, updatedAt: now })
     .where(and(eq(workflows.id, id), isNull(workflows.deletedAt)))
   invalidateHasLiveWorkflowCache()
+  await invalidatePlanLimits()
 }
 
 /**

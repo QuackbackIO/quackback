@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 import {
+  BRAND_STEP_ID,
   LAUNCH_LIVE_STEP,
   launchPath,
   launchVisibilityHref,
@@ -14,6 +15,8 @@ import {
   type LaunchTask,
 } from '@/lib/shared/launch-checklist'
 import { cn } from '@/lib/shared/utils'
+import { Link } from '@tanstack/react-router'
+import { BrandSourceLine, EditInCustomiseLabel } from './branding-step-action'
 import { LaunchStepAction } from './launch-step-action'
 import { LaunchTaskLabel, LaunchTaskOutcome, launchTaskMessage } from './launch-task-label'
 import { useProductTour } from './product-tour'
@@ -36,10 +39,11 @@ function livePageHref(goal: LaunchPathGoal, status: LaunchStatus, baseUrl?: stri
 }
 
 /**
- * The whole launch plan: the three-step path to a first win (the live page,
- * the goal step, the win), counted the same as Home and the sidebar, then
- * every other step under Later with one action and a Skip. Steps setup did
- * itself are left out.
+ * The whole launch plan: the path to a first win (the live page, the brand
+ * step where customers see the page, the goal step, the win), counted the
+ * same as Home and the sidebar, then every other step under Later with one
+ * action and a Skip. The brand step can be skipped on the path too. Steps
+ * setup did itself are left out.
  */
 export function LaunchPlanPage({
   firstWinAction,
@@ -65,7 +69,8 @@ export function LaunchPlanPage({
       task={task}
       status={status}
       next={task.id === path.next?.id}
-      canSkip={canSkip && !onPath}
+      // The brand step is the one path step that is optional.
+      canSkip={canSkip && (!onPath || task.id === BRAND_STEP_ID)}
       // A path step skipped before it joined the path can still be restored.
       canUndo={canSkip}
       pending={resolution.isPending}
@@ -218,6 +223,7 @@ function LaunchPlanRow({
   const open = isOpen(task)
   const automatic = task.classification === 'first_win'
   const blocked = open && task.availability === 'blocked'
+  const brandDone = task.id === BRAND_STEP_ID && task.isCompleted
 
   if (task.isReady) {
     return (
@@ -266,7 +272,11 @@ function LaunchPlanRow({
           <LaunchTaskLabel task={task} />
         </span>
         <span className="block text-xs text-muted-foreground">
-          <LaunchTaskOutcome task={task} />
+          {brandDone ? (
+            <BrandSourceLine importedFrom={status.brandImportedFrom} />
+          ) : (
+            <LaunchTaskOutcome task={task} />
+          )}
         </span>
       </span>
       {note ? <span className="text-sm text-muted-foreground">{note}</span> : null}
@@ -276,8 +286,17 @@ function LaunchPlanRow({
         primary={next}
         pending={pending}
         firstWinAction={firstWinAction}
+        // On its own line under the step, so the row's Skip stays beside the title.
+        brandClassName="order-last basis-full ps-8"
         onCreateBoard={onCreateBoard}
       />
+      {brandDone && task.href ? (
+        <Button asChild size="sm" variant="ghost">
+          <Link to={task.href}>
+            <EditInCustomiseLabel />
+          </Link>
+        </Button>
+      ) : null}
       {open && !automatic && canSkip ? (
         <Button
           variant="ghost"

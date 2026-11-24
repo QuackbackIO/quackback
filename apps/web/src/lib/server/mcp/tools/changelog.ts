@@ -5,7 +5,7 @@
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import {
   createChangelog,
   updateChangelog,
@@ -109,6 +109,7 @@ type DeleteChangelogArgs = { changelogId: string }
 export function registerChangelogTools(server: McpServer, auth: McpAuthContext) {
   registerTool<CreateChangelogArgs>(server, auth, {
     name: 'create_changelog',
+    title: 'Create changelog entry',
     permissions: [PERMISSIONS.CHANGELOG_MANAGE],
     description: `Create a changelog entry. Saves as draft by default; set publish: true to publish immediately.
 
@@ -145,6 +146,7 @@ Examples:
 
   registerTool<UpdateChangelogArgs>(server, auth, {
     name: 'update_changelog',
+    title: 'Update changelog entry',
     permissions: [PERMISSIONS.CHANGELOG_MANAGE],
     description: `Update title, content, publish state, and/or linked posts on an existing changelog entry.
 
@@ -168,15 +170,19 @@ Examples:
         publishState = { type: 'draft' }
       }
 
-      const result = await updateChangelog(args.changelogId as ChangelogId, {
-        title: args.title,
-        content: args.content,
-        linkedPostIds: args.linkedPostIds as PostId[] | undefined,
-        publishState,
-        ...(args.displayDate !== undefined && {
-          displayDate: args.displayDate === null ? null : new Date(args.displayDate),
-        }),
-      })
+      const result = await updateChangelog(
+        args.changelogId as ChangelogId,
+        {
+          title: args.title,
+          content: args.content,
+          linkedPostIds: args.linkedPostIds as PostId[] | undefined,
+          publishState,
+          ...(args.displayDate !== undefined && {
+            displayDate: args.displayDate === null ? null : new Date(args.displayDate),
+          }),
+        },
+        { principalId: auth.principalId }
+      )
 
       return jsonResult({
         id: result.id,
@@ -191,6 +197,7 @@ Examples:
 
   registerTool<DeleteChangelogArgs>(server, auth, {
     name: 'delete_changelog',
+    title: 'Delete changelog entry',
     permissions: [PERMISSIONS.CHANGELOG_MANAGE],
     description: `Soft-delete a changelog entry. This cannot be undone via the API.
 

@@ -1,7 +1,6 @@
 /**
  * The centered, muted notice for an author-less 'system' thread event (chat
- * ended/reopened, assignment, assistant handoff, ticket created, ticket
- * status changed) — the status-line idiom shared by every customer-facing
+ * ended/reopened, assistant handoff, ticket created, ticket status changed) — the status-line idiom shared by every customer-facing
  * thread: the messenger (`VisitorConversationThread`'s system row), the
  * portal ticket thread, and the widget ticket detail. One component so the
  * three surfaces localize the same kinds identically and can't drift.
@@ -15,7 +14,9 @@
  *
  * Kinds and copy:
  *  - chat_ended / chat_reopened / assigned / assistant_handoff — the
- *    messenger's original four (copy unchanged).
+ *    messenger's original four (copy unchanged). 'assigned' is team-only now:
+ *    the row is internal and customer reads filter legacy public rows by
+ *    kind, so this case no longer reaches a customer surface.
  *  - ticket_created (B17) — the create-ticket flow's conversion marker on the
  *    converged shared thread: "Ticket #N created from this
  *    conversation". The visitor it renders for is the ticket's own requester.

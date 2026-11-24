@@ -5,6 +5,15 @@ vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
   generateEmbedding: (...args: unknown[]) => mockGenerateEmbedding(...args),
 }))
 
+// The changelog is open to an anonymous visitor unless a case closes it.
+const changelogOpen = vi.hoisted(() => ({ anonymous: true }))
+vi.mock('@/lib/server/domains/changelog/changelog.audience', () => ({
+  isChangelogOpenToAnonymous: async () => changelogOpen.anonymous,
+}))
+vi.mock('@/lib/server/domains/changelog/changelog-category.service', () => ({
+  categoryGateCondition: vi.fn(() => ({ op: 'categoryGate' })),
+}))
+
 // Terminal `.limit()` resolves with whatever rows the test seeded.
 const mockLimit = vi.fn()
 
@@ -63,6 +72,7 @@ function row(id: string, overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  changelogOpen.anonymous = true
   mockLimit.mockResolvedValue([])
 })
 
@@ -72,10 +82,11 @@ describe('changelogVisibilityConditions', () => {
     expect(vi.mocked(isNull)).toHaveBeenCalledWith('deleted_at')
   })
 
-  it('adds the published-only predicate for the public ceiling', () => {
+  it('adds the published-only predicate and the anonymous label gate for the public ceiling', () => {
     const publicConditions = changelogVisibilityConditions('public')
-    // deleted-at guard + published-not-null + published<=now
-    expect(publicConditions).toHaveLength(3)
+    // deleted-at guard + published-not-null + published<=now + label gate
+    expect(publicConditions).toHaveLength(4)
+    expect(publicConditions).toContainEqual({ op: 'categoryGate' })
   })
 
   it('sees every non-deleted entry (incl. drafts) for team/internal ceilings', () => {
@@ -85,6 +96,14 @@ describe('changelogVisibilityConditions', () => {
 })
 
 describe('retrieveChangelogEntries', () => {
+  it('retrieves nothing for the public ceiling while the changelog is closed to visitors', async () => {
+    changelogOpen.anonymous = false
+    mockGenerateEmbedding.mockResolvedValue(null)
+    mockLimit.mockResolvedValue([row('changelog_closed')])
+    expect(await retrieveChangelogEntries('dark mode', 'public')).toEqual([])
+    expect(await retrieveChangelogEntries('dark mode', 'team')).toHaveLength(1)
+  })
+
   it('uses the semantic path when a query embedding is available', async () => {
     mockGenerateEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
     mockLimit.mockResolvedValue([row('changelog_1')])

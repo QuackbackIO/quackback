@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockGetFeatureFlags = vi.fn()
+// The portal lets the caller in unless a case makes it private to them.
+const portalGate = vi.hoisted(() => ({ open: true }))
+vi.mock('@/lib/server/widget/portal-gate', () => ({
+  isPortalOpenToRequest: async () => portalGate.open,
+}))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getFeatureFlags: (...args: unknown[]) => mockGetFeatureFlags(...args),
 }))
@@ -90,6 +95,7 @@ function parseAguiSse(text: string): Array<Record<string, unknown> & { type: str
 
 beforeEach(() => {
   vi.clearAllMocks()
+  portalGate.open = true
   mockGetFeatureFlags.mockResolvedValue({ helpCenter: true })
   mockIsConfigured.mockReturnValue(true)
   mockIncrementBucket.mockResolvedValue({ count: 1 })
@@ -122,6 +128,12 @@ describe('GET /api/widget/kb-ask (capability probe)', () => {
     expect(res.status).toBe(404)
   })
 
+  it('404s to a caller a private portal turns away', async () => {
+    portalGate.open = false
+    const res = await handleKbAskProbe({ request: makeProbe() })
+    expect(res.status).toBe(404)
+  })
+
   it('serves a capability probe with the widget CORS header', async () => {
     const res = await handleKbAskProbe({ request: makeProbe() })
     expect(res.status).toBe(200)
@@ -140,6 +152,13 @@ describe('GET /api/widget/kb-ask (capability probe)', () => {
 })
 
 describe('POST /api/widget/kb-ask', () => {
+  it('404s to a caller a private portal turns away, without retrieving', async () => {
+    portalGate.open = false
+    const res = await handleKbAsk({ request: makePost('how do I reset my password?') })
+    expect(res.status).toBe(404)
+    expect(mockRetrieve).not.toHaveBeenCalled()
+  })
+
   it('400s on a non-AG-UI body', async () => {
     const res = await handleKbAsk({
       request: new Request('http://localhost/api/widget/kb-ask', {

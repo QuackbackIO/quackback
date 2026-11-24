@@ -19,6 +19,9 @@ const hoisted = vi.hoisted(() => ({
   listMacrosFn: vi.fn(),
 }))
 
+// The viewer may read every list these controls load; the permission gates
+// themselves are pinned in components/admin/__tests__/permission-gated-reads.test.tsx.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 vi.mock('@/lib/server/functions/conversation-tags', () => ({
   fetchConversationTagsFn: hoisted.fetchConversationTagsFn,
 }))

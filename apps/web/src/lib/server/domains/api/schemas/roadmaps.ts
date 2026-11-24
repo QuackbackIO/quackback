@@ -17,6 +17,7 @@ import {
   NotFoundErrorSchema,
   ValidationErrorSchema,
 } from './common'
+import { ForbiddenErrorSchema } from './errors'
 
 const RoadmapBaseFilterSchema = z.object({
   statusIds: z.array(TypeIdSchema).optional(),
@@ -129,7 +130,8 @@ registerPath('/roadmaps', {
   get: {
     tags: ['Roadmaps'],
     summary: 'List roadmaps',
-    description: 'Returns all roadmaps in the workspace',
+    description:
+      'Returns all roadmaps in the workspace. Requires the read:feedback scope and the post.view_private permission.',
     responses: {
       200: {
         description: 'List of roadmaps',
@@ -142,6 +144,11 @@ registerPath('/roadmaps', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the post.view_private permission',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
     },
   },
@@ -187,7 +194,8 @@ registerPath('/roadmaps/{roadmapId}', {
   get: {
     tags: ['Roadmaps'],
     summary: 'Get a roadmap',
-    description: 'Get a single roadmap by ID',
+    description:
+      'Get a single roadmap by ID. Requires the read:feedback scope and the post.view_private permission.',
     parameters: [
       {
         name: 'roadmapId',
@@ -209,6 +217,11 @@ registerPath('/roadmaps/{roadmapId}', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the post.view_private permission',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
       404: {
         description: 'Roadmap not found',
@@ -300,7 +313,8 @@ registerPath('/roadmaps/{roadmapId}/posts', {
   get: {
     tags: ['Roadmaps'],
     summary: 'List posts in a roadmap',
-    description: 'Returns posts matching the roadmap view configuration',
+    description:
+      'Returns posts matching the roadmap view configuration. Requires the read:feedback scope and the post.view_private permission.',
     parameters: [
       {
         name: 'roadmapId',
@@ -324,13 +338,13 @@ registerPath('/roadmaps/{roadmapId}/posts', {
       {
         name: 'limit',
         in: 'query',
-        schema: { type: 'integer', default: 20, maximum: 100 },
+        schema: { type: 'integer', default: 20, minimum: 1, maximum: 100 },
         description: 'Items per page',
       },
       {
         name: 'offset',
         in: 'query',
-        schema: { type: 'integer', default: 0 },
+        schema: { type: 'integer', default: 0, minimum: 0 },
         description: 'Offset for pagination',
       },
     ],
@@ -343,9 +357,18 @@ registerPath('/roadmaps/{roadmapId}/posts', {
           },
         },
       },
+      400: {
+        description: 'Invalid limit or offset',
+        content: { 'application/json': { schema: ValidationErrorSchema } },
+      },
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the post.view_private permission',
+        content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
       404: {
         description: 'Roadmap not found',
@@ -370,6 +393,10 @@ registerPath('/roadmaps/{roadmapId}/columns', {
         },
       },
       401: { description: 'Unauthorized' },
+      403: {
+        description:
+          'The key lacks the read:feedback scope, or its creator lacks the post.view_private permission',
+      },
       404: { description: 'Roadmap not found' },
     },
   },

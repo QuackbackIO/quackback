@@ -287,6 +287,52 @@ describe('VisitorConversationThread composer', () => {
     expect(search).toHaveBeenCalledWith('password', expect.anything())
   })
 
+  it('tells the visitor to wait when a send is rate limited, and keeps the draft', async () => {
+    const rpc = await renderThread()
+    // The shape the browser receives (typed-error-serialization.ts): a plain
+    // Error carrying the refusal's code and the seconds to wait.
+    rpc.sendConversationMessage.mockRejectedValueOnce(
+      Object.assign(new Error('You are sending messages too quickly. Please wait a moment.'), {
+        code: 'RATE_LIMITED',
+        statusCode: 429,
+        retryAfter: 20,
+      })
+    )
+    type('', 'Hello there')
+    fireEvent.click(sendButton())
+
+    expect(
+      await screen.findByText("You're sending messages too quickly. Wait a moment, then try again.")
+    ).toBeTruthy()
+    // The draft stays for the retry.
+    expect(probe.editorMounts).toBe(1)
+    expect(sendButton()).toBeEnabled()
+
+    // The next send that goes through clears the notice.
+    fireEvent.click(sendButton())
+    await waitFor(() => expect(rpc.sendConversationMessage).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(
+        screen.queryByText("You're sending messages too quickly. Wait a moment, then try again.")
+      ).toBeNull()
+    )
+  })
+
+  it('says nothing about waiting when a send fails for another reason', async () => {
+    const rpc = await renderThread()
+    rpc.sendConversationMessage.mockRejectedValueOnce(
+      Object.assign(new Error('Conversation not found'), {
+        code: 'CONVERSATION_NOT_FOUND',
+        statusCode: 404,
+      })
+    )
+    type('', 'Hello there')
+    fireEvent.click(sendButton())
+    await waitFor(() => expect(rpc.sendConversationMessage).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(sendButton()).toBeEnabled())
+    expect(screen.queryByText(/sending messages too quickly/)).toBeNull()
+  })
+
   it('previews links once typing pauses', async () => {
     await renderThread({ linkPreviews: true })
     type('', 'see https://example.com')

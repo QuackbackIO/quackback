@@ -73,6 +73,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Maps an AI endpoint (the process-wide OPENAI_BASE_URL plus the model name) to how far structured requests had to fall back from json_schema. The base URL is process config and the model is a per-feature setting, neither is workspace data, and every workspace in the process talks to the same endpoints. A cross-workspace hit returns only "this endpoint and model reject json_schema (or response_format)", which is exactly what the requesting workspace would learn from its own first request; the worst case is one extra fallback request.',
   },
   {
+    file: 'apps/web/src/lib/server/db.ts',
+    name: 'reportedPoolUseSites',
+    category: 'fleet-wide',
+    reason:
+      'Remembers which source locations (two stack frames) have already logged the "shared db used inside a transaction" warning, so each one logs once per process. It holds code positions, not data: every workspace running that code produces the same frames. A cross-workspace hit only suppresses a repeat of a warning this process already wrote for the same line of code.',
+  },
+  {
     file: 'apps/web/src/lib/server/functions/read-batch.ts',
     name: 'registeredReads',
     category: 'fleet-wide',
@@ -99,6 +106,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'fleet-wide',
     reason:
       'Indexes the bundled emoji dataset by emoticon, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/plan-limits/plan-limits.service.ts',
+    name: 'evaluating',
+    category: 'process-lifetime',
+    reason:
+      'The AsyncLocalStorage instance marking one plan limits evaluation in progress. evaluate() opens a new store per call and the store holds only `true`, so concurrent workspaces and requests never see each other’s evaluation; the instance holds no value outside those contexts.',
   },
   {
     file: 'apps/web/src/lib/server/integrations/sync/transport.ts',
@@ -371,6 +385,38 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'for up to the copy lifetime.',
   },
   {
+    file: 'apps/web/src/lib/server/cache.ts',
+    name: 'refusedFills',
+    category: 'process-lifetime',
+    reason:
+      'A count of cache fills this process refused, logged so a fill that never lands is visible. It holds no workspace data; shared across workspaces it only sums their refusals in one log field.',
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'dropStamps',
+    category: 'workspace-keyed',
+    reason:
+      'Per cache key, when this process last dropped it, so a read that overlapped the drop does not keep its copy. Shared, a drop in one workspace would only make another workspace skip keeping one copy (a cache read, never wrong data); keyed, it does not even do that.',
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'lastStamp',
+    category: 'process-lifetime',
+    reason:
+      'The last stamp handed to dropStamps: a plain counter holding no workspace data. Shared across workspaces it only makes stamps unique; no value read from it says anything about a workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/settings/settings.service.ts',
+    name: 'derivedFromSettings',
+    category: 'workspace-scoped-key',
+    keyedBy: 'WorkspaceSettings',
+    reason:
+      "Keyed by one workspace's cached settings copy, which the workspace-keyed settings cache and " +
+      'the request memo hand out only to that workspace, so a lookup can only find values derived ' +
+      "from its own row. Shared, one workspace would read another's custom hostnames. It is a " +
+      'WeakMap, so an entry goes when its copy does.',
+  },
+  {
     file: 'apps/web/src/lib/server/mcp/untrusted.ts',
     name: 'itemFacts',
     category: 'workspace-scoped-key',
@@ -391,6 +437,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'when taken, so nothing outlives the response.',
   },
   {
+    file: 'apps/web/src/lib/server/middleware/stale-build.ts',
+    name: 'loggedStaleIds',
+    category: 'fleet-wide',
+    reason:
+      'Holds server function ids a page from an older build asked for, only so each is logged once ' +
+      'per process. An id names code in a build, not workspace data, and the set never changes an ' +
+      'answer: a cross-workspace hit only skips a repeat warn line. It is capped and resets when full.',
+  },
+  {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',
     name: 'pools',
     category: 'workspace-scoped-key',
@@ -409,6 +464,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'refusal was seen at. A cross-workspace hit would say one workspace is refused because another is, ' +
       'which the revision check makes impossible: the entry is discarded the moment the record it ' +
       'accuses changes.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/unknown-host-log.ts',
+    name: 'recent',
+    category: 'fleet-wide',
+    reason:
+      'When this process last logged a hostname no workspace claims, keyed by that hostname. An entry ' +
+      'exists only for a host that resolved to no workspace, so it belongs to none; a shared or stale ' +
+      'entry only delays one warning line and never changes the 404 the request gets. Bounded at 1,000 ' +
+      'hosts because the Host header is client-chosen.',
   },
   {
     file: 'apps/web/src/lib/server/workspaces/activity.ts',
@@ -513,6 +578,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Role to permission-set memo derived from the static RBAC catalogue. No database read, ' +
       'identical for every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/theme/theme-css.ts',
+    name: 'WRITTEN',
+    category: 'content-addressed',
+    reason:
+      'Up to 32 theme stylesheets this module generated, as a set of their exact text, so reading one back trusts its picked colours. A cross-workspace hit means another workspace has byte-identical generated theme text, which reads back to the same palettes either way.',
   },
   {
     file: 'apps/web/src/lib/shared/i18n.ts',
@@ -898,6 +970,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "would put every workspace's realtime traffic on one socket and one database. Deliberately NOT a " +
       'WorkspaceKeyedCache: that class evicts, and evicting here closes a socket out from under live ' +
       'SSE streams. Bounded instead by ref-counted release when a workspace loses its last subscriber.',
+  },
+  {
+    file: 'apps/web/src/lib/server/realtime/inbox-publish.ts',
+    name: 'chains',
+    category: 'workspace-scoped-key',
+    keyedBy: 'currentWorkspaceNamespace',
+    reason:
+      "The tail of each inbox item's publish chain, so frames for one item leave in call order. " +
+      'Keyed by the workspace namespace (taken at call time), the item kind and the id, so two ' +
+      'workspaces never share a chain even for equal ids. Deliberately NOT a WorkspaceKeyedCache: ' +
+      'evicting a live tail would let the next frame overtake it. Bounded by in-flight publishes: ' +
+      'an entry is deleted the moment its tail settles.',
   },
   {
     file: 'apps/web/src/lib/server/realtime/pubsub.ts',

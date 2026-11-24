@@ -236,7 +236,7 @@ const ACCOUNT = {
 
 describe('createSendingAddressFn', () => {
   it('adds the address through the domain-aware path for the default team', async () => {
-    hoisted.addAddress.mockResolvedValue(ACCOUNT)
+    hoisted.addAddress.mockResolvedValue({ ok: true, account: ACCOUNT })
     const result = await createAddress({
       data: { address: 'help@acme.com', senderName: 'Acme Support' },
     })
@@ -254,7 +254,7 @@ describe('createSendingAddressFn', () => {
   })
 
   it('says whether the address became the default sender', async () => {
-    hoisted.addAddress.mockResolvedValue(ACCOUNT)
+    hoisted.addAddress.mockResolvedValue({ ok: true, account: ACCOUNT })
     hoisted.getEmailSenders.mockResolvedValue(
       new Map<string, unknown>([['default', { mode: 'address', account: { id: ACCOUNT.id } }]])
     )
@@ -268,6 +268,18 @@ describe('createSendingAddressFn', () => {
     expect(await createAddress({ data: { address: 'help@acme.com' } })).toMatchObject({
       madeDefault: false,
     })
+  })
+
+  it('returns the refusal for an address on no Verified domain as a value', async () => {
+    const refusal = {
+      ok: false,
+      code: 'DOMAIN_NOT_VERIFIED',
+      domain: 'acme.com',
+      message: 'Verify acme.com in Settings > Domains first.',
+    }
+    hoisted.addAddress.mockResolvedValue(refusal)
+    expect(await createAddress({ data: { address: 'help@acme.com' } })).toEqual(refusal)
+    expect(hoisted.getEmailSenders).not.toHaveBeenCalled()
   })
 
   it('carries a provider failure back as a sentence a person can act on', async () => {

@@ -4,24 +4,25 @@ import {
   Outlet,
   retainSearchParams,
   useRouteContext,
+  useRouterState,
 } from '@tanstack/react-router'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
-import { PortalPreviewProvider } from '@/components/public/portal-preview-listener'
 import { getMyPortalPermissionsFn } from '@/lib/server/functions/portal-permissions'
 import { PortalPermissionsProvider } from '@/lib/client/hooks/use-portal-permissions'
 import { isTeamMember } from '@/lib/shared/roles'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { PortalHeader } from '@/components/public/portal-header'
+import { portalWideLogoDarkUrl, portalWideLogoUrl } from '@/lib/shared/portal-wide-logo'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { readConfigFontHeading, readConfigFontSans } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -35,6 +36,7 @@ import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
+import { useHeadingFont } from '@/lib/client/hooks/use-heading-font'
 import { usePreviewCss } from '@/components/public/preview-draft-context'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { shownName } from '@/lib/shared/greeting-name'
@@ -86,6 +88,9 @@ export const Route = createFileRoute('/_portal')({
     error: search.error,
   }),
   loader: async ({ context, deps, location }) => {
+    // The theme engine loads with the portal, not with every page's script:
+    // route loaders stay in the route tree's chunk, which the admin loads too.
+    const { generateWorkspaceThemeCSS } = await import('@/lib/shared/theme/generator')
     const { queryClient, session, settings, userRole, baseUrl, registeredAuthProviders } = context
 
     // Document response header — only meaningful (and only cheap) during SSR;
@@ -178,9 +183,11 @@ export const Route = createFileRoute('/_portal')({
         reason: accessResult.reason,
         workspaceName: settings?.name ?? '',
         logoUrl: brandingData?.logoUrl ?? null,
+        wideLogoUrl: portalWideLogoUrl(brandingData),
+        wideLogoDarkUrl: portalWideLogoDarkUrl(brandingData),
         themeStyles: generateWorkspaceThemeCSS(brandingConfig),
         customCss: settings?.customCss ?? '',
-        configFontSans: readFontSans(brandingConfig.light),
+        configFontSans: readConfigFontSans(brandingConfig),
         locale,
         // Only meaningful for 'unauthorized' — null for an anonymous visitor.
         // Lets the overlay say "you're signed in as alice@…, but…".
@@ -227,7 +234,6 @@ export const Route = createFileRoute('/_portal')({
     ])
 
     const brandingData = settings?.brandingData ?? null
-    const faviconData = settings?.faviconData ?? null
     const brandingConfig = settings?.brandingConfig ?? {}
     const customCss = settings?.customCss ?? ''
     const publicPortalConfig = settings?.publicPortalConfig ?? null
@@ -266,10 +272,10 @@ export const Route = createFileRoute('/_portal')({
       baseUrl: baseUrl ?? '',
       userRole,
       brandingData,
-      faviconData,
       themeStyles,
       customCss: customCssToApply,
-      configFontSans: readFontSans(brandingConfig.light),
+      configFontSans: readConfigFontSans(brandingConfig),
+      configFontHeading: readConfigFontHeading(brandingConfig),
       themeMode,
       initialUserData,
       authConfig,
@@ -288,13 +294,8 @@ export const Route = createFileRoute('/_portal')({
           { title: `Sign in · ${loaderData.gate.workspaceName}` },
           { name: 'robots', content: 'noindex, nofollow' },
         ],
-        links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }],
       }
     }
-
-    // Favicon priority: dedicated favicon > workspace logo > default logo.png
-    const faviconUrl =
-      loaderData?.faviconData?.url || loaderData?.brandingData?.logoUrl || '/logo.png'
 
     const workspaceName = loaderData?.workspaceName ?? 'Quackback'
     const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
@@ -311,10 +312,8 @@ export const Route = createFileRoute('/_portal')({
       { name: 'twitter:title', content: workspaceName },
       { name: 'twitter:description', content: description },
     ]
-    return {
-      meta,
-      links: [{ rel: 'icon', href: faviconUrl }],
-    }
+    // The tab icon comes from the root route (lib/shared/workspace-icon.ts).
+    return { meta }
   },
   component: PortalLayout,
 })
@@ -325,6 +324,35 @@ export const Route = createFileRoute('/_portal')({
 const PortalAccessGate = lazy(() =>
   import('@/components/portal/portal-access-gate').then((m) => ({ default: m.PortalAccessGate }))
 )
+
+// The preview draft bridge is the Customise editor's: only a portal framed in
+// its preview (`?preview=1`) loads it. The server still renders it in place.
+const PortalPreviewProvider = lazy(() =>
+  import('@/components/public/portal-preview-listener').then((m) => ({
+    default: m.PortalPreviewProvider,
+  }))
+)
+
+/**
+ * The preview draft bridge, told which page the frame shows. Reading the
+ * location here, not in the layout, keeps a navigation from rendering the
+ * layout again: the children are the layout's elements and stay as they were.
+ */
+function PortalPreviewFrame({ children }: { children: ReactNode }) {
+  const path = useRouterState({ select: (state) => state.location.pathname })
+  return (
+    <Suspense fallback={null}>
+      <PortalPreviewProvider enabled path={path}>
+        {children}
+      </PortalPreviewProvider>
+    </Suspense>
+  )
+}
+
+/** The children as they are on a live portal; inside the draft bridge in the preview. */
+function PortalPreviewBridge({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+  return enabled ? <PortalPreviewFrame>{children}</PortalPreviewFrame> : <>{children}</>
+}
 
 function PortalLayout() {
   const loaderData = Route.useLoaderData()
@@ -350,6 +378,8 @@ function PortalLayout() {
             reason={gate.reason}
             workspaceName={gate.workspaceName}
             logoUrl={gate.logoUrl}
+            wideLogoUrl={gate.wideLogoUrl ?? null}
+            wideLogoDarkUrl={gate.wideLogoDarkUrl ?? null}
             authConfig={gate.authConfig}
             themeStyles={gate.themeStyles}
             customCss={gate.customCss}
@@ -370,6 +400,7 @@ function PortalLayout() {
     themeStyles,
     customCss,
     configFontSans,
+    configFontHeading,
     themeMode,
     initialUserData,
     authConfig,
@@ -391,8 +422,12 @@ function PortalLayout() {
           />
           {/* Draft bridge for the admin branding preview; renders children
               untouched (and provides no context) outside preview mode. */}
-          <PortalPreviewProvider enabled={preview === true}>
-            <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
+          <PortalPreviewBridge enabled={preview === true}>
+            <PortalBrandingFontLoader
+              customCss={customCss}
+              configFontSans={configFontSans}
+              configFontHeading={configFontHeading}
+            />
             <div data-portal="" className="min-h-screen bg-background flex flex-col">
               {themeStyles && (
                 <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
@@ -403,7 +438,10 @@ function PortalLayout() {
               )}
               <PortalHeader
                 orgName={workspaceName}
+                headerName={brandingData?.headerDisplayName ?? null}
                 orgLogo={brandingData?.logoUrl ?? null}
+                wideLogo={portalWideLogoUrl(brandingData)}
+                wideLogoDark={portalWideLogoDarkUrl(brandingData)}
                 userRole={userRole}
                 initialUserData={initialUserData}
                 // The toggle is inert under a forced theme, and the preview
@@ -417,7 +455,7 @@ function PortalLayout() {
               </main>
               <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
             </div>
-          </PortalPreviewProvider>
+          </PortalPreviewBridge>
         </AuthPopoverProvider>
       </PortalPermissionsProvider>
     </PortalIntlProvider>
@@ -446,11 +484,17 @@ function PortalAuthAutoOpen(props: {
 function PortalBrandingFontLoader({
   customCss,
   configFontSans,
+  configFontHeading = null,
 }: {
   customCss: string
   configFontSans: string | null
+  /** The listed font the theme sets headings in, if any. */
+  configFontHeading?: string | null
 }) {
   const draftCss = usePreviewCss()
   useBrandingFont(draftCss ?? customCss, configFontSans)
+  // A draft stylesheet says what the headings are set in, the text font included:
+  // the saved choice stands only where there is no draft.
+  useHeadingFont(draftCss ?? customCss, configFontSans, draftCss ? null : configFontHeading)
   return null
 }

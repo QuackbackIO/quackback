@@ -45,19 +45,14 @@ function parseCssVar(css: string, varName: string): string | undefined {
 
 /**
  * Normalize a CSS color value to hex so every client (web, iOS, Android) can
- * consume it the same way. Admin UIs can paste `oklch(...)`, rgb, or hex — we
- * coerce to hex; anything we can't recognize is dropped (`undefined`) so the
- * client uses its own default.
+ * consume it the same way. Admin UIs can paste hex, rgb(), hsl(), oklab() or
+ * oklch() — we coerce to hex; anything we can't recognize is dropped
+ * (`undefined`) so the client uses its own default.
  */
 async function toHex(value: string | undefined): Promise<string | undefined> {
   if (!value) return undefined
-  const trimmed = value.trim()
-  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed)) return trimmed
-  if (/^oklch\(/i.test(trimmed)) {
-    const { oklchToHex } = await import('@/lib/shared/theme/colors')
-    return oklchToHex(trimmed)
-  }
-  return undefined
+  const { tryCssColorToHex } = await import('@/lib/shared/theme/colors')
+  return tryCssColorToHex(value) ?? undefined
 }
 
 /** Extract theme values from :root and .dark blocks in custom CSS */
@@ -77,6 +72,27 @@ async function extractThemeFromCss(css: string): Promise<PublicServerTheme> {
     theme.darkPrimaryForeground = await toHex(parseCssVar(darkBlock, '--primary-foreground'))
   }
   return theme
+}
+
+/**
+ * The launcher's colours: the main colour as a filled button and the words
+ * (or icon) on it, reading at 4.5:1 as the portal's buttons do. A words
+ * colour set in custom CSS is kept where it already reads on the fill; else
+ * both come from buttonOf, which may darken a mid-tone fill for white words.
+ * Worked out here so the embed script ships no colour maths.
+ */
+async function readableLauncher(
+  fill: string,
+  ink: string | undefined
+): Promise<{ fill: string; ink: string | undefined }> {
+  const { buttonOf, contrastOf, READABLE_TEXT } = await import('@/lib/shared/theme/expand')
+  const { tryCssColorToHex } = await import('@/lib/shared/theme/colors')
+  if (ink && contrastOf(ink, fill) >= READABLE_TEXT) return { fill, ink }
+  const button = buttonOf(fill)
+  return {
+    fill: tryCssColorToHex(button.fill) ?? fill,
+    ink: tryCssColorToHex(button.ink) ?? undefined,
+  }
 }
 
 /**
@@ -119,25 +135,44 @@ export async function getPublicServerConfig(): Promise<{
     const brandingConfig = await getBrandingConfig()
     theme.themeMode = brandingConfig.themeMode ?? 'user'
 
-    const { oklchToHex } = await import('@/lib/shared/theme/colors')
+    const { cssColorToHex } = await import('@/lib/shared/theme/colors')
     const light = brandingConfig.light
     const dark = brandingConfig.dark
-    if (light?.primary) theme.lightPrimary = oklchToHex(light.primary)
-    if (light?.primaryForeground) theme.lightPrimaryForeground = oklchToHex(light.primaryForeground)
-    if (dark?.primary) theme.darkPrimary = oklchToHex(dark.primary)
-    if (dark?.primaryForeground) theme.darkPrimaryForeground = oklchToHex(dark.primaryForeground)
+    // The stored words colour is not sent: the portal draws its buttons'
+    // words from the fill (buttonOf), and so does the launcher below.
+    const stored = {
+      light: light?.primary ? cssColorToHex(light.primary) : undefined,
+      dark: dark?.primary ? cssColorToHex(dark.primary) : undefined,
+    }
     if (light?.radius) theme.radius = light.radius
 
+    // Custom CSS paused after the plan limits grace is kept but not applied.
     const customCss = await getCustomCss()
-    if (customCss) {
-      const overrides = await extractThemeFromCss(customCss)
-      if (overrides.lightPrimary) theme.lightPrimary = overrides.lightPrimary
-      if (overrides.lightPrimaryForeground)
-        theme.lightPrimaryForeground = overrides.lightPrimaryForeground
-      if (overrides.darkPrimary) theme.darkPrimary = overrides.darkPrimary
-      if (overrides.darkPrimaryForeground)
-        theme.darkPrimaryForeground = overrides.darkPrimaryForeground
-      if (overrides.radius) theme.radius = overrides.radius
+    const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    const overrides =
+      customCss && !(await isFeaturePaused('customCss'))
+        ? await extractThemeFromCss(customCss)
+        : ({} as PublicServerTheme)
+    if (overrides.radius) theme.radius = overrides.radius
+
+    const lightFill = overrides.lightPrimary ?? stored.light
+    const darkFill =
+      overrides.darkPrimary ??
+      stored.dark ??
+      (overrides.darkPrimaryForeground ? lightFill : undefined)
+    const lightPair = lightFill
+      ? await readableLauncher(lightFill, overrides.lightPrimaryForeground)
+      : null
+    const darkPair = darkFill
+      ? await readableLauncher(darkFill, overrides.darkPrimaryForeground)
+      : null
+    if (lightPair) {
+      theme.lightPrimary = lightPair.fill
+      theme.lightPrimaryForeground = lightPair.ink
+    }
+    if (darkPair) {
+      theme.darkPrimary = darkPair.fill
+      theme.darkPrimaryForeground = darkPair.ink
     }
   } catch {
     // Fall back to SDK defaults — theme stays empty

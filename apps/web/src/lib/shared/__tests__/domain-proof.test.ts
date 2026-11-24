@@ -46,6 +46,8 @@ describe('labels', () => {
     expect(pendingProvenLabel('workspace')).toBe('Already verified by this workspace')
     expect(pendingProvenLabel('sso')).toBe('Already verified through single sign-on')
     expect(verifiedThroughLabel('domain')).toBe('Verified through domain verification')
+    // The product's word for a hostname the portal is served at.
+    expect(verifiedThroughLabel('web-address')).toBe('Verified through a custom domain')
   })
 })
 

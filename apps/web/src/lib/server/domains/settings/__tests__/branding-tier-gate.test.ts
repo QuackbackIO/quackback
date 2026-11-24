@@ -24,7 +24,11 @@ vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),
-  CACHE_KEYS: { WORKSPACE_SETTINGS: 'settings:workspace', REGISTERED_AUTH_PROVIDERS: 'auth:p' },
+  CACHE_KEYS: {
+    WORKSPACE_SETTINGS: 'settings:workspace',
+    REGISTERED_AUTH_PROVIDERS: 'auth:p',
+    PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
+  },
 }))
 
 vi.mock('../settings.helpers', async (importOriginal) => {
@@ -33,6 +37,11 @@ vi.mock('../settings.helpers', async (importOriginal) => {
     ...real,
     requireSettings: hoisted.mockRequireSettings,
     requireSettingsCached: hoisted.mockRequireSettings,
+    // The locked read-modify-write sees the same row and writes through the db mock.
+    writeLockedSettings: async (
+      _options: unknown,
+      write: (tx: unknown, row: unknown) => Promise<unknown>
+    ) => write({ update: hoisted.mockDbUpdate }, await hoisted.mockRequireSettings()),
   }
 })
 

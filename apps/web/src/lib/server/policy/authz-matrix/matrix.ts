@@ -10,10 +10,12 @@
  * MATRIX.md diff.
  */
 import { ALL_PERMISSIONS, PERMISSION_CATALOGUE } from '@/lib/shared/permissions'
+import { hasApiScope } from '@/lib/shared/api-key-scopes'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { ResolvedSurface } from './resolve'
 import { PRINCIPAL_CLASSES, type PrincipalClass } from './principals'
 import type { ScannedMcpTool, EntryPoint } from './scan'
+import { SESSION_REACH } from './classifications'
 
 export type Outcome = 'allow' | 'deny' | 'n/a'
 
@@ -34,6 +36,17 @@ export function evaluate(cls: PrincipalClass, surface: ResolvedSurface): Outcome
       // Passes if the class holds at least one candidate permission (can touch at
       // least one field); assertApiPermissions enforces the rest per changed field.
       return surface.authz.permissions.some((p) => cls.permissions.has(p)) ? 'allow' : 'deny'
+    case 'scoped_read': {
+      // The key must hold the read scope; the creator's permission is checked
+      // against the role's own set, not the scope-narrowed one, because the
+      // listed permissions are write-verbed and a read-only key still reads.
+      const scopes = cls.mcpScopes ? [...cls.mcpScopes] : null
+      if (!hasApiScope(scopes, surface.authz.scope)) return 'deny'
+      const { permissions } = surface.authz
+      if (permissions.length === 0) return 'allow'
+      const rolePermissions = resolveActorPermissions(cls.role)
+      return permissions.some((p) => rolePermissions.has(p)) ? 'allow' : 'deny'
+    }
     case 'role_gate':
       return (surface.authz.bar === 'admin' ? cls.role === 'admin' : cls.isTeamMember)
         ? 'allow'
@@ -68,6 +81,10 @@ function authzLabel(s: ResolvedSurface): string {
       return 'MCP entry (tool scopes authorize)'
     case 'dynamic_permission':
       return `DYNAMIC (${s.authz.permissions.join(' | ')})`
+    case 'scoped_read':
+      return s.authz.permissions.length === 0
+        ? `SCOPED READ (${s.authz.scope})`
+        : `SCOPED READ (${s.authz.scope}; ${s.authz.permissions.join(' | ')})`
     case 'role_gate': {
       const bar = s.authz.bar === 'admin' ? 'ADMIN-ONLY' : 'TEAM-ONLY'
       return `${bar}${s.authz.permission ? ` (~${s.authz.permission})` : ''}`
@@ -110,6 +127,13 @@ export function renderMatrixDoc(
     out.push(
       `| ${p} | ${categoryOf.get(p) ?? '?'} | ${mark(OWNER.has(p))} | ${mark(MANAGER.has(p))} |`
     )
+  }
+  out.push('')
+  out.push('### Session reach beyond the gated surfaces')
+  out.push('')
+  for (const p of ALL_PERMISSIONS) {
+    const note = SESSION_REACH[p]
+    if (note) out.push(`- **${p}**: ${note}`)
   }
   out.push('')
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { stripHtml, truncate } from '@/lib/shared/utils'
+import { stripHtml, stripMarkdownPreview, truncate } from '@/lib/shared/utils'
 
 export const Route = createFileRoute('/changelog/feed')({
   server: {
@@ -10,7 +10,8 @@ export const Route = createFileRoute('/changelog/feed')({
        */
       GET: async () => {
         const [
-          { config },
+          { getSectionOrigins },
+          { sectionUrl },
           { db, changelogEntries, and, desc, sql },
           { publicChangelogConditions },
           { getSettingsBrandingData },
@@ -19,8 +20,10 @@ export const Route = createFileRoute('/changelog/feed')({
           { getOptionalAuth, policyActorFromAuth },
           { isFeatureEnabled },
           { categoryGateCondition },
+          { tiptapJsonToText, hasTextLeaf },
         ] = await Promise.all([
-          import('@/lib/server/config'),
+          import('@/lib/server/domains/settings/section-links'),
+          import('@/lib/shared/section-links'),
           import('@/lib/server/db'),
           import('@/lib/server/domains/changelog/changelog.public'),
           import('@/lib/server/settings-utils'),
@@ -29,11 +32,25 @@ export const Route = createFileRoute('/changelog/feed')({
           import('@/lib/server/functions/auth-helpers'),
           import('@/lib/server/domains/settings/settings.service'),
           import('@/lib/server/domains/changelog/changelog-category.service'),
+          import('@/lib/server/markdown-tiptap'),
         ])
+
+        // Feed readers get plain text: the words of the entry's document, or
+        // its markdown with the syntax stripped when it has no document.
+        const plainText = (entry: { content: string; contentJson: unknown }): string => {
+          const doc = entry.contentJson as Parameters<typeof tiptapJsonToText>[0] | null
+          const text =
+            doc && hasTextLeaf(doc)
+              ? tiptapJsonToText(doc)
+              : stripMarkdownPreview(stripHtml(entry.content), Number.MAX_SAFE_INTEGER)
+          return text.replace(/\s+/g, ' ').trim()
+        }
 
         const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
-        const baseUrl = config.baseUrl
+        // On the changelog's own host once it has one, so a reader never
+        // leans on the redirect from the primary domain.
+        const origins = await getSectionOrigins()
 
         // Get workspace branding for feed title
         const branding = await getSettingsBrandingData()
@@ -83,14 +100,14 @@ export const Route = createFileRoute('/changelog/feed')({
         const rssXml = buildRssFeed({
           title: `${siteName} Changelog`,
           description: `Latest updates and releases from ${siteName}`,
-          link: `${baseUrl}/changelog`,
-          feedUrl: `${baseUrl}/changelog/feed`,
+          link: sectionUrl('changelog', '/changelog', origins),
+          feedUrl: `${origins.changelog}/changelog/feed`,
           entries: entries.map((entry) => ({
             id: entry.id,
             title: entry.title,
-            content: entry.content,
+            content: plainText(entry),
             publishedAt: entry.displayDate ?? entry.publishedAt!,
-            link: `${baseUrl}/changelog/${entry.id}`,
+            link: sectionUrl('changelog', `/changelog/${entry.id}`, origins),
           })),
         })
 
@@ -138,8 +155,8 @@ function buildRssFeed(options: RssFeedOptions): string {
 
   const items = entries
     .map((entry) => {
-      // Strip HTML for description, keep it short
-      const truncatedContent = truncate(stripHtml(entry.content), 500)
+      // Already plain text; keep it short
+      const truncatedContent = truncate(entry.content, 500)
 
       return `    <item>
       <title>${escapeXml(entry.title)}</title>

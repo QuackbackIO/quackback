@@ -28,6 +28,7 @@ import {
   type ProvenZone,
 } from './proven-zones'
 import { domainUsesFrom, type DomainUseRows } from './domains.service'
+import { activeSendingDomainIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 export interface SendingDomainSummary {
   id: string
@@ -38,6 +39,10 @@ export interface SendingDomainSummary {
   /** The local parts of the addresses sending from it, as "help@". */
   localParts: string[]
   ownershipProven: boolean
+  /** Held back by the plan: its mail goes from the default sender for now. */
+  paused: boolean
+  /** The plan that holds it back, named in its line; null when unknown or not paused. */
+  pausedPlanName?: string | null
 }
 
 export interface SignInDomainSummary {
@@ -61,7 +66,7 @@ function addressDomain(address: string): string {
 }
 
 export async function listSendingDomainSummaries(): Promise<SendingDomainSummary[]> {
-  const [domains, senders] = await Promise.all([
+  const [domains, senders, active] = await Promise.all([
     db.select().from(emailSendingDomains).orderBy(asc(emailSendingDomains.domain)),
     db
       .select({
@@ -70,7 +75,14 @@ export async function listSendingDomainSummaries(): Promise<SendingDomainSummary
       })
       .from(channelAccounts)
       .where(and(eq(channelAccounts.role, 'sending'), isNull(channelAccounts.deletedAt))),
+    activeSendingDomainIds(),
   ])
+  const pausedPlanName =
+    active === null
+      ? null
+      : await import('@/lib/server/domains/plan-limits/plan-limits.copy').then((m) =>
+          m.currentPlanName()
+        )
   return domains.map((d) => {
     const domain = toAsciiDomain(d.domain)
     const parts = new Set<string>()
@@ -90,6 +102,8 @@ export async function listSendingDomainSummaries(): Promise<SendingDomainSummary
       autoCheckUntil: d.autoCheckUntil?.toISOString() ?? null,
       localParts: [...parts].sort(),
       ownershipProven: sendingRowProvesZone(d),
+      paused: active !== null && !active.includes(d.id),
+      pausedPlanName,
     }
   })
 }

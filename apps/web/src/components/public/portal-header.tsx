@@ -1,15 +1,18 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
+import { WIDE_LOGO_CLASS } from '@/lib/shared/portal-wide-logo'
+import { WideLogo } from './wide-logo'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
+import { crossHostTabHref, isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
 import { usePortalNavItems } from './use-portal-nav-items'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
-import { signOut } from '@/lib/client/auth-client'
+import { SIGN_OUT_FAILED, signOutChecked } from '@/lib/client/sign-out-checked'
+import { toast } from 'sonner'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
 import { signinErrorLanding } from '@/lib/shared/auth-prompt'
@@ -43,11 +46,23 @@ import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-s
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
-import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useSectionLinks,
+  useSessionContext,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { usePreviewHelpCenter, usePreviewLogo, usePreviewName } from './preview-draft-context'
 
 interface PortalHeaderProps {
   orgName: string
+  /** The name the header shows in the workspace name's place, when one is set. */
+  headerName?: string | null
   orgLogo?: string | null
+  /** The wide logo, shown alone in place of the square logo and the name. */
+  wideLogo?: string | null
+  /** The wide logo's dark mode version, shown in its place where the portal is dark. */
+  wideLogoDark?: string | null
   /** User's role in the organization (passed from server) */
   userRole?: Role | null
   /** Initial user data for SSR (store values override these after hydration) */
@@ -61,8 +76,11 @@ interface PortalHeaderProps {
 }
 
 export function PortalHeader({
-  orgName,
+  orgName: workspaceName,
+  headerName,
   orgLogo,
+  wideLogo,
+  wideLogoDark,
   userRole,
   initialUserData,
   showThemeToggle = true,
@@ -82,6 +100,23 @@ export function PortalHeader({
   })
 
   const navItems = usePortalNavItems()
+  // The Customise page's unsaved Help Center links and logo, in its preview only.
+  const previewHelpCenter = usePreviewHelpCenter()
+  const previewLogo = usePreviewLogo()
+  // The header's own name when it has one; the workspace's everywhere else
+  // (emails, sign-in, page titles). The Customise page's unsaved one wins, in its preview only.
+  const orgName = usePreviewName() || headerName?.trim() || workspaceName
+  // The Customise draft decides which logo shows, the wide one ('custom_logo')
+  // or the square one, so a draft can turn a live wide logo off as well as on.
+  const shownWide = previewLogo
+    ? previewLogo.mode === 'custom_logo'
+      ? previewLogo.url
+      : null
+    : wideLogo
+  // Its dark mode version: the draft's own, which may be none, else the saved one.
+  const shownWideDark = previewLogo ? (previewLogo.darkUrl ?? null) : wideLogoDark
+  const shownLogo =
+    previewLogo && previewLogo.mode !== 'custom_logo' ? (previewLogo.url ?? orgLogo) : orgLogo
   const supportEnabled = isPortalSupportSurfaceEnabled(
     settings?.featureFlags,
     settings?.portalConfig
@@ -151,8 +186,19 @@ export function PortalHeader({
   const email = initialUserData?.email ?? user?.email ?? null
   const avatarUrl = initialUserData?.avatarUrl ?? user?.image ?? null
 
+  // On a section host the session is portal scope, so the role reads as a
+  // portal user's, and the admin runs on the primary domain only. The bootstrap
+  // sends a teammate there the admin's address on the primary domain instead,
+  // and Link renders an absolute address as a plain link: a full page load,
+  // with no session carried. On the primary domain it is absent and the link
+  // is the router's /admin, as before.
+  const primaryAdminUrl = useRouteContext({
+    from: '__root__',
+    select: (context) => context.primaryAdminUrl,
+  })
+
   // Team members (admin, member) can access admin dashboard
-  const canAccessAdmin = isLoggedIn && isTeamMember(userRole)
+  const canAccessAdmin = isLoggedIn && (isTeamMember(userRole) || !!primaryAdminUrl)
 
   // Skip the sign-in dialog for a single-IdP workspace: go straight to the
   // OIDC provider (same redirect the dialog's "Continue" path uses), returning
@@ -175,7 +221,11 @@ export function PortalHeader({
   }
 
   const handleSignOut = async () => {
-    await signOut()
+    // A refused sign-out leaves the visitor signed in: say so, and stay put.
+    if (!(await signOutChecked())) {
+      toast.error(intl.formatMessage(SIGN_OUT_FAILED))
+      return
+    }
     // Clear user-scoped caches: vote highlights, and every viewer-scoped
     // payload (a team member's internal tags must not outlive their session).
     queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
@@ -195,7 +245,7 @@ export function PortalHeader({
       {/* Admin Button (visible for team members) */}
       {canAccessAdmin && (
         <Button variant="outline" size="sm" asChild className="ms-1 me-2">
-          <Link to="/admin" search={{}}>
+          <Link to={primaryAdminUrl ?? '/admin'} search={{}}>
             <ShieldCheckIcon className="me-2 h-4 w-4" />
             <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
           </Link>
@@ -235,7 +285,7 @@ export function PortalHeader({
             <DropdownMenuSeparator />
             {canAccessAdmin && (
               <DropdownMenuItem asChild>
-                <Link to="/admin" search={{}}>
+                <Link to={primaryAdminUrl ?? '/admin'} search={{}}>
                   <ShieldCheckIcon className="me-2 h-4 w-4" />
                   <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
                 </Link>
@@ -270,6 +320,7 @@ export function PortalHeader({
           {showSignup && (
             <Button
               size="sm"
+              data-qb-edit="colours"
               onClick={() =>
                 soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
               }
@@ -282,49 +333,60 @@ export function PortalHeader({
     </div>
   )
 
-  // Two-row layout: Logo + Auth on top, Navigation below
+  // One row: the logo, the tabs beside it, the account controls at the end.
+  // On a phone the tabs take a row of their own below, scrolling sideways.
   return (
     // A banner landmark, so the logo and account controls sit in one.
     <header
       ref={headerRef}
+      data-qb-edit="header"
       className="portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm"
     >
-      {/* Row 1: Logo + Name + Auth */}
-      <div>
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
-          <div className="flex h-12 items-center justify-between">
-            <Link to="/" className="portal-header__logo flex items-center gap-2">
-              {orgLogo ? (
-                <img
-                  src={orgLogo}
-                  alt={orgName}
-                  className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
-                />
-              ) : (
-                <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
-                  {nameInitial(orgName)}
-                </div>
-              )}
+      <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
+        <div data-header-row="" className="flex flex-wrap items-center gap-x-4 md:flex-nowrap">
+          <Link
+            to="/"
+            data-qb-edit="logo"
+            className="portal-header__logo flex h-12 shrink-0 items-center gap-2"
+          >
+            {shownWide ? (
+              // A wordmark carries the name, so it stands alone, on phones too.
+              <WideLogo
+                src={shownWide}
+                darkSrc={shownWideDark}
+                alt={orgName}
+                className={WIDE_LOGO_CLASS}
+              />
+            ) : shownLogo ? (
+              <img
+                src={shownLogo}
+                alt={orgName}
+                className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
+              />
+            ) : (
+              <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+                {nameInitial(orgName)}
+              </div>
+            )}
+            {!shownWide && (
               <span
                 title={orgName}
-                className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
+                className="portal-header__name font-heading font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
               >
                 {orgName}
               </span>
-            </Link>
-            {authButtons}
+            )}
+          </Link>
+          <div className="order-last -mx-1 mt-1 basis-full overflow-x-auto px-1 scrollbar-none md:order-none md:mt-0 md:min-w-0 md:flex-1 md:basis-auto">
+            <Navigation
+              navItems={navItems}
+              helpHeaderLinks={
+                previewHelpCenter?.headerLinks ?? settings?.helpCenterConfig?.headerLinks
+              }
+              supportUnreadTotal={supportUnreadTotal}
+            />
           </div>
-        </div>
-      </div>
-
-      {/* Row 2: Navigation */}
-      <div className="mt-2 overflow-x-auto scrollbar-none">
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
-          <Navigation
-            navItems={navItems}
-            helpHeaderLinks={settings?.helpCenterConfig?.headerLinks}
-            supportUnreadTotal={supportUnreadTotal}
-          />
+          <div className="ms-auto shrink-0 md:ms-0">{authButtons}</div>
         </div>
       </div>
     </header>
@@ -355,7 +417,7 @@ function Navigation({
   const helpLinks = onHelpPages ? (helpHeaderLinks ?? []).slice(0, 3) : []
 
   return (
-    <nav className="portal-nav flex items-center gap-1 whitespace-nowrap">
+    <nav data-qb-edit="nav" className="portal-nav flex items-center gap-1 whitespace-nowrap">
       {navItems.map((item) => {
         if (item.kind === 'link') {
           return (
@@ -379,7 +441,8 @@ function Navigation({
         )
       })}
       {helpLinks.map((link) => {
-        const external = !link.url.startsWith('/')
+        // `//host` starts with / but is another site.
+        const external = !isSafeCallbackUrl(link.url)
         return (
           <a
             key={link.url}
@@ -407,30 +470,45 @@ type BuiltInNavItem = Extract<PortalNavItem, { kind: 'builtin' }>
 const NavTab = memo(
   function NavTab({ item, unread }: { item: BuiltInNavItem; unread: number }) {
     const intl = useIntl()
-    const isActive = useRouterState({ select: (s) => isTabActive(item.to, s.location.pathname) })
-    return (
-      <Link to={item.to} className={navItemClass(isActive)}>
-        {item.label ??
-          intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
-        {unread > 0 && (
-          <span
-            className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
-            aria-label={intl.formatMessage(
-              {
-                id: 'portal.support.unreadBadge',
-                defaultMessage: '{count} unread',
-              },
-              { count: unread }
-            )}
-          >
-            {unread > 99 ? '99+' : unread}
-          </span>
+    // A tab for a section served on another host (help.acme.com) is a plain
+    // link there: a client-side navigation would never reach the server. A
+    // signed-in viewer goes through the sign-in handoff on that host.
+    const signedIn = useSessionContext()?.user != null
+    const crossHostHref = crossHostTabHref(item.type, item.to, useSectionLinks(), { signedIn })
+    const isActive = useRouterState({
+      select: (s) => !crossHostHref && isTabActive(item.to, s.location.pathname),
+    })
+    const label =
+      item.label ?? intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })
+    const badge = unread > 0 && (
+      <span
+        className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
+        aria-label={intl.formatMessage(
+          {
+            id: 'portal.support.unreadBadge',
+            defaultMessage: '{count} unread',
+          },
+          { count: unread }
         )}
+      >
+        {unread > 99 ? '99+' : unread}
+      </span>
+    )
+    return crossHostHref ? (
+      <a href={crossHostHref} className={navItemClass(false)}>
+        {label}
+        {badge}
+      </a>
+    ) : (
+      <Link to={item.to} className={navItemClass(isActive)}>
+        {label}
+        {badge}
       </Link>
     )
   },
   (prev, next) =>
     prev.unread === next.unread &&
+    prev.item.type === next.item.type &&
     prev.item.to === next.item.to &&
     prev.item.label === next.item.label &&
     prev.item.messageId === next.item.messageId &&

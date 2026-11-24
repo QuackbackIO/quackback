@@ -12,7 +12,7 @@ test.describe('Admin Notifications Page', () => {
   })
 
   test('shows Notifications heading', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible({
       timeout: 10000,
     })
   })
@@ -151,10 +151,16 @@ test.describe('Admin Notifications — Mark All as Read', () => {
     await expect(page.locator('[class*="animate-spin"]')).toBeHidden({ timeout: 10000 })
 
     // If there are no unread notifications, the button stays visible but disabled
-    const hasUnread = (await page.locator('[class*="border-l-primary"]').count()) > 0
+    // Unread rows no longer carry a border class; the Unread tab shows the
+    // unread count when there is one.
+    const unreadTab = page.getByRole('tab', { name: /^Unread/ })
+    await expect(unreadTab).toBeVisible({ timeout: 10000 })
+    const hasUnread = /\d/.test((await unreadTab.textContent()) ?? '')
     const markAllBtn = page.getByRole('button', { name: 'Mark all as read' })
 
-    if (!hasUnread) {
+    if (hasUnread) {
+      await expect(markAllBtn).toBeEnabled()
+    } else {
       await expect(markAllBtn).toBeDisabled()
     }
   })

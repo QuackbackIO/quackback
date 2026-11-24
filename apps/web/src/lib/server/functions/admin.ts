@@ -333,6 +333,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const { loadLaunchStatus } = await import('@/lib/server/domains/onboarding/launch-status')
   return loadLaunchStatus({
     principalId: auth.principal.id,
+    email: auth.user.email,
     role: auth.principal.role,
     permissions: auth.permissions,
   })
@@ -1009,6 +1010,10 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
         'Invitation is no longer pending — refresh and try again'
       )
     }
+    // A pending team invite holds a seat.
+    const { invalidatePlanLimits } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.cache')
+    await invalidatePlanLimits()
 
     // Invalidate every link this invite ever minted, so a cancelled invite
     // can't sign anyone in. Revoking the full set (returned atomically by the
@@ -1179,12 +1184,11 @@ const segmentRulesSchema = z.object({
   conditions: z.array(segmentConditionSchema),
 })
 
-const CRON_REGEX =
-  /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)(\s+(\*|[0-9,\-/]+))?$/
-
+// The pattern is checked against the scheduler's own cron parser in the
+// segment service, which keeps that parser out of the client bundle.
 const evaluationScheduleSchema = z.object({
   enabled: z.boolean(),
-  pattern: z.string().min(1).regex(CRON_REGEX, 'Must be a valid cron expression'),
+  pattern: z.string().min(1),
 })
 
 const userAttributeDefinitionSchema = z.object({
@@ -1400,7 +1404,10 @@ export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(
   log.info('evaluate all segments')
   await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
   const results = await evaluateAllDynamicSegments()
-  log.info({ count: results.length }, 'all segments evaluated')
+  log.info(
+    { count: results.length, failed: results.filter((r) => 'error' in r).length },
+    'all segments evaluated'
+  )
   return results
 })
 

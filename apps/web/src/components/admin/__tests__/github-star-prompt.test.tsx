@@ -49,12 +49,20 @@ function wrap(
   )
 }
 
-async function shipAndWait(ms = 2000) {
+/**
+ * The gate loads the card with lazy(), a real module fetch that fake timers
+ * cannot advance. Wait for it to finish so the card has mounted, and its own
+ * pause has started, before any fake time passes.
+ */
+async function shipAndLoad() {
   await act(async () => {
     announceShipMoment()
   })
-  // Let the lazily loaded card mount before its own pause starts.
-  for (let i = 0; i < 5; i++) await act(() => vi.advanceTimersByTimeAsync(10))
+  await act(() => vi.dynamicImportSettled())
+}
+
+async function shipAndWait(ms = 2000) {
+  await shipAndLoad()
   await act(() => vi.advanceTimersByTimeAsync(ms))
 }
 
@@ -148,10 +156,7 @@ describe('the GitHub star card', () => {
 
   it('does not use up the ask when the person leaves before it appears', async () => {
     const view = render(wrap(<GithubStarPromptGate />))
-    await act(async () => {
-      announceShipMoment()
-    })
-    for (let i = 0; i < 5; i++) await act(() => vi.advanceTimersByTimeAsync(10))
+    await shipAndLoad()
     view.unmount()
     await act(() => vi.advanceTimersByTimeAsync(5000))
     expect(hoisted.reads).toBe(0)
@@ -217,9 +222,14 @@ describe('the GitHub star row on Home', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const first = render(wrap(<HomeGithubStarPrompt />, client))
     expect(await screen.findByText(/Founder of Quackback/)).toBeTruthy()
+    // The row is on screen before its claim settles; leave once it has, as a visit does.
+    await waitFor(() =>
+      expect(client.getQueryData(['github-star-prompt'])).toEqual({ stage: null, stars: null })
+    )
     first.unmount()
     render(wrap(<HomeGithubStarPrompt />, client))
     await act(async () => {})
     expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
+    expect(hoisted.marks).toBe(1)
   })
 })

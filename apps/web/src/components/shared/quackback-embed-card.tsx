@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type CSSProperties, type ReactNode } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { LocalDate } from '@/components/ui/local-date'
@@ -59,7 +59,7 @@ function InteractiveVoteBox({
         voteBoxCls,
         'transition-colors',
         hasVoted
-          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
+          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-primary-ink'
           : 'border-border/50 bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground/80',
         isPending && 'cursor-wait opacity-70'
       )}
@@ -244,7 +244,7 @@ export function QuackbackEmbedCard({
           )}
           <h3 className="line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
           {data.excerpt && (
-            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground/70">{data.excerpt}</p>
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{data.excerpt}</p>
           )}
 
           {data.tags.length > 0 && (
@@ -252,16 +252,18 @@ export function QuackbackEmbedCard({
               {data.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag.id}
-                  className="inline-flex items-center rounded px-1.5 py-0 text-[11px] font-medium"
+                  className="inline-flex items-center rounded px-1.5 py-0 text-[11px] font-medium text-readable"
                   style={
-                    tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color } : undefined
+                    tag.color
+                      ? ({ backgroundColor: `${tag.color}20`, '--ink': tag.color } as CSSProperties)
+                      : undefined
                   }
                 >
                   {tag.name}
                 </span>
               ))}
               {data.tags.length > 3 && (
-                <span className="text-xs text-muted-foreground/60">+{data.tags.length - 3}</span>
+                <span className="text-xs text-muted-foreground">+{data.tags.length - 3}</span>
               )}
             </div>
           )}
@@ -280,8 +282,8 @@ export function QuackbackEmbedCard({
             </span>
             {data.createdAt && (
               <>
-                <span className="text-muted-foreground/40">·</span>
-                <TimeAgo date={new Date(data.createdAt)} className="text-muted-foreground/70" />
+                <span className="text-muted-foreground">·</span>
+                <TimeAgo date={new Date(data.createdAt)} className="text-muted-foreground" />
               </>
             )}
           </div>
@@ -305,7 +307,7 @@ export function QuackbackEmbedCard({
   if (data.kind === 'article') {
     const articleInner = (
       <div className="p-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <FormattedMessage id="ui.embedCard.article" defaultMessage="Help article" />
         </p>
         <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
@@ -330,11 +332,11 @@ export function QuackbackEmbedCard({
     const priority = priorityMeta(data.priority)
     const ticketInner = (
       <div className="p-3">
-        <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+        <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <span>
             <FormattedMessage id="ui.embedCard.ticket" defaultMessage="Support ticket" />
           </span>
-          <span className="text-muted-foreground/40">·</span>
+          <span className="text-muted-foreground">·</span>
           <span className="font-mono normal-case tracking-normal">{data.reference}</span>
         </div>
         <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
@@ -375,7 +377,7 @@ export function QuackbackEmbedCard({
   // Changelog: a compact card (no vote tally — changelog entries aren't voted on).
   const changelogInner = (
     <div className="p-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <FormattedMessage id="ui.embedCard.changelog" defaultMessage="Changelog" />
       </p>
       <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>

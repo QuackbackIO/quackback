@@ -2,9 +2,11 @@ import type { StoredBillingProjection } from '@/lib/shared/db-types'
 import {
   BILLING_STATUSES,
   ENTITLEMENT_KEYS,
+  PLAN_CATALOGUE,
   PLAN_IDS,
   canonicalPlanId,
   type BillingStatus,
+  type EntitlementKey,
   type PlanId,
 } from './cloud.types'
 import type { TierLimits } from '../tier-limits.types'
@@ -176,15 +178,39 @@ export function overlayProjectedLimits(
   return effective
 }
 
+/** Whether the projection's access window has ended at `now`: from then on the workspace is on Free. */
+export function projectionAccessEnded(
+  projection: Pick<BillingProjection, 'planLimitsExpireAt'>,
+  now: Date
+): boolean {
+  return (
+    projection.planLimitsExpireAt !== null &&
+    now.getTime() >= Date.parse(projection.planLimitsExpireAt)
+  )
+}
+
+/**
+ * The entitlements in force at `now`: the projection's own until its access
+ * window ends, then the Free plan's grants (`PLAN_CATALOGUE.free`). The
+ * commercial config and the tier features both read a lapse through here, so
+ * they agree on every Free grant.
+ */
+export function entitlementsAt(
+  projection: Pick<BillingProjection, 'planLimitsExpireAt' | 'entitlements'>,
+  now: Date
+): Partial<Record<EntitlementKey, boolean>> {
+  if (!projectionAccessEnded(projection, now)) return projection.entitlements
+  return Object.fromEntries(PLAN_CATALOGUE.free.grants.map((grant) => [grant, true]))
+}
+
 /** Exact-expiry resolution from local state; no control-plane call or sweeper. */
 export function projectedLimitsAt(
   projection: BillingProjection,
   baseline: TierLimits,
   now = new Date()
 ): TierLimits {
-  const projected =
-    projection.planLimitsExpireAt && now.getTime() >= Date.parse(projection.planLimitsExpireAt)
-      ? projection.freeLimits
-      : projection.planLimits
+  const projected = projectionAccessEnded(projection, now)
+    ? projection.freeLimits
+    : projection.planLimits
   return overlayProjectedLimits(baseline, projected)
 }

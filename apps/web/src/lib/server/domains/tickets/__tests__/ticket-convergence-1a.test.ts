@@ -337,8 +337,9 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       // Redirect invariants: the ticket's activity ordering bump survives…
       const ticket = await readTicket(ticketId)
       expect(ticket.updatedAt?.toISOString()).toBe(message.createdAt)
-      // …but first_response_at is deliberately NOT stamped — the
-      // conversation's first-response machinery owns the pair's timeline.
+      // …but first_response_at is not written in the send itself: the
+      // ticket-first-response reaction to the conversation's message.created
+      // works it out (event-reactions-ticket-first-response.test.ts).
       expect(ticket.firstResponseAt).toBeNull()
 
       // `message.created` fired on the conversation (the SLA event hook's
@@ -369,7 +370,8 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
           }),
           agent: expect.objectContaining({ id: message.id, author: message.author }),
         },
-        { conversationUpdated: true }
+        { conversationUpdated: true },
+        expect.objectContaining({ teamId: null }) // the item scope envelope
       )
       // The seed has an account name but no public name. The widget must not
       // receive the account name even though the team-only ticket copy does.
@@ -422,9 +424,9 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       expect(message.ticketId).toBe(ticketId)
       expect(message.conversationId).toBeNull()
       expect(convEmit.emitMessageCreated).not.toHaveBeenCalled()
-      // Legacy behavior: the ticket-side first_response_at stamp still fires
-      // on the un-redirected path.
-      expect((await readTicket(ticketId)).firstResponseAt).not.toBeNull()
+      // A back-office ticket has no customer, so a teammate's reply is never
+      // its first response.
+      expect((await readTicket(ticketId)).firstResponseAt).toBeNull()
     })
 
     it('leaves a STANDALONE customer ticket reply ticket-parented (pre-1b legacy)', async () => {
@@ -444,6 +446,85 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       expect(message.ticketId).toBe(ticketId)
       expect(message.conversationId).toBeNull()
       expect(convEmit.emitMessageCreated).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('ticket.replied from either view of a paired ticket', () => {
+    /** Let every pending fire-and-forget signal land before counting. */
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 150))
+
+    function inboxActor(principalId: PrincipalId): Actor {
+      return agentActor(principalId, [PERMISSIONS.CONVERSATION_VIEW_ALL])
+    }
+
+    async function pairedTicket() {
+      const statuses = await seedStatuses()
+      const agentP = await seedPrincipal('admin')
+      const requesterP = await seedPrincipal()
+      const ticketId = await seedTicket({
+        statusId: statuses.received,
+        requesterPrincipalId: requesterP,
+      })
+      const conversationId = await seedConversation(requesterP)
+      await linkPair(ticketId, conversationId)
+      return { agentP, ticketId, conversationId }
+    }
+
+    it('signals once for a reply typed in the conversation', async () => {
+      const { agentP, ticketId, conversationId } = await pairedTicket()
+      const { sendAgentMessage } = await import('../../conversation/conversation.service')
+
+      const { message } = await sendAgentMessage(
+        conversationId,
+        'Typed in the inbox.',
+        { principalId: agentP },
+        inboxActor(agentP)
+      )
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await settle()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      const [, ticket, replied] = ticketEmit.emitTicketReplied.mock.calls[0]
+      expect(ticket.id).toBe(ticketId)
+      expect(replied.id).toBe(message.id)
+      expect(replied.senderType).toBe('agent')
+    })
+
+    it('signals once for a reply typed on the ticket', async () => {
+      const { agentP, ticketId } = await pairedTicket()
+
+      const { message } = await sendTicketMessage(agentActor(agentP), {
+        ticketId,
+        content: 'Typed on the ticket.',
+      })
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await settle()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied.mock.calls[0][2].id).toBe(message.id)
+    })
+
+    it('does not signal for a shared card, only for the reply after it', async () => {
+      const { agentP, ticketId, conversationId } = await pairedTicket()
+      const { sendAgentMessage } = await import('../../conversation/conversation.service')
+      const { shareTicket } = await import('../../conversation/conversation.cards')
+      const actor = inboxActor(agentP)
+
+      await shareTicket(
+        { conversationId, ticketId },
+        { agentActor: actor, agentPrincipalId: agentP, agent: { principalId: agentP } }
+      )
+      const { message } = await sendAgentMessage(
+        conversationId,
+        'And a word about it.',
+        { principalId: agentP },
+        actor
+      )
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await settle()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied.mock.calls[0][2].id).toBe(message.id)
     })
   })
 

@@ -95,6 +95,7 @@ describe('whose name a platform-address email goes under', () => {
         'DomainAttentionEmail',
         'OnboardingNudgeEmail',
         'OnboardingWelcomeEmail',
+        'PlanLimitsEmail',
         'SendingDomainAttentionEmail',
       ].sort()
     )

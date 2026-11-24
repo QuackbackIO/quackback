@@ -18,9 +18,14 @@ import { errorText } from '@/lib/client/error-text'
 import { addDomainFn } from '@/lib/server/functions/domains'
 import { DOMAIN_VIEW_ROUTE } from '@/lib/shared/domain-uses'
 
-export function AddDomainButton({ variant = 'default' }: { variant?: 'default' | 'outline' }) {
+export function AddDomainButton({
+  defaultOpen = false,
+}: {
+  /** Open on arrival, when a link asked for Add domain. */
+  defaultOpen?: boolean
+} = {}) {
   const navigate = useNavigate()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +55,7 @@ export function AddDomainButton({ variant = 'default' }: { variant?: 'default' |
 
   return (
     <>
-      <Button size="sm" variant={variant} onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         Add domain
       </Button>
       <Dialog open={open} onOpenChange={onOpenChange}>

@@ -30,7 +30,7 @@ export function HelpCenterPrevNext({ prev, next, locale }: HelpCenterPrevNextPro
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
             &larr; <FormattedMessage id="portal.hc.prevNext.previous" defaultMessage="Previous" />
           </span>
-          <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors mt-0.5">
+          <p className="text-sm font-medium text-foreground group-hover:text-primary-ink transition-colors mt-0.5">
             {prev.title}
           </p>
         </Link>
@@ -42,7 +42,7 @@ export function HelpCenterPrevNext({ prev, next, locale }: HelpCenterPrevNextPro
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
             <FormattedMessage id="portal.hc.prevNext.next" defaultMessage="Next" /> &rarr;
           </span>
-          <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors mt-0.5">
+          <p className="text-sm font-medium text-foreground group-hover:text-primary-ink transition-colors mt-0.5">
             {next.title}
           </p>
         </Link>
