@@ -21,7 +21,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import { EASE, HeightPresence, usePresence } from './widget-presence'
+import { EASE, FadeInOnMount, HeightPresence, usePresence } from './widget-presence'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { widgetListPublicPostsFn } from '@/lib/server/functions/widget/posts'
@@ -1025,7 +1025,7 @@ export function WidgetHomeAnimated({
             </div>
 
             <HeightPresence show={expanded} duration={250} easing="cubic-bezier(0.4, 0, 0.2, 1)">
-              <div className="px-3 pb-2 animate-in fade-in fill-mode-backwards duration-200 delay-100 ease-[cubic-bezier(0.42,0,0.58,1)] motion-reduce:animate-none">
+              <FadeInOnMount duration={200} delay={100} className="px-3 pb-2">
                 <Suspense fallback={<RichTextEditorPlaceholder minHeight="80px" />}>
                   <LazyRichTextEditor
                     value={editorContent || ''}
@@ -1055,7 +1055,7 @@ export function WidgetHomeAnimated({
                     className="text-sm"
                   />
                 </Suspense>
-              </div>
+              </FadeInOnMount>
 
               <WidgetBoardFields answers={fieldAnswers} />
 
@@ -1079,7 +1079,11 @@ export function WidgetHomeAnimated({
                 </div>
               )}
 
-              <div className="border-t border-border bg-muted/30 animate-in fade-in fill-mode-backwards duration-200 delay-150 ease-[cubic-bezier(0.42,0,0.58,1)] motion-reduce:animate-none">
+              <FadeInOnMount
+                duration={200}
+                delay={150}
+                className="border-t border-border bg-muted/30"
+              >
                 <div className="flex items-center justify-between px-3 py-2">
                   <p className="text-[11px] text-muted-foreground truncate me-2">
                     {selectedReadOnly ? (
@@ -1149,7 +1153,7 @@ export function WidgetHomeAnimated({
                     )}
                   </div>
                 </div>
-              </div>
+              </FadeInOnMount>
             </HeightPresence>
           </div>
 

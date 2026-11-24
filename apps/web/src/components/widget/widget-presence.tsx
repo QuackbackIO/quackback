@@ -107,6 +107,41 @@ export const EASE = {
 } as const
 
 /**
+ * Fades its content in once, as it mounts, through the Web Animations API.
+ * Use it instead of a CSS `animate-in` class inside the kept-mounted
+ * feedback view: a CSS animation replays whenever a hidden (display: none)
+ * ancestor shows again, and this must not.
+ */
+export function FadeInOnMount({
+  duration,
+  delay,
+  className,
+  children,
+}: {
+  duration: number
+  delay: number
+  className?: string
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || typeof el.animate !== 'function' || prefersReducedMotion()) return
+    el.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration,
+      delay,
+      easing: EASE.easeInOut,
+      fill: 'backwards',
+    })
+  }, [duration, delay])
+  return (
+    <div ref={ref} className={className}>
+      {children}
+    </div>
+  )
+}
+
+/**
  * A block that grows open from height 0 when `show` turns true and collapses
  * back when it turns false: framer-motion's
  * `initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
