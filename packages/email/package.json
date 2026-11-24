@@ -22,12 +22,12 @@
     "./subject": "./src/subject.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-sesv2": "^3.1131.0",
+    "@aws-sdk/client-sesv2": "^3.1176.0",
     "@quackback/logger": "workspace:*",
     "@react-email/components": "^1.0.12",
-    "nodemailer": "^10.0.9",
+    "nodemailer": "^10.6.1",
     "react": "^19.3.0",
-    "resend": "^6.28.0"
+    "resend": "^6.39.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0"
