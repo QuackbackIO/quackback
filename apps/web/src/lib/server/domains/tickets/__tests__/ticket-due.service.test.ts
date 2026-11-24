@@ -173,13 +173,14 @@ describe.skipIf(!fixture.available)('ticket-due.service (real DB, rolled back)',
     expect(dueAt).toBe(due.toISOString())
     expect(previousDueAt).toBeNull()
 
+    // The third argument is the inbox scope envelope publishTicketUpdated adds.
     expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
       id,
       {
         kind: 'ticket_updated',
         ticket: expect.objectContaining({ id, dueAt: due.toISOString() }),
       },
-      expect.anything()
+      expect.objectContaining({ assigneePrincipalId: null, teamId: null })
     )
   })
 
@@ -248,13 +249,24 @@ describe.skipIf(!fixture.available)('ticket-due.service (real DB, rolled back)',
     expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
   })
 
-  it('leaves firstResponseAt alone: only a teammate reply is a first response', async () => {
+  // First response is worked out from the message rows, never stamped by a field change.
+  it('leaves firstResponseAt unset when a teammate sets the first due date', async () => {
     const actor = await adminActor()
     const id = await seedTicket()
 
     await setTicketDueAt(id, at(DAY * 2), actor, { now: NOW })
 
     expect((await readTicket(id)).firstResponseAt).toBeNull()
+  })
+
+  it('keeps an existing firstResponseAt', async () => {
+    const actor = await adminActor()
+    const firstResponseAt = new Date('2026-10-10T09:00:00.000Z')
+    const id = await seedTicket({ firstResponseAt })
+
+    await setTicketDueAt(id, at(DAY * 2), actor, { now: NOW })
+
+    expect((await readTicket(id)).firstResponseAt?.getTime()).toBe(firstResponseAt.getTime())
   })
 
   describe('alert markers', () => {
