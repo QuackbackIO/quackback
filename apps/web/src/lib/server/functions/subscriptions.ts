@@ -23,11 +23,11 @@ const getSubscriptionStatusSchema = z.object({
   postId: z.string(),
 })
 
-// A subscription someone makes for themselves is always 'manual'; the other
-// reasons are written by the paths that create them (authoring, voting,
-// commenting, being assigned or added), never chosen by the client.
+// The stored reason is the caller's choice among their own reasons; 'assigned'
+// and 'added' are written only by a teammate's action.
 const subscribeToPostSchema = z.object({
   postId: z.string(),
+  reason: z.enum(['manual', 'author', 'vote', 'comment']).optional().default('manual'),
   level: z.enum(['all', 'status_only']).optional().default('all'),
 })
 
@@ -111,11 +111,12 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
 
     const { subscribeToPost } =
       await import('@/lib/server/domains/subscriptions/subscription.service')
-    const added = await subscribeToPost(auth.principal.id, data.postId as PostId, 'manual', {
+    const reason = data.reason || 'manual'
+    const added = await subscribeToPost(auth.principal.id, data.postId as PostId, reason, {
       level: data.level as SubscriptionLevel,
     })
     if (added) {
-      await announceOwnChange('added', actor, data.postId as PostId, auth.principal.id, 'manual')
+      await announceOwnChange('added', actor, data.postId as PostId, auth.principal.id, reason)
     }
     log.info({ post_id: data.postId }, 'post subscribed')
     return { postId: data.postId }
