@@ -1,7 +1,7 @@
 import { ClientOnly, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { portalPreviewSrc } from '@/components/admin/settings/branding/portal-preview'
+import { portalPreviewSrc } from '@/lib/shared/portal-preview-src'
 import type { SummaryRow } from './summary'
 
 /** The thumbnail renders the home page at desktop width, scaled to fit. */

@@ -115,6 +115,31 @@ export function oklchToHex(oklch: string): string {
   return oklabToHex(oL, a, b)
 }
 
+/**
+ * The colour at an OKLCH lightness and hue as hex, its chroma lowered only as
+ * far as it takes to sit inside sRGB. Clipping each channel instead would
+ * turn the hue (a darkened yellow going orange), so a colour moved in
+ * lightness keeps its hue this way.
+ */
+export function oklchToHexInGamut(L: number, C: number, H: number): string {
+  const linear = (chroma: number) => {
+    const [a, b] = oklchToOklab(L, chroma, H).slice(1) as [number, number]
+    return xyzToLinearRgb(...oklabToXyz(L, a, b))
+  }
+  const fits = (chroma: number) => linear(chroma).every((c) => c >= -1e-4 && c <= 1 + 1e-4)
+  let chroma = C
+  if (!fits(chroma)) {
+    let [low, high] = [0, C]
+    for (let i = 0; i < 12; i++) {
+      const mid = (low + high) / 2
+      if (fits(mid)) low = mid
+      else high = mid
+    }
+    chroma = low
+  }
+  return oklabToHex(...oklchToOklab(L, chroma, H))
+}
+
 function hslToHex(h: number, s: number, l: number): string {
   const sat = s / 100
   const light = l / 100

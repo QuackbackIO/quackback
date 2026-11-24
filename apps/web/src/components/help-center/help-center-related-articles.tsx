@@ -44,7 +44,7 @@ export function HelpCenterRelatedArticles({ articles, locale }: HelpCenterRelate
             className="group flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5 transition-colors hover:border-primary/40 hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="min-w-0">
-              <span className="block truncate text-sm font-medium text-foreground transition-colors group-hover:text-primary">
+              <span className="block truncate text-sm font-medium text-foreground transition-colors group-hover:text-primary-ink">
                 {article.title}
               </span>
               {article.description && (
@@ -53,7 +53,7 @@ export function HelpCenterRelatedArticles({ articles, locale }: HelpCenterRelate
                 </span>
               )}
             </span>
-            <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-primary" />
+            <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-primary-ink" />
           </Link>
         ))}
       </div>

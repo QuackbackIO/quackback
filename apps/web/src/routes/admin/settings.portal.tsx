@@ -19,13 +19,8 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { PortalSummaryCard } from '@/components/admin/settings/portal-customise/summary-card'
-import { portalSummary } from '@/components/admin/settings/portal-customise/summary'
-import { isProductEnabled } from '@/lib/shared/types/settings'
-import type { ThemeConfig } from '@/lib/shared/theme'
-import { isStatusPagePublished } from '@/lib/shared/status-settings'
-import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
-import type { PortalBuiltInNavType } from '@/components/public/portal-header-nav'
 import { SETTINGS_PAGES } from '@/lib/shared/settings-pages'
+import { portalGatedTypes } from '@/lib/shared/portal-customise/gated-types'
 import {
   PORTAL_SETTINGS_PATH,
   PORTAL_TAB_LABELS,
@@ -90,11 +85,9 @@ export const Route = createFileRoute('/admin/settings/portal')({
       // settings.branding (the tabs and welcome message too, decision Q2).
       ...(tabs.includes('design')
         ? [
-            ensure(settingsQueries.branding()),
-            ensure(settingsQueries.logo()),
-            ensure(settingsQueries.headerLogo()),
-            ensure(settingsQueries.customCss()),
-            ensure(settingsQueries.portalPageConfig()),
+            ensure(
+              settingsQueries.portalSummary(portalGatedTypes(context.settings, context.session))
+            ),
           ]
         : []),
       tab === 'custom-domains'
@@ -194,46 +187,9 @@ function DesignSummary() {
   const session = useSessionContext()
   const canManageHelpCenter = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
 
-  const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
-  const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
-  const { data: headerLogo } = useSuspenseQuery(settingsQueries.headerLogo())
-  const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
-  const { data: portalConfig } = useSuspenseQuery(settingsQueries.portalPageConfig())
+  const gatedTypes = useMemo(() => portalGatedTypes(settings, session), [settings, session])
 
-  // Built-in tabs that are currently unavailable (product or tab off) are not counted.
-  const gatedTypes = useMemo(() => {
-    const flags = settings?.featureFlags
-    const statusAudience = settings?.statusConfig?.audience ?? 'public'
-    const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
-    const gates: Record<PortalBuiltInNavType, boolean> = {
-      feedback: isProductEnabled(flags, 'feedback'),
-      roadmap: isProductEnabled(flags, 'feedback'),
-      changelog: isProductEnabled(flags, 'changelog'),
-      help: isProductEnabled(flags, 'helpCenter'),
-      support: isPortalSupportSurfaceEnabled(flags, settings?.portalConfig),
-      status:
-        isStatusPagePublished(flags, settings?.statusConfig) &&
-        (statusAudience === 'public' || statusLoggedIn),
-    }
-    return new Set(
-      (Object.keys(gates) as PortalBuiltInNavType[]).filter((type) => !gates[type])
-    ) as ReadonlySet<string>
-  }, [settings, session])
-
-  const summary = useMemo(
-    () =>
-      portalSummary({
-        theme: brandingConfig as ThemeConfig,
-        customCss,
-        portal: { nav: portalConfig.nav, welcomeCard: portalConfig.welcomeCard },
-        logoUrl: logoData?.url ?? null,
-        headerLogo: headerLogo
-          ? { url: headerLogo.url, displayMode: headerLogo.displayMode }
-          : null,
-        gatedTypes,
-      }),
-    [brandingConfig, customCss, portalConfig, logoData, headerLogo, gatedTypes]
-  )
+  const { data: summary } = useSuspenseQuery(settingsQueries.portalSummary(gatedTypes))
 
   return (
     <div className="space-y-4">

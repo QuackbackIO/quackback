@@ -16,8 +16,12 @@ describe('portalDraftPatchSchema', () => {
         dark: { main: '#8ab4f8', header: 'auto' },
       },
       font: 'lora',
+      headingFont: 'playfair',
+      cardStyle: 'shadow',
       corners: 0.25,
       buttonShape: 'corners',
+      portalName: 'Acme Ideas',
+      headerShows: 'logo',
       tabs: {
         order: ['roadmap', 'feedback'],
         changes: [
@@ -35,6 +39,19 @@ describe('portalDraftPatchSchema', () => {
     expect(result.success).toBe(true)
   })
 
+  it('takes words, never nulls, to put things back', () => {
+    for (const patch of [
+      { colours: { light: { background: 'auto', text: 'auto' } } },
+      { headingFont: 'same_as_text' },
+      { headerShows: 'icon_and_name' },
+    ]) {
+      expect(portalDraftPatchSchema.safeParse(patch).success, JSON.stringify(patch)).toBe(true)
+    }
+    // An empty name would clear one nobody asked about: refused, not taken as "put back".
+    expect(portalDraftPatchSchema.safeParse({ portalName: '' }).success).toBe(false)
+    expect(portalDraftPatchSchema.safeParse({ portalName: '   ' }).success).toBe(false)
+  })
+
   it.each([
     [
       'a CSS declaration smuggled into a colour',
@@ -50,6 +67,13 @@ describe('portalDraftPatchSchema', () => {
     // A model that fills every optional with null must not clear the header.
     ['a null header colour', { colours: { light: { header: null } } }],
     ['auto for a colour that has no Auto here', { colours: { light: { main: 'auto' } } }],
+    ['a null background', { colours: { light: { background: null } } }],
+    ['a null headings font', { headingFont: null }],
+    ['a headings font outside the list', { headingFont: 'Comic Sans' }],
+    ['an unknown card style', { cardStyle: 'glass' }],
+    ['a null portal name', { portalName: null }],
+    ['a portal name over 100 characters', { portalName: 'x'.repeat(101) }],
+    ['a header choice the section does not offer', { headerShows: 'logo_only' }],
     ['a font outside the list', { font: 'Comic Sans' }],
     ['a CSS font stack', { font: '"Inter", sans-serif' }],
     ['a corner radius off the stops', { corners: 0.375 }],

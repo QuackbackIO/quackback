@@ -477,8 +477,9 @@ function inboundAddress(
 // ============================================================================
 
 // An addr-spec anywhere in the value: a bare address, one wrapped in a display
-// name, or one of several in a header. Case is preserved deliberately — the
-// signature is base64url and lower-casing it would fail every verification.
+// name, or one of several in a header. Case is preserved here and folded where
+// each part is read ({@link claimFor}, {@link claimVerifies}): a mail client may
+// fold the local part it replies to, and the tag must still verify (#818).
 const ADDR_SPEC_RE = /[^\s<>,;"]+@[^\s<>,;"]+/g
 
 /** Every addr-spec in the value, in order of appearance, split at the last `@`
@@ -519,14 +520,28 @@ function claimFor(local: string, marker: string, prefix: string): AddressClaim |
   const slug = local.slice(0, plus).toLowerCase()
   if (!isValidMailSlug(slug)) return null
 
+  // The marker and the TypeID suffix are minted lower-case, so they are read
+  // back folded, like the slug: a client that uppercases the local part still
+  // names the same id. The tag keeps its case here and is compared folded in
+  // claimVerifies.
   const rest = local.slice(plus + 1)
-  if (!rest.startsWith(marker)) return null
+  if (foldAsciiCase(rest.slice(0, marker.length)) !== marker) return null
   const body = rest.slice(marker.length)
   const dot = body.lastIndexOf('.')
   if (dot <= 0) return null
 
-  const suffix = body.slice(0, dot)
+  const suffix = foldAsciiCase(body.slice(0, dot))
   return { slug, suffix, id: `${prefix}${suffix}`, provided: body.slice(dot + 1) }
+}
+
+/**
+ * Lower-case A-Z and nothing else. A mail client folds the ASCII letters an
+ * address is minted from; full Unicode folding would also turn look-alikes such
+ * as the Kelvin sign into ASCII, so an address the shape check refuses could
+ * still verify, and the two readers would disagree.
+ */
+function foldAsciiCase(value: string): string {
+  return value.replace(/[A-Z]/g, (c) => c.toLowerCase())
 }
 
 /**
@@ -542,12 +557,20 @@ function isMintedShape(claim: AddressClaim): boolean {
   return claim.suffix.length === TYPEID_SUFFIX_LENGTH && SIG_RE.test(claim.provided)
 }
 
-/** Constant-time tag check on one claim, against the pair it claims. */
+/**
+ * Constant-time tag check on one claim, against the pair it claims.
+ *
+ * Case-insensitive, because some mail clients fold the local part they reply
+ * to (Yahoo lowercases it), and a reply that fails here opens a new
+ * conversation instead of threading (#818). Folding maps base64url's 64
+ * symbols onto 38, so the 22-character tag keeps about 115 of its 132 bits:
+ * still far past guessable.
+ */
 function claimVerifies(claim: AddressClaim, env: EnvLike): boolean {
   const expected = signInboundTag(claim.slug, claim.id, env)
   if (!expected) return false
-  const a = Buffer.from(claim.provided)
-  const b = Buffer.from(expected)
+  const a = Buffer.from(foldAsciiCase(claim.provided))
+  const b = Buffer.from(foldAsciiCase(expected))
   return a.byteLength === b.byteLength && timingSafeEqual(a, b)
 }
 

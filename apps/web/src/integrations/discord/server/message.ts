@@ -46,10 +46,21 @@ function getStatusColor(status: string): number {
   return map[status.toLowerCase().replace(/\s+/g, '_')] ?? COLORS.blue
 }
 
+function inboxUrl(links: SectionOrigins, conversationId: string): string {
+  return `${links.primary}/admin/inbox?c=${conversationId}`
+}
+
 /**
- * Build a Discord message for an event.
+ * Build a Discord message for an event, or null when the event should post
+ * nothing (a teammate's own reply in a support conversation).
+ *
+ * Customer-written text only ever goes in embeds, where Discord never resolves
+ * mentions, so a customer typing @everyone cannot ping the server.
  */
-export function buildDiscordMessage(event: EventData, links: SectionOrigins): DiscordMessage {
+export function buildDiscordMessage(
+  event: EventData,
+  links: SectionOrigins
+): DiscordMessage | null {
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data
@@ -161,6 +172,45 @@ export function buildDiscordMessage(event: EventData, links: SectionOrigins): Di
             description: content || undefined,
             color: COLORS.blue,
             author: { name: `💬 New comment from ${author}` },
+            timestamp: event.timestamp,
+          },
+        ],
+      }
+    }
+
+    case 'conversation.created': {
+      const { conversation } = event.data
+      const visitor = conversation.visitorEmail || 'Anonymous visitor'
+
+      return {
+        embeds: [
+          {
+            title: truncate(conversation.subject?.trim() || 'New conversation', 256),
+            url: inboxUrl(links, conversation.id),
+            description: truncate(stripHtml(conversation.openingMessage ?? ''), 300) || undefined,
+            color: COLORS.blue,
+            author: { name: truncate(`🛟 New support conversation from ${visitor}`, 256) },
+            footer: { text: `Channel: ${conversation.channel}` },
+            timestamp: event.timestamp,
+          },
+        ],
+      }
+    }
+
+    case 'message.created': {
+      const { message, conversation } = event.data
+      // A teammate's reply would notify the team about its own message.
+      if (message.senderType !== 'visitor') return null
+      const author = message.authorName || message.authorEmail || 'Visitor'
+
+      return {
+        embeds: [
+          {
+            title: 'Open in inbox',
+            url: inboxUrl(links, conversation.id),
+            description: truncate(stripHtml(message.content), 300) || undefined,
+            color: COLORS.blue,
+            author: { name: truncate(`💬 New support message from ${author}`, 256) },
             timestamp: event.timestamp,
           },
         ],

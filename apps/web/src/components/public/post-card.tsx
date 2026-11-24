@@ -292,7 +292,7 @@ export function PostCard({
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
         'w-12 py-2 gap-0.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-readable [--ink:var(--post-card-voted-color)] border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
+          ? 'post-card__vote--voted text-primary-ink border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
           : 'bg-muted/40 text-muted-foreground border-border/50',
         // Hover affordances only when the button is actionable (not denied).
         !currentHasVoted &&
