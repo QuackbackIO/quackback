@@ -44,6 +44,10 @@ describe('getIntegrationCatalog capability derivation', () => {
         'Review cleanup on delete',
       ])
     )
+    const shortcut = catalog.find((e) => e.id === 'shortcut')!
+    const shortcutLabels = (shortcut.capabilities ?? []).map((c) => c.label)
+    expect(shortcutLabels).toContain('Receive status updates')
+    expect(shortcutLabels).not.toContain('Review status updates')
   })
 
   it('read-back inbound adapters advertise automatic status updates', async () => {
@@ -57,7 +61,7 @@ describe('getIntegrationCatalog capability derivation', () => {
 
   it('review-only inbound adapters do not advertise automatic status updates', async () => {
     const catalog = await getIntegrationCatalog()
-    for (const id of ['jira', 'asana', 'clickup', 'shortcut', 'trello']) {
+    for (const id of ['jira', 'asana', 'clickup', 'trello']) {
       const labels = catalog.find((entry) => entry.id === id)!.capabilities!.map((cap) => cap.label)
       expect(labels, id).toContain('Review status updates')
       expect(labels, id).not.toContain('Receive status updates')

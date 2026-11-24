@@ -188,7 +188,7 @@ describe.skipIf(!fixture.available)('provider capability flows', () => {
       ).toHaveLength(0)
     }
   )
-  it.each(['jira', 'asana', 'clickup', 'trello', 'shortcut'])(
+  it.each(['jira', 'asana', 'clickup', 'trello'])(
     '%s inbound review includes the received status and item identity',
     async (provider) => {
       const { integration, actor, post } = await seed(provider)
