@@ -1,3 +1,4 @@
+import { fetchPortalSummaryFn } from '@/lib/server/functions/portal-summary'
 import { queryOptions } from '@tanstack/react-query'
 import type { IdentityProviderId, UserId } from '@quackback/ids'
 import {
@@ -48,6 +49,17 @@ export const settingsQueries = {
       queryKey: ['settings', 'branding'],
       queryFn: fetchBrandingConfig,
       staleTime: STALE_TIME_LONG,
+    }),
+
+  /**
+   * Settings > Portal's summary rows, built on the server. Under branding's
+   * key, so a refreshed theme refreshes it; every publish also drops it.
+   */
+  portalSummary: (gatedTypes: readonly string[]) =>
+    queryOptions({
+      queryKey: ['settings', 'branding', 'summary', [...gatedTypes].sort()],
+      queryFn: () => fetchPortalSummaryFn({ data: { gatedTypes: [...gatedTypes].sort() } }),
+      staleTime: STALE_TIME_SHORT,
     }),
 
   customCss: () =>

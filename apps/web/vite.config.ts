@@ -6,7 +6,10 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
-import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-import-protection'
+import {
+  CLIENT_PROTECTED_SPECIFIERS,
+  NODE_BUILTIN_SPECIFIER,
+} from './src/lib/server/policy/client-import-protection'
 import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
 import { serverWorkers } from './src/lib/build/server-workers'
 
@@ -171,10 +174,11 @@ export default defineConfig(({ mode }) => {
       // render profiler (`bun perf/bench.ts --renders`). Never for a release.
       ...(process.env.PERF_UNMINIFIED === '1' && { minify: false }),
       rolldownOptions: {
-        // TanStack Router SSR code imports node builtins (node:stream, node:async_hooks)
-        // that end up in the client bundle. Mark node: imports as external since they're
-        // SSR-only code paths that never execute in the browser.
-        external: [/^node:/],
+        // Node built-ins are deliberately not marked external. An external
+        // `node:` import stays in a client chunk as written, and the browser
+        // then refuses the whole chunk ("Failed to fetch dynamically imported
+        // module") while the build passes. Import protection below fails the
+        // build on any built-in the client imports instead.
         // NO manualChunks pinning — deliberately. Directory-pinned chunks
         // (route-<segment>, components-admin-<section>) looked tidy but broke
         // code-splitting app-wide: rolldown places modules shared between a
@@ -232,6 +236,12 @@ export default defineConfig(({ mode }) => {
         // responses (SSR documents, server-function JSON) are unaffected;
         // see compression.ts for those.
         compressPublicAssets: { gzip: true, brotli: true },
+        // Keep one `_libs` chunk per package. The default splits each
+        // package's chunk by the entries that reach it, which cut drizzle-orm
+        // into two chunks that import each other; whichever loads first sees
+        // the other's classes uninitialised ("The superclass is not a
+        // constructor" from `PgColumn extends Column`), and every request 500s.
+        experimental: { entriesAwareLibChunks: false },
       }),
       tanstackStart({
         srcDirectory: 'src',
@@ -241,7 +251,7 @@ export default defineConfig(({ mode }) => {
         },
         importProtection: {
           behavior: { dev: 'error', build: 'error' },
-          client: { specifiers: [...CLIENT_PROTECTED_SPECIFIERS] },
+          client: { specifiers: [...CLIENT_PROTECTED_SPECIFIERS, NODE_BUILTIN_SPECIFIER] },
         },
       }),
       viteReact(),
