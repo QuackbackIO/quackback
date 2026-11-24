@@ -1130,6 +1130,7 @@ describe('applyAction', () => {
           { conversationId, actor: engineActor }
         )
         expect(result).toEqual({ label: 'ticket due date set' })
+        // The same system read as set_ticket_status: a workspace-wide service actor.
         expect(getLinkedCustomerTicket).toHaveBeenCalledWith(
           conversationId,
           expect.objectContaining({ principalType: 'service', principalId: null })
