@@ -16,7 +16,9 @@
  *
  * TRUSTED-SENDER BYPASS. A sender on the workspace trust list
  * (settings.spam) never reaches the model at all: the workspace's explicit
- * "never spam" list outranks any classifier verdict.
+ * "never spam" list outranks any classifier verdict. Only an address the
+ * sender is known to own is matched against it (`trustedSenderEmail`): an
+ * address someone merely typed proves nothing about who they are.
  *
  * WORKSPACE SWITCH. `aiClassifier` in the same settings turns the model call
  * off entirely. The deterministic sender signals are not AI and still run.
@@ -36,7 +38,8 @@ import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
 import type { SpamFilterConfig } from '@/lib/server/domains/settings/settings.spam'
-import type { SpamSignalHints } from './conversation.spam-signals'
+import type { SpamSignal, SpamSignalHints } from './conversation.spam-signals'
+import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 const log = logger.child({ component: 'spam-filter' })
 
@@ -61,9 +64,17 @@ const VerdictSchema = z.object({ spam: z.boolean().catch(false) }).catch({ spam:
 
 export interface ClassifyInboundSpamInput {
   /** Canonical sender address (already normalized by the ingest path), or
-   *  null when the channel has none — a null sender can never be trusted, so
-   *  classification proceeds. */
+   *  null when the channel has none. Keys the burst signal and logging. */
   senderEmail: string | null
+  /** The address the workspace trust list may match: one the sender is known
+   *  to own. On email it is the From the ingest path already authenticated;
+   *  on the messenger only a confirmed account email (a verified sign-in or
+   *  widget identity token), never an address the visitor typed. Null means
+   *  the sender can never be trusted, so classification proceeds. */
+  trustedSenderEmail: string | null
+  /** The sender's principal, for a channel that knows it (the messenger).
+   *  The burst signal counts on it when there is no sender address. */
+  senderPrincipalId?: string | null
   subject?: string | null
   content: string
 }
@@ -109,8 +120,8 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
     return false
   }
   if (!spamConfig.aiClassifier) return false
-  if (isTrustedSender(input.senderEmail, spamConfig.trustedSenders)) {
-    log.info({ sender: input.senderEmail }, 'spam filing bypassed: trusted sender')
+  if (isTrustedSender(input.trustedSenderEmail, spamConfig.trustedSenders)) {
+    log.info({ sender: input.trustedSenderEmail }, 'spam filing bypassed: trusted sender')
     return false
   }
 
@@ -130,6 +141,7 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
   let verdict: { spam: boolean }
   try {
     verdict = await chat({
+      threadId: oneShotThreadId(),
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,
@@ -165,6 +177,41 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
 }
 
 /**
+ * The fixed rule (a deterministic signal, never the AI) that files a new
+ * conversation's first message to Spam, decided BEFORE the conversation
+ * exists so the caller can file it in the insert and raise nothing: no
+ * created/message events, no webhook, no bell, no workflow, no SLA clock.
+ * Null when no rule matches, and when the sender is a test customer or is on
+ * the workspace trust list (which outranks every filing path). Never throws:
+ * any failure is "no rule", leaving the message in triage.
+ *
+ * A caller that uses this runs `maybeAutoFileSpam` afterwards with
+ * `signalsChecked`, so the signals (the burst count above all) are evaluated
+ * once per message.
+ */
+export async function fixedSpamSignalFor(
+  input: Pick<ClassifyInboundSpamInput, 'senderEmail' | 'trustedSenderEmail'> & {
+    signals?: SpamSignalHints
+  },
+  visitorPrincipalId: string
+): Promise<SpamSignal | null> {
+  try {
+    const { isTestCustomer } = await import('@/lib/server/test-data')
+    if (await isTestCustomer(visitorPrincipalId)) return null
+    if (await isTrustedInboundSender(input.trustedSenderEmail)) return null
+    const { detectSpamSignal } = await import('./conversation.spam-signals')
+    return await detectSpamSignal({
+      senderEmail: input.senderEmail,
+      senderPrincipalId: visitorPrincipalId,
+      ...input.signals,
+    })
+  } catch (err) {
+    log.warn({ err }, 'fixed spam rule check failed, leaving the message in triage')
+    return null
+  }
+}
+
+/**
  * Classify, then file the conversation as spam on an affirmative verdict.
  * The one call both ingest paths make; error-isolated so a filing failure
  * never breaks ingestion — the conversation simply stays in triage. Returns
@@ -176,15 +223,26 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
  */
 export async function maybeAutoFileSpam(
   conversationId: ConversationId,
-  input: ClassifyInboundSpamInput & { signals?: SpamSignalHints }
+  input: ClassifyInboundSpamInput & {
+    signals?: SpamSignalHints
+    /** The caller already ran the fixed rules (`fixedSpamSignalFor`) and none
+     *  matched: only the AI classifier is left. */
+    signalsChecked?: boolean
+  }
 ): Promise<boolean> {
   try {
     // A teammate's test thread is never spam, and spends no classification.
     const { isTestConversation } = await import('@/lib/server/test-data')
     if (await isTestConversation(conversationId)) return false
-    if (await isTrustedInboundSender(input.senderEmail)) return false
+    if (await isTrustedInboundSender(input.trustedSenderEmail)) return false
     const { detectSpamSignal } = await import('./conversation.spam-signals')
-    const signal = await detectSpamSignal({ senderEmail: input.senderEmail, ...input.signals })
+    const signal = input.signalsChecked
+      ? null
+      : await detectSpamSignal({
+          senderEmail: input.senderEmail,
+          senderPrincipalId: input.senderPrincipalId ?? null,
+          ...input.signals,
+        })
     if (signal) {
       log.info({ conversation_id: conversationId, signal }, 'spam signal matched; filing')
       const { autoFileConversationAsSpam } = await import('./conversation.service')

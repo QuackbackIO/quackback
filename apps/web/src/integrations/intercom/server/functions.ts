@@ -62,7 +62,7 @@ export const searchIntercomContactFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Intercom not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Intercom not connected')
     }
 
     const secrets = { accessToken: await getValidAccessToken(integration.id) }

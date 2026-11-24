@@ -6,6 +6,7 @@ import { toSessionScope } from '@/lib/shared/roles'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'user-profile' })
 
@@ -47,7 +48,7 @@ export const Route = createFileRoute('/api/user/profile')({
           })
         } catch (error) {
           log.error({ err: error }, 'profile fetch failed')
-          return Response.json({ error: 'Internal server error' }, { status: 500 })
+          return internalRouteErrorResponse()
         }
       },
 
@@ -114,7 +115,7 @@ export const Route = createFileRoute('/api/user/profile')({
           })
         } catch (error) {
           log.error({ err: error }, 'profile update failed')
-          return Response.json({ error: 'Internal server error' }, { status: 500 })
+          return internalRouteErrorResponse()
         }
       },
 
@@ -171,7 +172,7 @@ export const Route = createFileRoute('/api/user/profile')({
           })
         } catch (error) {
           log.error({ err: error }, 'avatar removal failed')
-          return Response.json({ error: 'Internal server error' }, { status: 500 })
+          return internalRouteErrorResponse()
         }
       },
     },

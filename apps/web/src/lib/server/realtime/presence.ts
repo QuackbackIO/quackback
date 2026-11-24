@@ -45,6 +45,7 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
 import type { PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { withoutPausedSeats } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 
 const log = logger.child({ component: 'presence' })
 
@@ -222,11 +223,11 @@ export async function isAnyAgentOnline(): Promise<boolean> {
 }
 
 /**
- * Principal ids of all team members with a live inbox stream right now. Used by
- * conversation routing to pick an active agent. Fails CLOSED (returns []) so an
- * outage leaves new conversations unassigned rather than mis-routing them.
+ * Principal ids of all team members with a live inbox stream right now, or
+ * null when the presence store cannot be read. Counts a teammate set to Away;
+ * the new-message alert gates read `readAvailableAgentIds` instead.
  */
-export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
+export async function readOnlineAgentIds(): Promise<PrincipalId[] | null> {
   try {
     const result = await db.execute(sql`
       SELECT DISTINCT principal_id FROM presence_stream
@@ -239,8 +240,41 @@ export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
     )
   } catch (err) {
     log.warn({ err }, 'list online agents failed')
-    return []
+    return null
   }
+}
+
+/**
+ * Of the team members with a live inbox stream, those not set to Away, or
+ * null when either read fails. The new-message alert gates read this, since
+ * they must tell "nobody around" from "unknown": a teammate who set Away with
+ * a tab open is online but not watching, so they never hold back an alert.
+ * Presence rows hold typed ids as text, so the Away filter is a second read
+ * through the principal table rather than a join.
+ */
+export async function readAvailableAgentIds(): Promise<PrincipalId[] | null> {
+  const onlineIds = await readOnlineAgentIds()
+  if (onlineIds === null) return null
+  if (onlineIds.length === 0) return []
+  try {
+    const rows = await db
+      .select({ id: principal.id })
+      .from(principal)
+      .where(and(inArray(principal.id, onlineIds), eq(principal.chatAvailability, 'online')))
+    return await withoutPausedSeats(rows.map((r) => r.id))
+  } catch (err) {
+    log.warn({ err }, 'read available agents failed')
+    return null
+  }
+}
+
+/**
+ * Principal ids of all team members with a live inbox stream right now. Used by
+ * conversation routing to pick an active agent. Fails CLOSED (returns []) so an
+ * outage leaves new conversations unassigned rather than mis-routing them.
+ */
+export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
+  return (await readOnlineAgentIds()) ?? []
 }
 
 /**
@@ -255,7 +289,7 @@ export async function listAvailableAgentIds(onlineIds: PrincipalId[]): Promise<P
       .select({ id: principal.id })
       .from(principal)
       .where(and(inArray(principal.id, onlineIds), eq(principal.chatAvailability, 'online')))
-    return rows.map((r) => r.id)
+    return await withoutPausedSeats(rows.map((r) => r.id))
   } catch (err) {
     log.warn({ err }, 'list available agents failed')
     return []

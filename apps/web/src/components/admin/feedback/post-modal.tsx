@@ -73,6 +73,7 @@ import {
   toPortalComments,
   getInitialContentJson,
 } from '@/components/admin/feedback/detail/post-utils'
+import { toastError } from '@/lib/client/error-notice'
 
 interface PostModalContentProps {
   postId: PostId
@@ -114,6 +115,8 @@ export const PostModalContent = memo(function PostModalContent({
   })
 
   const post = postQuery.data as PostDetails
+  // A read-only board takes no comments, team notes included.
+  const boardReadOnly = !!(post as { boardReadOnly?: boolean }).boardReadOnly
 
   // "Show more comments" — appends the next keyset page into the same
   // ['inbox','detail',postId] cache the admin comment mutations patch.
@@ -174,11 +177,11 @@ export const PostModalContent = memo(function PostModalContent({
   const unpinComment = useUnpinComment({ postId: post.id as PostId })
   const deleteCommentMutation = useDeleteComment({
     postId: post.id as PostId,
-    onError: (error) => toast.error(error.message || 'Failed to delete comment'),
+    onError: (error) => toastError(error, 'Failed to delete comment'),
   })
   const restoreCommentMutation = useRestoreComment({
     postId: post.id as PostId,
-    onError: (error) => toast.error(error.message || 'Failed to restore comment'),
+    onError: (error) => toastError(error, 'Failed to restore comment'),
   })
   const toggleCommentsLock = useToggleCommentsLock()
   const deletePost = useDeletePost()
@@ -197,8 +200,7 @@ export const PostModalContent = memo(function PostModalContent({
             : 'No new sync work to queue'
       )
     },
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : 'Failed to retry integrations'),
+    onError: (error) => toastError(error, 'Failed to retry integrations'),
   })
 
   // External links for cascade delete
@@ -248,7 +250,7 @@ export const PostModalContent = memo(function PostModalContent({
       await changePostBoard.mutateAsync({ postId: post.id as PostId, boardId })
       toast.success('Board updated')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update board')
+      toastError(err, 'Failed to update board')
     } finally {
       setIsUpdating(false)
     }
@@ -261,7 +263,7 @@ export const PostModalContent = memo(function PostModalContent({
       await updateOwner.mutateAsync({ postId: post.id as PostId, ownerId })
       toast.success(ownerId ? 'Owner assigned' : 'Owner unassigned')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update owner')
+      toastError(err, 'Failed to update owner')
     }
   }
 
@@ -272,7 +274,7 @@ export const PostModalContent = memo(function PostModalContent({
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(post.id as PostId) })
       toast.success(eta ? 'ETA updated' : 'ETA cleared')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update ETA')
+      toastError(err, 'Failed to update ETA')
     } finally {
       setIsUpdating(false)
     }
@@ -299,7 +301,7 @@ export const PostModalContent = memo(function PostModalContent({
       toast.success('Post updated')
       onClose()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update post')
+      toastError(err, 'Failed to update post')
     }
   }
 
@@ -338,7 +340,7 @@ export const PostModalContent = memo(function PostModalContent({
         toast.success('Post restored')
         onClose()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to restore post')
+        toastError(err, 'Failed to restore post')
       }
     },
     isDeleted: !!post.deletedAt,
@@ -437,7 +439,7 @@ export const PostModalContent = memo(function PostModalContent({
               <RichTextEditor
                 value={contentJson || ''}
                 onDocumentChange={handleContentChange}
-                placeholder="Add more details... Type / for commands"
+                placeholder="Add more details… Type / for commands"
                 minHeight="200px"
                 disabled={updatePost.isPending}
                 borderless
@@ -520,6 +522,7 @@ export const PostModalContent = memo(function PostModalContent({
                     onUnpinComment={() => unpinComment.mutate()}
                     isPinPending={pinComment.isPending || unpinComment.isPending}
                     adminUser={{ name: currentUser.name, email: currentUser.email }}
+                    boardReadOnly={boardReadOnly}
                     statuses={statuses}
                     currentStatusId={post.statusId}
                     isTeamMember
@@ -597,7 +600,7 @@ export const PostModalContent = memo(function PostModalContent({
       {/* Footer */}
       <ModalFooter
         onCancel={onClose}
-        submitLabel={updatePost.isPending ? 'Saving...' : 'Save changes'}
+        submitLabel={updatePost.isPending ? 'Saving…' : 'Save changes'}
         isPending={updatePost.isPending}
         submitType="button"
         onSubmit={handleSubmit}
@@ -641,7 +644,7 @@ export const PostModalContent = memo(function PostModalContent({
             setShowDeleteDialog(false)
             onClose()
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to delete post')
+            toastError(err, 'Failed to delete post')
           }
         }}
       />

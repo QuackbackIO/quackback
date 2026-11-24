@@ -217,7 +217,7 @@ export function ChangelogList() {
             onSearchChange={setSearchValue}
             searchPlaceholder={intl.formatMessage({
               id: 'admin.changelog.list.searchPlaceholder',
-              defaultMessage: 'Search entries...',
+              defaultMessage: 'Search entries…',
             })}
             sortOptions={sortOptions}
             formatSortLabel={formatSortLabel}
@@ -333,8 +333,7 @@ export function ChangelogList() {
         })}
         description={intl.formatMessage({
           id: 'admin.changelog.delete.description',
-          defaultMessage:
-            'This action cannot be undone. The changelog entry will be permanently deleted.',
+          defaultMessage: 'The entry will be deleted from your changelog and its feed.',
         })}
         confirmLabel={intl.formatMessage({
           id: 'admin.changelog.delete.confirm',

@@ -79,6 +79,8 @@ export type AuditEventType =
   | 'session.revoked.bulk'
   | 'session.revoked.individual'
   | 'user.role.changed'
+  // A customer's block ended because they joined the team (principal.factory.ts).
+  | 'person.unblocked'
   | 'user.invited'
   | 'user.removed'
   // Custom-role CRUD (role.manage)
@@ -94,6 +96,9 @@ export type AuditEventType =
   | 'board.access.changed'
   | 'moderation.default.changed'
   | 'portal.visibility.changed'
+  // Customise: one atomic publish of the portal's look (metadata.parts names what changed;
+  // metadata.brandAssets the imported logo, icon or font the publisher confirmed as the brand's)
+  | 'portal.customise.published'
   | 'portal.allowed_domains.changed'
   | 'post.moderation.approved'
   | 'post.moderation.rejected'
@@ -186,6 +191,11 @@ export type AuditEventType =
   // Device sign-in (RFC 8628): a person approved or denied a headless client's code.
   | 'oauth.device.approved'
   | 'oauth.device.denied'
+  // An MCP client identified by its metadata document URL (CIMD): created on
+  // first use, and refreshed when a re-fetched document changed its name or
+  // redirect URIs.
+  | 'oauth.client.discovered'
+  | 'oauth.client.refreshed'
 
 export type AuditEventOutcome = 'success' | 'failure'
 

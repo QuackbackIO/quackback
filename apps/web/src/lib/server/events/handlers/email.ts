@@ -12,8 +12,9 @@ import {
   sendStatusMaintenanceScheduledEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
+  sendModerationDecisionEmail,
 } from '@quackback/email'
-import type { EmailResult, IncidentImpact } from '@quackback/email'
+import type { EmailResult, IncidentImpact, SendingIdentity } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
 import type {
   HookHandler,
@@ -23,8 +24,13 @@ import type {
   EmailConfig,
   TicketEmailConfig,
   NoteMentionEmailConfig,
+  ModerationDecisionEmailConfig,
 } from '../hook-types'
-import type { EventData, EventPostMentionedData } from '../types'
+import {
+  isModerationDecisionEventType,
+  type EventData,
+  type EventPostMentionedData,
+} from '../types'
 import {
   ticketRootMessageId,
   mintTicketOutboundMessageId,
@@ -35,6 +41,7 @@ import type { ConversationId } from '@quackback/ids'
 import { isRetryableError } from '../hook-utils'
 import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
 import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
+import { getsAutomatedEmail } from '@/lib/server/domains/principals/blocking'
 import { logger } from '@/lib/server/logger'
 
 /** The event types whose email is one of the nine ticket-lifecycle kinds. */
@@ -119,6 +126,32 @@ function noteMentionThreading(cfg: NoteMentionEmailConfig): {
 
 const log = logger.child({ component: 'email' })
 
+/**
+ * The From and display name a send goes out with, re-asked HERE rather than
+ * trusted from the payload. The target builder resolved the address when the
+ * event was enqueued, and this send happens after the queue, which may be
+ * minutes later and is certainly after a re-check could have demoted the
+ * domain. Sending is the moment the claim is made, so it is the moment the
+ * claim is checked; the enqueue-time resolution stays because it decides WHICH
+ * address to try, and this decides whether it may be used.
+ *
+ * The address's sender name goes with the address. Mail that falls back to the
+ * platform address carries no name from here: the email package names it for
+ * the `workspaceName` every sender is already given.
+ */
+async function checkedSender(cfg: {
+  from?: string
+  fromDisplayName?: string
+  workspaceName: string
+}): Promise<{ from: SendingIdentity | undefined; fromDisplayName: string | undefined }> {
+  // No From asked for: nothing to check.
+  const from = cfg.from ? ((await permittedSendingIdentity(cfg.from)) ?? undefined) : undefined
+  return { from, fromDisplayName: from ? (cfg.fromDisplayName ?? cfg.workspaceName) : undefined }
+}
+
+/** Email that carries a teammate's own reply rather than a notice about something. */
+const TEAMMATE_REPLY_EVENTS = new Set(['ticket.replied'])
+
 const BROADCAST_EMAIL_EVENTS = new Set([
   'changelog.published',
   'status.incident_created',
@@ -146,20 +179,44 @@ async function deliverEmail(
   config: unknown,
   finalAttempt: boolean
 ): Promise<HookResult> {
-  const { email, unsubscribeUrl } = target as EmailTarget
+  const { email, unsubscribeUrl, principalId } = target as EmailTarget
   const cfg = config as EmailConfig
 
   log.debug({ event_type: event.type }, 'sending email notification')
 
   try {
+    // Automated email never goes to a blocked person. A ticket reply carries a
+    // teammate's own words, so it still does.
+    if (
+      principalId &&
+      !TEAMMATE_REPLY_EVENTS.has(event.type) &&
+      !(await getsAutomatedEmail(principalId))
+    ) {
+      log.info({ event_type: event.type }, 'email skipped: the person is blocked')
+      return { success: true }
+    }
+
     if (BROADCAST_EMAIL_EVENTS.has(event.type)) {
       const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
       if (!(await emailBudgetAvailable())) {
-        log.warn({ event_type: event.type }, 'email budget exhausted; broadcast skipped')
+        // With plan limits on, one line per broadcast (not per recipient) that
+        // the Plan limits page also counts; otherwise the line per delivery.
+        const { recordSkippedBroadcast } =
+          await import('@/lib/server/domains/plan-limits/plan-limits.broadcasts')
+        const firstForBroadcast = await recordSkippedBroadcast(event.id)
+        if (firstForBroadcast !== false) {
+          log.warn(
+            { event_type: event.type, event_id: event.id, broadcast_skipped: true },
+            'email budget exhausted; broadcast skipped'
+          )
+        }
         return { success: true }
       }
     }
 
+    // The From the config asks for, once the send guard permits it; nothing
+    // when it asks for none.
+    const sender = await checkedSender(cfg)
     let result: EmailResult
 
     if (event.type === 'post.status_changed') {
@@ -169,10 +226,12 @@ async function deliverEmail(
         postUrl: cfg.postUrl,
         previousStatus: cfg.previousStatus!,
         newStatus: cfg.newStatus!,
+        isPostAuthor: cfg.isPostAuthor === true,
         workspaceName: cfg.workspaceName,
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...sender,
       })
     } else if (event.type === 'comment.created') {
       result = await sendNewCommentEmail({
@@ -182,16 +241,21 @@ async function deliverEmail(
         commenterName: cfg.commenterName!,
         commentPreview: cfg.commentPreview!,
         isTeamMember: cfg.isTeamMember ?? false,
+        isPostAuthor: cfg.isPostAuthor === true,
         workspaceName: cfg.workspaceName,
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...sender,
       })
     } else if (event.type === 'post.mentioned') {
       const data = event.data as EventPostMentionedData
       result = await sendPostMentionEmail({
         to: email,
-        mentionerName: event.actor.displayName ?? '',
+        mentionerName:
+          cfg.mentionerName?.trim() ||
+          (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+          '',
         postTitle: data.postTitle,
         excerpt: data.excerpt,
         postUrl: data.postUrl,
@@ -199,6 +263,39 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...sender,
+      })
+    } else if (event.type === 'comment.mentioned') {
+      // Worded like a post mention; the link (resolved by the target) opens
+      // the comment itself.
+      result = await sendPostMentionEmail({
+        to: email,
+        mentionerName:
+          cfg.mentionerName?.trim() ||
+          (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+          '',
+        postTitle: event.data.postTitle,
+        excerpt: event.data.excerpt,
+        postUrl: cfg.postUrl,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+        ...sender,
+      })
+    } else if (isModerationDecisionEventType(event.type)) {
+      const c = config as unknown as ModerationDecisionEmailConfig
+      result = await sendModerationDecisionEmail({
+        to: email,
+        item: c.item,
+        decision: c.decision,
+        postTitle: c.postTitle,
+        postUrl: c.postUrl,
+        workspaceName: c.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: c.preferencesUrl,
+        logoUrl: c.logoUrl,
+        ...sender,
       })
     } else if (event.type === 'conversation.note_mentioned') {
       const c = config as unknown as NoteMentionEmailConfig
@@ -224,9 +321,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        from:
-          (await permittedSendingIdentity((changelogCfg.from as string | undefined) ?? null)) ??
-          undefined,
+        ...sender,
       })
     } else if (event.type === 'status.incident_created') {
       const c = config as Record<string, unknown>
@@ -242,6 +337,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...sender,
       })
     } else if (event.type === 'status.maintenance_scheduled') {
       const c = config as Record<string, unknown>
@@ -259,6 +355,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...sender,
       })
     } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
       // All eight ticket/SLA event types map onto sendTicketEventEmail; the
@@ -271,14 +368,10 @@ async function deliverEmail(
       result = await sendTicketEventEmail({
         to: email,
         ...t,
-        // Re-asked HERE rather than trusted from the payload. The target
-        // builder resolved this address when the event was enqueued, and this
-        // send happens after the queue, which may be minutes later and is
-        // certainly after a re-check could have demoted the domain. Sending
-        // is the moment the claim is made, so it is the moment the claim is
-        // checked; the enqueue-time resolution stays because it decides
-        // WHICH address to try, and this decides whether it may be used.
-        from: (await permittedSendingIdentity(t.from ?? null)) ?? undefined,
+        // Agent-facing ticket mail carries no From, so no name either: it goes
+        // from the platform address, which the email package names for
+        // `workspaceName`.
+        ...sender,
         ...ticketThreading(t),
       })
     } else {

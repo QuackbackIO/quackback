@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { registerTools } from '@/lib/server/mcp/tools'
+import { MCP_TOOL_NAMES } from '@/lib/shared/mcp-tools'
 import { UNTRUSTED_TOOL_FIELDS, type UntrustedRule } from '../untrusted'
 
 const TEST_AUTH = {
@@ -19,7 +20,7 @@ function registeredToolNames(): string[] {
   const names: string[] = []
   registerTools(
     {
-      tool: (name: string) => {
+      registerTool: (name: string) => {
         names.push(name)
       },
     } as never,
@@ -67,6 +68,14 @@ describe('untrusted-field registry', () => {
   it('declares no tool that is not registered', () => {
     const registered = new Set(registeredToolNames())
     expect(Object.keys(UNTRUSTED_TOOL_FIELDS).filter((name) => !registered.has(name))).toEqual([])
+  })
+
+  it('matches the shared tool list the admin setup guide shows', () => {
+    expect(
+      [...registeredToolNames()].sort(),
+      'Add each tool to MCP_TOOL_NAMES in lib/shared/mcp-tools.ts'
+    ).toEqual([...MCP_TOOL_NAMES].sort())
+    expect(new Set(MCP_TOOL_NAMES).size).toBe(MCP_TOOL_NAMES.length)
   })
 
   it('uses only well-formed paths', () => {

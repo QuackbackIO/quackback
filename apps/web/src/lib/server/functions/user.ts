@@ -19,12 +19,19 @@ import {
 } from '@/lib/server/db'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import { deleteObject } from '@/lib/server/storage/s3'
+import { isOwnAvatarKey } from '@/lib/server/storage/avatar-keys'
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { logger } from '@/lib/server/logger'
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'user' })
 
@@ -104,22 +111,28 @@ async function requirePrincipalId(): Promise<PrincipalId> {
   return ctx.principal.id
 }
 
-/** Delete a user's existing S3 avatar if one exists. Silently ignores missing files. */
-async function deleteExistingAvatar(userId: string): Promise<string | null> {
+/** The avatar key a person holds now, or null. */
+async function currentAvatarKey(userId: UserId): Promise<string | null> {
   const currentUser = await db.query.user.findFirst({
-    where: eq(user.id, userId as UserId),
+    where: eq(user.id, userId),
     columns: { imageKey: true },
   })
-
-  if (currentUser?.imageKey) {
-    try {
-      await deleteObject(currentUser.imageKey)
-    } catch {
-      // Ignore deletion errors - old file may not exist
-    }
-  }
-
   return currentUser?.imageKey ?? null
+}
+
+/**
+ * Delete a person's previous avatar object from storage, but only one they
+ * uploaded into their own folder: a key from anywhere else (an avatar saved
+ * before per-person folders, or one pointing at someone else's upload) is
+ * cleared from their profile and never deleted. Missing files are ignored.
+ */
+async function deleteOwnAvatarObject(userId: UserId, key: string | null): Promise<void> {
+  if (!key || !isOwnAvatarKey(key, userId)) return
+  try {
+    await deleteObject(key)
+  } catch {
+    // Ignore deletion errors - old file may not exist
+  }
 }
 
 // ============================================
@@ -135,7 +148,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
     log.debug('get profile')
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
 
     const userRecord = await db.query.user.findFirst({
@@ -150,7 +163,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!userRecord) {
-      throw new Error('User not found')
+      throw new NotFoundError('USER_NOT_FOUND', 'User not found')
     }
 
     // Get principal record to determine userType
@@ -182,7 +195,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
 
 function requireNonWidgetSession(session: Awaited<ReturnType<typeof getSession>>) {
   if (!session?.user) {
-    throw new Error('Authentication required')
+    throw new UnauthorizedError('Authentication required')
   }
   assertNotWidgetScope(toSessionScope(session.session.scope))
   return session
@@ -223,7 +236,8 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
     log.debug('remove avatar')
     const session = requireNonWidgetSession(await getSession())
 
-    await deleteExistingAvatar(session.user.id)
+    const userId = session.user.id as UserId
+    await deleteOwnAvatarObject(userId, await currentAvatarKey(userId))
 
     const [updated] = await db
       .update(user)
@@ -250,7 +264,14 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
     log.debug('save avatar key')
     const session = requireNonWidgetSession(await getSession())
 
-    await deleteExistingAvatar(session.user.id)
+    const userId = session.user.id as UserId
+    // A new avatar must come from the caller's own upload folder; the key they
+    // already hold is kept as it is, so an older avatar stays valid.
+    const previous = await currentAvatarKey(userId)
+    if (data.key !== previous && !isOwnAvatarKey(data.key, userId)) {
+      throw new ForbiddenError('AVATAR_NOT_YOURS', 'That image was not uploaded by you')
+    }
+    if (data.key !== previous) await deleteOwnAvatarObject(userId, previous)
 
     const [updated] = await db
       .update(user)
@@ -271,7 +292,7 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
     log.debug('get user role')
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
 
     const role = await getCurrentUserRole()
@@ -332,7 +353,7 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
       }
 
       if (Object.keys(updates).length === 0) {
-        throw new Error('No fields to update')
+        throw new ValidationError('NO_FIELDS_TO_UPDATE', 'No fields to update')
       }
 
       const preferences = await updateNotificationPreferences(principalId, updates)
@@ -349,16 +370,34 @@ export const runGetUserStats = createServerOnlyFn(async function runGetUserStats
   principalId: PrincipalId
 ): Promise<UserEngagementStats> {
   log.debug('get user stats')
+  // Live activity only, as on the public profile: a held or deleted idea, and
+  // votes and comments on one, are not counted, and a comment counts only
+  // when it is published, public and undeleted. Comments are counted one by
+  // one (the profile counts the ideas commented on).
+  const livePost = and(isNull(posts.deletedAt), eq(posts.moderationState, 'published'))
   const [ideasResult, votesResult, commentsResult] = await Promise.all([
     db
       .select({ count: count() })
       .from(posts)
-      .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
-    db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
+      .where(and(eq(posts.principalId, principalId), livePost)),
+    db
+      .select({ count: count() })
+      .from(postVotes)
+      .innerJoin(posts, eq(posts.id, postVotes.postId))
+      .where(and(eq(postVotes.principalId, principalId), livePost)),
     db
       .select({ count: count() })
       .from(postComments)
-      .where(and(eq(postComments.principalId, principalId), isNull(postComments.deletedAt))),
+      .innerJoin(posts, eq(posts.id, postComments.postId))
+      .where(
+        and(
+          eq(postComments.principalId, principalId),
+          eq(postComments.isPrivate, false),
+          eq(postComments.moderationState, 'published'),
+          isNull(postComments.deletedAt),
+          livePost
+        )
+      ),
   ])
 
   return {

@@ -12,6 +12,7 @@ import {
   db,
   eq,
   and,
+  or,
   desc,
   isNull,
   isNotNull,
@@ -29,6 +30,7 @@ import {
   boardViewFilter,
   canViewPost,
   postTestViewFilter,
+  postViewFilter,
   type Actor,
 } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
@@ -90,6 +92,35 @@ export async function createNotification(
 }
 
 /**
+ * The post and board a bell points at, joined only when the actor may still
+ * see them: a deleted post or board, or one outside the actor's audience,
+ * joins as null.
+ */
+function visiblePostJoin(actor: Actor) {
+  return and(
+    eq(inAppNotifications.postId, posts.id),
+    isNull(posts.deletedAt),
+    postTestViewFilter(actor)
+  )
+}
+
+function visibleBoardJoin(actor: Actor) {
+  return and(eq(posts.boardId, boards.id), isNull(boards.deletedAt), boardViewFilter(actor))
+}
+
+/**
+ * Whether a bell is one the actor can open, as SQL over the joins below. It is
+ * the list's redaction rule (see the mapper in getNotificationsForMember), so
+ * the unread counts leave out exactly the bells the list redacts.
+ */
+function openableBell(actor: Actor) {
+  return or(
+    isNull(inAppNotifications.postId),
+    and(isNotNull(posts.id), isNotNull(boards.id), postViewFilter(actor))
+  )
+}
+
+/**
  * Get notifications for a member with pagination.
  *
  * The `actor` parameter drives per-board audience filtering on the
@@ -144,18 +175,8 @@ export async function getNotificationsForMember(
       boardAccess: boards.access,
     })
     .from(inAppNotifications)
-    .leftJoin(
-      posts,
-      and(
-        eq(inAppNotifications.postId, posts.id),
-        isNull(posts.deletedAt),
-        postTestViewFilter(actor)
-      )
-    )
-    .leftJoin(
-      boards,
-      and(eq(posts.boardId, boards.id), isNull(boards.deletedAt), boardViewFilter(actor))
-    )
+    .leftJoin(posts, visiblePostJoin(actor))
+    .leftJoin(boards, visibleBoardJoin(actor))
     .where(where)
     .orderBy(desc(inAppNotifications.createdAt))
     .limit(limit)
@@ -163,18 +184,14 @@ export async function getNotificationsForMember(
 
   // Total (for pagination) and unread counts are independent of each other and
   // of the list query above, so fire them in parallel rather than serially.
-  const [totalResult, unreadResult] = await Promise.all([
+  const [totalResult, unreadCount] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)::int`.as('count') })
       .from(inAppNotifications)
       .where(where),
-    db
-      .select({ count: sql<number>`count(*)::int`.as('count') })
-      .from(inAppNotifications)
-      .where(and(baseWhere, isNull(inAppNotifications.readAt))),
+    getUnreadCount(principalId, actor),
   ])
   const total = totalResult[0]?.count ?? 0
-  const unreadCount = unreadResult[0]?.count ?? 0
 
   const notifications: NotificationWithPost[] = rows.map((row) => {
     // Three ways a postId-bearing notification can be denied:
@@ -238,17 +255,23 @@ export async function getNotificationsForMember(
 }
 
 /**
- * Get unread notification count for a member (optimized for badge display)
+ * Get unread notification count for a member (optimized for badge display).
+ * Counts only bells the list would show unredacted to `actor`, so a bell about
+ * a deleted or hidden post never holds the badge up. The actor is required: an
+ * anonymous default would leave out bells on boards the reader can see.
  */
-export async function getUnreadCount(principalId: PrincipalId): Promise<number> {
+export async function getUnreadCount(principalId: PrincipalId, actor: Actor): Promise<number> {
   const result = await db
     .select({ count: sql<number>`count(*)::int`.as('count') })
     .from(inAppNotifications)
+    .leftJoin(posts, visiblePostJoin(actor))
+    .leftJoin(boards, visibleBoardJoin(actor))
     .where(
       and(
         eq(inAppNotifications.principalId, principalId),
         isNull(inAppNotifications.archivedAt),
-        isNull(inAppNotifications.readAt)
+        isNull(inAppNotifications.readAt),
+        openableBell(actor)
       )
     )
 
@@ -266,7 +289,7 @@ export async function markAsRead(
     { principal_id: principalId, notification_id: notificationId },
     'mark notification as read'
   )
-  // Verify ownership and update in single query
+  // Verify domain and update in single query
   const result = await db
     .update(inAppNotifications)
     .set({ readAt: new Date() })

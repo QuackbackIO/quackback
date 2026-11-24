@@ -17,10 +17,8 @@ import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { isTeamMember } from '@/lib/shared/roles'
 import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { dueAlertMarkersOnSet } from '@/lib/shared/ticket-due'
-import { firstResponseStamp } from './ticket.lifecycle'
 import { recordTicketActivity } from './ticket-activity.service'
 import { emitTicketDueChanged } from './ticket.webhooks'
 import { publishTicketUpdated } from './ticket-intake.service'
@@ -85,8 +83,6 @@ export async function setTicketDueAt(
         !!actor.principalId && actor.principalId === (existing.assigneePrincipalId ?? null),
     }),
   }
-  const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
-  if (stamp) patch.firstResponseAt = stamp
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
 
   // Durable timeline record + the integration signal (both fire-and-forget).

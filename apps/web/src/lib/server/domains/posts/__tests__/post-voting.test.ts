@@ -35,6 +35,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.board-guard', async () => {
+  const { sql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
+  return {
+    BoardReadOnlyError: class BoardReadOnlyError extends Error {},
+    planOpenBoardsSql: vi.fn(async () => sql`NULL::uuid[]`),
+  }
+})
 vi.mock('@/lib/server/events/dispatch', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/events/dispatch')>()),
   dispatchPostVoted: (...args: unknown[]) => mockDispatchPostVoted(...args),
@@ -154,7 +161,13 @@ describe('addVoteOnBehalf', () => {
 
   it('adds a proxy vote successfully', async () => {
     mockDbExecute.mockResolvedValue([
-      { post_exists: true, board_exists: true, newly_voted: true, vote_count: 6 },
+      {
+        post_exists: true,
+        board_exists: true,
+        voter_exists: true,
+        newly_voted: true,
+        vote_count: 6,
+      },
     ])
 
     const result = await addVoteOnBehalf(
@@ -170,7 +183,13 @@ describe('addVoteOnBehalf', () => {
 
   it('returns voted: false when vote already exists (idempotent)', async () => {
     mockDbExecute.mockResolvedValue([
-      { post_exists: true, board_exists: true, newly_voted: false, vote_count: 5 },
+      {
+        post_exists: true,
+        board_exists: true,
+        voter_exists: true,
+        newly_voted: false,
+        vote_count: 5,
+      },
     ])
 
     const result = await addVoteOnBehalf(POST_ID, PRINCIPAL_ID)
@@ -197,7 +216,13 @@ describe('addVoteOnBehalf', () => {
 
   it('passes source metadata to the CTE', async () => {
     mockDbExecute.mockResolvedValue([
-      { post_exists: true, board_exists: true, newly_voted: true, vote_count: 3 },
+      {
+        post_exists: true,
+        board_exists: true,
+        voter_exists: true,
+        newly_voted: true,
+        vote_count: 3,
+      },
     ])
 
     const result = await addVoteOnBehalf(

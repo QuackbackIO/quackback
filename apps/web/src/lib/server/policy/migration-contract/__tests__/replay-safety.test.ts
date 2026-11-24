@@ -323,6 +323,13 @@ describe('the real corpus', () => {
     // 0311 adds ownership_warning_sent_at only while the column is absent and
     // marks the rows already in a grace period in the same branch, as 0239
     // does, so a second run finds the column and does nothing.
+    // 0313 creates email_senders and backfills it in one block that runs only
+    // while the table does not exist, so a second run skips both and never
+    // writes back a sender an admin has since cleared.
+    // 0323 clears legacy header name and mode, and drops the settings cache,
+    // only while the header_display_name column comment it writes in the same
+    // block is absent, so a second run does nothing and never clears a value
+    // saved afterwards, on an old row or a new one.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -353,6 +360,9 @@ describe('the real corpus', () => {
       '0305_sending_domain_setup.sql',
       '0308_remove_approvals_leftovers.sql',
       '0311_sending_domain_ownership_warning_sent.sql',
+      '0313_email_senders.sql',
+      '0316_personal_key_reply_cutoff.sql',
+      '0323_clear_legacy_header_settings.sql',
     ])
   })
 

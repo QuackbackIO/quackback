@@ -128,11 +128,13 @@ const STRANGER = 'stranger@evil.example'
  * either of them.
  */
 const PORTAL_OPEN = {
-  authConfig: { openSignup: false },
+  // Email sign-in on: with the method off, every one of these paths refuses
+  // before the door is asked, and the door is the subject here.
+  authConfig: { openSignup: false, oauth: { magicLink: true } },
   portalConfig: { openSignup: true },
 }
 const PORTAL_CLOSED = {
-  authConfig: { openSignup: true },
+  authConfig: { openSignup: true, oauth: { magicLink: true } },
   portalConfig: { openSignup: false },
 }
 

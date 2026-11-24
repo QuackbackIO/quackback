@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { StatusVisibilityCard } from '../status-visibility-card'
 import { StatusDangerCard } from '../status-danger-card'
+import { StatusNotificationsCard } from '../status-notifications-card'
 import { DEFAULT_STATUS_SETTINGS } from '@/lib/shared/status-settings'
 
 const { clearMutateAsync } = vi.hoisted(() => ({
@@ -17,6 +18,9 @@ vi.mock('@/components/admin/segments/segment-multi-select', () => ({
 }))
 vi.mock('@/lib/client/mutations/status', () => ({
   useClearStatusHistory: () => ({ mutateAsync: clearMutateAsync, isPending: false }),
+}))
+vi.mock('@/components/admin/channels/surface-sender-row', () => ({
+  SurfaceSenderRow: ({ surface }: { surface: string }) => <p>sender for {surface}</p>,
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
@@ -68,5 +72,12 @@ describe('StatusDangerCard', () => {
     expect(screen.getByText('Delete incident history?')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Delete incident history' }))
     expect(clearMutateAsync).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('StatusNotificationsCard', () => {
+  it('shows the address status email comes from', () => {
+    render(<StatusNotificationsCard settings={DEFAULT_STATUS_SETTINGS} onChange={() => {}} />)
+    expect(screen.getByText('sender for status')).toBeTruthy()
   })
 })

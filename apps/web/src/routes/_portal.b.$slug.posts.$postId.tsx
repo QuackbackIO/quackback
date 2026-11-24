@@ -30,7 +30,6 @@ import {
   useRestoreComment,
 } from '@/lib/client/mutations/portal-comments'
 import { useLoadMorePortalComments } from '@/lib/client/mutations/load-more-comments'
-import { toast } from 'sonner'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
 import { isValidTypeId, type PostCommentId, type PostId } from '@quackback/ids'
@@ -41,6 +40,8 @@ import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { toastError } from '@/lib/client/error-notice'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 // Dialogs the post's author or the team open from its menu; they load on first use.
 const DeletePostDialog = lazy(() =>
@@ -117,15 +118,14 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
       slug,
       postTitle: post.title,
       boardName: post.board.name,
-      baseUrl: context.baseUrl ?? '',
+      canonicalUrl: pageCanonical('feedback', `/b/${slug}/posts/${postId}`, context),
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { postTitle, boardName, slug, postId, baseUrl } = loaderData
+    const { postTitle, boardName, canonicalUrl } = loaderData
     const title = `${postTitle} - ${boardName}`
     const description = `${postTitle}. Vote and comment on this ${boardName} post.`
-    const canonicalUrl = baseUrl ? `${baseUrl}/b/${slug}/posts/${postId}` : ''
     return {
       meta: [
         { title },
@@ -209,22 +209,22 @@ function PostDetailPage() {
 
   const deleteComment = useDeleteComment({
     postId,
-    onError: (error) => toast.error(error.message || 'Failed to delete comment'),
+    onError: (error) => toastError(error, 'Failed to delete comment'),
   })
 
   const pinComment = usePinComment({
     postId,
-    onError: (error) => toast.error(error.message || 'Failed to pin comment'),
+    onError: (error) => toastError(error, 'Failed to pin comment'),
   })
 
   const unpinComment = useUnpinComment({
     postId,
-    onError: (error) => toast.error(error.message || 'Failed to unpin comment'),
+    onError: (error) => toastError(error, 'Failed to unpin comment'),
   })
 
   const restoreComment = useRestoreComment({
     postId,
-    onError: (error) => toast.error(error.message || 'Failed to restore comment'),
+    onError: (error) => toastError(error, 'Failed to restore comment'),
   })
 
   // "Show more comments" — appends the next keyset page of root comments into
@@ -347,6 +347,9 @@ function PostDetailPage() {
             onImageUpload={canUploadPostMedia ? uploadMediaWithSession : undefined}
             isSaving={isSavingEdit || team.isTeamSavingEdit}
             canModerate={canModerate}
+            // Only the author and those who may see unpublished posts are
+            // shown a held post, so a viewer without that permission wrote it.
+            pendingForAuthor={!can(PERMISSIONS.POST_VIEW_PRIVATE)}
             moderationBusy={approvePost.isPending || rejectPost.isPending}
             onApprove={() => approvePost.mutate(postId)}
             onReject={() => rejectPost.mutate({ postId })}

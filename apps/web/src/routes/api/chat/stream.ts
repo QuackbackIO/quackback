@@ -1,15 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import {
-  db,
-  eq,
-  and,
-  or,
-  gt,
-  isNull,
-  conversations,
-  conversationMessages,
-  principal,
-} from '@/lib/server/db'
+import { db, eq, principal } from '@/lib/server/db'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { verifyStreamToken } from '@/lib/server/realtime/stream-token'
@@ -22,20 +12,25 @@ import {
   type ParsedConversationFrame,
 } from '@/lib/server/realtime/conversation-channels'
 import { subscribe } from '@/lib/server/realtime/pubsub'
+import {
+  createInboxScopeGate,
+  type InboxScopeGate,
+  type InboxScopeLoad,
+} from '@/lib/server/realtime/inbox-scope-gate'
+import { inboxScopeChannel } from '@/lib/server/realtime/inbox-scope-invalidate'
+import { teamIdsForPrincipal } from '@/lib/server/domains/teams'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
 import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
-import { canViewConversation } from '@/lib/server/policy/conversation'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, toSessionScope, type SessionScope } from '@/lib/shared/roles'
-import {
-  loadAuthors,
-  toMessageDTO,
-  fallbackAuthor,
-  findBackfillCursor,
-} from '@/lib/server/domains/conversation/conversation.query'
+import { listMissedMessagesForBackfill } from '@/lib/server/domains/conversation/conversation.query'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
+import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
+import type { PermissionKey } from '@/lib/shared/permissions'
+import type { Role } from '@/lib/shared/roles'
 import { createSseStream, SSE_RESPONSE_HEADERS } from '@/lib/server/utils/sse'
 import { streamLimiter } from '@/lib/server/realtime/stream-connection-limit'
 import { startStreamHeartbeat } from '@/lib/server/realtime/stream-heartbeat'
@@ -44,6 +39,7 @@ import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspace
 import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { logger } from '@/lib/server/logger'
+import { isPausedTeamSeat } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 
 const log = logger.child({ component: 'chat-stream' })
 
@@ -56,6 +52,8 @@ interface StreamPrincipal {
   via: 'token' | 'session'
   /** Bound audience; non-dashboard tokens and sessions are portal-tier here. */
   scope: SessionScope
+  /** A paused seat (the plan has fewer team seats than members): portal-tier too. */
+  paused: boolean
 }
 
 /** Resolve the principal for a stream from a signed token (widget) or the
@@ -67,14 +65,17 @@ async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal
     const row = await db.query.principal.findFirst({
       where: eq(principal.id, tokenPrincipal.principalId),
     })
-    if (row)
+    if (row) {
+      const paused = await isPausedTeamSeat(row)
       return {
         principalId: row.id,
-        role: row.role,
+        role: paused ? 'user' : row.role,
         type: row.type,
         via: 'token',
         scope: tokenPrincipal.scope,
+        paused,
       }
+    }
     return null
   }
 
@@ -84,12 +85,14 @@ async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal
     where: eq(principal.userId, session.user.id as never),
   })
   if (!row) return null
+  const paused = await isPausedTeamSeat(row)
   return {
     principalId: row.id,
-    role: row.role,
+    role: paused ? 'user' : row.role,
     type: row.type,
     via: 'session',
     scope: toSessionScope(session.session.scope),
+    paused,
   }
 }
 
@@ -108,6 +111,21 @@ function formatFrame(
     id,
     frame: `${id ? `id: ${id}\n` : ''}event: ${eventName}\ndata: ${message}\n\n`,
   }
+}
+
+/**
+ * Read a teammate's inbox scope afresh for the stream's cache: their view keys
+ * and team ids, or `'not-teammate'` when they have left the team (or the row
+ * is gone), which closes the stream.
+ */
+async function loadInboxScope(principalId: PrincipalId): Promise<InboxScopeLoad> {
+  const row = await db.query.principal.findFirst({ where: eq(principal.id, principalId) })
+  if (!row || !isTeamMember(row.role)) return 'not-teammate'
+  const [permissions, teamIds] = await Promise.all([
+    permissionsForPrincipal(principalId, row.role as Role),
+    teamIdsForPrincipal(principalId),
+  ])
+  return { permissions, teamIds }
 }
 
 export const Route = createFileRoute('/api/chat/stream')({
@@ -145,11 +163,21 @@ export const Route = createFileRoute('/api/chat/stream')({
           return new Response('Not found', { status: 404 })
         }
 
+        // The actor carries the principal's assignment-derived permissions, as
+        // every other request path does. Non-dashboard audiences never carry
+        // team authority: the set is empty, not resolved, because a teammate's
+        // assignments would otherwise ride their widget or portal stream.
+        const permissions: ReadonlySet<PermissionKey> =
+          me.scope === 'dashboard' && !me.paused
+            ? await permissionsForPrincipal(me.principalId, me.role as Role)
+            : new Set()
+        const wantsInboxScope = scope === 'inbox' && isTeamMember(effectiveRole)
         const actor: Actor = {
           principalId: me.principalId,
           role: (effectiveRole as Actor['role']) ?? null,
           principalType: normalizePrincipalType(me.type),
           segmentIds: new Set(),
+          permissions,
         }
 
         // Resolve which channel(s) to subscribe to, authorizing FIRST.
@@ -160,7 +188,9 @@ export const Route = createFileRoute('/api/chat/stream')({
           if (!isTeamMember(effectiveRole)) {
             return new Response('Forbidden', { status: 403 })
           }
-          channels.push(CONVERSATION_INBOX_CHANNEL)
+          // The inbox channel carries every item; the principal's own channel
+          // says when their role or teams change.
+          channels.push(CONVERSATION_INBOX_CHANNEL, inboxScopeChannel(me.principalId))
         } else if (scope === 'presence') {
           // App-wide agent presence: any admin page keeps a team member marked
           // online for routing. Heartbeat only — no channel subscription.
@@ -180,12 +210,15 @@ export const Route = createFileRoute('/api/chat/stream')({
               return new Response('Not found', { status: 404 })
             }
           }
-          const conversation = await db.query.conversations.findFirst({
-            where: eq(conversations.id, conversationId),
-          })
-          if (!conversation || !canViewConversation(actor, conversation).allowed) {
-            // Never leak existence to a non-owner.
-            return new Response('Not found', { status: 404 })
+          // The visitor who owns it, or a teammate whose scope holds it. Any
+          // other caller gets 404, never 403, so existence never leaks.
+          try {
+            await assertConversationVisible(conversationId, actor)
+          } catch (err) {
+            if (err instanceof NotFoundError) {
+              return new Response('Not found', { status: 404 })
+            }
+            throw err
           }
           channels.push(conversationChannel(conversationId))
           backfillConversationId = conversationId
@@ -257,8 +290,9 @@ export const Route = createFileRoute('/api/chat/stream')({
         // The captured scope's pool does not live as long as the stream: under
         // pooled tenancy the pool cache ends a pool that has gone unused, or that
         // its LRU cap pushes out, and a stream checks out only once. So presence
-        // writes after start re-acquire the workspace by key, which replaces an
-        // evicted pool. A single-workspace install runs them as they are.
+        // writes and inbox scope reloads after start re-acquire the workspace by
+        // key, which replaces an evicted pool. A single-workspace install runs
+        // them as they are.
         const pooledWorkspaceKey =
           workspaceScope && isPooledTenancy() ? workspaceScope.workspace.workspaceKey : null
         const withLivePool = async (body: () => Promise<void>): Promise<void> => {
@@ -268,7 +302,7 @@ export const Route = createFileRoute('/api/chat/stream')({
           } catch (err) {
             log.warn(
               { err, stream_id: streamId, workspace_key: pooledWorkspaceKey },
-              'chat stream presence update failed'
+              'chat stream work on the workspace pool failed'
             )
           }
         }
@@ -290,8 +324,9 @@ export const Route = createFileRoute('/api/chat/stream')({
               const wentOffline = await clearPresence(me.principalId, streamId, isAgentStream)
               // When an inbox agent's last stream closes cluster-wide, return
               // their unanswered conversations to the queue so they aren't
-              // stranded. wentOffline reads the shared presence store, so an
-              // agent still live on another replica is not treated as offline.
+              // stranded, while routing is on (the requeue checks). wentOffline
+              // reads the shared presence store, so an agent still live on
+              // another replica is not treated as offline.
               if (wentOffline && isAgentStream) {
                 const { requeueUnansweredOnAgentOffline } =
                   await import('@/lib/server/domains/conversation/conversation.service')
@@ -321,14 +356,7 @@ export const Route = createFileRoute('/api/chat/stream')({
             let backfilling = Boolean(backfillConversationId && lastEventId)
             const liveBuffer: Array<{ id?: string; frame: string }> = []
 
-            const unsub = await subscribe(channels, (_channel, message) => {
-              const event = parseConversationFrame(message)
-              // Never echo a subscriber's own typing back to them, on any
-              // surface — clients can treat every typing event they receive
-              // as someone else's.
-              if (isOwnTyping(event, me.principalId)) {
-                return
-              }
+            const deliver = (message: string, event: ParsedConversationFrame) => {
               const { id, frame } = formatFrame(message, event)
               if (backfilling) {
                 liveBuffer.push({ id, frame })
@@ -336,6 +364,51 @@ export const Route = createFileRoute('/api/chat/stream')({
               }
               if (id) sentMessageIds.add(id)
               sse.sendRaw(frame)
+            }
+
+            // Parse once, after any gate, so a frame outside this teammate's
+            // scope is never parsed. Never echo a subscriber's own typing back
+            // to them, on any surface: clients can treat every typing event
+            // they receive as someone else's.
+            const deliverParsed = (message: string) => {
+              const event = parseConversationFrame(message)
+              if (isOwnTyping(event, me.principalId)) return
+              deliver(message, event)
+            }
+
+            // The inbox carries every item in the workspace; the gate passes on
+            // only what this teammate's scope holds (inbox-scope-gate.ts).
+            // It starts stale: a role or team change committed after the
+            // reads above but before the subscribe below sends a signal no one
+            // hears, so the first inbox frame waits for a reload that runs
+            // after the subscribe (and is dropped if that reload fails).
+            const gate: InboxScopeGate | null = wantsInboxScope
+              ? createInboxScopeGate({
+                  actor,
+                  teamIds: new Set(),
+                  startStale: true,
+                  load: () => loadInboxScope(me.principalId),
+                  runReload: withLivePool,
+                  forward: (message) => deliverParsed(message),
+                  sendEvent: (name, data) =>
+                    sse.sendRaw(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`),
+                  close: () => void cleanup(),
+                })
+              : null
+            const scopeChannel = inboxScopeChannel(me.principalId)
+
+            const unsub = await subscribe(channels, (channel, message, meta) => {
+              if (gate && channel === scopeChannel) {
+                gate.onScopeChanged()
+                return
+              }
+              // Only the inbox channel is filtered; a conversation or ticket
+              // channel was authorized for its one item at connect.
+              if (gate && channel === CONVERSATION_INBOX_CHANNEL) {
+                gate.onInboxFrame(message, meta)
+                return
+              }
+              deliverParsed(message)
             })
             // If the client aborted while subscribe() was in flight, cleanup
             // already ran (with unsubscribe still null) — release this orphan
@@ -360,61 +433,26 @@ export const Route = createFileRoute('/api/chat/stream')({
               ? readActivitySnapshot(backfillConversationId)
               : null
 
-            // Backfill messages the client missed while disconnected. Mirror
-            // the canonical read path: skip soft-deleted rows and use the
-            // composite (created_at, id) keyset so same-microsecond siblings
-            // are not dropped. A backfill failure must not tear down the live
-            // stream, so it's isolated in its own try/catch.
+            // Backfill messages the client missed while disconnected (see
+            // listMissedMessagesForBackfill for the audience and keyset rules).
+            // A backfill failure must not tear down the live stream, so it's
+            // isolated in its own try/catch.
             if (backfillConversationId && lastEventId) {
               try {
-                // Scoped to the authorized conversation — a Last-Event-ID
+                // Scoped to the authorized conversation: a Last-Event-ID
                 // from elsewhere must not shift the backfill window.
-                const cursor = await findBackfillCursor(backfillConversationId, lastEventId)
-                if (cursor) {
-                  const missed = await db
-                    .select()
-                    .from(conversationMessages)
-                    .where(
-                      and(
-                        eq(conversationMessages.conversationId, backfillConversationId),
-                        isNull(conversationMessages.deletedAt),
-                        // Mirror listMessages: internal notes are agent-only.
-                        // Visitor (non-team) reconnect backfill must exclude
-                        // them — publish-time channel separation doesn't cover
-                        // this DB read path.
-                        isTeamMember(effectiveRole)
-                          ? undefined
-                          : eq(conversationMessages.isInternal, false),
-                        or(
-                          gt(conversationMessages.createdAt, cursor.createdAt),
-                          and(
-                            eq(conversationMessages.createdAt, cursor.createdAt),
-                            gt(conversationMessages.id, cursor.id)
-                          )
-                        )
-                      )
-                    )
-                    .orderBy(conversationMessages.createdAt, conversationMessages.id)
-                  const authors = await loadAuthors(
-                    missed.map((m) => m.principalId),
-                    {
-                      preferAccountName: isTeamMember(effectiveRole),
-                    }
+                const missed = await listMissedMessagesForBackfill(
+                  backfillConversationId,
+                  lastEventId,
+                  { includeInternal: isTeamMember(effectiveRole) }
+                )
+                for (const dto of missed) {
+                  sentMessageIds.add(dto.id)
+                  sse.send(
+                    'message',
+                    { kind: 'message', conversationId: dto.conversationId, message: dto },
+                    dto.id
                   )
-                  for (const m of missed) {
-                    const dto = toMessageDTO(
-                      m,
-                      m.principalId
-                        ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId))
-                        : null
-                    )
-                    sentMessageIds.add(dto.id)
-                    sse.send(
-                      'message',
-                      { kind: 'message', conversationId: dto.conversationId, message: dto },
-                      dto.id
-                    )
-                  }
                 }
               } catch (err) {
                 log.warn({ err }, 'chat stream backfill failed')

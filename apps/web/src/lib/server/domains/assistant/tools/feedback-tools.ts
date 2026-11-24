@@ -21,6 +21,8 @@ import { getBaseUrl } from '@/lib/server/config'
 import type { AssistantToolContext } from '../assistant.toolspec'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { sectionUrl } from '@/lib/shared/section-links'
 // Zod 4.5+ requires seconds (`2020-01-01T06:15:00Z`). LLMs often omit them.
 // The documented union restores the 4.4 default: both precisions, Z only,
 // real calendar dates, no naive / local timestamps.
@@ -73,7 +75,9 @@ export async function executeListFeedback(
     return { items: [] }
   const args = listInput.parse(input)
   const board = args.boardSlug
-    ? await db.query.boards.findFirst({ where: eq(boards.slug, args.boardSlug) })
+    ? await db.query.boards.findFirst({
+        where: and(eq(boards.slug, args.boardSlug), isNull(boards.deletedAt)),
+      })
     : null
   if (args.boardSlug && !board) return { items: [] }
   const tag = args.tagSlug
@@ -97,8 +101,13 @@ export async function executeListFeedback(
   })
   const statuses = await db.query.postStatuses.findMany()
   const names = new Map(statuses.map((status) => [status.id, status.name]))
+  const origins = await getSectionOrigins()
   const items = result.items.map((post) => {
-    const url = `${getBaseUrl()}/b/${encodeURIComponent(post.board.slug)}/posts/${post.id}`
+    const url = sectionUrl(
+      'feedback',
+      `/b/${encodeURIComponent(post.board.slug)}/posts/${post.id}`,
+      origins
+    )
     ctx.ledger.sources.set(post.id, { type: 'post', id: post.id, title: post.title, url })
     return {
       id: post.id,

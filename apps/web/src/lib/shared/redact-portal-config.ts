@@ -62,6 +62,8 @@ const SERVER_ONLY_SETTINGS_KEYS = [
   'tierLimits',
   'cloud',
   'setupState',
+  // WorkspaceSettings: an input to the server's sign-in decision, not for display.
+  'ssoProvidersConfigured',
 ] as const
 
 function stripServerOnlyKeys<T extends object>(row: T): T {

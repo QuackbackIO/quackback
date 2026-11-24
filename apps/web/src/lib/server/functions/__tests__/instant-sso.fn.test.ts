@@ -37,6 +37,7 @@ const hoisted = vi.hoisted(() => ({
   getRegisteredOidcProviderIds: vi.fn(),
   getRegisteredAuthProviders: vi.fn(),
   signInSocial: vi.fn(),
+  warn: vi.fn(),
 }))
 
 vi.mock('@/lib/server/auth/session', () => ({
@@ -54,6 +55,10 @@ vi.mock('@/lib/shared/signin-methods', () => ({
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: hoisted.getRegisteredOidcProviderIds,
   getRegisteredAuthProviders: hoisted.getRegisteredAuthProviders,
+}))
+
+vi.mock('@/lib/server/logger', () => ({
+  logger: { child: () => ({ warn: hoisted.warn }) },
 }))
 
 vi.mock('@/lib/server/auth', () => ({
@@ -170,5 +175,22 @@ describe('resolveInstantSsoRedirectFn', () => {
 
     expect(result).toBeNull()
     expect(hoisted.signInSocial).not.toHaveBeenCalled()
+  })
+
+  it('(h) falls back to the sign-in page when the sole provider cannot start a sign-in', async () => {
+    soleOidcWorkspace()
+    // Better Auth throws PROVIDER_NOT_FOUND when it skipped the provider (its
+    // discovery document was unreachable when the instance was built).
+    hoisted.signInSocial.mockRejectedValueOnce(
+      Object.assign(new Error('Provider not found'), { name: 'APIError' })
+    )
+
+    const result = await resolveHandler({ data: { callbackUrl: '/admin' } })
+
+    expect(result).toBeNull()
+    expect(hoisted.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ provider_id: 'oidc_acme', error_name: 'APIError' }),
+      expect.any(String)
+    )
   })
 })

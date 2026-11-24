@@ -41,6 +41,13 @@ vi.mock('@/lib/server/logger', () => {
   return { logger: { child, warn: hoisted.warn, info: () => {}, debug: () => {}, error: () => {} } }
 })
 
+// Whether the plan holds custom roles (past its cap, after the grace). The
+// real answer is proved against a database in plan-limits.team.db.test.ts.
+const planLock = vi.hoisted(() => ({ locked: false }))
+vi.mock('@/lib/server/domains/roles/role.plan-lock', () => ({
+  customRolesLocked: async () => planLock.locked,
+}))
+
 const { handleAutoProvisionAfter } = await import('../hooks')
 
 const fixture = await createDbTestFixture({
@@ -138,6 +145,52 @@ async function signIn(
     async () => ({ claims: { groups } }) as never
   )
 }
+
+describe.skipIf(!fixture.available)('SSO role rules while the plan holds custom roles', () => {
+  afterEach(() => {
+    planLock.locked = false
+  })
+
+  it('a first sign-in matching a held custom role gets the default role instead, with a warning', async () => {
+    planLock.locked = true
+    const support = await insertRole('Support')
+    const who = await seedUser('user')
+    await signIn(who, [{ whenContains: 'support', role: 'member', roleId: support }], ['support'])
+    const [manager] = await testDb.select().from(roles).where(eq(roles.key, SYSTEM_ROLES.MANAGER))
+    const after = await state(who.userId)
+    expect(after?.role).toBe('member')
+    expect(after?.assignments).not.toContain(support)
+    expect(after?.assignments).toEqual(manager ? [manager.id] : [])
+    expect(hoisted.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'sso_role_rule_role_held', role_id: support }),
+      expect.any(String)
+    )
+  })
+
+  it('under sync, nobody moves onto a held custom role, and its holders keep it', async () => {
+    planLock.locked = true
+    const support = await insertRole('Support')
+    const billing = await insertRole('Billing')
+    const mover = await seedUser('member', support)
+    await signIn(
+      mover,
+      [{ whenContains: 'support', role: 'member', roleId: billing }],
+      ['support'],
+      true
+    )
+    expect(await state(mover.userId)).toEqual({ role: 'member', assignments: [support] })
+
+    const holder = await seedUser('member', billing)
+    await signIn(
+      holder,
+      [{ whenContains: 'support', role: 'member', roleId: billing }],
+      ['support'],
+      true
+    )
+    expect(await state(holder.userId)).toEqual({ role: 'member', assignments: [billing] })
+    expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
+  })
+})
 
 describe.skipIf(!fixture.available)('SSO role rules granting a workspace role', () => {
   it('a first sign-in matching a custom-role rule gets the member tier and that role', async () => {

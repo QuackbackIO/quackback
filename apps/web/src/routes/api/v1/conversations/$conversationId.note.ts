@@ -17,6 +17,7 @@ import {
   markdownToSanitizedJson,
 } from './-validation'
 import type { ConversationId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const noteSchema = z.object({
   content: messageContentSchema,
@@ -36,7 +37,7 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/note
             'conversation ID'
           )
 
-          const parsed = noteSchema.safeParse(await request.json().catch(() => null))
+          const parsed = noteSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,
@@ -45,9 +46,9 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/note
 
           const actor = serviceActorFromApiAuth(auth)
           // A personal key acts only on conversations its creator can see.
-          const { assertConversationViewable } =
-            await import('@/lib/server/domains/conversation/conversation.service')
-          await assertConversationViewable(conversationId, actor)
+          const { assertConversationVisible } =
+            await import('@/lib/server/domains/conversation/conversation-visibility')
+          await assertConversationVisible(conversationId, actor)
           const agent = {
             principalId: auth.principalId,
             displayName: auth.principal?.displayName ?? 'API',

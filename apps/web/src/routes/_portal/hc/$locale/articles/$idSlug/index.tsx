@@ -8,6 +8,7 @@ import { HelpCenterPrevNext } from '@/components/help-center/help-center-prev-ne
 import { HelpCenterArticleFeedback } from '@/components/help-center/help-center-article-feedback'
 import { HelpCenterRelatedArticles } from '@/components/help-center/help-center-related-articles'
 import { HelpCenterToc } from '@/components/help-center/help-center-toc'
+import { useRecordArticleView } from '@/components/help-center/use-record-article-view'
 import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-utils'
 import {
   extractHeadings,
@@ -20,12 +21,13 @@ import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
-import {
-  helpCenterAbsoluteUrl,
-  helpCenterHeadPortal,
-} from '@/components/help-center/help-center-head'
+import { helpCenterHeadPortal } from '@/components/help-center/help-center-head'
 import type { JSONContent } from '@tiptap/react'
-import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useBaseUrl,
+  useSectionLinks,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 const helpCenterApi = getRouteApi('/_portal/hc')
 
@@ -54,13 +56,12 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug/')({
   head: ({ loaderData, params, matches }) => {
     if (!loaderData) return {}
     const { article } = loaderData
-    const { workspaceName, baseUrl } = helpCenterHeadPortal(matches)
+    const { workspaceName, helpUrl } = helpCenterHeadPortal(matches)
     const description =
       article.description ||
       (article.content ? stripMarkdownPreview(article.content, 160) : undefined)
     const pageTitle = `${article.title} - ${workspaceName}`
-    const canonicalUrl = helpCenterAbsoluteUrl(
-      baseUrl,
+    const canonicalUrl = helpUrl(
       hcArticlePath({
         locale: params.locale,
         urlId: article.urlId,
@@ -90,9 +91,12 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug/')({
 function ArticleDetailPage() {
   const intl = useIntl()
   const { article, related, category, articles, allCategories } = Route.useLoaderData()
+  useRecordArticleView(article.id)
   const { locale } = Route.useParams()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
-  const baseUrl = useBaseUrl()
+  // Structured data names the help center's own host once it has one.
+  const requestBaseUrl = useBaseUrl()
+  const baseUrl = useSectionLinks()?.origins.help ?? requestBaseUrl
   const settings = useWorkspaceSettings()
   const supportEnabled = isPortalSupportSurfaceEnabled(
     settings?.featureFlags,

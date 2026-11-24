@@ -20,7 +20,7 @@ import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
-import { hasEntitlement } from '@/lib/server/domains/settings/cloud/entitlements'
+import { isFeatureLive } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { getArticleById } from './help-center.article.service'
 import {
   getArticleTranslation,
@@ -30,6 +30,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
 import type { HelpCenterArticleWithCategory } from './help-center.types'
+import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 const log = logger.child({ component: 'help-center-auto-translate' })
 
@@ -118,7 +119,7 @@ export async function translateArticleForLocale(
   locale: string,
   opts: { guard?: ParkedTranslationGuard } = {}
 ): Promise<AutoTranslatePause | undefined> {
-  if (!(await hasEntitlement('aiArticleTranslation'))) {
+  if (!(await isFeatureLive('aiArticleTranslation'))) {
     log.debug({ article_id: articleId, locale }, 'auto-translate skipped: plan excludes it')
     return
   }
@@ -146,6 +147,13 @@ export async function translateArticleForLocale(
   }
 
   const helpCenterConfig = await getHelpCenterConfig()
+  // A language the plan holds back is not translated into.
+  const { heldHelpCenterLocales } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.locales')
+  if ((await heldHelpCenterLocales(helpCenterConfig.locales?.additional ?? [])).includes(locale)) {
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: language held by the plan')
+    return
+  }
   const protectedTerms = helpCenterConfig.autoTranslate?.protectedTerms ?? []
 
   const article = await getArticleById(articleId)
@@ -160,6 +168,7 @@ export async function translateArticleForLocale(
   let parsed: z.infer<typeof TranslationResultSchema>
   try {
     parsed = await chat({
+      threadId: oneShotThreadId(),
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,
@@ -219,7 +228,7 @@ export async function queueAutoTranslateOnPublish(
   try {
     const helpCenterConfig = await getHelpCenterConfig()
     if (!helpCenterConfig.autoTranslate?.enabled) return
-    if (!(await hasEntitlement('aiArticleTranslation'))) return
+    if (!(await isFeatureLive('aiArticleTranslation'))) return
     const additionalLocales = helpCenterConfig.locales?.additional ?? []
     if (additionalLocales.length === 0) return
 

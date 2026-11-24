@@ -21,7 +21,7 @@ type ModerationInput = Parameters<ReturnType<typeof useUpdateModerationDefault>[
 export function ModerationPage() {
   const router = useRouter()
   const updateModerationDefault = useUpdateModerationDefault()
-  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalPageConfig())
   const [isPending, startTransition] = useTransition()
 
   // Moderation toggles
@@ -33,6 +33,10 @@ export function ModerationPage() {
   )
   const [holdLinks, setHoldLinks] = useState(
     portalConfigQuery.data.moderationDefault?.holdLinks === true
+  )
+  // On unless the workspace turned it off.
+  const [emailDecisions, setEmailDecisions] = useState(
+    portalConfigQuery.data.moderationDefault?.emailDecisions !== false
   )
 
   // Each switch saves on change. Switches are locked while a save is in
@@ -65,6 +69,13 @@ export function ModerationPage() {
     return save(key === 'holdImages' ? setHoldImages : setHoldLinks, checked, {
       requireApproval: togglesToRequireApproval(moderationToggles),
       [key]: checked,
+    })
+  }
+
+  function updateEmailDecisions(checked: boolean) {
+    return save(setEmailDecisions, checked, {
+      requireApproval: togglesToRequireApproval(moderationToggles),
+      emailDecisions: checked,
     })
   }
 
@@ -109,6 +120,19 @@ export function ModerationPage() {
                 id="moderate-authenticated"
                 checked={moderationToggles.authenticated}
                 onCheckedChange={(checked) => updateModeration('authenticated', checked)}
+                disabled={disabled}
+              />
+            }
+          />
+          <SettingRow
+            label="Email authors the decision"
+            htmlFor="moderation-email-decisions"
+            disabled={disabled}
+            control={
+              <Switch
+                id="moderation-email-decisions"
+                checked={emailDecisions}
+                onCheckedChange={updateEmailDecisions}
                 disabled={disabled}
               />
             }

@@ -5,14 +5,21 @@
  * spelling of "Re: {subject}" and of the first-vs-follow-up team-alert intro.
  */
 
+import { singleLineSubject } from './subject'
+
 export type ConversationMailDirection = 'agent_reply' | 'visitor_message' | 'agent_started'
 
-/** Strip any leading `Re:` tokens (any case, repeated) and prefix a single `Re:`. */
+/**
+ * Strip any leading `Re:` tokens (any case, repeated) and prefix a single `Re:`.
+ * The stored subject can come from a multi-line message, so it is made one line first.
+ */
 export function conversationReplySubject(subject: string | null | undefined): string | null {
   if (subject == null) return null
-  const stripped = subject.replace(/^\s*(re:\s*)+/i, '').trim()
+  const stripped = singleLineSubject(subject)
+    .replace(/^\s*(re:\s*)+/i, '')
+    .trim()
   if (!stripped) return null
-  return `Re: ${stripped}`
+  return singleLineSubject(`Re: ${stripped}`)
 }
 
 /** Human correspondence template: email-channel agent replies and agent-started mail. */
@@ -32,19 +39,26 @@ export function teamAlertSubject(
   preview?: string | null
 ): string {
   const topic =
-    subject?.replace(/^\s*(re:\s*)+/i, '').trim() ||
+    (subject &&
+      singleLineSubject(subject)
+        .replace(/^\s*(re:\s*)+/i, '')
+        .trim()) ||
     preview?.replace(/\s+/g, ' ').trim().slice(0, 80) ||
     'New message'
   return `${visitorName}: ${topic}`
 }
 
+/** The From display name on an agent's reply: `Alex from Acme`. */
 export function agentReplyDisplayName(agentName: string, workspaceName: string): string {
-  return `${agentName} (${workspaceName})`
+  return `${agentName} from ${workspaceName}`
 }
 
 export function conversationMessageCopy(opts: {
   direction: ConversationMailDirection
   senderName: string
+  /** `senderName` is the support team's, not a person's: the copy speaks as
+   *  the team rather than "X from the workspace". */
+  senderIsTeam?: boolean
   workspaceName: string
   conversationSubject?: string | null
   /** Team-alert subject fallback when the conversation has no subject. */
@@ -85,9 +99,13 @@ export function conversationMessageCopy(opts: {
   return {
     subject: forwarded ?? generic,
     heading: forwarded ?? generic,
-    intro: isReply
-      ? `${senderName} replied to your conversation with ${workspaceName}.`
-      : `${senderName} from ${workspaceName} sent you a message.`,
+    intro: opts.senderIsTeam
+      ? isReply
+        ? `${senderName} replied to your conversation.`
+        : `${senderName} sent you a message.`
+      : isReply
+        ? `${senderName} replied to your conversation with ${workspaceName}.`
+        : `${senderName} from ${workspaceName} sent you a message.`,
     ctaLabel: 'View conversation',
     reason: isReply
       ? 'You received this email because you have an open conversation with this team.'

@@ -57,6 +57,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 // --- Other mocks ---
+// No mentioner here is an API key (the API key case runs on Postgres in
+// api-key-feedback-author.db.test.ts), so its lookup reads nothing.
+vi.mock('@/lib/server/domains/principals/principal-display', () => ({
+  loadApiKeyFeedbackAuthors: vi.fn(async () => new Map()),
+}))
 vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
 }))
@@ -80,6 +85,12 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: vi.fn().mockReturnValue(null),
 }))
 
+// Portal access has its own suite (portal-access-recipients.db.test.ts); here
+// the portal is public, so it lets every mentioned person through.
+vi.mock('@/lib/server/domains/settings/portal-access.recipients', () => ({
+  principalsWithPortalAccess: async (ids: readonly string[]) => new Set(ids),
+}))
+
 vi.mock('../hook-context', () => ({
   buildHookContext: vi.fn().mockResolvedValue({
     workspaceName: 'Test Workspace',
@@ -93,11 +104,21 @@ vi.mock('../hook-utils', () => ({
   truncate: vi.fn((s: string) => s),
 }))
 
+// The feedback surface's sender; which address it is is pinned in
+// sender-resolver.db.test.ts.
+const resolveSender = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({ resolveSender }))
+
 // Import after mocks
 const { getHookTargets } = await import('../targets')
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resolveSender.mockResolvedValue({
+    from: 'ideas@acme.example',
+    source: 'default',
+    senderName: 'Acme Ideas',
+  })
   mockCacheGet.mockResolvedValue(null)
   mockCacheSet.mockResolvedValue(undefined)
   // Default: no integration mappings, no webhooks
@@ -115,7 +136,11 @@ beforeEach(() => {
  * row second so the fast-path triggers and the mentioned principal
  * passes the audience filter.
  */
-function setupMentionDbChain(rows: unknown[]) {
+function setupMentionDbChain(
+  rows: unknown[],
+  // The mentioning principal, read third for the mentioner's name.
+  mentioner: unknown[] = [{ displayName: 'Bea' }]
+) {
   // mockReset (vs clearAllMocks in beforeEach) so leftover
   // mockResolvedValueOnce queues from prior tests don't carry over.
   mockLimit.mockReset()
@@ -133,10 +158,11 @@ function setupMentionDbChain(rows: unknown[]) {
       },
     },
   ])
+  mockLimit.mockResolvedValueOnce(mentioner)
   mockDbWhere.mockReturnValue({ limit: mockLimit })
   mockLeftJoin.mockReturnValue({ where: mockDbWhere })
   mockInnerJoin.mockReturnValue({ where: mockDbWhere })
-  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin, innerJoin: mockInnerJoin })
+  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin, innerJoin: mockInnerJoin, where: mockDbWhere })
   mockSelect.mockReturnValue({ from: mockFrom })
 }
 
@@ -190,7 +216,13 @@ describe('post.mentioned target resolution', () => {
       postTitle: 'A test post',
       postUrl: 'https://test.quackback.io/b/bugs/posts/post_1',
       workspaceName: 'Test Workspace',
+      mentionerName: 'Bea',
+      from: 'ideas@acme.example',
+      fromDisplayName: 'Acme Ideas',
     })
+    // The relayed event carries no actor name; both name the mentioner.
+    expect(notificationTargets[0].config).toMatchObject({ mentionerName: 'Bea' })
+    expect(resolveSender).toHaveBeenCalledWith({ surface: 'feedback' })
     // Token was issued with action=unsubscribe_all (global mute) since the
     // user didn't subscribe to the post — they were tagged.
     expect(mockBatchGenerateUnsubscribeTokens).toHaveBeenCalledWith([
@@ -200,6 +232,40 @@ describe('post.mentioned target resolution', () => {
         action: 'unsubscribe_all',
       },
     ])
+  })
+
+  it("falls back to the mentioner's account name when their principal has none", async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: 'Bea Account' }]
+    )
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: 'Bea Account' })
+  })
+
+  it("never names a service actor by its event source ('api', 'mcp')", async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: null }]
+    )
+    const event = {
+      ...makePostMentionedEvent(),
+      actor: { type: 'service' as const, principalId: 'principal_actor', displayName: 'api' },
+    }
+    const targets = await getHookTargets(event)
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: null })
+  })
+
+  it('leaves the mentioner unnamed when their principal has no name', async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: null }]
+    )
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: null })
   })
 
   it('notifies nobody when the principal mentioned themselves', async () => {
@@ -312,5 +378,74 @@ describe('mention email — reachable only via a contact address', () => {
 
     const targets = await getHookTargets(makePostMentionedEvent())
     expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
+  })
+})
+
+describe('comment.mentioned target resolution', () => {
+  function makeCommentMentionedEvent(isPrivate = false) {
+    const base = makePostMentionedEvent()
+    return {
+      ...base,
+      type: 'comment.mentioned' as const,
+      data: { ...base.data, commentId: 'comment_9', isPrivate },
+    }
+  }
+  const person = (role: string) => [
+    { id: 'principal_mentioned', type: 'user', role, email: 'alice@example.com' },
+  ]
+
+  it('tells the person in the app and by email, linking to the comment', async () => {
+    setupMentionDbChain(person('user'))
+
+    const targets = await getHookTargets(makeCommentMentionedEvent())
+
+    const bell = targets.filter((t) => t.type === 'notification')
+    expect(bell).toHaveLength(1)
+    expect(bell[0].target).toEqual({ principalIds: ['principal_mentioned'] })
+    expect(bell[0].config).toMatchObject({ mentionerName: 'Bea', commentId: 'comment_9' })
+    const mail = targets.filter((t) => t.type === 'email')
+    expect(mail).toHaveLength(1)
+    expect(mail[0].config).toMatchObject({
+      postTitle: 'A test post',
+      postUrl: 'https://test.quackback.io/b/bugs/posts/post_1#comment-comment_9',
+    })
+  })
+
+  it('honours the "Mentioned in a comment" email switch, not the post one', async () => {
+    setupMentionDbChain(person('user'))
+    mockBatchGetNotificationPreferences.mockResolvedValueOnce(
+      new Map([
+        [
+          'principal_mentioned',
+          {
+            emailMuted: false,
+            emailStatusChange: true,
+            emailNewComment: true,
+            matrix: { comment_mentioned: { email: false } },
+          },
+        ],
+      ])
+    )
+
+    const targets = await getHookTargets(makeCommentMentionedEvent())
+
+    expect(targets.filter((t) => t.type === 'notification')).toHaveLength(1)
+    expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
+  })
+
+  it('never tells a portal user about a private comment', async () => {
+    setupMentionDbChain(person('user'))
+
+    const targets = await getHookTargets(makeCommentMentionedEvent(true))
+
+    expect(targets.filter((t) => t.type === 'notification' || t.type === 'email')).toEqual([])
+  })
+
+  it('tells a teammate about a private comment', async () => {
+    setupMentionDbChain(person('member'))
+
+    const targets = await getHookTargets(makeCommentMentionedEvent(true))
+
+    expect(targets.filter((t) => t.type === 'notification')).toHaveLength(1)
   })
 })

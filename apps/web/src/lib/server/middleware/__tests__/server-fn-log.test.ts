@@ -8,6 +8,7 @@ import {
   InternalError,
   NotFoundError,
   RateLimitError,
+  ServiceUnavailableError,
   ValidationError,
 } from '@/lib/shared/errors'
 
@@ -159,5 +160,89 @@ describe('runWithServerFnLogging', () => {
 
     expect(log.warn).toHaveBeenCalledTimes(1)
     expect(log.error).not.toHaveBeenCalled()
+  })
+})
+
+describe('runWithServerFnLogging in production', () => {
+  const failWith = (thrown: unknown, production: boolean, log = fakeLog()) => ({
+    log,
+    thrown: runWithServerFnLogging({
+      next: async () => {
+        throw thrown
+      },
+      name: 'fetchThings',
+      log: log as never,
+      production,
+    }).then(
+      () => undefined,
+      (error: unknown) => error as Error
+    ),
+  })
+
+  it('swaps a technical failure for a plain sentence and logs its reference', async () => {
+    const bug = new TypeError("Cannot read properties of undefined (reading 'settings')")
+    const { log, thrown } = failWith(bug, true)
+    const error = await thrown
+
+    expect(error).not.toBe(bug)
+    expect(error?.message).toMatch(
+      /^Something went wrong on our side\. Try again in a moment\. \(Ref [A-Z0-9]{4}-[A-Z0-9]{4}\)$/
+    )
+    const [fields] = log.error.mock.calls[0]
+    // The log keeps the real error, findable by the code the person was shown.
+    expect(fields.err).toBe(bug)
+    expect(error?.message).toContain(`(Ref ${fields.error_ref})`)
+  })
+
+  it('rethrows the same failure unchanged outside production', async () => {
+    const bug = new TypeError('boom')
+    const { log, thrown } = failWith(bug, false)
+    expect(await thrown).toBe(bug)
+    expect(log.error.mock.calls[0][0]).not.toHaveProperty('error_ref')
+  })
+
+  it('leaves a planned refusal alone', async () => {
+    const refusal = new ForbiddenError('NOPE', 'Only admins can do that')
+    expect(await failWith(refusal, true).thrown).toBe(refusal)
+    const signedOut = new Error('Authentication required')
+    expect(await failWith(signedOut, true).thrown).toBe(signedOut)
+    const withStatus = Object.assign(new Error('That file is empty'), { statusCode: 400 })
+    expect(await failWith(withStatus, true).thrown).toBe(withStatus)
+  })
+
+  it('hides a plain error, whatever its message says', async () => {
+    const { log, thrown } = failWith(new Error('Pick a board first'), true)
+    const shown = (await thrown) as Error
+    expect(shown.message).toMatch(
+      /^Something went wrong on our side\. .*\(Ref [A-Z0-9]{4}-[A-Z0-9]{4}\)$/
+    )
+    expect(log.error.mock.calls[0][0].err.message).toBe('Pick a board first')
+    expect(log.error.mock.calls[0][0].error_ref).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)
+  })
+
+  it('shows a failure on our side whose class says its message is for people', async () => {
+    const outage = new ServiceUnavailableError(
+      'MAIL_PROVIDER_UNREACHABLE',
+      "Couldn't reach the mail provider. Try again in a minute."
+    )
+    const { log, thrown } = failWith(outage, true)
+    expect(await thrown).toBe(outage)
+    expect(log.error).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides an ordinary 5xx and a provider reply that carries a 4xx status', async () => {
+    const internal = new InternalError('DATABASE_ERROR', 'relation "posts" does not exist')
+    expect(((await failWith(internal, true).thrown) as Error).message).toContain('(Ref ')
+    const providerReply = Object.assign(new Error('401 {"error":"invalid_api_key sk-live-1234"}'), {
+      statusCode: 401,
+      status: 401,
+      headers: {},
+    })
+    expect(((await failWith(providerReply, true).thrown) as Error).message).toContain('(Ref ')
+  })
+
+  it('never touches framework control flow', async () => {
+    const r = redirect({ to: '/' })
+    expect(await failWith(r, true).thrown).toBe(r)
   })
 })

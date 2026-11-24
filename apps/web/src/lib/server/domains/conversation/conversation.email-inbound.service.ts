@@ -74,7 +74,8 @@ import {
   createEmailConversation,
   cleanupColdInboundLead,
 } from './conversation.email-cold-inbound'
-import { maybeAutoFileSpam } from './conversation.spam-filter'
+import { fixedSpamSignalFor, maybeAutoFileSpam } from './conversation.spam-filter'
+import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { senderAuthSpamSignal } from './conversation.spam-signals'
 
@@ -748,6 +749,33 @@ async function ingestColdInbound(
     return { status: 'no_conversation' }
   }
 
+  // A fixed spam rule (auto-responder headers, weak sender authentication, a
+  // burst from one sender) is decided before the thread exists, so a filed
+  // message is filed in the insert and raises nothing, exactly like refused
+  // mail: no created or message events, so no webhook, bell, workflow or SLA
+  // clock, and no acknowledgement mail. The workspace trust list still
+  // outranks it. Only the AI classifier runs after the create.
+  const spamSignal = quarantineCause
+    ? null
+    : await fixedSpamSignalFor(
+        {
+          senderEmail,
+          // The From is the only address an email has; the authentication
+          // checks above stand behind it (a hard reject never gets here).
+          trustedSenderEmail: senderEmail,
+          signals: { autoResponder: opts.autoResponder === true, senderAuthSignal: authSignal },
+        },
+        resolution.principalId
+      )
+  const filing = quarantineCause
+    ? { cause: quarantineCause, note: quarantineNote }
+    : spamSignal
+      ? {
+          cause: spamSignal,
+          note: `Auto-filed by the spam filter (${CONVERSATION_SPAM_FILED_BY_LABELS[spamSignal]})`,
+        }
+      : null
+
   let conversationId: ConversationId
   try {
     conversationId = await createEmailConversation({
@@ -755,6 +783,9 @@ async function ingestColdInbound(
       channelAccountId: channelAccount.id,
       principalId: resolution.principalId,
       unverified: resolution.unverified,
+      // Any sender-auth failure, whether or not it filed the thread to Spam
+      // (the trusted-sender list can outrank that filing, not the failure).
+      senderAuthFailed: authSignal !== null,
       content,
       contentJson: converted?.contentJson ?? null,
       attachments: media.attachments,
@@ -762,7 +793,7 @@ async function ingestColdInbound(
       // in the open queue. The free-text note is the MTA's own wording, or ours
       // for a refusal we decided ourselves, kept as a supplement to the
       // enumerated cause and never as a substitute for it.
-      quarantine: quarantineCause ? { cause: quarantineCause, note: quarantineNote } : null,
+      quarantine: filing,
     })
   } catch (error) {
     await discardMintedLead()
@@ -774,23 +805,24 @@ async function ingestColdInbound(
     return { status: 'quarantined', conversationId, cause: quarantineCause }
   }
 
-  // Spam filter, after the thread exists so a filing has something to land
-  // on. Error-isolated inside (a classification failure leaves the thread in
-  // triage, never breaks ingestion); the workspace trust list bypasses it.
-  // The deterministic signals run first: auto-responder headers (this mail
-  // arrived already flagged machine-generated) and whatever the sender's
-  // authentication earned short of the quarantine above — either files to Spam
-  // without spending an AI completion.
-  await maybeAutoFileSpam(conversationId, {
+  if (spamSignal) {
+    log.info({ conversation_id: conversationId, signal: spamSignal }, 'spam signal matched; filed')
+    return { status: 'ingested', conversationId }
+  }
+
+  // The AI classifier, after the thread exists so a filing has something to
+  // land on. Error-isolated inside (a classification failure leaves the thread
+  // in triage, never breaks ingestion); the workspace trust list bypasses it.
+  // The fixed rules already ran above.
+  const filedBySpamFilter = await maybeAutoFileSpam(conversationId, {
     senderEmail,
+    trustedSenderEmail: senderEmail,
     subject: parsed.subject,
     content,
-    signals: {
-      autoResponder: opts.autoResponder === true,
-      senderAuthSignal: authSignal,
-    },
+    signalsChecked: true,
   })
-  if (opts.autoResponder !== true) {
+  // Mail filed to Spam gets no acknowledgement.
+  if (!filedBySpamFilter && opts.autoResponder !== true) {
     // Fire-and-forget on purpose — the ack must not delay the ingest response —
     // but never unhandled: a failed ack is a log line, not a process-level
     // unhandled rejection.
@@ -800,6 +832,7 @@ async function ingestColdInbound(
           parsed,
           conversationId,
           conversationSubject: parsed.subject,
+          senderPrincipalId: resolution.principalId,
         })
       )
       .catch((err) => log.error({ err, conversationId }, 'cold-inbound auto-ack failed'))

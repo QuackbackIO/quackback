@@ -63,6 +63,13 @@ describe('GET /api/export/users', () => {
     expect(hoisted.mockListPortalUsers).not.toHaveBeenCalled()
   })
 
+  it('refuses the CSV export on a plan without analytics exports', async () => {
+    hoisted.mockGetTierLimits.mockResolvedValue({ features: { analyticsExports: false } })
+    const res = await handleExportUsers(makeRequest())
+    expect(res.status).toBe(402)
+    expect(hoisted.mockListPortalUsers).not.toHaveBeenCalled()
+  })
+
   it('returns a CSV with the directory rows', async () => {
     const res = await handleExportUsers(makeRequest())
 

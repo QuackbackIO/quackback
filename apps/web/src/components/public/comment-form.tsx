@@ -1,18 +1,9 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { useForm } from 'react-hook-form'
 import { useQueryClient, type UseMutationResult } from '@tanstack/react-query'
-import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { commentSchema, type CommentInput } from '@/lib/shared/schemas/comments'
+import { commentSchema } from '@/lib/shared/schemas/comments'
 import { Button } from '@/components/ui/button'
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
+import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -29,6 +20,76 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
+import { errorText } from '@/lib/client/error-text'
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
+
+/** The schema's message for a comment it refuses, or null when it is valid. */
+function contentProblem(content: string): string | null {
+  const result = commentSchema.shape.content.safeParse(content)
+  return result.success ? null : (result.error.issues[0]?.message ?? null)
+}
+
+/**
+ * The editor's field, with the label, ids and message the shared form
+ * components give a field. The form holds a single value, so it keeps it in
+ * plain state rather than loading a form library onto every post page.
+ */
+function CommentField({
+  label,
+  error,
+  controlClassName,
+  messageClassName,
+  onKeyDownCapture,
+  children,
+}: {
+  label: string
+  error: string | null
+  controlClassName?: string
+  messageClassName?: string
+  onKeyDownCapture: (e: KeyboardEvent<HTMLDivElement>) => void
+  children: ReactNode
+}) {
+  const id = useId()
+  const formItemId = `${id}-form-item`
+  const formDescriptionId = `${id}-form-item-description`
+  const formMessageId = `${id}-form-item-message`
+  return (
+    <div data-slot="form-item" className="grid gap-2">
+      <Label
+        data-slot="form-label"
+        data-error={!!error}
+        className="data-[error=true]:text-destructive sr-only"
+        htmlFor={formItemId}
+      >
+        {label}
+      </Label>
+      <div
+        data-testid="comment-form-editor"
+        className={controlClassName}
+        onKeyDownCapture={onKeyDownCapture}
+        data-slot="form-control"
+        id={formItemId}
+        aria-describedby={error ? `${formDescriptionId} ${formMessageId}` : formDescriptionId}
+        aria-invalid={!!error}
+      >
+        {children}
+      </div>
+      {error && (
+        <p
+          data-slot="form-message"
+          id={formMessageId}
+          className={cn('text-destructive text-sm', messageClassName)}
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -105,15 +166,12 @@ export function CommentForm({
     },
   })
 
-  const form = useForm<CommentInput>({
-    resolver: standardSchemaResolver(commentSchema),
-    defaultValues: {
-      content: '',
-      parentId: parentId || undefined,
-    },
-  })
+  // The comment's markdown as of the last submit attempt, and the schema's
+  // message for it.
+  const [content, setContent] = useState('')
+  const [contentError, setContentError] = useState<string | null>(null)
 
-  // What the editor holds. Typing keeps it here rather than in the form, so a
+  // What the editor holds. Typing keeps it here rather than in state, so a
   // keystroke never re-renders the form around the editor, and serializes
   // nothing: the form takes the markdown when the comment is submitted. After
   // a submit attempt the form validates on change, so from then on each change
@@ -121,19 +179,38 @@ export function CommentForm({
   const editorDocumentRef = useRef<EditorDocument | null>(null)
   const submittedRef = useRef(false)
 
-  function recordEditorChange(document: EditorDocument, onFieldChange: (v: string) => void) {
+  function recordEditorChange(document: EditorDocument) {
     editorDocumentRef.current = document
-    if (submittedRef.current) onFieldChange(document.markdown())
+    if (submittedRef.current) {
+      const markdown = document.markdown()
+      setContent(markdown)
+      setContentError(contentProblem(markdown))
+    }
   }
 
   function submit() {
     submittedRef.current = true
-    form.setValue('content', editorDocumentRef.current?.markdown() ?? '')
-    void form.handleSubmit(onSubmit)()
+    const markdown = editorDocumentRef.current?.markdown() ?? ''
+    const problem = contentProblem(markdown)
+    setContent(markdown)
+    setContentError(problem)
+    if (!problem) onSubmit(markdown)
   }
 
+  function submitOnModEnter(e: KeyboardEvent<HTMLDivElement>) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault()
+      submit()
+    }
+  }
+
+  const fieldLabel = intl.formatMessage({
+    id: 'portal.commentForm.labelSrOnly',
+    defaultMessage: 'Your comment',
+  })
+
   // Bumping the key on submit force-remounts the editor with a fresh doc.
-  // `form.reset()` flips field.value to '' which would clear via value-sync,
+  // Resetting `content` to '' would clear via value-sync,
   // but TipTap's empty-doc model leaves a stale `<p></p>` node that traps
   // the cursor mid-edit; remount is the cleanest reset.
   const [editorResetKey, setEditorResetKey] = useState(0)
@@ -162,7 +239,7 @@ export function CommentForm({
     })
   }
 
-  function onSubmit(data: CommentInput) {
+  function onSubmit(markdown: string) {
     setError(null)
 
     if (!createComment) {
@@ -177,7 +254,7 @@ export function CommentForm({
 
     createComment.mutate(
       {
-        content: data.content.trim(),
+        content: markdown.trim(),
         contentJson: (editorDocumentRef.current?.json() ?? null) as TiptapContent | null,
         parentId: parentId || null,
         postId,
@@ -189,7 +266,8 @@ export function CommentForm({
       },
       {
         onSuccess: () => {
-          form.reset()
+          setContent('')
+          setContentError(null)
           editorDocumentRef.current = null
           submittedRef.current = false
           setEditorResetKey((k) => k + 1)
@@ -198,12 +276,18 @@ export function CommentForm({
         },
         onError: (err) => {
           setError(
-            err instanceof Error
-              ? err.message
-              : intl.formatMessage({
-                  id: 'portal.commentForm.errorPost',
-                  defaultMessage: 'Failed to post comment',
+            isBlockedRefusal(err)
+              ? intl.formatMessage({
+                  id: 'portal.blocked',
+                  defaultMessage: "You can't post, vote or comment here.",
                 })
+              : errorText(
+                  err,
+                  intl.formatMessage({
+                    id: 'portal.commentForm.errorPost',
+                    defaultMessage: 'Failed to post comment',
+                  })
+                )
           )
         },
       }
@@ -219,411 +303,360 @@ export function CommentForm({
   // Team member composer: unified card with toolbar
   if (showStatusSelector) {
     return (
-      <Form {...form}>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            submit()
-          }}
-        >
-          <div className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors">
-            {/* Textarea area */}
-            <FormField
-              control={form.control}
-              name="content"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="sr-only">
-                    {intl.formatMessage({
-                      id: 'portal.commentForm.labelSrOnly',
-                      defaultMessage: 'Your comment',
-                    })}
-                  </FormLabel>
-                  <FormControl>
-                    <div
-                      data-testid="comment-form-editor"
-                      className="px-3 py-2"
-                      onKeyDownCapture={(e) => {
-                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                          e.preventDefault()
-                          submit()
-                        }
-                      }}
-                    >
-                      <DeferredRichTextEditor
-                        editorKey={editorResetKey}
-                        value={field.value}
-                        borderless
-                        toolbarPosition="bottom"
-                        minHeight="72px"
-                        disabled={isSubmitting}
-                        features={COMMENT_EDITOR_FEATURES}
-                        onImageUpload={onImageUpload}
-                        onVideoUpload={onImageUpload}
-                        placeholder={intl.formatMessage({
-                          id: 'portal.commentForm.placeholder',
-                          defaultMessage: 'Write a comment...',
-                        })}
-                        onDocumentChange={(document) =>
-                          recordEditorChange(document, field.onChange)
-                        }
-                      />
-                    </div>
-                  </FormControl>
-                  <FormMessage className="px-3" />
-                </FormItem>
-              )}
-            />
-
-            {error && <p className="text-sm text-destructive px-3 pb-1">{error}</p>}
-
-            {/* Toolbar footer */}
-            <div className="flex items-center gap-2 border-t border-border/30 bg-muted/20 px-3 py-2">
-              {/* Left: Identity */}
-              <p className="text-xs text-muted-foreground me-auto truncate">
-                <span className="font-medium text-foreground">
-                  {effectiveUser?.name ||
-                    effectiveUser?.email ||
-                    intl.formatMessage({
-                      id: 'portal.commentForm.authorFallback',
-                      defaultMessage: 'Anonymous',
-                    })}
-                </span>
-              </p>
-
-              {/* Status selector */}
-              <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
-                      'hover:bg-muted/80',
-                      selectedStatus
-                        ? 'bg-muted/60 border border-border/50'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {selectedStatus ? (
-                      <>
-                        <StatusBadge name={selectedStatus.name} color={selectedStatus.color} />
-                        <button
-                          type="button"
-                          className="ms-0.5 text-muted-foreground hover:text-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setSelectedStatusId(null)
-                          }}
-                        >
-                          &times;
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span
-                          className="size-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: currentStatus?.color ?? '#94a3b8' }}
-                        />
-                        <span>
-                          {currentStatus?.name ??
-                            intl.formatMessage({
-                              id: 'portal.commentForm.noStatus',
-                              defaultMessage: 'No status',
-                            })}
-                        </span>
-                      </>
-                    )}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-44 p-1" align="end">
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    {intl.formatMessage({
-                      id: 'portal.commentForm.updateStatus',
-                      defaultMessage: 'Update status',
-                    })}
-                  </div>
-                  {statuses.map((status) => {
-                    const isCurrent = status.id === currentStatusId
-                    const isSelected = status.id === selectedStatusId
-                    return (
-                      <button
-                        key={status.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatusId(isCurrent ? null : status.id)
-                          setStatusPopoverOpen(false)
-                        }}
-                        className={cn(
-                          'w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs transition-colors',
-                          'hover:bg-muted/50',
-                          isSelected && 'bg-muted/40'
-                        )}
-                      >
-                        <span
-                          className="size-2 rounded-full shrink-0"
-                          style={{ backgroundColor: status.color }}
-                        />
-                        <span className="flex-1 text-start">{status.name}</span>
-                        {isCurrent && !isSelected && (
-                          <span className="text-muted-foreground text-xs">
-                            <FormattedMessage
-                              id="portal.commentForm.currentStatus"
-                              defaultMessage="current"
-                            />
-                          </span>
-                        )}
-                        {isSelected && <CheckIcon className="size-3.5 text-primary shrink-0" />}
-                      </button>
-                    )
-                  })}
-                  {selectedStatusId && (
-                    <>
-                      <div className="my-1 border-t border-border/30" />
-                      <button
-                        type="button"
-                        className="w-full text-start px-2 py-1.5 text-xs rounded-sm hover:bg-muted/50 transition-colors text-muted-foreground"
-                        onClick={() => {
-                          setSelectedStatusId(null)
-                          setStatusPopoverOpen(false)
-                        }}
-                      >
-                        {intl.formatMessage({
-                          id: 'portal.commentForm.clearStatusChange',
-                          defaultMessage: 'Clear status change',
-                        })}
-                      </button>
-                    </>
-                  )}
-                </PopoverContent>
-              </Popover>
-
-              {/* Private toggle */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => setIsPrivate(!isPrivate)}
-                      disabled={isPrivateLocked}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
-                        isPrivate
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
-                        isPrivateLocked && 'opacity-70 cursor-not-allowed'
-                      )}
-                    >
-                      <LockClosedIcon className="h-3 w-3" />
-                      {intl.formatMessage({
-                        id: 'portal.commentForm.private',
-                        defaultMessage: 'Private',
-                      })}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{privateTooltipText()}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              {/* Submit */}
-              {onCancel && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onCancel}
-                  disabled={isSubmitting}
-                  className="h-7 text-xs"
-                >
-                  {intl.formatMessage({
-                    id: 'portal.commentForm.cancel',
-                    defaultMessage: 'Cancel',
-                  })}
-                </Button>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                disabled={isSubmitting}
-                className="h-7 text-xs"
-                onClick={submit}
-              >
-                {isSubmitting
-                  ? intl.formatMessage({
-                      id: 'portal.commentForm.submitting',
-                      defaultMessage: 'Posting...',
-                    })
-                  : selectedStatus
-                    ? intl.formatMessage(
-                        {
-                          id: 'portal.commentForm.submitWithStatus',
-                          defaultMessage: 'Comment & mark {statusName}',
-                        },
-                        { statusName: selectedStatus.name }
-                      )
-                    : intl.formatMessage({
-                        id: 'portal.commentForm.submit',
-                        defaultMessage: 'Comment',
-                      })}
-              </Button>
-            </div>
-          </div>
-        </form>
-      </Form>
-    )
-  }
-
-  // Default composer for non-team-members / replies
-  return (
-    <Form {...form}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
           submit()
         }}
-        className="space-y-4"
       >
-        <FormField
-          control={form.control}
-          name="content"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="sr-only">
-                {intl.formatMessage({
-                  id: 'portal.commentForm.labelSrOnly',
-                  defaultMessage: 'Your comment',
-                })}
-              </FormLabel>
-              <FormControl>
-                <div
-                  data-testid="comment-form-editor"
-                  onKeyDownCapture={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                      e.preventDefault()
-                      submit()
-                    }
-                  }}
-                >
-                  <DeferredRichTextEditor
-                    editorKey={editorResetKey}
-                    value={field.value}
-                    minHeight="80px"
-                    disabled={isSubmitting}
-                    features={COMMENT_EDITOR_FEATURES}
-                    onImageUpload={onImageUpload}
-                    onVideoUpload={onImageUpload}
-                    placeholder={intl.formatMessage({
-                      id: 'portal.commentForm.placeholder',
-                      defaultMessage: 'Write a comment...',
-                    })}
-                    onDocumentChange={(document) => recordEditorChange(document, field.onChange)}
-                  />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors">
+          {/* Textarea area */}
+          <CommentField
+            label={fieldLabel}
+            error={contentError}
+            controlClassName="px-3 py-2"
+            messageClassName="px-3"
+            onKeyDownCapture={submitOnModEnter}
+          >
+            <DeferredRichTextEditor
+              editorKey={editorResetKey}
+              value={content}
+              borderless
+              toolbarPosition="bottom"
+              minHeight="72px"
+              disabled={isSubmitting}
+              features={COMMENT_EDITOR_FEATURES}
+              onImageUpload={onImageUpload}
+              onVideoUpload={onImageUpload}
+              placeholder={intl.formatMessage({
+                id: 'portal.commentForm.placeholder',
+                defaultMessage: 'Write a comment...',
+              })}
+              onDocumentChange={recordEditorChange}
+            />
+          </CommentField>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-destructive px-3 pb-1">{error}</p>}
 
-        <div className="flex items-center justify-end gap-2">
-          <p className="text-xs text-muted-foreground me-auto">
-            {isAnonymousCommenter ? (
-              intl.formatMessage({
-                id: 'portal.commentForm.postingAnonymously',
-                defaultMessage: 'Posting anonymously',
-              })
-            ) : (
-              <>
-                {intl.formatMessage(
-                  { id: 'portal.commentForm.postingAs', defaultMessage: 'Posting as {name}' },
-                  {
-                    name: (
-                      <span className="font-medium text-foreground">
-                        {shownName(effectiveUser?.name, effectiveUser?.email)}
-                      </span>
-                    ),
-                  }
-                )}
-                {' ('}
+          {/* Toolbar footer */}
+          <div className="flex items-center gap-2 border-t border-border/30 bg-muted/20 px-3 py-2">
+            {/* Left: Identity */}
+            <p className="text-xs text-muted-foreground me-auto truncate">
+              <span className="font-medium text-foreground">
+                {effectiveUser?.name ||
+                  effectiveUser?.email ||
+                  intl.formatMessage({
+                    id: 'portal.commentForm.authorFallback',
+                    defaultMessage: 'Anonymous',
+                  })}
+              </span>
+            </p>
+
+            {/* Status selector */}
+            <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
+              <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="text-primary hover:underline"
-                  onClick={() => {
-                    signOut({
-                      fetchOptions: {
-                        onSuccess: () => {
-                          removeViewerScopedPortalQueries(queryClient)
-                          router.invalidate()
-                        },
-                      },
-                    })
-                  }}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
+                    'hover:bg-muted/80',
+                    selectedStatus
+                      ? 'bg-muted/60 border border-border/50'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
                 >
-                  {intl.formatMessage({
-                    id: 'portal.commentForm.signOut',
-                    defaultMessage: 'sign out',
-                  })}
+                  {selectedStatus ? (
+                    <>
+                      <StatusBadge name={selectedStatus.name} color={selectedStatus.color} />
+                      <button
+                        type="button"
+                        className="ms-0.5 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedStatusId(null)
+                        }}
+                      >
+                        &times;
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        className="size-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: currentStatus?.color ?? '#94a3b8' }}
+                      />
+                      <span>
+                        {currentStatus?.name ??
+                          intl.formatMessage({
+                            id: 'portal.commentForm.noStatus',
+                            defaultMessage: 'No status',
+                          })}
+                      </span>
+                    </>
+                  )}
                 </button>
-                {')'}
-              </>
-            )}
-          </p>
-          {onCancel && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onCancel}
-              disabled={isSubmitting}
-            >
-              {intl.formatMessage({ id: 'portal.commentForm.cancel', defaultMessage: 'Cancel' })}
-            </Button>
-          )}
-          {/* Private toggle for team members */}
-          {isTeamMember && (
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-1" align="end">
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  {intl.formatMessage({
+                    id: 'portal.commentForm.updateStatus',
+                    defaultMessage: 'Update status',
+                  })}
+                </div>
+                {statuses.map((status) => {
+                  const isCurrent = status.id === currentStatusId
+                  const isSelected = status.id === selectedStatusId
+                  return (
+                    <button
+                      key={status.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedStatusId(isCurrent ? null : status.id)
+                        setStatusPopoverOpen(false)
+                      }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs transition-colors',
+                        'hover:bg-muted/50',
+                        isSelected && 'bg-muted/40'
+                      )}
+                    >
+                      <span
+                        className="size-2 rounded-full shrink-0"
+                        style={{ backgroundColor: status.color }}
+                      />
+                      <span className="flex-1 text-start">{status.name}</span>
+                      {isCurrent && !isSelected && (
+                        <span className="text-muted-foreground text-xs">
+                          <FormattedMessage
+                            id="portal.commentForm.currentStatus"
+                            defaultMessage="current"
+                          />
+                        </span>
+                      )}
+                      {isSelected && <CheckIcon className="size-3.5 text-primary-ink shrink-0" />}
+                    </button>
+                  )
+                })}
+                {selectedStatusId && (
+                  <>
+                    <div className="my-1 border-t border-border/30" />
+                    <button
+                      type="button"
+                      className="w-full text-start px-2 py-1.5 text-xs rounded-sm hover:bg-muted/50 transition-colors text-muted-foreground"
+                      onClick={() => {
+                        setSelectedStatusId(null)
+                        setStatusPopoverOpen(false)
+                      }}
+                    >
+                      {intl.formatMessage({
+                        id: 'portal.commentForm.clearStatusChange',
+                        defaultMessage: 'Clear status change',
+                      })}
+                    </button>
+                  </>
+                )}
+              </PopoverContent>
+            </Popover>
+
+            {/* Private toggle */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
+                  <button
                     type="button"
-                    variant={isPrivate ? 'default' : 'ghost'}
-                    size="sm"
                     onClick={() => setIsPrivate(!isPrivate)}
                     disabled={isPrivateLocked}
                     className={cn(
+                      'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
                       isPrivate
-                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 gap-1.5'
-                        : 'text-muted-foreground gap-1.5',
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
                       isPrivateLocked && 'opacity-70 cursor-not-allowed'
                     )}
                   >
-                    <LockClosedIcon className="h-3.5 w-3.5" />
+                    <LockClosedIcon className="h-3 w-3" />
                     {intl.formatMessage({
                       id: 'portal.commentForm.private',
                       defaultMessage: 'Private',
                     })}
-                  </Button>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent>{privateTooltipText()}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          )}
-          <Button type="button" size="sm" disabled={isSubmitting} onClick={submit}>
-            {isSubmitting
-              ? intl.formatMessage({
-                  id: 'portal.commentForm.submitting',
-                  defaultMessage: 'Posting...',
-                })
-              : parentId
-                ? intl.formatMessage({ id: 'portal.commentForm.reply', defaultMessage: 'Reply' })
-                : intl.formatMessage({
-                    id: 'portal.commentForm.submit',
-                    defaultMessage: 'Comment',
-                  })}
-          </Button>
+
+            {/* Submit */}
+            {onCancel && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onCancel}
+                disabled={isSubmitting}
+                className="h-7 text-xs"
+              >
+                {intl.formatMessage({
+                  id: 'portal.commentForm.cancel',
+                  defaultMessage: 'Cancel',
+                })}
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              disabled={isSubmitting}
+              className="h-7 text-xs"
+              onClick={submit}
+            >
+              {isSubmitting
+                ? intl.formatMessage({
+                    id: 'portal.commentForm.submitting',
+                    defaultMessage: 'Posting...',
+                  })
+                : selectedStatus
+                  ? intl.formatMessage(
+                      {
+                        id: 'portal.commentForm.submitWithStatus',
+                        defaultMessage: 'Comment & mark {statusName}',
+                      },
+                      { statusName: selectedStatus.name }
+                    )
+                  : intl.formatMessage({
+                      id: 'portal.commentForm.submit',
+                      defaultMessage: 'Comment',
+                    })}
+            </Button>
+          </div>
         </div>
       </form>
-    </Form>
+    )
+  }
+
+  // Default composer for non-team-members / replies
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        submit()
+      }}
+      className="space-y-4"
+    >
+      <CommentField label={fieldLabel} error={contentError} onKeyDownCapture={submitOnModEnter}>
+        <DeferredRichTextEditor
+          editorKey={editorResetKey}
+          value={content}
+          minHeight="80px"
+          disabled={isSubmitting}
+          features={COMMENT_EDITOR_FEATURES}
+          onImageUpload={onImageUpload}
+          onVideoUpload={onImageUpload}
+          placeholder={intl.formatMessage({
+            id: 'portal.commentForm.placeholder',
+            defaultMessage: 'Write a comment...',
+          })}
+          onDocumentChange={recordEditorChange}
+        />
+      </CommentField>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex items-center justify-end gap-2">
+        <p className="text-xs text-muted-foreground me-auto">
+          {isAnonymousCommenter ? (
+            intl.formatMessage({
+              id: 'portal.commentForm.postingAnonymously',
+              defaultMessage: 'Posting anonymously',
+            })
+          ) : (
+            <>
+              {intl.formatMessage(
+                { id: 'portal.commentForm.postingAs', defaultMessage: 'Posting as {name}' },
+                {
+                  name: (
+                    <span className="font-medium text-foreground">
+                      {shownName(effectiveUser?.name, effectiveUser?.email)}
+                    </span>
+                  ),
+                }
+              )}
+              {' ('}
+              <button
+                type="button"
+                className="text-primary-ink hover:underline"
+                onClick={() => {
+                  signOut({
+                    fetchOptions: {
+                      onSuccess: () => {
+                        removeViewerScopedPortalQueries(queryClient)
+                        router.invalidate()
+                      },
+                    },
+                  })
+                }}
+              >
+                {intl.formatMessage({
+                  id: 'portal.commentForm.signOut',
+                  defaultMessage: 'sign out',
+                })}
+              </button>
+              {')'}
+            </>
+          )}
+        </p>
+        {onCancel && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            {intl.formatMessage({ id: 'portal.commentForm.cancel', defaultMessage: 'Cancel' })}
+          </Button>
+        )}
+        {/* Private toggle for team members */}
+        {isTeamMember && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant={isPrivate ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setIsPrivate(!isPrivate)}
+                  disabled={isPrivateLocked}
+                  className={cn(
+                    isPrivate
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 gap-1.5'
+                      : 'text-muted-foreground gap-1.5',
+                    isPrivateLocked && 'opacity-70 cursor-not-allowed'
+                  )}
+                >
+                  <LockClosedIcon className="h-3.5 w-3.5" />
+                  {intl.formatMessage({
+                    id: 'portal.commentForm.private',
+                    defaultMessage: 'Private',
+                  })}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{privateTooltipText()}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <Button type="button" size="sm" disabled={isSubmitting} onClick={submit}>
+          {isSubmitting
+            ? intl.formatMessage({
+                id: 'portal.commentForm.submitting',
+                defaultMessage: 'Posting...',
+              })
+            : parentId
+              ? intl.formatMessage({ id: 'portal.commentForm.reply', defaultMessage: 'Reply' })
+              : intl.formatMessage({
+                  id: 'portal.commentForm.submit',
+                  defaultMessage: 'Comment',
+                })}
+        </Button>
+      </div>
+    </form>
   )
 }

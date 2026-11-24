@@ -10,11 +10,7 @@ import { AUTOSAVE } from '@/lib/client/autosave'
 import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import {
   deleteLogoFn,
-  deleteHeaderLogoFn,
-  updateHeaderDisplayModeFn,
-  updateHeaderDisplayNameFn,
   saveLogoKeyFn,
-  saveHeaderLogoKeyFn,
   saveFaviconKeyFn,
   saveWidgetHeroImageKeyFn,
   deleteWidgetHeroImageFn,
@@ -23,10 +19,9 @@ import {
   updateWidgetConfigFn,
   regenerateWidgetSecretFn,
   mintWidgetInstallCodeFn,
-  updateThemeFn,
-  updateCustomCssFn,
   updateWorkflowAbandonedAutoCloseFn,
   updateWorkflowCloseSpamFn,
+  updateConversationRoutingFn,
   updateDefaultSlaPolicyFn,
   updateSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
@@ -39,19 +34,16 @@ import {
   updateHelpCenterAutoTranslateFn,
 } from '@/lib/server/functions/help-center-settings'
 import {
-  updateHelpCenterDomainFn,
-  verifyHelpCenterDomainFn,
-} from '@/lib/server/functions/help-center-domain'
-import {
   createRedirectRuleFn,
   deleteRedirectRuleFn,
 } from '@/lib/server/functions/help-center-redirect-rules'
 import {
   getLogoUploadUrlFn,
-  getHeaderLogoUploadUrlFn,
   getWidgetHeroUploadUrlFn,
   getFaviconUploadUrlFn,
 } from '@/lib/server/functions/uploads'
+import { publishPortalCustomisationFn } from '@/lib/server/functions/portal-customise'
+import type { PublishPortalCustomisationInput } from '@/lib/shared/schemas/portal-customise'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { downscaleSquareImage } from '@/lib/client/downscale-square-image'
@@ -123,57 +115,6 @@ export function useDeleteWorkspaceLogo() {
 }
 
 // ============================================================================
-// Header Logo Mutation Hooks
-// ============================================================================
-
-export function useUploadWorkspaceHeaderLogo() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (file: Blob) => {
-      // 1. Get presigned URL from server
-      const { uploadUrl, key } = await getHeaderLogoUploadUrlFn({
-        data: {
-          filename: (file as File).name || 'header-logo.png',
-          contentType: file.type,
-          fileSize: file.size,
-        },
-      })
-
-      // 2. Upload directly to S3
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload header logo to storage')
-      }
-
-      // 3. Save the S3 key to the database
-      await saveHeaderLogoKeyFn({ data: { key } })
-    },
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })
-    },
-  })
-}
-
-export function useDeleteWorkspaceHeaderLogo() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: () => deleteHeaderLogoFn(),
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })
-    },
-  })
-}
-
-// ============================================================================
 // Widget Hero Image Mutation Hooks
 // ============================================================================
 
@@ -222,29 +163,6 @@ export function useDeleteWidgetHeroImage() {
     mutationFn: () => deleteWidgetHeroImageFn(),
     onSuccess: () => {
       return queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey })
-    },
-  })
-}
-
-export function useUpdateHeaderDisplayMode() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (mode: 'logo_and_name' | 'logo_only' | 'custom_logo') =>
-      updateHeaderDisplayModeFn({ data: { mode } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.headerLogo().queryKey })
-    },
-  })
-}
-
-export function useUpdateHeaderDisplayName() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (name: string | null) => updateHeaderDisplayNameFn({ data: { name } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
   })
 }
@@ -432,34 +350,6 @@ export function useUpdateHelpCenterAutoTranslate() {
   })
 }
 
-export function useUpdateHelpCenterDomain() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    scope: HELP_CENTER_CONFIG_SCOPE,
-    // The server's reasons (a host already in use, say) are written for the person saving.
-    meta: { ...AUTOSAVE, showServerMessage: true },
-    mutationFn: (domain: string | null) => updateHelpCenterDomainFn({ data: { domain } }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
-  })
-}
-
-export function useVerifyHelpCenterDomain() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    scope: HELP_CENTER_CONFIG_SCOPE,
-    mutationFn: () => verifyHelpCenterDomainFn({ data: {} }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey })
-      queryClient.invalidateQueries({
-        queryKey: settingsQueries.helpCenterDomainStatus().queryKey,
-      })
-    },
-  })
-}
-
 export function useCreateHelpCenterRedirectRule() {
   const queryClient = useQueryClient()
 
@@ -509,6 +399,19 @@ export function useUpdateWorkflowCloseSpam() {
   })
 }
 
+/** Autosave for the auto-assign switch on the Workflows page. */
+export function useUpdateConversationRouting() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (enabled: boolean) =>
+      updateConversationRoutingFn({ data: { enabled, strategy: 'auto_assign_active' } }),
+    onSuccess: (saved) =>
+      queryClient.setQueryData(settingsQueries.conversationRouting().queryKey, saved),
+  })
+}
+
 export function useUpdateDefaultSlaPolicy() {
   const queryClient = useQueryClient()
 
@@ -521,37 +424,55 @@ export function useUpdateDefaultSlaPolicy() {
   })
 }
 
-export function useSaveBrandingTheme() {
+/**
+ * The portal's one-step publish: theme, Advanced CSS, tabs and welcome
+ * message (and, from the editor, Help Center home and wide logo) go live
+ * together or not at all. Someone else's change to a sent part fails the
+ * save with the server's sentence; the refusal rides on the error as
+ * `conflict` for an editor that can offer to load their values.
+ */
+export function usePublishPortalCustomisation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    // A plan refusal opens the page's upgrade dialog; other refusals (a rejected
-    // stylesheet) are written for the admin, so the toast names them.
-    meta: { ...AUTOSAVE, showServerMessage: true, ownsError: isPlanRefusal },
-    mutationFn: async (input: {
-      brandingConfig: Record<string, unknown>
-      customCss: string
-      /**
-       * persist: Advanced CSS changed — write remainder (Pro-gated).
-       * clear: generated-only theme CSS — write empty so leftover CSS cannot override.
-       * rewrite: extra rules unchanged — write remainder-only so stale :root/.dark
-       *   theme vars cannot override the saved structured colours.
-       */
-      customCssWrite: 'persist' | 'clear' | 'rewrite'
-    }) => {
-      const { throwIfServerFnFailed } = await import('@/lib/shared/describe-upgrade')
-      const theme = await updateThemeFn({ data: { brandingConfig: input.brandingConfig } })
-      throwIfServerFnFailed(theme)
-      const css = await updateCustomCssFn({
-        data: { customCss: input.customCssWrite === 'clear' ? '' : input.customCss },
-      })
-      throwIfServerFnFailed(css)
-      return [theme, css] as const
+    // A plan refusal and someone else's change open the editor's own dialogs;
+    // other refusals (a rejected stylesheet) are written for the admin, so the
+    // toast names them.
+    meta: {
+      ...AUTOSAVE,
+      showServerMessage: true,
+      ownsError: (error) => isPlanRefusal(error) || !!(error as { conflict?: unknown }).conflict,
     },
-    onSuccess: () =>
+    mutationFn: async (input: PublishPortalCustomisationInput) => {
+      const { throwIfServerFnFailed } = await import('@/lib/shared/describe-upgrade')
+      const result = await publishPortalCustomisationFn({ data: input })
+      throwIfServerFnFailed(result)
+      if (!result.ok) throw Object.assign(new Error(result.message), { conflict: result })
+      return result
+    },
+    onSuccess: (_result, input) =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: settingsQueries.branding().queryKey }),
-        queryClient.invalidateQueries({ queryKey: settingsQueries.customCss().queryKey }),
+        // Settings > Portal's summary reads the theme, the tabs and the logos.
+        queryClient.invalidateQueries({ queryKey: ['settings', 'branding', 'summary'] }),
+        ...(input.theme !== undefined
+          ? [queryClient.invalidateQueries({ queryKey: settingsQueries.branding().queryKey })]
+          : []),
+        ...(input.customCss !== undefined
+          ? [queryClient.invalidateQueries({ queryKey: settingsQueries.customCss().queryKey })]
+          : []),
+        ...(input.portal !== undefined
+          ? [queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey })]
+          : []),
+        ...(input.helpCenter !== undefined
+          ? [
+              queryClient.invalidateQueries({
+                queryKey: settingsQueries.helpCenterConfig().queryKey,
+              }),
+            ]
+          : []),
+        ...(input.logo !== undefined
+          ? [queryClient.invalidateQueries({ queryKey: settingsQueries.headerLogo().queryKey })]
+          : []),
       ]),
   })
 }

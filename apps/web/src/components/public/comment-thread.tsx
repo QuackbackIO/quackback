@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ComponentProps } from 'react'
 import { useIntl } from 'react-intl'
+import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRightIcon,
   ArrowUturnLeftIcon,
@@ -19,7 +20,11 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
-import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
+import {
+  addReactionFn,
+  getCommentPermissionsFn,
+  removeReactionFn,
+} from '@/lib/server/functions/comments'
 import { useEditComment } from '@/lib/client/mutations/portal-comments'
 import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
@@ -39,6 +44,7 @@ import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 import { useApproveComment, useRejectComment } from '@/lib/client/mutations/moderation'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { errorText } from '@/lib/client/error-text'
 
 // Asked only when someone deletes a comment, so it loads on first use.
 const LazyConfirmDialog = lazy(() =>
@@ -363,6 +369,31 @@ interface CommentItemProps {
 
 const MAX_NESTING_DEPTH = 5
 
+/**
+ * What the server lets the author do with their own comment. Same query key
+ * as useCommentPermissions, read here without that hooks module so the post
+ * page loads nothing extra.
+ */
+function useOwnCommentPermissions(commentId: PostCommentId, enabled: boolean) {
+  return useQuery({
+    queryKey: ['comments', 'permissions', commentId],
+    queryFn: async (): Promise<{ canEdit: boolean; canDelete: boolean }> => {
+      try {
+        return await getCommentPermissionsFn({ data: { commentId } })
+      } catch {
+        return { canEdit: false, canDelete: false }
+      }
+    },
+    enabled,
+    staleTime: 30 * 1000,
+  })
+}
+
+/** Whether a teammate has replied under this comment (live replies only, as the server counts). */
+function hasTeamReply(comment: PublicCommentView): boolean {
+  return comment.replies.some((r) => !r.deletedAt && (r.isTeamMember || hasTeamReply(r)))
+}
+
 function CommentItem({
   postId,
   comment,
@@ -429,11 +460,20 @@ function CommentItem({
     depth === 0 &&
     !isDeleted &&
     !comment.isPrivate
-  // Can edit/delete: not already deleted, and user is author or team member
-  // Server re-checks; client heuristic avoids showing the button to unrelated users
+  // Can edit/delete: not already deleted, and the viewer is a team member or
+  // the author. The author loses both once a teammate replies: hidden at once
+  // when the thread shows the reply, and otherwise as the server answers (a
+  // reply the author cannot see locks the comment too). The server re-checks.
   const isAuthor = !!user?.principalId && comment.principalId === user.principalId
-  const canEdit = !isDeleted && (isTeamMember || isAuthor)
-  const canDelete = !isDeleted && !!onDeleteComment && (isTeamMember || isAuthor)
+  const lockedByTeamReply = hasTeamReply(comment)
+  const { data: ownPermissions } = useOwnCommentPermissions(
+    comment.id as PostCommentId,
+    isAuthor && !isTeamMember && !isDeleted && !lockedByTeamReply
+  )
+  const authorMayEdit = isAuthor && !lockedByTeamReply && ownPermissions?.canEdit !== false
+  const authorMayDelete = isAuthor && !lockedByTeamReply && ownPermissions?.canDelete !== false
+  const canEdit = !isDeleted && (isTeamMember || authorMayEdit)
+  const canDelete = !isDeleted && !!onDeleteComment && (isTeamMember || authorMayDelete)
   const isBeingDeleted = deletingCommentId === comment.id
   // Can restore: deleted, team member, and restore handler provided
   const canRestore = isDeleted && isTeamMember && !!onRestoreComment
@@ -465,12 +505,13 @@ function CommentItem({
       setIsEditing(false)
     } catch (err) {
       setEditError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.commentThread.editFailed',
-              defaultMessage: 'Failed to save edit',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'portal.commentThread.editFailed',
+            defaultMessage: 'Failed to save edit',
+          })
+        )
       )
     }
   }
@@ -643,7 +684,7 @@ function CommentItem({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
-                    className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary/15 text-primary cursor-default"
+                    className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary/15 text-primary-ink cursor-default"
                     aria-label={intl.formatMessage(
                       {
                         id: 'portal.commentThread.teamBadgeAria',
@@ -698,7 +739,7 @@ function CommentItem({
               </Badge>
             )}
             {isPinned && (
-              <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+              <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary-ink border-0">
                 <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
                 {intl.formatMessage({
                   id: 'portal.commentThread.pinnedBadge',
@@ -709,7 +750,7 @@ function CommentItem({
             <span className="text-muted-foreground text-xs">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
             {comment.isEdited && (
-              <span className="text-xs text-muted-foreground/60">
+              <span className="text-xs text-muted-foreground">
                 {intl.formatMessage({
                   id: 'portal.commentThread.edited',
                   defaultMessage: '(edited)',
@@ -800,13 +841,14 @@ function CommentItem({
             <CommentContent
               content={comment.content}
               contentJson={comment.contentJson ?? null}
-              className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
+              className="text-sm mt-1.5 ms-10 text-foreground leading-relaxed"
             />
           )}
           {comment.moderationState === 'pending' && (
             <InlineModerationActions
               pending
               noun="comment"
+              forAuthor={isAuthor && !canModerate}
               className="mt-2 ms-10"
               busy={approveComment.isPending || rejectComment.isPending}
               onApprove={canModerate ? () => approveComment.mutate(comment.id) : undefined}

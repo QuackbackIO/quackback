@@ -15,8 +15,10 @@ import {
   isAllowedImageType,
   MAX_FILE_SIZE,
 } from '../storage/s3'
+import { avatarFolderFor } from '../storage/avatar-keys'
 import { logger } from '@/lib/server/logger'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { UnauthorizedError, ValidationError, ServiceUnavailableError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'uploads' })
 
@@ -24,11 +26,27 @@ const log = logger.child({ component: 'uploads' })
 // Schemas
 // ============================================================================
 
+/**
+ * The prefixes the generic upload URL signs: the media the editors upload
+ * (the same set as /api/upload/image). Branding keys (header-logos/, logos/,
+ * fonts/) have upload functions of their own behind the branding permission.
+ */
+const GENERIC_UPLOAD_PREFIXES = [
+  'uploads',
+  'changelog-images',
+  'changelog',
+  'post-images',
+  'post-media',
+  'comment-media',
+  'help-center',
+  'chat-images',
+] as const
+
 const getPresignedUploadUrlSchema = z.object({
   filename: z.string().min(1).max(255),
   contentType: z.string().min(1).max(100),
   fileSize: z.number().int().positive().max(MAX_FILE_SIZE),
-  prefix: z.string().default('uploads'),
+  prefix: z.enum(GENERIC_UPLOAD_PREFIXES).default('uploads'),
 })
 
 /** Shared shape for every fixed-prefix image upload. */
@@ -55,7 +73,20 @@ const imageUploadSchema = z.object({
  */
 async function presignedImageUpload(
   data: z.infer<typeof imageUploadSchema>,
-  opts: { label: string; prefix: string }
+  opts: {
+    label: string
+    prefix: string
+    /**
+     * Also SVG, for a wide logo. The upload route stores only the sanitiser's
+     * rebuild of it, and only under header-logos/.
+     */
+    svg?: boolean
+    /**
+     * Not saved by this upload: a later publish saves it. The key is recorded
+     * as staged first, so the daily sweep removes it if it is never published.
+     */
+    stage?: boolean
+  }
 ) {
   log.debug(
     { content_type: data.contentType, file_size: data.fileSize },
@@ -63,14 +94,26 @@ async function presignedImageUpload(
   )
 
   if (!isS3Usable()) {
-    throw new Error('File storage is not configured. Contact your administrator.')
+    throw new ServiceUnavailableError(
+      'STORAGE_NOT_CONFIGURED',
+      'File storage is not configured. Contact your administrator.'
+    )
   }
 
-  if (!isAllowedImageType(data.contentType)) {
-    throw new Error(`Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`)
+  const svg = opts.svg === true && data.contentType === 'image/svg+xml'
+  if (!svg && !isAllowedImageType(data.contentType)) {
+    throw new ValidationError(
+      'INVALID_FILE_TYPE',
+      `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP${opts.svg ? ', SVG' : ''}.`
+    )
   }
 
   const key = generateStorageKey(opts.prefix, data.filename)
+  if (opts.stage) {
+    const { recordStagedUpload } =
+      await import('@/lib/server/domains/settings/settings.staged-uploads')
+    await recordStagedUpload(key)
+  }
   return await generatePresignedUploadUrl(key, data.contentType)
 }
 
@@ -99,7 +142,9 @@ export const checkS3ConfiguredFn = createServerFn({ method: 'GET' }).handler(asy
  */
 export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
   .validator(getPresignedUploadUrlSchema)
-  .handler(async ({ data }) => {
+  .handler(async ({ data: raw }) => {
+    // Checked here as well, so the prefix allowlist holds whatever calls the handler.
+    const data = getPresignedUploadUrlSchema.parse(raw)
     log.debug(
       { prefix: data.prefix, content_type: data.contentType, file_size: data.fileSize },
       'presigned upload url requested'
@@ -109,12 +154,16 @@ export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
 
     // Check S3 is configured
     if (!isS3Usable()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      throw new ServiceUnavailableError(
+        'STORAGE_NOT_CONFIGURED',
+        'File storage is not configured. Contact your administrator.'
+      )
     }
 
     // Validate content type for images
     if (data.prefix.includes('image') && !isAllowedImageType(data.contentType)) {
-      throw new Error(
+      throw new ValidationError(
+        'INVALID_FILE_TYPE',
         `Invalid file type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
       )
     }
@@ -163,18 +212,22 @@ export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
     )
     const session = await getWidgetSession()
     if (!session) {
-      throw new Error('Authentication required to upload images.')
+      throw new UnauthorizedError('Authentication required to upload images.')
     }
     if (session.principal.type === 'anonymous') {
-      throw new Error('Authentication required to upload images.')
+      throw new UnauthorizedError('Authentication required to upload images.')
     }
 
     if (!isS3Usable()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      throw new ServiceUnavailableError(
+        'STORAGE_NOT_CONFIGURED',
+        'File storage is not configured. Contact your administrator.'
+      )
     }
 
     if (!isAllowedImageType(data.contentType)) {
-      throw new Error(
+      throw new ValidationError(
+        'INVALID_FILE_TYPE',
         `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
       )
     }
@@ -198,6 +251,28 @@ export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
   })
 
 /**
+ * Presigned URLs for a new workspace icon and the favicon made from it, both
+ * staged: Customise publishes them together (`logo.icon`), and the daily
+ * sweep removes them if it never does. Raster only, as emails carry the icon.
+ */
+export const getIconUploadUrlsFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ icon: imageUploadSchema, favicon: imageUploadSchema }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const icon = await presignedImageUpload(data.icon, {
+      label: 'icon',
+      prefix: 'logos',
+      stage: true,
+    })
+    const favicon = await presignedImageUpload(data.favicon, {
+      label: 'favicon',
+      prefix: 'favicons',
+      stage: true,
+    })
+    return { icon, favicon }
+  })
+
+/**
  * Get a presigned URL for uploading the workspace favicon.
  */
 export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
@@ -208,13 +283,21 @@ export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Get a presigned URL for uploading the workspace header logo.
+ * Get a presigned URL for uploading the portal's wide (header) logo. Part of
+ * the portal look, so a branding permission; unlike the square logo, which
+ * emails carry, it may be an SVG. The upload is staged: publishing the portal
+ * look saves it.
  */
 export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
   .validator(imageUploadSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    return presignedImageUpload(data, { label: 'header logo', prefix: 'header-logos' })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return presignedImageUpload(data, {
+      label: 'header logo',
+      prefix: 'header-logos',
+      svg: true,
+      stage: true,
+    })
   })
 
 /**
@@ -238,13 +321,15 @@ export const getWidgetHeroUploadUrlFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Get a presigned URL for uploading user avatars.
+ * Get a presigned URL for uploading user avatars. The key sits in the
+ * uploader's own avatar folder, which is the only place saveAvatarKeyFn
+ * accepts a new avatar from.
  */
 export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })
   .validator(imageUploadSchema)
   .handler(async ({ data }) => {
-    await requireAuth()
-    return presignedImageUpload(data, { label: 'avatar', prefix: 'avatars' })
+    const auth = await requireAuth()
+    return presignedImageUpload(data, { label: 'avatar', prefix: avatarFolderFor(auth.user.id) })
   })
 
 /**
@@ -256,4 +341,69 @@ export const getAssistantAvatarUploadUrlFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.AI_CUSTOMER_MANAGE })
     return presignedImageUpload(data, { label: 'assistant avatar', prefix: 'assistant-avatars' })
+  })
+
+const fontUploadSchema = z.object({
+  filename: z.string().min(1).max(255),
+  fileSize: z.number().int().positive(),
+})
+
+export type FontUploadResult =
+  | { ok: true; uploadUrl: string; key: string; contentType: string }
+  | {
+      ok: false
+      code: 'STORAGE_UNAVAILABLE' | 'NOT_A_FONT' | 'TOO_LARGE' | 'TOO_MANY_STAGED_UPLOADS'
+      message: string
+    }
+
+/**
+ * Get a presigned URL for uploading one file of a portal font: woff2 (up to
+ * 400 KB), woff (600 KB), ttf or otf (1 MB). The upload itself checks the
+ * file's signature. Allowed on every plan.
+ */
+export const getFontUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(fontUploadSchema)
+  .handler(async ({ data }): Promise<FontUploadResult> => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { FONT_FORMATS, FONT_UPLOADS, fontExtension, sizeLabel } =
+      await import('@/lib/shared/theme/font-uploads')
+    if (!isS3Usable()) {
+      return {
+        ok: false,
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'Uploading fonts needs file storage.',
+      }
+    }
+    const ext = fontExtension(data.filename)
+    if (!ext) {
+      return {
+        ok: false,
+        code: 'NOT_A_FONT',
+        message: `${data.filename} is not a woff2, woff, ttf or otf file.`,
+      }
+    }
+    if (data.fileSize > FONT_FORMATS[ext].maxBytes) {
+      return {
+        ok: false,
+        code: 'TOO_LARGE',
+        message: `${data.filename} is over ${sizeLabel(FONT_FORMATS[ext].maxBytes)}.`,
+      }
+    }
+    const key = generateStorageKey(FONT_UPLOADS.prefix, data.filename)
+    // Staged until a publish names it in the theme; the daily sweep removes
+    // it otherwise. Recorded before the URL is handed out.
+    const { recordStagedUpload } =
+      await import('@/lib/server/domains/settings/settings.staged-uploads')
+    try {
+      await recordStagedUpload(key)
+    } catch (err) {
+      if (err instanceof ValidationError && err.code === 'TOO_MANY_STAGED_UPLOADS') {
+        return { ok: false, code: 'TOO_MANY_STAGED_UPLOADS', message: err.message }
+      }
+      throw err
+    }
+    const contentType = FONT_FORMATS[ext].type
+    const { uploadUrl } = await generatePresignedUploadUrl(key, contentType)
+    log.info({ key }, 'font upload url issued')
+    return { ok: true, uploadUrl, key, contentType }
   })

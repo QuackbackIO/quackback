@@ -100,8 +100,16 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 
 const mockGetRegisteredOidcProviderIds = vi.fn()
+// Identity providers set up, and whether single sign-on is live right now.
+const oidc = vi.hoisted(() => ({ configured: new Set<string>(), live: true }))
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredOidcProviderIds: (...a: unknown[]) => mockGetRegisteredOidcProviderIds(...a),
+  getConfiguredOidcProviderIds: async () => oidc.configured,
+  isSsoLive: async () => oidc.live,
+  getSsoSignInState: async () =>
+    oidc.live
+      ? { ssoLive: true, providersConfigured: false }
+      : { ssoLive: false, providersConfigured: oidc.configured.size > 0 },
 }))
 
 // auth-restrictions stays unmocked — we want the real predicates to
@@ -200,6 +208,32 @@ describe('handleSignInPreCheck — early exits', () => {
     await handleSignInPreCheck(ctx)
     expect(mockGetWorkspaceSettings).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('refuses the start of a set-up provider while single sign-on is not live', async () => {
+    oidc.configured = new Set(['acme-sso'])
+    oidc.live = false
+    try {
+      for (const ctx of [
+        ctxFor('/sign-in/social', { provider: 'acme-sso' }),
+        ctxFor('/sign-in/oauth2', { providerId: 'acme-sso' }),
+      ]) {
+        await expect(handleSignInPreCheck(ctx)).rejects.toThrow()
+        expect(ctx.redirect).toHaveBeenCalledWith('/?auth=signin&error=oauth_method_not_allowed')
+      }
+      // A social provider is not an identity provider: left to its own gates.
+      const social = ctxFor('/sign-in/social', { provider: 'google' })
+      await handleSignInPreCheck(social)
+      expect(social.redirect).not.toHaveBeenCalled()
+      // Live again: the start goes ahead.
+      oidc.live = true
+      const live = ctxFor('/sign-in/social', { provider: 'acme-sso' })
+      await handleSignInPreCheck(live)
+      expect(live.redirect).not.toHaveBeenCalled()
+    } finally {
+      oidc.configured = new Set()
+      oidc.live = true
+    }
   })
 
   it('skips when path is /oauth2/callback/:providerId (Layer C handles those)', async () => {
@@ -346,6 +380,81 @@ describe('handleSignInPreCheck — isAuthMethodAllowed gate', () => {
     mockUserFindFirst.mockResolvedValue(null)
     mockPrincipalFindFirst.mockResolvedValue(null)
     const ctx = ctxFor('/sign-up/email', { email: 'brand@new.com' })
+
+    await handleSignInPreCheck(ctx)
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+})
+
+// ============================================================
+// Method toggles bind addresses with no account too
+// ============================================================
+
+/**
+ * The method gate used to sit after the `!principalRow` return, so it bound
+ * only addresses that already held an account: with "Password" off a stranger
+ * could still create a password account (and get a session) at
+ * `/sign-up/email`, and with "Email magic link" off a new address could still
+ * redeem a sign-in code. Whether a method is on is a fact about the workspace,
+ * not the address, so refusing it says nothing about which addresses exist.
+ */
+describe('handleSignInPreCheck — method toggles for an address with no account', () => {
+  beforeEach(() => {
+    oidc.configured = new Set<string>()
+    oidc.live = true
+  })
+
+  it('refuses a password sign-up while Password is off', async () => {
+    mockGetWorkspaceSettings.mockResolvedValue(
+      workspace({ openSignup: true, passwordEnabled: false, magicLinkEnabled: true })
+    )
+    const ctx = ctxFor('/sign-up/email', { email: 'brand@new.example' })
+
+    await expect(handleSignInPreCheck(ctx)).rejects.toThrow(
+      'REDIRECT:/?auth=signin&error=password_method_not_allowed'
+    )
+  })
+
+  it.each(['/sign-in/magic-link', '/email-otp/send-verification-otp', '/sign-in/email-otp'])(
+    'refuses %s while Email magic link is off',
+    async (path) => {
+      mockGetWorkspaceSettings.mockResolvedValue(
+        workspace({ openSignup: true, magicLinkEnabled: false })
+      )
+      const ctx = ctxFor(path, { email: 'brand@new.example' })
+
+      await expect(handleSignInPreCheck(ctx)).rejects.toThrow(
+        'REDIRECT:/?auth=signin&error=magic_link_method_not_allowed'
+      )
+    }
+  )
+
+  it('lets a code in while email links stand in for single sign-on that is paused', async () => {
+    oidc.configured = new Set(['sso'])
+    oidc.live = false
+    mockGetWorkspaceSettings.mockResolvedValue(
+      workspace({ openSignup: true, magicLinkEnabled: false })
+    )
+    const ctx = ctxFor('/sign-in/email-otp', { email: 'brand@new.example' })
+
+    await handleSignInPreCheck(ctx)
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  // The controls: the same requests with the method on go through.
+  it('lets a password sign-up through while Password is on', async () => {
+    mockGetWorkspaceSettings.mockResolvedValue(workspace({ openSignup: true }))
+    const ctx = ctxFor('/sign-up/email', { email: 'brand@new.example' })
+
+    await handleSignInPreCheck(ctx)
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('lets a code in while Email magic link is on', async () => {
+    mockGetWorkspaceSettings.mockResolvedValue(
+      workspace({ openSignup: true, magicLinkEnabled: true })
+    )
+    const ctx = ctxFor('/sign-in/email-otp', { email: 'brand@new.example' })
 
     await handleSignInPreCheck(ctx)
     expect(ctx.redirect).not.toHaveBeenCalled()
@@ -670,7 +779,9 @@ describe('handleSignInPreCheck — sign-in rate-limit', () => {
   it('dispatches the magic-link limiter on /sign-in/magic-link (not the credential limiter)', async () => {
     // Sign-ups open: which limiter runs is the question here, and a workspace
     // that would refuse this address downstream never gets that far.
-    mockGetWorkspaceSettings.mockResolvedValue(workspace({ openSignup: true }))
+    mockGetWorkspaceSettings.mockResolvedValue(
+      workspace({ openSignup: true, magicLinkEnabled: true })
+    )
     const ctx = ctxFor('/sign-in/magic-link', { email: 'a@b.com' })
     await handleSignInPreCheck(ctx)
     expect(mockCheckMagicLinkRateLimit).toHaveBeenCalledWith(expect.any(String), 'a@b.com')

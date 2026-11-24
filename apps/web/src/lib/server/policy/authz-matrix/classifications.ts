@@ -7,7 +7,8 @@
  * to state intent so the matrix (and its reviewers) can tell an END_USER action
  * apart from an accidental hole:
  *   - bare `requireAuth()`      — an end-user action, or a team-any read
- *   - bare `withApiKeyAuth(req)` — a public-tier REST read (any valid key)
+ *   - bare `withApiKeyAuth(req)` — a REST read that asserts its read scope
+ *     (and, for some, one of a few permissions) right after the gate
  *   - `requireTeamAuth()`        — a local wrapper that resolves to a permission
  *   - inline `isAdmin` / `isTeamMember` — either the real access decision
  *     (SECONDARY_GATE) or a behavior refinement behind an existing gate
@@ -19,6 +20,12 @@
  * expectation" gate from the feature request.
  */
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import type { ApiKeyScope } from '@/lib/shared/api-key-scopes'
+import {
+  GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+  PORTAL_DESIGN_READ_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+} from '@/lib/shared/settings-read-permissions'
 
 export type SurfaceIntent =
   /** Bare `requireAuth()`: any authenticated principal (team, portal, or widget). */
@@ -27,6 +34,8 @@ export type SurfaceIntent =
   | 'PUBLIC_DATA'
   /** The MCP handler's bare `withApiKeyAuth(req)`: a valid key enters; per-tool scopes authorize. */
   | 'MCP_ENTRY'
+  /** Bare `withApiKeyAuth(req)` followed by `assertApiScope` / `assertApiReadAccess`: the key must hold a read scope and, when listed, its creator one of `resolvesToAny`. Used where the matching permission's verb is not a read, so a permission gate would demand the write scope. */
+  | 'SCOPED_READ'
   /** Bare gate whose required permission is computed from the request (a field-scoped PATCH): a valid key authenticates, then `assertApiPermissions` enforces the permission for each field touched. No single static permission covers it. */
   | 'DYNAMIC_PERMISSION'
   /** An inline role check that IS the access decision for a surface without a requireAuth/key gate. */
@@ -40,8 +49,10 @@ export interface Classification {
   roleBar?: 'admin' | 'team'
   /** For SECONDARY_GATE: the catalogue permission the check mirrors, when it maps to one. */
   resolvesTo?: PermissionKey
-  /** For DYNAMIC_PERMISSION: the closed set of permissions the runtime check may require (one per patchable field). */
+  /** For DYNAMIC_PERMISSION: the closed set of permissions the runtime check may require (one per patchable field). For SCOPED_READ: the permissions of which the key's creator must hold one (empty = any teammate). */
   resolvesToAny?: readonly PermissionKey[]
+  /** For SCOPED_READ: the read scope the key must hold. */
+  scope?: ApiKeyScope
   why: string
 }
 
@@ -55,6 +66,16 @@ export function inlineKey(file: string, surface: string, callee: string): string
   return `${file}::${surface}::${callee}`
 }
 
+/**
+ * Reach a permission has beyond the surfaces it gates: settings that decide
+ * where sign-in may go. Rendered into MATRIX.md, so a change is reviewed as
+ * an access-control change.
+ */
+export const SESSION_REACH: Partial<Record<PermissionKey, string>> = {
+  [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]:
+    'Maps section hostnames. Each verified section host (on Cloud a ready custom domain; self-hosted, one whose lookups still answer) becomes a trusted sign-in origin and a host a signed-in session can be carried to through the section handoff. A carried session is a new portal-scope session for the same person: it never holds team permissions, so it cannot open /admin or pass a permission gate.',
+}
+
 /** `requireTeamAuth()` wraps `requireAuth({ permission: POST_APPROVE })`. */
 export const ALIAS_RESOLUTIONS: Record<string, PermissionKey> = {
   requireTeamAuth: PERMISSIONS.POST_APPROVE,
@@ -65,11 +86,18 @@ export const ALIAS_RESOLUTIONS: Record<string, PermissionKey> = {
 // ---------------------------------------------------------------------------
 
 const END_USER = (why: string): Classification => ({ intent: 'END_USER', why })
-const PUBLIC_DATA = (why: string): Classification => ({ intent: 'PUBLIC_DATA', why })
 const DYNAMIC_PERMISSION = (
   resolvesToAny: readonly PermissionKey[],
   why: string
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
+const SCOPED_READ = (
+  scope: ApiKeyScope,
+  resolvesToAny: readonly PermissionKey[],
+  why: string
+): Classification => ({ intent: 'SCOPED_READ', scope, resolvesToAny, why })
+
+/** Who reads the admin status shapes over REST (`status/-serialize.ts`). */
+const STATUS_PAGE_READ = [PERMISSIONS.STATUS_PAGE_PUBLISH, PERMISSIONS.STATUS_PAGE_MANAGE]
 
 /** The permission each settings registry area needs, to read and to write. */
 const SETTINGS_REGISTRY_PERMISSIONS = [
@@ -96,6 +124,59 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/personal-api-keys.ts::revokeMyApiKeyFn': END_USER(
     'self-service: revokes one of personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
+  ),
+  // Plan limits: every teammate sees what is over the plan; each chooser takes
+  // billing rights or the permission that manages what it picks.
+  'lib/server/functions/plan-notice.ts::getPlanNotice': END_USER(
+    'team-any read for the admin plan strip: dashboard session and team members only (inline isTeamMember); returns plan name, dates and copy, a billing link only for billing.manage, and the operator notice only for member.view'
+  ),
+  'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn': END_USER(
+    'team-any read for the admin banner without member.view: dashboard session and team members only (inline isTeamMember); returns no member ids, seat counts or team links'
+  ),
+  'lib/server/functions/plan-limits.ts::setKeptBoardFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.SETTINGS_MANAGE],
+    'choose the board that stays open: billing rights or whoever manages boards'
+  ),
+  'lib/server/functions/plan-limits.ts::setSeatHoldersFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.MEMBER_MANAGE],
+    'choose who keeps a seat: billing rights or whoever manages members'
+  ),
+  'lib/server/functions/plan-limits.ts::setVisibleStatusComponentsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE],
+    'choose the status components that stay public: billing rights or whoever manages the status page'
+  ),
+  'lib/server/functions/plan-limits.ts::setKeptSendingDomainsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'choose the sending domains that keep sending: billing rights or whoever manages channel accounts'
+  ),
+  // Email senders: sending is a workspace setting (settings.manage), and whoever
+  // runs the support inbox may still choose where support replies come from.
+  // Domains added by name: every Domains page permission reads them, so each
+  // viewer sees a domain's ownership whichever of its uses they manage.
+  'lib/server/functions/domains.ts::getDomainFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.AUTH_MANAGE],
+    'read by the Domains page, which any one of its use permissions opens'
+  ),
+  'lib/server/functions/domains.ts::listDomainsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.AUTH_MANAGE],
+    'read by the Domains page, which any one of its use permissions opens'
+  ),
+  'lib/server/functions/channel-accounts.ts::getEmailChannelConfigFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'read by the workspace Email page and the support inbox page; either permission opens it'
+  ),
+  'lib/server/functions/channel-accounts.ts::setEmailSenderFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'the support sender takes either permission; every other sender requires settings.manage'
+  ),
+  'lib/server/functions/channel-accounts.ts::getSurfaceSenderFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.BOARD_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
+      PERMISSIONS.STATUS_PAGE_MANAGE,
+    ],
+    'read-only From line: an admin, or the manager of the product that sends that kind of email'
   ),
   'lib/server/functions/assistant-connectors.ts::createConnectorFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
@@ -136,6 +217,19 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/assistant-documents.ts::uploadAssistantDocumentFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'shared AI settings: a holder of either AI permission may use them'
+  ),
+  // Settings pages owned by a narrower permission read what they show with it.
+  'lib/server/functions/settings.ts::fetchPortalPageConfigFn': DYNAMIC_PERMISSION(
+    PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+    'any one of these reads; the moderation default goes only to settings.manage or settings.moderation, the portal tabs and welcome message only to settings.manage or settings.branding, and nothing else of the portal config'
+  ),
+  'lib/server/functions/portal-summary.ts::fetchPortalSummaryFn': DYNAMIC_PERMISSION(
+    PORTAL_DESIGN_READ_PERMISSIONS,
+    "Settings > Portal's summary of the live theme, tabs and welcome message: the Design tab's readers (settings.manage or settings.branding)"
+  ),
+  'integrations/github/server/functions.ts::getGitHubChannelStatusFn': DYNAMIC_PERMISSION(
+    GITHUB_CHANNEL_STATUS_READ_PERMISSIONS,
+    'the GitHub channel page (channel_account.manage) and the Channels hub (settings.manage) read the connection status; never the token'
   ),
   'lib/server/functions/assistant-guidance-stats.ts::getGuidanceRuleStatsFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
@@ -220,31 +314,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/assistant-web-sources.ts::setWebSourceEnabledFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'shared AI settings: a holder of either AI permission may use them'
-  ),
-  'lib/server/functions/website-branding.ts::startAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'the lookup only records an offer and requires current settings management, rechecked after the fetch'
-  ),
-  'lib/server/functions/website-branding.ts::lookupWebsiteBrandingFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Find logo looks up a typed website through the safe fetch and records an offer; requires current settings management, rechecked after the fetch'
-  ),
-  'lib/server/functions/website-branding.ts::getAutomaticWebsiteBrandingStatusFn':
-    DYNAMIC_PERMISSION(
-      [PERMISSIONS.SETTINGS_MANAGE],
-      'private lookup status requires current settings management; ineligible callers receive no status'
-    ),
-  'lib/server/functions/website-branding.ts::undoAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Undo requires current settings management and every permission required by the stored receipt'
-  ),
-  'lib/server/functions/website-branding.ts::acceptWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Use it applies the offered logo with current settings management; its color additionally requires branding permission'
-  ),
-  'lib/server/functions/website-branding.ts::declineWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.SETTINGS_MANAGE],
-    'Not now closes the offer and requires current settings management'
   ),
   'routes/api/v1/settings/index.ts::GET': DYNAMIC_PERMISSION(
     SETTINGS_REGISTRY_PERMISSIONS,
@@ -541,12 +610,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/teammate-preferences.ts::setMyLanguagePreferenceFn': END_USER(
     'teammate sets their own language preference'
   ),
-  'lib/server/functions/billing.ts::getAdminBillingLockFn': END_USER(
-    'admin layout lock inputs: any teammate may ask; only billing.manage gets an answer'
-  ),
 
   // MCP transport entry: a valid key authenticates; per-tool scopes authorize
-  // (see MCP_TOOLS). Not a permission gate on its own.
+  // (see MCP_TOOL_NAMES). Not a permission gate on its own.
   'lib/server/mcp/handler.ts::resolveAuthContext': {
     intent: 'MCP_ENTRY',
     why: 'MCP transport entry — a valid key authenticates; per-tool scopes provide authorization',
@@ -622,38 +688,61 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'either-or — conversation.view(_all) or ticket.view(_all), checked by canViewInboxAtAll'
   ),
 
-  // Public-tier REST reads: a valid key is required, but the data is portal-public
-  // so no permission is checked. Anonymous (no key) is still rejected.
-  'routes/api/v1/apps/boards.ts::GET': PUBLIC_DATA('public board list'),
-  'routes/api/v1/boards/$boardId.ts::GET': PUBLIC_DATA('public board'),
-  'routes/api/v1/boards/index.ts::GET': PUBLIC_DATA('public board list'),
-  // Status page read API: a valid key reads the public status surface (the
-  // page snapshot, component list, and incident/maintenance history). Writes
-  // to these resources require STATUS_PAGE_MANAGE / STATUS_PAGE_PUBLISH.
-  'routes/api/v1/status/summary.ts::GET': PUBLIC_DATA('public status page summary'),
+  // Status page read API. The public snapshot needs only the read scope; the
+  // admin shapes (services with segment ids, incidents with audit fields)
+  // also need a status page permission. Both status page permissions are
+  // write-verbed, so they are checked by hand after the read scope rather
+  // than through a permission gate, which would demand write:feedback.
+  'routes/api/v1/status/summary.ts::GET': SCOPED_READ(
+    'read:feedback',
+    [],
+    'public status page snapshot: any teammate key holding read:feedback'
+  ),
   // Shared handlers behind both /status/components (deprecated) and the
   // /status/services aliases — one gate each, two route surfaces.
-  'routes/api/v1/status/-service-handlers.ts::listStatusComponentsHandler': PUBLIC_DATA(
-    'public status service list'
+  'routes/api/v1/status/-service-handlers.ts::listStatusComponentsHandler': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'status services with their segment ids'
   ),
-  'routes/api/v1/status/-service-handlers.ts::getStatusComponentHandler':
-    PUBLIC_DATA('public status service'),
-  'routes/api/v1/status/incidents/index.ts::GET': PUBLIC_DATA('public status incident list'),
-  'routes/api/v1/status/incidents/$incidentId.ts::GET': PUBLIC_DATA('public status incident'),
-  'routes/api/v1/help-center/articles/$articleId.feedback.ts::POST':
-    PUBLIC_DATA('end-user article rating'),
-  'routes/api/v1/help-center/articles/$articleId.ts::GET': PUBLIC_DATA('public help article'),
-  'routes/api/v1/help-center/articles/index.ts::GET': PUBLIC_DATA('public help article list'),
-  'routes/api/v1/help-center/categories/$categoryId.ts::GET': PUBLIC_DATA('public help category'),
-  'routes/api/v1/help-center/categories/index.ts::GET': PUBLIC_DATA('public help category list'),
-  'routes/api/v1/roadmaps/$roadmapId.columns.ts::GET': PUBLIC_DATA('public roadmap columns'),
-  'routes/api/v1/roadmaps/$roadmapId.posts.ts::GET': PUBLIC_DATA('public roadmap posts'),
-  'routes/api/v1/roadmaps/$roadmapId.ts::GET': PUBLIC_DATA('public roadmap'),
-  'routes/api/v1/roadmaps/index.ts::GET': PUBLIC_DATA('public roadmap list'),
-  'routes/api/v1/statuses/$statusId.ts::GET': PUBLIC_DATA('public status'),
-  'routes/api/v1/statuses/index.ts::GET': PUBLIC_DATA('public status list'),
-  'routes/api/v1/tags/$tagId.ts::GET': PUBLIC_DATA('public tag'),
-  'routes/api/v1/tags/index.ts::GET': PUBLIC_DATA('public tag list'),
+  'routes/api/v1/status/-service-handlers.ts::getStatusComponentHandler': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'a status service with its segment ids'
+  ),
+  'routes/api/v1/status/incidents/index.ts::GET': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'incidents with their audit fields'
+  ),
+  'routes/api/v1/status/incidents/$incidentId.ts::GET': SCOPED_READ(
+    'read:feedback',
+    STATUS_PAGE_READ,
+    'an incident with its audit fields'
+  ),
+  // Help center reads and the article vote by key (helpCenterApiAccess): any
+  // key with read:article gets what is published to everyone; drafts, private
+  // and gated content need help_center.manage.
+  'routes/api/v1/help-center/articles/$articleId.feedback.ts::POST': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'article rating: read:article for a public article, help_center.manage for any other'
+  ),
+  'routes/api/v1/help-center/articles/$articleId.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help article: read:article for a public article, help_center.manage for any other'
+  ),
+  'routes/api/v1/help-center/articles/index.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help article list: read:article lists public articles, help_center.manage lists all'
+  ),
+  'routes/api/v1/help-center/categories/$categoryId.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help category: read:article for a public category, help_center.manage for any other'
+  ),
+  'routes/api/v1/help-center/categories/index.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.HELP_CENTER_MANAGE],
+    'help category list: read:article lists public categories, help_center.manage lists all'
+  ),
 
   // Advertised plan stickers, the same payload Plan & billing renders. Any
   // signed-in principal may read them so upgrade offers stay consistent;
@@ -732,13 +821,29 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     why: 'personal API keys are for team members only; a portal user is refused',
   },
+  'lib/server/functions/plan-notice.ts::getPlanNotice::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'the plan strip is for teammates only; a portal user is refused',
+  },
+  'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'the plan limits banner is for teammates only; a portal user is refused',
+  },
   // Real access decisions the requireAuth/withApiKeyAuth scan does NOT cover —
   // surfaced precisely because a stray change here would widen access silently.
   'routes/api/chat/stream.ts::GET::isTeamMember': {
     intent: 'SECONDARY_GATE',
     roleBar: 'team',
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
-    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by canViewConversation',
+    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by assertConversationVisible',
+  },
+  'routes/api/chat/stream.ts::loadInboxScope::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
+    why: 'SSE inbox scope reload: re-asks the connect-time team gate, and closes the stream of a principal who has left the team',
   },
   'lib/server/functions/portal-permissions.ts::getMyPortalPermissionsFn::isTeamMember': {
     intent: 'SECONDARY_GATE',
@@ -767,6 +872,9 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'routes/api/widget/identify.ts::POST::isTeamMember': NOT_A_GATE(
     'skips overwriting a teammate dashboard profile from the host-app JWT; identify still mints a widget-scoped customer session'
+  ),
+  'lib/server/functions/bootstrap.ts::getSessionAndRole::isTeamMember': NOT_A_GATE(
+    'sends a teammate on a section host the primary admin address for a plain link; the presented role stays portal-tier'
   ),
   'lib/server/functions/widget-auth.ts::getWidgetSession::isTeamMember': NOT_A_GATE(
     'sets canPortalHandoff from the stored role; presented session role stays portal-tier'
@@ -802,10 +910,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     why: 'the Files sidebar lists attachments off internal notes too; team-only on top of the CONVERSATION_VIEW permission gate (the conversation-target branch only — the ticket-target branch gates on TICKET_VIEW + assertTicketVisible, mirroring getTicketActivityFn)',
   },
   'lib/server/functions/embeds.ts::scopeTicketEmbed::isTeamMember': NOT_A_GATE(
-    'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
-  ),
-  'lib/server/functions/tickets.ts::listTicketMessagesFn::isTeamMember': NOT_A_GATE(
-    'internal notes are agent-only; requesters never see them'
+    'getEmbedPreviewFn already gates on portal access; team resolves a ticket embed only when its ticket filter admits the ticket (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
   ),
   'lib/server/functions/tickets.ts::exportTicketTranscriptFn::isTeamMember': {
     intent: 'SECONDARY_GATE',

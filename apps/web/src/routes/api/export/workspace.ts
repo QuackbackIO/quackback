@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { Role } from '@/lib/shared/roles'
 import type { AuditActorType } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'export-workspace' })
 
@@ -20,6 +21,7 @@ function isActiveRunConflict(error: unknown): boolean {
  * Creates the export_runs row and enqueues the ZIP build; the hub polls
  * GET /api/export/runs/{id} and downloads via GET .../download once completed.
  * At most one active run per deployment (409 while one is in flight).
+ * A workspace can always export its own data, so no plan feature gates this.
  */
 export async function handleStartWorkspaceExport(request: Request): Promise<Response> {
   const { validateApiWorkspaceAccess } = await import('@/lib/server/functions/workspace')
@@ -45,10 +47,6 @@ export async function handleStartWorkspaceExport(request: Request): Promise<Resp
       log.warn({ role: validation.principal.role }, 'workspace export access denied')
       return Response.json({ error: 'Only admins can export data' }, { status: 403 })
     }
-
-    // Tier gate: data exports are a Pro+ feature (same gate as the CSV exports).
-    const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
-    await assertTierFeature('analyticsExports', 'Data export')
 
     const active = await findActiveExportRun()
     if (active) {
@@ -99,12 +97,8 @@ export async function handleStartWorkspaceExport(request: Request): Promise<Resp
     log.info({ run_id: run.id }, 'workspace export queued')
     return Response.json({ runId: run.id }, { status: 202 })
   } catch (error) {
-    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
-    if (error instanceof TierLimitError) {
-      return Response.json(error.toResponseBody(), { status: error.statusCode })
-    }
     log.error({ err: error }, 'workspace export request failed')
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+    return internalRouteErrorResponse()
   }
 }
 

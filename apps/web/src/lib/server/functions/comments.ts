@@ -11,6 +11,7 @@ import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 
 import { createComment } from '@/lib/server/domains/comments/comment.service'
+import { assertNotBlocked } from '@/lib/server/domains/principals/blocking'
 import { policyActorFromAuth } from './auth-helpers'
 import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
 import {
@@ -25,7 +26,7 @@ import {
   restoreComment,
   unpinComment,
 } from '@/lib/server/domains/comments/comment.pin'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { getOptionalAuth, requireAuth, hasAuthCredentials } from './auth-helpers'
 import {
   createCommentSchema,
@@ -68,6 +69,7 @@ export const runCreateComment = createServerOnlyFn(async function runCreateComme
   data: CreateCommentInput
 ) {
   log.info({ post_id: data.postId }, 'create comment')
+  await assertNotBlocked(auth.principal.id)
   // Block anonymous users unless the workspace master switch allows
   // anonymous interaction. Per-board comment tiers are still checked
   // downstream; this is the workspace-wide ceiling collapsed in
@@ -81,7 +83,7 @@ export const runCreateComment = createServerOnlyFn(async function runCreateComme
       await import('@/lib/server/domains/settings/settings.types')
     const settings = await getSettings()
     if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
-      throw new Error('Anonymous interaction is not enabled')
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
     }
   }
 
@@ -120,7 +122,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     return runCreateComment(await requireAuth(), data)
   })
@@ -130,6 +132,17 @@ export const runAddReaction = createServerOnlyFn(async function runAddReaction(
   data: ReactionInput
 ) {
   log.info({ comment_id: data.commentId, emoji: data.emoji }, 'add reaction')
+  await assertNotBlocked(auth.principal.id)
+  // The workspace anonymous switch is the ceiling for reactions as it is for
+  // comments, votes and posts. Fail closed on a missing flag.
+  if (auth.principal.type === 'anonymous') {
+    const { getSettings } = await import('./workspace')
+    const { workspaceAllowsAnonymous } =
+      await import('@/lib/server/domains/settings/settings.types')
+    if (!workspaceAllowsAnonymous((await getSettings())?.portalConfig)) {
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
+    }
+  }
   // The reaction service now runs canViewPost + isPrivate using
   // the actor; without that, an authenticated user could probe
   // commentIds on team-only / private comments.
@@ -150,7 +163,7 @@ export const addReactionFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     return runAddReaction(await requireAuth(), data)
   })
@@ -160,6 +173,7 @@ export const runRemoveReaction = createServerOnlyFn(async function runRemoveReac
   data: ReactionInput
 ) {
   log.info({ comment_id: data.commentId, emoji: data.emoji }, 'remove reaction')
+  await assertNotBlocked(auth.principal.id)
   const actor = await policyActorFromAuth(auth)
   const result = await removeReaction(
     data.commentId as PostCommentId,
@@ -177,7 +191,7 @@ export const removeReactionFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     return runRemoveReaction(await requireAuth(), data)
   })
@@ -240,7 +254,7 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     const ctx = await requireAuth()
     const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')
@@ -268,7 +282,7 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     const ctx = await requireAuth()
     const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')

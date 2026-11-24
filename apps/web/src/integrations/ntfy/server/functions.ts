@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { parseNtfyUrl } from '@/integrations/ntfy/server/url'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 /**
  * Save an ntfy topic URL (and optional access token) as the integration connection.
@@ -27,7 +28,8 @@ export const saveNtfyFn = createServerFn({ method: 'POST' })
 
     const parsed = parseNtfyUrl(data.url)
     if (!parsed) {
-      throw new Error(
+      throw new ValidationError(
+        'INVALID_NTFY_URL',
         'Enter a valid ntfy topic URL, e.g. https://ntfy.sh/my-topic (topics may only contain letters, numbers, - and _)'
       )
     }
@@ -51,7 +53,10 @@ export const saveNtfyFn = createServerFn({ method: 'POST' })
       const status = testResponse.status
       const extra =
         status === 401 || status === 403 ? ' (check the access token / topic permissions)' : ''
-      throw new Error(`ntfy test failed: HTTP ${status}${extra}`)
+      throw new ValidationError(
+        'CONNECTION_TEST_FAILED',
+        `ntfy test failed: HTTP ${status}${extra}`
+      )
     }
 
     await saveIntegration('ntfy', {

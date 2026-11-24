@@ -18,6 +18,18 @@ vi.mock('../resolver', () => ({ acquireWorkspaceScope, acquireScopeForWorkspaceI
 vi.mock('../workspace-context', () => ({
   runWithWorkspaceScope: async (_scope: unknown, body: () => Promise<unknown>) => body(),
 }))
+/** Workspace keys whose pool is held right now. */
+const held = new Set<string>()
+vi.mock('../pool-cache', () => ({
+  holdWorkspacePool: async (key: string, body: () => Promise<unknown>) => {
+    held.add(key)
+    try {
+      return await body()
+    } finally {
+      held.delete(key)
+    }
+  },
+}))
 
 function ws(workspaceKey: string, lastActiveAt: Date | null) {
   return { workspaceKey, revision: 1, lastActiveAt }
@@ -87,5 +99,33 @@ it('explicit maintenance scripts include dormant workspaces without changing swe
     failed: 0,
     skipped: 0,
     dormant: 1,
+  })
+})
+
+describe('pool holds', () => {
+  it("holds each workspace's pool for as long as its body runs", async () => {
+    const { runFleetPass } = await import('../fleet')
+    listActiveWorkspaces.mockResolvedValue({
+      workspaces: [ws('inst_a', new Date()), ws('inst_b', new Date())],
+      refused: [],
+    })
+    const seen: string[][] = []
+    await runFleetPass('sweep', async (workspace) => {
+      await Promise.resolve()
+      seen.push([workspace?.workspaceKey ?? '', ...held])
+    })
+    expect(seen).toEqual([
+      ['inst_a', 'inst_a'],
+      ['inst_b', 'inst_b'],
+    ])
+    expect(held.size).toBe(0)
+  })
+
+  it('holds the pool of a named workspace while the job runs', async () => {
+    const { withWorkspaceScopeById } = await import('../fleet')
+    acquireScopeForWorkspaceId.mockResolvedValue({ kind: 'ok', scope: {} })
+    const during = await withWorkspaceScopeById('inst_job', 'queue', async () => [...held])
+    expect(during).toEqual(['inst_job'])
+    expect(held.size).toBe(0)
   })
 })

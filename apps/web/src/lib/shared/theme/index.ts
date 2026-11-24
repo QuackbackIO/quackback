@@ -100,54 +100,50 @@ export function resolveDocumentTheme(
 // ============================================================================
 // Theme Types & Utilities
 // ============================================================================
+//
+// Only what a page needs to show its theme. Every page's script holds this
+// barrel (the document theme above), and a module re-exported here ships with
+// it whole. What only the editors use is imported from its own module:
+// './colour-setters', './readable-css', './css-parser', './brand-import',
+// './font-names', './font-loader', './heading-font-loader'.
 
 export type {
   ThemeVariables,
   ThemeConfig,
-  ThemePreset,
   CoreThemeVariable,
   ThemeMode,
+  ButtonShape,
+  CardStyle,
+  HeadingScope,
 } from './types'
-export { CORE_THEME_VARIABLES } from './types'
+export { CORE_THEME_VARIABLES, CARD_STYLES } from './types'
+export type { CustomFont, CustomFontFile } from './font-uploads'
 
 export type { MinimalThemeVariables, MinimalThemeConfig } from './expand'
-export {
-  expandTheme,
-  extractMinimal,
-  unbrandedTheme,
-  DEFAULT_FONT_SANS,
-  DEFAULT_DARK_BASE,
-  DEFAULT_LIGHT_BASE,
-  parseOklch,
-  formatOklch,
-  adjustHue,
-  computeContrastForeground,
-  generateChartColors,
-} from './expand'
-
-// The presets are not re-exported here: building them runs at import time, so
-// a barrel re-export would put every palette in the entry chunk. The branding
-// screens import them from './presets' directly.
-
-export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
+// The theme engine (expand.ts, generator.ts) is never re-exported here: this
+// barrel ships with every page, and those modules would ship whole with it.
+// Import them from their own modules.
+export { DEFAULT_FONT_SANS, normalizeFontSans } from './base'
 
 export {
-  generateThemeCSS,
-  generateWorkspaceThemeCSS,
-  generateReadableCSS,
-  isGeneratedThemeCss,
-  advancedCssRemainder,
-  parseCssToMinimal,
-  replaceCssVar,
-  parseThemeConfig,
-  serializeThemeConfig,
-  normalizeFontSans,
-} from './generator'
-
-export type { ParsedCssVariables } from './css-parser'
-export { extractCssVariables } from './css-parser'
+  hexToOklch,
+  oklchToHex,
+  cssColorToHex,
+  tryCssColorToHex,
+  isValidHex,
+  isValidOklch,
+} from './colors'
 
 export type { BrandingFontId } from './fonts'
-export { BRANDING_FONTS, fontIdForValue, resolveBrandingFontId, readFontSans } from './fonts'
+export {
+  BRANDING_FONTS,
+  fontIdForValue,
+  resolveBrandingFontId,
+  resolveHeadingFontId,
+  readFontSans,
+  readConfigFontSans,
+  readConfigFontHeading,
+} from './fonts'
 
-export { loadBrandingFont } from './font-loader'
+// The font loaders are not re-exported here: only the branded surfaces load a
+// font (through useBrandingFont and useHeadingFont), and the admin does not.

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { XMarkIcon } from '@heroicons/react/24/solid'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BillingSettings } from '@/components/admin/settings/billing/billing-settings'
@@ -16,10 +15,13 @@ import { adminPageHead } from '@/lib/client/admin-head'
 const BILLING_ERROR_COPY: Record<string, string> = {
   seats_below_usage: 'Pick at least as many seats as people you already have.',
   seat_cap_exceeded: 'Remove extra members or choose Business.',
-  over_free_limits: 'Remove anything that is over the Free plan before switching.',
-  over_plan_limits: 'Remove anything that is over the new plan before switching.',
+  over_free_limits: 'Fix anything over the Free plan before you downgrade.',
+  over_plan_limits: 'Fix anything over the new plan before you downgrade.',
   already_on_plan: 'You are already on this plan.',
   already_on_addon: 'Branding removal is already on this workspace.',
+  subscription_pending: 'Your subscription is being set up. Refresh in a minute.',
+  already_subscribed: 'This workspace already has a subscription.',
+  workspace_changed: 'Something changed while starting the upgrade. Please try again.',
   not_on_addon: 'Branding removal is not on this workspace.',
   unavailable: 'That billing action is not available right now.',
   invalid: 'That billing request was not valid. Try again from this page.',
@@ -47,7 +49,7 @@ export const Route = createFileRoute('/admin/settings/billing')({
   }),
   loaderDeps: ({ search }) => ({ checkout: search.checkout }),
   loader: async ({ context, deps }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.BILLING_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/billing')
     if (deps.checkout === 'success') {
       await context.queryClient.invalidateQueries({ queryKey: billingQueries.all })
     }
@@ -56,7 +58,6 @@ export const Route = createFileRoute('/admin/settings/billing')({
       context.queryClient.ensureQueryData(billingQueries.catalogue()).catch(() => null),
       context.queryClient.ensureQueryData(billingQueries.invoices()).catch(() => null),
       context.queryClient.ensureQueryData(billingQueries.usage()).catch(() => []),
-      context.queryClient.ensureQueryData(billingQueries.pendingDowngrade()).catch(() => null),
     ])
     return {}
   },

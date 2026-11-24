@@ -55,6 +55,16 @@ export const inboxKeys = {
 // Fetch Functions
 // ============================================================================
 
+/**
+ * The owner filter as the server reads it: the "Unassigned" option is the
+ * literal 'unassigned' in the URL and in saved views, and null (no owner) on
+ * the wire, the way the portal's owner filter already maps it.
+ */
+function ownerIdFor(owner: string | undefined): PrincipalId | null | undefined {
+  if (!owner) return undefined
+  return owner === 'unassigned' ? null : (owner as PrincipalId)
+}
+
 /** Shared list/count payload. Sort, cursor, and limit are list-only. */
 function toInboxListInput(filters: InboxFilters) {
   return {
@@ -62,7 +72,7 @@ function toInboxListInput(filters: InboxFilters) {
     statusSlugs: filters.status,
     tagIds: filters.tags as PostTagId[] | undefined,
     segmentIds: filters.segmentIds as SegmentId[] | undefined,
-    ownerId: (filters.owner || undefined) as PrincipalId | null | undefined,
+    ownerId: ownerIdFor(filters.owner),
     search: filters.search,
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useLayoutEffect, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import type { LaunchStatus } from '@/lib/shared/launch-checklist'
@@ -16,17 +16,6 @@ const hoisted = vi.hoisted(() => ({
   start: vi.fn(),
 }))
 
-// Automatic branding has its own suite; here it has nothing to show.
-vi.mock('@/components/admin/branding/use-automatic-website-branding', () => ({
-  useAutomaticWebsiteBranding: () => ({
-    status: null,
-    pending: false,
-    error: null,
-    undo: vi.fn(),
-    accept: vi.fn(),
-    dismiss: vi.fn(),
-  }),
-}))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useWorkspaceSettings: () => ({ name: 'Acme' }),
   useBaseUrl: () => 'https://acme.example.com',
@@ -75,7 +64,7 @@ function status(overrides: Partial<LaunchStatus> = {}): LaunchStatus {
     hasBoards: true,
     hasPublicBoard: true,
     memberCount: 1,
-    hasBranding: false,
+    hasBranding: true,
     goals: ['customer_support'],
     hasFirstWin: false,
     launchWindow: OPEN,
@@ -144,14 +133,14 @@ describe('Home first-run cards', () => {
     hoisted.status = status()
     const { client } = mount()
     expect(await screen.findByText('New here? Take the 60-second tour')).toBeVisible()
-    expect(screen.getByText('Launch plan · Step 2 of 3')).toBeVisible()
+    expect(screen.getByText('Launch plan · Step 3 of 4')).toBeVisible()
     expect(screen.queryByText('Try it yourself')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
     await waitFor(() => expect(hoisted.dismiss).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull())
     expect(hoisted.start).not.toHaveBeenCalled()
-    expect(screen.getByText('Launch plan · Step 2 of 3')).toBeVisible()
+    expect(screen.getByText('Launch plan · Step 3 of 4')).toBeVisible()
 
     await client.invalidateQueries({ queryKey: ['onboarding', 'progress'] })
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
@@ -172,7 +161,7 @@ describe('Home first-run cards', () => {
     // The plan area no longer carries the offer: Home places it last.
     const { client } = mount({ tour: false })
     await waitFor(() => expect(client.getQueryData(['admin', 'onboarding'])).toBeDefined())
-    await screen.findByText('Launch plan · Step 2 of 3')
+    await screen.findByText('Launch plan · Step 3 of 4')
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
 
@@ -216,7 +205,7 @@ describe('Home first-run cards', () => {
     // The plan is done: Home no longer leads with a launch step, and says so once.
     expect(screen.queryByText(/Launch plan ·/)).toBeNull()
     const done = screen.getByRole('region', { name: 'Launch plan done.' })
-    expect(within(done).getByRole('link', { name: '4 optional steps' })).toHaveAttribute(
+    expect(within(done).getByRole('link', { name: '3 optional steps' })).toHaveAttribute(
       'href',
       '/admin/getting-started'
     )
@@ -277,7 +266,7 @@ describe('Home first-run cards', () => {
     tourView.narrow = true
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
-    await screen.findByText('Launch plan · Step 2 of 3')
+    await screen.findByText('Launch plan · Step 3 of 4')
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
 })
@@ -314,6 +303,33 @@ describe('Home changing in place', () => {
     expect(politeText()).toBe('Share your board link done. Next: A customer creates a post')
   })
 
+  it('moves focus to the next step when focus landed in the plan before Home was listening', async () => {
+    hoisted.status = feedback()
+    // Layout effects run before passive ones, so this focus lands in the plan
+    // before Home's focus tracking starts, as an early focus does in a busy browser.
+    function FocusCopyFirst() {
+      useLayoutEffect(() => {
+        screen.getByRole('button', { name: 'Copy board link' }).focus()
+      }, [])
+      return null
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['admin', 'onboarding'], hoisted.status)
+    render(
+      <IntlProvider locale="en" messages={en}>
+        <QueryClientProvider client={client}>
+          <HomeGettingStarted />
+          <FocusCopyFirst />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+    const copy = screen.getByRole('button', { name: 'Copy board link' })
+    expect(document.activeElement).toBe(copy)
+    fireEvent.click(copy)
+    const next = await screen.findByRole('heading', { name: 'A customer creates a post' })
+    await waitFor(() => expect(document.activeElement).toBe(next))
+  })
+
   it('moves focus to the first win when it arrives while focus is in the plan', async () => {
     hoisted.status = feedback({ publicBoardLinkCopiedAt: new Date().toISOString() })
     hoisted.card.mockResolvedValue({
@@ -346,7 +362,7 @@ describe('Home changing in place', () => {
     fireEvent.click(dismiss)
     const done = await screen.findByRole('heading', { name: 'Launch plan done.' })
     await waitFor(() => expect(document.activeElement).toBe(done))
-    expect(politeText()).toBe('Launch plan done. 4 optional steps')
+    expect(politeText()).toBe('Launch plan done. 3 optional steps')
   })
 
   it('refreshes Home’s counts when the first win arrives, so they need no reload', async () => {

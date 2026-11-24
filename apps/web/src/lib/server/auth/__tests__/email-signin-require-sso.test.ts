@@ -45,7 +45,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getWorkspaceSettings: vi.fn(async () => ({ authConfig: { openSignup: true } })),
+  getWorkspaceSettings: vi.fn(async () => ({
+    authConfig: { openSignup: true, oauth: { magicLink: true } },
+  })),
 }))
 
 // Nobody has claimed setup by creating an account; that claim is covered
@@ -61,6 +63,8 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 
 vi.mock('../registered-providers', () => ({
   getRegisteredOidcProviderIds: (...a: unknown[]) => hoisted.getRegisteredOidcProviderIds(...a),
+  // Single sign-on live (or not set up): email links are exactly as stored.
+  getSsoSignInState: async () => ({ ssoLive: true, providersConfigured: false }),
 }))
 
 vi.mock('@quackback/email', () => ({

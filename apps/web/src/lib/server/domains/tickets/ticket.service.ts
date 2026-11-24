@@ -30,16 +30,20 @@ import {
   ticketStatuses,
   conversationMessages,
   ticketConversations,
-  conversations,
   principal,
   teams,
   type Ticket,
   type ConversationPriority,
 } from '@/lib/server/db'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import type { SQL } from 'drizzle-orm'
 import type { PrincipalId, TicketId, TicketStatusId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
-import { rowScopePrincipalId, type Actor } from '@/lib/server/policy/types'
+import {
+  rowScopePrincipalId,
+  type Actor,
+  type SystemCascadeOptions,
+} from '@/lib/server/policy/types'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
@@ -56,15 +60,19 @@ import {
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { ticketDueConditionSql } from '@/lib/server/db/ticket-due'
+import { ticketSlaDueAt } from '@/lib/shared/inbox/items'
 import { getStageLabels } from '../settings/settings.tickets'
 import { emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
 import { recordTicketActivity, statusMovedSince } from './ticket-activity.service'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { ticketFtsMatch } from './ticket-search.service'
-import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
+import { statusTransition, resolveStage } from './ticket.lifecycle'
 import { resolvePairConversationId } from './pair-thread.service'
 import { createTicketCore, publishTicketUpdated } from './ticket-intake.service'
+import { resolveTicketTypeForCreate } from './ticket-type.service'
+import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
+import { publishInboxRemoval } from '@/lib/server/realtime/inbox-publish'
 import type {
   CreateTicketInput,
   AssignTicketInput,
@@ -106,7 +114,7 @@ export async function loadTicketOr404(id: TicketId): Promise<Ticket> {
 /**
  * The canonical single-ticket authorization chokepoint (unified inbox §2.5):
  * exists, non-deleted, AND passes `ticketFilter(actor)` — the same
- * existence+visibility fusion `assertConversationViewable` uses for
+ * existence+visibility fusion `assertConversationVisible` uses for
  * conversations, so a caller without `ticket.view`/`ticket.view_all` (or with
  * `ticket.view` on a ticket assigned to someone else / another team) gets
  * NotFound rather than a Forbidden that would leak the ticket's existence.
@@ -129,6 +137,25 @@ export async function getTicket(id: TicketId): Promise<TicketDTO> {
   return ticketRowToDTO(await loadTicketOr404(id))
 }
 
+/** Whether the actor's ticket filter admits the ticket. */
+export async function isTicketVisibleTo(id: TicketId, actor: Actor): Promise<boolean> {
+  const [row] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(and(eq(tickets.id, id), ticketFilter(actor)))
+    .limit(1)
+  return !!row
+}
+
+/**
+ * A ticket the actor may see, as its DTO, or NotFound. The read every
+ * agent-facing path uses; `getTicket` is for system callers that run with no
+ * actor.
+ */
+export async function getTicketForActor(id: TicketId, actor: Actor): Promise<TicketDTO> {
+  return ticketRowToDTO(await assertTicketVisible(id, actor))
+}
+
 const priorityRankExpr = priorityRankSql(tickets.priority)
 
 /**
@@ -140,7 +167,7 @@ const priorityRankExpr = priorityRankSql(tickets.priority)
  * conversation sort, so the keyset cursor only ever needs two columns.
  */
 export interface TicketSortDescriptor {
-  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'dueAt'
+  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'slaDueAt' | 'id' | 'dueAt'
   direction: 'asc' | 'desc'
 }
 
@@ -152,6 +179,11 @@ export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSort
       return { primary: 'createdAt', direction: 'desc' }
     case 'priority':
       return { primary: 'priorityRank', direction: 'desc' }
+    case 'sla':
+      return { primary: 'slaDueAt', direction: 'asc' }
+    case 'waiting':
+      // No waiting clock on a ticket: id order keeps the cursor stable.
+      return { primary: 'id', direction: 'asc' }
     case 'due':
       // Soonest due first, tickets without a due date last (NULLS LAST).
       return { primary: 'dueAt', direction: 'asc' }
@@ -161,6 +193,14 @@ export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSort
   }
 }
 
+/**
+ * The open time-to-resolve deadline for the 'sla' sort — the SQL twin of
+ * `ticketSlaDueAt` (keep them in lockstep). A ticket with no SLA, or one that
+ * already resolved (the clock settles for good), yields NULL and sorts last.
+ */
+const ticketSlaDueExpr = sql`CASE WHEN ${tickets.slaApplied} ->> 'resolvedAt' IS NULL
+  THEN (${tickets.slaApplied} ->> 'timeToResolveDueAt')::timestamptz END`
+
 /** ORDER BY clause list for a sort. `id` breaks ties so keyset never dupes/skips. */
 function orderByForTicketSort(sort: TicketSort): SQL[] {
   const d = ticketSortDescriptorFor(sort)
@@ -168,6 +208,11 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
   switch (d.primary) {
     case 'priorityRank':
       return [desc(priorityRankExpr), idTie]
+    case 'slaDueAt':
+      // Soonest breach first; rows with no open SLA clock sit at the end.
+      return [sql`${ticketSlaDueExpr} ASC NULLS LAST`, idTie]
+    case 'id':
+      return [idTie]
     case 'dueAt':
       // ASC NULLS LAST is the btree default — tickets_due_at_id_idx serves it.
       return [sql`${tickets.dueAt} ASC NULLS LAST`, idTie]
@@ -201,6 +246,24 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
       }
       return buildKeysetCondition([rankCol, idTie])
     }
+    case 'slaDueAt': {
+      // ticketSlaDueExpr ASC NULLS LAST, id ASC. A cursor in the NULL tail is
+      // followed only by later NULL rows (by id); otherwise later deadlines and
+      // the whole NULL tail. The due is bound as an ISO string and cast.
+      const due = ticketSlaDueAt(t.slaApplied as Parameters<typeof ticketSlaDueAt>[0])
+      const slaCol: KeysetColumn = due
+        ? {
+            equal: sql`${ticketSlaDueExpr} = ${due.toISOString()}::timestamptz`,
+            strict: or(
+              sql`${ticketSlaDueExpr} > ${due.toISOString()}::timestamptz`,
+              sql`${ticketSlaDueExpr} IS NULL`
+            )!,
+          }
+        : { equal: sql`${ticketSlaDueExpr} IS NULL`, strict: undefined }
+      return buildKeysetCondition([slaCol, idTie])
+    }
+    case 'id':
+      return buildKeysetCondition([idTie])
     case 'dueAt': {
       // due_at ASC NULLS LAST, id ASC — the same NULLS-LAST boundary shape as
       // conversation.query.ts's waiting sort: a cursor in the NULL tail only
@@ -369,11 +432,17 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
 export async function createTicket(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_CREATE, 'create a ticket')
 
+  // A source conversation the actor cannot see is NotFound, like a missing
+  // one, before anything about it is read and before any ticket exists.
+  const sourceAssignee = input.sourceConversationId
+    ? (await assertConversationVisible(input.sourceConversationId, actor)).assignedAgentPrincipalId
+    : null
+
   // Assignee resolution: explicit > source conversation's assignee > creating
-  // agent. The two defaults are best-effort — a missing conversation or a
-  // creator whose principal doesn't resolve to a team member simply leaves
-  // the ticket unassigned (a default must never fail the create); an EXPLICIT
-  // assignee, by contrast, is validated hard, mirroring assignTicket.
+  // agent. The creator default is best-effort — a creator whose principal
+  // doesn't resolve to a team member simply leaves the ticket unassigned (a
+  // default must never fail the create); an EXPLICIT assignee, by contrast, is
+  // validated hard, mirroring assignTicket.
   let assigneePrincipalId = input.assigneePrincipalId ?? null
   if (assigneePrincipalId) {
     const [assignee] = await db
@@ -384,17 +453,13 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
     if (!assignee || !isTeamMember(assignee.role)) {
       throw new ValidationError('INVALID_ASSIGNEE', 'Can only assign to a team member')
     }
-  } else if (input.sourceConversationId) {
-    const [conversation] = await db
-      .select({ assigned: conversations.assignedAgentPrincipalId })
-      .from(conversations)
-      .where(eq(conversations.id, input.sourceConversationId))
-      .limit(1)
-    assigneePrincipalId = conversation?.assigned ?? null
+  } else {
+    assigneePrincipalId = sourceAssignee
   }
-  // A personal API key assigns to its creator, so the ticket stays inside the
-  // scope the key reads with; the key itself stays the author for attribution.
-  const defaultAssignee = rowScopePrincipalId(actor)
+  // The person filing it is the default assignee: a personal API key's
+  // creator, so the ticket stays inside the scope the key reads with (the key
+  // itself stays the author for attribution); a workspace key is nobody.
+  const defaultAssignee = await filingPerson(actor)
   if (!assigneePrincipalId && defaultAssignee) {
     const [creator] = await db
       .select({ role: principal.role })
@@ -416,35 +481,70 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
     companyId = requester?.companyId ?? null
   }
 
+  // The create-from-a-conversation flow stays standalone here — it links its
+  // SOURCE conversation right after this call, and the pair unique would
+  // reject that second link if a backing conversation were minted first. An
+  // explicit withBackingConversation (API v1 / MCP) always wins. The category
+  // is the RESOLVED one: a caller that picks a registry type sends no bare
+  // category (the admin New ticket dialog), and the type's category decides.
+  let withBackingConversation = input.withBackingConversation
+  if (withBackingConversation === undefined) {
+    withBackingConversation =
+      !!input.requesterPrincipalId &&
+      !input.sourceConversationId &&
+      (
+        await resolveTicketTypeForCreate({
+          ticketTypeId: input.ticketTypeId,
+          category: input.type,
+        })
+      ).category === 'customer'
+  }
+
   return createTicketCore(
     {
       ...input,
       assigneePrincipalId,
       companyId,
-      // The create-from-a-conversation flow stays standalone here — it links
-      // its SOURCE conversation right after this call, and the pair unique
-      // would reject that second link if a backing conversation were minted
-      // first. An explicit withBackingConversation (API v1 / MCP) always wins.
-      withBackingConversation:
-        input.withBackingConversation ??
-        (input.type === 'customer' && !!input.requesterPrincipalId && !input.sourceConversationId),
+      withBackingConversation,
     },
-    actor
+    actor,
+    { creatorWatcher: defaultAssignee }
   )
 }
 
 /**
+ * The person filing a ticket as an agent, who is its default assignee and
+ * watches it: the teammate, or the teammate behind a personal API key. A
+ * workspace API key belongs to nobody, so it is neither: a watcher exists to
+ * be told about the ticket, and a key has nobody to tell. Any other service
+ * actor (the AI agent) files as itself, as before.
+ */
+async function filingPerson(actor: Actor): Promise<PrincipalId | null> {
+  if (actor.scopePrincipalId) return actor.scopePrincipalId
+  if (!actor.principalId || actor.principalType !== 'service') return actor.principalId ?? null
+  const [row] = await db
+    .select({ serviceMetadata: principal.serviceMetadata })
+    .from(principal)
+    .where(eq(principal.id, actor.principalId))
+    .limit(1)
+  return row?.serviceMetadata?.kind === 'api_key' ? null : actor.principalId
+}
+
+/**
  * Set a ticket's status. Entering a closed-category status stamps `resolvedAt`;
- * leaving one clears it and increments `reopenedCount`. An agent action also
- * stamps `firstResponseAt` the first time.
+ * leaving one clears it and increments `reopenedCount`. A ticket the actor
+ * cannot see is NotFound.
  */
 export async function setTicketStatus(
   id: TicketId,
   statusId: TicketStatusId,
-  actor: Actor
+  actor: Actor,
+  options: SystemCascadeOptions = {}
 ): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'change this ticket status')
-  const existing = await loadTicketOr404(id)
+  const existing = options.systemCascade
+    ? await loadTicketOr404(id)
+    : await assertTicketVisible(id, actor)
 
   // Independent reads, so run them together. `current` intentionally omits the
   // deletedAt guard: a ticket may still sit on a since-deleted status and we need
@@ -479,8 +579,6 @@ export async function setTicketStatus(
   if (transition.reopenedIncrement) {
     patch.reopenedCount = sql`${tickets.reopenedCount} + 1` as unknown as number
   }
-  const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
-  if (stamp) patch.firstResponseAt = stamp
 
   // The status move and its timeline record are one write. EVERY real status
   // move is recorded, including internal churn the customer-facing stage
@@ -576,7 +674,9 @@ export async function setTicketStatus(
 /**
  * Fan a tracker's new status onto the customer tickets it tracks (§4.9). Each
  * linked ticket takes the tracker's status via setTicketStatus, so it runs its
- * own transition + requester notification. A linked ticket already in a closed
+ * own transition + requester notification. The tracker was checked once by
+ * the caller; the linked tickets are a system effect, so they skip the
+ * per-ticket visibility check and keep the actor as author. A linked ticket already in a closed
  * category is skipped — the cascade never regresses a resolved ticket. Per-link
  * best-effort: the tracker's own update already committed, so one failing link
  * is logged, not fatal. The dynamic import breaks the ticket.service <->
@@ -604,7 +704,7 @@ async function cascadeTrackerStatus(
         .where(eq(ticketStatuses.id, linked.statusId))
         .limit(1)
       if (current?.category === 'closed') continue // never regress a resolved ticket
-      await setTicketStatus(linkedId, statusId, actor)
+      await setTicketStatus(linkedId, statusId, actor, { systemCascade: true })
     } catch (err) {
       log.warn({ err, tracker_id: trackerId, linked_id: linkedId }, 'tracker cascade: link failed')
     }
@@ -810,7 +910,7 @@ export async function assignTicket(
   actor: Actor
 ): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'assign this ticket')
-  const existing = await loadTicketOr404(id)
+  const existing = await assertTicketVisible(id, actor)
 
   const patch: Partial<Ticket> = { updatedAt: new Date() }
 
@@ -834,15 +934,12 @@ export async function assignTicket(
     patch.assigneeTeamId = input.assigneeTeamId
   }
 
-  const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role))
-  if (stamp) patch.firstResponseAt = stamp
-
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
 
   // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the
   // webhook below — an inbox row re-render on a no-op re-assign is harmless,
   // while a missed signal on an actual reorder-relevant change is not.
-  const dto = await publishTicketUpdated(updated)
+  const dto = await publishTicketUpdated(updated, ticketScopeOf(existing))
 
   // Only signal when an assignee actually moved (a no-op re-assign must not fire).
   if (
@@ -938,11 +1035,9 @@ export async function setTicketPriority(
   actor: Actor
 ): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'change this ticket priority')
-  const existing = await loadTicketOr404(id)
+  const existing = await assertTicketVisible(id, actor)
   const now = new Date()
   const patch: Partial<Ticket> = { priority, updatedAt: now }
-  const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
-  if (stamp) patch.firstResponseAt = stamp
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
   // Durable timeline record (fire-and-forget); a no-op re-set records nothing.
   if (existing.priority !== priority) {
@@ -969,8 +1064,10 @@ export async function setTicketPriority(
  * their individual server fns call — never a bypass of their `assertCan`
  * checks, realtime publish, or webhook — so a bulk apply is exactly N
  * individual applies. Per-item isolation: one ticket's failure (missing,
- * forbidden, an invalid target) lands in `failed` and never aborts the rest
- * of the batch.
+ * hidden from the actor, forbidden, an invalid target) lands in `failed` and
+ * never aborts the rest of the batch. Each op checks its permission and then
+ * the ticket's visibility before it reads anything else, so a hidden ticket
+ * fails exactly as a missing one does.
  */
 export async function bulkUpdateTickets(
   ticketIds: TicketId[],
@@ -1014,7 +1111,7 @@ export async function bulkUpdateTickets(
  */
 export async function softDeleteTicket(id: TicketId, actor: Actor): Promise<void> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'delete this ticket')
-  await loadTicketOr404(id)
+  await assertTicketVisible(id, actor)
   const [updated] = await db
     .update(tickets)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
@@ -1028,9 +1125,10 @@ export async function softDeleteTicket(id: TicketId, actor: Actor): Promise<void
       principalId: actor.principalId,
       type: 'ticket.deleted',
     })
-    // Realtime signal (unified inbox §3.2, M3): the list re-query already
-    // excludes a deleted ticket via ticketFilter, so the refetch this triggers
-    // is what actually makes the row disappear for every other viewer.
-    await publishTicketUpdated(updated)
+    // Every inbox that held the ticket drops it now. The owner and team are
+    // the ones the delete left untouched, so they are what the row held before
+    // it. No `ticket_updated` goes to the inbox: patched in after the removal,
+    // it would put the deleted ticket back in an open pane.
+    publishInboxRemoval({ kind: 'ticket', id }, ticketScopeOf(updated))
   }
 }

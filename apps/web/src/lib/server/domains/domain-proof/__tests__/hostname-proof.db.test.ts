@@ -8,7 +8,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TeamId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { emailSendingDomains, settings, ssoVerifiedDomain, teams } from '@/lib/server/db'
+import { domains, emailSendingDomains, settings, ssoVerifiedDomain, teams } from '@/lib/server/db'
 import type { SendingDomainDnsRecord } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -16,7 +16,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
-import { getHostnameProof, hostnameProofFrom } from '../hostname-proof'
+import { getHostnameProof, hostnameProofFrom, rankedZoneProofs } from '../hostname-proof'
 import type { ProvenZone } from '../proven-zones'
 
 const fixture = await createDbTestFixture({
@@ -173,6 +173,30 @@ describe.skipIf(!fixture.available)('hostname proof (real DB, rolled back)', () 
     }
   })
 
+  it('never sends a verified domain added by name, until the operator accepts it', async () => {
+    await testDb.insert(domains).values({
+      name: 'acme.com',
+      ownershipToken: 'tok-acme',
+      status: 'verified',
+      verifiedAt: new Date(),
+    })
+    expect(await getHostnameProof('feedback.acme.com')).toBeNull()
+
+    // A proof the operator does accept still goes, even when the domain's own
+    // is more specific; the domain's record is never sent under its name.
+    await seedSsoDomain('acme.org')
+    await testDb.insert(domains).values({
+      name: 'eu.acme.org',
+      ownershipToken: 'tok-eu',
+      status: 'verified',
+      verifiedAt: new Date(),
+    })
+    expect(await getHostnameProof('feedback.eu.acme.org')).toMatchObject({
+      source: 'sso',
+      zone: 'acme.org',
+    })
+  })
+
   it("never counts another workspace's rows", async () => {
     await seedSendingDomain('acme.com')
     expect(await getHostnameProof('feedback.acme.com')).not.toBeNull()
@@ -200,5 +224,43 @@ describe('hostnameProofFrom', () => {
 
   it('refuses an unusable hostname', () => {
     expect(hostnameProofFrom('  ', zones)).toBeNull()
+  })
+
+  describe('with a domain added by name', () => {
+    const withDomain: ProvenZone[] = [
+      { zone: 'acme.com', source: 'domain', exact: false, record: record('_quackback') },
+      ...zones,
+    ]
+
+    it('ranks it after email sending and single sign-on for the same zone', () => {
+      expect(rankedZoneProofs('feedback.acme.com', withDomain).map((p) => p.source)).toEqual([
+        'email-sending',
+        'sso',
+        'domain',
+      ])
+    })
+
+    it('ranks a more specific zone first, whatever proves it', () => {
+      const nested: ProvenZone[] = [
+        ...zones,
+        { zone: 'eu.acme.com', source: 'domain', exact: false, record: record('eu') },
+      ]
+      expect(rankedZoneProofs('feedback.eu.acme.com', nested)[0]).toMatchObject({
+        source: 'domain',
+        zone: 'eu.acme.com',
+      })
+    })
+
+    it('never sends it, and never under another source', () => {
+      const only: ProvenZone[] = [withDomain[0]]
+      expect(hostnameProofFrom('feedback.acme.com', only)).toBeNull()
+      const nested: ProvenZone[] = [
+        ...zones,
+        { zone: 'eu.acme.com', source: 'domain', exact: false, record: record('eu') },
+      ]
+      const sent = hostnameProofFrom('feedback.eu.acme.com', nested)
+      expect(sent).toEqual({ source: 'email-sending', zone: 'acme.com', record: record('mail') })
+      expect(sent?.record).not.toEqual(record('eu'))
+    })
   })
 })

@@ -9,6 +9,7 @@ import { authClient } from '@/lib/client/auth-client'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { loadPortalIntl } from '@/lib/server/functions/locale'
+import { errorText } from '@/lib/client/error-text'
 
 export const Route = createFileRoute('/auth/reset-password')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -95,12 +96,13 @@ function ResetPasswordContent({ token, urlError }: { token: string; urlError: st
       setSuccess(true)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.auth.resetPassword.failed',
-              defaultMessage: 'Failed to reset password',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'portal.auth.resetPassword.failed',
+            defaultMessage: 'Failed to reset password',
+          })
+        )
       )
     } finally {
       setLoading(false)

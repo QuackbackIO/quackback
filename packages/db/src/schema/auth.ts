@@ -122,6 +122,12 @@ export interface StoredCloudCustomDomain {
   updatedAt: string
 }
 
+/**
+ * The stored plan limits state. Shape is owned and validated by the app's
+ * plan-limits domain; the column only promises a JSON object.
+ */
+export type StoredPlanLimitsState = Record<string, unknown>
+
 /** Customer-safe cloud identity; provider ids and validation secrets never cross. */
 export interface StoredCloudIdentityProjection {
   version: number
@@ -270,6 +276,9 @@ export const session = pgTable(
     userAgent: text('user_agent'),
     // Session audience: dashboard | widget | portal. Only dashboard may satisfy team/permission gates.
     scope: text('scope').notNull().default('dashboard'),
+    // Issued by a password sign-in while two-factor is required and the person
+    // has not enrolled: it may only finish enrolment or sign out.
+    twoFactorPending: boolean('two_factor_pending').notNull().default(false),
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
@@ -557,6 +566,13 @@ export const settings = pgTable('settings', {
   cloudIdentity: jsonb('cloud_identity').$type<StoredCloudIdentityProjection>(),
   /** Local write token, deliberately separate from cloudRevision/billing. */
   cloudIdentityRevision: integer('cloud_identity_revision').notNull().default(0),
+  /**
+   * Plan limits state (see {@link StoredPlanLimitsState}): when the workspace
+   * was first seen over its plan's limits, its grace end, the plan before, and
+   * the admin's choices. NULL means it fits. Written only through the
+   * settings service.
+   */
+  planLimitsState: jsonb('plan_limits_state').$type<StoredPlanLimitsState>(),
   /**
    * JSON array of dot-paths whose values are managed by the
    * declarative config file (`/etc/quackback/config.yaml`). When a

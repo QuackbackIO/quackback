@@ -1,4 +1,4 @@
-import { db, desc, eq, or, emailLog } from '@/lib/server/db'
+import { db, desc, eq, inArray, or, emailLog } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'email-log-query' })
@@ -37,17 +37,28 @@ export async function listRecentEmailLog(limit = 50): Promise<EmailLogListItem[]
   }
 }
 
+/**
+ * A Message-ID in the one form email_log stores and matches it in: trimmed,
+ * without angle brackets. SMTP reports `<id@host>` while provider events
+ * usually carry the bare id, so both sides go through this.
+ */
+export function bareMessageId(id: string): string {
+  return id.trim().replace(/^<|>$/g, '').trim()
+}
+
 export async function recordEmailDeliveryEvent(input: {
   messageId: string
   event: 'bounce' | 'complaint'
 }): Promise<boolean> {
-  const id = input.messageId.replace(/^<|>$/g, '').trim()
+  const id = bareMessageId(input.messageId)
   if (!id) return false
+  // Rows logged before ids were stored bare may still hold the bracketed form.
+  const forms = [id, `<${id}>`]
   try {
     const [row] = await db
       .select({ id: emailLog.id })
       .from(emailLog)
-      .where(or(eq(emailLog.messageId, id), eq(emailLog.providerMessageId, id)))
+      .where(or(inArray(emailLog.messageId, forms), inArray(emailLog.providerMessageId, forms)))
       .limit(1)
     if (!row) return false
     await db

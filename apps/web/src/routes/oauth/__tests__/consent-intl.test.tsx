@@ -16,7 +16,14 @@ import { Route as ConsentRoute } from '@/routes/oauth/consent'
 
 const client = { client_name: 'MCP test client', client_uri: 'https://example.com' }
 
-async function renderConsent(locale?: SupportedLocale) {
+const DEFAULT_ENTRY =
+  '/oauth/consent?client_id=test-client&scope=openid%20read:feedback%20read:article%20read:chat'
+
+async function renderConsent(
+  locale?: SupportedLocale,
+  email?: string,
+  entry: string = DEFAULT_ENTRY
+) {
   const rootRoute = createRootRouteWithContext<RouterContext>()({
     component: () => <Outlet />,
   })
@@ -29,11 +36,13 @@ async function renderConsent(locale?: SupportedLocale) {
   })
   const router = createRouter({
     routeTree: rootRoute.addChildren([consentRoute]),
-    context: { queryClient: new QueryClient(), acceptLanguageLocale: locale },
+    context: {
+      queryClient: new QueryClient(),
+      acceptLanguageLocale: locale,
+      ...(email && { session: { user: { email } } as RouterContext['session'] }),
+    },
     history: createMemoryHistory({
-      initialEntries: [
-        '/oauth/consent?client_id=test-client&scope=openid%20read:feedback%20read:article%20read:chat',
-      ],
+      initialEntries: [entry],
     }),
     defaultErrorComponent: ({ error }) => (
       <div role="alert">{error instanceof Error ? error.message : String(error)}</div>
@@ -84,6 +93,20 @@ function openDetail() {
 }
 
 describe('standalone MCP consent intl', () => {
+  it('names the person who is signed in', async () => {
+    mockRequests()
+    await renderConsent(undefined, 'sam@example.com')
+    expect(screen.getByText(/Signed in as sam@example\.com\./)).toBeInTheDocument()
+  })
+
+  it("never shows an anonymous session's placeholder address as a person", async () => {
+    mockRequests()
+    await renderConsent(undefined, 'temp-abc123@anon.quackback.io')
+    expect(screen.getByText(/Revoke any time in account settings/)).toBeInTheDocument()
+    expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/anon\.quackback\.io/)).not.toBeInTheDocument()
+  })
+
   it('opens on full access with the per-area picker tucked away', async () => {
     mockRequests()
     await renderConsent()
@@ -181,5 +204,36 @@ describe('standalone MCP consent intl', () => {
       accept: false,
       scope: 'openid read:feedback read:article read:chat',
     })
+  })
+
+  it('posts the signed query it was handed, unchanged, on Authorize and Deny', async () => {
+    // As Better Auth signs it: repeated keys and numbers-looking values the
+    // router would otherwise rewrite.
+    const signed = new URLSearchParams([
+      ['client_id', 'test-client'],
+      ['scope', 'openid read:feedback read:article read:chat'],
+      ['state', '12345678901234567890'],
+      ['resource', 'http://localhost:3000/api/mcp'],
+      ['resource', 'http://localhost:3000/api/other'],
+      ['exp', '1999999999'],
+      ['ba_param', 'ba_param'],
+      ['ba_param', 'client_id'],
+      ['sig', 'signature'],
+    ]).toString()
+    const entry = `/oauth/consent?${new URLSearchParams({ oauth_query: signed })}`
+
+    for (const button of ['Authorize', 'Deny']) {
+      const request = mockRequests()
+      await renderConsent('en', undefined, entry)
+      fireEvent.click(screen.getByRole('button', { name: button }))
+      await waitFor(() => {
+        expect(request).toHaveBeenCalledWith('/api/auth/oauth2/consent', expect.any(Object))
+      })
+      const consent = request.mock.calls.find(([input]) => input === '/api/auth/oauth2/consent')
+      const body = JSON.parse((consent?.[1] as RequestInit).body as string)
+      expect(body.oauth_query).toBe(signed)
+      cleanup()
+      vi.unstubAllGlobals()
+    }
   })
 })

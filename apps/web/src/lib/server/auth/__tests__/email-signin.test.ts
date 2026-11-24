@@ -63,6 +63,12 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 }))
 vi.mock('../registered-providers', () => ({
   getRegisteredOidcProviderIds: vi.fn(async () => new Set()),
+  // Single sign-on live (or not set up): email links are exactly as stored.
+  getSsoSignInState: async () => ({ ssoLive: true, providersConfigured: false }),
+}))
+// Email sign-in on: the method gate has its own suite (email-signin-method).
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettings: vi.fn(async () => ({ authConfig: { oauth: { magicLink: true } } })),
 }))
 
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.quackback.io' } }))
@@ -104,6 +110,28 @@ describe('requestEmailSignin — failed-verify redirect', () => {
     await requestEmailSignin({ email: 'user@example.com', callbackURL: '/p/posts' })
     expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
       expect.objectContaining({ errorCallbackPath: '/auth/login' })
+    )
+  })
+})
+
+describe('requestEmailSignin: the host the link signs in on', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('signs in on the primary domain by default', async () => {
+    await requestEmailSignin({ email: 'jess@example.com', callbackURL: '/hc' })
+    expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ portalUrl: 'https://acme.quackback.io', callbackPath: '/hc' })
+    )
+  })
+
+  it('signs in on the section host the sign-in started on', async () => {
+    await requestEmailSignin({
+      email: 'jess@example.com',
+      callbackURL: '/hc',
+      linkOrigin: 'https://help.acme.com',
+    })
+    expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ portalUrl: 'https://help.acme.com', callbackPath: '/hc' })
     )
   })
 })

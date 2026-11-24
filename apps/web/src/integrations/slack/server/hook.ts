@@ -3,12 +3,15 @@
  * Sends messages to Slack channels when events occur.
  */
 
-import { WebClient } from '@slack/web-api'
+import type { WebClient } from '@slack/web-api'
+import { slackClient } from '@/integrations/slack/server/client'
 import { recordDeliveryOutcome } from '@/lib/server/integrations/sync/transport'
 import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
 import { buildSlackMessage } from '@/integrations/slack/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'slack' })
 
@@ -26,6 +29,8 @@ export interface SlackConfig {
   accessToken: string
   /** Portal base URL for constructing post links */
   rootUrl: string
+  links?: SectionOrigins
+  integrationId: string
 }
 
 // OAuth errors that indicate token is invalid/expired (don't retry these)
@@ -123,17 +128,24 @@ async function postMessage(
 export const slackHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as SlackTarget
-    const { accessToken, rootUrl } = config as SlackConfig
+    const { accessToken, rootUrl, links, integrationId } = config as SlackConfig
+
+    const { supportAlertHold } = await import('@/lib/server/integrations/support-alerts')
+    const held = await supportAlertHold(event, { integrationId, channelId })
+    if (held) {
+      log.debug({ event_type: event.type, reason: held }, 'support notice held back')
+      return { state: 'succeeded' }
+    }
 
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing hook event')
 
-    const message = buildSlackMessage(event, rootUrl)
+    const message = buildSlackMessage(event, hookLinks({ rootUrl, links }))
     if (!message) {
       log.debug({ event_type: event.type }, 'event produces no slack message, skipping')
       return { state: 'succeeded' }
     }
 
-    const client = new WebClient(accessToken, {
+    const client = slackClient(accessToken, {
       retryConfig: { retries: 0 },
       timeout: 20_000,
       rejectRateLimitedCalls: true,
@@ -162,7 +174,7 @@ export const slackHook: IntegrationHook = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as SlackConfig
     try {
-      const client = new WebClient(accessToken)
+      const client = slackClient(accessToken)
       const result = await client.auth.test()
       return { ok: result.ok === true, error: result.error }
     } catch (error) {

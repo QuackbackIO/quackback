@@ -1,6 +1,7 @@
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { DomainAccessPicker } from '@/components/domain-access-picker'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { Button } from '@/components/ui/button'
@@ -12,8 +13,8 @@ import {
   scopesFromDomainLevels,
   type DomainAccessLevels,
 } from '@/lib/shared/api-key-scopes'
+import { consentQueryFields, consentQueryFromSearch } from '@/lib/shared/oauth-consent-query'
 import {
-  CLIENT_REQUESTED_SCOPE_PARAM,
   clientRequestedFromConsentSearch,
   consentGrantScope,
   consentPreset,
@@ -22,25 +23,12 @@ import {
   type ConsentPreset,
 } from '@/lib/shared/mcp-consent-scopes'
 import { cn } from '@/lib/shared/utils'
-import { ChevronRight, ExternalLink, Globe, ShieldCheck } from 'lucide-react'
-
-const searchSchema = z.object({
-  client_id: z.string(),
-  scope: z.string().optional(),
-  [CLIENT_REQUESTED_SCOPE_PARAM]: z.string().optional(),
-  redirect_uri: z.string().optional(),
-  state: z.string().optional(),
-  response_type: z.string().optional(),
-  code_challenge: z.string().optional(),
-  code_challenge_method: z.string().optional(),
-  prompt: z.string().optional(),
-  exp: z.union([z.string(), z.number()]).optional(),
-  sig: z.string().optional(),
-  resource: z.string().optional(),
-})
+import { BadgeCheck, ChevronRight, ExternalLink, Globe, ShieldCheck } from 'lucide-react'
 
 export const Route = createFileRoute('/oauth/consent')({
-  validateSearch: searchSchema,
+  // Kept as the router parsed it: the signed query is read from it whole
+  // (consentQueryFromSearch), never from fields the router may have retyped.
+  validateSearch: (search: Record<string, unknown>) => search,
   component: ConsentRoute,
 })
 
@@ -53,12 +41,28 @@ function ConsentRoute() {
   )
 }
 
+type ConsentRedirectTarget =
+  { kind: 'web'; host: string } | { kind: 'device' } | { kind: 'app'; scheme: string }
+
+/** What the server can vouch for about the client (see consent-client-identity.ts). */
+type ClientIdentity =
+  | { verified: true; host: string; redirect: ConsentRedirectTarget | null }
+  | { verified: false; redirect: ConsentRedirectTarget | null }
+
 interface OAuthClientInfo {
   client_name?: string
   client_uri?: string
   logo_uri?: string
   policy_uri?: string
   tos_uri?: string
+  client_identity?: ClientIdentity
+}
+
+/** Where the authorization code goes, in words. */
+function redirectTargetText(target: ConsentRedirectTarget): string {
+  if (target.kind === 'web') return `Sends you back to ${target.host}`
+  if (target.kind === 'device') return 'Sends you back to an app on this device'
+  return `Sends you back to the ${target.scheme} app on this device`
 }
 
 function isSafeUrl(url: string): boolean {
@@ -70,17 +74,19 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
-function useClientInfo(clientId: string) {
+function useClientInfo(clientId: string, redirectUri: string | undefined) {
   const [client, setClient] = useState<OAuthClientInfo | null>(null)
 
   useEffect(() => {
-    fetch(`/api/auth/oauth2/public-client?client_id=${encodeURIComponent(clientId)}`, {
+    const query = new URLSearchParams({ client_id: clientId })
+    if (redirectUri) query.set('redirect_uri', redirectUri)
+    fetch(`/api/auth/oauth2/public-client?${query}`, {
       credentials: 'include',
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setClient(data ?? {}))
       .catch(() => setClient({}))
-  }, [clientId])
+  }, [clientId, redirectUri])
 
   return client
 }
@@ -166,16 +172,17 @@ function AccessChoice({
 }
 
 function ConsentPage() {
-  const search = Route.useSearch()
-  const context = Route.useRouteContext() as {
-    session?: { user?: { email?: string | null } | null } | null
-    settings?: { name?: string | null } | null
-  }
-  const signedInAs = context.session?.user?.email ?? null
-  const workspaceName = context.settings?.name ?? null
-  const client = useClientInfo(search.client_id)
+  // Posted back unchanged on submit: Better Auth checks its signature.
+  const oauthQuery = consentQueryFromSearch(Route.useSearch())
+  const search = consentQueryFields(oauthQuery)
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
+  // An anonymous session's address is synthetic, never a person's.
+  const signedInAs = realEmail(session?.user?.email)
+  const workspaceName = settings?.name ?? null
+  const client = useClientInfo(search.clientId, search.redirectUri)
   const clientRequested = clientRequestedFromConsentSearch({
-    requested: search[CLIENT_REQUESTED_SCOPE_PARAM],
+    requested: search.requested,
     scope: search.scope,
   })
   const defaults = defaultSelectedScopes(clientRequested)
@@ -189,14 +196,20 @@ function ConsentPage() {
   const [error, setError] = useState<string | null>(null)
 
   const clientName = client?.client_name || 'An application'
-  const clientDomain = (() => {
-    if (!client?.client_uri || !isSafeUrl(client.client_uri)) return null
-    try {
-      return new URL(client.client_uri).hostname
-    } catch {
-      return null
-    }
-  })()
+  // A self-registered client's link is never shown: it chose it freely, so it
+  // could point at anyone. No client's logo is shown: loading it from the
+  // client's host would tell that host who is consenting and when, and the
+  // draft requires a displayed logo to be prefetched and served from a trusted
+  // host (CIMD §10.9).
+  const identity = client?.client_identity
+  const verifiedHost = identity?.verified ? identity.host : null
+  const redirectTarget = identity?.redirect ?? null
+  // The server keeps a CIMD client's `client_uri` only on its verified host.
+  const verifiedLink =
+    verifiedHost && client?.client_uri && isSafeUrl(client.client_uri) ? client.client_uri : null
+  // CIMD cannot stop a program on this device from claiming a client whose
+  // document lists loopback redirects, so say so plainly.
+  const codeStaysOnDevice = redirectTarget?.kind === 'device' || redirectTarget?.kind === 'app'
 
   const preset = consentPreset(levels)
   const capabilityScopes = scopesFromDomainLevels(levels)
@@ -206,7 +219,6 @@ function ConsentPage() {
     setSubmitting(accept ? 'accept' : 'deny')
     setError(null)
     try {
-      const oauthQuery = window.location.search.replace(/^\?/, '')
       const response = await fetch('/api/auth/oauth2/consent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -257,38 +269,49 @@ function ConsentPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center gap-1.5">
           <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-muted/50">
-            {client.logo_uri && isSafeUrl(client.logo_uri) ? (
-              <img
-                src={client.logo_uri}
-                alt={clientName}
-                className="h-11 w-11 rounded-full object-cover"
-              />
-            ) : (
-              <Globe className="h-5 w-5 text-muted-foreground" />
-            )}
+            <Globe className="h-5 w-5 text-muted-foreground" />
           </div>
 
           <h1 className="text-xl font-semibold">{clientName}</h1>
+
+          {verifiedHost ? (
+            <p className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <BadgeCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Verified:{' '}
+              {verifiedLink ? (
+                <a
+                  href={verifiedLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                >
+                  {verifiedHost}
+                  <ExternalLink className="h-3 w-3" aria-hidden />
+                </a>
+              ) : (
+                verifiedHost
+              )}
+            </p>
+          ) : (
+            <p className="rounded-full border border-border/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              Unverified app
+            </p>
+          )}
 
           <p className="text-sm text-muted-foreground">
             wants to access {workspaceName ?? 'your account'}
           </p>
 
-          {clientDomain && (
+          {(!verifiedHost || redirectTarget) && (
             <p className="text-xs text-muted-foreground/70">
-              {client.client_uri ? (
-                <a
-                  href={client.client_uri}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 hover:text-muted-foreground transition-colors"
-                >
-                  {clientDomain}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : (
-                clientDomain
-              )}
+              {!verifiedHost && <>This app chose its own name, so it may not be who it says. </>}
+              {redirectTarget && <>{redirectTargetText(redirectTarget)}.</>}
+            </p>
+          )}
+
+          {codeStaysOnDevice && (
+            <p className="text-xs text-muted-foreground/70">
+              Only continue if you started this from an app on this device yourself.
             </p>
           )}
         </div>

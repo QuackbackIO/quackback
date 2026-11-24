@@ -57,13 +57,42 @@ const DEMO_ORG = {
   slug: 'acme',
 }
 
+// mulberry32: small, fast, and good enough for picking demo data.
+function seeded(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * Every draw for the demo data. `SEED_RANDOM` pins it to a generator of the
+ * seed's own (the perf bench sets it). It must not be done by replacing
+ * Math.random: the postgres driver calls Math.random too, a different number
+ * of times in each version, and every such call shifted the data.
+ */
+function seedRandom(): () => number {
+  if (!process.env.SEED_RANDOM) return Math.random
+  const draw = seeded(Number(process.env.SEED_RANDOM))
+  // SEED_RANDOM_SKIP discards the first draws, so a caller can keep the data an
+  // earlier sequence produced.
+  for (let i = Number(process.env.SEED_RANDOM_SKIP ?? 0); i > 0; i--) draw()
+  return draw
+}
+
+const random = seedRandom()
+
 function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
+  return arr[Math.floor(random() * arr.length)]
 }
 
 function randomDate(daysAgo: number): Date {
   const date = new Date()
-  date.setDate(date.getDate() - Math.floor(Math.random() * daysAgo))
+  date.setDate(date.getDate() - Math.floor(random() * daysAgo))
   return date
 }
 
@@ -253,20 +282,20 @@ const statusWeights = [30, 20, 20, 15, 10, 5] // Weighted distribution
 
 function weightedStatus(): string {
   const total = statusWeights.reduce((a, b) => a + b, 0)
-  let random = Math.random() * total
+  let roll = random() * total
   for (let i = 0; i < statusSlugs.length; i++) {
-    random -= statusWeights[i]
-    if (random <= 0) return statusSlugs[i]
+    roll -= statusWeights[i]
+    if (roll <= 0) return statusSlugs[i]
   }
   return 'open'
 }
 
 function generateVoteCount(): number {
-  const roll = Math.random()
-  if (roll < 0.5) return Math.floor(Math.random() * 10) // 0-9
-  if (roll < 0.8) return 10 + Math.floor(Math.random() * 40) // 10-49
-  if (roll < 0.95) return 50 + Math.floor(Math.random() * 100) // 50-149
-  return 150 + Math.floor(Math.random() * 200) // 150-349
+  const roll = random()
+  if (roll < 0.5) return Math.floor(random() * 10) // 0-9
+  if (roll < 0.8) return 10 + Math.floor(random() * 40) // 10-49
+  if (roll < 0.95) return 50 + Math.floor(random() * 100) // 50-149
+  return 150 + Math.floor(random() * 200) // 150-349
 }
 
 async function seed() {
@@ -527,7 +556,7 @@ async function seed() {
       postRecords.push({ id: postId, voteCount, statusSlug })
 
       // Add 1-2 tags
-      const numTags = 1 + Math.floor(Math.random() * 2)
+      const numTags = 1 + Math.floor(random() * 2)
       const usedTags = new Set<PostTagId>()
       for (let t = 0; t < numTags; t++) {
         const tagId = pick(tagIds)
@@ -556,7 +585,7 @@ async function seed() {
     const voteInserts: (typeof postVotes.$inferInsert)[] = []
     for (const post of postRecords) {
       const numVotes = Math.min(post.voteCount, principals.length) // Cap at number of principals
-      const shuffledPrincipals = [...principals].sort(() => Math.random() - 0.5)
+      const shuffledPrincipals = [...principals].sort(() => random() - 0.5)
       for (let v = 0; v < numVotes; v++) {
         voteInserts.push({
           postId: post.id,
@@ -577,14 +606,14 @@ async function seed() {
     console.log('Creating comments...')
     const commentInserts: (typeof postComments.$inferInsert)[] = []
     for (const post of postRecords) {
-      const numComments = Math.floor(Math.random() * 5) // 0-4 comments per post
+      const numComments = Math.floor(random() * 5) // 0-4 comments per post
       for (let c = 0; c < numComments; c++) {
         const author = pick(principals)
         commentInserts.push({
           postId: post.id,
           principalId: author.id,
           content: pick(commentContents),
-          isTeamMember: Math.random() < 0.2,
+          isTeamMember: random() < 0.2,
           createdAt: randomDate(60),
         })
       }
@@ -632,9 +661,9 @@ async function seed() {
 
       // Link 0-3 completed posts to some changelog entries (not all)
       // Published entries are more likely to have linked posts
-      const shouldLink = preset.status === 'published' && Math.random() > 0.3
+      const shouldLink = preset.status === 'published' && random() > 0.3
       if (shouldLink && completePosts.length > 0) {
-        const numLinks = 1 + Math.floor(Math.random() * 3) // 1-3 posts
+        const numLinks = 1 + Math.floor(random() * 3) // 1-3 posts
         for (let l = 0; l < numLinks && completePostIndex < completePosts.length; l++) {
           changelogPostInserts.push({
             changelogEntryId: changelogId,
@@ -701,7 +730,8 @@ async function seed() {
   await client.end()
 }
 
-seed().catch(async (error) => {
+/** Settles when the seed has finished, so a caller that imports this can follow it. */
+export const seedDone = seed().catch(async (error) => {
   console.error('Seed failed:', error)
   await client.end()
   process.exitCode = 1

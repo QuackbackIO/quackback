@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import {
@@ -32,6 +32,11 @@ import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { ChangelogId, PostId, PostStatusId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
 
 interface PostCardProps {
   id: PostId
@@ -67,6 +72,8 @@ interface PostCardProps {
   isAuthenticated?: boolean
   /** Whether the user can vote (true if authenticated or anonymous voting enabled) */
   canVote?: boolean
+  /** The board is read-only: votes are shown and no longer taken. */
+  votingClosed?: boolean
   /** Whether the current user is the author of this post */
   isCurrentUserAuthor?: boolean
   /** Whether the user can edit this post */
@@ -105,6 +112,8 @@ interface PostCardProps {
   showAvatar?: boolean
   moderationState?: 'published' | 'pending' | string | null
   canModerate?: boolean
+  /** A held post is shown to its author: tell them it waits for review. */
+  pendingForAuthor?: boolean
   moderationBusy?: boolean
   onApprove?: () => void
   onReject?: () => void
@@ -128,6 +137,7 @@ export function PostCard({
   changelogEntry,
   isAuthenticated = true,
   canVote = true,
+  votingClosed = false,
   isCurrentUserAuthor = false,
   canEdit = false,
   canDelete = false,
@@ -145,6 +155,7 @@ export function PostCard({
   showAvatar = true,
   moderationState,
   canModerate = false,
+  pendingForAuthor = false,
   moderationBusy = false,
   onApprove,
   onReject,
@@ -163,18 +174,29 @@ export function PostCard({
   const createdAtDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
 
   // Vote handling - only used in portal mode
+  // A blocked person's vote is refused; say why, in their language.
+  const sayIfBlocked = (err: unknown) => {
+    if (!isBlockedRefusal(err)) return
+    toast.error(
+      intl.formatMessage({
+        id: 'portal.blocked',
+        defaultMessage: "You can't post, vote or comment here.",
+      })
+    )
+  }
   const {
     voteCount: currentVoteCount,
     hasVoted: currentHasVoted,
     isPending: isVotePending,
     handleVote,
-  } = usePostVote({ postId: id, voteCount })
+  } = usePostVote({ postId: id, voteCount, onError: sayIfBlocked })
 
   const [isAnonSigningIn, setIsAnonSigningIn] = useState(false)
   const ensureAnonSession = useEnsureAnonSession()
 
   async function handleVoteClick(e: React.MouseEvent): Promise<void> {
     e.stopPropagation()
+    if (votingClosed) return
     if (!canVote) {
       // Signed in but denied by the board's vote tier (segments/team) — an
       // authorization failure, not authentication. The button's tooltip
@@ -236,47 +258,56 @@ export function PostCard({
       type="button"
       data-testid="vote-button"
       title={voteNoAccessMsg}
-      aria-disabled={voteNoAccess || undefined}
+      aria-disabled={voteNoAccess || votingClosed || undefined}
       aria-label={
-        currentHasVoted
+        votingClosed
           ? intl.formatMessage(
               {
-                id: 'portal.postCard.vote.ariaRemoveVote',
-                defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+                id: 'portal.postCard.vote.ariaClosed',
+                defaultMessage: '{count, plural, one {# vote} other {# votes}}, voting closed',
               },
               { count: currentVoteCount }
             )
-          : intl.formatMessage(
-              {
-                id: 'portal.postCard.vote.ariaVote',
-                defaultMessage:
-                  'Vote for this post ({count, plural, one {# vote} other {# votes}})',
-              },
-              { count: currentVoteCount }
-            )
+          : currentHasVoted
+            ? intl.formatMessage(
+                {
+                  id: 'portal.postCard.vote.ariaRemoveVote',
+                  defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+                },
+                { count: currentVoteCount }
+              )
+            : intl.formatMessage(
+                {
+                  id: 'portal.postCard.vote.ariaVote',
+                  defaultMessage:
+                    'Vote for this post ({count, plural, one {# vote} other {# votes}})',
+                },
+                { count: currentVoteCount }
+              )
       }
       aria-pressed={currentHasVoted}
       onClick={handleVoteClick}
-      disabled={isVotePending || isAnonSigningIn}
+      disabled={isVotePending || isAnonSigningIn || votingClosed}
       className={cn(
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
         'w-12 py-2 gap-0.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
+          ? 'post-card__vote--voted text-primary-ink border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
           : 'bg-muted/40 text-muted-foreground border-border/50',
         // Hover affordances only when the button is actionable (not denied).
         !currentHasVoted &&
           !voteNoAccess &&
+          !votingClosed &&
           'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
         (isVotePending || isAnonSigningIn) && 'opacity-70 cursor-wait',
-        voteNoAccess && 'cursor-not-allowed opacity-60'
+        (voteNoAccess || votingClosed) && 'cursor-not-allowed opacity-60'
       )}
     >
       <ChevronUpIcon
         className={cn(
           'transition-transform duration-200 h-4 w-4',
           currentHasVoted && 'fill-post-card-voted',
-          !isVotePending && !voteNoAccess && 'group-hover/vote:-translate-y-0.5'
+          !isVotePending && !voteNoAccess && !votingClosed && 'group-hover/vote:-translate-y-0.5'
         )}
       />
       <span
@@ -463,7 +494,9 @@ export function PostCard({
           fallbackClassName="bg-muted text-xs"
         />
       )}
-      <span className={showAvatar ? '' : 'text-foreground/80'}>{authorName || authorFallback}</span>
+      <span className={showAvatar ? '' : 'text-muted-foreground'}>
+        {authorName || authorFallback}
+      </span>
     </>
   )
   const authorMeta =
@@ -494,7 +527,8 @@ export function PostCard({
     </Link>
   )
 
-  const tagClassName = 'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium'
+  const tagClassName =
+    'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium text-readable'
 
   const cardContent = (
     <div className="flex items-start p-4 gap-4">
@@ -525,8 +559,8 @@ export function PostCard({
         {/* Title */}
         <h3
           className={cn(
-            'font-semibold text-base line-clamp-1',
-            isDone ? 'text-foreground/75' : 'text-foreground'
+            'font-heading font-semibold text-base line-clamp-1',
+            isDone ? 'text-muted-foreground' : 'text-foreground'
           )}
         >
           {titleText}
@@ -534,7 +568,7 @@ export function PostCard({
 
         {/* Description */}
         {content && (
-          <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">
+          <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
             {contentPreview(content)}
           </p>
         )}
@@ -543,7 +577,11 @@ export function PostCard({
         {tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1.5">
             {tags.slice(0, 3).map((tag) => {
-              const style = { backgroundColor: tag.color + '20', color: tag.color }
+              // The tag's colour as a tint behind it, and as text at a readable lightness.
+              const style = {
+                backgroundColor: tag.color + '20',
+                '--ink': tag.color,
+              } as CSSProperties
               return onTagClick ? (
                 <button
                   key={tag.id}
@@ -564,7 +602,7 @@ export function PostCard({
               )
             })}
             {tags.length > 3 && (
-              <span className="text-xs text-muted-foreground/60">+{tags.length - 3}</span>
+              <span className="text-xs text-muted-foreground">+{tags.length - 3}</span>
             )}
           </div>
         )}
@@ -572,10 +610,10 @@ export function PostCard({
         {/* Meta row */}
         <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5">
           {authorMeta}
-          <span className="text-muted-foreground/40">·</span>
-          <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
+          <span className="text-muted-foreground">·</span>
+          <TimeAgo date={createdAtDate} className="text-muted-foreground" />
           {commentCount > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground/50 ms-auto">
+            <span className="flex items-center gap-1 text-muted-foreground ms-auto">
               <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
               {commentCount}
             </span>
@@ -586,6 +624,7 @@ export function PostCard({
             <InlineModerationActions
               pending
               noun="post"
+              forAuthor={(pendingForAuthor || isCurrentUserAuthor) && !canModerate}
               busy={moderationBusy}
               onApprove={canModerate ? onApprove : undefined}
               onReject={canModerate ? onReject : undefined}
@@ -605,6 +644,7 @@ export function PostCard({
 
   return (
     <div
+      data-qb-edit="type"
       className={rootClassName}
       onClick={onClick}
       onMouseEnter={onMouseEnter}

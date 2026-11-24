@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/functions/ownership'
 import { cloudMembershipActions } from './workspace-ownership'
 import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
+import { errorText } from '@/lib/client/error-text'
 
 export function CloudOwnershipActions({
   memberEmails,
@@ -54,7 +55,7 @@ export function CloudOwnershipActions({
       await transferWorkspaceOwnershipFn({ data: { toEmail } })
       window.location.reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not transfer')
+      setError(errorText(err, 'Could not transfer'))
       setBusy(false)
       setTransferOpen(false)
     }
@@ -68,7 +69,7 @@ export function CloudOwnershipActions({
       await signOut()
       window.location.assign('/')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not leave')
+      setError(errorText(err, 'Could not leave'))
       setBusy(false)
       setLeaveOpen(false)
     }
@@ -110,7 +111,7 @@ export function CloudOwnershipActions({
         onOpenChange={setTransferOpen}
         title="Transfer ownership?"
         description={`${toEmail} will become the owner of this workspace.`}
-        confirmLabel={busy ? 'Transferring...' : 'Transfer ownership'}
+        confirmLabel={busy ? 'Transferring…' : 'Transfer ownership'}
         isPending={busy}
         onConfirm={transfer}
       />
@@ -120,7 +121,7 @@ export function CloudOwnershipActions({
         title="Leave this workspace?"
         description="You will lose access to this workspace. The owner stays."
         variant="destructive"
-        confirmLabel={busy ? 'Leaving...' : 'Leave workspace'}
+        confirmLabel={busy ? 'Leaving…' : 'Leave workspace'}
         isPending={busy}
         onConfirm={leave}
       />

@@ -50,6 +50,13 @@ services:
       # MinIO has no public port, so the browser can't reach it directly:
       # serve uploads through the app's /api/storage proxy.
       S3_PROXY: 'true'
+      # The optional browser reader (the `browser` profile below): with its
+      # token set in .env, Import your brand asks it to render websites.
+      QUACKBACK_BROWSER_URL: ${QUACKBACK_BROWSER_URL:-${QUACKBACK_BROWSER_TOKEN:+http://browser:3200}}
+    # The app is the only service on the browser reader's network.
+    networks:
+      - default
+      - browser
     ports:
       - '${APP_PORT:-3000}:3000'
     depends_on:
@@ -138,6 +145,49 @@ services:
       mc mb --ignore-existing local/\"$$S3_BUCKET\"
       "
     restart: 'no'
+
+  # Optional: the browser reader for Import your brand, off unless started with
+  #   docker compose -f docker-compose.prod.yml --profile browser up -d
+  # after setting QUACKBACK_BROWSER_TOKEN in .env. It renders a website in a
+  # headless browser and reaches public hosts only; no host port. Pulls the
+  # published image at the app's tag; to build it from this checkout instead
+  # (docker/browser/Dockerfile), run
+  #   docker compose -f docker-compose.prod.yml --profile browser build browser
+  browser:
+    profiles: ['browser']
+    image: ${QUACKBACK_BROWSER_IMAGE:-ghcr.io/quackbackio/quackback-browser:${QUACKBACK_TAG:-latest}}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: docker/browser/Dockerfile
+    container_name: quackback-browser
+    restart: unless-stopped
+    init: true
+    environment:
+      # The service refuses to start without a token of 16 characters or more.
+      QUACKBACK_BROWSER_TOKEN: ${QUACKBACK_BROWSER_TOKEN:-}
+    # It renders untrusted pages: on a network of its own that only the app
+    # joins, so a compromised renderer cannot reach the database or storage.
+    networks:
+      - browser
+    # Chromium's sandbox stays on. Docker's default seccomp profile refuses the
+    # namespaces it makes for its renderers; this one is that profile plus
+    # clone and unshare. The service runs as a non-root user.
+    security_opt:
+      - seccomp=./docker/browser/seccomp-chromium.json
+    # Rendering a heavy page peaks near 1 GB.
+    mem_limit: 1280m
+    read_only: true
+    # Chromium's profile and caches live in memory and go with the container.
+    tmpfs:
+      - /tmp
+      - /home/reader:uid=1001
+
+networks:
+  # The browser reader and the app only. Public websites are reached through
+  # this network's default route; the reader's guard proxy refuses private
+  # and local addresses.
+  browser:
 
 volumes:
   postgres_data:

@@ -8,6 +8,7 @@
  * safety gain (the shapes are validated by each destination route already).
  */
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
+import { CUSTOM_DOMAINS_LINK } from '@/lib/shared/portal-settings-tabs'
 
 export interface NotificationTarget {
   to: string
@@ -27,7 +28,9 @@ export function getNotificationTarget(
     }
     // Anchor a comment notification to the comment itself rather than just the post.
     if (
-      (notification.type === 'comment_created' || notification.type === 'comment_mentioned') &&
+      (notification.type === 'comment_created' ||
+        notification.type === 'comment_mentioned' ||
+        notification.type === 'post_moderated') &&
       notification.commentId
     ) {
       target.hash = `comment-${notification.commentId}`
@@ -95,12 +98,21 @@ export function getNotificationTarget(
     return { to: '/admin/inbox', search: { i: notification.ticketId } }
   }
 
-  // Sending domain bells open the email channel settings, where the records are.
+  // Sending domain bells open Settings → Email, where the records are.
   if (
     notification.type === 'sending_domain_live' ||
     notification.type === 'sending_domain_needs_attention'
   ) {
-    return { to: '/admin/settings/channels/email' }
+    return { to: '/admin/settings/email' }
+  }
+
+  // Domain bells open Settings → Domains, where each domain's record is; a
+  // section's custom domain bell opens the Custom domains tab, where it is verified.
+  if (notification.type === 'domain_needs_attention') {
+    if (notification.section) {
+      return { to: CUSTOM_DOMAINS_LINK.to, search: { ...CUSTOM_DOMAINS_LINK.search } }
+    }
+    return { to: '/admin/settings/domains' }
   }
 
   // Deep-link to the specific changelog entry when we have its id. Rows created

@@ -32,6 +32,8 @@ interface AfterCommitFrame {
   depth: number
   /** workspaceKey → job ids (empty set = nudge only). */
   pending: Map<string, Set<string>>
+  /** Work to run once the outer transaction commits (see {@link afterCommit}). */
+  callbacks: Array<() => unknown>
 }
 
 const frames = new AsyncLocalStorage<AfterCommitFrame>()
@@ -109,31 +111,74 @@ function flushPending(pending: Map<string, Set<string>>): void {
  */
 export async function runInAfterCommitFrame<T>(fn: () => Promise<T>): Promise<T> {
   const parent = frames.getStore()
-  if (parent) {
+  // Only an open transaction is a parent. Work started at a commit (a job
+  // the commit woke, say) inherits that transaction's closed frame; its own
+  // transaction must get a frame of its own, or it would flush nothing and
+  // make every sibling sharing the old frame look as if it were inside it.
+  if (parent && parent.depth > 0) {
     const snapshot = clonePending(parent.pending)
+    const callbackCount = parent.callbacks.length
     parent.depth += 1
     try {
       return await fn()
     } catch (err) {
       parent.pending.clear()
       for (const [key, ids] of snapshot) parent.pending.set(key, ids)
+      parent.callbacks.length = callbackCount
       throw err
     } finally {
       parent.depth -= 1
     }
   }
 
-  const frame: AfterCommitFrame = { depth: 1, pending: new Map() }
-  return frames.run(frame, async () => {
+  const frame: AfterCommitFrame = { depth: 1, pending: new Map(), callbacks: [] }
+  const result = await frames.run(frame, async () => {
     try {
-      const result = await fn()
+      const value = await fn()
       flushPending(frame.pending)
-      return result
+      return value
     } catch (err) {
       frame.pending.clear()
+      frame.callbacks.length = 0
       throw err
+    } finally {
+      // Work started inside the transaction can outlive it and still sees this
+      // frame. Once the transaction is over it must read as closed.
+      frame.depth = 0
     }
   })
+  // Outside the frame, so whatever a callback writes is its own commit.
+  for (const callback of frame.callbacks.splice(0)) await runCallback(callback)
+  return result
+}
+
+async function runCallback(callback: () => unknown): Promise<void> {
+  try {
+    await callback()
+  } catch (err) {
+    log.error({ err }, 'after-commit callback threw')
+  }
+}
+
+/** True while the caller is inside a `db.transaction` callback. */
+export function isInsideDbTransaction(): boolean {
+  const frame = frames.getStore()
+  return frame !== undefined && frame.depth > 0
+}
+
+/**
+ * Run `callback` once the current transaction commits, or now when none is
+ * open. Dropped if the transaction (or the savepoint it was registered in)
+ * rolls back. For cache drops that must not run before the write they follow
+ * is visible to other connections. A throwing callback is logged.
+ */
+export async function afterCommit(callback: () => unknown): Promise<void> {
+  const frame = frames.getStore()
+  if (frame && frame.depth > 0) {
+    frame.callbacks.push(callback)
+    return
+  }
+  await runCallback(callback)
 }
 
 /** Bind a drizzle `transaction` method so its commit flushes pending work. */

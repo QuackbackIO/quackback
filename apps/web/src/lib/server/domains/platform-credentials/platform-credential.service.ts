@@ -37,6 +37,7 @@ interface SavePlatformCredentialsInput {
  * "managed by the platform" state rather than an error.
  */
 export class PlatformCredentialsManagedError extends Error {
+  readonly statusCode = 403
   constructor() {
     super('Platform credentials are managed by the platform and cannot be edited here.')
     this.name = 'PlatformCredentialsManagedError'
@@ -152,7 +153,9 @@ export async function savePlatformCredentials({
     CACHE_KEYS.PLATFORM_INTEGRATION_TYPES,
     // The registered-provider list gates on the configured-types Set (a saved
     // credential is what flips a provider to "registered"), so drop it too.
-    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS
+    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS,
+    // The plan limits count registered sign-in providers the same way.
+    CACHE_KEYS.PLAN_LIMITS_INPUTS
   )
 }
 
@@ -252,6 +255,8 @@ export async function deletePlatformCredentials(integrationType: string): Promis
     CACHE_KEYS.PLATFORM_INTEGRATION_TYPES,
     // The registered-provider list gates on the configured-types Set (a saved
     // credential is what flips a provider to "registered"), so drop it too.
-    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS
+    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS,
+    // The plan limits count registered sign-in providers the same way.
+    CACHE_KEYS.PLAN_LIMITS_INPUTS
   )
 }

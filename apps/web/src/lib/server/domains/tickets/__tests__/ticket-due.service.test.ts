@@ -244,13 +244,14 @@ describe.skipIf(!fixture.available)('ticket-due.service (real DB, rolled back)',
     expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
   })
 
-  it('stamps firstResponseAt when a teammate sets the first due date', async () => {
+  // First response is worked out from the message rows, never stamped by a field change.
+  it('leaves firstResponseAt unset when a teammate sets the first due date', async () => {
     const actor = await adminActor()
     const id = await seedTicket()
 
     await setTicketDueAt(id, at(DAY * 2), actor, { now: NOW })
 
-    expect((await readTicket(id)).firstResponseAt?.getTime()).toBe(NOW.getTime())
+    expect((await readTicket(id)).firstResponseAt).toBeNull()
   })
 
   it('keeps an existing firstResponseAt', async () => {

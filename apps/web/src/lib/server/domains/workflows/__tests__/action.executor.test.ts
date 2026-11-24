@@ -7,6 +7,7 @@
  * the caller owns best-effort vs fail-fast.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createHmac } from 'node:crypto'
 import type {
   ConversationId,
   PrincipalId,
@@ -72,6 +73,7 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   appendAssistantReply,
   recordCsat,
   addAgentNote,
+  CSAT_CONVERSATION_OPEN: 'CSAT_CONVERSATION_OPEN',
 }))
 vi.mock('@/lib/server/domains/conversation/conversation-tag.service', () => ({
   attachTag,
@@ -94,6 +96,13 @@ vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
 
 const { safeFetch } = vi.hoisted(() => ({ safeFetch: vi.fn() }))
 vi.mock('@/lib/server/content/ssrf-guard', () => ({ safeFetch }))
+// The per-URL secret is derived from the workspace key (signing.test.ts covers
+// the derivation); here it stands in as a value that still depends on the URL,
+// and the signer itself is the real one.
+vi.mock('@/lib/server/domains/webhooks/signing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/webhooks/signing')>()),
+  workflowWebhookSecret: (url: string) => `whsec_for:${url}`,
+}))
 
 // Ticket actions (set_ticket_status / convert_to_ticket) — each mocked at its
 // own seam so this stays a unit test of action.executor.ts's dispatch/
@@ -138,6 +147,18 @@ vi.mock('@/lib/server/domains/tickets/ticket-due.service', () => ({ setTicketDue
 const { notifyCsatRequestEmail } = vi.hoisted(() => ({ notifyCsatRequestEmail: vi.fn() }))
 vi.mock('@/lib/server/domains/conversation/conversation.notify', () => ({ notifyCsatRequestEmail }))
 
+// The csat signals read the database; this suite pins the dispatch around them.
+const { isCsatAlreadyRequested, isConversationRated, mayAskForCsat } = vi.hoisted(() => ({
+  isCsatAlreadyRequested: vi.fn(),
+  isConversationRated: vi.fn(),
+  mayAskForCsat: vi.fn(() => async () => true),
+}))
+vi.mock('@/lib/server/domains/conversation/csat-request.service', () => ({
+  isCsatAlreadyRequested,
+  isConversationRated,
+  mayAskForCsat,
+}))
+
 const mockDbSelect = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/server/db')>()
@@ -172,9 +193,13 @@ const ctx: WorkflowContext = {
   workflowId: 'workflow_abc',
   subjectPrincipalId: 'principal_x' as PrincipalId,
 }
+/** A workflow run never skips the writers' per-item check (only a macro does). */
+const WORKFLOW_WRITE = { systemCascade: undefined }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  isCsatAlreadyRequested.mockResolvedValue(false)
+  isConversationRated.mockResolvedValue(false)
   ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   resolveWorkflowVariables.mockResolvedValue({
     first_name: 'Jane',
@@ -244,6 +269,9 @@ describe('applyAction', () => {
 
     expect(safeFetch).toHaveBeenCalledOnce()
     const [, options] = safeFetch.mock.calls[0]
+    // Same e2e sink allowance as outgoing webhooks; safeFetch ignores it unless
+    // the harness gate is open (ssrf-guard-e2e-sink.test.ts).
+    expect(options.allowE2eWebhookSink).toBe(true)
     expect(options.headers).toMatchObject({
       'X-Quackback-Delivery-Id': 'workflow:workflow_run_1:action_webhook',
       'Idempotency-Key': 'workflow:workflow_run_1:action_webhook',
@@ -260,6 +288,26 @@ describe('applyAction', () => {
     })
   })
 
+  it('signs a workflow webhook like an outgoing webhook, with the secret for its URL', async () => {
+    const before = Math.floor(Date.now() / 1000)
+    await applyAction(
+      { type: 'send_webhook', url: 'https://example.test/hook', nodeId: 'action_webhook' },
+      ctx
+    )
+    const after = Math.floor(Date.now() / 1000)
+
+    const [url, options] = safeFetch.mock.calls[0]
+    expect(url).toBe('https://example.test/hook')
+    const timestamp = options.headers['X-Quackback-Timestamp']
+    expect(Number(timestamp)).toBeGreaterThanOrEqual(before)
+    expect(Number(timestamp)).toBeLessThanOrEqual(after)
+    // What a receiver computes: HMAC-SHA256 of "<timestamp>.<raw body>".
+    const expected = createHmac('sha256', 'whsec_for:https://example.test/hook')
+      .update(`${timestamp}.${options.body}`)
+      .digest('hex')
+    expect(options.headers['X-Quackback-Signature']).toBe(`sha256=${expected}`)
+  })
+
   it('refuses to send a workflow webhook without a stable action identity', async () => {
     await expect(
       applyAction({ type: 'send_webhook', url: 'https://example.test/hook' }, ctx)
@@ -271,12 +319,24 @@ describe('applyAction', () => {
     expect(
       await applyAction({ type: 'assign_agent', principalId: 'principal_x' as PrincipalId }, ctx)
     ).toMatchObject({ label: 'assigned' })
-    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, undefined)
+    expect(assignConversation).toHaveBeenCalledWith(
+      conversationId,
+      'principal_x',
+      actor,
+      undefined,
+      WORKFLOW_WRITE
+    )
 
     expect(
       await applyAction({ type: 'assign_team', teamId: 'team_1' as TeamId }, ctx)
     ).toMatchObject({ label: 'assigned to team' })
-    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, undefined)
+    expect(assignTeam).toHaveBeenCalledWith(
+      conversationId,
+      'team_1',
+      actor,
+      undefined,
+      WORKFLOW_WRITE
+    )
 
     expect(
       await applyAction({ type: 'add_tag', tagId: 'ctag_1' as ConversationTagId }, ctx)
@@ -291,7 +351,12 @@ describe('applyAction', () => {
     expect(await applyAction({ type: 'set_priority', priority: 'high' }, ctx)).toMatchObject({
       label: 'priority high',
     })
-    expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
+    expect(setConversationPriority).toHaveBeenCalledWith(
+      conversationId,
+      'high',
+      actor,
+      WORKFLOW_WRITE
+    )
 
     expect(await applyAction({ type: 'close' }, ctx)).toMatchObject({ label: 'closed' })
     // The 5th argument is the close lifecycle: an explicit close, not an auto-close.
@@ -300,11 +365,19 @@ describe('applyAction', () => {
       'closed',
       actor,
       undefined,
-      'closed'
+      'closed',
+      WORKFLOW_WRITE
     )
 
     expect(await applyAction({ type: 'reopen' }, ctx)).toMatchObject({ label: 'reopened' })
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
+    expect(setConversationStatus).toHaveBeenCalledWith(
+      conversationId,
+      'open',
+      actor,
+      undefined,
+      undefined,
+      WORKFLOW_WRITE
+    )
   })
 
   it('threads ctx.workflowName as system-notice attribution into the notice-posting service calls', async () => {
@@ -315,21 +388,30 @@ describe('applyAction', () => {
       'closed',
       actor,
       { workflowName: 'Auto-close after CSAT' },
-      'closed'
+      'closed',
+      WORKFLOW_WRITE
     )
 
     await applyAction(
       { type: 'assign_agent', principalId: 'principal_x' as PrincipalId },
       attributedCtx
     )
-    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, {
-      workflowName: 'Auto-close after CSAT',
-    })
+    expect(assignConversation).toHaveBeenCalledWith(
+      conversationId,
+      'principal_x',
+      actor,
+      { workflowName: 'Auto-close after CSAT' },
+      WORKFLOW_WRITE
+    )
 
     await applyAction({ type: 'assign_team', teamId: 'team_1' as TeamId }, attributedCtx)
-    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, {
-      workflowName: 'Auto-close after CSAT',
-    })
+    expect(assignTeam).toHaveBeenCalledWith(
+      conversationId,
+      'team_1',
+      actor,
+      { workflowName: 'Auto-close after CSAT' },
+      WORKFLOW_WRITE
+    )
   })
 
   describe('reopen (SF4)', () => {
@@ -337,7 +419,14 @@ describe('applyAction', () => {
       setConversationStatus.mockResolvedValueOnce({ id: conversationId, status: 'open' })
       const result = await applyAction({ type: 'reopen' }, ctx)
       expect(result).toMatchObject({ label: 'reopened' })
-      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
+      expect(setConversationStatus).toHaveBeenCalledWith(
+        conversationId,
+        'open',
+        actor,
+        undefined,
+        undefined,
+        WORKFLOW_WRITE
+      )
     })
 
     it('delegates unconditionally (no pre-check) when the conversation is already open, exactly like `close` does for an already-closed one', async () => {
@@ -351,7 +440,14 @@ describe('applyAction', () => {
       const result = await applyAction({ type: 'reopen' }, ctx)
       expect(result).toMatchObject({ label: 'reopened' })
       expect(setConversationStatus).toHaveBeenCalledTimes(1)
-      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
+      expect(setConversationStatus).toHaveBeenCalledWith(
+        conversationId,
+        'open',
+        actor,
+        undefined,
+        undefined,
+        WORKFLOW_WRITE
+      )
     })
   })
 
@@ -360,10 +456,15 @@ describe('applyAction', () => {
     expect(await applyAction({ type: 'snooze', untilIso }, ctx)).toMatchObject({
       label: 'snoozed',
     })
-    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, new Date(untilIso), actor)
+    expect(snoozeConversation).toHaveBeenCalledWith(
+      conversationId,
+      new Date(untilIso),
+      actor,
+      WORKFLOW_WRITE
+    )
 
     await applyAction({ type: 'snooze', untilIso: null }, ctx)
-    expect(snoozeConversation).toHaveBeenLastCalledWith(conversationId, null, actor)
+    expect(snoozeConversation).toHaveBeenLastCalledWith(conversationId, null, actor, WORKFLOW_WRITE)
   })
 
   it('resolves a relative snooze to now + seconds, at execution time', async () => {
@@ -380,7 +481,7 @@ describe('applyAction', () => {
     // stored instant — so it falls within [before, after] + 3600s.
     expect(wakeAt.getTime()).toBeGreaterThanOrEqual(before + 3600 * 1000)
     expect(wakeAt.getTime()).toBeLessThanOrEqual(after + 3600 * 1000)
-    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, wakeAt, actor)
+    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, wakeAt, actor, WORKFLOW_WRITE)
   })
 
   it('resolves a zero-second relative snooze to (effectively) now, not null', async () => {
@@ -670,39 +771,54 @@ describe('applyAction', () => {
       })
     })
 
-    // CSAT once per pair: conversation.status_changed and
-    // ticket.status_changed are independent triggers with no cross-dedup, so
-    // a workspace authoring CSAT on both axes reaches send_block twice for
-    // one pair — the guard skips the second ask instead of double-prompting.
-    describe('csat once per pair (the guard)', () => {
+    // CSAT once per conversation: a csat block posts on the condition that
+    // the conversation was never asked or rated, checked by the post itself
+    // under the row lock (csat-request.service; the real check is covered
+    // in csat-request.service.test.ts against Postgres).
+    describe('csat once per conversation', () => {
       const csatAction = {
         type: 'send_block' as const,
         nodeId: 'n9',
         block: { kind: 'csat' as const, body, allowTypingInterrupt: true, commentPrompt: '' },
       }
+      const runCtx = { ...ctx, workflowId: 'workflow_1' }
 
-      it('skips (without parking) when the conversation already has a rating on file', async () => {
-        mockDbSelect.mockImplementationOnce(() => selectChainOnce([{ csatRating: 4 }]))
-        const res = await applyAction(csatAction, ctx)
+      it('posts a csat block on the ask condition', async () => {
+        const res = await applyAction(csatAction, runCtx)
+        expect(res.blockMessageId).toBe('conversation_message_block_1')
+        expect(res.blockSkipped).toBeUndefined()
+        expect(appendAssistantReply.mock.calls[0]![3].onlyIf).toBeTypeOf('function')
+        expect(notifyCsatRequestEmail).toHaveBeenCalledTimes(1)
+      })
+
+      it('skips without parking, emailing or logging when the post declines', async () => {
+        appendAssistantReply.mockResolvedValueOnce(null)
+        const res = await applyAction(csatAction, runCtx)
         expect(res.label).toContain('skipped')
         expect(res.blockMessageId).toBeUndefined()
-        expect(appendAssistantReply).not.toHaveBeenCalled()
+        // Tells the engine the step is over rather than waiting on an answer.
+        expect(res.blockSkipped).toBe(true)
+        expect(notifyCsatRequestEmail).not.toHaveBeenCalled()
+        expect(logRunEvent).not.toHaveBeenCalled()
       })
 
-      it('skips when an earlier csat block is already pending on the thread', async () => {
-        mockDbSelect
-          .mockImplementationOnce(() => selectChainOnce([{ csatRating: null }]))
-          .mockImplementationOnce(() => selectChainOnce([{ id: 'conversation_message_prior' }]))
-        const res = await applyAction(csatAction, ctx)
+      it('declines before any setup when the conversation was already asked or rated', async () => {
+        isCsatAlreadyRequested.mockResolvedValue(true)
+        const res = await applyAction(csatAction, runCtx)
         expect(res.label).toContain('skipped')
+        expect(res.blockMessageId).toBeUndefined()
+        expect(res.blockSkipped).toBe(true)
+        expect(isCsatAlreadyRequested).toHaveBeenCalledWith(conversationId)
+        expect(ensureAssistantPrincipal).not.toHaveBeenCalled()
         expect(appendAssistantReply).not.toHaveBeenCalled()
       })
 
-      it('asks normally when the conversation has neither a rating nor a pending ask', async () => {
-        // The default select stub resolves [] for both guard reads.
-        const res = await applyAction(csatAction, ctx)
-        expect(res.blockMessageId).toBe('conversation_message_block_1')
-        expect(appendAssistantReply).toHaveBeenCalledTimes(1)
+      it('posts other blocks unconditionally', async () => {
+        await applyAction(
+          { type: 'send_block', nodeId: 'n10', block: { kind: 'message', body } },
+          runCtx
+        )
+        expect(appendAssistantReply.mock.calls[0]![3]).not.toHaveProperty('onlyIf')
       })
     })
 
@@ -876,6 +992,36 @@ describe('applyAction', () => {
       ).toMatchObject({ label: 'csat recorded' })
       expect(recordCsat).toHaveBeenCalledWith(conversationId, 5, 'Great!', visitorActor)
     })
+
+    it('does nothing, and does not fail, when the conversation is already rated', async () => {
+      isConversationRated.mockResolvedValue(true)
+      const res = await applyAction(
+        { type: 'record_csat', rating: 5, comment: 'Great!' },
+        { conversationId, actor }
+      )
+      expect(res.label).toBe('csat already recorded')
+      expect(recordCsat).not.toHaveBeenCalled()
+    })
+
+    it('moves on without a rating when the conversation is open', async () => {
+      const { ConflictError } = await import('@/lib/shared/errors')
+      recordCsat.mockRejectedValueOnce(
+        new ConflictError('CSAT_CONVERSATION_OPEN', 'This conversation is still open.')
+      )
+      const res = await applyAction(
+        { type: 'record_csat', rating: 5, comment: 'Great!' },
+        { conversationId, actor }
+      )
+      expect(res.label).toBe('csat not recorded — conversation is open')
+    })
+
+    it('still fails the step on any other refusal', async () => {
+      const { ForbiddenError } = await import('@/lib/shared/errors')
+      recordCsat.mockRejectedValueOnce(new ForbiddenError('FORBIDDEN', 'Only the visitor'))
+      await expect(
+        applyAction({ type: 'record_csat', rating: 5 }, { conversationId, actor })
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
   })
 
   describe('add_note', () => {
@@ -926,7 +1072,11 @@ describe('applyAction', () => {
         { conversationId, actor: engineActor }
       )
       expect(result).toMatchObject({ label: 'ticket status updated' })
-      expect(getLinkedCustomerTicket).toHaveBeenCalledWith(conversationId)
+      // The pair lookup is a system read: a workspace-wide service actor.
+      expect(getLinkedCustomerTicket).toHaveBeenCalledWith(
+        conversationId,
+        expect.objectContaining({ principalType: 'service', principalId: null })
+      )
       expect(setTicketStatus).toHaveBeenCalledTimes(1)
       const [ticketIdArg, statusIdArg, actorArg] = setTicketStatus.mock.calls[0]!
       expect(ticketIdArg).toBe('ticket_1')

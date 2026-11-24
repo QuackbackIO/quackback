@@ -1,11 +1,10 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
-import { updateThemeSchema } from '@/lib/shared/schemas/settings'
+import { updatePortalConfigSchema } from '@/lib/shared/schemas/portal-config'
 // Import types from barrel export (client-safe)
 import {
   DEFAULT_PORTAL_CONFIG,
-  type BrandingConfig,
+  type PortalPageConfig,
   type UpdatePortalConfigInput,
 } from '@/lib/server/domains/settings'
 import { userIdSchema, type UserId } from '@quackback/ids'
@@ -19,27 +18,26 @@ import {
 } from '@/lib/server/domains/settings/settings.service'
 import {
   getBrandingConfig,
-  updateBrandingConfig,
   saveLogoKey,
   deleteLogoKey,
-  saveHeaderLogoKey,
-  deleteHeaderLogoKey,
   saveFaviconKey,
   deleteFaviconKey,
-  updateHeaderDisplayMode,
-  updateHeaderDisplayName,
   updateWorkspaceName,
   getCustomCss,
-  updateCustomCss,
 } from '@/lib/server/domains/settings/settings.media'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
-import { requireAuth } from './auth-helpers'
+import { assertAnyPermission, requireAuth } from './auth-helpers'
 import { teamMemberWhere } from '@/lib/server/domains/principals/principal.service'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, and } from '@/lib/server/db'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import {
+  PORTAL_DESIGN_READ_PERMISSIONS,
+  PORTAL_MODERATION_READ_PERMISSIONS,
+  PORTAL_PAGE_CONFIG_READ_PERMISSIONS,
+} from '@/lib/shared/settings-read-permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
 import { workflowAbandonedAutoCloseSchema } from '@/lib/shared/workflows/abandoned-auto-close'
@@ -47,6 +45,7 @@ import { workflowCloseSpamSchema } from '@/lib/shared/workflows/close-spam'
 import { defaultSlaPolicySchema } from '@/lib/shared/sla/default-policy'
 import { MAX_TRUSTED_SENDERS } from '@/lib/shared/trusted-senders'
 import { logger } from '@/lib/server/logger'
+import { ForbiddenError, UnauthorizedError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'settings' })
 
@@ -65,6 +64,34 @@ export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async
   const config = await getPortalConfig()
   return config ?? DEFAULT_PORTAL_CONFIG
 })
+
+/**
+ * The parts of the portal config Settings > Moderation and the Design tab of
+ * Settings > Portal show, for the narrower permissions that own those pages:
+ * the moderation default to settings.moderation, the portal's tabs and welcome
+ * message to settings.branding (settings.manage reads both). Everything else in
+ * the portal config (who may open the portal, signup, section domains) stays
+ * behind settings.manage in `fetchPortalConfig`.
+ */
+export const fetchPortalPageConfigFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<PortalPageConfig> => {
+    log.debug('fetch portal page config')
+    const auth = await requireAuth()
+    assertAnyPermission(auth, PORTAL_PAGE_CONFIG_READ_PERMISSIONS)
+    const config = (await getPortalConfig()) ?? DEFAULT_PORTAL_CONFIG
+    const reads = (permissions: readonly PermissionKey[]) =>
+      permissions.some((permission) => auth.permissions.includes(permission))
+    return {
+      ...(reads(PORTAL_MODERATION_READ_PERMISSIONS) && {
+        moderationDefault: config.moderationDefault,
+      }),
+      ...(reads(PORTAL_DESIGN_READ_PERMISSIONS) && {
+        welcomeCard: config.welcomeCard,
+        nav: config.nav,
+      }),
+    }
+  }
+)
 
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public portal config')
@@ -261,12 +288,12 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
     log.debug({ user_id: data }, 'fetch user profile')
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
 
     const userId = data as UserId
     if (session.user.id !== userId) {
-      throw new Error("Access denied: Cannot view other users' profiles")
+      throw new ForbiddenError('FORBIDDEN', "Access denied: Cannot view other users' profiles")
     }
 
     // Profile-page sections (Password, 2FA) depend on the user's auth
@@ -325,79 +352,14 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
 // Write Operations
 // ============================================
 
-export const updatePortalConfigSchema = z.object({
-  features: z
-    .object({
-      allowAnonymous: z.boolean().optional(),
-    })
-    .optional(),
-  // May a member of the public open an account on the portal? The portal's own
-  // answer, distinct from `authConfig.openSignup`, which answers for the team.
-  // A `z.object` strips what it does not name, so the key has to be here or the
-  // save is accepted and discarded — and the portal has no other writer.
-  openSignup: z.boolean().optional(),
-  welcomeCard: z
-    .object({
-      // Body is re-sanitized server-side by normalizeWelcomeCardInput;
-      // tiptapContentSchema gates the shape at the boundary.
-      body: tiptapContentSchema.optional(),
-    })
-    .optional(),
-  support: z
-    .object({
-      enabled: z.boolean().optional(),
-    })
-    .optional(),
-  nav: z
-    .object({
-      items: z
-        .array(
-          z.object({
-            id: z.string().min(1).max(64),
-            type: z.enum(['feedback', 'roadmap', 'changelog', 'help', 'support', 'status', 'link']),
-            enabled: z.boolean().optional(),
-            label: z.string().trim().max(30).optional(),
-            // http(s) only — blocks javascript:/data: URLs at the boundary.
-            url: z
-              .string()
-              .url()
-              .max(2048)
-              .refine((u) => /^https?:\/\//i.test(u), 'URL must be http(s)')
-              .optional(),
-            newTab: z.boolean().optional(),
-          })
-        )
-        .max(20)
-        .optional(),
-    })
-    .optional(),
-})
+export { updatePortalConfigSchema }
 
 const saveLogoKeySchema = z.object({
   key: z.string(),
 })
 
-const updateHeaderDisplayModeSchema = z.object({
-  mode: z.enum(['logo_and_name', 'logo_only', 'custom_logo']),
-})
-
-const updateHeaderDisplayNameSchema = z.object({
-  name: z.string().nullable(),
-})
-
-export type UpdateThemeInput = z.infer<typeof updateThemeSchema>
 export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSchema>
 export type SaveLogoKeyInput = z.infer<typeof saveLogoKeySchema>
-export type UpdateHeaderDisplayModeInput = z.infer<typeof updateHeaderDisplayModeSchema>
-export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNameSchema>
-
-export const updateThemeFn = createServerFn({ method: 'POST' })
-  .validator(updateThemeSchema)
-  .handler(async ({ data }) => {
-    log.info('update theme')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
-  })
 
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .validator(updatePortalConfigSchema)
@@ -617,20 +579,6 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
   return await deleteLogoKey()
 })
 
-export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
-  .validator(saveLogoKeySchema)
-  .handler(async ({ data }) => {
-    log.info({ key: data.key }, 'save header logo key')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await saveHeaderLogoKey(data.key)
-  })
-
-export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
-  log.info('delete header logo')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-  return await deleteHeaderLogoKey()
-})
-
 export const saveFaviconKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
@@ -644,22 +592,6 @@ export const deleteFaviconFn = createServerFn({ method: 'POST' }).handler(async 
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   return await deleteFaviconKey()
 })
-
-export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
-  .validator(updateHeaderDisplayModeSchema)
-  .handler(async ({ data }) => {
-    log.info({ mode: data.mode }, 'update header display mode')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateHeaderDisplayMode(data.mode)
-  })
-
-export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
-  .validator(updateHeaderDisplayNameSchema)
-  .handler(async ({ data }) => {
-    log.info({ name: data.name }, 'update header display name')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateHeaderDisplayName(data.name)
-  })
 
 const updateWorkspaceNameSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
@@ -679,26 +611,10 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
 // Custom CSS Operations
 // ============================================
 
-const MAX_CUSTOM_CSS_SIZE = 50 * 1024 // 50KB limit
-
-const updateCustomCssSchema = z.object({
-  customCss: z.string().max(MAX_CUSTOM_CSS_SIZE, 'Custom CSS exceeds 50KB limit'),
-})
-
-export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>
-
 export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch custom css')
   return await getCustomCss()
 })
-
-export const updateCustomCssFn = createServerFn({ method: 'POST' })
-  .validator(updateCustomCssSchema)
-  .handler(async ({ data }) => {
-    log.info({ css_length: data.customCss.length }, 'update custom css')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateCustomCss(data.customCss)
-  })
 
 // ============================================
 // Developer Config Operations
@@ -919,6 +835,8 @@ export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(asyn
   return await getOfficeHoursSchedule()
 })
 
+// The routing switch is the routing rule, so it follows routing.manage (the
+// Support lead preset holds it), not settings.manage.
 const conversationRoutingSchema = z.object({
   enabled: z.boolean(),
   strategy: z.literal('auto_assign_active'),
@@ -926,7 +844,7 @@ const conversationRoutingSchema = z.object({
 
 export const fetchConversationRoutingFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch conversation routing')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
   const { getConversationRouting } =
     await import('@/lib/server/domains/settings/settings.conversation-routing')
   return await getConversationRouting()
@@ -936,7 +854,7 @@ export const updateConversationRoutingFn = createServerFn({ method: 'POST' })
   .validator(conversationRoutingSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled }, 'update conversation routing')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
     const { updateConversationRouting } =
       await import('@/lib/server/domains/settings/settings.conversation-routing')
     return await updateConversationRouting(data)
@@ -1100,6 +1018,7 @@ const moderationDefaultSchema = z.object({
   requireApproval: z.enum(['none', 'anonymous', 'authenticated', 'all']),
   holdImages: z.boolean().optional(),
   holdLinks: z.boolean().optional(),
+  emailDecisions: z.boolean().optional(),
 })
 
 /**
@@ -1115,6 +1034,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { customSendingDomainsAvailable } =
     await import('@/lib/server/domains/channel-accounts/sending-identity')
+  const { isPooledTenancy } = await import('@/lib/server/workspaces/mode')
   let fromAddress: string | null = null
   try {
     fromAddress = getEmailFrom()
@@ -1132,6 +1052,9 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
     customDomains: customSendingDomainsAvailable()
       ? ('available' as const)
       : ('unavailable' as const),
+    // Whether the server is this workspace's own to read about. On one shared
+    // by many workspaces the page leaves the transport out.
+    ownServer: !isPooledTenancy(),
   }
 })
 

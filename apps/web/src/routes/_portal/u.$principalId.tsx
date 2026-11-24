@@ -27,7 +27,8 @@ export const Route = createFileRoute('/_portal/u/$principalId')({
     return {
       profile,
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
+      // A profile is on every host; its canonical is the primary domain's.
+      baseUrl: context.sectionLinks?.primary ?? context.baseUrl ?? '',
     }
   },
   head: ({ loaderData }) => {
@@ -55,7 +56,7 @@ function ProfileNotFound() {
       <p className="text-lg font-medium">
         <FormattedMessage id="portal.profile.notFound" defaultMessage="Profile not found" />
       </p>
-      <Link to="/" className="mt-4 inline-block text-sm text-primary hover:underline">
+      <Link to="/" className="mt-4 inline-block text-sm text-primary-ink hover:underline">
         <FormattedMessage id="portal.profile.backHome" defaultMessage="Back to feedback" />
       </Link>
     </div>
@@ -106,7 +107,7 @@ function PublicProfilePage() {
                   })}
               </h1>
               {profile.isTeamMember && (
-                <span className="inline-flex items-center gap-1 h-5 rounded-md bg-primary/15 px-1.5 text-xs font-medium text-primary">
+                <span className="inline-flex items-center gap-1 h-5 rounded-md bg-primary/15 px-1.5 text-xs font-medium text-primary-ink">
                   <CheckBadgeIcon className="h-3.5 w-3.5" aria-hidden="true" />
                   <FormattedMessage id="portal.profile.teamBadge" defaultMessage="Team" />
                 </span>
@@ -200,7 +201,7 @@ function PublicProfilePage() {
             <Link
               to="/admin/users"
               search={{ selected: profile.principalId }}
-              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary-ink hover:underline"
             >
               <FormattedMessage
                 id="portal.profile.teamStrip.openInAdmin"

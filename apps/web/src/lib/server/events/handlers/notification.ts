@@ -7,7 +7,11 @@
  */
 
 import type { HookHandler, HookResult } from '../hook-types'
-import type { EventData, EventPostMentionedData } from '../types'
+import {
+  isModerationDecisionEventType,
+  type EventData,
+  type EventPostMentionedData,
+} from '../types'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { CreateNotificationInput, NotificationType } from '@/lib/server/domains/notifications'
 import type { PrincipalId, PostId, PostCommentId, ConversationMessageId } from '@quackback/ids'
@@ -55,6 +59,14 @@ export interface NotificationConfig {
   // conversation.note_mentioned (WO-3 slice 3)
   conversationMessageId?: string
   authorName?: string
+  /** ticket.replied: the author as the requester's thread names them, for their row. */
+  requesterAuthorName?: string
+  // post.mentioned: who mentioned the recipient, resolved by getMentionTargets
+  mentionerName?: string | null
+  // post.approved / post.rejected / comment.approved / comment.rejected,
+  // resolved by getModerationDecisionTargets
+  decision?: 'approved' | 'rejected'
+  item?: 'post' | 'comment'
   preview?: string
   // ticket.status_changed (WO-3 slice 4) — labels resolved by the target
   // resolver (getTicketStatusChangedTargets), never carried on the event
@@ -68,6 +80,11 @@ export interface NotificationConfig {
   // message.created (WO-3 slice 5) — read back out by the anti-spam presence
   // gate in run(), below.
   isFirstMessage?: boolean
+  // message.created: the conversation is still closed after this customer
+  // message (a button tap answering a block posted after the close). It
+  // shows in no one's open inbox, so the presence gate cannot assume an
+  // online teammate sees it live.
+  stillClosed?: boolean
   // ticket.external_status_changed — the link row's display reference plus the
   // provider's status/transition, resolved by getTicketExternalStatusChangedTargets.
   reference?: string | null
@@ -78,27 +95,61 @@ export interface NotificationConfig {
   dueAt?: string
 }
 
+/**
+ * The same anti-spam gate as the new-message team bell below, for a customer
+ * message on a ticket's conversation (`ticket.replied` sent by the visitor).
+ * Every message in a live chat signals it, and the ticket's watchers are its
+ * team bell on a pair (the conversation bell is held back there), so without
+ * this each message would bell every watching teammate. While one of the
+ * watching teammates is around (a live inbox, not set to Away) they see it
+ * live and no teammate is belled; an unreadable presence store counts as
+ * someone around. Only teammates are held back: the requester's own row, and
+ * a teammate's reply (news for everyone watching), always go out.
+ */
+async function gateCustomerTicketReply(
+  event: EventData,
+  principalIds: NotificationTarget['principalIds'],
+  cfg: NotificationConfig
+): Promise<NotificationTarget['principalIds']> {
+  if (event.type !== 'ticket.replied' || event.data.senderType !== 'visitor') return principalIds
+  if (!principalIds || principalIds.length === 0) return principalIds
+  const requester = cfg.requesterPrincipalId ?? event.data.requesterPrincipalId ?? null
+  const teammates = principalIds.filter((id) => id !== requester)
+  if (teammates.length === 0) return principalIds
+  const { readAvailableAgentIds } = await import('@/lib/server/realtime/presence')
+  const online = await readAvailableAgentIds()
+  const someoneAround = online === null || teammates.some((id) => online.includes(id))
+  return someoneAround ? principalIds.filter((id) => id === requester) : principalIds
+}
+
 export const notificationHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { principalIds } = target as NotificationTarget
     const cfg = config as NotificationConfig
+    const principalIds = await gateCustomerTicketReply(
+      event,
+      (target as NotificationTarget).principalIds,
+      cfg
+    )
 
     if (!principalIds || principalIds.length === 0) {
       return { success: true }
     }
 
-    // Anti-spam gate for the new-message team bell (WO-3 slice 5), moved
-    // here from notifyVisitorMessage's request-time check: only ping the
-    // team on the first message of a conversation, or when nobody is around
-    // to see it live. isAnyAgentOnline is a single GLOBAL presence check, not
-    // per-recipient, so it's evaluated once for the whole target. This is a
-    // deliberate skew from notifyVisitorMessage's own (still request-time)
-    // presence check for the offline email — the two are never unified.
-    if (event.type === 'message.created' && !cfg.isFirstMessage) {
-      const { isAnyAgentOnline } = await import('@/lib/server/realtime/presence')
-      if (await isAnyAgentOnline()) {
-        return { success: true }
-      }
+    // Anti-spam gate for the new-message team bell (WO-3 slice 5): only ping
+    // on the first message of a conversation, or when none of the recipients
+    // is around to see it live (a live inbox and not set to Away). The
+    // recipients are already cut to the teammates whose scope holds the
+    // conversation, so an agent online who
+    // cannot see it never silences the ones who can. An unreadable presence
+    // store counts as someone online, so an outage cannot ping everyone on
+    // every message. This is a deliberate skew from notifyVisitorMessage's own
+    // (request-time) presence check for the offline email — never unified.
+    if (event.type === 'message.created' && !cfg.isFirstMessage && !cfg.stillClosed) {
+      const { readAvailableAgentIds } = await import('@/lib/server/realtime/presence')
+      const online = await readAvailableAgentIds()
+      if (online === null) return { success: true }
+      const onlineSet = new Set(online)
+      if (principalIds.some((id) => onlineSet.has(id))) return { success: true }
     }
 
     log.debug(
@@ -169,6 +220,17 @@ export const notificationHook: HookHandler = {
   },
 }
 
+/** The stored English title of a moderation-decision bell (the portal words it again). */
+function moderationDecisionTitle(
+  item: 'post' | 'comment',
+  decision: 'approved' | 'rejected'
+): string {
+  if (item === 'comment') {
+    return decision === 'approved' ? 'Your comment is now public' : 'Your comment was not published'
+  }
+  return decision === 'approved' ? 'Your post is now public' : 'Your post was not published'
+}
+
 /**
  * Build notification inputs for all subscribers based on event type
  */
@@ -237,7 +299,11 @@ function buildNotifications(
 
   if (event.type === 'post.mentioned') {
     const data = event.data as EventPostMentionedData
-    const actorName = event.actor.displayName?.trim() || 'Anonymous user'
+    // A service actor's displayName is its event source ('api', 'mcp'), not a name.
+    const actorName =
+      config.mentionerName?.trim() ||
+      (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+      'Anonymous user'
     // principalIds is always a single-element array for post.mentioned (target resolver builds it that way).
     return principalIds.map((principalId) => ({
       principalId,
@@ -246,6 +312,43 @@ function buildNotifications(
       body: truncate(data.postTitle, 150),
       postId: data.postId as PostId,
       metadata: { postUrl: data.postUrl, excerpt: data.excerpt, actorName },
+    }))
+  }
+
+  if (event.type === 'comment.mentioned') {
+    const data = event.data
+    const actorName =
+      config.mentionerName?.trim() ||
+      (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+      'Anonymous user'
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'comment_mentioned' as NotificationType,
+      title: `${actorName} mentioned you in a comment`,
+      body: truncate(data.postTitle, 150),
+      postId: data.postId as PostId,
+      commentId: data.commentId as PostCommentId,
+      metadata: { postUrl: data.postUrl, excerpt: data.excerpt, actorName },
+    }))
+  }
+
+  if (isModerationDecisionEventType(event.type)) {
+    const { decision, item, commentId } = config
+    if (!decision || !item || !postTitle) return []
+    // A rejected item is gone, so its row carries no post to open.
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'post_moderated' as NotificationType,
+      title: moderationDecisionTitle(item, decision),
+      body: truncate(postTitle, 150),
+      ...(decision === 'approved' ? { postId, commentId } : {}),
+      metadata: {
+        postTitle,
+        boardSlug,
+        postUrl,
+        moderationDecision: decision,
+        moderatedItem: item,
+      },
     }))
   }
 
@@ -355,19 +458,24 @@ function buildNotifications(
 
   if (event.type === 'ticket.replied') {
     const { ticketId, conversationId, title, authorName, preview, requesterPrincipalId } = config
-    return principalIds.map((principalId) => ({
-      principalId,
-      type: 'ticket_replied' as NotificationType,
-      title: `${authorName} replied on ${title}`,
-      body: preview,
-      metadata: {
-        ticketId,
-        conversationId,
-        ticketTitle: title,
-        actorName: authorName,
-        audience: requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
-      },
-    }))
+    return principalIds.map((principalId) => {
+      const toRequester = Boolean(requesterPrincipalId) && principalId === requesterPrincipalId
+      // The requester's row names the author as their thread does.
+      const name = (toRequester && config.requesterAuthorName) || authorName
+      return {
+        principalId,
+        type: 'ticket_replied' as NotificationType,
+        title: `${name} replied on ${title}`,
+        body: preview,
+        metadata: {
+          ticketId,
+          conversationId,
+          ticketTitle: title,
+          actorName: name,
+          audience: toRequester ? 'portal' : 'admin',
+        },
+      }
+    })
   }
 
   if (event.type === 'ticket.note_added') {

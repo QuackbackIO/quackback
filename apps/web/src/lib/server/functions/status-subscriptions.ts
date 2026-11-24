@@ -7,8 +7,15 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { StatusComponentId } from '@quackback/ids'
 import { requireAuth, normalizePrincipalType } from './auth-helpers'
-import { subscribe, unsubscribe, getMySubscription } from '@/lib/server/domains/status'
+import {
+  subscribe,
+  unsubscribe,
+  getMySubscription,
+  getStatusPageSnapshot,
+} from '@/lib/server/domains/status'
 import { logger } from '@/lib/server/logger'
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { resolveStatusPageGate, type StatusPageGateResult } from './status'
 
 const log = logger.child({ component: 'status-subscriptions' })
 
@@ -42,16 +49,44 @@ export const subscribeStatusFn = createServerFn({ method: 'POST' })
     log.debug({ scope: data.scope }, 'status subscribe')
     const auth = await requireAuth()
     if (normalizePrincipalType(auth.principal.type) === 'anonymous') {
-      throw new Error('Anonymous interaction is not enabled')
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
     }
-    await subscribe(
-      auth.principal.id,
-      data.scope,
-      (data.componentIds ?? []) as StatusComponentId[],
-      'self_serve'
-    )
+    // The page's own gate: someone it would turn away (private portal,
+    // unpublished page, audience they are outside of) cannot follow it.
+    const gate = await resolveStatusPageGate()
+    if (!gate.available) {
+      throw new NotFoundError('STATUS_PAGE_NOT_FOUND', 'Status page not found')
+    }
+    const componentIds =
+      data.scope === 'components' ? await followableComponents(gate, data.componentIds ?? []) : []
+    await subscribe(auth.principal.id, data.scope, componentIds, 'self_serve')
     return { subscribed: true }
   })
+
+/**
+ * The services a component subscription follows: at least one, each one the
+ * caller can see on the page (live, in their audience, within the plan).
+ * Anything else would store a subscription no incident can ever reach.
+ */
+async function followableComponents(
+  gate: StatusPageGateResult,
+  requested: string[]
+): Promise<StatusComponentId[]> {
+  const chosen = [...new Set(requested)]
+  if (chosen.length === 0) {
+    throw new ValidationError('INVALID_STATUS_COMPONENTS', 'Choose at least one service to follow')
+  }
+  const snapshot = await getStatusPageSnapshot(gate.actor, gate.settings)
+  const visible = new Set(
+    [...snapshot.ungroupedComponents, ...snapshot.groups.flatMap((g) => g.components)].map((c) =>
+      String(c.id)
+    )
+  )
+  if (!chosen.every((id) => visible.has(id))) {
+    throw new ValidationError('INVALID_STATUS_COMPONENTS', 'Choose services shown on the page')
+  }
+  return chosen as StatusComponentId[]
+}
 
 /** Self-serve unsubscribe from the same button (toggle). */
 export const unsubscribeStatusFn = createServerFn({ method: 'POST' }).handler(async () => {

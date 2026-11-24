@@ -16,7 +16,28 @@ import type { TicketType, TicketStage, TicketStatusCategory } from '@/lib/shared
 /** Every ticket list order. `recent`/`oldest` sort by activity (updatedAt);
  *  `due` is soonest due date first, tickets without one last. The single list
  *  shared by the server fns, the v1 API and MCP so they cannot drift. */
-export const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority', 'due'] as const
+export const TICKET_SORTS = [
+  'recent',
+  'oldest',
+  'created',
+  'priority',
+  'sla',
+  'waiting',
+  'due',
+] as const
+
+/**
+ * Whether a failed ticket-to-conversation link was refused because one side is
+ * test data and the other is real. Read from the typed code the server error
+ * keeps on its way to the browser, never from its message.
+ */
+export function isTestDataLinkConflict(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    (error as { code?: unknown }).code === 'TEST_DATA_LINK_CONFLICT'
+  )
+}
 
 /** Render a ticket's sequential number for display (plain `#142`). */
 export function formatTicketNumber(n: number): string {

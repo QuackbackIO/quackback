@@ -17,6 +17,8 @@ const {
   mockInvalidateQueries,
   mockRemoveQueries,
   mockSignOut,
+  mockNavigate,
+  mockToastError,
   linkRenders,
 } = vi.hoisted(() => ({
   mockGetRouteContext: vi.fn(),
@@ -27,7 +29,11 @@ const {
   mockHasDistinctSignup: vi.fn((): boolean => true),
   mockInvalidateQueries: vi.fn(() => Promise.resolve()),
   mockRemoveQueries: vi.fn(() => Promise.resolve()),
-  mockSignOut: vi.fn(() => Promise.resolve()),
+  mockSignOut: vi.fn((): Promise<unknown> =>
+    Promise.resolve({ data: { success: true }, error: null })
+  ),
+  mockNavigate: vi.fn(),
+  mockToastError: vi.fn(),
   // The label (or target) of each Link render, to tell which tabs rendered.
   linkRenders: [] as string[],
 }))
@@ -35,7 +41,7 @@ const {
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({
     invalidate: vi.fn(),
-    navigate: vi.fn(),
+    navigate: mockNavigate,
     state: { location: { pathname: '/' } },
   }),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
@@ -96,6 +102,8 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
   useAuthBroadcast: () => {},
 }))
 
+vi.mock('sonner', () => ({ toast: { error: mockToastError, success: vi.fn() } }))
+
 vi.mock('@/lib/client/auth-client', () => ({
   signOut: mockSignOut,
   authClient: { signIn: { social: mockSocial } },
@@ -128,12 +136,16 @@ function renderHeader({
   userRole,
   isLoggedIn,
   workspaceName = 'Acme',
+  route = {},
 }: {
   userRole?: 'admin' | 'member' | 'user' | null
   isLoggedIn: boolean
   workspaceName?: string
+  /** More of the root route context, as the bootstrap sends it. */
+  route?: Record<string, unknown>
 }) {
   mockGetRouteContext.mockReturnValue({
+    ...route,
     session: isLoggedIn ? loggedInSession : null,
     settings: {
       name: workspaceName,
@@ -151,6 +163,86 @@ function renderHeader({
     </IntlProvider>
   )
 }
+
+describe('PortalHeader: the wide logo', () => {
+  afterEach(() => cleanup())
+
+  const WIDE = '/api/storage/header-logos/2026/11/abc-wordmark.svg'
+  const SQUARE = '/api/storage/logos/2026/11/abc-mark.png'
+
+  function renderWith(props: { wideLogo?: string | null; orgLogo?: string | null }) {
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: { name: 'Acme', headerDisplayMode: 'custom_logo' },
+      registeredAuthProviders: [],
+    })
+    return render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PortalHeader orgName="Acme" showThemeToggle={false} {...props} />
+      </IntlProvider>
+    )
+  }
+
+  it('shows the wide logo in place of the square logo and the name', () => {
+    renderWith({ wideLogo: WIDE, orgLogo: SQUARE })
+    const logo = screen.getByRole('img', { name: 'Acme' })
+    expect(logo).toHaveAttribute('src', WIDE)
+    expect(logo.className).toMatch(/\bh-8\b/)
+    expect(logo.className).toMatch(/\bw-auto\b/)
+    expect(logo.className).toMatch(/max-w-\[180px\]/)
+    expect(logo.className).toMatch(/\bobject-contain\b/)
+    // A wordmark is the brand's own shape: no rounded crop.
+    expect(logo.className).not.toMatch(/radius|rounded/)
+    expect(screen.queryByText('Acme')).not.toBeInTheDocument()
+    expect(document.querySelector(`img[src="${SQUARE}"]`)).toBeNull()
+  })
+
+  it('keeps the wide logo on a phone, where the name is hidden', () => {
+    renderWith({ wideLogo: WIDE, orgLogo: SQUARE })
+    const logo = screen.getByRole('img', { name: 'Acme' })
+    expect(logo.className).not.toMatch(/(^|\s)hidden(\s|$)/)
+    expect(logo.className).not.toMatch(/sm:block/)
+  })
+
+  it('shows the square logo and the name without one', () => {
+    renderWith({ wideLogo: null, orgLogo: SQUARE })
+    expect(screen.getByRole('img', { name: 'Acme' })).toHaveAttribute('src', SQUARE)
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+  })
+
+  function renderDraft(
+    logo: PortalPreviewDraft['logo'],
+    props: { wideLogo?: string | null; orgLogo?: string | null }
+  ) {
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: { name: 'Acme' },
+      registeredAuthProviders: [],
+    })
+    return render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PreviewDraftProvider draft={{ logo }} css="">
+          <PortalHeader orgName="Acme" showThemeToggle={false} {...props} />
+        </PreviewDraftProvider>
+      </IntlProvider>
+    )
+  }
+
+  it("draws the Customise draft's wide logo before it is published", () => {
+    renderDraft({ url: WIDE, mode: 'custom_logo' }, { wideLogo: null, orgLogo: SQUARE })
+    const logo = screen.getByRole('img', { name: 'Acme' })
+    expect(logo).toHaveAttribute('src', WIDE)
+    expect(logo.className).toMatch(/max-w-\[180px\]/)
+    expect(screen.queryByText('Acme')).not.toBeInTheDocument()
+  })
+
+  it('shows the square icon and the name when the draft turns a live wide logo off', () => {
+    renderDraft({ url: SQUARE, mode: 'logo_and_name' }, { wideLogo: WIDE, orgLogo: SQUARE })
+    expect(screen.getByRole('img', { name: 'Acme' })).toHaveAttribute('src', SQUARE)
+    expect(document.querySelector(`img[src="${WIDE}"]`)).toBeNull()
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+  })
+})
 
 describe('PortalHeader — Admin dropdown item', () => {
   afterEach(() => cleanup())
@@ -176,6 +268,57 @@ describe('PortalHeader — Admin dropdown item', () => {
     const trigger = screen.getByRole('button')
     fireEvent.click(trigger)
     expect(await screen.findByRole('menuitem', { name: /admin/i })).toBeInTheDocument()
+  })
+
+  it('links Admin on the page on the primary domain', async () => {
+    renderHeader({ userRole: 'admin', isLoggedIn: true, route: { baseUrl: 'https://acme.com' } })
+    expect(screen.getByRole('link', { name: /admin/i }).getAttribute('href')).toBe('/admin')
+    fireEvent.click(screen.getByRole('button'))
+    const item = await screen.findByRole('menuitem', { name: /admin/i })
+    expect(item.getAttribute('href')).toBe('/admin')
+  })
+
+  // On a section host the session is portal scope, so the role reads as a
+  // portal user's; the bootstrap sends a teammate the admin's address instead.
+  const onSectionHost = {
+    baseUrl: 'https://acme.com',
+    sectionLinks: {
+      hosts: { feedback: 'https://feedback.acme.com' },
+      here: 'https://feedback.acme.com',
+    },
+  }
+
+  it('links a teammate on a section host to the admin on the primary domain', async () => {
+    renderHeader({
+      userRole: 'user',
+      isLoggedIn: true,
+      route: { ...onSectionHost, primaryAdminUrl: 'https://acme.com/admin' },
+    })
+    // The button in the header...
+    expect(screen.getByRole('link', { name: /admin/i }).getAttribute('href')).toBe(
+      'https://acme.com/admin'
+    )
+    // ...and the item in the account menu.
+    fireEvent.click(screen.getByRole('button'))
+    const item = await screen.findByRole('menuitem', { name: /admin/i })
+    expect(item.getAttribute('href')).toBe('https://acme.com/admin')
+  })
+
+  it('shows a portal user on a section host no Admin', async () => {
+    renderHeader({ userRole: 'user', isLoggedIn: true, route: onSectionHost })
+    expect(screen.queryByRole('link', { name: /admin/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button'))
+    await screen.findByRole('menuitem', { name: /settings/i })
+    expect(screen.queryByRole('menuitem', { name: /admin/i })).toBeNull()
+  })
+
+  it('shows a visitor who is not signed in on a section host no Admin', () => {
+    renderHeader({
+      userRole: null,
+      isLoggedIn: false,
+      route: { ...onSectionHost, primaryAdminUrl: 'https://acme.com/admin' },
+    })
+    expect(screen.queryByRole('link', { name: /admin/i })).toBeNull()
   })
 
   it('hides the Admin item for portal users', async () => {
@@ -222,6 +365,52 @@ describe('PortalHeader — sign-out cache hygiene', () => {
         ['publicPosts'],
       ])
     )
+  })
+})
+
+describe('PortalHeader: a sign-out that fails', () => {
+  beforeEach(() => {
+    mockSignOut.mockReset()
+    mockNavigate.mockClear()
+    mockToastError.mockClear()
+    mockRemoveQueries.mockClear()
+  })
+  afterEach(() => cleanup())
+
+  async function clickSignOut() {
+    renderHeader({ userRole: 'user', isLoggedIn: true })
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /log out|sign out/i }))
+    await vi.waitFor(() => expect(mockSignOut).toHaveBeenCalled())
+  }
+
+  it('says so when the server refuses it, and stays signed in where it is', async () => {
+    mockSignOut.mockResolvedValue({
+      data: null,
+      error: { status: 403, code: 'INVALID_ORIGIN', message: 'Invalid origin' },
+    })
+    await clickSignOut()
+    await vi.waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("Couldn't sign you out. Try again.")
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(mockRemoveQueries).not.toHaveBeenCalled()
+  })
+
+  it('says so when the request fails', async () => {
+    mockSignOut.mockRejectedValue(new TypeError('Failed to fetch'))
+    await clickSignOut()
+    await vi.waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("Couldn't sign you out. Try again.")
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('goes home with no error when it works', async () => {
+    mockSignOut.mockResolvedValue({ data: { success: true }, error: null })
+    await clickSignOut()
+    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/' }))
+    expect(mockToastError).not.toHaveBeenCalled()
   })
 })
 

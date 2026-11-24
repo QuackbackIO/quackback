@@ -10,22 +10,42 @@ Quackback validates required runtime configuration before it starts workers or a
 
 Production Compose supplies `DATABASE_URL` from its bundled service. You must set `BASE_URL` and `SECRET_KEY` in `.env`.
 
-| Operational variable       |                Default | Description                                                                                                   |
-| -------------------------- | ---------------------: | ------------------------------------------------------------------------------------------------------------- |
-| `QUACKBACK_ROLE`           |                  `all` | `web`, `worker`, or `all`; split roles when scaling replicas.                                                 |
-| `DB_POOL_MAX`              | `10` web / `20` worker | Maximum PostgreSQL connections per process. Keep the replica total below the server budget.                   |
-| `DB_IDLE_TIMEOUT`          |                   `20` | Seconds before an idle database connection is closed.                                                         |
-| `TRUSTED_PROXY_HOPS`       |                    `0` | Proxy hops permitted to supply client-IP headers. Keep `0` when directly exposed.                             |
-| `TRUSTED_CLIENT_IP_HEADER` |                  unset | Header your proxy sets to the client IP, e.g. `X-Real-IP`. Wins over `TRUSTED_PROXY_HOPS`.                    |
-| `CHAT_TRANSPORT_MODE`      |                 `live` | Set `poll` only behind proxies that buffer SSE.                                                               |
-| `SETUP_OWNER_EMAIL`        |                  unset | Hands an unfinished setup to this address. See [Recovering setup](#recovering-setup).                         |
-| `SETUP_TOKEN`              |                  unset | Lets you create the first admin over HTTP. See [Setting up without a browser](#setting-up-without-a-browser). |
+| Operational variable       |                Default | Description                                                                                                     |
+| -------------------------- | ---------------------: | --------------------------------------------------------------------------------------------------------------- |
+| `QUACKBACK_ROLE`           |                  `all` | `web`, `worker`, or `all`; split roles when scaling replicas.                                                   |
+| `DB_POOL_MAX`              | `10` web / `20` worker | Maximum PostgreSQL connections per process. Keep the replica total below the server budget.                     |
+| `DB_IDLE_TIMEOUT`          |                   `20` | Seconds before an idle database connection is closed.                                                           |
+| `TRUSTED_PROXY_HOPS`       |                    `0` | Proxy hops permitted to supply client-IP headers. Keep `0` when directly exposed.                               |
+| `TRUSTED_CLIENT_IP_HEADER` |                  unset | Header your proxy sets to the client IP, e.g. `X-Real-IP`. Wins over `TRUSTED_PROXY_HOPS`.                      |
+| `CHAT_TRANSPORT_MODE`      |                 `live` | Set `poll` only behind proxies that buffer SSE.                                                                 |
+| `SETUP_OWNER_EMAIL`        |                  unset | Hands an unfinished setup to this address. See [Recovering setup](#recovering-setup).                           |
+| `SETUP_TOKEN`              |                  unset | Lets you create the first admin over HTTP. See [Setting up without a browser](#setting-up-without-a-browser).   |
+| `QUACKBACK_DISABLED_JOBS`  |                  unset | Comma list of job names to pause, such as `spam-retention,file-retention`. See [Pausing a job](#pausing-a-job). |
 
 With `TRUSTED_PROXY_HOPS=0` (the default), rate limiting and IP-based checks never trust client-supplied headers; they use the actual TCP peer address instead, so distinct clients still get distinct buckets even directly exposed. That resolution depends on the platform reporting the socket peer, which the production build (`bun run start`) always has; a dev runtime that doesn't expose it falls back to a single shared bucket rather than trusting a spoofable header. When you do run behind reverse proxies, set this to the number of hops so client IP is read from the correct `X-Forwarded-For` position instead.
 
 If your proxy sets one authoritative client-IP header, such as nginx with `proxy_set_header X-Real-IP $remote_addr;` or Cloudflare's `CF-Connecting-IP`, you can set `TRUSTED_CLIENT_IP_HEADER` to that header's name instead of counting hops. This is the better choice when requests pass through several proxies whose number you don't control. The header is used only when it holds exactly one valid IP address; otherwise the app falls back to `TRUSTED_PROXY_HOPS` and logs a warning at most once a minute. Only set it when your proxy always sets or overwrites the header and the app port is not reachable directly, otherwise any client can spoof its IP. `X-Forwarded-For` is refused here; use `TRUSTED_PROXY_HOPS` for it.
 
+### Pausing a job
+
+`QUACKBACK_DISABLED_JOBS` pauses background jobs by name, for example while you look into a job that misbehaves. A paused scheduled job writes nothing, and a paused job's queued work stays queued: it does not fail, and it runs once you take the name off the list and restart. Each start logs one `job paused` line per paused job and a warning for a name that matches no job. The job names are listed in `apps/web/src/lib/server/jobs/JOBS.md`.
+
 Use `/api/health/live` for process liveness and `/api/health/ready` for traffic readiness. Readiness checks PostgreSQL, the exact bundled migration ledger, and whether a worker-role process is actually running the job worker.
+
+### Browser reader
+
+Import your brand (Portal > Customise) reads a website's HTML and CSS. To match a brand more closely, run the optional browser reader sidecar, which renders the page in a headless browser and measures its colours, buttons, corners, fonts and logo. Without it, Import uses the HTML and CSS reader and says what it could not read.
+
+| Variable                  | Default | Description                                                                             |
+| ------------------------- | ------: | --------------------------------------------------------------------------------------- |
+| `QUACKBACK_BROWSER_URL`   |   unset | The sidecar's base URL, such as `http://browser:3200`.                                  |
+| `QUACKBACK_BROWSER_TOKEN` |   unset | A shared token of 16 characters or more. Set the same value on the app and the sidecar. |
+
+Both must be set for Import to use the sidecar. With production Compose, set `QUACKBACK_BROWSER_TOKEN` in `.env` and start it with `docker compose -f docker-compose.prod.yml --profile browser up -d`; Compose sets the URL and pulls the published image, `ghcr.io/quackbackio/quackback-browser`, at the same tag as the app (`QUACKBACK_TAG`). To build it yourself instead, run `docker compose -f docker-compose.prod.yml --profile browser build browser`, or `docker build -f docker/browser/Dockerfile -t quackback-browser .` from the repository root. Compose runs it on a network of its own that only the app joins, so it cannot reach the database or storage, as a non-root user with Chromium's sandbox on. The sandbox needs the seccomp profile in `docker/browser/seccomp-chromium.json` (Docker's default profile plus `clone` and `unshare`); with `docker run`, pass `--security-opt seccomp=docker/browser/seccomp-chromium.json`. Every request a page makes is checked against the same private-address rules as the app's own fetches. It reads one page at a time, keeps no cookies or storage between reads, and identifies itself as `QuackbackBrandReader`, which sites can name in robots.txt. The app checks robots.txt before asking it.
+
+### Portal logos and fonts
+
+Portal > Customise uploads a wide logo (SVG, PNG or WebP) and font files (WOFF2, WOFF, TTF or OTF) to the configured file storage, so both need S3-compatible storage. An SVG logo is rebuilt from an allowlist on upload, and only the rebuilt file is stored. Wide logos and fonts are always served through the app's own `/api/storage` route rather than by a redirect to the bucket, so the bucket needs no CORS rules for them. An upload waits in the editor's draft until Publish; the `staged-upload-sweep` job deletes uploads that were never published a day later, and never a file the settings still name.
 
 For optional email, storage, AI, authentication, and integration settings, see [`.env.example`](../.env.example).
 
@@ -40,7 +60,7 @@ curl -X POST https://feedback.example.com/api/v1/setup \
   -d '{"workspaceName":"Acme","adminEmail":"you@example.com","adminName":"You"}'
 ```
 
-The response creates the workspace and its first admin, and includes that admin's first API key. It is shown once, so store it. The admin has no password; they can sign in later with an emailed link or code once email is configured. The endpoint exists only while the install has no admin. After that it answers `404` and the token opens nothing, so you can remove `SETUP_TOKEN`. If `adminEmail` already has an account, it is promoted only when its address is verified (otherwise `409`), and its sessions are ended. It is rate limited, every attempt is logged, and setup and refused attempts are written to the audit log.
+The response creates the workspace and its first admin, and includes the workspace's first API key. It is shown once, so store it. It is a workspace key with the Owner role and every scope, recorded as made by the admin, so replies sent with it count as automated, never as the admin's own, and do not meet response targets. Because it is a workspace key, it keeps working after the first admin leaves: once setup is done, rotate it or revoke it under Settings → Developers → Keys. The admin has no password; they can sign in later with an emailed link or code once email is configured. The endpoint exists only while the install has no admin. After that it answers `404` and the token opens nothing, so you can remove `SETUP_TOKEN`. If `adminEmail` already has an account, it is promoted only when its address is verified (otherwise `409`), and its sessions are ended. It is rate limited, every attempt is logged, and setup and refused attempts are written to the audit log.
 
 ## Signing in headless clients
 

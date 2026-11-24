@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useDeleteIntegration } from '@/lib/client/mutations'
 import { saveSegmentConnectionFn } from '@/lib/server/functions/segment-integration'
+import { errorText } from '@/lib/client/error-text'
 
 export function SegmentConnectionActions(props: { integrationId?: string; isConnected: boolean }) {
   const [incomingSecret, setIncomingSecret] = useState('')
@@ -87,7 +88,7 @@ export function SegmentConnectionActions(props: { integrationId?: string; isConn
             })
             window.location.reload()
           } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'Failed to connect Segment')
+            setError(errorText(cause, 'Failed to connect Segment'))
           } finally {
             setSaving(false)
           }

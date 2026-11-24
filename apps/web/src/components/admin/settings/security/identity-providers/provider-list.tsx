@@ -7,15 +7,16 @@
  * the same label the end user meets at login. Adding or configuring a provider
  * leaves this page: /sso/new is the short create form and /sso/:id is the
  * provider's own page (connection, sign-in, accounts, claim mapping, removal).
- * When the custom-OIDC tier is off, the upgrade prompt sits above the list.
- * Enabled providers can still be switched off from the list; turning one on,
- * adding one, and opening its page need the tier. The recovery codes stay.
+ * When the custom-OIDC tier is off, the upgrade prompt sits above the list, or,
+ * when a provider is still set up, a notice that email links stand in for it.
+ * Enabled providers can still be switched off from the list, unless that would
+ * leave no way in (with the tier off, a provider keeps the stand-in email links
+ * on); turning one on, adding one, and opening its page need the tier. The recovery codes stay.
  */
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { toast } from 'sonner'
 import { LockClosedIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,20 +31,33 @@ import { upsertIdentityProviderFn } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
 import { RecoveryCodesSection } from '../sso/recovery-codes-section'
-import { isOnlyWorkingMethod } from './only-working-method'
-import { SsoUpgradeNotice } from './sso-upgrade-notice'
+import { isProviderLastWayIn, type AuthMethodInputs } from '../auth-method-count'
+import { SsoOffOnPlanNotice, SsoUpgradeNotice } from './sso-upgrade-notice'
+import { toastError } from '@/lib/client/error-notice'
+
+// Loaded only while a provider set up past the plan still works.
+const SsoPausesNotice = lazy(() => import('./sso-pauses-notice'))
 
 export function IdentityProvidersSection({
   tierEnabled,
-  enabledMethodCount,
+  ssoLive = tierEnabled,
+  methods,
 }: {
   tierEnabled: boolean
-  /** Total working sign-in methods across every surface. Used to block
-   *  disabling a provider that is the only one left (keep ≥1 method enabled). */
-  enabledMethodCount: number
+  /** Single sign-on works right now: the plan has it, or it keeps working
+   *  through a plan limits grace. Defaults to the tier flag. */
+  ssoLive?: boolean
+  /** The other sign-in methods (built-in and social). With the providers below
+   *  they decide whether switching a provider off would leave no way in. */
+  methods: Omit<AuthMethodInputs, 'identityProviders' | 'ssoLive'>
 }) {
   const providersQuery = useSuspenseQuery(settingsQueries.identityProviders())
   const providers = providersQuery.data ?? []
+  const isLastWayIn = (providerId: string) =>
+    isProviderLastWayIn({ ...methods, identityProviders: providers, ssoLive }, providerId)
+  // Set up but not in the plan: it keeps working through a plan limits grace,
+  // and once paused email links stand in for it.
+  const setUp = !tierEnabled && providers.some((p) => p.enabled && p.configured)
 
   const createAction = (
     <NewButton noun="provider" asChild>
@@ -60,7 +74,15 @@ export function IdentityProvidersSection({
     >
       {!tierEnabled && (
         <div className="p-4 sm:p-6">
-          <SsoUpgradeNotice />
+          {!setUp ? (
+            <SsoUpgradeNotice />
+          ) : ssoLive ? (
+            <Suspense fallback={null}>
+              <SsoPausesNotice />
+            </Suspense>
+          ) : (
+            <SsoOffOnPlanNotice />
+          )}
         </div>
       )}
       {providers.length === 0 ? (
@@ -79,7 +101,7 @@ export function IdentityProvidersSection({
             <ProviderRow
               key={provider.id}
               provider={provider}
-              enabledMethodCount={enabledMethodCount}
+              isOnlyMethod={isLastWayIn(provider.id)}
               tierEnabled={tierEnabled}
             />
           ))}
@@ -99,11 +121,12 @@ export function IdentityProvidersSection({
 
 function ProviderRow({
   provider,
-  enabledMethodCount,
+  isOnlyMethod,
   tierEnabled,
 }: {
   provider: IdentityProvider
-  enabledMethodCount: number
+  /** Switching it off would leave no way in (see `isProviderLastWayIn`). */
+  isOnlyMethod: boolean
   tierEnabled: boolean
 }) {
   const queryClient = useQueryClient()
@@ -116,9 +139,6 @@ function ProviderRow({
   // Persisted choice wins; infer from the discovery URL only for legacy rows.
   const kind = provider.kind ?? inferIdpKind(provider.discoveryUrl)
   const verifiedDomains = provider.domains.filter((d) => d.verifiedAt)
-  // Without the tier the count leaves identity providers out, so the guard
-  // would wrongly lock a stale provider on. Switching it off must stay possible.
-  const isOnlyMethod = tierEnabled && isOnlyWorkingMethod(provider, enabledMethodCount)
   // Without the tier a provider can be switched off but not switched on.
   const needsTierToEnable = !tierEnabled && !enabled
 
@@ -143,7 +163,7 @@ function ProviderRow({
       })
     } catch (err) {
       setEnabled(!checked)
-      toast.error(err instanceof Error ? err.message : 'Could not update the provider.')
+      toastError(err, 'Could not update the provider.')
     } finally {
       setPending(false)
     }

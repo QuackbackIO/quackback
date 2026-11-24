@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { toastError } from '@/lib/client/error-notice'
 
 interface TrackerLink {
   id: TicketExternalLinkId
@@ -115,8 +116,7 @@ function TrackerSection({
     void qc.invalidateQueries({ queryKey: ticketKeys.externalLinks(ticketId) })
     onChanged()
   }
-  const onError = (e: unknown) =>
-    toast.error(e instanceof Error ? e.message : 'Could not update the link')
+  const onError = (e: unknown) => toastError(e, 'Could not update the link')
 
   const link = useMutation({
     mutationFn: (issue: string) =>

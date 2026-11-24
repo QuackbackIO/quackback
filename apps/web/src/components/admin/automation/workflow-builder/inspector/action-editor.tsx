@@ -5,8 +5,12 @@
  * home (inspector panel instead of a popover) and the entity source (the
  * shared WorkflowEntitiesProvider instead of a canvas-local context) differ.
  */
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { useIntl } from 'react-intl'
 import { Input } from '@/components/ui/input'
+import { CopyButton } from '@/components/shared/copy-button'
+import { getWorkflowWebhookSecretFn } from '@/lib/server/functions/workflows'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -477,6 +481,64 @@ export function ActionEditor({
           </p>
         </Field>
       )}
+
+      {action.type === 'send_webhook' && <WebhookSigningSecret url={action.url} />}
     </div>
+  )
+}
+
+/**
+ * The secret this step signs its deliveries with, shown on request so the
+ * receiver can verify them. It belongs to the URL, so it is hidden again
+ * whenever the URL changes.
+ */
+export function WebhookSigningSecret({ url }: { url: string }) {
+  const [shown, setShown] = useState<{ url: string; secret: string } | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const secret = shown?.url === url ? shown.secret : null
+
+  const reveal = async () => {
+    setLoading(true)
+    setFailed(false)
+    try {
+      const result = await getWorkflowWebhookSecretFn({ data: { url } })
+      setShown({ url, secret: result.secret })
+    } catch {
+      setFailed(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Field label="Signing secret">
+      {secret ? (
+        <div className="flex items-center gap-2">
+          <Input
+            readOnly
+            value={secret}
+            className="font-mono text-xs"
+            aria-label="Signing secret"
+          />
+          <CopyButton value={secret} aria-label="Copy signing secret" />
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={reveal}
+          disabled={loading || !url.startsWith('https://')}
+        >
+          Show secret
+        </Button>
+      )}
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {failed
+          ? 'Could not load the secret. Check the URL and try again.'
+          : 'Verify the X-Quackback-Signature header with it, as for outgoing webhooks.'}
+      </p>
+    </Field>
   )
 }

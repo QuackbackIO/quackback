@@ -21,7 +21,8 @@
  *   - The row is NOT customer-scoped. A closed ticket is team knowledge
  *     retrieved across every requester (tickets-retrieval.ts is a copilot-only,
  *     team-ceiling source), so `requesterPrincipalId` is denormalized for
- *     provenance only, never a retrieval predicate.
+ *     provenance only, never a retrieval predicate. Retrieval is scoped to the
+ *     asking teammate instead, through the parent ticket's `ticketFilter`.
  *
  * `summarizeTicketOnClose` is best-effort end to end: every failure
  * (unconfigured AI, a malformed model response, a DB error) is caught and
@@ -53,6 +54,7 @@ import {
 } from './close-summary'
 import { createId, type TicketId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 const log = logger.child({ component: 'ticket-summary' })
 
@@ -125,6 +127,7 @@ export async function summarizeTicketOnClose(
     // chip's 'copilot_summary' (analytics/copilot-usage.ts counts only the
     // latter), matching how the conversation on-close path stays off that report.
     const object = await chat({
+      threadId: oneShotThreadId(),
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,

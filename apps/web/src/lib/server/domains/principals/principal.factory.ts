@@ -29,6 +29,7 @@ import {
   ne,
   and,
   isNull,
+  isNotNull,
   sql,
   type Principal,
   type ServiceMetadata,
@@ -39,9 +40,12 @@ import { generateId, type PrincipalId, type RoleId, type UserId } from '@quackba
 import { isTeamMember, type Role, type PrincipalType } from '@/lib/shared/roles'
 import { presetForLegacyRole } from '@/lib/shared/permissions'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
+import { afterCommit } from '@/lib/server/workspaces/after-commit'
 import { addPrincipalToDefaultTeam } from '@/lib/server/domains/teams'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { enqueueMembershipSync } from './membership-sync'
+import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 
 /** The live db or an open transaction — both expose insert/update/query. */
 export type Executor = Database | Transaction
@@ -61,6 +65,15 @@ function shouldSyncMembership(args: {
 
 async function noteMembershipChanged(executor?: Executor): Promise<void> {
   await enqueueMembershipSync(executor && executor !== db ? { executor } : undefined)
+}
+
+/**
+ * A new team seat: sync membership, and recount seats for plan limits once the
+ * caller's transaction commits (`invalidatePlanLimits` waits for it).
+ */
+async function noteSeatAdded(executor?: Executor): Promise<void> {
+  await noteMembershipChanged(executor)
+  await invalidatePlanLimits()
 }
 
 /** Address a principal by its id (exact) or by its owning user. */
@@ -123,7 +136,7 @@ export async function createPrincipal(
 ): Promise<Principal> {
   const [created] = await exec.insert(principal).values(toRow(input)).returning()
   await enrollTeamTierInDefaultTeam(created, exec)
-  if (isTeamSeat(created.type, created.role)) await noteMembershipChanged(exec)
+  if (isTeamSeat(created.type, created.role)) await noteSeatAdded(exec)
   return created
 }
 
@@ -135,7 +148,7 @@ export async function createPrincipals(
   if (inputs.length === 0) return []
   const created = await exec.insert(principal).values(inputs.map(toRow)).returning()
   for (const row of created) await enrollTeamTierInDefaultTeam(row, exec)
-  if (created.some((row) => isTeamSeat(row.type, row.role))) await noteMembershipChanged(exec)
+  if (created.some((row) => isTeamSeat(row.type, row.role))) await noteSeatAdded(exec)
   return created
 }
 
@@ -185,8 +198,10 @@ export async function ensurePrincipalForUser(
     .returning()
   if (inserted) {
     await enrollTeamTierInDefaultTeam(inserted, exec)
-    await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(input.userId))
-    if (isTeamSeat(inserted.type, inserted.role)) await noteMembershipChanged(exec)
+    // After commit: the cache lives in the database, so dropping it now would
+    // need a second connection while the caller's transaction holds one.
+    await afterCommit(() => cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(input.userId)))
+    if (isTeamSeat(inserted.type, inserted.role)) await noteSeatAdded(exec)
     return { principal: inserted, created: true }
   }
 
@@ -245,6 +260,16 @@ async function resolveUserId(
   return row?.userId ?? null
 }
 
+export interface SetRoleResult {
+  /** User-keyed cache entries for a caller inside a transaction to bust on commit. */
+  cacheKeysToBust: readonly string[]
+  /**
+   * The principal whose role or workspace assignment this write changed, so
+   * their open inbox streams reload their scope. Unset when nothing changed.
+   */
+  scopeChangedFor?: PrincipalId
+}
+
 export interface SetRoleOpts extends MutateOpts {
   /**
    * Workspace-wide role assignment to write alongside the role column, for
@@ -279,7 +304,7 @@ export async function setPrincipalRole(
   ref: PrincipalRef,
   role: Role,
   opts: SetRoleOpts = {}
-): Promise<{ cacheKeysToBust: readonly string[] }> {
+): Promise<SetRoleResult> {
   // The role column and its workspace assignment must move together, and every
   // demotion/removal is serialized through one transaction-scoped lock, so all
   // writes (promotions included) get a transaction when the caller didn't
@@ -291,6 +316,11 @@ export async function setPrincipalRole(
       setPrincipalRole(ref, role, { ...opts, executor: tx })
     )
     for (const key of result.cacheKeysToBust) await cacheDel(key)
+    // After the commit, so the person's open inbox stream reloads the new
+    // role (or closes, when they left the team). A caller that brings its own
+    // transaction gets `scopeChangedFor` back and publishes it after its own
+    // commit (an invite accepted by an existing teammate does).
+    if (result.scopeChangedFor) publishInboxScopeChanged([result.scopeChangedFor])
     return result
   }
 
@@ -368,14 +398,55 @@ export async function setPrincipalRole(
   if (target?.type === 'user' && isTeamMember(target.role) !== isTeamMember(role)) {
     await revokeApiKeysCreatedBy(exec, target.id)
   }
+  // A teammate cannot be blocked (blocking.ts), so joining the team ends a
+  // block the person held as a customer, with an audit row saying why.
+  // Otherwise the block would lock the new teammate out of signing in.
+  if (reconcilable && target?.type === 'user' && !isTeamMember(target.role) && isTeamMember(role)) {
+    await clearBlockOnJoiningTeam(exec, target.id, opts.assignGrantedBy ?? null)
+  }
+  // Recovery codes are break-glass for the people who manage sign-in, so a
+  // role change that leaves someone unable to manage it takes their codes.
+  if (reconcilable && target?.type === 'user' && userId && (reassign || target.role !== role)) {
+    const { invalidateRecoveryCodesOfFormerHolder } =
+      await import('@/lib/server/auth/recovery-codes-status')
+    await invalidateRecoveryCodesOfFormerHolder(exec, userId)
+  }
   const type = target?.type ?? current?.type
   const fromRole = target?.role ?? current?.role
   if (roleMoved && shouldSyncMembership({ type, fromRole, toRole: role })) {
     await noteMembershipChanged(opts.executor)
   }
-  const keys = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
+  const keys: string[] = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
+  // Seats and billing rights are counted from people's roles, so a person's
+  // role change recounts them; inside a caller's transaction, after it commits.
+  if (type === 'user') keys.push(CACHE_KEYS.PLAN_LIMITS_INPUTS)
   if (!opts.executor) for (const k of keys) await cacheDel(k)
-  return { cacheKeysToBust: keys }
+  const scopeChanged = target !== undefined && (target.role !== role || reassign)
+  return { cacheKeysToBust: keys, scopeChangedFor: scopeChanged ? target?.id : undefined }
+}
+
+/**
+ * Clear a person's block as they join the team, inside the caller's executor,
+ * and record `person.unblocked` beside it. A no-op for someone not blocked.
+ */
+async function clearBlockOnJoiningTeam(
+  exec: Executor,
+  principalId: PrincipalId,
+  grantedBy: PrincipalId | null
+): Promise<void> {
+  const cleared = await exec
+    .update(principal)
+    .set({ blockedAt: null, blockedByPrincipalId: null })
+    .where(and(eq(principal.id, principalId), isNotNull(principal.blockedAt)))
+    .returning({ id: principal.id })
+  if (cleared.length === 0) return
+  const { recordAuditEventInTransaction } = await import('@/lib/server/audit/log')
+  await recordAuditEventInTransaction(exec as Parameters<typeof recordAuditEventInTransaction>[0], {
+    event: 'person.unblocked',
+    actor: { type: 'system' },
+    target: { type: 'principal', id: principalId },
+    metadata: { reason: 'joined_team', granted_by: grantedBy },
+  })
 }
 
 /**

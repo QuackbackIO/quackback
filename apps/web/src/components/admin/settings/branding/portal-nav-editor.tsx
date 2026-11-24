@@ -1,4 +1,5 @@
 import { memo, useId } from 'react'
+import { Link } from '@tanstack/react-router'
 import {
   DndContext,
   closestCenter,
@@ -39,6 +40,9 @@ import {
   type PortalBuiltInNavType,
 } from '@/components/public/portal-header-nav'
 import type { PortalNavItemConfig } from '@/lib/shared/types/settings'
+import type { PortalSection } from '@/lib/shared/custom-domains'
+import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
+import { CUSTOM_DOMAINS_LINK } from '@/lib/shared/portal-settings-tabs'
 
 const TYPE_ICONS: Record<string, typeof ChatBubbleLeftIcon> = {
   feedback: ChatBubbleLeftIcon,
@@ -54,12 +58,29 @@ export function isValidNavLinkUrl(url: string | undefined): boolean {
   return !!url && /^https?:\/\/\S+\.\S+/i.test(url)
 }
 
+/**
+ * The hostname each tab is served at, for the line under it: only a verified
+ * one, as routing sends visitors only there. A pending domain serves nothing yet.
+ */
+export function servedSectionHosts(map: SectionDomainMap): Partial<Record<PortalSection, string>> {
+  const hosts: Partial<Record<PortalSection, string>> = {}
+  for (const section of PORTAL_SECTIONS) {
+    const entry = map[section]
+    if (entry?.verifiedAt) hosts[section] = entry.hostname
+  }
+  return hosts
+}
+
 interface PortalNavEditorProps {
   items: PortalNavItemConfig[]
   onChange: (items: PortalNavItemConfig[]) => void
   /** Built-in types whose product is currently disabled (rows render inert). */
   gatedTypes: ReadonlySet<string>
   onReset: () => void
+  /** The hostname a tab's section is served at, when it has one of its own (set on the Custom domains tab). */
+  sectionHosts?: Partial<Record<PortalSection, string>>
+  /** The viewer has the Custom domains tab: each domain line links there. */
+  linkSectionHosts?: boolean
 }
 
 /**
@@ -72,6 +93,8 @@ export const PortalNavEditor = memo(function PortalNavEditor({
   onChange,
   gatedTypes,
   onReset,
+  sectionHosts,
+  linkSectionHosts = false,
 }: PortalNavEditorProps) {
   const dndId = useId()
   const sensors = useSensors(
@@ -118,6 +141,8 @@ export const PortalNavEditor = memo(function PortalNavEditor({
                 key={item.id}
                 item={item}
                 gated={item.type !== 'link' && gatedTypes.has(item.type)}
+                host={item.type !== 'link' ? sectionHosts?.[item.type] : undefined}
+                linkHost={linkSectionHosts}
                 onPatch={(patch) => updateItem(item.id, patch)}
                 onRemove={() => removeItem(item.id)}
               />
@@ -141,11 +166,17 @@ export const PortalNavEditor = memo(function PortalNavEditor({
 function NavRow({
   item,
   gated,
+  host,
+  linkHost,
   onPatch,
   onRemove,
 }: {
   item: PortalNavItemConfig
   gated: boolean
+  /** The tab's own domain, shown as one quiet line under it. */
+  host?: string
+  /** The line links to the Custom domains tab, where the domain is set. */
+  linkHost: boolean
   onPatch: (patch: Partial<PortalNavItemConfig>) => void
   onRemove: () => void
 }) {
@@ -162,98 +193,117 @@ function NavRow({
   return (
     <div
       ref={setNodeRef}
+      data-slot="nav-row"
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        'flex items-center gap-2 bg-background py-2',
-        isDragging && 'relative z-10 opacity-50 shadow-md'
-      )}
+      className={cn('bg-background py-2', isDragging && 'relative z-10 opacity-50 shadow-md')}
     >
-      <button
-        type="button"
-        className="cursor-grab touch-none p-1 text-muted-foreground/60 hover:text-muted-foreground"
-        aria-label={`Reorder ${item.label || defaultLabel}`}
-        {...attributes}
-        {...listeners}
-      >
-        <Bars3Icon className="size-3.5" />
-      </button>
-
-      {(() => {
-        const Icon = TYPE_ICONS[item.type] ?? LinkIcon
-        return (
-          <Icon
-            className={cn(
-              'size-4 shrink-0',
-              gated ? 'text-muted-foreground/40' : 'text-muted-foreground'
-            )}
-          />
-        )
-      })()}
-
-      <Input
-        value={item.label ?? ''}
-        placeholder={defaultLabel}
-        maxLength={30}
-        aria-label={`Label for ${defaultLabel}`}
-        onChange={(e) => {
-          const value = e.target.value
-          // Empty override = keep the (localized) default label.
-          onPatch({ label: value.trim() === '' ? undefined : value })
-        }}
-        className={cn(
-          'h-7 flex-1 border-transparent px-1.5 text-[13px]',
-          'hover:border-border focus-visible:border-input',
-          gated && 'text-muted-foreground'
-        )}
-      />
-
-      {isLink && (
-        <Input
-          value={item.url ?? ''}
-          placeholder="https://…"
-          aria-label="Link URL"
-          onChange={(e) => onPatch({ url: e.target.value })}
-          className={cn('h-7 w-40 px-1.5 text-[13px]', urlInvalid && 'border-destructive/60')}
-        />
-      )}
-
-      {gated && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <Badge size="sm" variant="outline" className="text-muted-foreground">
-                Product off
-              </Badge>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            This tab shows once its product is enabled (Settings → General). Your order and label
-            are kept.
-          </TooltipContent>
-        </Tooltip>
-      )}
-
-      {isLink && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Remove link"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={onRemove}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="cursor-grab touch-none p-1 text-muted-foreground/60 hover:text-muted-foreground"
+          aria-label={`Reorder ${item.label || defaultLabel}`}
+          {...attributes}
+          {...listeners}
         >
-          <TrashIcon className="size-3.5" />
-        </Button>
-      )}
+          <Bars3Icon className="size-3.5" />
+        </button>
 
-      {item.type === 'feedback' ? (
-        <Badge variant="secondary">Always on</Badge>
-      ) : (
-        <Switch
-          checked={item.enabled !== false}
-          disabled={gated}
-          onCheckedChange={(checked) => onPatch({ enabled: checked ? undefined : false })}
-          aria-label={`Show ${item.label || defaultLabel} tab`}
+        {(() => {
+          const Icon = TYPE_ICONS[item.type] ?? LinkIcon
+          return (
+            <Icon
+              className={cn(
+                'size-4 shrink-0',
+                gated ? 'text-muted-foreground/40' : 'text-muted-foreground'
+              )}
+            />
+          )
+        })()}
+
+        <Input
+          value={item.label ?? ''}
+          placeholder={defaultLabel}
+          maxLength={30}
+          aria-label={`Label for ${defaultLabel}`}
+          onChange={(e) => {
+            const value = e.target.value
+            // Empty override = keep the (localized) default label.
+            onPatch({ label: value.trim() === '' ? undefined : value })
+          }}
+          className={cn(
+            'h-7 flex-1 border-transparent px-1.5 text-[13px]',
+            'hover:border-border focus-visible:border-input',
+            gated && 'text-muted-foreground'
+          )}
         />
+
+        {isLink && (
+          <Input
+            value={item.url ?? ''}
+            placeholder="https://…"
+            aria-label="Link URL"
+            onChange={(e) => onPatch({ url: e.target.value })}
+            className={cn('h-7 w-40 px-1.5 text-[13px]', urlInvalid && 'border-destructive/60')}
+          />
+        )}
+
+        {gated && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Badge size="sm" variant="outline" className="text-muted-foreground">
+                  Product off
+                </Badge>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              This tab shows once its product is enabled (Settings → General). Your order and label
+              are kept.
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {isLink && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Remove link"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={onRemove}
+          >
+            <TrashIcon className="size-3.5" />
+          </Button>
+        )}
+
+        {item.type === 'feedback' ? (
+          <Badge variant="secondary">Always on</Badge>
+        ) : (
+          <Switch
+            checked={item.enabled !== false}
+            disabled={gated}
+            onCheckedChange={(checked) => onPatch({ enabled: checked ? undefined : false })}
+            aria-label={`Show ${item.label || defaultLabel} tab`}
+          />
+        )}
+      </div>
+      {host && (
+        <p
+          data-slot="nav-row-domain"
+          // Lined up with the label's text: grip, icon and the input's own padding.
+          className="mt-0.5 truncate ps-[3.8125rem] text-xs text-muted-foreground"
+        >
+          {linkHost ? (
+            <Link
+              to={CUSTOM_DOMAINS_LINK.to}
+              search={CUSTOM_DOMAINS_LINK.search}
+              className="hover:text-foreground hover:underline"
+            >
+              {host}
+            </Link>
+          ) : (
+            host
+          )}
+        </p>
       )}
     </div>
   )

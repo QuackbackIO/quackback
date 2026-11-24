@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { z } from 'zod'
@@ -40,7 +39,7 @@ export const Route = createFileRoute('/admin/settings/general')({
   head: adminPageHead('General settings'),
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/general')
     const ensure = readBatch(context.queryClient)
     const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),

@@ -24,6 +24,7 @@ import { WarningBox } from '@/components/shared/warning-box'
 import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/shared/webhook-events'
 import { RotateWebhookSecretDialog } from './rotate-webhook-secret-dialog'
 import type { Webhook } from '@/lib/shared/types'
+import { errorText } from '@/lib/client/error-text'
 
 interface EditWebhookDialogProps {
   webhook: Webhook
@@ -76,7 +77,11 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
           webhookId: webhook.id,
           url,
           events: selectedEvents as (typeof WEBHOOK_EVENTS)[number][],
-          status: isEnabled ? 'active' : 'disabled',
+          // Only a change of the switch is sent, so saving another edit never
+          // re-enables the webhook or clears its failure count.
+          ...(isEnabled !== (webhook.status === 'active')
+            ? { status: isEnabled ? ('active' as const) : ('disabled' as const) }
+            : {}),
         },
       })
 
@@ -87,7 +92,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
 
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update webhook')
+      setError(errorText(err, 'Failed to update webhook'))
     }
   }
 
@@ -230,7 +235,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending || !url || selectedEvents.length === 0}>
-                {isPending ? 'Saving...' : 'Save changes'}
+                {isPending ? 'Saving…' : 'Save changes'}
               </Button>
             </DialogFooter>
           </form>

@@ -21,6 +21,7 @@ import {
 } from '@/lib/server/auth/request-session'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { logger } from '@/lib/server/logger'
+import { SEAT_PAUSED_DENIAL } from '@/lib/shared/billing/seat-paused'
 
 const log = logger.child({ component: 'auth-helpers' })
 
@@ -63,6 +64,22 @@ async function getSessionDirect(): Promise<RequestSession | null> {
     log.error({ err: error }, 'get session failed')
     return null
   }
+}
+
+/**
+ * Whether a dashboard session's teammate holds a paused seat (see
+ * plan-limits.seats.ts). A paused seat keeps the portal and loses team
+ * authority, so the gates below treat it as a portal session. Loaded lazily:
+ * every server function imports this file, and only a dashboard teammate
+ * needs the plan limits read.
+ */
+async function isPausedDashboardSeat(
+  scope: SessionScope,
+  record: { id: string; role: string; type: string }
+): Promise<boolean> {
+  if (scope !== 'dashboard') return false
+  const { isPausedTeamSeat } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  return isPausedTeamSeat(record)
 }
 
 /**
@@ -141,11 +158,16 @@ export async function requireAuth(options?: RequireAuthOptions): Promise<AuthCon
   if (!principalRecord) {
     throw new Error('Access denied: Not a team member')
   }
+  const paused = await isPausedDashboardSeat(scope, principalRecord)
+  if (paused && options?.permission) {
+    throw new Error(SEAT_PAUSED_DENIAL)
+  }
   const resolvedPermissions = await getRequestPermissions(principalRecord)
 
-  const role: Role = sessionRole(principalRecord.role as Role, scope)
-  // Non-dashboard audiences never carry team authority downstream.
-  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
+  // Non-dashboard audiences, and a paused seat, never carry team authority downstream.
+  const teamAuthority = scope === 'dashboard' && !paused
+  const role: Role = teamAuthority ? sessionRole(principalRecord.role as Role, scope) : 'user'
+  const permissions: PermissionKey[] = teamAuthority ? [...resolvedPermissions] : []
 
   if (options?.permission && scope !== 'dashboard') {
     throw new Error(
@@ -289,9 +311,11 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       ? new Set<PermissionKey>()
       : await getRequestPermissions(principalRecord)
 
-  const role: Role = sessionRole(principalRecord.role as Role, scope)
-  // Non-dashboard audiences never carry team authority downstream.
-  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
+  // Non-dashboard audiences, and a paused seat, never carry team authority downstream.
+  const teamAuthority =
+    scope === 'dashboard' && !(await isPausedDashboardSeat(scope, principalRecord))
+  const role: Role = teamAuthority ? sessionRole(principalRecord.role as Role, scope) : 'user'
+  const permissions: PermissionKey[] = teamAuthority ? [...resolvedPermissions] : []
 
   return {
     settings: {
@@ -322,6 +346,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
 
 import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 /**
@@ -359,4 +384,31 @@ export async function policyActorFromAuth(auth: AuthContext | null): Promise<Act
   if (actor.principalType !== 'anonymous') return actor
   const { resolveTestFeedbackActor } = await import('@/lib/server/test-customer-feedback')
   return resolveTestFeedbackActor(actor)
+}
+
+/**
+ * The policy actor for a teammate (admin or member) who holds
+ * post.view_private, built from the AuthContext alone, or null for anyone
+ * else (who needs policyActorFromAuth).
+ *
+ * Segments are skipped on purpose: for such an actor the post and board view
+ * filters never read `segmentIds` (boardViewFilter passes team actors, and
+ * postViewFilter takes the view_private branch), so the segment lookup
+ * policyActorFromAuth runs would be a wasted query on every admin page load
+ * (the unread badge). Use it only where those filters are the sole consumer.
+ */
+export function teamActorFromAuth(auth: AuthContext | null): Actor | null {
+  if (!auth) return null
+  const role = auth.principal.role
+  if (role !== 'admin' && role !== 'member') return null
+  const principalType = normalizePrincipalType(auth.principal.type)
+  if (principalType === 'anonymous') return null
+  if (!auth.permissions.includes(PERMISSIONS.POST_VIEW_PRIVATE)) return null
+  return {
+    principalId: auth.principal.id,
+    role,
+    principalType,
+    segmentIds: new Set(),
+    permissions: new Set(auth.permissions),
+  }
 }

@@ -42,7 +42,10 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 
 const recordCsat = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({ recordCsat }))
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  recordCsat,
+  CSAT_CONVERSATION_OPEN: 'CSAT_CONVERSATION_OPEN',
+}))
 
 import { recordCsatViaTokenFn } from '../csat-email'
 import { mintCsatEmailToken } from '@/lib/server/domains/conversation/csat-email-token'
@@ -135,6 +138,17 @@ describe('mintCsatEmailToken / recordCsatViaTokenFn round trip', () => {
 
     const result = await recordCsatViaTokenFn({ data: { token, rating: 4 } })
     expect(result).toEqual({ success: false, error: 'failed' })
+  })
+
+  it('answers open when the conversation was reopened after the email went out', async () => {
+    const { ConflictError } = await import('@/lib/shared/errors')
+    const token = mintCsatEmailToken(conversationId, principalId)
+    recordCsat.mockRejectedValue(
+      new ConflictError('CSAT_CONVERSATION_OPEN', 'This conversation is still open.')
+    )
+
+    const result = await recordCsatViaTokenFn({ data: { token, rating: 4 } })
+    expect(result).toEqual({ success: false, error: 'open' })
   })
 })
 

@@ -88,6 +88,8 @@ interface PostContentSectionProps {
   /** Editor features for inline editing (defaults to simple user-friendly options) */
   editorFeatures?: EditorFeatures
   canModerate?: boolean
+  /** A held post is shown to its author: tell them it waits for review. */
+  pendingForAuthor?: boolean
   moderationBusy?: boolean
   onApprove?: () => void
   onReject?: () => void
@@ -126,6 +128,7 @@ export function PostContentSection({
   isSaving = false,
   editorFeatures = DEFAULT_USER_EDITOR_FEATURES,
   canModerate = false,
+  pendingForAuthor = false,
   moderationBusy = false,
   onApprove,
   onReject,
@@ -197,7 +200,7 @@ export function PostContentSection({
               id: 'portal.postDetail.edit.titleLabel',
               defaultMessage: 'Post title',
             })}
-            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
+            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground placeholder:font-normal caret-primary-ink mb-4"
           />
 
           {/* Rich text editor — lazy-loaded so its chunk never lands in the
@@ -272,6 +275,7 @@ export function PostContentSection({
         <InlineModerationActions
           pending
           noun="post"
+          forAuthor={pendingForAuthor && !canModerate}
           className="mb-4"
           busy={moderationBusy}
           onApprove={canModerate ? onApprove : undefined}
@@ -282,7 +286,7 @@ export function PostContentSection({
       <PostContent
         content={post.content}
         contentJson={post.contentJson}
-        className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground/90"
+        className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground"
       />
 
       {!isEditing && (

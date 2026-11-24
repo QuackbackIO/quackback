@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { Role } from '@/lib/shared/roles'
 import type { AuditActorType } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'export-conversations' })
 
@@ -64,7 +65,7 @@ export async function handleExportConversations(request: Request): Promise<Respo
       return Response.json(error.toResponseBody(), { status: error.statusCode })
     }
     log.error({ err: error }, 'conversations export failed')
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+    return internalRouteErrorResponse()
   }
 }
 

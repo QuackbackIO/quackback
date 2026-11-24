@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useDeleteIntegration } from '@/lib/client/mutations'
+import { errorText } from '@/lib/client/error-text'
 
 interface WebhookConnectionActionsProps {
   integrationId?: string
@@ -54,7 +55,7 @@ export function WebhookConnectionActions({
       const timer = setTimeout(() => setShowSuccess(false), 3000)
       return () => clearTimeout(timer)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save webhook URL')
+      setError(errorText(err, 'Failed to save webhook URL'))
     } finally {
       setSaving(false)
     }
@@ -79,7 +80,7 @@ export function WebhookConnectionActions({
           {disconnecting ? (
             <>
               <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-              Disconnecting...
+              Disconnecting…
             </>
           ) : (
             'Disconnect'
@@ -103,7 +104,7 @@ export function WebhookConnectionActions({
       {showSuccess && (
         <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           <CheckCircleIcon className="h-4 w-4" />
-          <span>Webhook saved and verified!</span>
+          <span>Webhook saved and verified.</span>
         </div>
       )}
 
@@ -132,7 +133,7 @@ export function WebhookConnectionActions({
             {saving ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                Saving…
               </>
             ) : (
               'Save'

@@ -24,7 +24,7 @@ export function contentLengthExceeds(request: Request, maxBytes: number): boolea
 export async function readBodyWithLimit(
   request: Request,
   maxBytes: number
-): Promise<Uint8Array | null> {
+): Promise<Uint8Array<ArrayBuffer> | null> {
   // A declared Content-Length over the limit never needs reading. The stream
   // loop below still enforces the cap when the header is absent or wrong.
   if (contentLengthExceeds(request, maxBytes)) return null

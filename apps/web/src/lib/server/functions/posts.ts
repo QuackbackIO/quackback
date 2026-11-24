@@ -49,6 +49,7 @@ import {
 } from '@/lib/server/domains/posts/post.admin-panels'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import { logger } from '@/lib/server/logger'
+import { NotFoundError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'posts' })
 
@@ -355,8 +356,18 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         )
       : null
 
+    // Set only while the post's board is read-only (set by an admin or kept so by
+    // the plan), so the admin modal can close its comment box. Absent otherwise,
+    // which keeps the payload unchanged.
+    const { isBoardOpenFor } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.board-guard')
+    const boardReadOnly = (await isBoardOpenFor(result.board.id, result.board.readOnly ?? false))
+      ? undefined
+      : true
+
     return {
       ...serializePostDates(result),
+      boardReadOnly,
       summaryUpdatedAt: toIsoStringOrNull(result.summaryUpdatedAt),
       hasVoted: voted,
       comments: comments.map(serializeComment),
@@ -584,7 +595,7 @@ export const retryPostIntegrationSyncFn = createServerFn({ method: 'POST' })
     const { syncSourceForActor } = await import('@/lib/server/integrations/sync/eligibility')
     const actor = await policyActorFromAuth(ctx)
     if (!(await syncSourceForActor({ sourceType: 'post', sourceId: data.id }, actor)))
-      throw new Error('Post not found')
+      throw new NotFoundError('POST_NOT_FOUND', 'Post not found')
     return syncPostIntegrations(data.id as PostId, actor.principalId ?? undefined)
   })
 

@@ -13,6 +13,7 @@ export type NotificationType =
   | 'post_status_changed'
   | 'comment_created'
   | 'post_mentioned'
+  | 'post_moderated'
   | 'changelog_published'
   | 'status_incident'
   | 'chat_message'
@@ -33,6 +34,7 @@ export type NotificationType =
   | 'assistant_handed_off'
   | 'sending_domain_live'
   | 'sending_domain_needs_attention'
+  | 'domain_needs_attention'
 
 /**
  * Input for creating a single notification

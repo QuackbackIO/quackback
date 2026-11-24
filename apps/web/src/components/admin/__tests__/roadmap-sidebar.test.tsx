@@ -4,10 +4,15 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
+// A viewer holding every permission, so each permission-gated read runs.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 vi.mock('@/lib/client/hooks/use-roadmaps-query', () => ({
   useRoadmaps: () => ({ data: [], isLoading: false }),
 }))
-vi.mock('@/lib/client/hooks/use-segments-queries', () => ({ useSegments: () => ({ data: [] }) }))
+vi.mock('@/lib/client/hooks/use-segments-queries', () => ({
+  useSegments: () => ({ data: [] }),
+  useAdminSegments: () => ({ data: [] }),
+}))
 vi.mock('@/lib/client/mutations', () => ({
   useCreateRoadmap: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useUpdateRoadmap: () => ({ isPending: false, mutateAsync: vi.fn() }),

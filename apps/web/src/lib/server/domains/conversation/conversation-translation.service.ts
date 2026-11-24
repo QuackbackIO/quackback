@@ -39,6 +39,7 @@
  * re-attempts on a later open; a thrown/transient failure (network,
  * unparseable response) leaves the column `null` and free to retry.
  */
+import { assertConversationVisible } from './conversation-visibility'
 import {
   db,
   eq,
@@ -68,7 +69,7 @@ import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-midd
 import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { getChatModel } from '@/lib/server/domains/ai/models'
-import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { canActAsAgent } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -87,6 +88,7 @@ import { conversationToDTO, translationStateFrom } from './conversation.query'
 import { publishConversationUpdate } from '@/lib/server/realtime/conversation-channels'
 import { isTestCustomer } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
+import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 export { translationStateFrom }
 
@@ -234,6 +236,7 @@ async function callInboxTranslationModel<T>(
     metadata: { stage, ...metadata },
   })
   const result = await chat({
+    threadId: oneShotThreadId(),
     adapter: openaiCompatibleText(model, {
       baseURL: config.openaiBaseUrl!,
       apiKey: config.openaiApiKey!,
@@ -436,6 +439,9 @@ export interface ResolveOutgoingReplyInput {
   /** The sending teammate — used to resolve their own language preference
    *  (P2-0.3) as the "source" locale recorded on `translatedFrom`. */
   teammateUserId: UserId
+  /** The conversation's translation state, when the caller already holds the
+   *  row (see `translationContextOf`); read by id otherwise. */
+  context?: InboxTranslationContext | null
 }
 
 export interface ResolveOutgoingReplyResult {
@@ -477,7 +483,10 @@ export async function resolveOutgoingReplyTranslation(
 
   if (!input.content.trim()) return passthrough()
 
-  const context = await getInboxTranslationContext(input.conversationId)
+  const context =
+    input.context !== undefined
+      ? input.context
+      : await getInboxTranslationContext(input.conversationId)
   if (!context?.enabled || !context.customerLocale) return passthrough()
 
   const [teammateRow] = await db
@@ -534,20 +543,16 @@ export async function getInboxTranslationContext(
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1)
-  if (!row) return null
+  return row ? translationContextOf(row) : null
+}
+
+/** A conversation row's translation state. */
+export function translationContextOf(
+  row: Pick<Conversation, 'translationEnabled' | 'detectedCustomerLanguage'>
+): InboxTranslationContext {
   const customerLocale =
     row.detectedCustomerLanguage === UNDETERMINED_LANGUAGE ? null : row.detectedCustomerLanguage
   return { enabled: row.translationEnabled, customerLocale }
-}
-
-async function loadConversationOr404(conversationId: ConversationId): Promise<Conversation> {
-  const [row] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-  if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  return row
 }
 
 /** Manual per-conversation activation toggle (ACTIVATION). Turning
@@ -561,7 +566,7 @@ export async function setInboxTranslationEnabled(
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await assertConversationVisible(conversationId, actor)
   const [updated] = await db
     .update(conversations)
     .set({
@@ -585,7 +590,7 @@ export async function dismissInboxTranslationSuggestion(
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  await loadConversationOr404(conversationId)
+  await assertConversationVisible(conversationId, actor)
   const [updated] = await db
     .update(conversations)
     .set({ translationDismissedAt: new Date(), updatedAt: new Date() })

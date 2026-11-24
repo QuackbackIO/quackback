@@ -11,6 +11,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeIncidentDetails } from '../-serialize'
 import { STATUS_INCIDENT_LIFECYCLE_STATUSES } from '../-validation'
 import type { StatusIncidentId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const postIncidentUpdateSchema = z.object({
   status: z.enum(STATUS_INCIDENT_LIFECYCLE_STATUSES),
@@ -40,7 +41,7 @@ export const Route = createFileRoute('/api/v1/status/incidents/$incidentId/updat
             'incident ID'
           )
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = postIncidentUpdateSchema.safeParse(body)
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {

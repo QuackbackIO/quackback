@@ -27,6 +27,7 @@ import {
 } from './help-center-metadata-sidebar'
 import type { JSONContent } from '@tiptap/react'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
+import { errorText } from '@/lib/client/error-text'
 
 interface CreateArticleDialogProps {
   /** Controlled open state. When provided, the built-in trigger button is hidden. */
@@ -109,7 +110,7 @@ export function CreateArticleDialog({
           articleId = (await createArticleMutation.mutateAsync(content)).id
         }
       } catch (error) {
-        setSaveError(error instanceof Error ? error.message : String(error))
+        setSaveError(errorText(error, "Couldn't save article"))
         return
       }
       try {
@@ -150,6 +151,11 @@ export function CreateArticleDialog({
   }
 
   const handleKeyDown = useKeyboardSubmit(handleSubmit)
+  // Keys typed in a portaled child dialog (New category) bubble here through the
+  // React tree; only the article's own DOM may trigger the save shortcut.
+  const handleOwnKeyDown = (e: React.KeyboardEvent) => {
+    if (e.currentTarget.contains(e.target as Node)) handleKeyDown(e)
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -160,7 +166,7 @@ export function CreateArticleDialog({
       )}
       <DialogContent
         className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleOwnKeyDown}
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">Create help article</DialogTitle>
@@ -187,7 +193,7 @@ export function CreateArticleDialog({
 
             <ModalFooter
               onCancel={() => handleOpenChange(false)}
-              submitLabel={isPending ? 'Saving...' : canPublish ? 'Publish' : 'Save draft'}
+              submitLabel={isPending ? 'Saving…' : canPublish ? 'Publish' : 'Save draft'}
               isPending={isPending}
               {...(canPublish ? { submitType: 'button' as const, onSubmit: handlePublish } : {})}
             >

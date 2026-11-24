@@ -30,7 +30,9 @@ export const ASSISTANT_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024
 /** Stored-text ceiling; retrieval trims per row, this caps the whole document. */
 export const ASSISTANT_DOCUMENT_MAX_CONTENT_CHARS = 100_000
 
-export class DocumentIngestError extends Error {}
+export class DocumentIngestError extends Error {
+  readonly statusCode = 400
+}
 
 export interface IngestAssistantDocumentInput {
   title: string

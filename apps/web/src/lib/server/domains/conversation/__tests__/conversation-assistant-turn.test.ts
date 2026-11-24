@@ -58,10 +58,12 @@ const mockEnforceAiTokenBudget = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: mockEnforceAiTokenBudget,
 }))
-const mockRequireEntitlement = vi.hoisted(() => vi.fn(async () => {}))
-vi.mock('@/lib/server/domains/settings/cloud/entitlements', () => ({
-  requireEntitlement: mockRequireEntitlement,
-}))
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
 vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
   getOfficeHoursSchedule: vi.fn(async () => ({ enabled: false, timezone: 'UTC', intervals: [] })),
 }))
@@ -98,6 +100,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),
   publishConversationOnlyEvent: vi.fn(),
+  publishConversationOnlyEventAsync: vi.fn(async () => {}),
 }))
 const mockWriteActivitySnapshot = vi.hoisted(() => vi.fn(async () => {}))
 const mockClearActivitySnapshot = vi.hoisted(() => vi.fn(async () => {}))
@@ -139,7 +142,12 @@ vi.mock('../conversation.query', () => ({
       displayName: a.displayName ?? null,
       avatarUrl: null,
     }
-    return { publicAuthor: author, supportAuthor: author }
+    return {
+      publicAuthor: author,
+      supportAuthor: author,
+      customerAuthor: author,
+      shownAsTeam: false,
+    }
   }),
   loadAuthors: vi.fn(async () => new Map()),
 }))
@@ -156,6 +164,8 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', async (importO
 
 const insertedMessages: Record<string, unknown>[] = []
 const updateSets: Record<string, unknown>[] = []
+// The status the reply's own conversation read sees (the turn may have closed it).
+const storedConversation = { status: 'open' }
 
 function conversationRow(override: Record<string, unknown> = {}) {
   return {
@@ -187,7 +197,9 @@ vi.mock('@/lib/server/db', () => {
     })
     c.where = vi.fn(() => c)
     c.orderBy = vi.fn(() => c)
-    c.limit = vi.fn(async () => (label === 'conversations' ? [conversationRow()] : []))
+    c.limit = vi.fn(async () =>
+      label === 'conversations' ? [conversationRow({ status: storedConversation.status })] : []
+    )
     c.returning = vi.fn(async () => {
       if (label === 'conversation_messages') {
         return [{ ...row, id: 'conversation_msg_new', createdAt: new Date() }]
@@ -228,9 +240,15 @@ vi.mock('@/lib/server/db', () => {
 
 import { shouldConsiderAssistant } from '../conversation.service'
 import {
+  previewAssistantTurnForConversation,
   runAssistantTurnForConversation,
   __resetAssistantPrincipalMemo,
 } from '@/lib/server/domains/assistant/assistant.orchestrator'
+import {
+  FEATURE_STATES,
+  runsWithPlanGate,
+  setFeatureState,
+} from '@/lib/server/domains/plan-limits/__tests__/feature-states'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const CONV = 'conversation_1' as ConversationId
@@ -300,6 +318,7 @@ beforeEach(() => {
   __resetAssistantPrincipalMemo()
   insertedMessages.length = 0
   updateSets.length = 0
+  storedConversation.status = 'open'
   assistantMock.isAssistantConfigured.mockReturnValue(true)
   assistantMock.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_assistant' })
   assistantMock.voidAssumedResolutionForConversation.mockResolvedValue(null)
@@ -313,7 +332,7 @@ beforeEach(() => {
   assistantMock.openInvolvement.mockResolvedValue({ id: 'assistant_involvement_1' })
   getMessengerConfig.mockResolvedValue({ assistant: { respond: true, name: 'Quinn' } })
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
-  mockRequireEntitlement.mockResolvedValue(undefined)
+  setFeatureState('included', 'aiAssistant')
   mockIsFeatureEnabled.mockResolvedValue(false)
   mockGetLiveWorkflowReferencedAttributeKeys.mockResolvedValue(new Set())
   mockClassifyConversationAttributes.mockResolvedValue([])
@@ -359,23 +378,28 @@ describe('runAssistantTurnForConversation gate', () => {
     expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
   })
 
-  it('does not run when the workspace is not entitled to the AI assistant', async () => {
-    const { EntitlementRequiredError } = await import('@/lib/server/errors/entitlement-error')
-    mockRequireEntitlement.mockRejectedValue(
-      new EntitlementRequiredError({
-        entitlement: 'aiAssistant',
-        friendly: 'The AI assistant',
-        friendlyIsPlural: false,
-        requiredPlanArticle: 'a',
-        currentPlan: 'free',
-        currentPlanName: 'Free',
-        requiredPlan: 'pro',
-        requiredPlanName: 'Pro',
-      })
+  // The plan gate reads isFeatureLive: the plan's own answer without plan billing, kept
+  // live through the plan limits grace, off after it.
+  it.each(FEATURE_STATES)(
+    'answers in the %s state only while the plan includes it',
+    async (state) => {
+      setFeatureState(state, 'aiAssistant')
+      assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
+      await runAssistantTurnForConversation(CONV)
+      if (runsWithPlanGate(state)) {
+        expect(assistantMock.runAssistantTurn).toHaveBeenCalledOnce()
+      } else {
+        expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
+        expect(assistantMock.ensureAssistantPrincipal).not.toHaveBeenCalled()
+      }
+    }
+  )
+
+  it.each(FEATURE_STATES)('previews in the %s state as declined once it stops', async (state) => {
+    setFeatureState(state, 'aiAssistant')
+    expect(await previewAssistantTurnForConversation(CONV)).toBe(
+      runsWithPlanGate(state) ? 'eligible' : 'declined'
     )
-    await runAssistantTurnForConversation(CONV)
-    expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
-    expect(assistantMock.ensureAssistantPrincipal).not.toHaveBeenCalled()
   })
 
   it('stays silent after a handoff even before the first teammate reply', async () => {
@@ -457,6 +481,43 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
       sources: [{ type: 'article', id: 'a1', title: 'T', url: 'u' }],
     })
     expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
+  })
+
+  it('keeps the conversation closed when the turn itself ended it (end_conversation)', async () => {
+    // The tool closed the conversation mid-turn; the closing words land after.
+    storedConversation.status = 'closed'
+    assistantMock.runAssistantTurn.mockResolvedValue(
+      answered({
+        text: 'Glad that is sorted',
+        trace: {
+          ...PRIVACY_SAFE_TRACE,
+          toolCalls: [{ name: 'end_conversation', outcome: 'executed' }],
+        },
+      })
+    )
+    await runAssistantTurnForConversation(CONV)
+
+    expect(insertedMessages).toHaveLength(1)
+    expect(updateSets).toHaveLength(1)
+    expect(updateSets[0].status).toBe('closed')
+  })
+
+  it('still reopens a closed conversation for a reply when the turn did not end it', async () => {
+    storedConversation.status = 'closed'
+    assistantMock.runAssistantTurn.mockResolvedValue(
+      answered({
+        text: 'Here you go',
+        trace: {
+          ...PRIVACY_SAFE_TRACE,
+          // A failed close is no close.
+          toolCalls: [{ name: 'end_conversation', outcome: 'failed' }],
+        },
+      })
+    )
+    await runAssistantTurnForConversation(CONV)
+
+    expect(updateSets).toHaveLength(1)
+    expect(updateSets[0].status).toBe('open')
   })
 
   it('refuses an internal-sourced public result: the reply never persists, the floor hands off', async () => {
@@ -683,9 +744,9 @@ describe('runAssistantTurnForConversation hand-off on a filed proposal', () => {
 
 describe('runAssistantTurnForConversation preview retraction (invalidated attempt)', () => {
   async function publishedEvents(): Promise<Array<Record<string, unknown>>> {
-    const { publishConversationOnlyEvent } =
+    const { publishConversationOnlyEventAsync } =
       await import('@/lib/server/realtime/conversation-channels')
-    return vi.mocked(publishConversationOnlyEvent).mock.calls.map(([, e]) => e as never)
+    return vi.mocked(publishConversationOnlyEventAsync).mock.calls.map(([, e]) => e as never)
   }
 
   it('retracts a streamed answer on retry and stays preview-silent for the rest of the turn', async () => {
@@ -730,6 +791,36 @@ describe('runAssistantTurnForConversation preview retraction (invalidated attemp
     const deltas = (await publishedEvents()).filter((e) => e.kind === 'assistant_delta')
     expect(deltas.length).toBeGreaterThan(0)
     expect(deltas.every((e) => (e.text as string).length > 0)).toBe(true)
+  })
+})
+
+describe('runAssistantTurnForConversation turn signal order', () => {
+  it('publishes each signal after the last, and all of them before the reply', async () => {
+    const { publishConversationOnlyEventAsync } =
+      await import('@/lib/server/realtime/conversation-channels')
+    const published: string[] = []
+    // The first publish (the 'thinking' status) is the slow one, as when its
+    // NOTIFY waits for a busy pooled connection while the next goes straight out.
+    let first = true
+    vi.mocked(publishConversationOnlyEventAsync).mockImplementation(async (_id, event) => {
+      if (first) {
+        first = false
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      }
+      const label = event.kind === 'assistant_delta' ? `delta:${event.text}` : event.kind
+      // Whether the reply row was already written when this signal went out.
+      published.push(insertedMessages.length > 0 ? `${label} (after reply)` : label)
+    })
+    assistantMock.runAssistantTurn.mockImplementation(
+      async (input: { onActivity: (a: unknown) => void; onTextDelta: (d: string) => void }) => {
+        input.onActivity({ kind: 'thinking' })
+        input.onTextDelta('Here is your answer.')
+        return answered({ text: 'Here is your answer.' })
+      }
+    )
+    await runAssistantTurnForConversation(CONV)
+    expect(published).toEqual(['assistant_activity', 'delta:Here is your answer.'])
+    expect(insertedMessages).toHaveLength(1)
   })
 })
 

@@ -14,11 +14,15 @@ const OUTBOUND_LABEL = {
   console: 'Not configured',
 } as const
 
-/** Read-only env probe: outbound provider, from-address, inbound domain. */
+/**
+ * Read-only env probe: outbound provider, from-address, inbound domain. Shown
+ * only where the server is the workspace's own: on one shared by many
+ * workspaces these describe the platform, which is not theirs to set up.
+ */
 export function EmailTransportCard() {
   const { data } = useQuery(channelSettingsQueries.emailStatus())
 
-  if (!data) return null
+  if (!data?.ownServer) return null
 
   const outboundLabel = OUTBOUND_LABEL[data.provider]
 

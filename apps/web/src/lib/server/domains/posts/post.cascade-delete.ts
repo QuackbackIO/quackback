@@ -1,4 +1,5 @@
 import { getIntegration } from '@/lib/server/integrations'
+import { ConflictError } from '@/lib/shared/errors'
 /**
  * Cascade delete service for post external links.
  *
@@ -131,7 +132,11 @@ export async function executeCascadeDelete(
   const results: CascadeResult[] = []
   for (const choice of toArchive) {
     const row = rows.find((r) => r.link.id === choice.linkId)
-    if (!row) throw new Error('An archive selection is no longer available')
+    if (!row)
+      throw new ConflictError(
+        'ARCHIVE_SELECTION_UNAVAILABLE',
+        'An archive selection is no longer available'
+      )
     const { link, integration } = row
     if (!link.syncScope) continue
     const installation = installationIdentity(integration)

@@ -19,6 +19,8 @@
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { runWithAuditAttribution, SYSTEM_ATTRIBUTION } from '@/lib/server/audit/attribution'
+import { config } from '@/lib/server/config'
+import { withPausedCustomDomainOrigin } from '@/lib/server/domains/plan-limits/plan-limits.custom-domain'
 import {
   claimById,
   claimJobs,
@@ -43,6 +45,8 @@ import {
   retentionOverrides,
   retryBackoffMs,
   RetryAfterError,
+  runnableJobDefinitions,
+  runnableQueues,
   type DynamicSchedule,
   type JobDefinition,
   type JobHandler,
@@ -218,6 +222,15 @@ function failOutcome(outcome: 'retrying' | 'failed' | 'lease-lost'): string {
  * dead while it was in fact still working, which is either a lease set too short
  * for the work or a stalled process — both worth seeing.
  */
+/** Whether this job runs for a workspace whose settings can be read. Never throws. */
+function hasWorkspaceToAsk(): boolean {
+  try {
+    return !config.isPooledTenancy || getCurrentWorkspace() !== null
+  } catch {
+    return false
+  }
+}
+
 export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 'retrying'> {
   const def = findJobDefinition(job.queue)
   if (!def) {
@@ -262,7 +275,13 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
     const handler = await resolveHandler(def)
     // A job is background work: whatever it changes is attributed to the
     // system, never to the request or tier that happened to arm the runner.
-    await runWithAuditAttribution(SYSTEM_ATTRIBUTION, () => handler(job))
+    // Links a job builds (emails, exports, notifications) name the default
+    // hostname while the workspace's custom domain is paused after the plan
+    // limits grace. A job with no workspace scope under pooled tenancy has no
+    // workspace to ask about.
+    await runWithAuditAttribution(SYSTEM_ATTRIBUTION, () =>
+      hasWorkspaceToAsk() ? withPausedCustomDomainOrigin(() => handler(job)) : handler(job)
+    )
   } catch (err) {
     clearInterval(heartbeat)
     const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
@@ -444,11 +463,15 @@ export function poolSize(pool: JobPool): number {
   return n
 }
 
-/** The free slots each queue has right now, given the pool and the caps. */
+/**
+ * The free slots each queue has right now, given the pool and the caps. A
+ * paused queue (`QUACKBACK_DISABLED_JOBS`) asks for none, so its rows stay
+ * `pending` with no attempt spent.
+ */
 export function claimSpecsFor(pool: JobPool, config: RunnerConfig): QueueClaimSpec[] {
   let budget = Math.max(0, config.maxConcurrency - poolSize(pool))
   const specs: QueueClaimSpec[] = []
-  for (const def of jobDefinitions()) {
+  for (const def of runnableJobDefinitions()) {
     if (budget <= 0) break
     const free = Math.min(
       concurrencyFor(def) - (pool.inFlight.get(def.name) ?? 0),
@@ -545,8 +568,9 @@ export function startClaimedJob(opts: {
 }
 
 /**
- * Try to claim `jobIds` now, honouring the same pool caps as `dispatchPass`.
- * Returns how many jobs were claimed. A miss is success — the sweeper still runs.
+ * Try to claim `jobIds` now, honouring the same pool caps and the same paused
+ * list as `dispatchPass`. Returns how many jobs were claimed. A miss is success
+ * — the sweeper still runs.
  */
 export async function startJobsById(opts: {
   pool: JobPool
@@ -557,11 +581,12 @@ export async function startJobsById(opts: {
 }): Promise<number> {
   return withClaimLock(opts.pool, async () => {
     let claimed = 0
+    const runnable = new Set(runnableQueues())
     for (const jobId of opts.jobIds) {
       const peek = await peekRunnableJob(jobId)
       if (!peek) continue
       const def = findJobDefinition(peek.queue)
-      if (!def) continue
+      if (!def || !runnable.has(def.name)) continue
       const free = Math.min(
         concurrencyFor(def) - (opts.pool.inFlight.get(peek.queue) ?? 0),
         opts.config.maxConcurrency - poolSize(opts.pool),
@@ -809,10 +834,10 @@ export async function runScheduleTick(
     live.add(stateKey)
     const { slot, nextDueAt: next } = scheduleView(state, pattern, now)
     const seen = state.seen.get(stateKey)
-    if (seen === undefined) {
+    if (seen === undefined && !def.runOnFirstPass) {
       // First pass for THIS scheduler: adopt the current slot, do not run it.
       if (slot) state.seen.set(stateKey, slot.getTime())
-    } else if (slot && slot.getTime() > seen) {
+    } else if (slot && (seen === undefined || slot.getTime() > seen)) {
       attempted += 1
       const result = await enqueueJob({
         queue: def.name,
@@ -859,7 +884,28 @@ export async function runScheduleTick(
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
   }
 
+  const readSchedules = async (def: JobDefinition): Promise<readonly DynamicSchedule[]> => {
+    if (!def.dynamicSchedules) return []
+    try {
+      return await def.dynamicSchedules()
+    } catch (err) {
+      log.error({ err, queue: def.name }, 'could not read dynamic schedules for this queue')
+      return []
+    }
+  }
+
+  const runnable = new Set(runnableQueues())
   for (const def of jobDefinitions()) {
+    if (!runnable.has(def.name)) {
+      // Paused by the operator: a shut gate that nothing in the database opens.
+      // Every slot is spent and nothing is written.
+      if (def.cron) adopt(def.name, def.cron)
+      for (const schedule of await readSchedules(def)) {
+        adopt(`${def.name}:${schedule.key}`, schedule.cron)
+      }
+      continue
+    }
+
     if (def.cron) {
       // A disabled schedule writes nothing, rather than enqueueing a job whose
       // handler returns immediately. The reference achieved the same by never
@@ -877,25 +923,17 @@ export async function runScheduleTick(
       else adopt(def.name, def.cron)
     }
 
-    if (def.dynamicSchedules) {
-      let schedules: readonly DynamicSchedule[] = []
+    for (const schedule of await readSchedules(def)) {
+      // The dedupe key must separate the schedules sharing this queue, or the
+      // first segment's slot would spend every other segment's.
+      const dedupeName = `${def.name}:${schedule.key}`
       try {
-        schedules = await def.dynamicSchedules()
+        await tick(def, dedupeName, dedupeName, schedule.cron, schedule.payload)
       } catch (err) {
-        log.error({ err, queue: def.name }, 'could not read dynamic schedules for this queue')
-      }
-      for (const schedule of schedules) {
-        // The dedupe key must separate the schedules sharing this queue, or the
-        // first segment's slot would spend every other segment's.
-        const dedupeName = `${def.name}:${schedule.key}`
-        try {
-          await tick(def, dedupeName, dedupeName, schedule.cron, schedule.payload)
-        } catch (err) {
-          log.error(
-            { err, queue: def.name, schedule: schedule.key },
-            'a dynamic schedule could not be ticked'
-          )
-        }
+        log.error(
+          { err, queue: def.name, schedule: schedule.key },
+          'a dynamic schedule could not be ticked'
+        )
       }
     }
   }

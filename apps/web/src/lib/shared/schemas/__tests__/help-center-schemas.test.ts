@@ -6,7 +6,37 @@ import {
   updateCategorySchema,
   createArticleSchema,
   updateArticleSchema,
+  helpCenterHeaderLinkUrl,
 } from '../help-center'
+
+describe('blank names on update', () => {
+  it('refuses a whitespace-only article title', () => {
+    expect(updateArticleSchema.safeParse({ id: 'article_1', title: '   ' }).success).toBe(false)
+  })
+
+  it('refuses a whitespace-only category name', () => {
+    expect(updateCategorySchema.safeParse({ id: 'category_1', name: '   ' }).success).toBe(false)
+  })
+
+  it('keeps the trimmed title and name', () => {
+    expect(updateArticleSchema.parse({ id: 'article_1', title: '  Refunds  ' }).title).toBe(
+      'Refunds'
+    )
+    expect(updateCategorySchema.parse({ id: 'category_1', name: ' Billing ' }).name).toBe('Billing')
+  })
+})
+
+describe('helpCenterHeaderLinkUrl', () => {
+  it('accepts a root-relative path and an absolute http(s) URL', () => {
+    expect(helpCenterHeaderLinkUrl.safeParse('/docs').success).toBe(true)
+    expect(helpCenterHeaderLinkUrl.safeParse('https://example.com/docs').success).toBe(true)
+  })
+
+  it('refuses a protocol-relative URL, which leaves the site', () => {
+    expect(helpCenterHeaderLinkUrl.safeParse('//example.com').success).toBe(false)
+    expect(helpCenterHeaderLinkUrl.safeParse('/\\example.com').success).toBe(false)
+  })
+})
 
 describe('updateHelpCenterConfigSchema', () => {
   it('should accept empty object (all optional)', () => {

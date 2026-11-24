@@ -285,7 +285,7 @@ describe('self-hosted ready step', () => {
     await finishSetup(['product_feedback'])
 
     expect(screen.getByText('No posts yet. Be the first to post')).toBeInTheDocument()
-    expect(screen.getByText('The Acme team reads every request.')).toBeInTheDocument()
+    expect(screen.getByText('The Acme team reads every post.')).toBeInTheDocument()
     expect(screen.queryByText('Dark mode')).toBeNull()
     expect(screen.getByText(/Your portal is live at/)).toBeInTheDocument()
   })
@@ -345,11 +345,11 @@ describe('self-hosted ready step', () => {
   // shown in the form above it would land below the fold or under the bar.
   it('shows a server refusal in the pinned bar, above the button', async () => {
     const user = userEvent.setup()
-    hoisted.save.mockRejectedValue(new Error('Authentication required'))
+    hoisted.save.mockRejectedValue(new Error('That workspace name is taken'))
     renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
     await user.click(screen.getByRole('button', { name: 'Create workspace' }))
 
-    const alert = await screen.findByText('Authentication required')
+    const alert = await screen.findByText('That workspace name is taken')
     const button = screen.getByRole('button', { name: 'Create workspace' })
     expect(button.parentElement).toContainElement(alert)
     expect(alert.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

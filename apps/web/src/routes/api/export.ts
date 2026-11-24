@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 import { escapeCSV } from '@/lib/server/utils/csv'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'export' })
 
@@ -43,10 +44,10 @@ export const Route = createFileRoute('/api/export')({
               return Response.json({ error: 'Invalid board ID format' }, { status: 400 })
             }
             boardId = boardIdParam as BoardId
-            // Verify board exists (throws NotFoundError if not found)
-            try {
-              await getBoardById(boardId)
-            } catch {
+            // Verify the board exists and is not deleted (getBoardById throws
+            // NotFoundError when there is no such board)
+            const board = await getBoardById(boardId).catch(() => null)
+            if (!board || board.deletedAt) {
               return Response.json({ error: 'Board not found' }, { status: 400 })
             }
           }
@@ -105,7 +106,7 @@ export const Route = createFileRoute('/api/export')({
             return Response.json(error.toResponseBody(), { status: error.statusCode })
           }
           log.error({ err: error }, 'csv export failed')
-          return Response.json({ error: 'Internal server error' }, { status: 500 })
+          return internalRouteErrorResponse()
         }
       },
     },

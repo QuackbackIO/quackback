@@ -4,6 +4,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface ShortcutProject {
   id: string
@@ -28,9 +29,15 @@ export const saveShortcutTokenFn = createServerFn({ method: 'POST' })
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('Invalid API token. Please check your Shortcut API token and try again.')
+        throw new ValidationError(
+          'INVALID_API_TOKEN',
+          'Invalid API token. Please check your Shortcut API token and try again.'
+        )
       }
-      throw new Error(`Failed to validate Shortcut token: HTTP ${response.status}`)
+      throw new ValidationError(
+        'CONNECTION_TEST_FAILED',
+        `Failed to validate Shortcut token: HTTP ${response.status}`
+      )
     }
 
     const memberInfo = (await response.json()) as {
@@ -61,7 +68,7 @@ export const fetchShortcutProjectsFn = createServerFn({ method: 'GET' }).handler
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Shortcut not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Shortcut not connected')
     }
 
     const secrets = { accessToken: await getValidAccessToken(integration.id) }

@@ -28,6 +28,8 @@ import { withSyncTransport } from './transport'
 import { canDispatchSync } from './eligibility'
 import { refreshSyncActor } from './sources'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { isBoardScopedEvent } from '@/lib/shared/board-scoped-events'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
 
 export function hookSource(data: HookJobData) {
   const content = data.event.data as {
@@ -164,7 +166,9 @@ export async function executeHookSync(
       const filters = m.filters as { boardIds?: string[] } | null
       return (
         (action?.channelId || config.channelId) === channel &&
-        (!filters?.boardIds?.length || (!!post && filters.boardIds.includes(post.boardId)))
+        (!filters?.boardIds?.length ||
+          !isBoardScopedEvent(event.type) ||
+          (!!post && filters.boardIds.includes(post.boardId)))
       )
     })
   )
@@ -244,6 +248,7 @@ export async function executeHookSync(
         ...(accessToken ? { accessToken } : {}),
         integrationId: integration.id,
         rootUrl: getBaseUrl(),
+        links: await getSectionOrigins(),
       },
       { jobId: claim.operation.operationKey }
     )

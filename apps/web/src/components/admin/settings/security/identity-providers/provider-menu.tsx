@@ -25,6 +25,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { deleteIdentityProviderFn } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { IDENTITY_PROVIDERS_KEY, SIGN_IN_TAB } from './provider-shared'
+import { toastError } from '@/lib/client/error-notice'
 
 export function ProviderMenu({
   provider,
@@ -58,7 +59,7 @@ export function ProviderMenu({
       toast.success('Identity provider deleted.')
       await navigate(SIGN_IN_TAB)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not delete the identity provider.')
+      toastError(err, 'Could not delete the identity provider.')
       setPending(false)
       setConfirmOpen(false)
     }

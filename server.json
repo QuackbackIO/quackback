@@ -75,7 +75,7 @@
     },
     {
       "name": "upload_file",
-      "description": "Upload a file (base64-encoded, max 5 MB decoded) so it can be attached to a conversation reply, ticket reply, or ticket note"
+      "description": "Upload a file (base64-encoded, max 3 MB decoded) so it can be attached to a conversation reply, ticket reply, or ticket note"
     },
     {
       "name": "create_article",

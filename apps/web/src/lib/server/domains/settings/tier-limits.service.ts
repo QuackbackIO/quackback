@@ -1,14 +1,18 @@
-import { db, settings } from '@/lib/server/db'
+import { db, settings, type Database, type Transaction } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
+import { settingsLocalTtlMs } from '@/lib/server/local-cache'
 import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
+import { PLAN_ONLY_FEATURES } from './plan-only-features'
 import {
+  entitlementsAt,
   parseBillingProjection,
   projectedLimitsAt,
+  projectionAccessEnded,
   type BillingProjection,
   type ProjectedLimits,
 } from './cloud/billing-projection'
-import { canonicalPlanId, isPlanId, type PlanId } from './cloud/cloud.types'
+import { canonicalPlanId, isPlanId, type EntitlementKey, type PlanId } from './cloud/cloud.types'
 
 const log = logger.child({ component: 'tier-limits-service' })
 
@@ -74,53 +78,6 @@ const CLOSED_CLOUD_FEATURES: TierLimits['features'] = {
   visitorAnalytics: false,
 }
 
-/**
- * Feature flags that are not entitlements. Must match CP `definitions.ts`
- * for the same plan. Copied from `effectivePlan` because the projection
- * entitlements map does not carry these keys.
- *
- * `visitorAnalytics` is the exception to the CP-match rule: the control plane
- * does not define it. Every plan includes it, so a cloud workspace keeps
- * counting unless an operator tier-limits row switches it off. Changing a
- * plan's grant here is the one place that controls it.
- */
-const PLAN_ONLY_FEATURES: Record<
-  PlanId,
-  Pick<
-    TierLimits['features'],
-    'analyticsExports' | 'customColors' | 'customCss' | 'integrations' | 'visitorAnalytics'
-  >
-> = {
-  free: {
-    analyticsExports: false,
-    customColors: true,
-    customCss: false,
-    integrations: false,
-    visitorAnalytics: true,
-  },
-  pro: {
-    analyticsExports: false,
-    customColors: true,
-    customCss: false,
-    integrations: false,
-    visitorAnalytics: true,
-  },
-  business: {
-    analyticsExports: true,
-    customColors: true,
-    customCss: true,
-    integrations: true,
-    visitorAnalytics: true,
-  },
-  enterprise: {
-    analyticsExports: true,
-    customColors: true,
-    customCss: true,
-    integrations: true,
-    visitorAnalytics: true,
-  },
-}
-
 /** Numeric floor from a projection when the operator has not written a row. */
 export function cloudProjectionFloor(limits: ProjectedLimits): TierLimits {
   return {
@@ -141,21 +98,28 @@ export function cloudProjectionFloor(limits: ProjectedLimits): TierLimits {
   }
 }
 
+/** The tier features a projection's entitlement switches on. */
+export const ENTITLEMENT_TIER_FEATURES = {
+  customDomain: 'customDomain',
+  sso: 'customOidcProvider',
+  webhooks: 'webhooks',
+  mcpServer: 'mcpServer',
+} as const satisfies Partial<Record<EntitlementKey, keyof TierLimits['features']>>
+
 function featuresFromProjection(projection: BillingProjection, now: Date): TierLimits['features'] {
-  const expired =
-    projection.planLimitsExpireAt !== null &&
-    now.getTime() >= Date.parse(projection.planLimitsExpireAt)
-  const entitlements = expired ? {} : projection.entitlements
-  const resolved = expired ? 'free' : canonicalPlanId(projection.effectivePlan)
+  const entitlements = entitlementsAt(projection, now)
+  const resolved = projectionAccessEnded(projection, now)
+    ? 'free'
+    : canonicalPlanId(projection.effectivePlan)
   const planId: PlanId = isPlanId(resolved) ? resolved : 'free'
-  return {
+  const features: TierLimits['features'] = {
     ...CLOSED_CLOUD_FEATURES,
     ...PLAN_ONLY_FEATURES[planId],
-    customDomain: entitlements.customDomain === true,
-    customOidcProvider: entitlements.sso === true,
-    webhooks: entitlements.webhooks === true,
-    mcpServer: entitlements.mcpServer === true,
   }
+  for (const [entitlement, feature] of Object.entries(ENTITLEMENT_TIER_FEATURES)) {
+    features[feature] = entitlements[entitlement as EntitlementKey] === true
+  }
+  return features
 }
 
 /**
@@ -189,6 +153,8 @@ export function resolveEffectiveTierLimits(
 interface CachedLimits {
   stored: StoredTierLimits | null
   projection: BillingProjection | null
+  /** When this copy stops being served (see {@link getTierLimits}). */
+  expiresAt: number
 }
 
 const cachedLimits = new WorkspaceKeyedCache<CachedLimits>()
@@ -198,13 +164,25 @@ const LIMITS_KEY = 'limits'
  * Resolve the active TierLimits for this workspace. Self-hosters with no
  * row in `settings.tier_limits` get OSS_TIER_LIMITS (unlimited everything).
  * Cloud workspaces apply the signed projection instead of that default.
- * The cache is invalidated when the row is written.
+ *
+ * The row is held in this process for the settings window
+ * (`settingsLocalTtlMs`, a few seconds). A write drops the copy at once in the
+ * process that made it; every other process (other web replicas, the worker)
+ * reads the row again when its copy expires, so a plan change reaches all of
+ * them within that window, as a settings change does.
  */
-export async function getTierLimits(now = new Date()): Promise<TierLimits> {
+export async function getTierLimits(
+  now = new Date(),
+  executor?: Database | Transaction
+): Promise<TierLimits> {
   let cached = cachedLimits.get(LIMITS_KEY)
+  if (cached && cached.expiresAt <= Date.now()) cached = undefined
 
   if (!cached) {
-    const rows = await db
+    // Inside a transaction, read on it: the shared pool would need a second
+    // connection while the transaction holds one. A read inside a transaction
+    // is not cached, since the transaction may still roll back.
+    const rows = await (executor ?? db)
       .select({ tierLimits: settings.tierLimits, cloud: settings.cloud })
       .from(settings)
       .limit(1)
@@ -214,8 +192,9 @@ export async function getTierLimits(now = new Date()): Promise<TierLimits> {
     cached = {
       stored,
       projection: parseBillingProjection(rawProjection),
+      expiresAt: Date.now() + settingsLocalTtlMs(),
     }
-    cachedLimits.set(LIMITS_KEY, cached)
+    if (!executor) cachedLimits.set(LIMITS_KEY, cached)
   }
 
   return resolveEffectiveTierLimits(cached.stored, cached.projection, now)
@@ -224,4 +203,20 @@ export async function getTierLimits(now = new Date()): Promise<TierLimits> {
 /** Invalidate the active workspace's cache. Call when settings.tier_limits is written. */
 export function invalidateTierLimitsCache(): void {
   cachedLimits.delete(LIMITS_KEY)
+}
+
+/**
+ * The limits a settings row resolves to at `at`, without the cache: for
+ * looking back at the limits in force before a drop.
+ */
+export function resolveTierLimitsFromRow(
+  rawTierLimits: string | null | undefined,
+  rawProjection: unknown,
+  at: Date
+): TierLimits {
+  return resolveEffectiveTierLimits(
+    parseStoredTierLimits(rawTierLimits),
+    parseBillingProjection(rawProjection),
+    at
+  )
 }

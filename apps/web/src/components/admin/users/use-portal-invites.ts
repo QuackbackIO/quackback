@@ -10,6 +10,7 @@ import {
   portalInvitesQueryOptions,
   type PortalInvite,
 } from '@/lib/client/queries/portal-invites'
+import { errorText } from '@/lib/client/error-text'
 
 export { PORTAL_INVITES_QUERY_KEY, type PortalInvite }
 
@@ -176,7 +177,7 @@ export function usePortalInvites(options: UsePortalInvitesOptions = {}) {
         setEmailsInput(failed.map((f) => f.email).join(', '))
       }
     } catch (err) {
-      setEmailError(err instanceof Error ? err.message : 'Failed to send invites.')
+      setEmailError(errorText(err, 'Failed to send invites.'))
     } finally {
       setSendBusy(false)
     }
@@ -198,7 +199,7 @@ export function usePortalInvites(options: UsePortalInvitesOptions = {}) {
       void refetch()
       trackedSetTimeout(() => setResendConfirm((prev) => (prev === id ? null : prev)), 3000)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to resend invite.')
+      setActionError(errorText(err, 'Failed to resend invite.'))
     } finally {
       setResendingId(null)
     }
@@ -211,7 +212,7 @@ export function usePortalInvites(options: UsePortalInvitesOptions = {}) {
       await cancelPortalInviteFn({ data: { inviteId: id } })
       void refetch()
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to revoke invite.')
+      setActionError(errorText(err, 'Failed to revoke invite.'))
     } finally {
       setRevokingId(null)
     }

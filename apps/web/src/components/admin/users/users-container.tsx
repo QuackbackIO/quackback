@@ -14,7 +14,7 @@ import {
   flattenUsers,
 } from '@/lib/client/hooks/use-users-queries'
 import { useRemovePortalUser } from '@/lib/client/mutations'
-import { useSegments, type SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
+import { useAdminSegments, type SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import {
@@ -29,7 +29,9 @@ import {
   serializeCondition,
   deserializeCondition,
 } from '@/components/admin/segments/segment-utils'
-import { canReadCompanies, companiesDirectoryQueries } from '@/lib/client/queries/users-page'
+import { companiesDirectoryQueries } from '@/lib/client/queries/users-page'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
@@ -84,13 +86,17 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
   const invitesStatus = search.invites
   const inInvitesMode = !!invitesStatus
 
+  // Each control and read follows the permission its server function checks.
+  const canManagePeople = usePermission(PERMISSIONS.PEOPLE_MANAGE)
+  const canManageCompanies = usePermission(PERMISSIONS.COMPANY_MANAGE)
+  const canReadInvites = usePermission(PERMISSIONS.SETTINGS_MANAGE)
+
   // Total pending-invite count powers the badge on the segment-nav entry.
   // Pulled at the container level so we don't have to drill into the
-  // invitations view to read it. Gated on admin role — the underlying
-  // server fn requires admin and would 403 on every /admin/users mount
-  // for `member` / `user` roles otherwise.
+  // invitations view to read it. The server fn needs settings.manage and
+  // would 403 on every /admin/users mount for anyone else.
   const { pendingCount: invitesPendingCount } = usePortalInvites({
-    enabled: currentMemberRole === 'admin',
+    enabled: canReadInvites,
   })
 
   // Server state - Users list (with infinite query for pagination). The route
@@ -118,9 +124,9 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
   const inLeadsMode = filters.lifecycle === 'leads'
   const inCompaniesMode = filters.lifecycle === 'companies'
 
-  // Companies directory (the Companies lifecycle tab). Fetched only for team
-  // roles — the server fn is gated on company.view, which both presets hold.
-  const companiesEnabled = canReadCompanies(currentMemberRole)
+  // Companies directory (the Companies lifecycle tab). Fetched only for a
+  // viewer holding company.view, which its server fns check.
+  const companiesEnabled = usePermission(PERMISSIONS.COMPANY_VIEW)
   const {
     data: companyPages,
     isLoading: isLoadingCompanies,
@@ -138,7 +144,7 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
   })
 
   // Segments data
-  const { data: segments, isLoading: isLoadingSegments } = useSegments()
+  const { data: segments, isLoading: isLoadingSegments } = useAdminSegments()
   const { data: customAttributes } = useUserAttributes()
   const { data: companyAttributes } = useCompanyAttributes()
 
@@ -302,7 +308,7 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
               <CompanyDetail
                 companyId={selectedCompanyId}
                 onClose={() => setSelectedCompanyId(null)}
-                canManage={currentMemberRole === 'admin'}
+                canManage={canManageCompanies}
               />
             ) : (
               <CompaniesView
@@ -317,7 +323,7 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
                 companyAttrs={filters.companyAttrs}
                 onCompanyAttrsChange={(encoded) => setFilters({ companyAttrs: encoded })}
                 onSelectCompany={setSelectedCompanyId}
-                canManage={currentMemberRole === 'admin'}
+                canManage={canManageCompanies}
               />
             )}
           </Suspense>
@@ -350,8 +356,8 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
             selectedSegmentIds={filters.segmentIds ?? []}
             onSelectSegment={handleSelectSegment}
             onClearSegments={handleClearSegments}
-            onNewPerson={currentMemberRole === 'admin' ? () => setNewPersonOpen(true) : undefined}
-            canManage={currentMemberRole === 'admin'}
+            onNewPerson={canManagePeople ? () => setNewPersonOpen(true) : undefined}
+            canManage={canManagePeople}
           />
         )}
       </UsersLayout>

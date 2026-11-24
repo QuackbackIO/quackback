@@ -93,24 +93,123 @@ export function hexToOklch(hex: string): string {
   return `oklch(${lStr} ${cStr} ${hStr})`
 }
 
+function rgbBytesToHex(r: number, g: number, b: number): string {
+  const byte = (n: number) =>
+    Math.round(Math.max(0, Math.min(255, n)))
+      .toString(16)
+      .padStart(2, '0')
+  return `#${byte(r)}${byte(g)}${byte(b)}`
+}
+
+function oklabToHex(L: number, a: number, b: number): string {
+  const [x, y, z] = oklabToXyz(L, a, b)
+  const [lr, lg, lb] = xyzToLinearRgb(x, y, z)
+  return rgbBytesToHex(linearToSrgb(lr), linearToSrgb(lg), linearToSrgb(lb))
+}
+
 export function oklchToHex(oklch: string): string {
   const match = oklch.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)/)
   if (!match) return '#000000'
 
-  const L = parseFloat(match[1])
-  const C = parseFloat(match[2])
-  const H = parseFloat(match[3])
+  const [oL, a, b] = oklchToOklab(parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3]))
+  return oklabToHex(oL, a, b)
+}
 
-  const [oL, a, b] = oklchToOklab(L, C, H)
-  const [x, y, z] = oklabToXyz(oL, a, b)
-  const [lr, lg, lb] = xyzToLinearRgb(x, y, z)
+/**
+ * The colour at an OKLCH lightness and hue as hex, its chroma lowered only as
+ * far as it takes to sit inside sRGB. Clipping each channel instead would
+ * turn the hue (a darkened yellow going orange), so a colour moved in
+ * lightness keeps its hue this way.
+ */
+export function oklchToHexInGamut(L: number, C: number, H: number): string {
+  const linear = (chroma: number) => {
+    const [a, b] = oklchToOklab(L, chroma, H).slice(1) as [number, number]
+    return xyzToLinearRgb(...oklabToXyz(L, a, b))
+  }
+  const fits = (chroma: number) => linear(chroma).every((c) => c >= -1e-4 && c <= 1 + 1e-4)
+  let chroma = C
+  if (!fits(chroma)) {
+    let [low, high] = [0, C]
+    for (let i = 0; i < 12; i++) {
+      const mid = (low + high) / 2
+      if (fits(mid)) low = mid
+      else high = mid
+    }
+    chroma = low
+  }
+  return oklabToHex(...oklchToOklab(L, chroma, H))
+}
 
-  const r = linearToSrgb(lr)
-  const g = linearToSrgb(lg)
-  const b_ = linearToSrgb(lb)
+function hslToHex(h: number, s: number, l: number): string {
+  const sat = s / 100
+  const light = l / 100
+  const k = (n: number) => (n + h / 30) % 12
+  const f = (n: number) =>
+    light - sat * Math.min(light, 1 - light) * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))
+  return rgbBytesToHex(f(0) * 255, f(8) * 255, f(4) * 255)
+}
 
-  const toHex = (n: number): string => n.toString(16).padStart(2, '0')
-  return `#${toHex(r)}${toHex(g)}${toHex(b_)}`
+const CSS_NUMBER = /^-?(\d+\.?\d*|\.\d+)(%|deg)?$/
+
+/** A CSS number token; `percentScale` is the value a trailing `%` of 100 maps to. */
+function channel(token: string | undefined, percentScale: number): number | null {
+  if (!token || !CSS_NUMBER.test(token)) return null
+  const n = parseFloat(token)
+  return token.endsWith('%') ? (n / 100) * percentScale : n
+}
+
+/** Parse hex, rgb(), hsl(), oklab() or oklch() into a lowercase 6-digit hex, or null. Alpha is dropped. */
+function parseCssColorToHex(color: string): string | null {
+  const value = color.trim().toLowerCase()
+
+  const hex = value.match(/^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/)
+  if (hex) {
+    const h = hex[1].length <= 4 ? hex[1].replace(/./g, '$&$&') : hex[1]
+    return `#${h.slice(0, 6)}`
+  }
+
+  const fn = value.match(/^(rgba?|hsla?|oklab|oklch)\(([^)]*)\)$/)
+  if (!fn) return null
+  const [a, b, c] = fn[2].split(/[\s,/]+/).filter(Boolean)
+
+  let result: string | null = null
+  if (fn[1].startsWith('rgb')) {
+    const [r, g, bl] = [channel(a, 255), channel(b, 255), channel(c, 255)]
+    if (r !== null && g !== null && bl !== null) result = rgbBytesToHex(r, g, bl)
+  } else if (fn[1].startsWith('hsl')) {
+    const [h, sat, l] = [channel(a, 360), channel(b, 100), channel(c, 100)]
+    if (h !== null && sat !== null && l !== null) result = hslToHex(((h % 360) + 360) % 360, sat, l)
+  } else if (fn[1] === 'oklab') {
+    const [l, x, y] = [channel(a, 1), channel(b, 0.4), channel(c, 0.4)]
+    if (l !== null && x !== null && y !== null) result = oklabToHex(l, x, y)
+  } else {
+    const [l, chroma, h] = [channel(a, 1), channel(b, 0.4), channel(c, 360)]
+    if (l !== null && chroma !== null && h !== null) {
+      result = oklabToHex(...oklchToOklab(l, chroma, h))
+    }
+  }
+  // A channel like "1e999" parses to Infinity; reject rather than emit NaN.
+  return result && !result.includes('NaN') ? result : null
+}
+
+/**
+ * Convert any stored brand colour (hex, rgb(), hsl(), oklch(), oklab()) to a
+ * lowercase 6-digit hex, for consumers that only accept hex (the SDK launcher).
+ * Unparseable input falls back to '#000000'.
+ */
+export function cssColorToHex(color: string): string {
+  return parseCssColorToHex(color) ?? '#000000'
+}
+
+/** Like `cssColorToHex`, but null (not black) when the colour cannot be parsed. */
+export function tryCssColorToHex(color: string): string | null {
+  return parseCssColorToHex(color)
+}
+
+/** Any supported colour as `oklch(L C H)`, or null when it cannot be parsed. */
+export function cssColorToOklch(color: string): string | null {
+  const hex = parseCssColorToHex(color)
+  return hex ? hexToOklch(hex) : null
 }
 
 export function isValidHex(hex: string): boolean {

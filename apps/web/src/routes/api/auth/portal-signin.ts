@@ -4,8 +4,25 @@ import { checkMagicLinkSendRateLimit } from '@/lib/server/auth/signin-rate-limit
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/shared/auth-block-messages'
 import { logger } from '@/lib/server/logger'
+import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 
 const log = logger.child({ component: 'portal-signin' })
+
+/**
+ * The section host this sign-in was asked for on, so the emailed link signs
+ * in there (sessions are host-only cookies). Undefined for the primary domain,
+ * or when the section map cannot be read: the link then signs in on the
+ * primary domain, as it always has.
+ */
+async function linkOriginOf(request: Request): Promise<string | undefined> {
+  try {
+    const { sectionHostOrigin } = await import('@/lib/server/domains/settings/section-links')
+    return (await sectionHostOrigin(requestWorkspaceHost(request))) ?? undefined
+  } catch (err) {
+    log.warn({ err }, 'section host not read; the sign-in link uses the primary domain')
+    return undefined
+  }
+}
 
 interface PortalSigninBody {
   email?: unknown
@@ -69,11 +86,13 @@ function asRateLimited(err: unknown): { retryAfter: string | null } | null {
  * invitation exemption would have made it an oracle for "invited but not yet
  * joined" as well.
  *
- * The one exception is a domain that requires SSO, refused with a 403 by
- * `EmailSigninRefusedError`. That answer depends only on the domain, which the
- * sign-in form already routes to its provider for anyone who types it, so it is
- * the same for every address at the domain. Nothing that depends on an
- * account may ever be added to that error.
+ * The exceptions are refused with a 403 by `EmailSigninRefusedError`: a domain
+ * that requires SSO, and the "Email magic link" method being off. The first
+ * depends only on the domain, which the sign-in form already routes to its
+ * provider for anyone who types it; the second only on the workspace, which
+ * the sign-in form shows to anyone who opens it. Each is the same for every
+ * address it covers. Nothing that depends on an account may ever be added to
+ * that error.
  *
  * Exported so it can be driven directly: a handler that can only be reached
  * through the router is a handler nobody can hold two requests up against.
@@ -110,7 +129,7 @@ export async function handlePortalSignin(request: Request): Promise<Response> {
   }
 
   try {
-    await requestEmailSignin({ email, callbackURL })
+    await requestEmailSignin({ email, callbackURL, linkOrigin: await linkOriginOf(request) })
     return Response.json({ ok: true })
   } catch (err) {
     // Domain-level, so it says nothing about whether the address holds an

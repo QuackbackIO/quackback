@@ -76,18 +76,25 @@ vi.mock('@/components/shared/user-stats', () => ({
 }))
 
 import { PortalHeader } from '../portal-header'
+import { PreviewDraftProvider } from '../preview-draft-context'
 
 const HEADER_LINKS = [
   { label: 'Community', url: 'https://community.example.com' },
   { label: 'Status', url: '/status' },
 ]
 
-function renderHeader(pathname: string, headerLinks: { label: string; url: string }[] | undefined) {
+function renderHeader(
+  pathname: string,
+  headerLinks: { label: string; url: string }[] | undefined,
+  hosts: { baseUrl?: string; sectionLinks?: Record<string, unknown> } = {},
+  featureFlags: Record<string, boolean> = { helpCenter: true }
+) {
   mockPathname.value = pathname
   mockGetRouteContext.mockReturnValue({
+    ...hosts,
     session: null,
     settings: {
-      featureFlags: { helpCenter: true },
+      featureFlags,
       helpCenterConfig: { enabled: true, headerLinks },
     },
     registeredAuthProviders: [],
@@ -124,8 +131,69 @@ describe('PortalHeader — help center header links', () => {
     expect(screen.queryByRole('link', { name: 'Community' })).toBeNull()
   })
 
+  it('shows the draft links in the admin preview', () => {
+    mockPathname.value = '/hc'
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: {
+        featureFlags: { helpCenter: true },
+        helpCenterConfig: { enabled: true, headerLinks: HEADER_LINKS },
+      },
+      registeredAuthProviders: [],
+    })
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PreviewDraftProvider
+          draft={{ helpCenter: { headerLinks: [{ label: 'Docs', url: '/docs' }] } }}
+          css=""
+        >
+          <PortalHeader orgName="Acme" userRole={null} showThemeToggle={false} />
+        </PreviewDraftProvider>
+      </IntlProvider>
+    )
+    expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', '/docs')
+    expect(screen.queryByRole('link', { name: 'Community' })).toBeNull()
+  })
+
   it('tolerates a legacy config without the headerLinks field', () => {
     renderHeader('/hc', undefined)
     expect(screen.queryByRole('link', { name: 'Community' })).toBeNull()
+  })
+})
+
+describe('PortalHeader — tabs for sections on their own host', () => {
+  afterEach(() => cleanup())
+
+  const PRIMARY = 'https://acme.example.com'
+  const FLAGS = { feedback: true, helpCenter: true }
+  // What the bootstrap sends: only the help center's host.
+  const hostsOnly = { hosts: { help: 'https://help.acme.com' } }
+
+  it("links the help center's tab to its own host from the primary domain", () => {
+    renderHeader('/', [], { baseUrl: PRIMARY, sectionLinks: hostsOnly }, FLAGS)
+    expect(screen.getByRole('link', { name: 'Help Center' })).toHaveAttribute(
+      'href',
+      'https://help.acme.com/'
+    )
+    // A tab on this host stays a client-side link.
+    expect(screen.getByRole('link', { name: 'Feedback' })).toHaveAttribute('href', '/')
+  })
+
+  it("links the other sections' tabs to the primary domain from the help center's host", () => {
+    renderHeader(
+      '/hc',
+      [],
+      {
+        // On the help host the base URL is that host, so the primary is named.
+        baseUrl: 'https://help.acme.com',
+        sectionLinks: { ...hostsOnly, here: 'https://help.acme.com', primary: PRIMARY },
+      },
+      FLAGS
+    )
+    expect(screen.getByRole('link', { name: 'Feedback' })).toHaveAttribute(
+      'href',
+      'https://acme.example.com/'
+    )
+    expect(screen.getByRole('link', { name: 'Help Center' })).toHaveAttribute('href', '/hc')
   })
 })

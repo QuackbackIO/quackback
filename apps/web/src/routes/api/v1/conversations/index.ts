@@ -2,6 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { parseCursor, parseLimit } from '@/lib/server/domains/api/request'
+import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeConversation } from './-serialize'
 import type { ConversationStatus, ConversationPriority } from '@/lib/server/db'
@@ -16,16 +18,16 @@ export const Route = createFileRoute('/api/v1/conversations/')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.CONVERSATION_VIEW })
 
           const url = new URL(request.url)
-          const cursor = url.searchParams.get('cursor') ?? undefined
-          const limit = Math.min(
-            100,
-            Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
-          )
+          const cursor = parseCursor(url)
+          const limit = parseLimit(url)
           const status = (url.searchParams.get('status') as ConversationStatus | null) ?? undefined
           const priority =
             (url.searchParams.get('priority') as ConversationPriority | null) ?? undefined
-          const assignedAgentPrincipalId =
-            (url.searchParams.get('assignedAgentPrincipalId') as PrincipalId | null) ?? undefined
+          const assignedAgentPrincipalId = parseOptionalTypeId<PrincipalId>(
+            url.searchParams.get('assignedAgentPrincipalId'),
+            'principal',
+            'assignedAgentPrincipalId'
+          )
 
           // A personal key lists only what its creator can see
           // (conversationFilter follows the actor's scopePrincipalId).

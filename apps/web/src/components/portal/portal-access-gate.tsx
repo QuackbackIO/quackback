@@ -13,11 +13,13 @@
  * re-runs; if the visitor is now authorized, the real portal replaces this.
  */
 import { nameInitial } from '@/lib/shared/utils/initial'
+import { WIDE_LOGO_CLASS } from '@/lib/shared/portal-wide-logo'
+import { WideLogo } from '@/components/public/wide-logo'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { toast } from 'sonner'
+import { toastError } from '@/lib/client/error-notice'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import {
@@ -150,9 +152,13 @@ const MOCK_POSTS: Array<{
 function DecorativeBackdrop({
   workspaceName,
   logoUrl,
+  wideLogoUrl,
+  wideLogoDarkUrl,
 }: {
   workspaceName: string
   logoUrl: string | null
+  wideLogoUrl: string | null
+  wideLogoDarkUrl: string | null
 }) {
   return (
     <div className="min-h-screen bg-background select-none pointer-events-none">
@@ -161,16 +167,25 @@ function DecorativeBackdrop({
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex h-12 items-center justify-between">
             <div className="flex items-center gap-2">
-              {logoUrl ? (
+              {wideLogoUrl ? (
+                <WideLogo
+                  src={wideLogoUrl}
+                  darkSrc={wideLogoDarkUrl}
+                  alt=""
+                  className={WIDE_LOGO_CLASS}
+                />
+              ) : logoUrl ? (
                 <img src={logoUrl} alt="" className="h-8 w-8 rounded-md object-contain" />
               ) : (
                 <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
                   {nameInitial(workspaceName)}
                 </div>
               )}
-              <span className="hidden max-w-[18ch] truncate font-semibold sm:block">
-                {workspaceName}
-              </span>
+              {!wideLogoUrl && (
+                <span className="hidden max-w-[18ch] truncate font-semibold sm:block">
+                  {workspaceName}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <div className="h-8 w-16 rounded-md bg-muted/50" />
@@ -330,6 +345,10 @@ interface GateCardProps {
   reason: 'unauthenticated' | 'unauthorized'
   workspaceName: string
   logoUrl: string | null
+  /** The wide logo when the portal header shows it; shown in place of the square logo. */
+  wideLogoUrl?: string | null
+  /** Its dark mode version, shown in its place where the portal is dark. */
+  wideLogoDarkUrl?: string | null
   authConfig: PortalAccessGateError['authConfig']
   /** Signed-in visitor's email when reason === 'unauthorized'. */
   userEmail?: string | null
@@ -342,6 +361,8 @@ function GateCard({
   reason,
   workspaceName,
   logoUrl,
+  wideLogoUrl,
+  wideLogoDarkUrl = null,
   authConfig,
   userEmail,
   callbackUrl,
@@ -447,13 +468,12 @@ function GateCard({
         router.invalidate(),
       ])
     } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.accessGate.signOutFailed',
-              defaultMessage: 'Sign out failed. Please try again.',
-            })
+      toastError(
+        err,
+        intl.formatMessage({
+          id: 'portal.accessGate.signOutFailed',
+          defaultMessage: 'Sign out failed. Please try again.',
+        })
       )
     } finally {
       setSigningOut(false)
@@ -466,7 +486,14 @@ function GateCard({
     <div className="rounded-xl border bg-card shadow-lg p-8 w-full max-w-md text-center space-y-4">
       {/* Org logo, or the workspace initial as a branded fallback (matches
           the portal header — never a generic icon). */}
-      {logoUrl ? (
+      {wideLogoUrl ? (
+        <WideLogo
+          src={wideLogoUrl}
+          darkSrc={wideLogoDarkUrl}
+          alt={workspaceName}
+          className="mx-auto h-12 w-auto max-w-[240px] object-contain"
+        />
+      ) : logoUrl ? (
         <img src={logoUrl} alt={workspaceName} className="mx-auto h-12 w-auto object-contain" />
       ) : (
         <div className="mx-auto flex h-12 w-12 items-center justify-center [border-radius:calc(var(--radius)*0.6)] bg-primary text-lg font-semibold text-primary-foreground">
@@ -561,6 +588,8 @@ export function PortalAccessGate({
   reason,
   workspaceName,
   logoUrl,
+  wideLogoUrl = null,
+  wideLogoDarkUrl = null,
   authConfig,
   themeStyles,
   customCss,
@@ -590,7 +619,12 @@ export function PortalAccessGate({
           aria-hidden
           data-testid="portal-gate-backdrop"
         >
-          <DecorativeBackdrop workspaceName={workspaceName} logoUrl={logoUrl} />
+          <DecorativeBackdrop
+            workspaceName={workspaceName}
+            logoUrl={logoUrl}
+            wideLogoUrl={wideLogoUrl}
+            wideLogoDarkUrl={wideLogoDarkUrl}
+          />
         </div>
 
         {/* Light scrim to lift the card off the blurred chrome */}
@@ -602,6 +636,8 @@ export function PortalAccessGate({
             reason={reason}
             workspaceName={workspaceName}
             logoUrl={logoUrl}
+            wideLogoUrl={wideLogoUrl}
+            wideLogoDarkUrl={wideLogoDarkUrl}
             authConfig={authConfig}
             userEmail={userEmail}
             callbackUrl={callbackUrl}

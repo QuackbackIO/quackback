@@ -30,6 +30,7 @@ import {
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { workspaceSlugFor } from '@/lib/server/domains/settings/workspace-slug'
 import { logger } from '@/lib/server/logger'
+import { LockedError } from '@/lib/shared/errors'
 import { finishIdentityOnboarding, mutateSetupStateAtomic } from '@/lib/server/setup-state'
 import { applyOnboardingGoals } from '@/lib/server/onboarding-board'
 import type { SupportedLocale } from '@/lib/shared/i18n'
@@ -301,7 +302,7 @@ export async function setupWorkspaceForUser(input: {
       const slugManaged = isPathManaged('workspace.slug', row.managedFieldPaths)
       const useCaseManaged = isPathManaged('workspace.useCase', row.managedFieldPaths)
       if (nameManaged && workspaceName !== row.name) {
-        throw new Error('Workspace name is managed by your workspace admin')
+        throw new LockedError('FIELD_LOCKED', 'Workspace name is managed by your workspace admin')
       }
       if (
         useCaseManaged &&
@@ -311,7 +312,7 @@ export async function setupWorkspaceForUser(input: {
           (data.feedbackPrivate !== undefined &&
             data.feedbackPrivate !== (current.feedbackPrivate ?? false)))
       ) {
-        throw new Error('Workspace goal is managed by your workspace admin')
+        throw new LockedError('FIELD_LOCKED', 'Workspace goal is managed by your workspace admin')
       }
       const goal = useCaseManaged ? (current.useCase ?? useCase) : useCase
       const selectedGoals = useCaseManaged ? (current.goals ?? [goal]) : goals

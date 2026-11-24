@@ -136,7 +136,8 @@ test.describe('Post @-mention happy path', () => {
     // form's `useCreatePublicPost` posts to the TanStack-Start server fn,
     // so we just wait for the editor to collapse — same signal the
     // post-submission spec uses.
-    const submitBtn = page.getByRole('button', { name: /^submit$/i })
+    // The composer's submit button reads "Post" since #895.
+    const submitBtn = page.getByRole('button', { name: /^post$/i })
     await submitBtn.click()
     await expect(editor).not.toBeVisible({ timeout: 15000 })
 

@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { readConfigFontSans } from '@/lib/shared/theme'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
@@ -71,6 +71,9 @@ export const Route = createFileRoute('/widget')({
     const customCss = settings.customCss ?? ''
     const themeMode = brandingConfig.themeMode ?? 'user'
 
+    // Loaded here, not imported at the top: route loaders stay in the route
+    // tree's chunk, which every page loads.
+    const { generateWorkspaceThemeCSS } = await import('@/lib/shared/theme/generator')
     const themeStyles = generateWorkspaceThemeCSS(brandingConfig)
 
     // If user is logged into the portal (same-origin), extract the signed
@@ -119,7 +122,7 @@ export const Route = createFileRoute('/widget')({
       themeMode,
       themeStyles,
       customCss,
-      configFontSans: readFontSans(brandingConfig.light),
+      configFontSans: readConfigFontSans(brandingConfig),
       portalUser,
       portalSessionToken,
       hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,

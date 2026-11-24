@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { saveFreshdeskKeyFn } from '@/integrations/freshdesk/server/functions'
 import { useDeleteIntegration } from '@/lib/client/mutations'
+import { errorText } from '@/lib/client/error-text'
 
 interface FreshdeskConnectionActionsProps {
   integrationId?: string
@@ -43,7 +44,7 @@ export function FreshdeskConnectionActions({
       const timer = setTimeout(() => setShowSuccess(false), 3000)
       return () => clearTimeout(timer)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save credentials')
+      setError(errorText(err, 'Failed to save credentials'))
     } finally {
       setSaving(false)
     }

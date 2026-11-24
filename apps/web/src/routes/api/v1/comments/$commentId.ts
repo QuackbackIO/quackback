@@ -11,6 +11,7 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostCommentId } from '@quackback/ids'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema
 const updateCommentSchema = z.object({
@@ -74,7 +75,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             'comment ID'
           )
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateCommentSchema.safeParse(body)
 
           if (!parsed.success) {

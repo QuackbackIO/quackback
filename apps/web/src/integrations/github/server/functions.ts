@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { GITHUB_CHANNEL_STATUS_READ_PERMISSIONS } from '@/lib/shared/settings-read-permissions'
 import { ValidationError } from '@/lib/shared/errors'
 
 export interface GitHubOAuthState {
@@ -74,12 +75,14 @@ export interface GitHubChannelStatus {
 
 export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<GitHubChannelStatus> => {
-    const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
+    const { requireAuth, assertAnyPermission } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { getLiveGitHubConnectionAccount, githubAccessTokenPresent } =
       await import('@/lib/server/domains/channel-accounts/github-connection')
 
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    // The GitHub channel page (channel_account.manage) and the Channels hub
+    // (settings.manage) both show it. No token leaves the server.
+    assertAnyPermission(await requireAuth(), GITHUB_CHANNEL_STATUS_READ_PERMISSIONS)
     const integration = await db.query.integrations.findFirst({
       where: eq(integrations.integrationType, 'github'),
     })
@@ -144,7 +147,10 @@ export const setGitHubInboxEnabledFn = createServerFn({ method: 'POST' })
         accessToken,
       })
       if (denied || !integration) {
-        throw new Error(denied ?? 'Connect GitHub before enabling the inbox channel.')
+        throw new ValidationError(
+          'GITHUB_INBOX_UNAVAILABLE',
+          denied ?? 'Connect GitHub before enabling the inbox channel.'
+        )
       }
       await ensureGitHubConnectionAccount(integration.id)
     } else {
@@ -172,7 +178,7 @@ export const fetchGitHubReposFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('GitHub not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'GitHub not connected')
     }
 
     const secrets = { accessToken: await getValidAccessToken(integration.id) }
@@ -184,7 +190,9 @@ export const retryGitHubAgentMessageFn = createServerFn({ method: 'POST' })
   .validator(z.object({ messageId: z.string() }))
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const { requireAuth, policyActorFromAuth } = await import('@/lib/server/functions/auth-helpers')
-    const { db, eq, conversationMessages, conversations } = await import('@/lib/server/db')
+    const { db, eq, conversationMessages } = await import('@/lib/server/db')
+    const { assertMessageParentVisible } =
+      await import('@/lib/server/domains/conversation/message-parent')
     const { retryGitHubAgentMessage } = await import('@/lib/server/domains/channels/github-deliver')
     const { canActAsAgent } = await import('@/lib/server/policy/conversation')
     const { ForbiddenError, NotFoundError } = await import('@/lib/shared/errors')
@@ -200,11 +208,9 @@ export const retryGitHubAgentMessageFn = createServerFn({ method: 'POST' })
     if (!message?.conversationId || message.isInternal || message.senderType !== 'agent') {
       throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
     }
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, message.conversationId))
-      .limit(1)
+    // A conversation the caller cannot see hides its messages too.
+    const parent = await assertMessageParentVisible(message, actor)
+    const conversation = parent.kind === 'conversation' ? parent.conversation : null
     if (!conversation || conversation.channel !== 'github') {
       throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
     }

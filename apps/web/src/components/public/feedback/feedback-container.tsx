@@ -48,6 +48,9 @@ import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
 import { useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
+import { planComposer } from '@/components/public/feedback/submit-permission'
+import { ReadOnlyBoardNote } from '@/components/public/feedback/read-only-board-note'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
@@ -95,7 +98,7 @@ interface FeedbackContainerProps {
    * (server-computed). Vote permission is per-board, so this one map gates
    * every card — including infinite-scroll pages — and the submit CTA.
    */
-  boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
+  boardPermissions?: Record<string, BoardPermission>
   showPoweredBy?: boolean
   /** Filter panel counts as rendered on the server. */
   facets?: PublicPostFacetCounts | null
@@ -178,6 +181,9 @@ export function FeedbackContainer({
   // Holders of post.approve get the inline moderation section (banner + pending
   // cards).
   const canApprove = can(PERMISSIONS.POST_APPROVE)
+  // A held post is listed only for its author and for those who may see
+  // unpublished posts, so a viewer without that permission wrote it.
+  const pendingForAuthor = !can(PERMISSIONS.POST_VIEW_PRIVATE)
   const approvePost = useApprovePost()
   const rejectPost = useRejectPost()
 
@@ -377,6 +383,13 @@ export function FeedbackContainer({
     const title = handoff?.take('composeTitle')
     if (title !== undefined) setDraft({ title, key: Date.now() })
   }, [handoff])
+  // Read-only boards take no posts: the composer stands down on one, and the
+  // whole-feed composer does not offer them.
+  const composer = planComposer(
+    boards,
+    boardPermissions,
+    boardLocked ? boardIdForCreate : undefined
+  )
   const canStartIdea =
     !isRealUser || canPostTo(boardPermissions, boardLocked ? boardIdForCreate : undefined)
 
@@ -463,16 +476,24 @@ export function FeedbackContainer({
     <div>
       <div className="flex gap-6 lg:gap-8">
         <div className="flex-1 min-w-0">
-          <FeedbackHeader
-            workspaceName={workspaceName}
-            boards={boards}
-            defaultBoardId={boardIdForCreate}
-            user={effectiveUser}
-            boardPermissions={boardPermissions}
-            onPostCreated={handlePostCreated}
-            boardLocked={boardLocked}
-            draft={draft}
-          />
+          {composer.readOnly ? (
+            <ReadOnlyBoardNote />
+          ) : (
+            <FeedbackHeader
+              workspaceName={workspaceName}
+              boards={composer.boards}
+              defaultBoardId={
+                boardLocked || composer.boards.some((board) => board.id === boardIdForCreate)
+                  ? boardIdForCreate
+                  : composer.boards[0]?.id
+              }
+              user={effectiveUser}
+              boardPermissions={boardPermissions}
+              onPostCreated={handlePostCreated}
+              boardLocked={boardLocked}
+              draft={draft}
+            />
+          )}
 
           <FeedbackToolbar
             currentSort={activeSort}
@@ -578,7 +599,7 @@ export function FeedbackContainer({
                     {intl.formatMessage(
                       {
                         id: 'portal.feedback.list.noPostsYetDescription',
-                        defaultMessage: 'The {workspace} team reads every request.',
+                        defaultMessage: 'The {workspace} team reads every post.',
                       },
                       { workspace: workspaceName }
                     )}
@@ -596,7 +617,7 @@ export function FeedbackContainer({
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
+                      className="portal-card [--portal-card-edge:40%] border rounded-lg overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
                       <PostCard
@@ -620,12 +641,18 @@ export function FeedbackContainer({
                         canVote={
                           post.board ? (boardPermissions?.[post.board.id]?.canVote ?? false) : false
                         }
+                        votingClosed={
+                          post.board
+                            ? (boardPermissions?.[post.board.id]?.readOnly ?? false)
+                            : false
+                        }
                         canChangeStatus={canSetStatus}
                         onStatusChange={(statusId) => handleStatusChange(post, statusId)}
                         isUpdatingStatus={changeStatus.isPending}
                         showAvatar={false}
                         moderationState={post.moderationState}
                         canModerate={canApprove}
+                        pendingForAuthor={pendingForAuthor}
                         moderationBusy={approvePost.isPending || rejectPost.isPending}
                         onApprove={() => approvePost.mutate(post.id)}
                         onReject={() => rejectPost.mutate({ postId: post.id })}

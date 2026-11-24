@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/shared/utils'
+import { isBoardScopedEvent } from '@/lib/shared/board-scoped-events'
 import {
   useAddNotificationChannel,
   useUpdateNotificationChannel,
@@ -69,6 +70,10 @@ export interface EventConfig {
   label: string
   shortLabel: string
   description: string
+  /** Column group (e.g. Feedback, Support). When any event has one, the table
+   *  labels its column groups and a new channel starts with nothing picked,
+   *  so different kinds of notice are never mixed by default. */
+  group?: string
 }
 
 export interface Board {
@@ -153,6 +158,25 @@ export function NotificationChannelRouter<TChannel extends Channel>(
 // Helpers
 // ============================================
 
+/** Consecutive runs of events sharing a group, or null when nothing is grouped. */
+function eventGroups(events: EventConfig[]): { name: string; events: EventConfig[] }[] | null {
+  if (!events.some((e) => e.group)) return null
+  const groups: { name: string; events: EventConfig[] }[] = []
+  for (const event of events) {
+    const name = event.group ?? ''
+    const last = groups.at(-1)
+    if (last && last.name === name) last.events.push(event)
+    else groups.push({ name, events: [event] })
+  }
+  return groups
+}
+
+/** Events that open a new group after the first, drawn with a divider before them. */
+function groupStarts(events: EventConfig[]): Set<string> {
+  const groups = eventGroups(events)
+  return new Set((groups ?? []).slice(1).map((g) => g.events[0].id))
+}
+
 function getBoardSummary(channel: NotificationChannel, boards: Board[]): string {
   if (!channel.boardIds?.length) return 'All boards'
   if (channel.boardIds.length === 1) {
@@ -214,7 +238,7 @@ function ChannelPicker<TChannel extends Channel>({
   loading,
   onRefresh,
   renderChannelIcon,
-  placeholder = 'Select a channel...',
+  placeholder = 'Select a channel…',
 }: {
   channels: TChannel[]
   value: string
@@ -250,7 +274,7 @@ function ChannelPicker<TChannel extends Channel>({
           {loading ? (
             <span className="flex items-center gap-2 text-muted-foreground">
               <ArrowPathIcon className="h-4 w-4 animate-spin" />
-              Loading channels...
+              Loading channels…
             </span>
           ) : selected ? (
             <span className="flex items-center gap-2">
@@ -270,7 +294,7 @@ function ChannelPicker<TChannel extends Channel>({
             ref={inputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search channels..."
+            placeholder="Search channels…"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           {onRefresh && (
@@ -382,7 +406,7 @@ function BoardFilterCombobox({
       <PopoverContent align="start" className="w-(--anchor-width) p-0">
         {open && (
           <Command>
-            <CommandInput placeholder="Search boards..." />
+            <CommandInput placeholder="Search boards…" />
             <CommandList>
               <CommandEmpty>No boards found.</CommandEmpty>
               <CommandGroup>
@@ -493,6 +517,9 @@ function ChannelRow<TChannel extends Channel>({
     if (!open) removeMutation.reset()
   }
 
+  const starts = groupStarts(events)
+  const showBoardFilter = channel.events.some((e) => e.enabled && isBoardScopedEvent(e.eventType))
+
   const handleRemove = () => {
     removeMutation.mutate(
       { integrationId, channelId: channel.channelId },
@@ -530,7 +557,10 @@ function ChannelRow<TChannel extends Channel>({
             return (
               <div
                 key={event.id}
-                className="flex justify-center py-3"
+                className={cn(
+                  'flex justify-center self-stretch items-center py-3',
+                  starts.has(event.id) && 'border-l border-border/50'
+                )}
                 onClick={(e) => e.stopPropagation()}
               >
                 <Checkbox
@@ -553,16 +583,18 @@ function ChannelRow<TChannel extends Channel>({
         {expanded && (
           <div className="border-t border-border/30 bg-muted/5 px-4 pb-4">
             <div className="pl-10 pt-3 space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Board filter</Label>
-                <BoardFilterCombobox
-                  boardIds={channel.boardIds}
-                  boards={boards}
-                  onBoardIdsChange={handleBoardIdsChange}
-                  disabled={disabled || saving}
-                />
-              </div>
-              <div className="pt-2 border-t border-border/30">
+              {showBoardFilter && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Board filter</Label>
+                  <BoardFilterCombobox
+                    boardIds={channel.boardIds}
+                    boards={boards}
+                    onBoardIdsChange={handleBoardIdsChange}
+                    disabled={disabled || saving}
+                  />
+                </div>
+              )}
+              <div className={cn(showBoardFilter && 'pt-2 border-t border-border/30')}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -602,7 +634,7 @@ function ChannelRow<TChannel extends Channel>({
               onClick={handleRemove}
               disabled={removeMutation.isPending}
             >
-              {removeMutation.isPending ? 'Removing...' : 'Remove'}
+              {removeMutation.isPending ? 'Removing…' : 'Remove'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -626,6 +658,8 @@ function RoutingTable<TChannel extends Channel>({
   onAddChannel,
 }: RoutingTableProps<TChannel>) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const groups = eventGroups(events)
+  const starts = groupStarts(events)
 
   return (
     <div
@@ -639,13 +673,35 @@ function RoutingTable<TChannel extends Channel>({
           className="grid items-end bg-muted/40 border-b border-border/50"
           style={tableGridStyle(events.length)}
         >
-          <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-            Channel
-          </div>
+          {groups ? (
+            <>
+              <div className="row-span-2 self-end px-4 py-2 text-[11px] font-medium text-muted-foreground">
+                Channel
+              </div>
+              {groups.map((group, i) => (
+                <div
+                  key={group.name}
+                  className={cn(
+                    'pt-2 text-[11px] font-semibold text-foreground/80 text-center',
+                    i > 0 && 'border-l border-border/50'
+                  )}
+                  style={{ gridColumn: `span ${group.events.length}` }}
+                >
+                  {group.name}
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground">Channel</div>
+          )}
           {events.map((event) => (
             <div
               key={event.id}
-              className="py-2 text-[11px] font-medium text-muted-foreground text-center leading-tight"
+              className={cn(
+                'py-2 text-[11px] font-medium text-muted-foreground text-center leading-tight',
+                groups && 'pt-1',
+                starts.has(event.id) && 'border-l border-border/50'
+              )}
               title={event.description}
             >
               {event.shortLabel}
@@ -705,8 +761,11 @@ function AddChannelDialog<TChannel extends Channel>({
 }: AddChannelDialogProps<TChannel>) {
   const addMutation = useAddNotificationChannel()
   const [selectedChannelId, setSelectedChannelId] = useState('')
+  const groups = eventGroups(events)
+  // Grouped events start unpicked so a channel never mixes kinds by default.
+  const startPicked = groups === null
   const [selectedEvents, setSelectedEvents] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(events.map((e) => [e.id, true]))
+    Object.fromEntries(events.map((e) => [e.id, startPicked]))
   )
   const [boardIds, setBoardIds] = useState<string[] | null>(null)
   const resetAdd = addMutation.reset
@@ -715,11 +774,11 @@ function AddChannelDialog<TChannel extends Channel>({
   useEffect(() => {
     if (!open) {
       setSelectedChannelId('')
-      setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, true])))
+      setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, startPicked])))
       setBoardIds(null)
       resetAdd()
     }
-  }, [open, events, resetAdd])
+  }, [open, events, startPicked, resetAdd])
 
   const availableChannels = channels.filter((c) => !existingChannelIds.includes(c.id))
   // A refresh can mark the picked channel unpostable; treat that as no selection.
@@ -728,6 +787,7 @@ function AddChannelDialog<TChannel extends Channel>({
     : ''
   const allEventsSelected = events.every((e) => selectedEvents[e.id])
   const noEventsSelected = events.every((e) => !selectedEvents[e.id])
+  const showBoardFilter = events.some((e) => selectedEvents[e.id] && isBoardScopedEvent(e.id))
 
   const handleSave = () => {
     if (!channelId) return
@@ -742,7 +802,7 @@ function AddChannelDialog<TChannel extends Channel>({
         integrationId,
         channelId,
         events: eventsToSave,
-        boardIds: boardIds ?? undefined,
+        boardIds: (showBoardFilter && boardIds) || undefined,
       },
       {
         onSuccess: () => onOpenChange(false),
@@ -774,52 +834,85 @@ function AddChannelDialog<TChannel extends Channel>({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Events</Label>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !allEventsSelected
-                  setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, next])))
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {allEventsSelected ? 'Deselect all' : 'Select all'}
-              </button>
+          {groups ? (
+            <div className="space-y-3">
+              {groups.map((group) => {
+                const allPicked = group.events.every((e) => selectedEvents[e.id])
+                return (
+                  <div key={group.name} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label>{group.name}</Label>
+                      <button
+                        type="button"
+                        aria-label={`${allPicked ? 'Clear' : 'Select all'} ${group.name}`}
+                        onClick={() =>
+                          setSelectedEvents((prev) => ({
+                            ...prev,
+                            ...Object.fromEntries(group.events.map((e) => [e.id, !allPicked])),
+                          }))
+                        }
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {allPicked ? 'Clear' : 'Select all'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                      {group.events.map((event) => (
+                        <EventCheckbox
+                          key={event.id}
+                          event={event}
+                          checked={selectedEvents[event.id] ?? false}
+                          onChange={(checked) =>
+                            setSelectedEvents((prev) => ({ ...prev, [event.id]: checked }))
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-              {events.map((event) => (
-                <label
-                  key={event.id}
-                  title={event.description}
-                  className="flex items-center gap-2 text-sm cursor-pointer py-1"
+          ) : (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>Events</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !allEventsSelected
+                    setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, next])))
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <Checkbox
+                  {allEventsSelected ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {events.map((event) => (
+                  <EventCheckbox
+                    key={event.id}
+                    event={event}
                     checked={selectedEvents[event.id] ?? true}
-                    onCheckedChange={(checked) =>
-                      setSelectedEvents((prev) => ({
-                        ...prev,
-                        [event.id]: checked === true,
-                      }))
+                    onChange={(checked) =>
+                      setSelectedEvents((prev) => ({ ...prev, [event.id]: checked }))
                     }
-                    data-in-label
                   />
-                  {event.label}
-                </label>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="space-y-1.5">
-            <Label>Board filter</Label>
-            <BoardFilterCombobox
-              boardIds={boardIds}
-              boards={boards}
-              onBoardIdsChange={setBoardIds}
-              disabled={addMutation.isPending}
-            />
-          </div>
+          {showBoardFilter && (
+            <div className="space-y-1.5">
+              <Label>Board filter</Label>
+              <BoardFilterCombobox
+                boardIds={boardIds}
+                boards={boards}
+                onBoardIdsChange={setBoardIds}
+                disabled={addMutation.isPending}
+              />
+            </div>
+          )}
 
           {addMutation.isError && (
             <p className="text-sm text-destructive">
@@ -836,10 +929,34 @@ function AddChannelDialog<TChannel extends Channel>({
             onClick={handleSave}
             disabled={!channelId || noEventsSelected || addMutation.isPending}
           >
-            {addMutation.isPending ? 'Adding...' : 'Add channel'}
+            {addMutation.isPending ? 'Adding…' : 'Add channel'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function EventCheckbox({
+  event,
+  checked,
+  onChange,
+}: {
+  event: EventConfig
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label
+      title={event.description}
+      className="flex items-center gap-2 text-sm cursor-pointer py-1"
+    >
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(next) => onChange(next === true)}
+        data-in-label
+      />
+      {event.label}
+    </label>
   )
 }

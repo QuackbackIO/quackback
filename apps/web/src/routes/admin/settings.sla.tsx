@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useIntl } from 'react-intl'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import {
   queryOptions,
@@ -56,6 +55,7 @@ import {
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { errorText } from '@/lib/client/error-text'
 
 const slaPoliciesQuery = queryOptions({
   queryKey: ['settings', 'slaPolicies'],
@@ -77,7 +77,7 @@ export const Route = createFileRoute('/admin/settings/sla')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.SLA_MANAGE)
+    assertSettingsPageAccess(context.permissions, '/admin/settings/sla')
     await Promise.all([
       context.queryClient.ensureQueryData(slaPoliciesQuery),
       context.queryClient.ensureQueryData(settingsQueries.defaultSlaPolicy()),
@@ -405,7 +405,7 @@ function PolicyEditorDialog({
       onSaved()
     },
     onError: (err) => {
-      if (err instanceof EditorError) setError(err.message)
+      if (err instanceof EditorError) setError(errorText(err, 'Failed to save policy'))
       else toast.error('Failed to save policy')
     },
   })

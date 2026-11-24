@@ -74,7 +74,7 @@ export const fetchNotionDatabasesFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration || integration.status !== 'active') {
-      throw new Error('Notion not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Notion not connected')
     }
 
     if (!integration.secrets) {

@@ -6,7 +6,7 @@ import { fromUuid } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { db, posts, boards } from '@/lib/server/db'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
-import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse, withCors } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/suggest')({
   server: {
@@ -21,7 +21,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
           const limit = Math.min(Number(url.searchParams.get('limit')) || 5, 20)
 
           if (!text) {
-            return badRequestResponse('text parameter is required')
+            return withCors(badRequestResponse('text parameter is required'))
           }
 
           // Team-level actor so the suggest fallback uses
@@ -94,7 +94,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
 
           return appJsonResponse({ posts: resultPosts })
         } catch (error) {
-          return handleDomainError(error)
+          return withCors(handleDomainError(error))
         }
       },
     },

@@ -7,10 +7,11 @@
  */
 
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { createComment, deleteComment } from '@/lib/server/domains/comments/comment.service'
 import { userEditComment } from '@/lib/server/domains/comments/comment.permissions'
 import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
+import { assertNotBlocked } from '@/lib/server/domains/principals/blocking'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
 import {
@@ -91,6 +92,7 @@ type ReactToCommentArgs = {
 export function registerCommentTools(server: McpServer, auth: McpAuthContext) {
   registerTool<AddCommentArgs>(server, auth, {
     name: 'add_comment',
+    title: 'Add comment',
     permissions: 'none',
     description: `Post a comment on a feedback post. Supports threaded replies via parentId. Set isPrivate to create an internal note visible only to team members.
 ${CONTENT_FORMAT_BLOCK}
@@ -103,6 +105,7 @@ Examples:
     annotations: WRITE,
     scope: 'write:feedback',
     handler: async (args) => {
+      await assertNotBlocked(auth.principalId)
       // The actor carries the caller's REAL role so the policy gate inside
       // createComment reflects who is doing the write.
       const result = await createComment(
@@ -137,6 +140,7 @@ Examples:
 
   registerTool<UpdateCommentArgs>(server, auth, {
     name: 'update_comment',
+    title: 'Edit comment',
     permissions: 'none',
     description: `Edit a comment's content. Team members can edit any comment; authors can edit their own.
 ${CONTENT_FORMAT_BLOCK}
@@ -169,6 +173,7 @@ Examples:
 
   registerTool<DeleteCommentArgs>(server, auth, {
     name: 'delete_comment',
+    title: 'Delete comment',
     permissions: 'none',
     description: `Hard-delete a comment and all its replies (cascade). This cannot be undone.
 Authors can delete their own comments; team members can delete any comment.
@@ -195,6 +200,7 @@ Examples:
 
   registerTool<ReactToCommentArgs>(server, auth, {
     name: 'react_to_comment',
+    title: 'React to comment',
     permissions: 'none',
     description: `Add or remove an emoji reaction on a comment.
 
@@ -207,6 +213,7 @@ Examples:
     handler: async (args) => {
       // The actor reflects who is reacting, for the canViewPost + isPrivate
       // gates inside add/removeReaction.
+      await assertNotBlocked(auth.principalId)
       const reactionActor = await mcpMemberActor(auth)
       const result =
         args.action === 'add'

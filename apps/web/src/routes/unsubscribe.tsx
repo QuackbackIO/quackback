@@ -27,7 +27,7 @@ const searchSchema = z.object({
   token: z.string().optional(),
 })
 
-type PageError = 'missing' | 'malformed' | 'invalid' | 'failed'
+type PageError = 'missing' | 'malformed' | 'invalid' | 'used' | 'expired' | 'failed'
 type UnsubscribeView = UnsubscribePreview | { status: 'error'; error: 'missing' | 'malformed' }
 
 export const Route = createFileRoute('/unsubscribe')({
@@ -90,7 +90,7 @@ function ConfirmFlow({
   const copy = actionCopy(preview.action)
 
   if (result?.success) return <DoneView result={result} />
-  if (result) return <ErrorView error={result.error === 'failed' ? 'failed' : 'invalid'} />
+  if (result) return <ErrorView error={result.error ?? 'invalid'} />
 
   async function confirm() {
     setState('working')
@@ -247,12 +247,12 @@ const ACTION_COPY: Record<string, ActionCopy> = {
     },
     confirmBody: {
       id: 'unsubscribe.post.confirmBody',
-      defaultMessage: 'You will stop getting email updates about it.',
+      defaultMessage: 'You will stop getting notifications about it.',
     },
     button: UNSUBSCRIBE_BUTTON,
     doneBody: {
       id: 'unsubscribe.post.doneBody',
-      defaultMessage: 'You will not get more email updates about this post.',
+      defaultMessage: 'You will not get more notifications about this post.',
     },
   },
   mute_post: {
@@ -274,12 +274,14 @@ const ACTION_COPY: Record<string, ActionCopy> = {
     },
     confirmBody: {
       id: 'unsubscribe.all.confirmBody',
-      defaultMessage: 'You will stop getting every email notification.',
+      defaultMessage:
+        'You will stop getting every email notification. Replies from our team still reach you.',
     },
     button: { id: 'unsubscribe.all.button', defaultMessage: 'Turn off all email' },
     doneBody: {
       id: 'unsubscribe.all.doneBody',
-      defaultMessage: 'All email is off. You can turn it back on in your preferences.',
+      defaultMessage:
+        'All email is off. Replies from our team still reach you. You can turn it back on in your preferences.',
     },
   },
   unsubscribe_changelog: {
@@ -370,14 +372,35 @@ const ERROR_COPY: Record<PageError, { title: MessageDescriptor; body: MessageDes
       defaultMessage: 'Use the link from your email.',
     },
   },
+  // Well formed, but never issued: the same words as a malformed link.
   invalid: {
     title: {
-      id: 'unsubscribe.error.invalid.title',
+      id: 'unsubscribe.error.malformed.title',
+      defaultMessage: 'This link is not valid',
+    },
+    body: {
+      id: 'unsubscribe.error.missing.body',
+      defaultMessage: 'Use the link from your email.',
+    },
+  },
+  used: {
+    title: {
+      id: 'unsubscribe.error.used.title',
+      defaultMessage: 'This link was already used',
+    },
+    body: {
+      id: 'unsubscribe.error.used.body',
+      defaultMessage: 'The change it makes is already done.',
+    },
+  },
+  expired: {
+    title: {
+      id: 'unsubscribe.error.expired.title',
       defaultMessage: 'This link has expired',
     },
     body: {
-      id: 'unsubscribe.error.invalid.body',
-      defaultMessage: 'It was already used or is too old. Use the link in a newer email.',
+      id: 'unsubscribe.error.expired.body',
+      defaultMessage: 'Use the link in a newer email.',
     },
   },
   failed: {

@@ -8,6 +8,7 @@ import { InputOTP, InputOTPSixSlots } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/client/auth-client'
 import { Spinner } from '@/components/shared/spinner'
 import { AreaMessages } from '@/components/shared/area-messages'
+import { errorText } from '@/lib/client/error-text'
 
 interface TwoFactorChallengeStepProps {
   onComplete: () => void
@@ -59,12 +60,13 @@ function ChallengeStep({ onComplete, onCancel }: TwoFactorChallengeStepProps): R
       onComplete()
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.auth.twoFactor.codeRejected',
-              defaultMessage: 'Code rejected.',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'portal.auth.twoFactor.codeRejected',
+            defaultMessage: 'Code rejected.',
+          })
+        )
       )
     } finally {
       setPending(false)

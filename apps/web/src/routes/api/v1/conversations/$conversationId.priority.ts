@@ -12,6 +12,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeConversation } from './-serialize'
 import { priorityEnum } from './-validation'
 import type { ConversationId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 const prioritySchema = z.object({
   priority: priorityEnum,
@@ -32,7 +33,7 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/prio
             'conversation ID'
           )
 
-          const parsed = prioritySchema.safeParse(await request.json().catch(() => null))
+          const parsed = prioritySchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,
@@ -41,9 +42,9 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/prio
 
           const actor = serviceActorFromApiAuth(auth)
           // A personal key acts only on conversations its creator can see.
-          const { assertConversationViewable } =
-            await import('@/lib/server/domains/conversation/conversation.service')
-          await assertConversationViewable(conversationId, actor)
+          const { assertConversationVisible } =
+            await import('@/lib/server/domains/conversation/conversation-visibility')
+          await assertConversationVisible(conversationId, actor)
           const { setConversationPriority } =
             await import('@/lib/server/domains/conversation/conversation.service')
           const { conversationToDTO } =

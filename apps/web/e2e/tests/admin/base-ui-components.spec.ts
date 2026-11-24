@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { waitForHydration } from '../../utils/helpers'
+import { setSupportSurfaces } from '../../utils/db-helpers'
 
 /**
  * Site-wide usability pass for the Radix → Base UI migration.
@@ -40,7 +41,7 @@ test.describe('Base UI component usability', () => {
     await expect(page.locator('[data-slot="popover-content"]')).toHaveCount(0)
   })
 
-  test('switch, select, slider, and styled links stay usable', async ({ page }) => {
+  test('switch, select, radio group, and styled links stay usable', async ({ page }) => {
     await page.goto('/admin/settings/general')
     await expect(page.getByRole('heading', { name: 'General' })).toBeVisible({ timeout: 15_000 })
     const productSwitch = page.locator('#product-changelog')
@@ -63,15 +64,21 @@ test.describe('Base UI component usability', () => {
     await expect(listbox).toBeHidden()
     await expect(position).toHaveText(shown)
 
-    const install = page.getByRole('link', { name: /Install widget|View installation/ })
+    // "Install widget" reads "Set it up" before the widget is installed (#589)
+    const install = page.getByRole('link', { name: /Set it up|View installation/ })
     await expect(install).toBeVisible()
     await expect(install).not.toHaveAttribute('role', 'button')
 
-    await page.goto('/admin/settings/portal')
-    await expect(page.getByRole('heading', { name: 'Portal' })).toBeVisible({ timeout: 15_000 })
-    const slider = page.getByRole('slider')
-    await expect(slider).toBeVisible()
-    await expect(slider).toHaveAttribute('aria-valuenow')
+    // The portal's corners were the last slider; Customise sets them with a radio group.
+    await page.goto('/admin/settings/portal/customise')
+    const fontAndShape = page.getByRole('button', { name: /^Font and shape/ })
+    await waitForHydration(fontAndShape)
+    await fontAndShape.click()
+    const round = page.getByRole('radiogroup', { name: 'Corners' }).getByRole('radio', {
+      name: 'Round',
+    })
+    await round.click()
+    await expect(round).toHaveAttribute('aria-checked', 'true')
   })
 
   test('tabs, dialog, radio, and checkbox stay usable', async ({ page }) => {
@@ -110,6 +117,9 @@ test.describe('Base UI component usability', () => {
     await tagDialog.getByRole('button', { name: /cancel/i }).click()
     await expect(tagDialog).toBeHidden()
 
+    // Office hours lives under the Support module, which is off on a fresh
+    // seed; turn it on rather than depend on a support spec running first.
+    setSupportSurfaces(true)
     await page.goto('/admin/settings/office-hours')
     await expect(
       page.getByRole('navigation', { name: 'Support' }).getByRole('link', { name: 'Office hours' })
@@ -122,7 +132,7 @@ test.describe('Base UI component usability', () => {
 
   test('menu checkbox items, alert dialog, and dropdown stay usable', async ({ page }) => {
     await page.goto('/admin/users')
-    await expect(page.getByPlaceholder('Search users...')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByPlaceholder('Search users…')).toBeVisible({ timeout: 15_000 })
     const columns = page.getByRole('button', { name: 'Columns' })
     await waitForHydration(columns)
     await columns.click()

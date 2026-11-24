@@ -8,6 +8,9 @@ export function billingErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
   if (message === 'already_on_plan') return 'already_on_plan'
   if (message === 'already_on_addon') return 'already_on_addon'
+  if (message === 'subscription_pending') return 'subscription_pending'
+  if (message === 'already_subscribed') return 'already_subscribed'
+  if (message === 'workspace_changed') return 'workspace_changed'
   if (message === 'not_on_addon') return 'not_on_addon'
   if (message === 'seats_below_usage') return 'seats_below_usage'
   if (message === 'seat_cap_exceeded') return 'seat_cap_exceeded'
@@ -104,11 +107,6 @@ export const Route = createFileRoute('/api/billing/session')({
             parsed.data.action === 'checkout'
               ? await createCheckoutSession(parsed.data)
               : await createHostedBillingSession(parsed.data)
-          if (parsed.data.action === 'downgrade' || parsed.data.action === 'checkout') {
-            const { clearPendingDowngrade } =
-              await import('@/lib/server/domains/billing/pending-downgrade')
-            await clearPendingDowngrade()
-          }
           const flashSuccess =
             parsed.data.action === 'checkout' || parsed.data.action === 'branding'
           const location =

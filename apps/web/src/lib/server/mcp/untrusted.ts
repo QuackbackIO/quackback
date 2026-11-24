@@ -37,8 +37,9 @@
  * activity's actor is on the team today) attaches it with withItemFacts.
  */
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import type { ActivityType } from '@/lib/shared/types/activity'
+import type { McpToolName } from '@/lib/shared/mcp-tools'
 
 type JsonObject = Record<string, unknown>
 
@@ -310,9 +311,9 @@ export const UNTRUSTED_TOOL_FIELDS = {
   get_settings: NONE,
   update_settings: NONE,
   navigate_workspace: NONE,
-} satisfies Record<string, UntrustedSpec>
+} satisfies Record<McpToolName, UntrustedSpec>
 
-export type McpToolName = keyof typeof UNTRUSTED_TOOL_FIELDS
+export type { McpToolName }
 
 // ============================================================================
 // Matching

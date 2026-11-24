@@ -32,6 +32,7 @@ import {
   ticketTypes,
   ticketStatuses,
   ticketConversations,
+  eq,
 } from '@/lib/server/db'
 import { ANON_EMAIL_DOMAIN } from '@quackback/email/anon'
 
@@ -454,5 +455,127 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(ctx!.person!.attributes).toEqual({ plan: 'starter' })
     expect(evaluateCondition({ field: 'person.email', op: 'is_set' }, ctx!)).toBe(false)
     expect(evaluateCondition({ field: 'person.email', op: 'is_empty' }, ctx!)).toBe(true)
+  })
+
+  it("resolves an email sender's address for person.email: a lead with no user row, only a contact email", async () => {
+    // Exactly the principal the inbound-email path mints for a sender it does
+    // not know (conversation.email-cold-inbound.ts): anonymous, no user row,
+    // the From address on principal.contact_email.
+    const address = `sender-${suffix()}@customer.example`
+    const principalId = createId('principal') as PrincipalId
+    await testDb.insert(principal).values({
+      id: principalId,
+      userId: null,
+      role: 'user',
+      type: 'anonymous',
+      contactEmail: address,
+      createdAt: new Date(),
+    })
+    const [conv] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: principalId, channel: 'email' })
+      .returning()
+
+    const ctx = await resolveConditionContext(conv.id)
+    expect(ctx!.person!.email).toBe(address)
+    expect(
+      evaluateCondition({ field: 'person.email', op: 'contains', value: '@customer.example' }, ctx!)
+    ).toBe(true)
+    expect(evaluateCondition({ field: 'person.email', op: 'is_set' }, ctx!)).toBe(true)
+  })
+
+  it('never matches the sender address of a conversation whose mail failed sender authentication', async () => {
+    // A forged From must not trip an email condition (VIP routing, an auto-reply).
+    async function lead(): Promise<PrincipalId> {
+      const id = createId('principal') as PrincipalId
+      await testDb.insert(principal).values({
+        id,
+        userId: null,
+        role: 'user',
+        type: 'anonymous',
+        contactEmail: `ceo-${suffix()}@bigcustomer.example`,
+        createdAt: new Date(),
+      })
+      return id
+    }
+
+    // Marked by the cold-inbound create (kept after a release from Spam).
+    const [marked] = await testDb
+      .insert(conversations)
+      .values({
+        visitorPrincipalId: await lead(),
+        channel: 'email',
+        customAttributes: { unverifiedSender: true, senderAuthFailed: true },
+      })
+      .returning()
+    const markedCtx = await resolveConditionContext(marked.id)
+    expect(markedCtx!.person!.email).toBeNull()
+    expect(
+      evaluateCondition(
+        { field: 'person.email', op: 'contains', value: '@bigcustomer.example' },
+        markedCtx!
+      )
+    ).toBe(false)
+
+    // Filed to Spam for its authentication before the marker existed.
+    const [filed] = await testDb
+      .insert(conversations)
+      .values({
+        visitorPrincipalId: await lead(),
+        channel: 'email',
+        status: 'closed',
+        endReason: 'spam',
+        spamReason: 'sender_auth_failure',
+      })
+      .returning()
+    expect((await resolveConditionContext(filed.id))!.person!.email).toBeNull()
+
+    // Unknown authentication (no Authentication-Results: unverified, not
+    // failed) still matches, as a pass does.
+    const [unknown] = await testDb
+      .insert(conversations)
+      .values({
+        visitorPrincipalId: await lead(),
+        channel: 'email',
+        customAttributes: { unverifiedSender: true },
+      })
+      .returning()
+    expect((await resolveConditionContext(unknown.id))!.person!.email).toMatch(
+      /@bigcustomer\.example$/
+    )
+  })
+
+  it('prefers the account email over the contact email, and never reads a synthetic contact address', async () => {
+    const accountEmail = `account-${suffix()}@customer.example`
+    const withAccount = await seedPrincipal({ email: accountEmail })
+    await testDb
+      .update(principal)
+      .set({ contactEmail: `other-${suffix()}@customer.example` })
+      .where(eq(principal.id, withAccount))
+    const [convA] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: withAccount, channel: 'messenger' })
+      .returning()
+    expect((await resolveConditionContext(convA.id))!.person!.email).toBe(accountEmail)
+
+    // A widget visitor: synthetic account address, synthetic contact address.
+    const synthetic = await seedPrincipal({ email: `temp-${suffix()}@${ANON_EMAIL_DOMAIN}` })
+    await testDb
+      .update(principal)
+      .set({ contactEmail: `temp-${suffix()}@${ANON_EMAIL_DOMAIN}` })
+      .where(eq(principal.id, synthetic))
+    const [convB] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: synthetic, channel: 'messenger' })
+      .returning()
+    expect((await resolveConditionContext(convB.id))!.person!.email).toBeNull()
+
+    // An anonymous visitor with no address anywhere still reads unresolved.
+    const bare = await seedAnonymousPrincipal()
+    const [convC] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: bare, channel: 'messenger' })
+      .returning()
+    expect((await resolveConditionContext(convC.id))!.person!.email).toBeNull()
   })
 })

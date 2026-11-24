@@ -15,7 +15,7 @@ describe('AdminListHeader', () => {
   it('renders the search input and forwards changes', () => {
     const onSearchChange = vi.fn()
     render(<AdminListHeader searchValue="" onSearchChange={onSearchChange} />)
-    fireEvent.change(screen.getByPlaceholderText('Search...'), { target: { value: 'abc' } })
+    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'abc' } })
     expect(onSearchChange).toHaveBeenCalledWith('abc')
   })
 
@@ -29,7 +29,7 @@ describe('AdminListHeader', () => {
 
   it('gives the search input an accessible name', () => {
     render(<AdminListHeader searchValue="" onSearchChange={() => {}} />)
-    expect(screen.getByRole('textbox', { name: 'Search...' })).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Search…' })).toBeTruthy()
   })
 
   it('caps the search width at 360px', () => {

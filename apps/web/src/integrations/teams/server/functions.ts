@@ -71,7 +71,7 @@ export const fetchTeamsTeamsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Teams not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Teams not connected')
     }
 
     const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
@@ -94,7 +94,7 @@ export const fetchTeamsChannelsFn = createServerFn({ method: 'GET' })
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Teams not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Teams not connected')
     }
 
     const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')

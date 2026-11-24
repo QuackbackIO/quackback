@@ -7,11 +7,15 @@ import { createServerFn } from '@tanstack/react-start'
 import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { SubscriptionLevel } from '@/lib/server/domains/subscriptions/subscription.service'
+import type {
+  SubscriptionLevel,
+  UnsubscribeTokenProblem,
+} from '@/lib/server/domains/subscriptions/subscription.service'
 import { db, postVotes, eq, and, inArray } from '@/lib/server/db'
 import { relatedPostIdsSubquery } from '@/lib/server/domains/posts/post.merge-ids'
 import { isUnsubscribeToken } from '@/lib/shared/unsubscribe-token'
 import { logger } from '@/lib/server/logger'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'subscriptions' })
 
@@ -72,7 +76,7 @@ async function gateSubscriptionWrite(
   const { resolvePortalAccessForRequest } = await import('./portal-access')
   const access = await resolvePortalAccessForRequest()
   if (!access.granted) {
-    throw new Error('Portal access required')
+    throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
   }
   const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
   const { policyActorFromAuth } = await import('./auth-helpers')
@@ -167,7 +171,7 @@ export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
       )
       .limit(1)
     if (!vote) {
-      throw new Error('Principal does not have a vote on this post')
+      throw new ValidationError('NOT_A_VOTER', 'Principal does not have a vote on this post')
     }
     const votePostId = vote.postId
     if (data.level === 'none') {
@@ -216,8 +220,9 @@ export const processUnsubscribeTokenFn = createServerFn({ method: 'POST' })
       const result = await processUnsubscribeToken(data.token)
 
       if (!result) {
-        log.debug('unsubscribe token invalid or expired')
-        return { success: false, error: 'invalid' }
+        const error = await tokenError(data.token)
+        log.debug({ error }, 'unsubscribe token not live')
+        return { success: false, error }
       }
 
       log.info({ action: result.action }, 'unsubscribe token processed')
@@ -236,7 +241,15 @@ export const processUnsubscribeTokenFn = createServerFn({ method: 'POST' })
 
 export type UnsubscribePreview =
   | { status: 'confirm'; action: string; postTitle?: string }
-  | { status: 'error'; error: 'invalid' | 'failed' }
+  | { status: 'error'; error: 'invalid' | 'used' | 'expired' | 'failed' }
+
+/** Why a token is not live: a link that was never issued is 'invalid'; used and expired links say so. */
+async function tokenError(token: string): Promise<'invalid' | 'used' | 'expired'> {
+  const { unsubscribeTokenProblem } =
+    await import('@/lib/server/domains/subscriptions/subscription.service')
+  const problem: UnsubscribeTokenProblem = await unsubscribeTokenProblem(token)
+  return problem === 'unknown' ? 'invalid' : problem
+}
 
 /**
  * Read-only: what the link would unsubscribe from. Opening the page calls only
@@ -252,7 +265,7 @@ export const previewUnsubscribeTokenFn = createServerFn({ method: 'GET' })
       const { previewUnsubscribeToken } =
         await import('@/lib/server/domains/subscriptions/subscription.service')
       const preview = await previewUnsubscribeToken(data.token)
-      if (!preview) return { status: 'error', error: 'invalid' }
+      if (!preview) return { status: 'error', error: await tokenError(data.token) }
       return { status: 'confirm', action: preview.action, postTitle: preview.postTitle }
     } catch (error) {
       log.error({ err: error }, 'preview unsubscribe token failed')

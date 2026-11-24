@@ -47,6 +47,7 @@ export type ClaimMappingOperation =
   | { op: 'setPeopleFlags'; overrideExisting?: boolean; syncOnSignIn?: boolean }
 
 export class ClaimMappingEditError extends Error {
+  readonly statusCode = 400
   readonly code: string
   constructor(code: string, message: string) {
     super(message)
@@ -475,7 +476,9 @@ export function roleRuleRoleIds(mapping: unknown, opts: { newSince?: unknown } =
  */
 export type RoleRuleGrantCheck = (
   before: unknown,
-  after: unknown
+  after: unknown,
+  /** The server transaction the save runs in, when there is one. */
+  executor?: unknown
 ) => Promise<{ adminTierRoleIds: ReadonlySet<string> }>
 
 export function sourcesAreDefault(sources: IdentitySource[] | undefined): boolean {

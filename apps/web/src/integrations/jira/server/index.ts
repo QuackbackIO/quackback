@@ -1,3 +1,4 @@
+import { ValidationError } from '@/lib/shared/errors'
 import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { fetchJiraStatuses } from '@/integrations/jira/server/statuses'
@@ -38,7 +39,8 @@ export const jiraIntegration: IntegrationDefinition = {
       const cloudId = config.cloudId as string
       if (!cloudId) throw new Error('No Jira Cloud ID configured')
       const projectRef = jiraProjectRef(config.channelId)
-      if (!projectRef) throw new Error('No Jira project configured')
+      if (!projectRef)
+        throw new ValidationError('INTEGRATION_TARGET_REQUIRED', 'No Jira project configured')
       const result = await registerJiraWebhook(accessToken, cloudId, callbackUrl, projectRef)
       return { externalWebhookId: result.webhookId }
     },

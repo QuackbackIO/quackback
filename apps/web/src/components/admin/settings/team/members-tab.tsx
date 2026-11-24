@@ -94,7 +94,8 @@ const features = tableFeatures({
 function roleBadge(r: TeamRow, role: string, extra = '') {
   const assigned = r.type === 'member' ? r.assignedRole : null
   const inviteRoleName = r.type === 'invitation' ? r.roleName : null
-  const label = assigned?.name ?? inviteRoleName ?? role
+  // The legacy role key (admin, member) reads as a name: sentence case.
+  const label = assigned?.name ?? inviteRoleName ?? role.charAt(0).toUpperCase() + role.slice(1)
   return (
     <Badge variant="secondary" className={extra}>
       {label}
@@ -150,10 +151,27 @@ function SignInLabel({
 
 interface MembersTabProps {
   currentMember: { id: PrincipalId; role: 'admin' | 'member'; userId: UserId }
-  /** Holds member.manage: may add people to the team. */
+  /**
+   * Holds member.manage: may add people, change roles, remove teammates and
+   * resend or cancel invitations, as the server functions behind them allow.
+   */
   canManageMembers: boolean
   /** Starts the roster filtered, as a teammate search result opens it. */
   initialSearch?: string
+}
+
+/**
+ * Whether the viewer gets the actions menu on a teammate's row: never on their
+ * own, only with member.manage, and on an admin's row only as an admin (the
+ * server's grant ceiling, role.grants.ts).
+ */
+function canActOnMember(
+  row: { principalId: string; role: string },
+  viewerId: string,
+  viewerIsAdmin: boolean,
+  canManageMembers: boolean
+): boolean {
+  return canManageMembers && row.principalId !== viewerId && (viewerIsAdmin || !isAdmin(row.role))
 }
 
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
@@ -316,6 +334,7 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
           const r = row.original
 
           if (r.type === 'invitation') {
+            if (!canManageMembers) return null
             return (
               <InvitationActions
                 invitation={r}
@@ -328,9 +347,9 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
           }
 
           // Member row
-          const isCurrentUser = r.principalId === currentMember.id
-          const showActions = isCurrentUserAdmin && !isCurrentUser
-          if (!showActions) return null
+          if (!canActOnMember(r, currentMember.id, isCurrentUserAdmin, canManageMembers)) {
+            return null
+          }
 
           return (
             <div className="flex justify-end">
@@ -341,13 +360,14 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
                 memberRole={r.role as 'admin' | 'member'}
                 assignedRoleId={r.assignedRole?.id ?? null}
                 isLastAdmin={isLastAdmin && isAdmin(r.role)}
+                canGrantAdmin={isCurrentUserAdmin}
               />
             </div>
           )
         },
       },
     ],
-    [avatarMap, currentMember.id, isCurrentUserAdmin, isLastAdmin]
+    [avatarMap, currentMember.id, isCurrentUserAdmin, isLastAdmin, canManageMembers]
   )
 
   const table = useTable({
@@ -376,7 +396,7 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search by name, email or role..."
+            placeholder="Search by name, email or role…"
           />
         </div>
         {seatDescription && (
@@ -453,7 +473,10 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
               const inviteLink = r.type === 'invitation' ? inviteLinkMap[r.id] : undefined
               const role = r.role || 'member'
               const isCurrentUser = r.type === 'member' && r.principalId === currentMember.id
-              const showActions = r.type === 'invitation' || (isCurrentUserAdmin && !isCurrentUser)
+              const showActions =
+                r.type === 'invitation'
+                  ? canManageMembers
+                  : canActOnMember(r, currentMember.id, isCurrentUserAdmin, canManageMembers)
 
               return (
                 <Fragment key={row.id}>
@@ -527,6 +550,7 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
                             memberRole={r.role as 'admin' | 'member'}
                             assignedRoleId={r.assignedRole?.id ?? null}
                             isLastAdmin={isLastAdmin && isAdmin(r.role)}
+                            canGrantAdmin={isCurrentUserAdmin}
                           />
                         )}
                       </div>

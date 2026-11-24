@@ -2,7 +2,7 @@
 
 import { lazy, Suspense, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { defineMessages, useIntl } from 'react-intl'
+import { defineMessage, defineMessages, useIntl } from 'react-intl'
 import { KeyIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { NewButton } from '@/components/shared/new-button'
@@ -58,7 +58,10 @@ const m = defineMessages({
   lastUsed: { id: 'apiKeys.column.lastUsed', defaultMessage: 'Last used' },
   actions: { id: 'apiKeys.column.actions', defaultMessage: 'Actions' },
   never: { id: 'apiKeys.never', defaultMessage: 'Never' },
-  createdOn: { id: 'apiKeys.workspace.createdByOn', defaultMessage: '{creator}, {date}' },
+  createdOn: defineMessage<{ creator: string; date: string }>({
+    id: 'apiKeys.workspace.createdByOn',
+    defaultMessage: '{creator}, {date}',
+  }),
   rename: { id: 'apiKeys.action.rename', defaultMessage: 'Rename' },
   changeRole: { id: 'apiKeys.action.changeRole', defaultMessage: 'Change role' },
   rotate: { id: 'apiKeys.action.rotate', defaultMessage: 'Rotate' },
@@ -154,7 +157,7 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
                       {isKeyExpired(key) && <ExpiredTag label={intl.formatMessage(m.expired)} />}
                     </div>
                     <code className="font-mono text-xs text-muted-foreground">
-                      {key.keyPrefix}...
+                      {key.keyPrefix}…
                     </code>
                   </KeyTableCell>
                   <KeyTableCell>{key.role?.name ?? ''}</KeyTableCell>

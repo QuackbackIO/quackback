@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Suspense } from 'react'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({}),
   useRouter: () => ({ invalidate: () => {}, navigate: () => {} }),
+  useNavigate: () => () => {},
   Link: ({ children }: { children: unknown }) => children,
 }))
 
@@ -20,12 +22,14 @@ describe('integration connect config', () => {
   const typedInput = async (type: string) => {
     const entry = INTEGRATION_SETTINGS[type]
     const { container, findByText } = render(
-      <QueryClientProvider client={new QueryClient()}>
-        <Suspense fallback={<p>loading</p>}>
-          <entry.ConnectionActions integrationId={undefined} isConnected={false} />
-        </Suspense>
-        <p>mounted</p>
-      </QueryClientProvider>
+      <IntlProvider locale="en" messages={{}}>
+        <QueryClientProvider client={new QueryClient()}>
+          <Suspense fallback={<p>loading</p>}>
+            <entry.ConnectionActions integrationId={undefined} isConnected={false} />
+          </Suspense>
+          <p>mounted</p>
+        </QueryClientProvider>
+      </IntlProvider>
     )
     await waitFor(() => expect(container.textContent).not.toContain('loading'), {
       timeout: 20000,

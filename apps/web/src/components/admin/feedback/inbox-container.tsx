@@ -8,13 +8,14 @@ import { ModerationPendingBanner } from '@/components/admin/feedback/moderation-
 import { useInboxFilters, type InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import { SavedViewsMenu } from '@/components/admin/feedback/saved-views-menu'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
-import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import { useAdminSegments } from '@/lib/client/hooks/use-segments-queries'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import type { CurrentUser } from '@/lib/shared/types'
 import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
 import type { PostId } from '@quackback/ids'
 import { useOpenPost } from '@/components/admin/feedback/use-open-post'
+import { mergeDuplicateCounts } from '@/components/admin/feedback/duplicate-counts'
 
 interface InboxContainerProps {
   boards: Board[]
@@ -45,7 +46,7 @@ export function InboxContainer({
   } = useInboxFilters()
 
   // Segments data for filter UI
-  const { data: segments } = useSegments()
+  const { data: segments } = useAdminSegments()
 
   // Server state - Posts list (with infinite query for pagination). The route
   // loader prefetches the default/unfiltered dataset into this same infinite
@@ -75,18 +76,13 @@ export function InboxContainer({
   })
 
   // Build a Map<postId, count> for efficient lookup, merging every page's counts.
-  const duplicateCountByPostId = useMemo(() => {
-    const map = new Map<PostId, number>()
-    for (const query of countsQueries) {
-      for (const item of query.data ?? []) {
-        map.set(item.postId, item.count)
-      }
-    }
-    return map.size > 0 ? map : undefined
-    // Keyed on a fingerprint of each page-query's last-updated stamp so the memo
-    // recomputes only when counts actually change (countsQueries is a fresh
-    // array each render).
-  }, [countsQueries.map((q) => q.dataUpdatedAt).join(',')])
+  const duplicateCountByPostId = useMemo(
+    () => mergeDuplicateCounts(countsQueries),
+    // Keyed on a fingerprint of each page-query's status and last-updated
+    // stamp so the memo recomputes only when counts actually change
+    // (countsQueries is a fresh array each render).
+    [countsQueries.map((q) => `${q.status}:${q.dataUpdatedAt}`).join(',')]
+  )
 
   // Handlers
   const handleLoadMore = useCallback(() => {

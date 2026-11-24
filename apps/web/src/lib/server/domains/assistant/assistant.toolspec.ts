@@ -60,6 +60,7 @@ import { SKILL_LOADS_PER_TURN } from '@/lib/shared/assistant/skills'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
+import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
 import { setConversationStatus } from '@/lib/server/domains/conversation/conversation.service'
 import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { linkTicketToConversation } from '@/lib/server/domains/tickets/ticket-conversation-link.service'
@@ -70,6 +71,7 @@ import { sharePost, shareTicket } from '@/lib/server/domains/conversation/conver
 import { quinnActor } from './assistant.actor'
 import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
 import { logger } from '@/lib/server/logger'
+import { BoardReadOnlyError } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
 const log = logger.child({ component: 'assistant-toolspec' })
 
@@ -314,6 +316,13 @@ export interface AssistantToolContext {
    */
   actor: Actor
   /**
+   * The teammate this turn answers (the copilot's asker, the workspace
+   * assistant's requester). Separate from `actor`: Quinn still executes as its
+   * own bounded actor, but team-scoped retrieval is bounded by what this
+   * teammate can see. Undefined on customer-facing turns.
+   */
+  viewer?: Actor
+  /**
    * Live attribute definitions for this turn (the same catalogue the system
    * prompt enumerates), so `summarize` can render set_attribute proposals with
    * the workspace's friendly label and option labels instead of the raw
@@ -352,6 +361,7 @@ export function makeAssistantToolContext(init: {
   writeToolPolicy?: AssistantWriteToolPolicy
   skills?: { count: number; loads: number }
   actor?: Actor
+  viewer?: Actor
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
   mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
   mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
@@ -383,6 +393,7 @@ export function makeAssistantToolContext(init: {
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
+    viewer: init.viewer,
     attributeCatalogue: init.attributeCatalogue,
     mcpSession: init.mcpSession,
     mcpConnectorSessions: init.mcpConnectorSessions,
@@ -579,6 +590,7 @@ async function executeSearchKnowledge(
     sourceTypes: narrowing,
     enabledSources: ctx.knowledge.sources,
     actor: ctx.actor,
+    viewer: ctx.viewer,
     workspaceSearch: isHomeTurn(ctx),
     includeInternalNotes: ctx.knowledge.internalNotes,
     notesOnly: ctx.knowledge.pastConversations === false,
@@ -677,12 +689,16 @@ async function executeGetStatus(
   try {
     const isPublic = ctx.audience === 'public'
     const [
-      { getStatusPageSnapshot, isStatusAudienceGranted },
+      { getStatusPageSnapshot },
       { getStatusSettings },
+      { getWorkspaceSettings },
+      { isStatusFeedReadable },
       { ANONYMOUS_ACTOR },
     ] = await Promise.all([
       import('@/lib/server/domains/status'),
       import('@/lib/server/domains/settings/settings.status'),
+      import('@/lib/server/domains/settings/settings.service'),
+      import('@/lib/shared/status-settings'),
       import('@/lib/server/policy/types'),
     ])
     const settings = await getStatusSettings()
@@ -700,7 +716,10 @@ async function executeGetStatus(
           principalType: 'service',
           segmentIds: new Set<SegmentId>(),
         }
-    if (isPublic && !isStatusAudienceGranted(actor, settings)) {
+    // A customer is told only what an anonymous visitor could read on the
+    // page: the portal is not private, the page is published and it is for
+    // everyone (the status gate, asked for a caller with no session).
+    if (isPublic && !isStatusFeedReadable(await getWorkspaceSettings())) {
       return unavailable('The status page is not publicly available.')
     }
     const snapshot = await getStatusPageSnapshot(actor, settings)
@@ -883,7 +902,7 @@ export const createTicketTool = toolDefinition({
     title: z.string().min(1).max(300).describe('A short, specific summary of the issue.'),
     description: z
       .string()
-      .max(10000)
+      .max(MAX_CONVERSATION_MESSAGE_LENGTH)
       .optional()
       .describe('Additional detail from the conversation to seed the ticket.'),
     priority: z.enum(CONVERSATION_PRIORITIES).optional().describe('How urgent the ticket is.'),
@@ -1159,6 +1178,20 @@ type CaptureFeedbackArgs = InferToolInput<typeof captureFeedbackTool>
 type CaptureFeedbackOutput = z.infer<typeof captureFeedbackOutputSchema>
 
 async function executeCaptureFeedback(
+  args: CaptureFeedbackArgs,
+  ctx: AssistantToolContext
+): Promise<CaptureFeedbackOutput> {
+  try {
+    return await captureFeedback(args, ctx)
+  } catch (error) {
+    // A read-only board is a refusal the model can act on (pick another
+    // board), not a failure of the tool.
+    if (error instanceof BoardReadOnlyError) return { created: false, note: error.message }
+    throw error
+  }
+}
+
+async function captureFeedback(
   args: CaptureFeedbackArgs,
   ctx: AssistantToolContext
 ): Promise<CaptureFeedbackOutput> {

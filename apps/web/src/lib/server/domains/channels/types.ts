@@ -14,6 +14,9 @@ export interface AgentMessageDeliveryCtx {
   content: string
   contentJson?: JSONContent | null
   agentName: string
+  /** The name is the support team's, not a person's (a message an API key
+   *  wrote under its own name), so the email speaks as the team. */
+  senderIsTeam?: boolean
   recipient: string
   ctaUrl: string
   workspaceName: string
@@ -30,7 +33,8 @@ export interface CsatDeliveryCtx {
   ratingUrls: [string, string, string, string, string]
   workspaceName: string
   logoUrl: string | null
-  from?: string
+  /** Stored `conversations.subject`, so the request's subject matches the thread. */
+  conversationSubject?: string | null
 }
 
 export interface LifecycleDeliveryCtx {

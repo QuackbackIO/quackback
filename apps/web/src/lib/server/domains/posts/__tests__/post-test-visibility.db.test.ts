@@ -27,6 +27,7 @@ import { addReaction, removeReaction } from '../../comments/comment.reactions'
 import { getPostMergeInfo } from '../post.merge'
 import { getNotificationsForMember } from '../../notifications/notification.service'
 import { getSubscriberTargets, getMentionTargets } from '@/lib/server/events/targets'
+import { allOnPrimary } from '@/lib/shared/section-links'
 import type {
   PostStatusChangedEvent,
   PostMentionedEvent,
@@ -181,7 +182,9 @@ describe('test feedback stays inside its customer session and team workspace', (
     for (const viewer of [customer, team]) {
       await expect(assertPostViewable(testPost, viewer)).resolves.toBeUndefined()
       await expect(assertPostVotable(testPost, viewer)).resolves.toBeUndefined()
-      await expect(assertCommentViewable(testComment, viewer)).resolves.toBeUndefined()
+      await expect(assertCommentViewable(testComment, viewer)).resolves.toMatchObject({
+        boardReadOnly: false,
+      })
     }
     await expect(assertPostViewable(realPost, visitor)).resolves.toBeUndefined()
   })
@@ -311,6 +314,18 @@ describe('test feedback stays inside its customer session and team workspace', (
     const realTargets = await getSubscriberTargets(status(realPost), context)
     expect(realTargets.some((target) => target.type === 'notification')).toBe(true)
     expect(realTargets.some((target) => target.type === 'email')).toBe(true)
+    // With feedback on its own host, the email and the bell link the post there.
+    const onFeedbackHost = await getSubscriberTargets(status(realPost), {
+      ...context,
+      sectionOrigins: {
+        ...allOnPrimary(context.portalBaseUrl),
+        feedback: 'https://ideas.acme.com',
+      },
+    })
+    expect(onFeedbackHost.map((target) => target.config.postUrl).sort()).toEqual([
+      `https://ideas.acme.com/b/${boardSlug}/posts/${realPost}`,
+      `https://ideas.acme.com/b/${boardSlug}/posts/${realPost}`,
+    ])
     expect(await getSubscriberTargets(status(testPost), context)).toEqual([])
     const testOnReal = createId('post_comment')
     await testDb.insert(postComments).values({

@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildMondayItem } from '@/integrations/monday/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'monday' })
 
@@ -21,6 +23,7 @@ export interface MondayTarget {
 export interface MondayConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
   groupId?: string
 }
 
@@ -31,11 +34,11 @@ export const mondayHook: IntegrationHook = {
     }
 
     const { channelId: boardId } = target as MondayTarget
-    const { accessToken, rootUrl, groupId } = config as MondayConfig
+    const { accessToken, rootUrl, links, groupId } = config as MondayConfig
 
     log.debug({ event_type: event.type, board_id: boardId }, 'processing event')
 
-    const { name, updateBody } = buildMondayItem(event, rootUrl)
+    const { name, updateBody } = buildMondayItem(event, hookLinks({ rootUrl, links }))
 
     try {
       const groupArg = groupId ? `, group_id: "${groupId}"` : ''

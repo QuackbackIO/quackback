@@ -5,6 +5,7 @@ import { CheckIcon } from '@heroicons/react/24/solid'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import {
+  BRAND_STEP_ID,
   LAUNCH_LIVE_STEP,
   launchPath,
   openLaterSteps,
@@ -14,6 +15,7 @@ import {
 } from '@/lib/shared/launch-checklist'
 import { launchTaskWhy } from '@/lib/shared/launch-outcomes'
 import { cn } from '@/lib/shared/utils'
+import { BrandSourceLine, EditInCustomiseLabel } from './branding-step-action'
 import { LaunchStepAction } from './launch-step-action'
 import { LaunchTaskLabel, launchTaskMessage } from './launch-task-label'
 import { LaunchTaskLink } from './launch-task-link'
@@ -124,7 +126,7 @@ export function stepAnnouncement(
 }
 
 /**
- * Home's launch plan, in one card: the three-step path to a first win with
+ * Home's launch plan, in one card: the path to a first win with
  * the current step open (why it matters, its one action and a live picture
  * of the page it is about), then the open steps that come later. The count
  * is the launch plan's, the same everywhere.
@@ -132,14 +134,11 @@ export function stepAnnouncement(
 export function HomeNextStep({
   status,
   portalUrl,
-  brandingNotice,
   pending,
   onCreateBoard,
 }: {
   status: LaunchStatus
   portalUrl?: string
-  /** Logo and color found on the workspace's website, shown under the snapshot. */
-  brandingNotice?: ReactNode
   pending: boolean
   onCreateBoard: () => void
 }) {
@@ -192,7 +191,7 @@ export function HomeNextStep({
                       <FormattedMessage {...why} />
                     </p>
                   ) : null}
-                  <div className="flex flex-wrap gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <LaunchStepAction
                       task={task}
                       status={status}
@@ -214,10 +213,27 @@ export function HomeNextStep({
                       <FormattedMessage {...page.label} /> <span aria-hidden="true">↗</span>
                     </a>
                   ) : null}
-                  {brandingNotice}
                 </PortalSnapshot>
               </div>
             </li>
+          ) : task.id === BRAND_STEP_ID && task.isCompleted ? (
+            // The finished brand step says where the look came from, and how to change it.
+            <PathRow
+              key={task.id}
+              state="done"
+              action={
+                task.href ? (
+                  <Link
+                    to={task.href}
+                    className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    <EditInCustomiseLabel />
+                  </Link>
+                ) : null
+              }
+            >
+              <BrandSourceLine importedFrom={status.brandImportedFrom} />
+            </PathRow>
           ) : (
             <PathRow key={task.id} state={task.isCompleted || task.isReady ? 'done' : 'waiting'}>
               <LaunchTaskLabel task={task} />
@@ -270,9 +286,12 @@ function StepMark({ state, className }: { state: StepState; className?: string }
 /** A step on the path that is not the current one: done, or waiting its turn. */
 function PathRow({
   state,
+  action,
   children,
 }: {
   state: Exclude<StepState, 'current'>
+  /** A quiet link at the end of a done row. */
+  action?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -287,6 +306,7 @@ function PathRow({
       >
         {children}
       </span>
+      {action}
       {state === 'done' ? (
         <span className="text-xs text-muted-foreground">
           <FormattedMessage id="onboarding.launch.done" defaultMessage="Done" />

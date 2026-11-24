@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { checkedAgainstOutputSchema } from './output-schema-check'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 
 const mockStatus = vi.fn()
 vi.mock('@/lib/server/domains/settings/widget-install-pairing', () => ({
@@ -14,8 +15,8 @@ type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 function collect(auth: McpAuthContext): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const fakeServer = {
-    tool: (name: string, _d: string, _s: unknown, _a: unknown, handler: Handler) => {
-      handlers.set(name, handler)
+    registerTool: (name: string, config: unknown, handler: Handler) => {
+      handlers.set(name, checkedAgainstOutputSchema(config, handler))
     },
   }
   registerWidgetTools(fakeServer as never, auth)

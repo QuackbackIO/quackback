@@ -5,6 +5,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { shownName } from '@/lib/shared/greeting-name'
+import { errorText } from '@/lib/client/error-text'
 
 interface WidgetUser {
   id: string
@@ -12,6 +13,11 @@ interface WidgetUser {
   email: string
   avatarUrl: string | null
 }
+
+// The refusal a blocked person gets (person-blocked.ts), matched by its code.
+// Kept local so this file loads no extra module.
+const isBlockedRefusal = (err: unknown): boolean =>
+  (err as { code?: unknown } | null)?.code === 'BLOCKED'
 
 interface WidgetCommentFormProps {
   isIdentified: boolean
@@ -57,12 +63,18 @@ export function WidgetCommentForm({
       })
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'widget.commentForm.errorPost',
-              defaultMessage: 'Could not post comment. Please try again.',
+        isBlockedRefusal(err)
+          ? intl.formatMessage({
+              id: 'widget.blocked',
+              defaultMessage: "You can't post, vote or comment here.",
             })
+          : errorText(
+              err,
+              intl.formatMessage({
+                id: 'widget.commentForm.errorPost',
+                defaultMessage: 'Could not post comment. Please try again.',
+              })
+            )
       )
     } finally {
       setIsSubmitting(false)

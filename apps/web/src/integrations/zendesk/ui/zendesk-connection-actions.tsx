@@ -1,8 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSearch } from '@tanstack/react-router'
-import { toast } from 'sonner'
+import { useState } from 'react'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +8,8 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { getZendeskConnectUrl } from '@/integrations/zendesk/server/functions'
 import { useDeleteIntegration } from '@/lib/client/mutations'
+import { toastError } from '@/lib/client/error-notice'
+import { useOAuthResult } from '@/components/admin/settings/integrations/oauth-connection-actions'
 
 interface ZendeskConnectionActionsProps {
   integrationId?: string
@@ -22,26 +22,12 @@ export function ZendeskConnectionActions({
   integrationId,
   isConnected,
 }: ZendeskConnectionActionsProps) {
-  const search = useSearch({ strict: false })
   const deleteMutation = useDeleteIntegration()
-  const [showSuccess, setShowSuccess] = useState(false)
+  const showSuccess = useOAuthResult('zendesk', 'Zendesk')
   const [connecting, setConnecting] = useState(false)
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false)
   const [subdomain, setSubdomain] = useState('')
   const [subdomainError, setSubdomainError] = useState('')
-
-  useEffect(() => {
-    const searchParams = search as { zendesk?: string }
-    if (searchParams.zendesk !== 'connected') return
-
-    setShowSuccess(true)
-    const url = new URL(window.location.href)
-    url.searchParams.delete('zendesk')
-    window.history.replaceState({}, '', url.toString())
-
-    const timer = setTimeout(() => setShowSuccess(false), 3000)
-    return () => clearTimeout(timer)
-  }, [search])
 
   const handleConnect = async () => {
     const trimmed = subdomain.trim().toLowerCase()
@@ -60,7 +46,7 @@ export function ZendeskConnectionActions({
       window.location.href = url
     } catch (err) {
       console.error('Failed to get connect URL:', err)
-      toast.error(err instanceof Error ? err.message : "Couldn't start connection. Try again.")
+      toastError(err, "Couldn't start connection. Try again.")
       setConnecting(false)
     }
   }

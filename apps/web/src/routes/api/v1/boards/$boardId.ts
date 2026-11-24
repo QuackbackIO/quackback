@@ -10,6 +10,7 @@ import {
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // Input validation schema — `audience` and `access` are intentionally
 // excluded. Visibility is a policy-level setting changed only via
@@ -19,6 +20,7 @@ const updateBoardSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   slug: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
+  readOnly: z.boolean().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/boards/$boardId')({
@@ -30,7 +32,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request)
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
@@ -65,7 +67,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
-          const body = await request.json()
+          const body = await readJsonBody(request)
           const parsed = updateBoardSchema.safeParse(body)
 
           if (!parsed.success) {
@@ -81,6 +83,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             name: parsed.data.name,
             slug: parsed.data.slug,
             description: parsed.data.description,
+            readOnly: parsed.data.readOnly,
           })
 
           return successResponse({
@@ -91,6 +94,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             // Legacy contract: synthesised from board.access for back-compat.
             audience: accessToAudience(board.access),
             settings: board.settings,
+            readOnly: board.readOnly,
             createdAt: board.createdAt.toISOString(),
             updatedAt: board.updatedAt.toISOString(),
           })

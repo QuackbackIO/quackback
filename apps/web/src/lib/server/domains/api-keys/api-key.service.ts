@@ -152,11 +152,14 @@ function getKeyPrefix(key: string): string {
  * A personal key (the default) acts as `createdById`. A workspace key needs a
  * `roleId` and the creator's own authority as `granter`: the role is checked
  * against it exactly as re-roling a teammate is, then held by the key itself.
+ * `options.source` is the provenance the creation's audit row records
+ * (`admin` unless given).
  */
 export async function createApiKey(
   input: CreateApiKeyInput,
   createdById: PrincipalId,
-  granter?: ApiKeyGranter
+  granter?: ApiKeyGranter,
+  options: { source?: string } = {}
 ): Promise<CreateApiKeyResult> {
   // Validate input
   if (!input.name?.trim()) {
@@ -176,7 +179,7 @@ export async function createApiKey(
     if (!granter) {
       throw new ForbiddenError('GRANT_CEILING', 'Creator permission set is required')
     }
-    workspaceRole = await resolveGrantableKeyRole(input.roleId, granter)
+    workspaceRole = await resolveGrantableKeyRole(input.roleId, granter, { newGrant: true })
   }
 
   // Generate the key
@@ -235,27 +238,30 @@ export async function createApiKey(
 
   // EVENTING-V2 WO-6a: emit the audit-relevant creation event. A short tx since
   // this service has no surrounding one; exposure.audit writes the audit_log row
-  // in the same tx (best-effort — a failure must not fail key creation).
+  // in the same tx (best-effort — a failure must not fail key creation). The
+  // payload carries the scopes as a list; a legacy key with no stored scopes
+  // holds every scope.
+  const created = toApiKey(apiKey)
   try {
     await db.transaction((tx) =>
       emit(tx, apiKeyCreated, {
         payload: {
           apiKeyId: apiKey.id,
           name: apiKey.name,
-          scopes: storedScopes,
+          scopes: created.scopes ?? [...API_KEY_SCOPES],
           kind,
           ...(workspaceRole ? { roleName: workspaceRole.roleName } : {}),
         },
         actor: { type: 'user', id: createdById },
         entityId: apiKey.id,
-        context: { source: 'admin' },
+        context: { source: options.source ?? 'admin' },
       })
     )
   } catch {
     /* best-effort emission; never blocks key creation */
   }
 
-  return { apiKey: toApiKey(apiKey), plainTextKey }
+  return { apiKey: created, plainTextKey }
 }
 
 /**
@@ -346,7 +352,7 @@ export async function rotateApiKey(
       throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
     }
     if (filter.granter && key.kind === 'workspace') {
-      await assertCanManageWorkspaceKey(key.principalId, filter.granter)
+      await assertCanManageWorkspaceKey(key.principalId, filter.granter, tx)
     }
 
     const [updatedKey] = await tx
@@ -485,7 +491,7 @@ export async function setWorkspaceKeyRole(
   granter: ApiKeyGranter,
   grantedBy: PrincipalId
 ): Promise<ApiKey> {
-  const role = await resolveGrantableKeyRole(roleId, granter)
+  const role = await resolveGrantableKeyRole(roleId, granter, { newGrant: true })
   // Lock the key row for the whole change. Revoking updates that row, so a
   // revoke either waits and then demotes the key's principal last, or commits
   // first and this finds no live key. A revoked key is never re-promoted.
@@ -498,7 +504,7 @@ export async function setWorkspaceKeyRole(
       .for('update')
     if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'Workspace key not found')
     // The role it holds now must be one the caller could grant, as well as the new one.
-    await assertCanManageWorkspaceKey(key.principalId, granter)
+    await assertCanManageWorkspaceKey(key.principalId, granter, tx)
     await applyWorkspaceKeyRole(key.principalId, role, grantedBy, tx)
     await emit(tx, apiKeyUpdated, {
       payload: { apiKeyId: key.id, changedKeys: ['role'], roleName: role.roleName },

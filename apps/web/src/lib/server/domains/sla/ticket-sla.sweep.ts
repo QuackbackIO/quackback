@@ -49,6 +49,7 @@ import {
   type TicketSlaApplied,
 } from './ticket-sla.service'
 import type { StampExecutor } from './sla.service'
+import { breachTriggerFloor, isRecentBreach } from './sla.sweep'
 
 // Upper bound on tickets handled per sweep run; anything beyond waits for the
 // next tick (the SQL filter keeps re-finding them).
@@ -418,27 +419,31 @@ export async function sweepApproachingTicketSlaBreaches(
  * `resolutionBreachedAt` claim above: different marker field, so whichever of
  * the per-minute reporting sweep or this 5-minute trigger sweep runs first
  * never blocks the other. No lead time: this fires the instant `now >= due`,
- * same as the reporting sweep's own breach detection. Returns the
+ * same as the reporting sweep's own breach detection, for clocks that breached
+ * within SLA_BREACH_TRIGGER_LOOKBACK_MS (sla.sweep.ts). Returns the
  * dispatchable candidates for the caller (workflow-sweep.ts); back-office
  * tickets are claimed inline but never returned (see
  * resolveTicketTriggerTarget's doc).
  */
 export async function sweepTicketSlaBreachTriggers(
   at: Date = new Date(),
-  ticketIds?: TicketId[]
+  ticketIds?: TicketId[],
+  notBefore?: Date
 ): Promise<TicketSlaTimerTriggerCandidate[]> {
   const candidates: TicketSlaTimerTriggerCandidate[] = []
+  const floorIso = breachTriggerFloor(at, notBefore).toISOString()
   await scanTicketSlaCandidates(
     at,
     (nowIso) => sql`(
           (${tickets.slaApplied} ->> 'timeToResolveDueAt') < ${nowIso}
+          AND (${tickets.slaApplied} ->> 'timeToResolveDueAt') >= ${floorIso}
           AND (${tickets.slaApplied} ->> 'resolvedAt') IS NULL
           AND (${tickets.slaApplied} ->> 'resolutionBreachTriggerFiredAt') IS NULL
         )`,
     (applied, dueAt) => {
       if (applied.resolvedAt) return false
       if (applied.resolutionBreachTriggerFiredAt) return false
-      return at.getTime() > new Date(dueAt).getTime()
+      return isRecentBreach(dueAt, at, notBefore)
     },
     async (row, applied, dueAt) => {
       const target = await resolveTicketTriggerTarget(row.id)

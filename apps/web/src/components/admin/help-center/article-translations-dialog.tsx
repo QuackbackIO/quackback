@@ -30,6 +30,7 @@ import {
 import { getArticleFn } from '@/lib/server/functions/help-center'
 import type { KbArticleId } from '@quackback/ids'
 import type { SupportedLocale } from '@/lib/shared/i18n'
+import { errorText } from '@/lib/client/error-text'
 
 const LOCALE_LABELS: Record<string, string> = {
   de: 'Deutsch',
@@ -109,7 +110,7 @@ export function ArticleTranslationsDialog({
         <div className="flex items-center gap-2">
           <Select value={locale ?? undefined} onValueChange={setLocale}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Choose a locale..." />
+              <SelectValue placeholder="Choose a locale…" />
             </SelectTrigger>
             <SelectContent>
               {additionalLocales.map((l) => (
@@ -209,10 +210,11 @@ function TranslationForm({
       await upsertArticleTranslationFn({
         data: { articleId, locale: locale as SupportedLocale, title, description, content },
       })
-      if (status === 'untranslated') setStatus('draft')
+      // Saving is a draft: a published translation goes offline until published again.
+      setStatus('draft')
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the translation')
+      setError(errorText(err, 'Could not save the translation'))
     } finally {
       setSaving(false)
     }
@@ -229,7 +231,7 @@ function TranslationForm({
       setStatus(next)
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update the translation status')
+      setError(errorText(err, 'Could not update the translation status'))
     } finally {
       setSaving(false)
     }
@@ -246,7 +248,7 @@ function TranslationForm({
       setContent('')
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete the translation')
+      setError(errorText(err, 'Could not delete the translation'))
     } finally {
       setSaving(false)
       void queryClient.invalidateQueries({

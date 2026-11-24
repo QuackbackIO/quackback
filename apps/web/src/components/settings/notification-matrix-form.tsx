@@ -10,6 +10,7 @@ import { AUTOSAVE } from '@/lib/client/autosave'
 import {
   catalogByGroup,
   catalogForSurface,
+  deliversOn,
   type NotificationChannel,
   type NotificationGroup,
   type NotificationTypeMeta,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/server/functions/user'
 import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
+import { errorText } from '@/lib/client/error-text'
 
 type Message = { id: string; defaultMessage: string }
 
@@ -77,6 +79,16 @@ export const TYPE_LABELS: Partial<
     description: {
       id: 'portal.settings.notifications.type.postMention.description',
       defaultMessage: 'Someone @-mentions you in a post',
+    },
+  },
+  post_moderated: {
+    label: {
+      id: 'portal.settings.notifications.type.postModerated.label',
+      defaultMessage: 'Post reviewed',
+    },
+    description: {
+      id: 'portal.settings.notifications.type.postModerated.description',
+      defaultMessage: 'The team publishes or declines a post or comment you wrote',
     },
   },
   comment_mentioned: {
@@ -195,12 +207,13 @@ export function NotificationMatrixForm({
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof Error
-              ? err.message
-              : intl.formatMessage({
-                  id: 'portal.settings.notifications.loadFailed',
-                  defaultMessage: 'Failed to load preferences',
-                })
+            errorText(
+              err,
+              intl.formatMessage({
+                id: 'portal.settings.notifications.loadFailed',
+                defaultMessage: 'Failed to load preferences',
+              })
+            )
           )
         }
       } finally {
@@ -311,11 +324,19 @@ export function NotificationMatrixForm({
             id: 'portal.settings.notifications.pauseAll.label',
             defaultMessage: 'Pause all email',
           })}
-          description={intl.formatMessage({
-            id: 'portal.settings.notifications.pauseAll.description',
-            defaultMessage:
-              'Turn off email delivery for every notification type below. In-app notifications keep working.',
-          })}
+          description={
+            surface === 'portal'
+              ? intl.formatMessage({
+                  id: 'portal.settings.notifications.pauseAll.customerDescription',
+                  defaultMessage:
+                    'Turn off email delivery for every notification type below. In-app notifications keep working. Replies from our team still reach you.',
+                })
+              : intl.formatMessage({
+                  id: 'portal.settings.notifications.pauseAll.description',
+                  defaultMessage:
+                    'Turn off email delivery for every notification type below. In-app notifications keep working.',
+                })
+          }
           control={
             <>
               {surface === 'portal' && savingEmailMuted && (
@@ -452,12 +473,14 @@ function MatrixRow({
         {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
       </div>
       <div className="flex justify-center">
-        <Switch
-          aria-label={`${label} - ${intl.formatMessage(CHANNEL_LABELS.inApp)}`}
-          checked={inAppChecked}
-          onCheckedChange={(checked) => onToggle(meta.type, 'inApp', checked)}
-          disabled={busy}
-        />
+        {deliversOn(meta, 'inApp') && (
+          <Switch
+            aria-label={`${label} - ${intl.formatMessage(CHANNEL_LABELS.inApp)}`}
+            checked={inAppChecked}
+            onCheckedChange={(checked) => onToggle(meta.type, 'inApp', checked)}
+            disabled={busy}
+          />
+        )}
       </div>
       <div className="flex justify-center">
         <Switch

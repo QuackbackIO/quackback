@@ -82,6 +82,25 @@ describe('WorkspaceKeysSettings', () => {
     expect(screen.getByText('Feedback (read), Conversations (read)')).toBeInTheDocument()
   })
 
+  it('sums up a key holding every scope as "All scopes" (API-K-14)', () => {
+    const every = [
+      'read:feedback',
+      'write:feedback',
+      'write:changelog',
+      'read:article',
+      'write:article',
+      'read:chat',
+      'write:chat',
+      'read:settings',
+      'write:settings',
+    ]
+    render(<WorkspaceKeysSettings apiKeys={[key({ scopes: every as never })]} />, {
+      wrapper: intl,
+    })
+    const row = screen.getByRole('row', { name: /Warehouse sync/ })
+    expect(within(row).getByText('All scopes')).toBeInTheDocument()
+  })
+
   it('marks a creator who left and a deleted creator', () => {
     render(
       <WorkspaceKeysSettings

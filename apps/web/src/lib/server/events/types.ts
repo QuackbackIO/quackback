@@ -5,6 +5,7 @@ import type { ConversationStatus } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
 import type { Channel } from '@/lib/shared/channels'
+import type { BlockReplyKind } from '@/lib/shared/conversation/block-reply-kinds'
 
 /**
  * Timer-driven workflow triggers (support platform §4.6): synthetic events
@@ -48,6 +49,9 @@ export const EVENT_TYPES = [
   'comment.created',
   'comment.updated',
   'comment.deleted',
+  // Notification-only: a published comment @-mentions someone. Never a
+  // webhook (a private comment's words must not leave), never a trigger.
+  'comment.mentioned',
   'changelog.published',
   'status.incident_created',
   'status.incident_updated',
@@ -88,6 +92,27 @@ export const EVENT_TYPES = [
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]
+
+/**
+ * Events that only ever tell people (a bell, an email) and never leave the
+ * workspace: no webhook, integration or app receives them. A comment mention
+ * can carry a private comment's words.
+ */
+export const NOTIFICATION_ONLY_EVENT_TYPES = [
+  'comment.mentioned',
+] as const satisfies readonly EventType[]
+
+/**
+ * Whether an event type only ever notifies people and never leaves the
+ * workspace. Besides the listed EVENT_TYPES members, the moderation decisions
+ * (catalogue-only, so never webhook events) exist only to tell the author.
+ */
+export function isNotificationOnlyEvent(type: string): boolean {
+  return (
+    (NOTIFICATION_ONLY_EVENT_TYPES as readonly string[]).includes(type) ||
+    isModerationDecisionEventType(type)
+  )
+}
 
 /**
  * Actor information for events - identifies who or what triggered the event.
@@ -173,6 +198,16 @@ export interface EventPostMentionedData {
   excerpt: string
 }
 
+/**
+ * Payload for comment.mentioned — fired once per principal a comment
+ * @-mentions, when the comment becomes visible (at create, or on approval).
+ */
+export interface EventCommentMentionedData extends EventPostMentionedData {
+  commentId: string
+  /** A private (team-only) comment: only teammates hear about it. */
+  isPrivate: boolean
+}
+
 export interface PostUpdatedPayload {
   post: EventPostRef
   changedFields: string[]
@@ -192,6 +227,39 @@ export interface PostOwnerAssignedPayload {
   boardId?: string
   ownerPrincipalId: string
   previousOwnerPrincipalId: string | null
+}
+
+/**
+ * The team's decision on a held post or comment. Catalogue-only events (not in
+ * EVENT_TYPES, so off the webhook surface): they exist to tell the author.
+ */
+export const MODERATION_DECISION_EVENT_TYPES = [
+  'post.approved',
+  'post.rejected',
+  'comment.approved',
+  'comment.rejected',
+] as const
+export type ModerationDecisionEventType = (typeof MODERATION_DECISION_EVENT_TYPES)[number]
+
+export interface ModerationDecisionPayload {
+  postId: string
+  postTitle: string
+  boardId: string
+  boardSlug: string
+  /** Who wrote the held item; null for an item with no author left. */
+  authorPrincipalId: string | null
+  /** comment.approved / comment.rejected only. */
+  commentId?: string
+  /** The person who decided: the teammate, or the creator of the API key that
+   *  made the call. The author is not told about their own decision. */
+  moderatorPrincipalId?: string | null
+  /** When the held item was submitted (ISO). An item older than the backlog
+   *  window gets no decision email; see MODERATION_DECISION_EMAIL_MAX_AGE_MS. */
+  submittedAt?: string
+}
+
+export function isModerationDecisionEventType(type: string): type is ModerationDecisionEventType {
+  return (MODERATION_DECISION_EVENT_TYPES as readonly string[]).includes(type)
 }
 
 export interface PostDeletedPayload {
@@ -311,6 +379,9 @@ export interface EventConversationData extends EventConversationRef {
   createdAt: string
   lastMessageAt: string
   resolvedAt: string | null
+  /** The customer's first message. Read at delivery for chat channel notices
+   *  (Slack, Discord); absent from webhook and stored event payloads. */
+  openingMessage?: string | null
 }
 
 export interface EventMessageData {
@@ -322,6 +393,10 @@ export interface EventMessageData {
   authorEmail: string | null // realEmail()
   content: string
   createdAt: string
+  /** The kind of conversation block the message answers ('csat', 'buttons',
+   *  ...), taken from the stored, server-matched block reply; null for every
+   *  other message. Absent on events stored before the field existed. */
+  blockReplyKind?: BlockReplyKind | null
 }
 
 export interface ConversationCreatedPayload {
@@ -457,6 +532,21 @@ export interface EventTicketData extends EventTicketRef {
   createdAt: string
   updatedAt: string
   resolvedAt: string | null
+  /** The ticket's SLA (its time-to-resolve clock), or null when none applies.
+   *  Same shape as the ticket's `sla` in the REST API. */
+  sla: EventTicketSla | null
+}
+
+/** A ticket's SLA as events and the REST API carry it (TicketSlaRef). */
+export interface EventTicketSla {
+  /** The policy name when the SLA was applied. */
+  policyName: string
+  /** When the ticket is due to be resolved (ISO), office hours included. */
+  timeToResolveDueAt: string
+  /** When the ticket was first resolved (ISO), or null while the clock runs. */
+  resolvedAt: string | null
+  /** Whether the clock is paused because the ticket is waiting on the customer. */
+  paused: boolean
 }
 
 export interface TicketCreatedPayload {
@@ -692,6 +782,9 @@ export interface CommentUpdatedEvent extends EventBase<'comment.updated'> {
 export interface CommentDeletedEvent extends EventBase<'comment.deleted'> {
   data: CommentDeletedPayload
 }
+export interface CommentMentionedEvent extends EventBase<'comment.mentioned'> {
+  data: EventCommentMentionedData
+}
 
 export interface ChangelogPublishedEvent extends EventBase<'changelog.published'> {
   data: ChangelogPublishedPayload
@@ -831,6 +924,7 @@ export type EventData =
   | CommentCreatedEvent
   | CommentUpdatedEvent
   | CommentDeletedEvent
+  | CommentMentionedEvent
   | ChangelogPublishedEvent
   | StatusIncidentCreatedEvent
   | StatusMaintenanceScheduledEvent

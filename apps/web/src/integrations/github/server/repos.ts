@@ -1,3 +1,5 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
+import { providerFetch } from '@/lib/server/integrations/provider-fetch'
 /**
  * GitHub repository listing via REST API.
  */
@@ -10,7 +12,7 @@ const GITHUB_API = 'https://api.github.com'
 export async function listGitHubRepos(
   accessToken: string
 ): Promise<Array<{ id: number; fullName: string; private: boolean }>> {
-  const response = await fetch(`${GITHUB_API}/user/repos?sort=updated&per_page=100`, {
+  const response = await providerFetch(`${GITHUB_API}/user/repos?sort=updated&per_page=100`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/vnd.github+json',
@@ -20,7 +22,10 @@ export async function listGitHubRepos(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list GitHub repos: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list GitHub repos: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as Array<{

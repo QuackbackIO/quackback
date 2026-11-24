@@ -139,6 +139,8 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   // per-action tier requires sign-in (#191). Undefined (legacy/cached) → false.
   const canVote = post?.canVote ?? false
   const canComment = post?.canComment ?? false
+  // A read-only board shows its posts, votes and comments and takes no more.
+  const boardReadOnly = post?.boardReadOnly ?? false
   // Identified viewer denied by the board tier (segments/team) = authorization,
   // not auth. Vote shows a dimmed tooltip; the comment form is replaced with the
   // reason. An anonymous viewer keeps the sign-in / email-identify path.
@@ -218,7 +220,8 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
                   : undefined
               }
               noAccessReason={voteNoAccessReason}
-              onAuthRequired={!canVote ? handleViewOnPortal : undefined}
+              onAuthRequired={!canVote && !boardReadOnly ? handleViewOnPortal : undefined}
+              closed={boardReadOnly}
             />
           </div>
           <div className="flex-1 min-w-0">
@@ -265,7 +268,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
         {/* Pinned comment / official response */}
         {post.pinnedComment && (
           <div className="rounded-md border border-primary/20 bg-primary/[0.03] p-2.5">
-            <p className="text-[11px] font-medium text-primary mb-1">
+            <p className="text-[11px] font-medium text-primary-ink mb-1">
               <FormattedMessage
                 id="widget.postDetail.officialResponse"
                 defaultMessage="Official response"
@@ -302,7 +305,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
               — authorization, not auth: state it, no form or login prompt. An
               author-only board names that rule instead: the account is fine,
               this thread just isn't the viewer's. */}
-          {!post.isCommentsLocked && commentNoAccess && (
+          {!post.isCommentsLocked && !boardReadOnly && commentNoAccess && (
             <p className="text-xs text-muted-foreground/70 mb-3">
               {post.replyPolicy === 'author-only' ? (
                 <FormattedMessage
@@ -320,7 +323,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
 
           {/* Root comment form — unified: textarea + email (when anonymous) + single Post.
               For an anonymous viewer the email field escalates them to a real user. */}
-          {!post.isCommentsLocked && !commentNoAccess && !hmacRequired && (
+          {!post.isCommentsLocked && !boardReadOnly && !commentNoAccess && !hmacRequired && (
             <WidgetCommentForm
               isIdentified={isIdentified}
               user={user}
@@ -329,17 +332,30 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             />
           )}
 
-          {!post.isCommentsLocked && !commentNoAccess && hmacRequired && !canComment && (
-            <button
-              type="button"
-              onClick={handleViewOnPortal}
-              className="text-xs text-primary hover:text-primary/80 transition-colors mb-3"
-            >
+          {!post.isCommentsLocked &&
+            !boardReadOnly &&
+            !commentNoAccess &&
+            hmacRequired &&
+            !canComment && (
+              <button
+                type="button"
+                onClick={handleViewOnPortal}
+                className="text-xs text-primary-ink hover:underline transition-colors mb-3"
+              >
+                <FormattedMessage
+                  id="widget.postDetail.loginToComment"
+                  defaultMessage="Log in to join the conversation"
+                />
+              </button>
+            )}
+
+          {boardReadOnly && !post.isCommentsLocked && (
+            <p className="text-xs text-muted-foreground/50 mb-3">
               <FormattedMessage
-                id="widget.postDetail.loginToComment"
-                defaultMessage="Log in to join the conversation"
+                id="widget.readOnly"
+                defaultMessage="This board isn't taking new feedback right now."
               />
-            </button>
+            </p>
           )}
 
           {post.isCommentsLocked && (

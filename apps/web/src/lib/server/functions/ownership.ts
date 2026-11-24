@@ -1,3 +1,4 @@
+import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
@@ -38,7 +39,7 @@ export const transferWorkspaceOwnershipFn = createServerFn({ method: 'POST' })
     const owner = await fetchWorkspaceOwnerEmail()
     const me = auth.user.email?.trim().toLowerCase()
     if (!me || !owner || me !== owner.trim().toLowerCase()) {
-      throw new Error('Only the owner can transfer this workspace')
+      throw new ForbiddenError('OWNER_REQUIRED', 'Only the owner can transfer this workspace')
     }
     const toEmail = data.toEmail.trim().toLowerCase()
     try {
@@ -51,7 +52,8 @@ export const transferWorkspaceOwnershipFn = createServerFn({ method: 'POST' })
         error instanceof ControlPlaneUnavailableError &&
         error.message.includes(FREE_WORKSPACE_OWNER_CAP)
       ) {
-        throw new Error(
+        throw new ConflictError(
+          'FREE_WORKSPACE_OWNER_CAP',
           'That teammate already owns 3 live Free workspaces. They need to delete or upgrade one first.'
         )
       }
@@ -69,12 +71,15 @@ export const leaveCloudWorkspaceFn = createServerFn({ method: 'POST' })
       throw new Error('Cloud workspace actions are not available')
     }
     const email = auth.user.email?.trim().toLowerCase()
-    if (!email) throw new Error('You need an email to leave')
+    if (!email) throw new ValidationError('EMAIL_REQUIRED', 'You need an email to leave')
     const { fetchWorkspaceOwnerEmail, leaveCloudWorkspace } =
       await import('@/lib/server/control-plane/client')
     const owner = await fetchWorkspaceOwnerEmail()
     if (owner && email === owner.trim().toLowerCase()) {
-      throw new Error('The owner cannot leave. Transfer the workspace first.')
+      throw new ForbiddenError(
+        'OWNER_CANNOT_LEAVE',
+        'The owner cannot leave. Transfer the workspace first.'
+      )
     }
     const { leaveTeamSelf } = await import('@/lib/server/domains/principals/principal.service')
     const { actorFromAuth } = await import('@/lib/server/audit/log')

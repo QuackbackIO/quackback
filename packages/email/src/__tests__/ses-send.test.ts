@@ -220,6 +220,19 @@ describe('formatAddress', () => {
     expect(formatAddress('Support <support@acme.test>')).toBe('Support <support@acme.test>')
     expect(formatAddress('  support@acme.test ')).toBe('support@acme.test')
   })
+
+  it('gives the same header however many times a name with quotes passes through', () => {
+    // A From is formatted where the name is applied and again at the transport
+    // boundary, so a second pass must not escape the first pass's escapes.
+    for (const name of ['Acme "Support"', 'Acme \\ Co, Inc', 'Doe, Jane']) {
+      const once = formatAddress(`${name} <hi@acme.test>`)
+      expect(formatAddress(once)).toBe(once)
+      expect(parseAddress(once)).toEqual({ address: 'hi@acme.test', name })
+    }
+    expect(formatAddress('Acme "Support" <hi@acme.test>')).toBe(
+      '"Acme \\"Support\\"" <hi@acme.test>'
+    )
+  })
 })
 
 describe('addressDomain', () => {
@@ -946,10 +959,10 @@ describe('dispatch on the ses rung', () => {
       ctaUrl: 'https://acme.example/c',
       workspaceName: 'Acme',
       channel: 'email',
-      fromDisplayName: 'Alex (Acme)',
+      fromDisplayName: 'Alex from Acme',
     })
     const command = sdkSend.mock.calls[0][0] as SendEmailCommand
-    expect(command.input.FromEmailAddress).toBe('"Alex (Acme)" <notifications@platform.test>')
+    expect(command.input.FromEmailAddress).toBe('Alex from Acme <notifications@platform.test>')
   })
 
   it('renders a text/plain alternative and uses the human reply subject', async () => {
@@ -971,6 +984,35 @@ describe('dispatch on the ses rung', () => {
     expect(command.input.Content?.Simple?.Body?.Html?.Data).toContain('I checked the invoice.')
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('New reply from Acme')
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('Unsubscribe')
+  })
+
+  it('sends a reply subject taken from a multi-line message as one line', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendConversationMessageEmail({
+      to: 'customer@example.test',
+      direction: 'agent_reply',
+      senderName: 'Alex',
+      messagePreview: 'On its way.',
+      bodyHtml: '<p>On its way.</p>',
+      ctaUrl: 'https://acme.example/support/c1',
+      workspaceName: 'Acme',
+      channel: 'email',
+      conversationSubject: 'My order\r\n\r\n\thas not arrived\n',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Subject?.Data).toBe('Re: My order has not arrived')
+  })
+
+  it('never hands the provider a subject with a line break, whatever the template', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendRawEmail({
+      from: sendingAs('Support <support@platform.test>'),
+      to: 'customer@example.test',
+      subject: 'First line\r\nSecond line\tand a tab',
+      html: '<p>hi</p>',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Subject?.Data).toBe('First line Second line and a tab')
   })
 
   it('carries RFC 8058 one-click unsubscribe headers on a changelog email', async () => {

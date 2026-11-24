@@ -6,10 +6,16 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { isTeamMember } from '@/lib/shared/roles'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
+import { assertNotBlocked } from '@/lib/server/domains/principals/blocking'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
-import { voteOnPost, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
+import {
+  blockedVoteToggle,
+  voteOnPost,
+  addVoteOnBehalf,
+  removeVote,
+} from '@/lib/server/domains/posts/post.voting'
 import { mergePost, unmergePost } from '@/lib/server/domains/posts/post.merge'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.user-actions'
 import { getActivityForPost, createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -161,6 +167,7 @@ type GetPostActivityArgs = { postId: string }
 export function registerPostTools(server: McpServer, auth: McpAuthContext) {
   registerTool<TriagePostArgs>(server, auth, {
     name: 'triage_post',
+    title: 'Triage post',
     permissions: (args) => permissionsForTriage(args),
     description: `Update a post: set status, tags, and/or owner. All fields optional — only provided fields are updated.
 
@@ -201,6 +208,7 @@ Examples:
 
   registerTool<VotePostArgs>(server, auth, {
     name: 'vote_post',
+    title: 'Vote on post',
     permissions: 'none',
     description: `Toggle vote on a feedback post. If not yet voted, adds a vote. If already voted, removes the vote.
 
@@ -211,6 +219,9 @@ Examples:
     annotations: WRITE,
     scope: 'write:feedback',
     handler: async (args) => {
+      // A blocked person may only take back a vote they gave (blocking.ts).
+      const blockedAnswer = await blockedVoteToggle(args.postId as PostId, auth.principalId)
+      if (blockedAnswer) return jsonResult({ postId: args.postId, ...blockedAnswer })
       // Chokepoint: resolves the post + board, then runs canVotePost
       // (which composes canViewPost). Team API keys always pass the
       // tier check; this primarily enforces post.deletedAt /
@@ -236,6 +247,7 @@ Examples:
 
   registerTool<ProxyVoteArgs>(server, auth, {
     name: 'proxy_vote',
+    title: 'Vote on behalf of a user',
     permissions: [PERMISSIONS.POST_VOTE_ON_BEHALF],
     description: `Add or remove a vote on behalf of another user. Requires team role.
 
@@ -302,10 +314,11 @@ Examples:
 
   registerTool<CreatePostArgs>(server, auth, {
     name: 'create_post',
+    title: 'Create feedback post',
     // A teammate needs post.create, as the dashboard requires; a portal user
     // is gated by the board's submit policy inside createPost.
     permissions: (_args, caller) => (isTeamMember(caller.role) ? [PERMISSIONS.POST_CREATE] : []),
-    description: `Submit new feedback on a board. Requires board and title; content/status/tags optional.
+    description: `Submit new feedback on a board. Requires board and title; content/status/tags optional. Status and tags apply only for team members.
 
 Examples:
 - Minimal: create_post({ boardId: "board_01abc...", title: "Add dark mode" })
@@ -317,14 +330,18 @@ Examples:
       // The actor carries the caller's REAL role so the policy gate inside
       // createPost (submit tier + moderation axis) reflects who is writing.
       const actor = await mcpMemberActor(auth)
+      await assertNotBlocked(auth.principalId)
+      // Status and tags are triage, which the portal never offers its users: a
+      // portal user's post takes the board default status and no tags.
+      const team = isTeamMember(auth.role)
 
       const result = await createPost(
         {
           boardId: args.boardId as BoardId,
           title: args.title,
           content: args.content ?? '',
-          statusId: args.statusId as PostStatusId | undefined,
-          tagIds: args.tagIds as PostTagId[] | undefined,
+          statusId: team ? (args.statusId as PostStatusId | undefined) : undefined,
+          tagIds: team ? (args.tagIds as PostTagId[] | undefined) : undefined,
         },
         {
           principalId: auth.principalId,
@@ -348,6 +365,7 @@ Examples:
 
   registerTool<MergePostArgs>(server, auth, {
     name: 'merge_post',
+    title: 'Merge duplicate post',
     permissions: [PERMISSIONS.POST_MERGE],
     description: `Merge a duplicate post into a canonical post. Aggregates votes. Reversible via unmerge_post.
 
@@ -373,6 +391,7 @@ Examples:
 
   registerTool<UnmergePostArgs>(server, auth, {
     name: 'unmerge_post',
+    title: 'Unmerge post',
     permissions: [PERMISSIONS.POST_MERGE],
     description: `Restore a merged post to independent state. Recalculates vote counts.
 
@@ -394,6 +413,7 @@ Examples:
 
   registerTool<DeletePostArgs>(server, auth, {
     name: 'delete_post',
+    title: 'Delete post',
     permissions: [PERMISSIONS.POST_DELETE],
     description: `Soft-delete a feedback post. The post is hidden from public views but can be restored within 30 days.
 
@@ -415,6 +435,7 @@ Examples:
 
   registerTool<RestorePostArgs>(server, auth, {
     name: 'restore_post',
+    title: 'Restore deleted post',
     permissions: [PERMISSIONS.POST_DELETE],
     description: `Restore a soft-deleted post. Posts can only be restored within 30 days of deletion.
 
@@ -433,6 +454,7 @@ Examples:
 
   registerTool<GetPostActivityArgs>(server, auth, {
     name: 'get_post_activity',
+    title: 'Get post activity',
     permissions: [PERMISSIONS.POST_VIEW_PRIVATE],
     description: `Get the activity log for a post. Shows status changes, merges, tag changes, owner assignments, proxy votes, and other events.
 

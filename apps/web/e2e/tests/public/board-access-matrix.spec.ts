@@ -89,7 +89,9 @@ test.beforeAll(async ({ browser }) => {
 })
 
 test.afterAll(async () => {
-  setWorkspaceAnon(true) // restore baseline
+  // Restore the seed's state. The seed leaves the switch unset, which denies
+  // anonymous activity; leaving it on changed what later specs see.
+  setWorkspaceAnon(false)
   await Promise.all([anonCtx?.close(), userCtx?.close(), memberCtx?.close(), adminCtx?.close()])
 })
 
@@ -178,7 +180,13 @@ async function postState(page: Page, board: { slug: string; postId: string }) {
     denied,
     renders: !denied && body.includes('e2e access probe post'),
     signInToComment: /sign in to comment|log in to comment/.test(body),
-    hasCommentEditor: (await page.locator('[contenteditable="true"], textarea').count()) > 0,
+    // Since #589 the composer first draws a stand-in textbox and mounts the
+    // real editor when the pointer arrives, so count either.
+    hasCommentEditor:
+      (await page
+        .locator('[contenteditable="true"], textarea')
+        .or(page.getByRole('textbox', { name: /write a comment/i }))
+        .count()) > 0,
   }
 }
 
@@ -289,17 +297,22 @@ test.describe('vote tier — vote affordance + gating', () => {
 // sees their own pending item, but a held item must NOT reach other (anonymous)
 // viewers — until a moderator approves it.
 
-/** Submit a post to a board via the portal composer; resolves once accepted. */
-async function submitFeedback(page: Page, boardSlug: string, title: string) {
+/**
+ * Submit a post to a board that holds posts for review, via the portal
+ * composer; resolves once accepted and held.
+ */
+async function submitHeldFeedback(page: Page, boardSlug: string, title: string) {
   await page.goto(`/?board=${boardSlug}`)
   await page.waitForLoadState('networkidle')
   const composer = page.getByPlaceholder(/what'?s on your mind/i).first()
   await composer.click()
   await composer.fill(title)
-  const submit = page.getByRole('button', { name: /^submit/i }).first()
+  // The composer's submit button reads "Post" since d538f26ea2 (#895).
+  const submit = page.getByRole('button', { name: 'Post', exact: true }).first()
   await expect(submit).toBeEnabled()
   await submit.click()
-  await expect(page.getByText('Feedback submitted')).toBeVisible({ timeout: 10000 })
+  // A held post's toast says it waits for review since 03289cf36b (#1211).
+  await expect(page.getByText('Your post is waiting for review')).toBeVisible({ timeout: 10000 })
 }
 
 /** Does the board's filtered feed (newest-first) surface a post with this title? */
@@ -351,7 +364,7 @@ async function postShowsComment(
 test.describe('moderation — hold for review + approve/reject', () => {
   test('a held post is approved into the public feed', async () => {
     const title = `E2E Hold-Approve ${Date.now()}`
-    await submitFeedback(user, 'e2e-mod', title)
+    await submitHeldFeedback(user, 'e2e-mod', title)
 
     // Held: the pending post is not visible to other (anonymous) viewers.
     expect(await feedShowsPost(anon, 'e2e-mod', title)).toBe(false)
@@ -368,7 +381,7 @@ test.describe('moderation — hold for review + approve/reject', () => {
 
   test('a held post is rejected and never shown publicly', async () => {
     const title = `E2E Hold-Reject ${Date.now()}`
-    await submitFeedback(user, 'e2e-mod', title)
+    await submitHeldFeedback(user, 'e2e-mod', title)
 
     const row = await queueRow(admin, title)
     await expect(row).toBeVisible({ timeout: 10000 })

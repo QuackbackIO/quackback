@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { runWithLogContext } from '@/lib/server/log-context'
 import { ForbiddenError, ValidationError, ConflictError, NotFoundError } from '@/lib/shared/errors'
 
 // Type for error response body
@@ -15,6 +16,7 @@ import {
   conflictResponse,
   validationErrorResponse,
   internalErrorResponse,
+  internalRouteErrorResponse,
   handleDomainError,
   parsePaginationParams,
   encodeCursor,
@@ -196,6 +198,55 @@ describe('API Responses', () => {
     })
   })
 
+  describe('request id on a 5xx', () => {
+    it('carries the id of the request it was built in', async () => {
+      const response = await runWithLogContext(
+        { request_id: 'req-123', route: '/api/v1/posts' },
+        () => Promise.resolve(internalErrorResponse())
+      )
+      expect((await response.json()).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        requestId: 'req-123',
+      })
+    })
+
+    it('covers an error nobody planned for', async () => {
+      const response = await runWithLogContext(
+        { request_id: 'req-456', route: '/api/v1/posts' },
+        () => Promise.resolve(handleDomainError(new Error('connect ECONNREFUSED 10.0.4.17:5432')))
+      )
+      const body = await response.json()
+      expect(response.status).toBe(500)
+      expect(body.error.requestId).toBe('req-456')
+      expect(JSON.stringify(body)).not.toContain('ECONNREFUSED')
+    })
+
+    it("rides beside the plain string the app's own routes answer with", async () => {
+      const response = await runWithLogContext(
+        { request_id: 'req-321', route: '/api/export' },
+        () => Promise.resolve(internalRouteErrorResponse())
+      )
+      expect(response.status).toBe(500)
+      expect(await response.json()).toEqual({
+        error: 'Internal server error',
+        requestId: 'req-321',
+      })
+      expect(await internalRouteErrorResponse().json()).toEqual({
+        error: 'Internal server error',
+      })
+    })
+
+    it('is left off a 4xx, and off a 5xx built outside a request', async () => {
+      const refusal = await runWithLogContext(
+        { request_id: 'req-789', route: '/api/v1/posts' },
+        () => Promise.resolve(notFoundResponse('Post'))
+      )
+      expect((await refusal.json()).error).not.toHaveProperty('requestId')
+      expect((await internalErrorResponse().json()).error).not.toHaveProperty('requestId')
+    })
+  })
+
   describe('handleDomainError', () => {
     it('should handle NOT_FOUND errors', async () => {
       const error = { code: 'NOT_FOUND', message: 'Post not found' }
@@ -209,6 +260,13 @@ describe('API Responses', () => {
       const response = handleDomainError(error)
 
       expect(response.status).toBe(404)
+    })
+
+    it('names a missing tag "Tag", not the internal model name', async () => {
+      const response = handleDomainError({ code: 'TAG_NOT_FOUND', message: 'x' })
+
+      expect(response.status).toBe(404)
+      expect(((await response.json()) as ErrorBody).error.message).toBe('Tag not found')
     })
 
     it('should handle VALIDATION_ERROR', async () => {
@@ -294,6 +352,28 @@ describe('API Responses', () => {
       expect(handleDomainError(err).status).toBe(404)
     })
 
+    it.each([
+      ['TICKET_NOT_FOUND', 'Ticket ticket_123 not found', 'Ticket not found'],
+      ['CONVERSATION_NOT_FOUND', 'Conversation not found', 'Conversation not found'],
+    ])('should name the resource once for %s', async (code, message, expected) => {
+      const response = handleDomainError(new NotFoundError(code, message))
+      expect(response.status).toBe(404)
+      const body = (await response.json()) as ErrorBody
+      expect(body.error).toEqual({ code: 'NOT_FOUND', message: expected })
+    })
+
+    it('should not say not found twice for an unmapped code whose message already says it', async () => {
+      const response = handleDomainError(new NotFoundError('WIDGET_NOT_FOUND', 'Widget not found'))
+      const body = (await response.json()) as ErrorBody
+      expect(body.error.message).toBe('Widget not found')
+    })
+
+    it('should still name a bare resource in an unmapped not-found message', async () => {
+      const response = handleDomainError(new NotFoundError('WIDGET_NOT_FOUND', 'Widget'))
+      const body = (await response.json()) as ErrorBody
+      expect(body.error.message).toBe('Widget not found')
+    })
+
     // WWW-Authenticate header on 401
     it('should include WWW-Authenticate header on unauthorizedResponse', () => {
       const response = handleDomainError({ code: 'API_UNAUTHORIZED', message: 'Invalid key' })
@@ -345,27 +425,9 @@ describe('API Responses', () => {
       expect(result.limit).toBe(100)
     })
 
-    it('should use default for limit=0', () => {
-      // limit=0 is falsy, so it falls through to the default of 20
-      const url = new URL('https://example.com/api?limit=0')
-      const result = parsePaginationParams(url)
-
-      expect(result.limit).toBe(20)
-    })
-
-    it('should enforce minimum limit of 1', () => {
-      // Negative numbers are capped to 1 by Math.max
-      const url = new URL('https://example.com/api?limit=-5')
-      const result = parsePaginationParams(url)
-
-      expect(result.limit).toBe(1)
-    })
-
-    it('should handle invalid limit gracefully', () => {
-      const url = new URL('https://example.com/api?limit=invalid')
-      const result = parsePaginationParams(url)
-
-      expect(result.limit).toBe(20)
+    it.each(['0', '-5', 'invalid'])('refuses limit=%s as a ValidationError', (limit) => {
+      const url = new URL(`https://example.com/api?limit=${limit}`)
+      expect(() => parsePaginationParams(url)).toThrow('limit must be a whole number of 1 or more')
     })
   })
 
