@@ -40,6 +40,7 @@ import {
 } from '@/lib/server/fleet/schema-floor'
 import { isActivitySignal, noteWorkspaceActivity } from './activity'
 import { unavailableResponse } from './unavailable-page'
+import { warnUnknownHost } from './unknown-host-log'
 import { isIdentityFailureCode, isKeyCustodyFailureCode } from './fingerprint'
 import { acquireScopeForHost } from './resolver'
 import { requestWorkspaceHost } from './saas-edge-host'
@@ -123,7 +124,7 @@ export async function resolveWorkspaceAndContinue<T>({
       return runWithWorkspaceScope(acquisition.scope, next)
 
     case 'unknown_host':
-      log.warn({ host: acquisition.hostname }, 'no workspace claims this hostname')
+      warnUnknownHost(acquisition.hostname, log)
       return unavailableResponse(request, 'unknown', { status: 404, host: acquisition.hostname })
 
     case 'redirect': {
