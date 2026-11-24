@@ -232,6 +232,12 @@ export default defineConfig(({ mode }) => {
         // responses (SSR documents, server-function JSON) are unaffected;
         // see compression.ts for those.
         compressPublicAssets: { gzip: true, brotli: true },
+        // Keep one `_libs` chunk per package. The default splits each
+        // package's chunk by the entries that reach it, which cut drizzle-orm
+        // into two chunks that import each other; whichever loads first sees
+        // the other's classes uninitialised ("The superclass is not a
+        // constructor" from `PgColumn extends Column`), and every request 500s.
+        experimental: { entriesAwareLibChunks: false },
       }),
       tanstackStart({
         srcDirectory: 'src',
