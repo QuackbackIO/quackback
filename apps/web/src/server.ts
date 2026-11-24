@@ -1,4 +1,5 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
+import { handleStartError } from '@tanstack/react-start/server'
 import { assertBootConfigurationOrExit } from '@/lib/server/boot-config'
 import { logStartupBanner } from '@/lib/server/startup'
 import { finishResponse } from '@/lib/server/finish-response'
@@ -42,7 +43,8 @@ installRuntimeErrorLog()
 export default createServerEntry({
   // The framework's final response, finished (body-end hooks, compression)
   // out here rather than in request middleware: see finish-response.ts.
-  fetch: withRuntimeErrorLog(async (request: Request) =>
-    finishResponse(request, await handler.fetch(request))
+  fetch: withRuntimeErrorLog(
+    async (request: Request) => finishResponse(request, await handler.fetch(request)),
+    { toResponse: handleStartError }
   ),
 })

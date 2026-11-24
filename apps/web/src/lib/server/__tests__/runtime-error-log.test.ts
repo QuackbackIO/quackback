@@ -7,7 +7,11 @@
  * logged.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { createServerEntry } from '@tanstack/react-start/server'
+import {
+  createServerEntry,
+  handleStartError,
+  setResponseStatus,
+} from '@tanstack/react-start/server'
 import { createLogger } from '@/lib/server/logger'
 import { handleRequestWithContext } from '@/lib/server/middleware/request-context'
 import {
@@ -49,7 +53,9 @@ async function runThroughFramework(
   const original = console.error
   console.error = (...args: unknown[]) => target.error(...args)
   try {
-    const entry = createServerEntry({ fetch: wrap ? withRuntimeErrorLog(handler, log) : handler })
+    const entry = createServerEntry({
+      fetch: wrap ? withRuntimeErrorLog(handler, { toResponse: handleStartError, log }) : handler,
+    })
     return await entry.fetch(request)
   } finally {
     console.error = original
@@ -206,8 +212,30 @@ describe('withRuntimeErrorLog + installRuntimeErrorLog', () => {
     expect(records).toHaveLength(1)
     expect(records[0].level).toBe('error')
     expect(records[0].msg).toBe('unhandled request error')
+    expect(records[0].status).toBe(500)
     expect(records[0].err.type).toBe('TypeError')
     expect(records[0].err.message).toBe('cannot read properties of undefined')
+  })
+
+  it('answers and logs with the status a response helper set before the throw', async () => {
+    const cap = capture()
+    const { printed, target } = fakeConsole()
+    installRuntimeErrorLog({ target })
+
+    const res = await runThroughFramework(
+      target,
+      async () => {
+        setResponseStatus(503)
+        throw new Error('upstream down')
+      },
+      { log: cap.log }
+    )
+
+    expect(res.status).toBe(503)
+    expect(printed).toEqual([])
+    const records = cap.records()
+    expect(records).toHaveLength(1)
+    expect(records[0].status).toBe(503)
   })
 
   it('does not log again an error the request boundary already logged', async () => {

@@ -15,8 +15,9 @@
  *
  * - The request boundary (request-context.ts) and the server entry
  *   (`withRuntimeErrorLog` below) account for every error they see: the
- *   boundary logs it, the entry logs anything the boundary did not, and both
- *   record client disconnects without an error line.
+ *   boundary logs it, the entry answers anything escaping it with the
+ *   framework's own error response and logs what the boundary did not, and
+ *   both record client disconnects without an error line.
  * - The console wrapper drops the framework's print of an error that has been
  *   accounted for. It matches by identity, because the print carries the raw
  *   thrown value with nothing to tell it from any other `console.error(err)`.
@@ -73,23 +74,42 @@ export function isClientDisconnect(error: unknown, request: Request): boolean {
 }
 
 /**
- * Wrap the server entry's fetch: log, once, any error escaping it that the
- * request boundary has not already accounted for, then rethrow it unchanged so
- * the framework still builds the response.
+ * Account for this request's disconnect whenever it happens, so the
+ * framework's print of the signal's reason is dropped wherever it is printed,
+ * including inside the server-function handler, which answers its own
+ * failures without rethrowing them.
+ */
+function noteClientDisconnectOf(request: Request): void {
+  const { signal } = request
+  const note = () => noteLoggedAtBoundary(signal.reason)
+  if (signal.aborted) note()
+  else signal.addEventListener('abort', note, { once: true })
+}
+
+/**
+ * Wrap the server entry's fetch. An error escaping it is answered by
+ * `toResponse` (the framework's `handleStartError`, which keeps response
+ * helper status, headers and cookies), and logged once with that status unless
+ * the request boundary already logged it or it is the client's disconnect.
  */
 export function withRuntimeErrorLog<A extends unknown[]>(
   fetch: (request: Request, ...rest: A) => Promise<Response>,
-  log: AppLogger = logger.child({ component: 'http-runtime' })
+  {
+    toResponse,
+    log = logger.child({ component: 'http-runtime' }),
+  }: { toResponse: (error: unknown) => Response; log?: AppLogger }
 ): (request: Request, ...rest: A) => Promise<Response> {
   return async (request, ...rest) => {
+    noteClientDisconnectOf(request)
     try {
       return await fetch(request, ...rest)
     } catch (error) {
-      if (!isAccountedFor(error) && !isClientDisconnect(error, request)) {
-        log.error({ err: error }, 'unhandled request error')
-      }
+      const report = !isAccountedFor(error) && !isClientDisconnect(error, request)
+      // Marked first, so the framework's own print of it is dropped.
       noteLoggedAtBoundary(error)
-      throw error
+      const response = toResponse(error)
+      if (report) log.error({ err: error, status: response.status }, 'unhandled request error')
+      return response
     }
   }
 }
