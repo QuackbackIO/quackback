@@ -142,7 +142,7 @@ export function FeedbackToolbar({
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
               >
-                <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
+                <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary-ink')} />
                 {intl.formatMessage({
                   id: option.messageId,
                   defaultMessage: option.defaultMessage,

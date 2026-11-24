@@ -18,7 +18,7 @@ export function WidgetPortalTitle({ title, onClick }: WidgetPortalTitleProps) {
       onClick={onClick}
       className="group text-left mt-0.5 block rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     >
-      {/* Hover cue is an underline, not text-primary: a light brand colour on
+      {/* Hover cue is an underline, not the main colour: a light brand colour on
           the panel background would push the heading below text contrast. */}
       <h2 className="text-[15px] font-semibold text-foreground leading-snug inline decoration-muted-foreground/40 underline-offset-2 group-hover:underline">
         {title}

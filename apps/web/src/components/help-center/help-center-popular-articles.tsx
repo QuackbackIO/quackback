@@ -43,7 +43,7 @@ export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticle
             <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
               {article.categoryName}
             </span>
-            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-primary" />
+            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-primary-ink" />
           </Link>
         ))}
       </div>

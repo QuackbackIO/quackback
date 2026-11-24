@@ -3,27 +3,41 @@
  * Ask applied through the same writes the sections use, and the draft as
  * Ask's request carries it. Pure; the editor applies the result as one step.
  */
-import { fontIdForValue, normalizeFontSans, tryCssColorToHex } from '@/lib/shared/theme'
+import { fontIdForValue, normalizeFontSans } from '@/lib/shared/theme'
 import { BRANDING_FONTS, type BrandingFontId } from '@/lib/shared/theme/fonts'
 import {
   applyTabsPatch,
-  HEADER_AUTO,
+  COLOUR_AUTO,
   PATCH_COLOUR_ROLES,
+  SAME_AS_TEXT_FONT,
   welcomeDocToText,
   welcomeTextToDoc,
   type PortalDraftPatch,
 } from '@/lib/shared/portal-customise/draft-patch'
 import type { AskDraftContext } from '@/lib/shared/portal-customise/ask'
-import { draftFont, draftPalette, draftRadius, editTheme, type PortalDraft } from './portal-draft'
+import {
+  draftFont,
+  draftHeadingFont,
+  draftPalette,
+  draftRadius,
+  editHeaderName,
+  editLogo,
+  editTheme,
+  shownName,
+  showsWide,
+  type PortalDraft,
+} from './portal-draft'
 import type { Palette } from '@/components/admin/settings/branding/theme-css'
+import { pickedHex } from './colours'
 
 /**
  * The draft with a patch applied. Colours go through the colour setters (so
  * derived colours follow), a listed font replaces an uploaded one, and the
  * Advanced CSS rules are carried over untouched. Tab ids the draft does not
  * have are ignored, Feedback stays on, and Help Center fields are skipped
- * when the draft has no Help Center home. A header colour of "auto" puts the bar
- * back on Auto.
+ * when the draft has no Help Center home. A colour of "auto" puts it back on
+ * Auto. An empty portal name, or the workspace's own, puts the workspace's
+ * name back; showing the logo needs one uploaded.
  */
 export function applyDraftPatch(draft: PortalDraft, patch: PortalDraftPatch): PortalDraft {
   let next = draft
@@ -35,14 +49,30 @@ export function applyDraftPatch(draft: PortalDraft, patch: PortalDraftPatch): Po
       if (!colours) continue
       for (const [role, variable] of PATCH_COLOUR_ROLES) {
         const hex = colours[role]
-        if (hex) next = editTheme.setColour(next, variable, mode, hex === HEADER_AUTO ? null : hex)
+        if (hex) next = editTheme.setColour(next, variable, mode, hex === COLOUR_AUTO ? null : hex)
       }
     }
   }
   if (patch.font) {
     next = editTheme.setFont(next, BRANDING_FONTS.find((font) => font.id === patch.font)!.value)
   }
+  if (patch.headingFont) {
+    next = editTheme.setHeadingFont(
+      next,
+      patch.headingFont === SAME_AS_TEXT_FONT
+        ? null
+        : BRANDING_FONTS.find((font) => font.id === patch.headingFont)!.value
+    )
+  }
+  if (patch.cardStyle) next = editTheme.setCardStyle(next, patch.cardStyle)
   if (patch.corners !== undefined) next = editTheme.setRadius(next, patch.corners)
+  if (patch.portalName !== undefined) {
+    const name = patch.portalName.trim()
+    next = editHeaderName(next, name === next.workspaceName ? '' : name)
+  }
+  if (patch.headerShows) {
+    next = patch.headerShows === 'logo' ? editLogo.showWide(next) : editLogo.showSquare(next)
+  }
   if (patch.tabs) next = { ...next, nav: applyTabsPatch(next.nav, patch.tabs) }
   if (patch.welcomeMessage !== undefined) {
     next = { ...next, welcomeBody: welcomeTextToDoc(patch.welcomeMessage) }
@@ -62,8 +92,8 @@ function coloursOf(palette: Palette): AskDraftContext['colours']['light'] {
     // Only a header colour of its own: unset, the header is the page.
     ['header', 'header'],
   ] as const) {
-    const value = palette[variable]
-    const hex = value ? tryCssColorToHex(value) : null
+    // The colour picked, not the shade it may be drawn as.
+    const hex = pickedHex(palette, variable)
     if (hex) out[key] = hex
   }
   return out
@@ -111,6 +141,13 @@ function listedFontId(stack: string): BrandingFontId | null {
   return match?.id ?? null
 }
 
+/** The headings font as Ask sees it: listed, the text font, or null for one of its own. */
+function headingFontOf(draft: PortalDraft): AskDraftContext['headingFont'] {
+  if (draft.customHeadingFont) return null
+  const stack = draftHeadingFont(draft)
+  return stack ? listedFontId(stack) : SAME_AS_TEXT_FONT
+}
+
 /** The draft as Ask's request carries it: never Advanced CSS, logo keys or font files. */
 export function summariseDraftForAsk(draft: PortalDraft): AskDraftContext {
   return {
@@ -118,6 +155,12 @@ export function summariseDraftForAsk(draft: PortalDraft): AskDraftContext {
     buttonShape: draft.buttonShape,
     corners: draftRadius(draft),
     font: draft.customFont ? null : listedFontId(draftFont(draft)),
+    headingFont: headingFontOf(draft),
+    cardStyle: draft.cardStyle,
+    portalName: shownName(draft).slice(0, 100),
+    workspaceName: draft.workspaceName.slice(0, 100),
+    headerShows: showsWide(draft) ? 'logo' : 'icon_and_name',
+    hasLogo: draft.logo.wideKey !== null,
     colours: {
       light: coloursOf(draftPalette(draft, 'light')),
       dark: coloursOf(draftPalette(draft, 'dark')),

@@ -305,6 +305,44 @@ describe('reading an inbound address back', () => {
     expect(conversationIdFromInboundAddress(conv.replace('ws-t1+', 'Ws-T1+'), ENV)).toBe(REAL_ID)
   })
 
+  it('reads a reply address back when the mail client lowercased it (#818)', () => {
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    expect(conversationIdFromInboundAddress(conv.toLowerCase(), ENV)).toBe(REAL_ID)
+  })
+
+  it('reads a reply address back when the mail client uppercased it', () => {
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    expect(conversationIdFromInboundAddress(conv.toUpperCase(), ENV)).toBe(REAL_ID)
+  })
+
+  it('reads a ticket reply address back when the mail client lowercased it', () => {
+    const ticket = inboundTicketReplyToAddress(TICKET_ID, SLUG, ENV)!
+    expect(ticketIdFromInboundAddress(ticket.toLowerCase(), ENV)).toBe(TICKET_ID)
+  })
+
+  it('still rejects a tag one letter off, in any case', () => {
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    // Change one tag letter to a DIFFERENT letter, so folding case cannot undo
+    // the tamper the way it undoes a client's case change.
+    const tampered = conv.replace(/\.([^@]+)@/, (_, tag: string) => {
+      const i = tag.search(/[a-z]/i)
+      const swapped = tag[i].toLowerCase() === 'a' ? 'b' : 'a'
+      return `.${tag.slice(0, i)}${swapped}${tag.slice(i + 1)}@`
+    })
+    for (const variant of [tampered, tampered.toLowerCase(), tampered.toUpperCase()]) {
+      expect(conversationIdFromInboundAddress(variant, ENV)).toBeNull()
+    }
+  })
+
+  it('folds ASCII case only, so a non-ASCII look-alike is not read as the minted address', () => {
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    // KELVIN SIGN lower-cases to an ASCII "k" under full Unicode folding.
+    const kelvin = String.fromCharCode(0x212a)
+    expect(
+      conversationIdFromInboundAddress(conv.replace('+c01kw', `+c01${kelvin}w`), ENV)
+    ).toBeNull()
+  })
+
   it('rejects a tampered tag', () => {
     const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
     expect(

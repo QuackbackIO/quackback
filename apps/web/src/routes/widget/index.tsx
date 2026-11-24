@@ -1199,7 +1199,7 @@ function SuccessView({
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 shrink-0">
-          <CheckCircleIcon className="w-4.5 h-4.5 text-primary" />
+          <CheckCircleIcon className="w-4.5 h-4.5 text-primary-ink" />
         </div>
         <div>
           <p className="text-sm font-semibold text-foreground">

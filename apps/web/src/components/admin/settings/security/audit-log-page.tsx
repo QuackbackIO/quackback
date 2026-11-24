@@ -5,7 +5,13 @@
  */
 import { useMemo, useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { defineMessages, useIntl, type IntlShape, type MessageDescriptor } from 'react-intl'
+import {
+  defineMessage,
+  defineMessages,
+  useIntl,
+  type IntlShape,
+  type MessageDescriptor,
+} from 'react-intl'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { ArrowDownTrayIcon } from '@heroicons/react/24/solid'
 import {
@@ -256,9 +262,10 @@ const VIA_CHANNEL: Partial<Record<AuditChannel, MessageDescriptor>> = defineMess
   system: { id: 'admin.auditLog.via.system', defaultMessage: 'via system' },
 })
 
-const VIA_ON_BEHALF_OF = defineMessages({
-  onBehalfOf: { id: 'admin.auditLog.via.onBehalfOf', defaultMessage: 'for {name}' },
-}).onBehalfOf
+const VIA_ON_BEHALF_OF = defineMessage<{ name: string }>({
+  id: 'admin.auditLog.via.onBehalfOf',
+  defaultMessage: 'for {name}',
+})
 
 /**
  * The client name a row shows. An assistant row stored under the former default
