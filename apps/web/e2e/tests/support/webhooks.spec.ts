@@ -29,6 +29,7 @@ const CONVERSATION_REF_KEYS = ['assignedTeamId', 'channel', 'id', 'priority', 's
 const TICKET_REF_KEYS = [
   'assignedPrincipalId',
   'assignedTeamId',
+  'dueAt',
   'id',
   'number',
   'priority',
@@ -901,7 +902,6 @@ test.describe('ticket events', () => {
             ...TICKET_REF_KEYS,
             'companyId',
             'createdAt',
-            'dueAt',
             'requesterPrincipalId',
             'resolvedAt',
             'sla',
