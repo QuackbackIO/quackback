@@ -311,7 +311,7 @@ export function mergeInboxBranches(input: MergeInboxBranchesInput): MergeInboxBr
           key: sortValue(item, sort),
         }))
   // Rank fusion ascends (position 0 = best match), as do the oldest,
-  // soonest-deadline, waiting-longest and due sorts.
+  // soonest-deadline, waiting-longest and soonest-due sorts.
   keyed.sort((a, b) =>
     compareKeyedInboxItems(
       a,

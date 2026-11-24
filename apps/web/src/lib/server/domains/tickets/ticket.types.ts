@@ -23,7 +23,7 @@ import type {
 } from '@/lib/shared/db-types'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import type { JsonValue } from '@/lib/shared/json'
-import type { INBOX_ONLY_TICKET_SORTS, TICKET_SORTS } from '@/lib/shared/tickets'
+import type { TICKET_SORTS } from '@/lib/shared/tickets'
 import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 
 // ---------------------------------------------------------------------------
@@ -90,9 +90,9 @@ export interface AssignTicketInput {
 /** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt);
  *  `sla` by the open time-to-resolve deadline, soonest first, none last;
  *  `waiting` by id alone, since a ticket has no waiting clock (the unified
- *  inbox lists them after every conversation, in a stable order); `due` is
- *  soonest due date first, tickets without one last. */
-export type TicketSort = (typeof TICKET_SORTS)[number] | (typeof INBOX_ONLY_TICKET_SORTS)[number]
+ *  inbox lists them after every conversation, in a stable order);
+ *  `due` by the shared due date, soonest first, none last. */
+export type TicketSort = (typeof TICKET_SORTS)[number]
 
 /** Who a list is scoped to by assignee: the caller, nobody, or a specific teammate. */
 export type TicketAssigneeFilter = 'me' | 'unassigned' | PrincipalId
@@ -286,10 +286,9 @@ export interface RequesterTicketDTO {
   /** Who is handling the ticket, by public name. No team. */
   assignee: { principalId: PrincipalId | null; displayName: string | null }
   company: TicketCompanyRef | null
-  /** The ticket's shared due date, which the customer may have proposed and
-   *  both sides see. Null = none. */
-  dueAt: string | null
   resolvedAt: string | null
+  /** The ticket's one shared due date (ISO), the same the team sees; null when unset. */
+  dueAt: string | null
   createdAt: string
   /** The newest public, non-system message on the ticket's thread; else the
    *  newest move into a status with a customer stage; else `createdAt`. */

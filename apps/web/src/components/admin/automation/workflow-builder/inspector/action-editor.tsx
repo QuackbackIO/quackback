@@ -5,9 +5,9 @@
  * home (inspector panel instead of a popover) and the entity source (the
  * shared WorkflowEntitiesProvider instead of a canvas-local context) differ.
  */
-import { useIntl } from 'react-intl'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useIntl } from 'react-intl'
 import { Input } from '@/components/ui/input'
 import { CopyButton } from '@/components/shared/copy-button'
 import { getWorkflowWebhookSecretFn } from '@/lib/server/functions/workflows'
