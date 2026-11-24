@@ -1,7 +1,7 @@
 'use client'
 
 import { lazy, Suspense, useState } from 'react'
-import { defineMessages, useIntl } from 'react-intl'
+import { defineMessage, defineMessages, useIntl, type MessageValue } from 'react-intl'
 import { PortalPageHeader } from '@/components/public/portal-page-header'
 import { KeyGlyph } from '@/components/settings/settings-nav'
 import { NewButton } from '@/components/shared/new-button'
@@ -61,9 +61,15 @@ const m = defineMessages({
     defaultMessage:
       'Shown only once, when created. A key stops working if you leave the workspace.',
   },
-  expires: { id: 'portal.settings.apiKeys.expiresDate', defaultMessage: 'Expires {date}' },
+  expires: defineMessage<{ date: MessageValue }>({
+    id: 'portal.settings.apiKeys.expiresDate',
+    defaultMessage: 'Expires {date}',
+  }),
   noExpiry: { id: 'portal.settings.apiKeys.noExpiry', defaultMessage: 'No expiry' },
-  lastUsed: { id: 'portal.settings.apiKeys.lastUsed', defaultMessage: 'Last used {time}' },
+  lastUsed: defineMessage<{ time: MessageValue }>({
+    id: 'portal.settings.apiKeys.lastUsed',
+    defaultMessage: 'Last used {time}',
+  }),
   neverUsed: { id: 'portal.settings.apiKeys.neverUsed', defaultMessage: 'Never used' },
   rename: { id: 'portal.settings.apiKeys.rename', defaultMessage: 'Rename' },
   rotate: { id: 'portal.settings.apiKeys.rotate', defaultMessage: 'Rotate' },

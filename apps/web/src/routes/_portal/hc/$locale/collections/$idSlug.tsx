@@ -121,7 +121,7 @@ function ArticleRow({
     >
       <DocumentTextIcon className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors mt-0.5" />
       <div className="flex-1 min-w-0">
-        <span className="block text-sm text-foreground group-hover:text-primary transition-colors font-medium">
+        <span className="block text-sm text-foreground group-hover:text-primary-ink transition-colors font-medium">
           {title}
         </span>
         {description && (
@@ -139,7 +139,7 @@ function ArticleRow({
           />
         </span>
       )}
-      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary transition-colors mt-0.5" />
+      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary-ink transition-colors mt-0.5" />
     </Link>
   )
 }

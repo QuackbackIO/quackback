@@ -268,7 +268,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
         {/* Pinned comment / official response */}
         {post.pinnedComment && (
           <div className="rounded-md border border-primary/20 bg-primary/[0.03] p-2.5">
-            <p className="text-[11px] font-medium text-primary mb-1">
+            <p className="text-[11px] font-medium text-primary-ink mb-1">
               <FormattedMessage
                 id="widget.postDetail.officialResponse"
                 defaultMessage="Official response"
@@ -340,7 +340,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
               <button
                 type="button"
                 onClick={handleViewOnPortal}
-                className="text-xs text-primary hover:text-primary/80 transition-colors mb-3"
+                className="text-xs text-primary-ink hover:underline transition-colors mb-3"
               >
                 <FormattedMessage
                   id="widget.postDetail.loginToComment"

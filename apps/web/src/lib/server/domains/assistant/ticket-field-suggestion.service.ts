@@ -70,6 +70,7 @@ import {
 import { listConversationMessagesForGrounding } from '@/lib/server/domains/conversation/conversation.query'
 import { buildConversationTranscript, budgetTranscript } from './transcript'
 import { logger } from '@/lib/server/logger'
+import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 const log = logger.child({ component: 'ticket-field-suggestion' })
 
@@ -239,6 +240,7 @@ export async function suggestTicketFieldValues(
   let output: Record<string, unknown>
   try {
     output = (await chat({
+      threadId: oneShotThreadId(),
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,

@@ -1,7 +1,7 @@
 'use client'
 
 import { lazy, Suspense, useState, useTransition } from 'react'
-import { defineMessages, useIntl } from 'react-intl'
+import { defineMessage, defineMessages, useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -48,7 +48,10 @@ const m = defineMessages({
   noExpiry: { id: 'apiKeys.noExpiry', defaultMessage: 'No expiry' },
   revoke: { id: 'apiKeys.action.revoke', defaultMessage: 'Revoke' },
   expired: { id: 'apiKeys.expired', defaultMessage: 'Expired' },
-  revokeLabel: { id: 'apiKeys.personal.revokeLabel', defaultMessage: 'Revoke {name}' },
+  revokeLabel: defineMessage<{ name: string }>({
+    id: 'apiKeys.personal.revokeLabel',
+    defaultMessage: 'Revoke {name}',
+  }),
   settingsRead: { id: 'apiKeys.scopes.settingsReadSummary', defaultMessage: 'Settings (read)' },
   settingsReadWrite: {
     id: 'apiKeys.scopes.settingsReadWriteSummary',

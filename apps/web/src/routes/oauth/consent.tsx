@@ -204,7 +204,7 @@ function ConsentPage() {
   const identity = client?.client_identity
   const verifiedHost = identity?.verified ? identity.host : null
   const redirectTarget = identity?.redirect ?? null
-  // The plugin binds a CIMD client's `client_uri` to its client_id origin.
+  // The server keeps a CIMD client's `client_uri` only on its verified host.
   const verifiedLink =
     verifiedHost && client?.client_uri && isSafeUrl(client.client_uri) ? client.client_uri : null
   // CIMD cannot stop a program on this device from claiming a client whose
