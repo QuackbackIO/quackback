@@ -173,6 +173,23 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_subject_trgm_idx ON conversations USING gin (subject gin_trgm_ops)',
   },
   {
+    // The inbox's Due date sort (keyset: due_at ASC NULLS LAST, id ASC is the
+    // btree default order). tickets is large, so it is built here rather than
+    // in its migration (0324).
+    name: 'tickets_due_at_id_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_due_at_id_idx ON tickets USING btree (due_at, id)',
+  },
+  {
+    // The ticket-due sweep and deadline-provider candidate set: open, live
+    // tickets whose overdue alert has not fired for their current due date.
+    // Both queries repeat the predicate verbatim so the planner can prove it
+    // applies (0324).
+    name: 'tickets_due_alert_pending_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_due_alert_pending_idx ON tickets USING btree (due_at) WHERE due_at IS NOT NULL AND resolved_at IS NULL AND deleted_at IS NULL AND overdue_notified_for IS DISTINCT FROM due_at',
+  },
+  {
     // page_views is range-partitioned (0137); Postgres rejects CREATE INDEX
     // CONCURRENTLY on a partitioned parent ("cannot create index on partitioned
     // table ... concurrently"). Built non-concurrently on the parent, matching
