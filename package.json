@@ -67,7 +67,7 @@
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/language": "^6.12.4",
-    "@codemirror/view": "^6.43.11",
+    "@codemirror/view": "^6.43.15",
     "@lezer/highlight": "^1.2.3",
     "@tiptap/extension-image": "3.35.0",
     "@tiptap/extension-mention": "3.35.0",
