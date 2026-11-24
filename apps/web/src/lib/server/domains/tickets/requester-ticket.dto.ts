@@ -189,8 +189,9 @@ export function toRequesterTicketDTO(
     company: row.companyId
       ? { id: row.companyId, name: ctx.companies.get(row.companyId) ?? 'Unknown' }
       : null,
-    dueAt: row.dueAt?.toISOString() ?? null,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    // The shared due date: the customer sees the same date the team does.
+    dueAt: row.dueAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: (ctx.requesterUpdatedAt.get(row.id) ?? row.createdAt).toISOString(),
     customAttributes: customerVisibleAnswers(row, ticketType),

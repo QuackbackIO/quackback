@@ -3,7 +3,7 @@
  * Component tests for the in-thread ticket intake form a send_ticket_form
  * block posts (block-ticket-form.tsx): required-subject gating, the
  * createMyTicketFn payload shape (title/details/email, auth headers
- * threaded through), the filed confirmation on success, the intake
+ * threaded through), the filed confirmation on success, and the intake
  * default type's customer-visible fields (shown, validated, and sent with
  * that type's id so the server's required-field check passes), and the
  * optional "Needed by" date the askDueDate toggle adds.
@@ -88,13 +88,14 @@ function inputUnder(label: string): HTMLInputElement {
 
 function renderCard(
   headers: Record<string, string> = { 'x-widget-session': 'sess_1' },
-  props: { askEmail?: boolean; askDueDate?: boolean } = {}
+  askEmail?: boolean,
+  props: { askDueDate?: boolean } = {}
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en-US" messages={{}}>
-        <BlockTicketForm getAuthHeaders={() => headers} {...props} />
+        <BlockTicketForm getAuthHeaders={() => headers} askEmail={askEmail} {...props} />
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -164,7 +165,7 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
   })
 
   it('does not ask an identified visitor for an email, and sends none', async () => {
-    renderCard(undefined, { askEmail: false })
+    renderCard(undefined, false)
     expect(screen.queryByLabelText(/email/i)).toBeNull()
     expect(screen.queryByPlaceholderText(/you@example\.com/i)).toBeNull()
     fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
@@ -296,6 +297,16 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
   })
 
   describe('Needed by (askDueDate)', () => {
+    /** Types a subject and waits for Create to enable (the type list is in). */
+    async function fillSubject(value: string): Promise<HTMLElement> {
+      fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
+        target: { value },
+      })
+      const submit = screen.getByRole('button', { name: /create ticket/i })
+      await waitFor(() => expect(submit).toBeEnabled())
+      return submit
+    }
+
     it('offers no date field without the toggle', () => {
       renderCard()
       expect(screen.queryByLabelText(/needed by/i)).toBeNull()
@@ -303,7 +314,7 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     })
 
     it('shows the optional field and its hint, bounded to the customer window after mount', async () => {
-      renderCard(undefined, { askDueDate: true })
+      renderCard(undefined, undefined, { askDueDate: true })
       const input = screen.getByLabelText(/needed by/i)
       expect(input).toHaveAttribute('type', 'date')
       expect(screen.getByText('(optional)')).toBeTruthy()
@@ -315,16 +326,11 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     })
 
     it('sends the end of the picked local day as dueAt', async () => {
-      renderCard(undefined, { askDueDate: true })
+      renderCard(undefined, undefined, { askDueDate: true })
       const day = dayFromNow(10)
-      fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
-        target: { value: 'Renewal paperwork' },
-      })
+      const submit = await fillSubject('Renewal paperwork')
       fireEvent.change(screen.getByLabelText(/needed by/i), { target: { value: day } })
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: /create ticket/i })).toBeEnabled()
-      )
-      fireEvent.click(screen.getByRole('button', { name: /create ticket/i }))
+      fireEvent.click(submit)
 
       await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
       expect(createMyTicketFn).toHaveBeenCalledWith({
@@ -334,14 +340,8 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     })
 
     it('leaves dueAt out when no day is picked', async () => {
-      renderCard(undefined, { askDueDate: true })
-      fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
-        target: { value: 'Refund request' },
-      })
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: /create ticket/i })).toBeEnabled()
-      )
-      fireEvent.click(screen.getByRole('button', { name: /create ticket/i }))
+      renderCard(undefined, undefined, { askDueDate: true })
+      fireEvent.click(await fillSubject('Refund request'))
 
       await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
       expect(createMyTicketFn).toHaveBeenCalledWith({
@@ -354,16 +354,11 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
       ['more than two years out', 3 * 365],
       ['in the past', -3],
     ])('blocks a day %s with the inline error until it is fixed', async (_label, days) => {
-      renderCard(undefined, { askDueDate: true })
-      fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
-        target: { value: 'Renewal paperwork' },
-      })
+      renderCard(undefined, undefined, { askDueDate: true })
+      const submit = await fillSubject('Renewal paperwork')
       const input = screen.getByLabelText(/needed by/i)
       fireEvent.change(input, { target: { value: dayFromNow(days) } })
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: /create ticket/i })).toBeEnabled()
-      )
-      fireEvent.click(screen.getByRole('button', { name: /create ticket/i }))
+      fireEvent.click(submit)
 
       expect(
         await screen.findByText('Pick a date between today and two years from now.')
@@ -374,10 +369,7 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
       // Picking an acceptable day clears the error and submits.
       fireEvent.change(input, { target: { value: dayFromNow(5) } })
       expect(screen.queryByText(/pick a date between/i)).toBeNull()
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: /create ticket/i })).toBeEnabled()
-      )
-      fireEvent.click(screen.getByRole('button', { name: /create ticket/i }))
+      fireEvent.click(submit)
       await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
     })
   })
