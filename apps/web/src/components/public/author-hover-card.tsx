@@ -153,7 +153,7 @@ export function AuthorHoverCard({
                   </span>
                   {profile.isTeamMember && (
                     <span
-                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary"
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary-ink"
                       aria-label={intl.formatMessage(
                         {
                           id: 'portal.commentThread.teamBadgeAria',

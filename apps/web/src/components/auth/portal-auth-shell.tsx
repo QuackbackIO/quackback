@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { PortalBrandMark } from './portal-brand-mark'
-import { generateWorkspaceThemeCSS, readConfigFontSans } from '@/lib/shared/theme'
+import { readConfigFontSans } from '@/lib/shared/theme'
+import { generateWorkspaceThemeCSS } from '@/lib/shared/theme/generator'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'

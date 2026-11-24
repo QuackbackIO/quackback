@@ -3,7 +3,7 @@
  * (portal.settings.apiKeys.*), for the dialogs, the scope picker and the scope
  * summaries it shares with the admin pages.
  */
-import { defineMessages, type IntlShape } from 'react-intl'
+import { defineMessage, defineMessages, type IntlShape } from 'react-intl'
 import type { KeyDialogMessages } from '@/components/admin/settings/api-keys/key-messages'
 import type { DomainAccessWords } from '@/components/domain-access-picker'
 import {
@@ -125,23 +125,23 @@ const scope = defineMessages({
   read: { id: 'portal.settings.apiKeys.scope.read', defaultMessage: 'Read' },
   readWrite: { id: 'portal.settings.apiKeys.scope.readWrite', defaultMessage: 'Read and write' },
   write: { id: 'portal.settings.apiKeys.scope.write', defaultMessage: 'Write' },
-  chipName: {
+  chipName: defineMessage<{ domain: string; level: string }>({
     id: 'portal.settings.apiKeys.scope.chipName',
     defaultMessage: '{domain}: {level}',
-  },
+  }),
   highImpact: { id: 'portal.settings.apiKeys.scope.highImpact', defaultMessage: 'High impact' },
-  summaryRead: {
+  summaryRead: defineMessage<{ domain: string }>({
     id: 'portal.settings.apiKeys.summary.read',
     defaultMessage: '{domain} (read)',
-  },
-  summaryReadWrite: {
+  }),
+  summaryReadWrite: defineMessage<{ domain: string }>({
     id: 'portal.settings.apiKeys.summary.readWrite',
     defaultMessage: '{domain} (read and write)',
-  },
-  summaryWrite: {
+  }),
+  summaryWrite: defineMessage<{ domain: string }>({
     id: 'portal.settings.apiKeys.summary.write',
     defaultMessage: '{domain} (write)',
-  },
+  }),
   summaryLegacy: {
     id: 'portal.settings.apiKeys.summary.legacy',
     defaultMessage: 'Full access (legacy)',
@@ -150,21 +150,21 @@ const scope = defineMessages({
   summaryNone: { id: 'portal.settings.apiKeys.summary.none', defaultMessage: 'No API scopes' },
 })
 
-const LABELS: Record<AccessDomainId, keyof typeof scope> = {
+const LABELS = {
   feedback: 'feedback',
   changelog: 'changelog',
   article: 'article',
   chat: 'chat',
   settings: 'settings',
-}
+} as const satisfies Record<AccessDomainId, keyof typeof scope>
 
-const DESCRIPTIONS: Record<AccessDomainId, keyof typeof scope> = {
+const DESCRIPTIONS = {
   feedback: 'feedbackDescription',
   changelog: 'changelogDescription',
   article: 'articleDescription',
   chat: 'chatDescription',
   settings: 'settingsDescription',
-}
+} as const satisfies Record<AccessDomainId, keyof typeof scope>
 
 /** The scope picker's words on this page. */
 export function portalScopeWords(intl: IntlShape): DomainAccessWords {

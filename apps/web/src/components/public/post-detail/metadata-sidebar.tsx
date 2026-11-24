@@ -593,7 +593,7 @@ export function MetadataSidebar({
                     className={cn(
                       'text-sm font-medium text-end',
                       etaLabel ? 'text-foreground' : 'text-muted-foreground',
-                      'hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                      'hover:text-primary-ink transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                     )}
                   >
                     {etaLabel ??
@@ -652,7 +652,7 @@ export function MetadataSidebar({
                   disabled={isUpdating}
                   className={cn(
                     'text-sm font-medium text-foreground text-end max-w-[60%]',
-                    'hover:text-primary transition-colors',
+                    'hover:text-primary-ink transition-colors',
                     'disabled:opacity-50 disabled:cursor-not-allowed'
                   )}
                 >
@@ -675,7 +675,7 @@ export function MetadataSidebar({
                       <FolderIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="truncate flex-1">{b.name}</span>
                       {b.id === board.id && (
-                        <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <CheckIcon className="h-3.5 w-3.5 text-primary-ink shrink-0" />
                       )}
                     </button>
                   ))}
@@ -751,7 +751,7 @@ export function MetadataSidebar({
                           defaultMessage="Unassigned"
                         />
                       </span>
-                      {!owner && <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />}
+                      {!owner && <CheckIcon className="h-3.5 w-3.5 text-primary-ink shrink-0" />}
                     </button>
                     {ownerCandidates.map((m) => (
                       <button
@@ -772,7 +772,7 @@ export function MetadataSidebar({
                         />
                         <span className="flex-1 truncate">{m.name}</span>
                         {owner?.principalId === m.principalId && (
-                          <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <CheckIcon className="h-3.5 w-3.5 text-primary-ink shrink-0" />
                         )}
                       </button>
                     ))}

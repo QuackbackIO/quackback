@@ -6,6 +6,7 @@
 # compromised renderer, so Chromium's own sandbox stays on and Compose puts
 # this container on a network of its own with the app (no database or storage).
 #
+# Published as ghcr.io/quackbackio/quackback-browser beside the app image.
 # Build from the repository root:
 #   docker build -f docker/browser/Dockerfile -t quackback-browser .
 # Run (the app sets QUACKBACK_BROWSER_URL and the same token):
@@ -28,6 +29,9 @@ RUN mkdir -p /out \
       --target=bun --outfile=/out/reader.js
 
 FROM oven/bun:1.4.0-alpine AS runner
+LABEL org.opencontainers.image.source="https://github.com/QuackbackIO/quackback" \
+      org.opencontainers.image.description="Quackback's browser reader: renders a website for Import your brand" \
+      org.opencontainers.image.licenses="AGPL-3.0"
 RUN apk add --no-cache chromium font-noto ttf-freefont \
  && adduser -S -u 1001 reader
 WORKDIR /app

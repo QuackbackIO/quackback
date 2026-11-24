@@ -384,7 +384,7 @@ export function CommentForm({
                             />
                           </span>
                         )}
-                        {isSelected && <CheckIcon className="size-3.5 text-primary shrink-0" />}
+                        {isSelected && <CheckIcon className="size-3.5 text-primary-ink shrink-0" />}
                       </button>
                     )
                   })}
@@ -560,7 +560,7 @@ export function CommentForm({
                 {' ('}
                 <button
                   type="button"
-                  className="text-primary hover:underline"
+                  className="text-primary-ink hover:underline"
                   onClick={() => {
                     signOut({
                       fetchOptions: {
