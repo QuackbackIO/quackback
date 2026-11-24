@@ -679,9 +679,10 @@ test.describe('portal support: what the customer receives and is refused', () =>
           'resolvedAt',
           'createdAt',
           'updatedAt',
-          'dueAt',
           'customAttributes',
           'lastMessagePreview',
+          // The one shared due date: the customer sees the date the team set.
+          'dueAt',
         ].sort()
       )
       expect(Object.keys(dto.stage as object).sort()).toEqual(['closed', 'label', 'slot'])

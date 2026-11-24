@@ -19,8 +19,8 @@
  * one whose email is already on file, is never asked for it: the ticket links
  * to their session principal (`askEmail` false, from the thread load).
  * With `askDueDate` (the node's toggle) the card also offers an optional
- * "Needed by" day, sent as the end of that day in the visitor's own time zone;
- * the team may adjust it later.
+ * "Needed by" day, sent as the end of that day in the visitor's own time
+ * zone; the team may adjust it later.
  *
  * Filed state is local to the mounted card: a successful submit collapses
  * the form to a confirmation line, and the conversation's own
@@ -31,15 +31,15 @@ import { useEffect, useId, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import { ticketIntakeFormQuery } from '@/lib/client/queries/visitor-ticket-form'
+import { errorText } from '@/lib/client/error-text'
+import type { TicketIntakeType } from '@/lib/shared/tickets'
 import {
   endOfLocalDay,
   ticketDueBounds,
   ticketDueProblem,
   toLocalDateInputValue,
 } from '@/lib/shared/ticket-due'
-import { ticketIntakeFormQuery } from '@/lib/client/queries/visitor-ticket-form'
-import { errorText } from '@/lib/client/error-text'
-import type { TicketIntakeType } from '@/lib/shared/tickets'
 import { TicketFormFields } from '@/components/shared/ticket-form-fields'
 import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { Input } from '@/components/ui/input'
@@ -86,21 +86,19 @@ export function BlockTicketForm({
 }) {
   const intl = useIntl()
   const rpc = useVisitorSurfaceRpc()
-  const dueInputId = useId()
   const [email, setEmail] = useState('')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
   const [neededBy, setNeededBy] = useState('')
   const [neededByInvalid, setNeededByInvalid] = useState(false)
   const [filed, setFiled] = useState(false)
+  const id = useId()
   // The window depends on the viewer's clock and zone, so it is set after
   // mount: bounds in the server's markup would not match the hydrating render.
   const [dueBounds, setDueBounds] = useState<{ min: string; max: string } | null>(null)
   useEffect(() => {
     if (askDueDate) setDueBounds(customerDueInputBounds())
   }, [askDueDate])
-
-  const id = useId()
 
   // Shares the ticket header card's cache entry. Only a successful empty list
   // means no intake types.
@@ -136,18 +134,18 @@ export function BlockTicketForm({
   const canSubmit = title.trim().length > 0 && !create.isPending && intakeForm.isSuccess
   const submit = () => {
     if (!canSubmit) return
-    // A picked day means the end of that day where the visitor is.
-    const dueAt = askDueDate && neededBy ? endOfLocalDay(neededBy) : null
-    if (askDueDate && neededBy && ticketDueProblem(dueAt, 'customer')) {
-      setNeededByInvalid(true)
-      return
-    }
     const type = intake.selectedType
     let fieldValues: Record<string, unknown> | undefined
     if (type) {
       const checked = intake.validate()
       if (!checked.ok) return
       fieldValues = checked.values
+    }
+    // A picked day means the end of that day where the visitor is.
+    const dueAt = askDueDate && neededBy ? endOfLocalDay(neededBy) : null
+    if (askDueDate && neededBy && ticketDueProblem(dueAt, 'customer')) {
+      setNeededByInvalid(true)
+      return
     }
     create.mutate({
       title: title.trim(),
@@ -227,6 +225,43 @@ export function BlockTicketForm({
         onChange={intake.setFieldValue}
         errors={intake.fieldErrors}
       />
+      {askDueDate && (
+        <div className="space-y-1">
+          <label htmlFor={`${id}-due`} className="text-xs font-medium text-muted-foreground">
+            <FormattedMessage id="widget.tickets.new.neededBy" defaultMessage="Needed by" />
+            <span className="ms-1 font-normal text-muted-foreground/70">
+              <FormattedMessage id="widget.tickets.new.optional" defaultMessage="(optional)" />
+            </span>
+          </label>
+          <Input
+            id={`${id}-due`}
+            type="date"
+            value={neededBy}
+            min={dueBounds?.min}
+            max={dueBounds?.max}
+            onChange={(e) => {
+              setNeededBy(e.target.value)
+              setNeededByInvalid(false)
+            }}
+            aria-invalid={neededByInvalid}
+            aria-describedby={neededByInvalid ? `${id}-due-hint ${id}-due-error` : `${id}-due-hint`}
+          />
+          <p id={`${id}-due-hint`} className="text-[11px] text-muted-foreground/70">
+            <FormattedMessage
+              id="widget.tickets.new.neededByHint"
+              defaultMessage="Our team may adjust this date."
+            />
+          </p>
+          {neededByInvalid && (
+            <p id={`${id}-due-error`} className="text-[11px] text-destructive">
+              <FormattedMessage
+                id="widget.tickets.new.neededByInvalid"
+                defaultMessage="Pick a date between today and two years from now."
+              />
+            </p>
+          )}
+        </div>
+      )}
       {askEmail && (
         <div className="space-y-1">
           <label htmlFor={`${id}-email`} className="text-xs font-medium text-muted-foreground">
@@ -242,45 +277,6 @@ export function BlockTicketForm({
               defaultMessage: 'you@example.com',
             })}
           />
-        </div>
-      )}
-      {askDueDate && (
-        <div className="space-y-1">
-          <label htmlFor={dueInputId} className="text-xs font-medium text-muted-foreground">
-            <FormattedMessage id="widget.tickets.new.neededBy" defaultMessage="Needed by" />
-            <span className="ms-1 font-normal text-muted-foreground/70">
-              <FormattedMessage id="widget.tickets.new.optional" defaultMessage="(optional)" />
-            </span>
-          </label>
-          <Input
-            id={dueInputId}
-            type="date"
-            value={neededBy}
-            min={dueBounds?.min}
-            max={dueBounds?.max}
-            onChange={(e) => {
-              setNeededBy(e.target.value)
-              setNeededByInvalid(false)
-            }}
-            aria-invalid={neededByInvalid}
-            aria-describedby={
-              neededByInvalid ? `${dueInputId}-hint ${dueInputId}-error` : `${dueInputId}-hint`
-            }
-          />
-          <p id={`${dueInputId}-hint`} className="text-[11px] text-muted-foreground/70">
-            <FormattedMessage
-              id="widget.tickets.new.neededByHint"
-              defaultMessage="Our team may adjust this date."
-            />
-          </p>
-          {neededByInvalid && (
-            <p id={`${dueInputId}-error`} className="text-[11px] text-destructive">
-              <FormattedMessage
-                id="widget.tickets.new.neededByInvalid"
-                defaultMessage="Pick a date between today and two years from now."
-              />
-            </p>
-          )}
         </div>
       )}
       <Button className="w-full" size="sm" onClick={submit} disabled={!canSubmit}>
