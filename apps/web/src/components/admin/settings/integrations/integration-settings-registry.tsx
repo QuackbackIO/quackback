@@ -852,7 +852,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Shortcut workspace',
       description:
-        'Connect Shortcut to create stories from feedback and review incoming status changes.',
+        'Connect Shortcut to create stories from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Generate an API token from your Shortcut account settings and paste it below.
