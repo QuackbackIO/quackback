@@ -20,8 +20,8 @@
  * Run after `bun run build`:
  *   bun run check:client-imports
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 const ASSETS_DIR = process.argv[2] ?? join(import.meta.dirname, '..', '.output', 'public', 'assets')
 const PUBLIC_DIR = dirname(ASSETS_DIR)
@@ -31,20 +31,32 @@ if (!existsSync(ASSETS_DIR)) {
   process.exit(2)
 }
 
+/** Where the chunks are served from; only the path matters for resolution. */
+const SITE = 'https://site.invalid'
+
 /**
- * Why a chunk's import would fail in the browser, or null when it loads: a
- * sibling chunk that exists, an absolute path under the public directory that
- * exists, or a full URL.
+ * Why a chunk's import would fail in the browser, or null when it loads.
+ *
+ * The specifier is resolved the way the browser resolves it against the
+ * chunk's own URL, so `..` stops at the site root and a query or hash is not
+ * part of the file. A full URL to another origin (`https://`, `//host`) or a
+ * `data:` URL is taken as loadable; anything on this origin must name a file
+ * the build emitted. A bare specifier (`node:url`, `react`) is not a URL at all.
  */
-function problemWith(spec: string, chunkDir: string): string | null {
-  if (/^(?:https?:|data:)/i.test(spec)) return null
-  if (spec.startsWith('./') || spec.startsWith('../')) {
-    return existsSync(resolve(chunkDir, spec.split(/[?#]/)[0])) ? null : 'no such file'
+function problemWith(spec: string, chunkFile: string): string | null {
+  if (/^data:/i.test(spec)) return null
+  const isPath = /^(?:\.{0,2}\/)/.test(spec)
+  const isUrl = /^[a-z][a-z0-9+.-]*:/i.test(spec)
+  if (!isPath && !isUrl) return 'not a URL the browser can fetch'
+  let url: URL
+  try {
+    url = new URL(spec, `${SITE}/assets/${chunkFile}`)
+  } catch {
+    return 'not a URL the browser can fetch'
   }
-  if (spec.startsWith('/')) {
-    return existsSync(join(PUBLIC_DIR, spec.split(/[?#]/)[0])) ? null : 'no such file'
-  }
-  return 'not a URL the browser can fetch'
+  if (url.origin !== SITE) return /^https?:$/.test(url.protocol) ? null : 'not an http(s) URL'
+  const file = join(PUBLIC_DIR, decodeURIComponent(url.pathname))
+  return existsSync(file) && statSync(file).isFile() ? null : 'no such file'
 }
 
 const transpiler = new Bun.Transpiler({ loader: 'js' })
@@ -54,7 +66,7 @@ const problems: string[] = []
 for (const file of files) {
   const source = readFileSync(join(ASSETS_DIR, file), 'utf8')
   for (const { path, kind } of transpiler.scanImports(source)) {
-    const problem = problemWith(path, ASSETS_DIR)
+    const problem = problemWith(path, file)
     if (problem) problems.push(`  ${file}: ${kind} "${path}" (${problem})`)
   }
 }
