@@ -33,13 +33,13 @@
   },
   "dependencies": {
     "@quackback/ids": "workspace:*",
+    "dotenv": "^18.0.10",
     "drizzle-orm": "^0.45.2",
     "postgres": "^4.1.1"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.6.0",
     "@types/bun": "^1.4.5",
-    "dotenv": "^18.0.10",
     "drizzle-kit": "^0.31.10"
   }
 }
