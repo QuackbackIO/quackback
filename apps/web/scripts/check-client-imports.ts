@@ -13,30 +13,38 @@
  * the browser by another route (an `external` build option, a plugin, a
  * dependency). Imports are read with Bun's parser, so code samples inside
  * strings (the webhook guide's `import crypto from "node:crypto"`) do not count.
+ * A relative import must also name a file that exists. A dynamic import whose
+ * specifier is computed at runtime cannot be read statically and is not checked;
+ * the build emits none for browser code.
  *
  * Run after `bun run build`:
  *   bun run check:client-imports
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 const ASSETS_DIR = process.argv[2] ?? join(import.meta.dirname, '..', '.output', 'public', 'assets')
+const PUBLIC_DIR = dirname(ASSETS_DIR)
 
 if (!existsSync(ASSETS_DIR)) {
   console.error(`check-client-imports: ${ASSETS_DIR} not found. Run \`bun run build\` first.`)
   process.exit(2)
 }
 
-/** A specifier the browser resolves on its own: a sibling chunk or a full URL. */
-function isLoadable(spec: string): boolean {
-  return (
-    spec.startsWith('./') ||
-    spec.startsWith('../') ||
-    spec.startsWith('/') ||
-    /^https?:\/\//.test(spec) ||
-    // The client bundle's lazy-route preloads go through a data: URL.
-    spec.startsWith('data:')
-  )
+/**
+ * Why a chunk's import would fail in the browser, or null when it loads: a
+ * sibling chunk that exists, an absolute path under the public directory that
+ * exists, or a full URL.
+ */
+function problemWith(spec: string, chunkDir: string): string | null {
+  if (/^(?:https?:|data:)/i.test(spec)) return null
+  if (spec.startsWith('./') || spec.startsWith('../')) {
+    return existsSync(resolve(chunkDir, spec.split(/[?#]/)[0])) ? null : 'no such file'
+  }
+  if (spec.startsWith('/')) {
+    return existsSync(join(PUBLIC_DIR, spec.split(/[?#]/)[0])) ? null : 'no such file'
+  }
+  return 'not a URL the browser can fetch'
 }
 
 const transpiler = new Bun.Transpiler({ loader: 'js' })
@@ -46,7 +54,8 @@ const problems: string[] = []
 for (const file of files) {
   const source = readFileSync(join(ASSETS_DIR, file), 'utf8')
   for (const { path, kind } of transpiler.scanImports(source)) {
-    if (!isLoadable(path)) problems.push(`  ${file}: ${kind} "${path}"`)
+    const problem = problemWith(path, ASSETS_DIR)
+    if (problem) problems.push(`  ${file}: ${kind} "${path}" (${problem})`)
   }
 }
 

@@ -54,6 +54,39 @@ describe('domainToASCII', () => {
     expect(domainToASCII('bücher.de')).toBe('xn--bcher-kva.de')
   })
 
+  it('refuses a control character or space that URL would strip', () => {
+    // URL parses `acme.com\u0000` as `acme.com`: an address ending in NUL would
+    // otherwise match a verified `acme.com`.
+    for (const input of [
+      'acme.com\u0000',
+      '\u0000acme.com',
+      'acme.com\t',
+      'ac\nme.com',
+      ' acme.com',
+    ]) {
+      expect(domainToASCII(input)).toBe('')
+    }
+  })
+
+  it('never answers with a domain node:url would not', () => {
+    // Characters URL parsing treats specially, at each position of a few bases.
+    const specials = [
+      ...Array.from({ length: 0x21 }, (_, c) => String.fromCharCode(c)),
+      ...['\u007f', '\u0085', '\u00a0', '\u00ad', '\u200b', '\u200d', '\u2028', '\u3000'],
+      ...['\u3002', '\uff0e', '\ufeff', '%', '%00', '%2e', '/', '\\', '?', '#', '@', ':', '[', ']'],
+    ]
+    const unsafe: string[] = []
+    for (const base of ['acme.com', 'bücher.de']) {
+      for (const c of specials) {
+        for (const input of [c + base, base + c, base.replace('.', `${c}.`), `${base}.${c}`]) {
+          const ours = domainToASCII(input)
+          if (ours !== '' && ours !== nodeDomainToASCII(input)) unsafe.push(JSON.stringify(input))
+        }
+      }
+    }
+    expect(unsafe).toEqual([])
+  })
+
   it('refuses a value that names no domain', () => {
     expect(domainToASCII('user@x.com')).toBe('')
     expect(domainToASCII('exa mple.com')).toBe('')

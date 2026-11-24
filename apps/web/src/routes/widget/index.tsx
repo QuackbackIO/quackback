@@ -39,7 +39,7 @@ import { widgetChangelogListQuery } from '@/components/widget/widget-changelog-q
 import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query'
 import { widgetFetchBoardCapabilitiesFn } from '@/lib/server/functions/widget/posts'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
-import { widgetPortalOrigin } from '@/lib/server/functions/widget/portal-origin'
+import { getWidgetPortalOriginFn } from '@/lib/server/functions/widget/portal-origin'
 import { widgetListPublicArticlesFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -171,7 +171,7 @@ export const Route = createFileRoute('/widget/')({
             })
           )
         : Promise.resolve(emptyPortalData),
-      widgetPortalOrigin(),
+      getWidgetPortalOriginFn(),
       // Presence is workspace-global (not visitor-specific), so the anonymous SSR
       // baseline value is exactly correct for every visitor — seed the shared
       // presence query so the Messenger online/offline strip paints right

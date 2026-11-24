@@ -26,7 +26,8 @@ export const CLIENT_PROTECTED_SPECIFIERS = [
 
 /**
  * Node's built-in modules, `node:`-prefixed or bare (`node:url`, `crypto`,
- * `fs/promises`).
+ * `fs/promises`). Bare names match exactly: `punycode/punycode.js` is the npm
+ * package, not the built-in.
  *
  * A browser cannot load them. Vite swaps each one for an empty stub, so the
  * build passes and the chunk breaks later: the browser refuses any chunk that
@@ -36,7 +37,7 @@ export const CLIENT_PROTECTED_SPECIFIERS = [
  * Code that runs in both environments uses the web platform's equivalent.
  */
 export const NODE_BUILTIN_SPECIFIER = new RegExp(
-  `^(?:node:|(?:${builtinModules.filter((m) => !m.startsWith('_')).join('|')})(?:/|$))`
+  `^(?:node:.+|${builtinModules.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
 )
 
 /** True for a protected package or any of its subpaths (`pino/file`, `@quackback/db/x`). */
