@@ -19,19 +19,22 @@ const hoisted = vi.hoisted(() => ({
   toastError: vi.fn(),
 }))
 
-vi.mock('@tanstack/ai-react', () => ({
+vi.mock('@/lib/client/utils/agui-client', () => ({
   fetchServerSentEvents: () => ({}),
-  useChat: (options: { onError: (error: Error) => void }) => {
-    hoisted.chatOptions = options
-    return {
-      // The stream fails mid-turn: the library reports it, then settles.
-      sendMessage: async () => {},
-      stop: vi.fn(),
-      clear: vi.fn(),
-      setMessages: vi.fn(),
-      messages: [],
-      isLoading: false,
+  parsePartialJSON: () => undefined,
+  ChatClient: class {
+    constructor(options: { onError: (error: Error) => void }) {
+      hoisted.chatOptions = options
     }
+    // The stream fails mid-turn: the library reports it, then settles.
+    async sendMessage() {}
+    stop() {}
+    clear() {}
+    dispose() {}
+    getMessages() {
+      return []
+    }
+    setMessagesManually() {}
   },
 }))
 

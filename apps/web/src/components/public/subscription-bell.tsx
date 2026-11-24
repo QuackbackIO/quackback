@@ -159,7 +159,7 @@ export function SubscriptionBell({
             'flex items-center justify-center [border-radius:calc(var(--radius)*0.8)] p-2 transition-colors',
             !isSubscribed
               ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              : 'text-primary bg-primary/10 hover:bg-primary/20',
+              : 'text-primary-ink bg-primary/10 hover:bg-primary/20',
             loading && 'opacity-50 cursor-wait'
           )}
         >
@@ -209,7 +209,7 @@ export function SubscriptionBell({
               </p>
             </div>
           </div>
-          {level === 'all' && <CheckIcon className="h-4 w-4 text-primary" />}
+          {level === 'all' && <CheckIcon className="h-4 w-4 text-primary-ink" />}
         </DropdownMenuItem>
 
         {/* Status changes only */}
@@ -234,7 +234,7 @@ export function SubscriptionBell({
               </p>
             </div>
           </div>
-          {level === 'status_only' && <CheckIcon className="h-4 w-4 text-primary" />}
+          {level === 'status_only' && <CheckIcon className="h-4 w-4 text-primary-ink" />}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -254,7 +254,7 @@ export function SubscriptionBell({
               />
             </p>
           </div>
-          {level === 'none' && <CheckIcon className="h-4 w-4 text-primary" />}
+          {level === 'none' && <CheckIcon className="h-4 w-4 text-primary-ink" />}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

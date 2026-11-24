@@ -22,11 +22,7 @@ import { AuthDialog } from '@/components/auth/auth-dialog'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import {
-  generateWorkspaceThemeCSS,
-  readConfigFontHeading,
-  readConfigFontSans,
-} from '@/lib/shared/theme'
+import { readConfigFontHeading, readConfigFontSans } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -92,6 +88,9 @@ export const Route = createFileRoute('/_portal')({
     error: search.error,
   }),
   loader: async ({ context, deps, location }) => {
+    // The theme engine loads with the portal, not with every page's script:
+    // route loaders stay in the route tree's chunk, which the admin loads too.
+    const { generateWorkspaceThemeCSS } = await import('@/lib/shared/theme/generator')
     const { queryClient, session, settings, userRole, baseUrl, registeredAuthProviders } = context
 
     // Document response header — only meaningful (and only cheap) during SSR;

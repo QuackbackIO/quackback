@@ -24,17 +24,30 @@ export function ColourPicker({ value, swatches, allowAuto, isAuto, onChange }: C
   // Hue survives a trip through grey (where hex has no hue) while dragging.
   const [hsv, setHsv] = useState(() => hexToHsv(value))
   const lastSent = useRef(value)
+  // The colour that comes back for one just sent may be the theme's version
+  // of it (a button fill darkened for white words): the thumb stays where it
+  // was put rather than jumping mid-drag.
+  const awaitingEcho = useRef(false)
   useEffect(() => {
+    const echo = awaitingEcho.current
+    awaitingEcho.current = false
     if (value !== lastSent.current) {
       lastSent.current = value
-      setHsv(hexToHsv(value))
+      if (!echo) setHsv(hexToHsv(value))
     }
   }, [value])
+
+  // A swatch, the hex box or Auto: what comes back is shown as it is.
+  const pick = (hex: string | null) => {
+    awaitingEcho.current = false
+    onChange(hex)
+  }
 
   const send = (next: [number, number, number], dragging: boolean) => {
     setHsv(next)
     const hex = hsvToHex(...next)
     lastSent.current = hex
+    awaitingEcho.current = hex !== value
     onChange(hex, { dragging })
   }
 
@@ -48,7 +61,7 @@ export function ColourPicker({ value, swatches, allowAuto, isAuto, onChange }: C
             title={`${swatch.name} ${swatch.hex}`}
             aria-label={`${swatch.name} ${swatch.hex}`}
             aria-pressed={!isAuto && swatch.hex === value}
-            onClick={() => onChange(swatch.hex)}
+            onClick={() => pick(swatch.hex)}
             className={cn(
               'h-8 rounded-md border border-border/60 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
               !isAuto && swatch.hex === value && 'ring-2 ring-foreground/70 ring-offset-1'
@@ -62,14 +75,14 @@ export function ColourPicker({ value, swatches, allowAuto, isAuto, onChange }: C
       <HueSlider hsv={hsv} onChange={send} />
 
       <div className="flex items-start gap-2">
-        <HexBox value={value} onCommit={(hex) => onChange(hex)} />
+        <HexBox value={value} onCommit={(hex) => pick(hex)} />
         {allowAuto ? (
           <Button
             type="button"
             variant={isAuto ? 'secondary' : 'outline'}
             size="sm"
             aria-pressed={isAuto}
-            onClick={() => onChange(null)}
+            onClick={() => pick(null)}
           >
             Auto
           </Button>
