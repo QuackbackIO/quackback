@@ -65,7 +65,14 @@ const problems: string[] = []
 
 for (const file of files) {
   const source = readFileSync(join(ASSETS_DIR, file), 'utf8')
-  for (const { path, kind } of transpiler.scanImports(source)) {
+  let imports: ReturnType<typeof transpiler.scanImports>
+  try {
+    imports = transpiler.scanImports(source)
+  } catch (err) {
+    problems.push(`  ${file}: not JavaScript the parser can read (${(err as Error).message})`)
+    continue
+  }
+  for (const { path, kind } of imports) {
     const problem = problemWith(path, file)
     if (problem) problems.push(`  ${file}: ${kind} "${path}" (${problem})`)
   }
