@@ -466,6 +466,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'accuses changes.',
   },
   {
+    file: 'apps/web/src/lib/server/workspaces/unknown-host-log.ts',
+    name: 'recent',
+    category: 'fleet-wide',
+    reason:
+      'When this process last logged a hostname no workspace claims, keyed by that hostname. An entry ' +
+      'exists only for a host that resolved to no workspace, so it belongs to none; a shared or stale ' +
+      'entry only delays one warning line and never changes the 404 the request gets. Bounded at 1,000 ' +
+      'hosts because the Host header is client-chosen.',
+  },
+  {
     file: 'apps/web/src/lib/server/workspaces/activity.ts',
     name: 'lastStampedAt',
     category: 'workspace-scoped-key',
