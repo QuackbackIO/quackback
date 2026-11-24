@@ -17,7 +17,7 @@
  * one importing this from the other would tie a domain rule to whichever module
  * happened to define it first.
  */
-import { domainToASCII } from 'node:url'
+import { domainToASCII } from '@/lib/shared/domain-to-ascii'
 
 /**
  * A domain in the one form comparisons are made in: lower-case ASCII, A-labels.

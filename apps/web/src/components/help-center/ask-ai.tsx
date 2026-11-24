@@ -344,7 +344,7 @@ function SourceList({
               <span className="shrink-0 text-xs font-semibold text-primary tabular-nums">
                 {i + 1}.
               </span>
-              <span className="min-w-0 flex-1 text-sm text-foreground line-clamp-1 group-hover:text-primary group-hover:underline underline-offset-2">
+              <span className="min-w-0 flex-1 text-sm text-foreground line-clamp-1 group-hover:text-primary-ink group-hover:underline underline-offset-2">
                 {source.title}
               </span>
             </button>

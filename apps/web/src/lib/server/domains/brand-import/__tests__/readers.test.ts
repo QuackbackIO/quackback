@@ -71,4 +71,16 @@ describe('mergeBrandReads', () => {
   it('the reader goes by one name: in robots.txt, to the sites it reads, and in the editor', () => {
     expect(BRAND_READER_NAME).toBe(READER_TOKEN)
   })
+  it('takes the header bar from the rendered read alone when it read a page', () => {
+    const fromCss = { page: { background: '#ffffff' as const, header: '#0b1f3a' as const } }
+    // The rendered page's bar shows the page (no fill of its own): not a gap to fill.
+    expect(
+      mergeBrandReads({ page: { background: '#ffffff' } }, fromCss).page?.header
+    ).toBeUndefined()
+    expect(
+      mergeBrandReads({ page: { background: '#ffffff', header: '#005eb8' } }, fromCss).page?.header
+    ).toBe('#005eb8')
+    // No rendered page at all: the stylesheet's bar stands.
+    expect(mergeBrandReads({ title: 'Acme' }, fromCss).page?.header).toBe('#0b1f3a')
+  })
 })

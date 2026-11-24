@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 796 surfaces
+### Server functions (`requireAuth`) — 797 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -571,6 +571,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/portal-invites.ts`::fetchPortalInvitesFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::getPortalInviteLinkFn | settings.manage |
 | `lib/server/functions/portal-permissions.ts`::getMyPortalPermissionsFn | TEAM-ONLY |
+| `lib/server/functions/portal-summary.ts`::fetchPortalSummaryFn | DYNAMIC (settings.manage | settings.branding) |
 | `lib/server/functions/portal.ts`::fetchSubscriptionStatus | END_USER (any authenticated) |
 | `lib/server/functions/post-merge.ts`::mergePostFn | post.merge |
 | `lib/server/functions/post-merge.ts`::unmergePostFn | post.merge |
@@ -1146,7 +1147,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-238 of 1152 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+239 of 1154 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1274,6 +1275,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/widget/help.ts`::widgetRecordArticleFeedbackFn | server-fn |
 | `lib/server/functions/widget/help.ts`::widgetRecordArticleViewFn | server-fn |
 | `lib/server/functions/widget/help.ts`::widgetResolvePublicArticleRefFn | server-fn |
+| `lib/server/functions/widget/portal-origin.ts`::getWidgetPortalOriginFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetFetchBoardCapabilitiesFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetFetchPublicPostDetailFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetGetVotedPostsFn | server-fn |

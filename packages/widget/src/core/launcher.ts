@@ -160,7 +160,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: '10px',
-    backgroundColor: '#ef4444',
+    backgroundColor: '#dc2626',
     color: '#ffffff',
     fontSize: '11px',
     fontWeight: '700',

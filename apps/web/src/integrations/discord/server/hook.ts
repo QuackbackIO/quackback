@@ -24,16 +24,28 @@ export interface DiscordConfig {
   accessToken: string
   rootUrl: string
   links?: SectionOrigins
+  integrationId: string
 }
 
 export const discordHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as DiscordTarget
-    const { accessToken, rootUrl, links } = config as DiscordConfig
+    const { accessToken, rootUrl, links, integrationId } = config as DiscordConfig
+
+    const { supportAlertHold } = await import('@/lib/server/integrations/support-alerts')
+    const held = await supportAlertHold(event, { integrationId, channelId })
+    if (held) {
+      log.debug({ event_type: event.type, reason: held }, 'support notice held back')
+      return { state: 'succeeded' }
+    }
 
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing event')
 
     const message = buildDiscordMessage(event, hookLinks({ rootUrl, links }))
+    if (!message) {
+      log.debug({ event_type: event.type }, 'event produces no discord message, skipping')
+      return { state: 'succeeded' }
+    }
 
     try {
       const response = await integrationFetch(`${DISCORD_API}/channels/${channelId}/messages`, {
@@ -42,7 +54,8 @@ export const discordHook: IntegrationHook = {
           Authorization: `Bot ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(message),
+        // Customer text is quoted in posts: never let it ping anyone.
+        body: JSON.stringify({ ...message, allowed_mentions: { parse: [] } }),
       })
 
       if (!response.ok) {
