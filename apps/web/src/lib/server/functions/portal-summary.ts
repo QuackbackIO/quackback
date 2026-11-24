@@ -22,7 +22,7 @@ const log = logger.child({ component: 'portal-summary' })
 const inputSchema = z.object({ gatedTypes: z.array(z.string().max(32)).max(16) })
 
 export const fetchPortalSummaryFn = createServerFn({ method: 'GET' })
-  .inputValidator(inputSchema)
+  .validator(inputSchema)
   .handler(async ({ data }): Promise<SummaryRow[]> => {
     log.debug('fetch portal summary')
     const auth = await requireAuth()

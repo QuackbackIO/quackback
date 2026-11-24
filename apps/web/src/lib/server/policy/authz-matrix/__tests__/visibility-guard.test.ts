@@ -320,8 +320,8 @@ function constantsOf(file: string, depth = 0): Map<string, string> {
 
 /** The input text a server function's validator reads, with its schema constants expanded. */
 function validatorInput(body: string, consts: Map<string, string>): string | null | 'none' {
-  if (!/\.(?:validator|inputValidator)\(/.test(body)) return 'none'
-  const v = /\.(?:validator|inputValidator)\(([\s\S]*?)\)\s*\n\s*\.handler/.exec(body)
+  if (!/\.validator\(/.test(body)) return 'none'
+  const v = /\.validator\(([\s\S]*?)\)\s*\n\s*\.handler/.exec(body)
   if (!v) return null
   let text = v[1]
   const seen = new Set<string>()

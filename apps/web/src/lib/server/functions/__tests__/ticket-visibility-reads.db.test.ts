@@ -31,7 +31,6 @@ vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain: Record<string, unknown> = {}
     chain.validator = () => chain
-    chain.inputValidator = () => chain
     chain.middleware = () => chain
     chain.handler = (handler: (args: { data?: unknown }) => Promise<unknown>) =>
       Object.assign((args?: { data?: unknown }) => handler(args ?? {}), chain)

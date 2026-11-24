@@ -18,7 +18,7 @@ const SEMANTIC_BUDGET_MS = 1500
  * checks its own permission and row visibility for the effective actor.
  */
 export const searchWorkspaceFn = createServerFn({ method: 'GET' })
-  .inputValidator(
+  .validator(
     z.object({
       query: z.string().trim().max(MAX_SEARCH_LENGTH),
       kind: z.enum(SEARCH_KINDS).optional(),

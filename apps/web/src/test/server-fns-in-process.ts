@@ -16,7 +16,6 @@ export function withServerFnsInProcess<T extends object>(actual: T): T {
   const createServerFn = () => {
     const builder = {
       validator: () => builder,
-      inputValidator: () => builder,
       middleware: () => builder,
       handler: (fn: (ctx: { data: unknown }) => unknown) => (opts?: { data?: unknown }) =>
         Promise.resolve().then(() => fn({ data: opts?.data })),
