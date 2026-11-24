@@ -10,7 +10,7 @@
  * Result of parsing an inbound webhook payload.
  */
 export interface InboundWebhookResult {
-  /** Verified scope from the signed event, never inferred from the current connection. */
+  /** Verified scope: from a signed event, or confirmed by reading the item back from the connection. */
   destinationId?: string
   occurredAt?: string
   /** The external issue ID that changed status */
