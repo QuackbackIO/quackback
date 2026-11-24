@@ -173,10 +173,15 @@ describe.skipIf(!fixture.available)('ticket-due.service (real DB, rolled back)',
     expect(dueAt).toBe(due.toISOString())
     expect(previousDueAt).toBeNull()
 
-    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(id, {
-      kind: 'ticket_updated',
-      ticket: expect.objectContaining({ id, dueAt: due.toISOString() }),
-    })
+    // The third argument is the inbox scope envelope publishTicketUpdated adds.
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+      id,
+      {
+        kind: 'ticket_updated',
+        ticket: expect.objectContaining({ id, dueAt: due.toISOString() }),
+      },
+      expect.objectContaining({ assigneePrincipalId: null, teamId: null })
+    )
   })
 
   it('moves a due date: records the previous value as from', async () => {

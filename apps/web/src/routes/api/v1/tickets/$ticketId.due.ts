@@ -12,6 +12,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ticketDueAtWireSchema } from '@/lib/shared/schemas/tickets'
 import { serializeTicket } from './-serialize'
 import type { TicketId } from '@quackback/ids'
+import { readJsonBody } from '@/lib/server/domains/api/request'
 
 // The key is required: an explicit null clears the due date, so a body that
 // forgot the field can't wipe it by accident.
@@ -28,7 +29,7 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/due')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_SET_STATUS })
           const ticketId = parseTypeId<TicketId>(params.ticketId, 'ticket', 'ticket ID')
 
-          const parsed = dueSchema.safeParse(await request.json().catch(() => null))
+          const parsed = dueSchema.safeParse(await readJsonBody(request))
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
               errors: parsed.error.flatten().fieldErrors,

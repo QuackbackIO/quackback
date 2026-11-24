@@ -1128,7 +1128,11 @@ describe('applyAction', () => {
           { conversationId, actor: engineActor }
         )
         expect(result).toEqual({ label: 'ticket due date set' })
-        expect(getLinkedCustomerTicket).toHaveBeenCalledWith(conversationId)
+        // The same system read as set_ticket_status: a workspace-wide service actor.
+        expect(getLinkedCustomerTicket).toHaveBeenCalledWith(
+          conversationId,
+          expect.objectContaining({ principalType: 'service', principalId: null })
+        )
         const [ticketIdArg, dueAtArg] = setTicketDueAt.mock.calls[0]!
         expect(ticketIdArg).toBe('ticket_1')
         expect(dueAtArg).toEqual(new Date('2026-03-03T10:00:00Z'))
