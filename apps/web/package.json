@@ -68,11 +68,8 @@
     "@tanstack/ai": "1.8.0",
     "@tanstack/ai-client": "1.2.1",
     "@tanstack/ai-openai": "1.2.0",
-    "@tanstack/ai-react": "1.1.1",
     "@tanstack/react-query": "^5.108.4",
-    "@tanstack/react-query-devtools": "^5.108.4",
     "@tanstack/react-router": "1.170.42",
-    "@tanstack/react-router-devtools": "^1.167.1",
     "@tanstack/react-router-ssr-query": "^1.167.2",
     "@tanstack/react-start": "~1.168.60",
     "@tanstack/react-table": "^9.2.4",
@@ -99,7 +96,6 @@
     "@tiptap/starter-kit": "3.35.0",
     "@tiptap/suggestion": "3.35.0",
     "@xyflow/react": "^13.0.3",
-    "bcryptjs": "^3.0.3",
     "better-auth": "1.7.27",
     "bowser": "2.15.1",
     "class-variance-authority": "^0.7.1",
@@ -148,7 +144,6 @@
     "transliteration": "^2.7.0",
     "turndown": "7.2.5",
     "tw-animate-css": "^1.4.0",
-    "typeid-js": "^1.2.0",
     "unified": "^11.0.5",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "yaml": "^2.9.1",
@@ -164,7 +159,6 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.13",
-    "@types/bcryptjs": "^3.0.0",
     "@types/bun": "^1.4.5",
     "@types/css-tree": "3.2.0",
     "@types/dns-packet": "^5.6.5",
@@ -182,7 +176,6 @@
     "nitro": "^3.0.261103-rc",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
-    "vite": "^8.3.8",
-    "vite-tsconfig-paths": "^6.1.1"
+    "vite": "^8.3.8"
   }
 }
