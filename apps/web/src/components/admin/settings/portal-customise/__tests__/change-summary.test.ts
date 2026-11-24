@@ -362,3 +362,36 @@ describe('summariseChange: headings, cards and the name', () => {
     expect(flashTargets(summariseChange(before, after))).toEqual(['logo'])
   })
 })
+
+describe('summariseChange: what Ask sets beyond colours and shape', () => {
+  const withLogo = () =>
+    draft({ name: 'Acme Corp', logo: { wideKey: 'header-logos/acme.svg', mode: 'logo_and_name' } })
+
+  it('says what the header shows, as its tiles name it', () => {
+    const before = withLogo()
+    const after = applyDraftPatch(before, { headerShows: 'logo' })
+    expect(summariseChange(before, after).lines).toEqual([
+      { text: 'Header now shows the logo', target: 'logo', section: 'header' },
+    ])
+    expect(texts(after, applyDraftPatch(after, { headerShows: 'icon_and_name' }))).toEqual([
+      'Header now shows the icon and name',
+    ])
+  })
+
+  it('reads each new patch field back in one plain line', () => {
+    const before = withLogo()
+    expect(texts(before, applyDraftPatch(before, { headingFont: 'lora' }))).toEqual([
+      'Headings are now set in Lora',
+    ])
+    expect(texts(before, applyDraftPatch(before, { cardStyle: 'flat' }))).toEqual([
+      'Cards are now flat',
+    ])
+    expect(texts(before, applyDraftPatch(before, { portalName: 'Acme Ideas' }))).toEqual([
+      'Portal name is now Acme Ideas',
+    ])
+    const back = applyDraftPatch(before, { colours: { light: { text: '#334155' } } })
+    expect(texts(back, applyDraftPatch(back, { colours: { light: { text: 'auto' } } }))).toEqual([
+      'Text is now black',
+    ])
+  })
+})

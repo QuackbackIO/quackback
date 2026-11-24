@@ -280,3 +280,73 @@ describe('summariseDraftForAsk', () => {
     expect(summariseDraftForAsk(d).font).toBeNull()
   })
 })
+
+describe('Ask on headings, cards and the header', () => {
+  const withLogo = () =>
+    draft({ name: 'Acme', logo: { wideKey: 'header-logos/acme.svg', mode: 'logo_and_name' } })
+
+  it('sets the headings font, and puts headings back in the text font', () => {
+    const before = draft()
+    const lora = applyDraftPatch(before, { headingFont: 'lora' })
+    expect(summariseDraftForAsk(lora).headingFont).toBe('lora')
+    expect(summariseDraftForAsk(before).headingFont).toBe('same_as_text')
+    const back = applyDraftPatch(lora, { headingFont: 'same_as_text' })
+    expect(summariseDraftForAsk(back).headingFont).toBe('same_as_text')
+    expect(draftRemainder(back)).toBe(draftRemainder(before))
+  })
+
+  it('sees no listed headings font while an uploaded one is set', () => {
+    const d = {
+      ...draft(),
+      customHeadingFont: {
+        family: 'Brand Display',
+        files: [{ key: 'fonts/d.woff2', weight: 700, style: 'normal' as const }],
+        fallback: 'inter' as const,
+      },
+    }
+    expect(summariseDraftForAsk(d).headingFont).toBeNull()
+  })
+
+  it('sets the card style', () => {
+    const next = applyDraftPatch(draft(), { cardStyle: 'shadow' })
+    expect(next.cardStyle).toBe('shadow')
+    expect(summariseDraftForAsk(next).cardStyle).toBe('shadow')
+  })
+
+  it('names the portal; the workspace name puts the workspace name back', () => {
+    const named = applyDraftPatch(withLogo(), { portalName: '  Acme Ideas ' })
+    expect(named.headerName).toBe('Acme Ideas')
+    expect(summariseDraftForAsk(named)).toMatchObject({
+      portalName: 'Acme Ideas',
+      workspaceName: 'Acme',
+    })
+    expect(applyDraftPatch(named, { portalName: 'Acme' }).headerName).toBe('')
+  })
+
+  it('shows the logo only when the draft has one', () => {
+    const d = withLogo()
+    expect(summariseDraftForAsk(d)).toMatchObject({ headerShows: 'icon_and_name', hasLogo: true })
+    const logo = applyDraftPatch(d, { headerShows: 'logo' })
+    expect(logo.logo.mode).toBe('custom_logo')
+    expect(summariseDraftForAsk(logo).headerShows).toBe('logo')
+    expect(applyDraftPatch(logo, { headerShows: 'icon_and_name' }).logo.mode).toBe('logo_and_name')
+    // No logo uploaded: nothing to show, so nothing changes.
+    const none = draft()
+    expect(summariseDraftForAsk(none).hasLogo).toBe(false)
+    expect(applyDraftPatch(none, { headerShows: 'logo' })).toBe(none)
+  })
+
+  it('puts the background and text back on Auto', () => {
+    const before = applyDraftPatch(draft(), {
+      colours: { light: { background: '#f8f6f1', text: '#334155' } },
+    })
+    const auto = applyDraftPatch(before, {
+      colours: { light: { background: 'auto', text: 'auto' } },
+    })
+    expect(summariseDraftForAsk(auto).colours.light).toMatchObject({
+      background: '#ffffff',
+      text: '#0a0a0a',
+    })
+    expect(askDraftContextSchema.safeParse(summariseDraftForAsk(auto)).success).toBe(true)
+  })
+})

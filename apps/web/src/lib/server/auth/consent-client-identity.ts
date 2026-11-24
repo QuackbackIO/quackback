@@ -122,6 +122,25 @@ export function consentClientIdentity(
 }
 
 /**
+ * The client's link, kept only when it is on the host the client_id proves.
+ * The CIMD plugin accepts a `client_uri` on any public host (the draft forbids
+ * requiring the client_id's origin), so a client could otherwise put someone
+ * else's site beside its verified name on the consent screen.
+ */
+export function verifiedClientUri(
+  clientUri: unknown,
+  identity: ConsentClientIdentity
+): string | null {
+  if (!identity.verified || typeof clientUri !== 'string') return null
+  try {
+    const url = new URL(clientUri)
+    return url.protocol === 'https:' && url.hostname === identity.host ? clientUri : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Add `client_identity` to a successful `/oauth2/public-client` response.
  * Better Auth has already checked the session and that the client exists and
  * is enabled; this only reads the row it found. Any other response passes
@@ -142,13 +161,13 @@ export async function withConsentClientIdentity(
     columns: { clientId: true, clientDiscoveryId: true, redirectUris: true },
   })
   if (!row) return response
+  const identity = consentClientIdentity(row, url.searchParams.get('redirect_uri'))
+  const { client_uri: clientUri, ...rest } = payload
+  const link = verifiedClientUri(clientUri, identity)
   const headers = new Headers(response.headers)
   headers.delete('content-length')
   return Response.json(
-    {
-      ...payload,
-      client_identity: consentClientIdentity(row, url.searchParams.get('redirect_uri')),
-    },
+    { ...rest, ...(link ? { client_uri: link } : {}), client_identity: identity },
     { status: response.status, headers }
   )
 }

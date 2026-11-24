@@ -20,6 +20,7 @@ import { hexToOklch } from '@/lib/shared/theme/colors'
 import { luminance } from '@/lib/shared/theme/colour-setters'
 import { parseOklch } from '@/lib/shared/theme/expand'
 import { CONSENT_MARKUP } from './consent'
+import { headerFinder, inlineDeclarations, isVoidTag } from './site-header'
 import { colourHex, firstColour, resolveVars, splitTopLevel, type Context } from './site-css'
 
 const MAX_CSS_CHARS = 1_500_000
@@ -40,6 +41,12 @@ export interface PageElements {
   /** The page's buttons in document order, by what its markup names them. */
   buttons: PageElement[]
   cards: PageElement[]
+  /**
+   * The site's header bar, outermost first, then the first few elements
+   * inside it: a bar is often painted on an inner wrapper. Empty when the
+   * page has no header before its main content.
+   */
+  header: PageElement[]
   /** The markup says the page is dark (a dark theme attribute, class or color-scheme). */
   dark: boolean
 }
@@ -50,6 +57,8 @@ export interface PageStyle {
   text: string | null
   button: { fill?: string; radiusPx?: number; radiusPercent?: number; heightPx?: number } | null
   cardRadiusPx: number | null
+  /** The header bar's fill (#rrggbb) when its stylesheet paints one, else null. */
+  header: string | null
 }
 
 const classesOf = (tag: string) => (extractAttr(tag, 'class') ?? '').split(/\s+/).filter(Boolean)
@@ -92,15 +101,18 @@ export function pageElements(html: string): PageElements {
   const buttons: PageElement[] = []
   const plainButtons: PageElement[] = []
   const cards: PageElement[] = []
+  const header = headerFinder()
   // Everything inside a consent banner is the banner's, never the brand's.
   let consent: { name: string; depth: number } | null = null
   const re = /<(\/?)([a-z][\w-]*)\b[^>]*>/gi
   let match: RegExpExecArray | null
   while ((match = re.exec(body)) !== null) {
-    if (buttons.length >= MAX_BUTTONS && cards.length >= MAX_CARDS) break
     const [tag, closing, rawName] = match
     const name = rawName.toLowerCase()
     const selfClosing = tag.endsWith('/>')
+    const voidTag = isVoidTag(name, tag)
+    header.track({ closing: Boolean(closing), void: voidTag })
+    if (buttons.length >= MAX_BUTTONS && cards.length >= MAX_CARDS && !header.busy) break
     if (consent) {
       if (name === consent.name && !selfClosing) consent.depth += closing ? -1 : 1
       if (consent.depth === 0) consent = null
@@ -112,6 +124,15 @@ export function pageElements(html: string): PageElements {
       continue
     }
     const classes = classesOf(tag)
+    header.visit({
+      name,
+      closing: false,
+      void: voidTag,
+      classes,
+      id: extractAttr(tag, 'id') ?? '',
+      role: (extractAttr(tag, 'role') ?? '').toLowerCase(),
+      element: () => element(name, tag),
+    })
     if ((name === 'a' || name === 'button') && buttons.length < MAX_BUTTONS) {
       if (classes.some((c) => BUTTON_CLASS.test(c)) || isUtilityButton(classes))
         buttons.push(element(name, tag))
@@ -126,6 +147,7 @@ export function pageElements(html: string): PageElements {
     body: bodyEl,
     buttons: buttons.length ? buttons : plainButtons,
     cards,
+    header: header.result(),
     dark: isDark(htmlEl) || isDark(bodyEl),
   }
 }
@@ -259,6 +281,9 @@ function backgroundOf(decls: Map<string, string>, ctx: Context): string | null {
   return firstColour(value) ?? colourHex(value)
 }
 
+/** The fill an element's own markup gives it (style or bgcolor), which wins over its stylesheet. */
+const inlineFillOf = (el: PageElement, ctx: Context) => backgroundOf(inlineDeclarations(el), ctx)
+
 function colourOf(decls: Map<string, string>, property: string, ctx: Context): string | null {
   const raw = decls.get(property)
   const value = raw === undefined ? null : resolveVars(raw, ctx)
@@ -342,11 +367,23 @@ export function readPageStyle(
   elements: PageElements,
   opts: { themeColour?: string | null } = {}
 ): PageStyle {
-  const empty: PageStyle = { background: null, text: null, button: null, cardRadiusPx: null }
+  const empty: PageStyle = {
+    background: null,
+    text: null,
+    button: null,
+    cardRadiusPx: null,
+    header: null,
+  }
   try {
     const global: Context = { rootVars: new Map(), otherVars: new Map() }
     const rules = parseRules(sheets, global)
-    if (rules.length === 0) return empty
+    if (rules.length === 0) {
+      // Only the markup's own fills are left to read: a header's style or bgcolor.
+      const inline = elements.header
+        .map((el) => inlineFillOf(el, global))
+        .find((fill) => fill && fill !== 'transparent')
+      return { ...empty, header: inline ?? null }
+    }
 
     const root = computed(rules, { ...elements.html, root: true })
     const rootCtx = inherit(global, root)
@@ -398,7 +435,20 @@ export function readPageStyle(
         break
       }
     }
-    return { background, text, button, cardRadiusPx }
+    // The header's fill: on the header itself, else on the first wrapper inside
+    // it that paints one. Each element inherits its custom properties down the chain.
+    let header: string | null = null
+    let headerCtx = bodyCtx
+    for (const el of elements.header) {
+      const decls = computed(rules, el)
+      headerCtx = inherit(headerCtx, decls)
+      const fill = inlineFillOf(el, headerCtx) ?? backgroundOf(decls, headerCtx)
+      if (fill && fill !== 'transparent') {
+        header = fill
+        break
+      }
+    }
+    return { background, text, button, cardRadiusPx, header }
   } catch {
     return empty
   }

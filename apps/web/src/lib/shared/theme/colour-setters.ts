@@ -1,5 +1,6 @@
 import { tryCssColorToHex } from './colors'
-import { darkMainColour, unbrandedTheme, type MinimalThemeVariables } from './expand'
+import { expandTheme, unbrandedTheme, type MinimalThemeVariables } from './expand'
+import { PICKED_KEYS, pickedColour, type PickableKey } from './base'
 
 export type ColourRole = 'primary' | 'background' | 'foreground' | 'header'
 export type ColourMode = 'light' | 'dark'
@@ -53,9 +54,38 @@ export function sameColour(a: string | undefined, b: string): boolean {
   return p.every((c, i) => Math.abs(c - q[i]!) <= 12)
 }
 
+/**
+ * A palette colour set as picked: the colour kept as picked beside it (the
+ * one it may be drawn as instead) goes, and expansion works it out again.
+ */
+function setPicked(palette: Palette, key: keyof Palette, value: string | undefined) {
+  if (value === undefined) delete palette[key]
+  else palette[key] = value
+  if (key in PICKED_KEYS) delete palette[PICKED_KEYS[key as PickableKey]]
+}
+
 /** The text colour a background gets until the admin picks one. */
 export const autoForeground = (background: string) =>
   isDarkBackground(background) ? DARK_FOREGROUND : LIGHT_FOREGROUND
+
+/**
+ * Whether a text colour is the automatic one for its background: as the
+ * setters write it, or as the page shows it (moved to read at 4.5:1 where
+ * it would not, which the editor's stylesheet then holds).
+ */
+function isAutoText(palette: Palette, background: string, mode: ColourMode) {
+  const auto = autoForeground(background)
+  const text = pickedColour(palette, 'foreground')
+  if (sameColour(text, auto)) return true
+  // A theme saved before picked colours were kept holds the text as drawn.
+  const shown = hexOf(
+    expandTheme(
+      { ...palette, background, foreground: auto, [PICKED_KEYS.foreground]: undefined },
+      { mode }
+    ).foreground ?? ''
+  )
+  return shown !== null && sameColour(text, shown)
+}
 
 /**
  * The quiet text for a page: the usual grey, moved toward black or white only
@@ -106,39 +136,51 @@ export function applyColour(
   const next: Palette = { ...target }
 
   if (role === 'foreground') {
-    next.foreground = hex
+    setPicked(next, 'foreground', hex)
   } else if (role === 'header') {
     next.header = hex
   } else if (role === 'primary') {
-    next.primary = hex
+    setPicked(next, 'primary', hex)
   } else {
     const oldBackground = hexOf(target.background)
     const dim = isDarkBackground(hex)
+    const card = mix(hex, '#ffffff', dim ? 0.05 : 0.7)
+    const muted = mutedOf(hex)
     next.background = hex
-    next.card = mix(hex, '#ffffff', dim ? 0.05 : 0.7)
-    next.muted = mutedOf(hex)
+    setPicked(next, 'card', card)
+    setPicked(next, 'muted', muted)
     next.border = mix(hex, dim ? '#ffffff' : '#000000', dim ? 0.14 : 0.15)
-    next.mutedForeground = quietTextOn([hex, next.card, next.muted], dim)
-    if (
-      !target.foreground ||
-      (oldBackground && sameColour(target.foreground, autoForeground(oldBackground)))
-    ) {
-      next.foreground = autoForeground(hex)
+    setPicked(next, 'mutedForeground', quietTextOn([hex, card, muted], dim))
+    if (!target.foreground || (oldBackground && isAutoText(target, oldBackground, mode))) {
+      setPicked(next, 'foreground', autoForeground(hex))
     }
   }
 
   const palettes = mode === 'light' ? { light: next, dark } : { light, dark: next }
   if (role === 'primary' && mode === 'light') {
-    const oldLight = hexOf(light.primary)
+    const oldLight = hexOf(pickedColour(light, 'primary'))
     // The automatic one, as stored or as the dark page shows it (lightened to stand off it).
     const auto = oldLight === null ? null : autoDarkPrimary(oldLight)
-    const page = hexOf(dark.background) ?? hexOf(unbrandedTheme('dark').background)!
-    const shown = auto ? hexOf(darkMainColour(auto, page)?.primary) : null
+    // The automatic one as the dark page shows it: lightened to stand off the
+    // page, or darkened for white words on it (expandTheme).
+    const shown = auto
+      ? hexOf(
+          expandTheme(
+            { ...dark, primary: auto, [PICKED_KEYS.primary]: undefined },
+            { mode: 'dark' }
+          ).primary
+        )
+      : null
+    const darkPrimary = pickedColour(dark, 'primary')
     const wasAuto =
-      !dark.primary ||
-      (auto !== null && sameColour(dark.primary, auto)) ||
-      (shown !== null && sameColour(dark.primary, shown))
-    if (wasAuto) palettes.dark = { ...dark, primary: autoDarkPrimary(hex) }
+      !darkPrimary ||
+      (auto !== null && sameColour(darkPrimary, auto)) ||
+      // A theme saved before picked colours were kept holds it as drawn.
+      (shown !== null && sameColour(darkPrimary, shown))
+    if (wasAuto) {
+      palettes.dark = { ...dark }
+      setPicked(palettes.dark, 'primary', autoDarkPrimary(hex))
+    }
   }
   return palettes
 }
@@ -165,13 +207,18 @@ export function resetColour(
   if (role === 'header') {
     delete next.header
   } else if (role === 'background') {
-    for (const key of BACKGROUND_FAMILY) next[key] = unbranded[key]
-    if (isAutoColour(target, 'foreground', mode)) next.foreground = unbranded.foreground
+    for (const key of BACKGROUND_FAMILY) setPicked(next, key, unbranded[key])
+    if (isAutoColour(target, 'foreground', mode))
+      setPicked(next, 'foreground', unbranded.foreground)
   } else {
     const background = hexOf(target.background) ?? hexOf(unbranded.background)!
-    next.foreground = sameColour(unbranded.background, background)
-      ? unbranded.foreground
-      : autoForeground(background)
+    setPicked(
+      next,
+      'foreground',
+      sameColour(unbranded.background, background)
+        ? unbranded.foreground
+        : autoForeground(background)
+    )
   }
   return mode === 'light' ? { light: next, dark } : { light, dark: next }
 }
@@ -189,11 +236,11 @@ export function isAutoColour(
   const unbranded = unbrandedTheme(mode)
   const background = hexOf(palette.background) ?? hexOf(unbranded.background)!
   if (role === 'background') return sameColour(unbranded.background, background)
-  if (!palette.foreground) return true
+  const text = pickedColour(palette, 'foreground')
+  if (!text) return true
   return (
-    sameColour(palette.foreground, autoForeground(background)) ||
-    (sameColour(unbranded.background, background) &&
-      sameColour(palette.foreground, hexOf(unbranded.foreground)!))
+    isAutoText(palette, background, mode) ||
+    (sameColour(unbranded.background, background) && sameColour(text, hexOf(unbranded.foreground)!))
   )
 }
 
@@ -206,8 +253,7 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/** Links and buttons need 3:1 against the page; body text needs 4.5:1. */
-export const LINK_CONTRAST = 3
+/** Body text reads at this contrast or more on what it sits on. */
 export const TEXT_CONTRAST = 4.5
 
 /** Hue (0 to 360), saturation and value (0 to 1) of a hex colour. */
@@ -231,25 +277,4 @@ export function hsvToHex(h: number, s: number, v: number): string {
     return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255)
   }
   return `#${[f(5), f(3), f(1)].map((c) => c.toString(16).padStart(2, '0')).join('')}`
-}
-
-/**
- * The main colour moved just far enough to read on the background: darker on
- * a light page, lighter on a dark one, keeping its hue, until links reach 3:1.
- * Unchanged when it already does (or when either colour cannot be parsed).
- */
-export function fixLinkContrast(primary: string, background: string): string {
-  const hex = hexOf(primary)
-  const bg = hexOf(background)
-  if (!hex || !bg || contrastRatio(hex, bg) >= LINK_CONTRAST) return hex ?? primary
-  const [h, s, v] = hexToHsv(hex)
-  const darken = !isDarkBackground(bg)
-  for (let step = 1; step <= 100; step++) {
-    const value = darken ? v * (1 - step / 100) : v + (1 - v) * (step / 100)
-    // On a dark page a saturated colour stays dim as it lightens, so it gives up saturation too.
-    const saturation = darken ? s : s * (1 - step / 100)
-    const candidate = hsvToHex(h, saturation, value)
-    if (contrastRatio(candidate, bg) >= LINK_CONTRAST) return candidate
-  }
-  return darken ? '#000000' : '#ffffff'
 }
