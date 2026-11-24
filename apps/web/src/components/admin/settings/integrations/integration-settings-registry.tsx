@@ -566,7 +566,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Jira instance',
       description:
-        'Connect Jira to create issues from feedback and review incoming status changes.',
+        'Connect Jira to create issues from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Click <span className="font-medium text-foreground">Connect Jira</span> to authorize
