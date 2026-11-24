@@ -5,7 +5,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { publishPortalCustomisationSchema } from '@/lib/shared/schemas/portal-customise'
-import { askPortalCustomiseSchema, type PortalAskResponse } from '@/lib/shared/portal-customise/ask'
+import {
+  askPortalCustomiseSchema,
+  type PortalAskResponse,
+} from '@/lib/shared/portal-customise/ask-request'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { DomainException, RateLimitError } from '@/lib/shared/errors'
 import type { ImportBrandRefusalCode, ImportBrandResult } from '@/lib/shared/theme/brand-import'

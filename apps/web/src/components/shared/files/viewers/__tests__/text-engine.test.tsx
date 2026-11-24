@@ -71,10 +71,22 @@ afterEach(() => {
 })
 
 // happy-dom does no layout. Give the scroll area a 400px viewport and each
-// line its 20px, so the virtualizer draws what a browser would.
+// line its 20px, so the virtualizer draws what a browser would. The
+// virtualizer reads the viewport from clientHeight/clientWidth and each line
+// from offsetHeight, so both pairs are set.
 const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
 const offsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
+const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
 beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+    configurable: true,
+    get: () => 400,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+    configurable: true,
+    get: () => 800,
+  })
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
     configurable: true,
     get(this: HTMLElement) {
@@ -87,6 +99,8 @@ beforeAll(() => {
   })
 })
 afterAll(() => {
+  if (clientHeight) Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientHeight)
+  if (clientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', clientWidth)
   if (offsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeight)
   if (offsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offsetWidth)
 })

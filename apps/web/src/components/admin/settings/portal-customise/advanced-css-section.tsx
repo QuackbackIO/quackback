@@ -31,6 +31,9 @@ export function AdvancedCssSection({
         The whole theme as CSS. Theme colours can be edited here on any plan. Your own rules, like a
         gradient header, need the Business plan.
       </p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Links use <code>--primary-ink</code>, kept readable for you.
+      </p>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
@@ -108,7 +111,7 @@ export function AdvancedCssDrawer({
       </div>
       {ownRules ? (
         <p className="border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          Rules outside :root and .dark are your own CSS, which needs the Business plan to go live.
+          Anything beyond theme variables needs the Business plan to go live.
         </p>
       ) : null}
       <div className="min-h-0 flex-1 p-3">

@@ -35,3 +35,13 @@ export function aguiFetchClient(getHeaders?: () => HeadersInit | undefined): typ
   }
   return Object.assign(wrapped, { preconnect: fetch.preconnect })
 }
+
+/**
+ * A fresh AG-UI thread id. `ChatClient` and `useChat` require one since
+ * @tanstack/ai-client 1.0 (0.x minted it). The servers keep no thread state,
+ * so any unique string works; this avoids `crypto.randomUUID`, which a
+ * self-hosted portal served over plain HTTP does not have.
+ */
+export function aguiThreadId(): string {
+  return `thread-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}

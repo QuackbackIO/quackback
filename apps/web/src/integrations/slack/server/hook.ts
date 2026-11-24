@@ -30,6 +30,7 @@ export interface SlackConfig {
   /** Portal base URL for constructing post links */
   rootUrl: string
   links?: SectionOrigins
+  integrationId: string
 }
 
 // OAuth errors that indicate token is invalid/expired (don't retry these)
@@ -127,7 +128,14 @@ async function postMessage(
 export const slackHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as SlackTarget
-    const { accessToken, rootUrl, links } = config as SlackConfig
+    const { accessToken, rootUrl, links, integrationId } = config as SlackConfig
+
+    const { supportAlertHold } = await import('@/lib/server/integrations/support-alerts')
+    const held = await supportAlertHold(event, { integrationId, channelId })
+    if (held) {
+      log.debug({ event_type: event.type, reason: held }, 'support notice held back')
+      return { state: 'succeeded' }
+    }
 
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing hook event')
 
