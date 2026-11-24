@@ -13,13 +13,18 @@ import { z } from 'zod'
 import { isValidTypeId, type TicketTypeId } from '@quackback/ids'
 import type { TicketType, TicketStage, TicketStatusCategory } from '@/lib/shared/db-types'
 
-/** The ticket list orders the server fns, the v1 API and MCP all accept, in one
- *  list so they cannot drift. `recent`/`oldest` sort by activity (updatedAt);
- *  `due` is soonest due date first, tickets without one last. */
-export const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority', 'due'] as const
-
-/** Orders only the admin inbox asks for (see TicketSort). */
-export const INBOX_ONLY_TICKET_SORTS = ['sla', 'waiting'] as const
+/** Every ticket list order. `recent`/`oldest` sort by activity (updatedAt);
+ *  `due` is soonest due date first, tickets without one last. The single list
+ *  shared by the server fns, the v1 API and MCP so they cannot drift. */
+export const TICKET_SORTS = [
+  'recent',
+  'oldest',
+  'created',
+  'priority',
+  'sla',
+  'waiting',
+  'due',
+] as const
 
 /**
  * Whether a failed ticket-to-conversation link was refused because one side is
