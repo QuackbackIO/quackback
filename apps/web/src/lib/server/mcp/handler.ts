@@ -489,8 +489,37 @@ function logTransportError(error: Error): void {
  * requests. Legacy traffic never reaches it (`legacy: 'reject'`): it is routed
  * to serveLegacyRequest first, which keeps JSON responses for 2025 clients.
  */
+/**
+ * The SDK's console notice for `responseMode: 'json'`. Answering with one JSON
+ * body is deliberate: these tools report nothing mid-call, so the notifications
+ * that mode drops never exist.
+ */
+const JSON_RESPONSE_MODE_NOTICE = "responseMode: 'json' drops mid-call notifications"
+
+/**
+ * createMcpHandler without its JSON-mode console notice.
+ *
+ * The SDK prints that notice on every construction, and a handler is built per
+ * request (each one is bound to its caller's server), so it would be one stderr
+ * line per MCP call. Construction is synchronous, so the swap below cannot hide
+ * anything another request prints; any other warning passes straight through.
+ * Exported for tests.
+ */
+export function createJsonMcpHandler(...args: Parameters<typeof createMcpHandler>) {
+  const warn = console.warn
+  console.warn = (...data: unknown[]) => {
+    if (typeof data[0] === 'string' && data[0].startsWith(JSON_RESPONSE_MODE_NOTICE)) return
+    warn(...data)
+  }
+  try {
+    return createMcpHandler(...args)
+  } finally {
+    console.warn = warn
+  }
+}
+
 async function serveModernRequest(request: Request, auth: McpAuthContext): Promise<Response> {
-  const handler = createMcpHandler(() => createMcpServer(auth), {
+  const handler = createJsonMcpHandler(() => createMcpServer(auth), {
     legacy: 'reject',
     responseMode: 'json',
     maxRequestBodySize: MCP_MAX_REQUEST_BYTES,
