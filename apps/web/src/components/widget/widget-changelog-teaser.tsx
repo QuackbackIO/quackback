@@ -37,7 +37,7 @@ export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelog
         <button
           type="button"
           onClick={onSeeAll}
-          className="text-[11px] text-primary hover:underline"
+          className="text-[11px] text-primary-ink hover:underline"
         >
           <FormattedMessage id="widget.launcher.changelog.seeAll" defaultMessage="See all" />
         </button>

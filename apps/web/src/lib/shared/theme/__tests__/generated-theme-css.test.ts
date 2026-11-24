@@ -63,6 +63,15 @@ describe('advancedCssRemainder', () => {
     expect(remainder).not.toContain('--primary')
   })
 
+  it('keeps a hand-set --primary-ink, which overrides the readable shade worked out for links and counts', () => {
+    const css = generateReadableCSS(lightMinimal, darkMinimal, 'user').replace(
+      /(:root \{[^}]*--primary-ink: )[^;]+;/,
+      '$1#ff00aa;'
+    )
+    expect(css).toContain('--primary-ink: #ff00aa;')
+    expect(advancedCssRemainder(css)).toMatch(/^:root\s*\{\s*--primary-ink:\s*#ff00aa;\s*\}$/)
+  })
+
   it('does not split on a semicolon inside a declaration value', () => {
     const css = ':root { --primary: oklch(0.5 0.2 250); --logo: url(data:image/png;base64,abc); }\n'
     const remainder = advancedCssRemainder(css)

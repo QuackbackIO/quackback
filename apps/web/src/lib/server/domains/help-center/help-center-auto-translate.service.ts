@@ -30,6 +30,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
 import type { HelpCenterArticleWithCategory } from './help-center.types'
+import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 const log = logger.child({ component: 'help-center-auto-translate' })
 
@@ -167,6 +168,7 @@ export async function translateArticleForLocale(
   let parsed: z.infer<typeof TranslationResultSchema>
   try {
     parsed = await chat({
+      threadId: oneShotThreadId(),
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,

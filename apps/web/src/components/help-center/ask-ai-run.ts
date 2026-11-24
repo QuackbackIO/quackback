@@ -12,7 +12,7 @@ import type {
   KbAskFinalPayload,
   KbAskStateSnapshot,
 } from '@/lib/shared/help-center/kb-ask-contract'
-import { aguiFetchClient } from '@/lib/client/utils/agui-fetch'
+import { aguiFetchClient, aguiThreadId } from '@/lib/client/utils/agui-fetch'
 import { blankAskAiState, type AskAiSourceMeta, type AskAiState } from './ask-ai-state'
 
 const KB_ASK_URL = '/api/widget/kb-ask'
@@ -78,6 +78,7 @@ export function startAskAiRun(
   }
 
   const client = new ChatClient({
+    threadId: aguiThreadId(),
     connection: fetchServerSentEvents(KB_ASK_URL, () => ({
       // Non-2xx widget envelopes become a synthetic RUN_ERROR SSE frame.
       fetchClient: aguiFetchClient(getHeaders),

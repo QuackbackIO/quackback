@@ -22,6 +22,7 @@ import type { CustomFont } from '@/lib/shared/theme/font-uploads'
 import { BRANDING_FONTS } from '@/lib/shared/theme/fonts'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { editPalettes, type Palette } from '@/components/admin/settings/branding/theme-css'
+import { PICKED_KEYS, type PickableKey } from '@/lib/shared/theme/base'
 import { CARD_STYLE_NAMES, cornersName, fontName } from './font-shape-section'
 import {
   draftFont,
@@ -278,7 +279,7 @@ function resetPage(draft: PortalDraft): PortalDraft {
 
 /** Both sides' main colour cleared, so the dark one follows the light one set next. */
 function withoutPrimary(draft: PortalDraft): PortalDraft {
-  const drop = ({ primary: _primary, ...rest }: Palette) => rest
+  const drop = ({ primary: _primary, pickedPrimary: _picked, ...rest }: Palette) => rest
   return {
     ...draft,
     cssText: editPalettes(draft.cssText, (light, dark) => ({
@@ -369,16 +370,26 @@ export function revertImport(draft: PortalDraft, previous: PreviousImport): Port
 function withTokens(draft: PortalDraft, side: 'light' | 'dark', tokens: BrandTokens): PortalDraft {
   const set = Object.fromEntries(Object.entries(tokens).filter(([, v]) => v !== undefined))
   if (Object.keys(set).length === 0) return draft
+  // The site's colours are the ones picked: any kept beside them goes.
+  const apply = (palette: Palette): Palette => {
+    const out: Palette = { ...palette, ...set }
+    for (const key of Object.keys(set))
+      if (key in PICKED_KEYS) delete out[PICKED_KEYS[key as PickableKey]]
+    return out
+  }
   const cssText = editPalettes(draft.cssText, (light, dark) =>
-    side === 'light' ? { light: { ...light, ...set }, dark } : { light, dark: { ...dark, ...set } }
+    side === 'light' ? { light: apply(light), dark } : { light, dark: apply(dark) }
   )
   return { ...draft, cssText }
 }
 
-/** `palette` with `keys` as they are in `from`. */
+/** `palette` with `keys` as they are in `from`, with the colours kept as picked for them. */
 function restoreKeys(palette: Palette, from: Palette, keys: readonly (keyof Palette)[]): Palette {
   const out: Palette = { ...palette }
-  for (const key of keys) {
+  const picked = keys.flatMap((key) =>
+    key in PICKED_KEYS ? [PICKED_KEYS[key as PickableKey]] : []
+  )
+  for (const key of [...keys, ...picked]) {
     if (from[key] === undefined) delete out[key]
     else out[key] = from[key]
   }
