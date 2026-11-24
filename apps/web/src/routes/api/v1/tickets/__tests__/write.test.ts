@@ -130,20 +130,24 @@ describe('POST /api/v1/tickets (create)', () => {
     expect(actor.principalType).toBe('service')
   })
 
-  it('takes the due date only as dueAt, the shared due date, never as due_at (TKT-78)', async () => {
+  // TKT-78: dueAt is the ticket's shared due date (not an SLA target, which
+  // lives in sla_applied), passed through as a Date; only the camelCase wire
+  // key is read, so a snake_case due_at never reaches the service.
+  it('passes dueAt through as the shared due date and drops due_at (TKT-78)', async () => {
     mockCreateTicket.mockResolvedValue(ticketDTO)
     const res = await post(ListRoute)({
       request: jsonReq('https://x.test/api/v1/tickets', {
         type: 'customer',
         title: 'Due tomorrow',
-        due_at: '2030-01-01T00:00:00.000Z',
+        dueAt: '2030-01-01T00:00:00.000Z',
+        due_at: '2031-01-01T00:00:00.000Z',
       }),
       params: {},
     })
     expect(res.status).toBe(201)
     const [input] = mockCreateTicket.mock.calls[0]
     expect(input).toMatchObject({ title: 'Due tomorrow' })
-    expect(input.dueAt).toBeUndefined()
+    expect(input.dueAt).toEqual(new Date('2030-01-01T00:00:00.000Z'))
     expect(input).not.toHaveProperty('due_at')
   })
 
