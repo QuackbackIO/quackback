@@ -84,7 +84,7 @@
     "tiptap-extension-resizable-image": "^2.1.0"
   },
   "overrides": {
-    "@tanstack/openai-base": "0.10.11",
+    "@tanstack/openai-base": "1.1.0",
     "body-parser": "2.4.0",
     "@tiptap/extension-floating-menu": "3.35.0",
     "prosemirror-model": "1.25.11",

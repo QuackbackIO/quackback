@@ -53,6 +53,11 @@ const base = {
   maxTokens: 500,
 }
 
+/** What a plain `chat({ stream: false })` resolves to on @tanstack/ai 1.x. */
+function textResult(text: string) {
+  return { text, chunks: [] }
+}
+
 /** The error shape the OpenAI SDK throws for a 400 from the server. */
 function rejection(message: string, param?: string) {
   return Object.assign(new Error(`400 ${message}`), {
@@ -81,7 +86,7 @@ describe('structuredChat', () => {
   it('retries once as json_object with the schema in the prompt when json_schema is rejected', async () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection("'response_format.type' json_schema is unsupported"))
-      .mockResolvedValueOnce('```json\n{"sentiment":"negative","confidence":0.4}\n```')
+      .mockResolvedValueOnce(textResult('```json\n{"sentiment":"negative","confidence":0.4}\n```'))
 
     const out = await structuredChat(base)
 
@@ -102,8 +107,8 @@ describe('structuredChat', () => {
   it('remembers the endpoint and skips json_schema on later calls', async () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection("'response_format' type json_schema is not supported"))
-      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
-      .mockResolvedValueOnce('{"sentiment":"negative","confidence":0}')
+      .mockResolvedValueOnce(textResult('{"sentiment":"positive","confidence":1}'))
+      .mockResolvedValueOnce(textResult('{"sentiment":"negative","confidence":0}'))
 
     await structuredChat(base)
     await structuredChat(base)
@@ -118,8 +123,8 @@ describe('structuredChat', () => {
   it('sends no response_format when the server does not implement the parameter', async () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection('Unsupported parameter: response_format', 'response_format'))
-      .mockResolvedValueOnce('```json\n{"sentiment":"positive","confidence":1}\n```')
-      .mockResolvedValueOnce('{"sentiment":"negative","confidence":0}')
+      .mockResolvedValueOnce(textResult('```json\n{"sentiment":"positive","confidence":1}\n```'))
+      .mockResolvedValueOnce(textResult('{"sentiment":"negative","confidence":0}'))
 
     expect(await structuredChat(base)).toEqual({ sentiment: 'positive', confidence: 1 })
     const retry = hoisted.chat.mock.calls[1][0]
@@ -137,7 +142,7 @@ describe('structuredChat', () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection('json_schema is not supported'))
       .mockRejectedValueOnce(rejection('json_object is not supported', 'response_format'))
-      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
+      .mockResolvedValueOnce(textResult('{"sentiment":"positive","confidence":1}'))
 
     await structuredChat(base)
 
@@ -151,7 +156,7 @@ describe('structuredChat', () => {
   it('keys the memory by model as well as base URL', async () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection('json_schema is not supported'))
-      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
+      .mockResolvedValueOnce(textResult('{"sentiment":"positive","confidence":1}'))
       .mockResolvedValueOnce({ sentiment: 'negative', confidence: 0 })
 
     await structuredChat(base)
@@ -163,7 +168,7 @@ describe('structuredChat', () => {
   it('does not carry the memory to a different base URL', async () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection('response_format json_schema not supported'))
-      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
+      .mockResolvedValueOnce(textResult('{"sentiment":"positive","confidence":1}'))
       .mockResolvedValueOnce({ sentiment: 'negative', confidence: 0 })
 
     await structuredChat(base)
@@ -176,7 +181,7 @@ describe('structuredChat', () => {
   it('validates the fallback output with the same schema', async () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection('json_schema is not supported'))
-      .mockResolvedValueOnce('{"sentiment":"sideways","confidence":1}')
+      .mockResolvedValueOnce(textResult('{"sentiment":"sideways","confidence":1}'))
 
     await expect(structuredChat(base)).rejects.toMatchObject({
       code: 'structured-output-validation-failed',
@@ -186,7 +191,7 @@ describe('structuredChat', () => {
   it('reports unparseable and empty fallback output with the structured-output codes', async () => {
     hoisted.chat
       .mockRejectedValueOnce(rejection('json_schema is not supported'))
-      .mockResolvedValueOnce('not json at all')
+      .mockResolvedValueOnce(textResult('not json at all'))
     await expect(structuredChat(base)).rejects.toMatchObject({
       code: 'structured-output-parse-failed',
     })
@@ -194,7 +199,7 @@ describe('structuredChat', () => {
     resetStructuredFallbackMemory()
     hoisted.chat
       .mockRejectedValueOnce(rejection('json_schema is not supported'))
-      .mockResolvedValueOnce('')
+      .mockResolvedValueOnce(textResult(''))
     await expect(structuredChat(base)).rejects.toMatchObject({
       code: 'structured-output-missing-result',
     })
@@ -220,7 +225,7 @@ describe('structuredChat', () => {
     const mw = [{ name: 'usage' }]
     hoisted.chat
       .mockRejectedValueOnce(rejection('json_schema is not supported'))
-      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
+      .mockResolvedValueOnce(textResult('{"sentiment":"positive","confidence":1}'))
     await structuredChat({ ...base, middleware: mw as never })
     expect(hoisted.chat.mock.calls[0][0].middleware).toBe(mw)
     expect(hoisted.chat.mock.calls[1][0].middleware).toBe(mw)
