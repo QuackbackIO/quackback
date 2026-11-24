@@ -23,12 +23,14 @@ vi.mock('@slack/web-api', () => ({
 vi.mock('@/lib/server/integrations/sync/transport', () => ({
   recordDeliveryOutcome: vi.fn(),
 }))
+const hold = vi.hoisted(() => ({ supportAlertHold: vi.fn() }))
+vi.mock('@/lib/server/integrations/support-alerts', () => hold)
 
 import { slackHook } from '../hook'
 
 const ROOT_URL = 'https://feedback.example.com'
 const target = { channelId: 'C_SUPPORT' }
-const config = { accessToken: 'xoxb-test', rootUrl: ROOT_URL }
+const config = { accessToken: 'xoxb-test', rootUrl: ROOT_URL, integrationId: 'integration_1' }
 
 const envelope = {
   id: 'evt_1',
@@ -86,6 +88,7 @@ beforeEach(() => {
   mocks.postMessage.mockReset().mockResolvedValue({ ok: true, ts: '1700000000.0001' })
   mocks.join.mockReset()
   mocks.tokens.length = 0
+  hold.supportAlertHold.mockReset().mockResolvedValue(null)
 })
 
 describe('slackHook support notices', () => {
@@ -111,5 +114,17 @@ describe('slackHook support notices', () => {
     const outcome = await slackHook.run(messageCreated('agent'), target, config)
     expect(outcome).toEqual({ state: 'succeeded' })
     expect(mocks.postMessage).not.toHaveBeenCalled()
+  })
+
+  it('posts nothing while the support check holds the message back', async () => {
+    hold.supportAlertHold.mockResolvedValue('assignee_online')
+    const event = messageCreated('visitor')
+    const outcome = await slackHook.run(event, target, config)
+    expect(outcome).toEqual({ state: 'succeeded' })
+    expect(mocks.postMessage).not.toHaveBeenCalled()
+    expect(hold.supportAlertHold).toHaveBeenCalledWith(event, {
+      integrationId: 'integration_1',
+      channelId: 'C_SUPPORT',
+    })
   })
 })

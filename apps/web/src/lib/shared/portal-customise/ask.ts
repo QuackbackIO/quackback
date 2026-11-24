@@ -9,96 +9,29 @@
  */
 import { z } from 'zod'
 import { BRANDING_FONTS, type BrandingFontId } from '@/lib/shared/theme/fonts'
-import { CORNER_STOPS, type CornerStop, type PortalDraftPatch } from './draft-patch'
+import type { CardStyle } from '@/lib/shared/theme/types'
+import {
+  CORNER_STOPS,
+  SAME_AS_TEXT_FONT,
+  type CornerStop,
+  type PortalDraftPatch,
+} from './draft-patch'
 
-// ---------------------------------------------------------------------------
-// Request
-// ---------------------------------------------------------------------------
+import type { AskDraftContext, PortalAskResponse } from './ask-request'
 
-const colourSummary = z
-  .object({
-    main: z.string().max(16).optional(),
-    background: z.string().max(16).optional(),
-    text: z.string().max(16).optional(),
-    /** The header bar's own colour; left out while it is the page's. */
-    header: z.string().max(16).optional(),
-  })
-  .strict()
-
-/**
- * What the server is told about the draft: only what the prompt and the fast
- * path need. Never Advanced CSS, logo keys or uploaded font files.
- */
-export const askDraftContextSchema = z
-  .object({
-    themeMode: z.enum(['light', 'dark', 'user']),
-    buttonShape: z.enum(['pill', 'corners']),
-    /** The corner radius in rem. */
-    corners: z.number().min(0).max(10),
-    /** A listed font id, or null for an uploaded or unlisted font. */
-    font: z.string().max(64).nullable(),
-    colours: z.object({ light: colourSummary, dark: colourSummary }).strict(),
-    tabs: z
-      .array(
-        z
-          .object({
-            id: z.string().min(1).max(64),
-            type: z.enum(['feedback', 'roadmap', 'changelog', 'help', 'support', 'status', 'link']),
-            label: z.string().max(30).optional(),
-            enabled: z.boolean(),
-          })
-          .strict()
-      )
-      .max(20),
-    welcomeMessage: z.string().max(2000),
-    /** Null when the person cannot edit the Help Center home. */
-    helpCenter: z
-      .object({
-        homepageTitle: z.string().max(200),
-        homepageDescription: z.string().max(500),
-        headerLinks: z
-          .array(z.object({ label: z.string().max(60), url: z.string().max(500) }).strict())
-          .max(3),
-      })
-      .strict()
-      .nullable(),
-  })
-  .strict()
-
-export type AskDraftContext = z.infer<typeof askDraftContextSchema>
-
-/** The page the preview shows, so "this page" requests land on the right section. */
-export const ASK_PAGES = ['feedback', 'roadmap', 'changelog', 'help'] as const
-export type AskPage = (typeof ASK_PAGES)[number]
-
-export const askPortalCustomiseSchema = z
-  .object({
-    request: z.string().trim().min(1).max(500),
-    draft: askDraftContextSchema,
-    page: z.enum(ASK_PAGES).optional(),
-  })
-  .strict()
-
-// ---------------------------------------------------------------------------
-// Response
-// ---------------------------------------------------------------------------
-
-export type PortalAskResponse =
-  /** Apply `patch` to the draft (see `applyDraftPatch`) and show `reply` with Undo. */
-  | { outcome: 'patch'; handled: 'local' | 'model'; patch: PortalDraftPatch; reply: string }
-  /** Step the editor's history back. */
-  | { outcome: 'undo'; handled: 'local'; reply: string }
-  /** Run Import your brand for `host`. */
-  | { outcome: 'import'; handled: 'local' | 'model'; host: string; reply: string }
-  /** Nothing to change; show `reply`. */
-  | { outcome: 'refused'; handled: 'local' | 'refused'; reply: string }
-  /** AI is off or the allowance is used up; show `reply`. */
-  | { outcome: 'unavailable'; handled: 'refused'; reply: string }
+export {
+  askDraftContextSchema,
+  askPortalCustomiseSchema,
+  ASK_PAGES,
+  type AskDraftContext,
+  type AskPage,
+  type PortalAskResponse,
+} from './ask-request'
 
 /** Plain replies (§6.8): one sentence, no hex unless the person typed it. */
 export const ASK_REPLIES = {
   outOfReach:
-    "I can't do that one. I can match a website, and change colours, background, text, font, corners, buttons, tabs and the welcome message.",
+    "I can't do that one. I can match a website, and change colours, fonts, cards, corners, buttons, the header, tabs and the welcome message.",
   poweredBy: 'Powered by depends on your plan.',
   layout: "That isn't a setting. Your own CSS rules can do it, on the Business plan.",
   notUnderstood: "I couldn't work that one out. Try saying it another way.",
@@ -107,6 +40,7 @@ export const ASK_REPLIES = {
     'Ask has used up its AI allowance for now. You can still change everything in the sections above.',
   undone: 'Undone.',
   feedbackAlwaysOn: 'Feedback is always on.',
+  noLogo: 'Upload a logo first, then the header can show it.',
   done: 'Done. Have a look at the preview.',
 } as const
 
@@ -115,6 +49,12 @@ const THEME_MODE_REPLIES = {
   light: 'The portal is light only now.',
   dark: 'The portal is dark only now.',
 } as const
+
+const CARD_STYLE_REPLIES: Record<CardStyle, string> = {
+  border: 'Cards have a border again.',
+  shadow: 'Cards now have a shadow.',
+  flat: 'Cards are now flat.',
+}
 
 /** A one-sentence reply for a patch, from what it changes. Never quotes values. */
 export function replyForPatch(patch: PortalDraftPatch): string {
@@ -130,6 +70,20 @@ export function replyForPatch(patch: PortalDraftPatch): string {
   }
   if (patch.corners !== undefined) return 'Corners updated.'
   if (patch.font) return `Font changed to ${fontName(patch.font)}.`
+  if (patch.headingFont) {
+    return patch.headingFont === SAME_AS_TEXT_FONT
+      ? 'Headings match the text font again.'
+      : `Headings are now set in ${fontName(patch.headingFont)}.`
+  }
+  if (patch.cardStyle) return CARD_STYLE_REPLIES[patch.cardStyle]
+  if (patch.portalName !== undefined) {
+    return `Portal name is now ${patch.portalName.trim()}.`
+  }
+  if (patch.headerShows) {
+    return patch.headerShows === 'logo'
+      ? 'Header now shows the logo.'
+      : 'Header now shows the icon and name.'
+  }
   if (patch.colours) return 'Colours updated.'
   if (patch.tabs) return 'Tabs updated.'
   if (patch.welcomeMessage !== undefined) {
@@ -337,11 +291,83 @@ function answerFont(text: string): PortalAskResponse | null {
       text
     )
   if (!match) return null
-  const wanted = match[1]!.trim()
-  const id = (Object.keys(FONT_NAMES) as BrandingFontId[]).find(
-    (key) => FONT_NAMES[key].toLowerCase() === wanted
-  )
+  const id = fontIdNamed(match[1]!)
   return id ? patch({ font: id }) : null
+}
+
+/** A listed font by the name the Font picker shows, as typed in any case. */
+function fontIdNamed(name: string): BrandingFontId | null {
+  const wanted = name.trim()
+  return (
+    (Object.keys(FONT_NAMES) as BrandingFontId[]).find(
+      (key) => FONT_NAMES[key].toLowerCase() === wanted
+    ) ?? null
+  )
+}
+
+const HEADINGS = '(?:the )?(?:headings?|titles?)'
+
+function answerHeadingFont(text: string): PortalAskResponse | null {
+  if (
+    new RegExp(
+      `^(?:make |set |put )?${HEADINGS}(?: font)? (?:to |in |back to )?(?:match|the same as|same as) (?:the )?(?:text|body)(?: font)?(?: again)?$`
+    ).test(text)
+  ) {
+    return patch({ headingFont: SAME_AS_TEXT_FONT })
+  }
+  const named =
+    new RegExp(`^(?:use )?(.+?)(?: font)? for ${HEADINGS}$`).exec(text) ??
+    new RegExp(`^(?:set|make|change|put) ${HEADINGS}(?: font)? (?:to |in )?(.+?)(?: font)?$`).exec(
+      text
+    )
+  const id = named ? fontIdNamed(named[1]!) : null
+  return id ? patch({ headingFont: id }) : null
+}
+
+const CARD_WORDS: Record<string, CardStyle> = {
+  flat: 'flat',
+  shadow: 'shadow',
+  shadowed: 'shadow',
+  border: 'border',
+  bordered: 'border',
+}
+
+function answerCards(text: string): PortalAskResponse | null {
+  const match =
+    /^(?:use )?(flat|shadowed|bordered) cards$/.exec(text) ??
+    /^make (?:the )?cards (flat|shadowed|bordered)$/.exec(text) ??
+    /^give (?:the )?cards (?:a )?(shadow|border)s?$/.exec(text) ??
+    /^cards with (?:a )?(shadow|border)s?$/.exec(text) ??
+    /^add (?:a )?(shadow|border)s? to (?:the )?cards$/.exec(text)
+  const style = match ? CARD_WORDS[match[1]!] : undefined
+  return style ? patch({ cardStyle: style }) : null
+}
+
+/** "Show the logo" or "show the icon and name": the header's two choices. */
+function answerHeaderShows(text: string, ctx: AskDraftContext): PortalAskResponse | null {
+  if (
+    /^(?:show|use) (?:the |our |my )?icon and (?:the |our |my )?name(?: in the header)?$/.test(text)
+  ) {
+    return patch({ headerShows: 'icon_and_name' })
+  }
+  if (
+    /^(?:show|use) (?:just |only )?(?:the |our |my )?logo(?: only| alone)?(?: in the header)?$/.test(
+      text
+    )
+  ) {
+    return ctx.hasLogo ? patch({ headerShows: 'logo' }) : refuse(ASK_REPLIES.noLogo)
+  }
+  return null
+}
+
+/** "Call the portal Acme Ideas": run on the request as typed so the name keeps its casing. */
+function answerPortalName(raw: string): PortalAskResponse | null {
+  const match =
+    /^(?:call the portal|rename the portal (?:to|as)|(?:change|set) the portal(?:'s)? name to) ["'“‘]?(.+?)["'”’]?$/i.exec(
+      raw
+    )
+  const name = match?.[1]?.trim()
+  return name && name.length <= 100 ? patch({ portalName: name }) : null
 }
 
 function answerThemeMode(text: string): PortalAskResponse | null {
@@ -394,6 +420,10 @@ export function answerLocally(request: string, ctx: AskDraftContext): PortalAskR
     return { outcome: 'import', handled: 'local', host, reply: `Matching ${host}.` }
   }
 
+  // "Icon and name" is one choice, not two intents.
+  const headerShows = answerHeaderShows(text, ctx)
+  if (headerShows) return headerShows
+
   // One intent only: anything joined up is the model's.
   if (/,|;|\band\b|\bthen\b/.test(text)) return null
 
@@ -402,6 +432,9 @@ export function answerLocally(request: string, ctx: AskDraftContext): PortalAskR
     answerColour(text, ctx) ??
     answerShape(text, ctx) ??
     answerTabs(raw, text, ctx) ??
+    answerPortalName(raw) ??
+    answerHeadingFont(text) ??
+    answerCards(text) ??
     answerFont(text)
   )
 }

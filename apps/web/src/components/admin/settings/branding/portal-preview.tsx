@@ -95,15 +95,8 @@ interface PortalPreviewProps {
   className?: string
 }
 
-/**
- * A portal page at the exact address the portal routes canonicalize its search
- * to (the preview flag as a boolean, the home page's default sort included),
- * so the frame loads without a redirect first.
- */
-export function portalPreviewSrc(theme: 'light' | 'dark', path: string) {
-  if (path === '/') return `/?theme=${theme}&preview=true&sort=trending`
-  return `${path}?theme=${theme}&preview=true`
-}
+import { portalPreviewSrc } from '@/lib/shared/portal-preview-src'
+export { portalPreviewSrc }
 
 /**
  * Live preview of the public portal: the real portal app in a same-origin

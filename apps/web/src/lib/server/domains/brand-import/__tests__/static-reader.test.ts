@@ -80,15 +80,21 @@ describe('brandReadFromSite', () => {
           text: '#111111',
           button: { fill: '#111111', radiusPercent: 50 },
           cardRadiusPx: 14,
+          header: '#0b1f3a',
         },
       })
     )
     expect(read).toMatchObject({
-      page: { background: '#fffefb', text: '#111111' },
+      page: { background: '#fffefb', text: '#111111', header: '#0b1f3a' },
       button: { fill: '#111111', radiusPercent: 50 },
       card: { radiusPx: 14 },
     })
-    expect(mapBrandRead(read)).toMatchObject({ primary: '#111111', buttonShape: 'pill', radius: 1 })
+    expect(mapBrandRead(read)).toMatchObject({
+      primary: '#111111',
+      buttonShape: 'pill',
+      radius: 1,
+      tokens: { header: '#0b1f3a' },
+    })
   })
 
   it('gives no page colours or shapes when the stylesheets name none', () => {

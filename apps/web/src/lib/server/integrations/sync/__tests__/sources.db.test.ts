@@ -28,6 +28,11 @@ vi.mock('@/lib/server/secret-key', () => ({
 }))
 const deliver = vi.hoisted(() => vi.fn().mockResolvedValue({ state: 'succeeded' }))
 vi.mock('@/integrations/slack/server/hook', () => ({ slackHook: { run: deliver } }))
+vi.mock('@/integrations/discord/server/hook', () => ({ discordHook: { run: deliver } }))
+vi.mock('@/integrations/discord/server/channels', async (original) => ({
+  ...(await original<typeof import('@/integrations/discord/server/channels')>()),
+  validateDiscordDestination: async () => true,
+}))
 const fixture = await createDbTestFixture()
 beforeEach(fixture.begin)
 afterEach(async () => {
@@ -208,6 +213,69 @@ describe('canonical sync sources (PostgreSQL)', () => {
     expect(target).toEqual({ channelId: 'C1' })
     expect(config.accessToken).toBe('current-token')
     expect(JSON.stringify(deliver.mock.calls)).not.toMatch(/old-private|Old content|expired-token/)
+  })
+  it('delivers a support message on a channel whose board filter only governs feedback', async () => {
+    const { data } = await seed()
+    // Saving a channel's board filter writes it onto every mapping of that channel.
+    await testDb
+      .update(integrationEventMappings)
+      .set({ filters: { boardIds: [createId('board')] } })
+      .where(eq(integrationEventMappings.integrationId, data.config.integrationId))
+    const op = (await queueHookSync(data))!
+    await runIntegrationSync(syncTestJob(op.id))
+    expect(deliver).toHaveBeenCalledTimes(1)
+  })
+  it('still holds back a post from a board outside the channel filter', async () => {
+    const { data, author } = await seed()
+    const [ideas, bugs] = await testDb
+      .insert(boards)
+      .values([
+        { name: 'Ideas', slug: createId('board') },
+        { name: 'Bugs', slug: createId('board') },
+      ])
+      .returning()
+    const [post] = await testDb
+      .insert(posts)
+      .values({ boardId: bugs.id, principalId: author.id, title: 'Crash', content: 'Body' })
+      .returning()
+    await testDb.insert(integrationEventMappings).values({
+      integrationId: data.config.integrationId,
+      eventType: 'post.created',
+      actionType: 'send_message',
+      enabled: true,
+      actionConfig: { channelId: 'C1' },
+      filters: { boardIds: [ideas.id] },
+    })
+    const event = {
+      id: createId('event'),
+      type: 'post.created',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'service' },
+      data: {
+        post: {
+          id: post.id,
+          title: 'Crash',
+          content: 'Body',
+          boardId: bugs.id,
+          boardSlug: bugs.slug,
+          voteCount: 0,
+        },
+      },
+    } as EventData
+    const op = await queueHookSync({ ...data, event })
+    if (op) await runIntegrationSync(syncTestJob(op.id))
+    expect(deliver).not.toHaveBeenCalled()
+  })
+  it('delivers a support message to Discord', async () => {
+    const { data, integration } = await seed()
+    await testDb
+      .update(integrations)
+      .set({ integrationType: 'discord', config: { guildId: 'g1', channelId: 'C1' } })
+      .where(eq(integrations.id, integration.id))
+    const op = (await queueHookSync({ ...data, hookType: 'discord' }))!
+    await runIntegrationSync(syncTestJob(op.id))
+    expect(deliver).toHaveBeenCalledTimes(1)
+    expect(deliver.mock.calls[0][0].data.message).toMatchObject({ content: 'Canonical message' })
   })
   it('purges a message snapshot and cancels delivery when it becomes internal', async () => {
     const { data, message } = await seed()

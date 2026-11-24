@@ -324,7 +324,7 @@ function SubscriberRow({
         <p
           className={cn(
             'truncate text-xs',
-            subscriber.canView ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'
+            subscriber.canView ? 'text-muted-foreground' : 'text-warning'
           )}
         >
           {subscriber.canView
