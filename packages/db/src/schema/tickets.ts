@@ -228,10 +228,12 @@ export const tickets = pgTable(
     index('tickets_created_at_id_idx').on(table.createdAt, table.id),
     // Keyset support for the 'due' sort: due_at ASC NULLS LAST, id ASC is the
     // btree default order, so the plain ascending index serves it directly.
+    // Built CONCURRENTLY after migrations (CONCURRENT_INDEX_SPECS).
     index('tickets_due_at_id_idx').on(table.dueAt, table.id),
     // Ticket-due sweep + deadline-provider candidate set: open, live tickets
     // with a due date whose overdue alert has not fired for that date yet.
     // The sweep repeats this exact clause so the planner proves it applies.
+    // Built CONCURRENTLY after migrations (CONCURRENT_INDEX_SPECS).
     index('tickets_due_alert_pending_idx')
       .on(table.dueAt)
       .where(
