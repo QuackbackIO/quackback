@@ -7,14 +7,17 @@
  * through `onChunk`; the caller reads its terminal state off the standard
  * RUN_FINISHED.result / RUN_ERROR frames.
  *
+ * The client library loads on the first run (see `agui-client.ts`), so the
+ * composer that offers transforms does not carry it on page load.
+ *
  * `stop()` aborts the run (supersede / unmount): the in-flight request is
  * abandoned and NO terminal chunk or error is surfaced for a caller-driven
  * stop, exactly like the old AbortController path — the caller owns the entry
  * state it settled before aborting.
  */
-import { ChatClient, fetchServerSentEvents } from '@tanstack/ai-client'
 import type { StreamChunk } from '@tanstack/ai'
-import { aguiFetchClient } from './agui-fetch'
+import type { ChatClient } from '@tanstack/ai-client'
+import { aguiFetchClient, aguiThreadId } from './agui-fetch'
 
 export interface AguiRunHandle {
   /** Abort the run. Its `done` promise still resolves; no error is surfaced. */
@@ -35,18 +38,45 @@ export function runAguiTurn(options: {
    *  caller's own stop(), never reported here. */
   onError?: (error: Error) => void
 }): AguiRunHandle {
-  const client = new ChatClient({
-    connection: fetchServerSentEvents(options.url, () => ({
-      body: options.forwardedProps,
-      fetchClient: aguiFetchClient(),
-    })),
-    onChunk: options.onChunk,
-    onError: (error: Error) => {
-      if (error.name === 'AbortError') return
-      options.onError?.(error)
-    },
-  })
+  let stopped = false
+  let client: ChatClient | null = null
 
-  const done = client.sendMessage(options.message).finally(() => client.dispose())
-  return { stop: () => client.stop(), done }
+  const run = async (): Promise<void> => {
+    let lib: typeof import('./agui-client')
+    try {
+      lib = await import('./agui-client')
+    } catch (error) {
+      // The client chunk failed to load (offline, a deploy replaced it).
+      if (!stopped) options.onError?.(error instanceof Error ? error : new Error(String(error)))
+      return
+    }
+    if (stopped) return
+    const runClient = new lib.ChatClient({
+      threadId: aguiThreadId(),
+      connection: lib.fetchServerSentEvents(options.url, () => ({
+        body: options.forwardedProps,
+        fetchClient: aguiFetchClient(),
+      })),
+      onChunk: options.onChunk,
+      onError: (error: Error) => {
+        if (error.name === 'AbortError') return
+        options.onError?.(error)
+      },
+    })
+    client = runClient
+    try {
+      await runClient.sendMessage(options.message)
+    } finally {
+      runClient.dispose()
+    }
+  }
+
+  const done = run()
+  return {
+    stop: () => {
+      stopped = true
+      client?.stop()
+    },
+    done,
+  }
 }

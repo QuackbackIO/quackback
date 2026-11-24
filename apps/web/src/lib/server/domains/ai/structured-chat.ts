@@ -21,6 +21,7 @@ import { z } from 'zod'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { stripCodeFences, structuredOutputProviderOptions } from './config'
+import { oneShotThreadId } from './thread-id'
 
 const log = logger.child({ component: 'ai-structured-chat' })
 
@@ -111,6 +112,7 @@ export async function structuredChat<S extends z.ZodType>(
   if (!level) {
     try {
       return (await chat({
+        threadId: oneShotThreadId(),
         ...common,
         systemPrompts: input.systemPrompts,
         outputSchema: input.schema,
@@ -127,8 +129,10 @@ export async function structuredChat<S extends z.ZodType>(
     }
   }
 
-  const promptOnly = (lvl: FallbackLevel) =>
-    chat({
+  // A plain `stream: false` chat() resolves to `{ text, chunks }` since 1.0.
+  const promptOnly = async (lvl: FallbackLevel): Promise<string> => {
+    const { text } = await chat({
+      threadId: oneShotThreadId(),
       ...common,
       systemPrompts: [...input.systemPrompts, describeSchema(input.schema)],
       modelOptions: {
@@ -136,7 +140,9 @@ export async function structuredChat<S extends z.ZodType>(
         ...(lvl === 'json_object' ? { response_format: { type: 'json_object' } } : {}),
         ...structuredOutputProviderOptions(),
       },
-    } as never) as unknown as Promise<string>
+    })
+    return text
+  }
 
   let text: string
   try {
