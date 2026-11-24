@@ -12,6 +12,8 @@ import {
   and,
   eq,
   isNull,
+  ne,
+  or,
   sql,
   conversations,
   conversationParticipants,
@@ -138,6 +140,30 @@ export function participantThreadAccessSql(principalId: PrincipalId) {
         AND ${conversationParticipants.threadAccess}
     )`,
     hasLinkedCustomerTicketSql()
+  )!
+}
+
+/**
+ * "This is `principalId`'s own conversation, or a customer ticket thread they
+ * were given": the customer's whole Messages list in one condition, so the
+ * list stays one query. The shared half is `participantThreadAccessSql` with
+ * its participant rows read once into an id array (an `= ANY(ARRAY(...))`
+ * Postgres evaluates up front) rather than per row, so the OR can still be
+ * answered from the visitor and primary-key indexes instead of scanning
+ * `conversations`. Keep the two in lockstep.
+ */
+export function customerListedThreadSql(principalId: PrincipalId) {
+  return or(
+    eq(conversations.visitorPrincipalId, principalId),
+    and(
+      ne(conversations.visitorPrincipalId, principalId),
+      sql`${conversations.id} = ANY(ARRAY(
+        SELECT ${conversationParticipants.conversationId} FROM ${conversationParticipants}
+        WHERE ${eq(conversationParticipants.principalId, principalId)}
+          AND ${conversationParticipants.threadAccess}
+      ))`,
+      hasLinkedCustomerTicketSql()
+    )
   )!
 }
 
