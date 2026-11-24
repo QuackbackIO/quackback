@@ -481,7 +481,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect GitLab',
       description:
-        'Connect GitLab.com or a self-hosted GitLab instance to create issues from feedback and review incoming status changes.',
+        'Connect GitLab.com or a self-hosted GitLab instance to create issues from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Configure your GitLab{' '}
