@@ -37,7 +37,7 @@ export const CLIENT_PROTECTED_SPECIFIERS = [
  * Code that runs in both environments uses the web platform's equivalent.
  */
 export const NODE_BUILTIN_SPECIFIER = new RegExp(
-  `^(?:node:.+|${builtinModules.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
+  `^(?:node:[\\s\\S]*|${builtinModules.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
 )
 
 /** True for a protected package or any of its subpaths (`pino/file`, `@quackback/db/x`). */
