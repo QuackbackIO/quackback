@@ -39,6 +39,7 @@ import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
 import type { SpamFilterConfig } from '@/lib/server/domains/settings/settings.spam'
 import type { SpamSignal, SpamSignalHints } from './conversation.spam-signals'
+import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 const log = logger.child({ component: 'spam-filter' })
 
@@ -140,6 +141,7 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
   let verdict: { spam: boolean }
   try {
     verdict = await chat({
+      threadId: oneShotThreadId(),
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,

@@ -485,6 +485,13 @@ export interface ThemeColors {
   popoverForeground?: string
   primary?: string
   primaryForeground?: string
+  primaryInk?: string
+  /** The colours as picked, where the theme draws them otherwise (PICKED_KEYS in theme/base.ts). */
+  pickedPrimary?: string
+  pickedForeground?: string
+  pickedCard?: string
+  pickedMuted?: string
+  pickedMutedForeground?: string
   secondary?: string
   secondaryForeground?: string
   muted?: string

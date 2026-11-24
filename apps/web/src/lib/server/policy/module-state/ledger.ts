@@ -570,6 +570,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'identical for every workspace.',
   },
   {
+    file: 'apps/web/src/lib/shared/theme/theme-css.ts',
+    name: 'WRITTEN',
+    category: 'content-addressed',
+    reason:
+      'Up to 32 theme stylesheets this module generated, as a set of their exact text, so reading one back trusts its picked colours. A cross-workspace hit means another workspace has byte-identical generated theme text, which reads back to the same palettes either way.',
+  },
+  {
     file: 'apps/web/src/lib/shared/i18n.ts',
     name: 'messageCache',
     category: 'content-addressed',

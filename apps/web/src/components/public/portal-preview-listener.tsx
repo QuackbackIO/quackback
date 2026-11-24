@@ -1,10 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
-import {
-  customFontStack,
-  headingFontStack,
-  normalizeFontSans,
-  themeExtrasCss,
-} from '@/lib/shared/theme'
+import { normalizeFontSans } from '@/lib/shared/theme'
+import { customFontStack, headingFontStack, themeExtrasCss } from '@/lib/shared/theme/generator'
 import { extractCssVariables } from '@/lib/shared/theme/css-parser'
 import { parseCssToMinimal } from '@/lib/shared/theme/readable-css'
 import {

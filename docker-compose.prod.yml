@@ -149,14 +149,17 @@ services:
   # Optional: the browser reader for Import your brand, off unless started with
   #   docker compose -f docker-compose.prod.yml --profile browser up -d
   # after setting QUACKBACK_BROWSER_TOKEN in .env. It renders a website in a
-  # headless browser and reaches public hosts only; no host port. Built from
-  # this checkout (docker/browser/Dockerfile).
+  # headless browser and reaches public hosts only; no host port. Pulls the
+  # published image at the app's tag; to build it from this checkout instead
+  # (docker/browser/Dockerfile), run
+  #   docker compose -f docker-compose.prod.yml --profile browser build browser
   browser:
     profiles: ['browser']
+    image: ${QUACKBACK_BROWSER_IMAGE:-ghcr.io/quackbackio/quackback-browser:${QUACKBACK_TAG:-latest}}
+    pull_policy: missing
     build:
       context: .
       dockerfile: docker/browser/Dockerfile
-    image: ${QUACKBACK_BROWSER_IMAGE:-quackback-browser:local}
     container_name: quackback-browser
     restart: unless-stopped
     init: true

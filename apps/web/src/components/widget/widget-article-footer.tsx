@@ -101,7 +101,7 @@ export function WidgetArticleFooter({ articleId, onAskQuestion }: WidgetArticleF
           onClick={onAskQuestion}
           className="mt-2 flex w-full items-center gap-2 rounded-md border border-border/50 bg-background px-2.5 py-2 text-start text-xs transition-colors hover:bg-muted/40"
         >
-          <ChatBubbleLeftRightIcon className="size-4 shrink-0 text-primary" />
+          <ChatBubbleLeftRightIcon className="size-4 shrink-0 text-primary-ink" />
           <span className="min-w-0 flex-1">
             <span className="text-muted-foreground">
               <FormattedMessage id="widget.help.article.stillStuck" defaultMessage="Still stuck?" />

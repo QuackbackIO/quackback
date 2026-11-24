@@ -240,6 +240,7 @@ export function buildSlackMessage(event: EventData, links: SectionOrigins): Slac
       const inboxUrl = `${links.primary}/admin/inbox?c=${conversation.id}`
       const visitor = conversation.visitorEmail || 'Anonymous visitor'
       const subject = conversation.subject?.trim() || 'New conversation'
+      const opening = truncate(stripHtml(conversation.openingMessage ?? ''), 300)
 
       return {
         text: `New support conversation from ${visitor}`,
@@ -257,7 +258,9 @@ export function buildSlackMessage(event: EventData, links: SectionOrigins): Slac
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `> *<${inboxUrl}|${escapeSlackMrkdwn(subject)}>*`,
+              text: opening
+                ? `> *<${inboxUrl}|${escapeSlackMrkdwn(subject)}>*\n${quoteText(escapeSlackMrkdwn(opening))}`
+                : `> *<${inboxUrl}|${escapeSlackMrkdwn(subject)}>*`,
             },
           },
         ],
