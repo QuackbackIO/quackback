@@ -69,6 +69,11 @@ interface PoolEntry {
   /** Transactions open on this pool. The idle sweep never closes a pool mid-transaction. */
   openTransactions: number
   /**
+   * Sweeps and jobs running against this pool (see {@link holdWorkspacePool}).
+   * Neither the idle sweep nor the LRU cap closes a pool that is held.
+   */
+  holds: number
+  /**
    * Resolves once the database has proven it is the one the registry named AND
    * this process has proven it holds that workspace's own `SECRET_KEY`. It yields
    * the resolved secret bundle, so "verified" and "has credentials" are one
@@ -200,6 +205,7 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
     openTransactions: 0,
+    holds: 0,
     verification: verifyWorkspaceDatabase(workspace, sql),
   }
   trackTransactions(entry)
@@ -227,6 +233,36 @@ function trackTransactions(entry: PoolEntry): void {
       entry.lastUsedAt = Date.now()
     }
   }) as typeof entry.db.transaction
+}
+
+/** True while a transaction or a held sweep or job is using the pool. */
+function isInUse(entry: PoolEntry): boolean {
+  return entry.openTransactions > 0 || entry.holds > 0
+}
+
+/**
+ * Mark a workspace's pool as in use for as long as `body` runs.
+ *
+ * `lastUsedAt` moves when the pool is checked out and when a transaction
+ * ends. A sweep checks its pool out once and may then wait minutes on an AI
+ * provider between plain queries, so without a hold it looks idle and the idle
+ * sweep closes its connections underneath it: every later query fails with
+ * CONNECTION_ENDED. Letting go counts as use. A key with no pool here (another
+ * process's, or one already evicted) just runs `body`.
+ */
+export async function holdWorkspacePool<T>(
+  workspaceKey: string,
+  body: () => Promise<T>
+): Promise<T> {
+  const entry = pools.get(workspaceKey)
+  if (!entry) return body()
+  entry.holds += 1
+  try {
+    return await body()
+  } finally {
+    entry.holds -= 1
+    entry.lastUsedAt = Date.now()
+  }
 }
 
 /**
@@ -403,10 +439,11 @@ async function enforceCap(keepWorkspaceKey: string): Promise<void> {
   const cap = config.workspacePoolMaxEntries
   while (pools.size > cap) {
     // Map iteration is insertion order, so the first key is the least recently
-    // used. Never evict the workspace we are about to serve.
+    // used. Never evict the workspace we are about to serve, or one in use: the
+    // cap is a soft bound, and going over it beats failing work mid-flight.
     let victim: string | null = null
-    for (const key of pools.keys()) {
-      if (key !== keepWorkspaceKey) {
+    for (const [key, entry] of pools) {
+      if (key !== keepWorkspaceKey && !isInUse(entry)) {
         victim = key
         break
       }
@@ -500,7 +537,7 @@ export async function sweepIdlePools(now = Date.now()): Promise<number> {
   const thresholdMs = config.workspacePoolIdleSeconds * 1000
   const doomed: string[] = []
   for (const [workspaceKey, entry] of pools) {
-    if (entry.openTransactions > 0) continue
+    if (isInUse(entry)) continue
     if (now - entry.lastUsedAt >= thresholdMs) doomed.push(workspaceKey)
   }
   for (const workspaceKey of doomed) await evict(workspaceKey, 'idle')

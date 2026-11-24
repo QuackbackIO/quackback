@@ -30,6 +30,7 @@ import { shouldSkipForDormancy } from './activity'
 import { listActiveWorkspaces, type WorkspaceDescriptor } from './registry'
 import { acquireScopeForWorkspaceId, acquireWorkspaceScope } from './resolver'
 import { runWithWorkspaceScope, type WorkspaceScopeOrigin } from './workspace-context'
+import { holdWorkspacePool } from './pool-cache'
 
 const log = logger.child({ component: 'workspace-fleet' })
 
@@ -89,7 +90,9 @@ export async function runFleetPass(
       continue
     }
     try {
-      await runWithWorkspaceScope(acquisition.scope, () => body(workspace))
+      await holdWorkspacePool(workspace.workspaceKey, () =>
+        runWithWorkspaceScope(acquisition.scope, () => body(workspace))
+      )
       result.succeeded += 1
     } catch (err) {
       result.failed += 1
@@ -159,7 +162,7 @@ export async function withWorkspaceScopeById<T>(
       'detail' in acquisition ? acquisition.detail : undefined
     )
   }
-  return runWithWorkspaceScope(acquisition.scope, body)
+  return holdWorkspacePool(workspaceKey, () => runWithWorkspaceScope(acquisition.scope, body))
 }
 
 /** Alias kept for the barrel's naming symmetry with `runFleetPass`. */
