@@ -60,23 +60,46 @@ export function carriesUserData(message: Record<string, unknown>): boolean {
   return carriesSignInToken(message)
 }
 
-let cachedHostOrigin: string | null | undefined
+let rememberedHostOrigin: string | null = null
+let cachedFallbackOrigin: string | null | undefined
+
+/**
+ * Record the host page's origin from a message it posted to this frame. The
+ * browser sets `event.origin`, so the first message from the parent window
+ * names the host origin even where the frame cannot see its ancestors or a
+ * referrer. Messages from any other window are ignored.
+ */
+export function rememberHostOrigin(event: MessageEvent): void {
+  if (rememberedHostOrigin || typeof window === 'undefined') return
+  if (event.source !== window.parent || window.parent === window) return
+  rememberedHostOrigin = httpOrigin(event.origin)
+}
+
+// Listen from module load, before any reader: the host's first message (its
+// init, or an identify) arrives before the frame replies to anything, and this
+// listener runs ahead of the ones that reply.
+if (typeof window !== 'undefined') {
+  window.addEventListener('message', rememberHostOrigin)
+}
 
 function hostOrigin(): string | null {
-  if (cachedHostOrigin === undefined) {
-    cachedHostOrigin = resolveHostOrigin({
+  if (rememberedHostOrigin) return rememberedHostOrigin
+  if (cachedFallbackOrigin === undefined) {
+    cachedFallbackOrigin = resolveHostOrigin({
       ancestorOrigins: window.location.ancestorOrigins,
       referrer: document.referrer,
     })
   }
-  return cachedHostOrigin
+  return cachedFallbackOrigin
 }
 
 /**
  * Post a message to the page hosting the widget, addressed to that page's
- * origin rather than to any origin. When the host origin is unknown, messages
- * without user data still go out to any origin, and messages naming the user
- * are not sent.
+ * origin rather than to any origin: the origin of the host's own messages to
+ * the frame, else the first ancestor origin, else the referrer origin. While
+ * the host origin is still unknown, messages without user data go out to any
+ * origin, and messages naming the user are not sent. Replies to the host's
+ * identify always follow a message from it, so its origin is known by then.
  */
 export function sendToHost(message: Record<string, unknown>): void {
   if (window.__quackbackNative?.dispatch) {

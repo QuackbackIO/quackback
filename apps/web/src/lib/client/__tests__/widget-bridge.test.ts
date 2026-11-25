@@ -89,6 +89,63 @@ describe('widget-bridge', () => {
     })
   })
 
+  describe('learning the host origin from its messages', () => {
+    function postFromParent(origin: string, source: unknown = window.parent) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'quackback:identify', data: { ssoToken: 't' } },
+          origin,
+          source: source as MessageEventSource,
+        })
+      )
+    }
+
+    it('sends identify results to the parent message origin when the frame sees no ancestors or referrer', async () => {
+      setEmbedder({})
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost({ type: 'quackback:ready' })
+      expect(window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'quackback:ready' }, '*')
+
+      postFromParent('https://host.example')
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).toHaveBeenLastCalledWith(
+        identifyResult,
+        'https://host.example'
+      )
+    })
+
+    it('prefers the parent message origin over ancestor and referrer origins', async () => {
+      setEmbedder({ ancestorOrigins: ['https://stale.example'], referrer: 'https://ref.example/' })
+      const { sendToHost } = await import('../widget-bridge')
+      postFromParent('https://host.example')
+      sendToHost({ type: 'quackback:ready' })
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        { type: 'quackback:ready' },
+        'https://host.example'
+      )
+    })
+
+    it('keeps the first parent origin it sees', async () => {
+      setEmbedder({})
+      const { sendToHost } = await import('../widget-bridge')
+      postFromParent('https://host.example')
+      postFromParent('https://other.example')
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, 'https://host.example')
+    })
+
+    it.each([
+      ['another window', 'https://other.example', {}],
+      ['an opaque origin', 'null', undefined],
+    ])('ignores a message from %s', async (_label, origin, source) => {
+      setEmbedder({})
+      const { sendToHost } = await import('../widget-bridge')
+      postFromParent(origin, source ?? window.parent)
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).not.toHaveBeenCalled()
+    })
+  })
+
   it('still dispatches user data through the native bridge', async () => {
     setEmbedder({})
     const dispatch = vi.fn()
