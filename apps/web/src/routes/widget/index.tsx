@@ -65,6 +65,9 @@ import {
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
 import { useTicketStageBadge } from '@/components/widget/use-ticket-stage-badge'
 import { useWarmLazyViews } from '@/components/widget/use-warm-lazy-views'
+// Listen for the host's shown state from first load: the embed script sends
+// it on ready, before any lazy view that reads it has loaded.
+import '@/lib/client/hooks/use-host-shown'
 
 // Secondary views load behind lazy() boundaries so the iframe's first paint
 // only needs the shell + Home/feedback — the detail views carry the

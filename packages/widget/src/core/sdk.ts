@@ -376,10 +376,12 @@ export function createSDK(): SDK {
       case 'open': {
         if (!config) return // open before init is a no-op, matching close/hide
         const opts = (a as OpenOptions) ?? {}
-        panelOpen = true
-        sendShownState()
+        // Navigate first, then say the panel is shown: a view the closed panel
+        // was left on must not count as seen on its way out.
         if (ready && bridge) bridge.send('quackback:open', opts)
         else pendingOpen = opts
+        panelOpen = true
+        sendShownState()
         // The idle preload may not have fired yet — create the panel now.
         ensurePanel().show()
         launcher?.setOpen(true)

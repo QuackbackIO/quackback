@@ -12,6 +12,13 @@ function stubIframe() {
   return { postMessage, spy }
 }
 
+function lastOpen(postMessage: ReturnType<typeof vi.fn>) {
+  return postMessage.mock.calls
+    .map(([msg]) => msg as { type: string })
+    .filter((msg) => msg.type === 'quackback:open')
+    .at(-1)
+}
+
 function fireReady() {
   window.dispatchEvent(
     new MessageEvent('message', {
@@ -227,13 +234,10 @@ describe('sdk', () => {
       body: 'steps',
       board: 'bug-reports',
     })
-    expect(postMessage).toHaveBeenLastCalledWith(
-      {
-        type: 'quackback:open',
-        data: { view: 'new-post', title: 'Bug:', body: 'steps', board: 'bug-reports' },
-      },
-      ORIGIN
-    )
+    expect(lastOpen(postMessage)).toEqual({
+      type: 'quackback:open',
+      data: { view: 'new-post', title: 'Bug:', body: 'steps', board: 'bug-reports' },
+    })
     spy.mockRestore()
   })
 
@@ -243,15 +247,9 @@ describe('sdk', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     fireReady()
     sdk.dispatch('open', { view: 'messages' })
-    expect(postMessage).toHaveBeenLastCalledWith(
-      { type: 'quackback:open', data: { view: 'messages' } },
-      ORIGIN
-    )
+    expect(lastOpen(postMessage)).toEqual({ type: 'quackback:open', data: { view: 'messages' } })
     sdk.dispatch('open', { view: 'tickets' })
-    expect(postMessage).toHaveBeenLastCalledWith(
-      { type: 'quackback:open', data: { view: 'tickets' } },
-      ORIGIN
-    )
+    expect(lastOpen(postMessage)).toEqual({ type: 'quackback:open', data: { view: 'tickets' } })
     spy.mockRestore()
   })
 
@@ -471,6 +469,22 @@ describe('sdk', () => {
     sdk.dispatch('open')
     sdk.dispatch('logout')
     expect(shownStates(postMessage, origin)).toEqual([false, true, false, true, false, true, false])
+    sdk.dispatch('destroy')
+    spy.mockRestore()
+  })
+
+  it('navigates before saying the panel is shown, so the view it was closed on stays unseen', () => {
+    const origin = 'https://shown-3.example.com'
+    const { postMessage, spy } = stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    fireFrom(origin, 'quackback:ready')
+    postMessage.mockClear()
+    sdk.dispatch('open', { view: 'messages' })
+    const types = postMessage.mock.calls
+      .filter(([, to]) => to === origin)
+      .map(([msg]) => (msg as { type: string }).type)
+    expect(types).toEqual(['quackback:open', 'quackback:shown'])
     sdk.dispatch('destroy')
     spy.mockRestore()
   })
