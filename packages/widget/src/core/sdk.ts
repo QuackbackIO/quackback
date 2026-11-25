@@ -15,6 +15,7 @@ import { fetchServerConfig, type ServerConfig } from './config'
 import { createTracker, type Tracker } from './tracker'
 import { clearDeviceId, getOrCreateDeviceId } from './device'
 import { FULL_SCREEN_MEDIA, removeStyles } from './style'
+import { fitToVisualViewport } from './viewport'
 
 type Command =
   | 'isOpen'
@@ -68,6 +69,8 @@ export function createSDK(): SDK {
   let placement: 'left' | 'right' = 'right'
   let mobileMql: MediaQueryList | null = null
   let mobileCleanup: (() => void) | null = null
+  // Set while the panel is open: undoes its fit to the visual viewport.
+  let detachViewport: (() => void) | null = null
   // The server config of the live init, kept for a launcher created later by
   // showLauncher, and whether the launcher has been revealed yet.
   let serverConfig: ServerConfig | null = null
@@ -446,6 +449,7 @@ export function createSDK(): SDK {
         sendShownState()
         opened.show()
         launcher?.setOpen(true)
+        detachViewport ??= fitToVisualViewport(opened.el, mobileMql!)
         // Keyboard and screen-reader users land in the panel, not on the page,
         // unless it closed again before the frame.
         requestAnimationFrame(() => {
@@ -473,6 +477,8 @@ export function createSDK(): SDK {
         panelOpen = false
         sendShownState()
         cancelSafeArea()
+        detachViewport?.()
+        detachViewport = null
         if (focusWasInside) launcher?.el.focus()
         emitter.emit('close', {})
         return
@@ -521,6 +527,8 @@ export function createSDK(): SDK {
         return
       case 'destroy':
         cancelPanelPreload()
+        detachViewport?.()
+        detachViewport = null
         panel?.destroy()
         launcher?.remove()
         bridge?.dispose()

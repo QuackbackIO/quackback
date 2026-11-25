@@ -973,6 +973,35 @@ describe('sdk panel as a dialog', () => {
     expect(sdk.dispatch('getUser')).toEqual({ id: 'user_a' })
     expect(sdk.dispatch('isIdentified')).toBe(true)
   })
+
+  it('fits the phone panel to the visible viewport while open', () => {
+    stubIframe()
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('max-width:639px'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+    )
+    const viewport = Object.assign(new EventTarget(), { height: 380, offsetTop: 12 })
+    vi.stubGlobal('visualViewport', viewport)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    expect(panelEl().style.height).toBe('')
+    sdk.dispatch('open')
+    expect(panelEl().style.height).toBe('380px')
+    expect(panelEl().style.top).toBe('12px')
+    sdk.dispatch('close')
+    expect(panelEl().style.height).toBe('')
+    expect(panelEl().style.top).toBe('')
+    // Destroy stops listening.
+    sdk.dispatch('open')
+    sdk.dispatch('destroy')
+    frames = []
+    viewport.dispatchEvent(new Event('resize'))
+    expect(frames).toHaveLength(0)
+  })
 })
 
 describe('sdk panel stylesheet', () => {

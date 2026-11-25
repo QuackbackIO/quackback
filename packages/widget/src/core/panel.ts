@@ -14,6 +14,8 @@ export interface PanelOptions {
 export const PANEL_ID = 'quackback-panel'
 
 export interface PanelHandle {
+  /** The fixed-position wrapper around the frame. */
+  el: HTMLElement
   iframe: HTMLIFrameElement
   show(): void
   hide(): void
@@ -87,6 +89,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
   let open = false
 
   return {
+    el: panel,
     iframe,
     show() {
       if (open) return
