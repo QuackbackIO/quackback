@@ -30,6 +30,8 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
     // connection held, which hangs behind a transaction pooler that has fewer
     // server connections than this pool has clients. Drizzle maps the
     // pgvector columns itself, and the schema has no enum or domain types.
+    // A raw query that selects an array of a custom type, or a domain-typed
+    // column (information_schema has some), gets a string and must parse it.
     fetch_types: false,
     // postgres-js prints every server NOTICE to the console by default, and
     // idempotent DDL (`CREATE TABLE IF NOT EXISTS` for page_views partitions at

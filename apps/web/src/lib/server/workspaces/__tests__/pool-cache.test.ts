@@ -480,6 +480,14 @@ describe('workspace pool cache', () => {
     await cache.closeAllWorkspacePools()
   })
 
+  it('never looks custom types up at runtime on a direct pool either', async () => {
+    const cache = await loadCache()
+    const direct = await cache.openWorkspaceDirectPool(descriptor('t1'))
+    const options = (postgresFactory.mock.calls.at(-1)?.[1] ?? {}) as { fetch_types?: boolean }
+    expect(options.fetch_types).toBe(false)
+    await direct.close()
+  })
+
   it('keeps prepared statements on', async () => {
     const cache = await loadCache()
     await cache.acquireWorkspacePool(descriptor('t1'))
