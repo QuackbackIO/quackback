@@ -132,6 +132,32 @@ describe('WidgetAuthProvider — identityResolved', () => {
     expect(screen.getByTestId('probe').textContent).toBe('resolved:identified')
   })
 
+  it('goes back to pending while an identify that arrives after the wait is in flight', async () => {
+    vi.useFakeTimers()
+    let finish!: (value: unknown) => void
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise((r) => (finish = r)))
+    )
+    renderWidget()
+    act(() => vi.advanceTimersByTime(IDENTITY_HANDSHAKE_TIMEOUT_MS))
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:anonymous')
+
+    postFromHost({ id: 'u1', ssoToken: 'sso' })
+    // Not "anonymous" any more: who the visitor is is on its way.
+    expect(screen.getByTestId('probe').textContent).toBe('pending:anonymous')
+    await act(async () => {
+      finish({
+        ok: true,
+        json: async () => ({
+          sessionToken: 'tok',
+          user: { id: 'u1', name: 'Ada', email: 'ada@example.com', avatarUrl: null },
+        }),
+      })
+    })
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:identified')
+  })
+
   it('still takes an identify that arrives after the handshake wait', async () => {
     vi.useFakeTimers()
     vi.stubGlobal(

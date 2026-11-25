@@ -500,6 +500,10 @@ export function WidgetAuthProvider({
             break
           case 'identify':
             sessionSourceRef.current = 'sdk'
+            // Who the visitor is stays unknown until this round trip settles,
+            // even if the frame had already settled as anonymous while it
+            // waited for its host.
+            setIdentityResolved(false)
             handleIdentify(msg.data as Record<string, unknown>)
             break
           case 'skip':
