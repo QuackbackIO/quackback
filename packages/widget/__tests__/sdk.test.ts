@@ -12,10 +12,10 @@ function stubIframe() {
   return { postMessage, spy }
 }
 
+// The last open command and the origin it was sent to.
 function lastOpen(postMessage: ReturnType<typeof vi.fn>) {
   return postMessage.mock.calls
-    .map(([msg]) => msg as { type: string })
-    .filter((msg) => msg.type === 'quackback:open')
+    .filter(([msg]) => (msg as { type: string }).type === 'quackback:open')
     .at(-1)
 }
 
@@ -234,10 +234,13 @@ describe('sdk', () => {
       body: 'steps',
       board: 'bug-reports',
     })
-    expect(lastOpen(postMessage)).toEqual({
-      type: 'quackback:open',
-      data: { view: 'new-post', title: 'Bug:', body: 'steps', board: 'bug-reports' },
-    })
+    expect(lastOpen(postMessage)).toEqual([
+      {
+        type: 'quackback:open',
+        data: { view: 'new-post', title: 'Bug:', body: 'steps', board: 'bug-reports' },
+      },
+      ORIGIN,
+    ])
     spy.mockRestore()
   })
 
@@ -247,9 +250,15 @@ describe('sdk', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     fireReady()
     sdk.dispatch('open', { view: 'messages' })
-    expect(lastOpen(postMessage)).toEqual({ type: 'quackback:open', data: { view: 'messages' } })
+    expect(lastOpen(postMessage)).toEqual([
+      { type: 'quackback:open', data: { view: 'messages' } },
+      ORIGIN,
+    ])
     sdk.dispatch('open', { view: 'tickets' })
-    expect(lastOpen(postMessage)).toEqual({ type: 'quackback:open', data: { view: 'tickets' } })
+    expect(lastOpen(postMessage)).toEqual([
+      { type: 'quackback:open', data: { view: 'tickets' } },
+      ORIGIN,
+    ])
     spy.mockRestore()
   })
 
