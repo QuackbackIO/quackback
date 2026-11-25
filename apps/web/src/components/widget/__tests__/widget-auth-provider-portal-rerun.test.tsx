@@ -77,6 +77,7 @@ describe('WidgetAuthProvider: a loader re-run without the portal session', () =>
     view.rerender(tree({ portalSessionToken: null, portalUser: null }))
     await new Promise((resolve) => setTimeout(resolve, 20))
 
+    bridge.sendToHost.mockClear()
     window.dispatchEvent(
       new MessageEvent('message', {
         data: { type: 'quackback:identify', data: { anonymous: true } },
@@ -87,5 +88,16 @@ describe('WidgetAuthProvider: a loader re-run without the portal session', () =>
 
     expect(seen!.user).toEqual(portalUser)
     expect(getWidgetToken()).toBe('portal-tok')
+    // The host is told the portal user it keeps, never a signed-out visitor.
+    expect(bridge.sendToHost).toHaveBeenCalledWith({
+      type: 'quackback:identify-result',
+      success: true,
+      user: portalUser,
+    })
+    expect(bridge.sendToHost).toHaveBeenCalledWith({
+      type: 'quackback:auth-change',
+      user: portalUser,
+    })
+    expect(bridge.sendToHost).not.toHaveBeenCalledWith(expect.objectContaining({ user: null }))
   })
 })

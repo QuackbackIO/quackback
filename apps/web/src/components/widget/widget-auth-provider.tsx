@@ -512,8 +512,12 @@ export function WidgetAuthProvider({
           case 'skip':
             // Portal session takes precedence — ack without changing state
             setIdentityResolved(true)
-            sendToHost({ type: 'quackback:identify-result', success: true, user: user ?? null })
-            sendToHost({ type: 'quackback:auth-change', user: user ?? null })
+            sendToHost({
+              type: 'quackback:identify-result',
+              success: true,
+              user: userRef.current,
+            })
+            sendToHost({ type: 'quackback:auth-change', user: userRef.current })
             break
         }
       }
