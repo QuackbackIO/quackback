@@ -2,9 +2,15 @@
  * Tests for Shortcut inbound webhook handler.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createHmac } from 'crypto'
+
+vi.mock('@/lib/server/integrations/sync/transport', () => ({
+  integrationFetch: vi.fn(),
+}))
+
 import { shortcutInboundHandler } from '@/integrations/shortcut/server/inbound'
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 
 function sign(body: string, secret: string): string {
   return createHmac('sha256', secret).update(body).digest('hex')
@@ -14,10 +20,29 @@ function makeRequest(headers: Record<string, string> = {}): Request {
   return new Request('https://example.com/webhook', { headers })
 }
 
-// The handler only reads the body; config/secrets are required by the
-// InboundWebhookHandler interface signature but ignored here.
-const parse = (payload: unknown) =>
-  shortcutInboundHandler.parseStatusChange(JSON.stringify(payload), {}, {})
+const GROUP_ID = '5f2b0c1e-0000-4000-8000-000000000001'
+const config = { channelId: GROUP_ID, workspaceSlug: 'acme' }
+const secrets = { accessToken: 'test-token' }
+
+const parse = (
+  payload: unknown,
+  cfg: Record<string, unknown> = config,
+  sec: Record<string, unknown> = secrets
+) => shortcutInboundHandler.parseStatusChange(JSON.stringify(payload), cfg, sec)
+
+/** The story as read back from the connected workspace. */
+function mockStory(story: Record<string, unknown> = {}) {
+  vi.mocked(integrationFetch).mockResolvedValue(
+    Response.json({
+      id: 16,
+      group_id: GROUP_ID,
+      project_id: null,
+      workflow_state_id: 1495,
+      updated_at: '2026-06-06T00:00:01Z',
+      ...story,
+    })
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,15 +84,85 @@ function storyStateChangePayload(overrides: Record<string, unknown> = {}) {
 // ---------------------------------------------------------------------------
 
 describe('shortcutInboundHandler.parseStatusChange', () => {
-  it('resolves the new workflow state name from the payload references', async () => {
-    const payload = storyStateChangePayload()
-    const result = await parse(payload)
+  beforeEach(() => {
+    vi.mocked(integrationFetch).mockReset()
+    mockStory()
+  })
+
+  it('applies a signed state change after the story is confirmed in the connected team', async () => {
+    const result = await parse(storyStateChangePayload())
 
     expect(result).toEqual({
       externalId: '16',
       externalStatus: 'Ready for Deploy',
       eventType: 'story.workflow_state_changed',
+      destinationId: GROUP_ID,
+      occurredAt: '2026-06-06T00:00:00.000Z',
     })
+    expect(integrationFetch).toHaveBeenCalledWith(
+      'https://api.app.shortcut.com/api/v3/stories/16',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'Shortcut-Token': 'test-token' }),
+      })
+    )
+  })
+
+  it('ignores stories that belong to another team', async () => {
+    mockStory({ group_id: '5f2b0c1e-0000-4000-8000-000000000002' })
+    expect(await parse(storyStateChangePayload())).toBeNull()
+  })
+
+  it('sends stories without a team to review instead of applying them', async () => {
+    mockStory({ group_id: null })
+    expect(await parse(storyStateChangePayload())).toEqual({
+      externalId: '16',
+      externalStatus: 'Ready for Deploy',
+      eventType: 'story.workflow_state_changed',
+    })
+  })
+
+  it('ignores the event when the story has since moved to another state', async () => {
+    mockStory({ workflow_state_id: 1500 })
+    expect(await parse(storyStateChangePayload())).toBeNull()
+  })
+
+  it('ignores deleted stories', async () => {
+    vi.mocked(integrationFetch).mockResolvedValue(new Response('Not found', { status: 404 }))
+    expect(await parse(storyStateChangePayload())).toBeNull()
+  })
+
+  it('throws on other read failures so the receipt retries', async () => {
+    vi.mocked(integrationFetch).mockResolvedValue(new Response('Unavailable', { status: 503 }))
+    await expect(parse(storyStateChangePayload())).rejects.toMatchObject({ status: 503 })
+  })
+
+  it('falls back to review without a stored token', async () => {
+    const result = await parse(storyStateChangePayload(), config, {})
+    expect(result).toEqual({
+      externalId: '16',
+      externalStatus: 'Ready for Deploy',
+      eventType: 'story.workflow_state_changed',
+    })
+    expect(integrationFetch).not.toHaveBeenCalled()
+  })
+
+  it('falls back to review without a configured team', async () => {
+    const result = await parse(storyStateChangePayload(), { workspaceSlug: 'acme' })
+    expect(result).toEqual({
+      externalId: '16',
+      externalStatus: 'Ready for Deploy',
+      eventType: 'story.workflow_state_changed',
+    })
+    expect(integrationFetch).not.toHaveBeenCalled()
+  })
+
+  it('returns null when the state did not actually change', async () => {
+    const payload = storyStateChangePayload()
+    ;(payload.actions[0] as Record<string, unknown>).changes = {
+      workflow_state_id: { new: 1495, old: 1495 },
+    }
+    expect(await parse(payload)).toBeNull()
+    expect(integrationFetch).not.toHaveBeenCalled()
   })
 
   it('returns null when no reference matches the new state ID', async () => {
@@ -111,6 +206,7 @@ describe('shortcutInboundHandler.parseStatusChange', () => {
     ;(payload.actions[0] as Record<string, unknown>).changes = { name: { new: 'x', old: 'y' } }
     const result = await parse(payload)
     expect(result).toBeNull()
+    expect(integrationFetch).not.toHaveBeenCalled()
   })
 
   it('returns null when the payload has no actions array', async () => {

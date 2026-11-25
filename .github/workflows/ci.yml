@@ -102,12 +102,14 @@ jobs:
       - run: bun run test --run --shard=${{ matrix.shard }}/4 --reporter=dot --reporter=github-actions
       # The suite runs under Node. Production runs Bun, and the CIMD fetch
       # transport's SSRF pin depends on Bun's node:https honouring a custom
-      # lookup, so that one file runs again under Bun.
+      # lookup, so that one file runs again under Bun. It uses the threads
+      # pool because vitest's forks pool calls child.channel.unref(), which
+      # Bun's child_process does not implement.
       - name: CIMD fetch transport under Bun
         if: matrix.shard == 1
         env:
           CIMD_TRANSPORT_EXPECT_BUN: '1'
-        run: bun --bun node_modules/vitest/vitest.mjs run apps/web/src/lib/server/auth/__tests__/cimd-transport.test.ts
+        run: bun --bun node_modules/vitest/vitest.mjs run --pool=threads apps/web/src/lib/server/auth/__tests__/cimd-transport.test.ts
 
   # Single check name so existing "test" required-status wiring still matches.
   test:
