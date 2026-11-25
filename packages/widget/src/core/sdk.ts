@@ -297,6 +297,8 @@ export function createSDK(): SDK {
       origin: iframeOrigin(),
     })
     bridge.onMessage(onIframeMessage)
+    // The launcher names the panel it controls once there is one.
+    launcher?.el.setAttribute('aria-controls', panel.el.id)
     mobileMql = window.matchMedia(FULL_SCREEN_MEDIA)
     mobileMql.addEventListener('change', sendMobileState)
     window.addEventListener('resize', scheduleSafeArea)
@@ -400,6 +402,7 @@ export function createSDK(): SDK {
     if (launcher || !config || (config.launcher === false && !force)) return
     launcher = createLauncher({
       placement,
+      locale: config.locale,
       onClick: () => {
         if (panelOpen) {
           dispatch('close')
@@ -419,6 +422,7 @@ export function createSDK(): SDK {
     if (unreadCount) launcher.setUnread(unreadCount)
     if (panelOpen) launcher.setOpen(true)
     if (launcherRevealed) launcher.reveal()
+    if (panel) launcher.el.setAttribute('aria-controls', panel.el.id)
   }
 
   function dispatch(cmd: Command, a?: unknown, b?: unknown): unknown {

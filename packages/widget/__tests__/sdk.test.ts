@@ -908,6 +908,40 @@ describe('sdk panel as a dialog', () => {
   const launcherEl = () =>
     document.querySelector('button[aria-controls]') as HTMLButtonElement | null
 
+  it.each([
+    ['nl', 'Hulp'],
+    ['th', 'ความช่วยเหลือ'],
+  ])('names the panel in %s', (locale, title) => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, locale })
+    expect(panelEl().getAttribute('aria-label')).toBe(title)
+  })
+
+  it('points the launcher at the panel only once the panel exists', () => {
+    stubIframe()
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn(() => 1)
+    )
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    expect(panelEl()).toBeNull()
+    const btn = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
+    expect(btn.hasAttribute('aria-controls')).toBe(false)
+    sdk.dispatch('open')
+    expect(btn.getAttribute('aria-controls')).toBe(panelEl().id)
+  })
+
+  it('a launcher shown after the panel exists points at it', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
+    expect(panelEl()).not.toBeNull()
+    sdk.dispatch('showLauncher')
+    expect(launcherEl()!.getAttribute('aria-controls')).toBe(panelEl().id)
+  })
+
   it('is a labelled dialog the launcher controls', () => {
     stubIframe()
     const sdk = createSDK()

@@ -1,4 +1,5 @@
 import { ensureStyles } from './style'
+import { panelTitle } from './labels'
 
 export interface PanelOptions {
   /** Widget URL — e.g. "https://feedback.acme.com/widget". */
@@ -29,25 +30,6 @@ export interface PanelHandle {
   destroy(): void
 }
 
-/** The frame's accessible name, in the visitor's language where known. */
-const FRAME_TITLE: Record<string, string> = {
-  ar: 'مساعدة',
-  de: 'Hilfe',
-  es: 'Ayuda',
-  fr: 'Aide',
-  pl: 'Pomoc',
-  pt: 'Ajuda',
-  ru: 'Помощь',
-  uk: 'Допомога',
-  zh: '帮助',
-  'zh-tw': '說明',
-}
-
-function frameTitle(locale: string | undefined): string {
-  const tag = (locale ?? '').toLowerCase()
-  return FRAME_TITLE[tag] ?? FRAME_TITLE[tag.split('-')[0]!] ?? 'Help'
-}
-
 export function createPanel(opts: PanelOptions): PanelHandle {
   ensureStyles(opts.placement)
 
@@ -69,7 +51,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
   panel.inert = true
   panel.id = PANEL_ID
   panel.setAttribute('role', 'dialog')
-  panel.setAttribute('aria-label', frameTitle(opts.locale))
+  panel.setAttribute('aria-label', panelTitle(opts.locale))
   document.body.appendChild(panel)
 
   const iframe = document.createElement('iframe')
@@ -80,7 +62,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
     colorScheme: 'normal',
   })
   iframe.setAttribute('src', url)
-  iframe.setAttribute('title', frameTitle(opts.locale))
+  iframe.setAttribute('title', panelTitle(opts.locale))
   iframe.setAttribute(
     'sandbox',
     'allow-scripts allow-forms allow-same-origin allow-popups allow-downloads'

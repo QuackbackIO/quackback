@@ -1,4 +1,4 @@
-import { PANEL_ID } from './panel'
+import { launcherLabels } from './labels'
 
 export interface LauncherOptions {
   placement: 'left' | 'right'
@@ -9,6 +9,8 @@ export interface LauncherOptions {
    * the fake page instead of `position: fixed` on the viewport.
    */
   root?: HTMLElement
+  /** The visitor's language, for the button's accessible name. */
+  locale?: string
 }
 
 export interface LauncherHandle {
@@ -46,6 +48,11 @@ const MESSENGER_ICON =
 const CLOSE_ICON =
   '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
+const BUTTON_TRANSITION =
+  'opacity 450ms ease, transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease'
+const ICON_TRANSITION =
+  'opacity 220ms cubic-bezier(0.34,1.56,0.64,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1)'
+
 const LAUNCHER_SHADOW = '0 1px 6px rgba(15,23,42,0.08), 0 2px 24px rgba(15,23,42,0.16)'
 const LAUNCHER_SHADOW_HOVER = '0 2px 8px rgba(15,23,42,0.10), 0 6px 28px rgba(15,23,42,0.20)'
 
@@ -61,13 +68,17 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // Visible button label — when set, it doubles as the accessible name.
   let labelText = ''
   // The closed button's accessible name, with the count the badge shows.
+  const labels = launcherLabels(opts.locale)
   const openLabel = () => {
-    const base = labelText || 'Open help'
-    return unreadCount > 0 ? `${base}, ${unreadCount} unread` : base
+    const base = labelText || labels.open
+    return unreadCount > 0 ? labels.unread(base, unreadCount) : base
   }
-  const reduceMotion =
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  // Follows the visitor's reduced-motion setting, also when it changes.
+  const motionQuery =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null
+  let reduceMotion = !!motionQuery?.matches
   // Proactive greeting bubble state. Dismissal persists per browser session so
   // the bubble invites once without nagging on every page. A contained preview
   // must not write that key — it would hide the bubble for a later host visit.
@@ -115,12 +126,8 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     cursor: 'pointer',
     boxShadow: LAUNCHER_SHADOW,
     opacity: '0',
-    transition: reduceMotion
-      ? 'none'
-      : 'opacity 450ms ease, transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease',
   })
   btn.setAttribute('aria-label', openLabel())
-  btn.setAttribute('aria-controls', PANEL_ID)
   btn.setAttribute('aria-expanded', 'false')
 
   const wrapper = document.createElement('div')
@@ -132,9 +139,6 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     flexShrink: '0',
   })
 
-  const iconTransition = reduceMotion
-    ? 'none'
-    : 'opacity 220ms cubic-bezier(0.34,1.56,0.64,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1)'
   const iconMessenger = document.createElement('span')
   Object.assign(iconMessenger.style, {
     position: 'absolute',
@@ -143,7 +147,6 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     display: 'flex',
     opacity: '1',
     transform: 'rotate(0deg)',
-    transition: iconTransition,
   })
   iconMessenger.innerHTML = MESSENGER_ICON
   const iconClose = document.createElement('span')
@@ -154,9 +157,20 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     display: 'flex',
     opacity: '0',
     transform: 'rotate(-90deg)',
-    transition: iconTransition,
   })
   iconClose.innerHTML = CLOSE_ICON
+  const applyMotion = () => {
+    btn.style.transition = reduceMotion ? 'none' : BUTTON_TRANSITION
+    iconMessenger.style.transition = reduceMotion ? 'none' : ICON_TRANSITION
+    iconClose.style.transition = reduceMotion ? 'none' : ICON_TRANSITION
+    if (reduceMotion) btn.style.transform = 'translateY(0)'
+  }
+  const onMotionChange = () => {
+    reduceMotion = !!motionQuery?.matches
+    applyMotion()
+  }
+  applyMotion()
+  motionQuery?.addEventListener?.('change', onMotionChange)
   wrapper.appendChild(iconMessenger)
   wrapper.appendChild(iconClose)
   btn.appendChild(wrapper)
@@ -286,7 +300,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     setOpen(open) {
       isOpen = open
       btn.setAttribute('aria-expanded', open ? 'true' : 'false')
-      btn.setAttribute('aria-label', open ? 'Close help' : openLabel())
+      btn.setAttribute('aria-label', open ? labels.close : openLabel())
       iconMessenger.style.opacity = open ? '0' : '1'
       iconMessenger.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)'
       iconClose.style.opacity = open ? '1' : '0'
@@ -344,6 +358,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       btn.style.opacity = '1'
     },
     remove() {
+      motionQuery?.removeEventListener?.('change', onMotionChange)
       btn.remove()
       bubble.remove()
     },

@@ -9,8 +9,8 @@ import { createLauncher } from '../src/core/launcher'
 
 const badgeOf = (el: HTMLButtonElement) => el.lastElementChild as HTMLElement
 
-function make() {
-  return createLauncher({ placement: 'right', onClick: () => {} })
+function make(locale?: string) {
+  return createLauncher({ placement: 'right', onClick: () => {}, locale })
 }
 
 describe('launcher unread badge', () => {
@@ -242,7 +242,8 @@ describe('launcher accessible name', () => {
   it('names the button for what it opens and points at the panel it controls', () => {
     const l = make()
     expect(l.el.getAttribute('aria-label')).toBe('Open help')
-    expect(l.el.getAttribute('aria-controls')).toBe('quackback-panel')
+    // The SDK points it at the panel once the panel exists.
+    expect(l.el.hasAttribute('aria-controls')).toBe(false)
     expect(l.el.getAttribute('aria-expanded')).toBe('false')
     l.setOpen(true)
     expect(l.el.getAttribute('aria-label')).toBe('Close help')
@@ -303,6 +304,33 @@ describe('launcher visibility', () => {
   })
 })
 
+describe('launcher accessible name in the visitor language', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('says open, close and the unread count in the init locale', () => {
+    const l = make('de')
+    expect(l.el.getAttribute('aria-label')).toBe('Hilfe öffnen')
+    l.setUnread(2)
+    expect(l.el.getAttribute('aria-label')).toBe('Hilfe öffnen, 2 ungelesen')
+    l.setOpen(true)
+    expect(l.el.getAttribute('aria-label')).toBe('Hilfe schließen')
+  })
+
+  it.each([
+    ['pt-BR', 'Abrir ajuda'],
+    ['zh-CN', '打开帮助'],
+    ['zh-TW', '開啟說明'],
+    ['nl', 'Help openen'],
+    ['th', 'เปิดความช่วยเหลือ'],
+    ['xx', 'Open help'],
+    [undefined, 'Open help'],
+  ])('names the button for %s', (locale, name) => {
+    expect(make(locale).el.getAttribute('aria-label')).toBe(name)
+  })
+})
+
 describe('launcher with reduced motion', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
@@ -329,6 +357,24 @@ describe('launcher with reduced motion', () => {
     for (const icon of icons(l)) expect(icon.style.transition).toBe('none')
     l.el.dispatchEvent(new Event('mouseenter'))
     expect(l.el.style.transform).not.toContain('translateY(-2px)')
+  })
+
+  it('follows the setting when it changes', () => {
+    const query = Object.assign(new EventTarget(), { matches: false })
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => query)
+    )
+    const l = make()
+    expect(l.el.style.transition).toContain('transform')
+    query.matches = true
+    query.dispatchEvent(new Event('change'))
+    expect(l.el.style.transition).toBe('none')
+    for (const icon of icons(l)) expect(icon.style.transition).toBe('none')
+    query.matches = false
+    query.dispatchEvent(new Event('change'))
+    expect(l.el.style.transition).toContain('transform')
+    l.remove()
   })
 
   it('keeps them otherwise', () => {
