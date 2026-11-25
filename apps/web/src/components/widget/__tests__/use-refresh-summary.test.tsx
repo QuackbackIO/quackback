@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { renderHook } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -36,7 +36,7 @@ function setup() {
   )
   const refresher = () =>
     renderHook(
-      ({ total }: { total: number | undefined }) => useRefreshSummaryOnUnreadChange(total),
+      ({ total }: { total: number | undefined }) => useRefreshSummaryOnUnreadChange(total, true),
       { wrapper, initialProps: { total: 2 as number | undefined } }
     )
   return { qc, wrapper, refresher }
@@ -80,7 +80,7 @@ describe('useRefreshSummaryOnUnreadChange', () => {
     const { qc, wrapper } = setup()
     await qc.fetchQuery({ queryKey: current, queryFn: () => summary('stale') })
     const hook = renderHook(
-      ({ total }: { total: number | undefined }) => useRefreshSummaryOnUnreadChange(total),
+      ({ total }: { total: number | undefined }) => useRefreshSummaryOnUnreadChange(total, true),
       { wrapper, initialProps: { total: undefined as number | undefined } }
     )
     hook.rerender({ total: 2 })
@@ -107,33 +107,27 @@ describe('useRefreshSummaryOnUnreadChange', () => {
     expect(myConversation).toHaveBeenCalledTimes(1)
   })
 
-  describe('after the card already refreshed since the last total', () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ toFake: ['Date'] })
-      vi.setSystemTime(new Date('2026-11-25T10:00:00.000Z'))
-    })
-    afterEach(() => vi.useRealTimers())
+  it('a drop after the card refreshed still fetches it, since a read elsewhere moves it too', async () => {
+    const { qc, refresher } = setup()
+    const hook = refresher()
+    // The card was refreshed after the last total arrived, then a read in
+    // another tab lowers the total.
+    await new Promise((r) => setTimeout(r, 5))
+    qc.setQueryData(current, summary('refreshed'))
+    await new Promise((r) => setTimeout(r, 5))
+    hook.rerender({ total: 0 })
+    await vi.waitFor(() => expect(myConversation).toHaveBeenCalledTimes(1))
+  })
 
-    it('a read whose own refresh already finished does not fetch the card again', async () => {
-      const { qc, refresher } = setup()
-      const hook = refresher()
-      // The read refreshed the card before the lower total arrived.
-      vi.setSystemTime(new Date('2026-11-25T10:00:05.000Z'))
-      qc.setQueryData(current, summary('after read'))
-      vi.setSystemTime(new Date('2026-11-25T10:00:06.000Z'))
-      hook.rerender({ total: 0 })
-      await new Promise((r) => setTimeout(r, 20))
-      expect(myConversation).not.toHaveBeenCalled()
-    })
-
-    it('a reply that arrives after that refresh still fetches the card', async () => {
-      const { qc, refresher } = setup()
-      const hook = refresher()
-      vi.setSystemTime(new Date('2026-11-25T10:00:05.000Z'))
-      qc.setQueryData(current, summary('after read'))
-      vi.setSystemTime(new Date('2026-11-25T10:00:06.000Z'))
-      hook.rerender({ total: 3 })
-      await vi.waitFor(() => expect(myConversation).toHaveBeenCalledTimes(1))
-    })
+  it('a widget without Home never fetches the card', async () => {
+    const { qc, wrapper } = setup()
+    qc.setQueryData(current, summary('seeded'))
+    const hook = renderHook(
+      ({ total }: { total: number | undefined }) => useRefreshSummaryOnUnreadChange(total, false),
+      { wrapper, initialProps: { total: 2 as number | undefined } }
+    )
+    hook.rerender({ total: 0 })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(myConversation).not.toHaveBeenCalled()
   })
 })

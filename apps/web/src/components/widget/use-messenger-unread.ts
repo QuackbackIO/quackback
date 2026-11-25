@@ -35,35 +35,29 @@ export function useMessengerUnread(enabled: boolean): number | undefined {
  * arrives while Home sits open, or a read made elsewhere, changes it, and the
  * card follows without a poll of its own. It refetches even while Home is
  * off screen, so going back to Home never shows the count from before. The
- * first count after a load or an identity change is not a change.
+ * first count after a load or an identity change is not a change. A widget
+ * without Home (`hasHome` false) never shows the card, so never fetches it.
  *
  * It fetches with the fetch function in hand, because the loader seeds the
  * card with data only, and a card nobody has shown yet has no other way to
  * refetch. A fetch already running, such as the one a read starts, is joined
- * rather than repeated. A total that drops after the card was already
- * refreshed (a read here refreshes it directly) does not fetch it again; a
- * total that rises always does, since that is a new reply.
+ * rather than repeated.
  */
-export function useRefreshSummaryOnUnreadChange(total: number | undefined): void {
+export function useRefreshSummaryOnUnreadChange(total: number | undefined, hasHome: boolean): void {
   const { sessionVersion } = useWidgetAuth()
   const { locale } = useIntl()
   const queryClient = useQueryClient()
   const last = useRef(total)
-  const lastReceivedAt = useRef(Date.now())
   useEffect(() => {
     const previous = last.current
-    const previousAt = lastReceivedAt.current
+    if (total === previous) return
     last.current = total
-    lastReceivedAt.current = Date.now()
-    if (previous === undefined || total === undefined || total === previous) return
-    const queryKey = conversationKeys.widgetConversationSummary(sessionVersion)
-    const cardUpdatedAt = queryClient.getQueryState(queryKey)?.dataUpdatedAt ?? 0
-    if (total < previous && cardUpdatedAt > previousAt) return
+    if (!hasHome || previous === undefined || total === undefined) return
     void queryClient.prefetchQuery({
-      queryKey,
+      queryKey: conversationKeys.widgetConversationSummary(sessionVersion),
       queryFn: () => fetchConversationSummary(locale),
       staleTime: 0,
       retry: false,
     })
-  }, [total, sessionVersion, locale, queryClient])
+  }, [total, hasHome, sessionVersion, locale, queryClient])
 }
