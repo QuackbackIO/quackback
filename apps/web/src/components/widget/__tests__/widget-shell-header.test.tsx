@@ -95,8 +95,16 @@ describe('WidgetShell header', () => {
   })
 })
 
-describe('WidgetShell on a phone held sideways', () => {
-  it('keeps the header, content and tab bar clear of a side notch', () => {
+describe('WidgetShell edges', () => {
+  it('keeps the header clear of the status bar, from the host page or its own', () => {
+    const { container } = renderHome()
+    const spacer = (container.firstElementChild as HTMLElement).querySelector('[aria-hidden]')
+    expect(spacer?.classList).toContain(
+      'h-[max(env(safe-area-inset-top,0px),var(--qb-safe-top,0px))]'
+    )
+  })
+
+  it('keeps the header, content and tab bar clear of a side cutout', () => {
     const { container } = renderHome()
     const shell = container.firstElementChild as HTMLElement
     expect(shell.classList).toContain(

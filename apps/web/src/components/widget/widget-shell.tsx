@@ -248,20 +248,20 @@ export function WidgetShell({
   }, [canPortalHandoff, portalOrigin])
 
   return (
-    // Held sideways, a phone's notch sits on the left or right. A frame reads
+    // A full-screen panel can meet a side cutout. A frame reads
     // env(safe-area-inset-*) as zero; the host page's side insets arrive as
     // --qb-safe-left and --qb-safe-right, so the header, content and tab bar
-    // stay clear of it.
+    // stay clear of it. Loaded as the top page, env() applies directly.
     <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden pl-[max(env(safe-area-inset-left,0px),var(--qb-safe-left,0px))] pr-[max(env(safe-area-inset-right,0px),var(--qb-safe-right,0px))]">
       {/* The Home hero backdrop fills the panel behind the header row and
           body; the header/content render transparently over it. */}
       {backdrop}
-      {/* On a phone the panel fills the screen: keep the header out from under
-          the host page's notch or status bar (see widget-host-safe-area). */}
+      {/* Keep the header out from under the notch or status bar: the host
+          page's (see widget-host-safe-area), or the widget's own when it is
+          the top page, as in an app's web view. */}
       <div
         aria-hidden
-        className="relative z-10 shrink-0"
-        style={{ height: 'var(--qb-safe-top, 0px)' }}
+        className="relative z-10 shrink-0 h-[max(env(safe-area-inset-top,0px),var(--qb-safe-top,0px))]"
       />
       <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
         {/* Left: back button on detail views; workspace logo on Home. min-w-0 so

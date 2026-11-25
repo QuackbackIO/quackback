@@ -1,9 +1,10 @@
 /**
  * The host page's safe-area insets, sent by the embed script as
  * `{ type: 'quackback:safe-area', data: { top, bottom, left, right } }` in CSS
- * pixels. A frame reads `env(safe-area-inset-*)` as zero, so on a phone, where
- * the panel fills the screen, the widget's edges would sit under the notch and
- * the system bars (held sideways, the notch is on the left or right). The
+ * pixels. A frame reads `env(safe-area-inset-*)` as zero, so where the panel
+ * fills the screen, the widget's edges would sit under the notch, a side
+ * cutout or the system bars. The embed script sends zeros for the floating
+ * panel, which its own offsets keep clear of them. The
  * values become `--qb-safe-top`, `--qb-safe-bottom`, `--qb-safe-left` and
  * `--qb-safe-right` on the root element, which the widget shell pads by.
  */
