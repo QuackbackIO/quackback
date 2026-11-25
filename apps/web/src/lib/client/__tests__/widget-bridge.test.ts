@@ -23,38 +23,43 @@ const identifyResult = {
   user: { id: 'u1', name: 'Test', email: 'test@example.com' },
 }
 
+// Each fresh import registers its own message listener; remove them after
+// each test so an earlier instance never posts to a later test's parent.
+const messageListeners: EventListenerOrEventListenerObject[] = []
+
+function postFromParent(origin: string, source: unknown = window.parent) {
+  window.dispatchEvent(
+    new MessageEvent('message', {
+      data: { type: 'quackback:identify', data: { ssoToken: 't' } },
+      origin,
+      source: source as MessageEventSource,
+    })
+  )
+}
+
 describe('widget-bridge', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubGlobal('parent', { postMessage: vi.fn() })
     setEmbedder({ ancestorOrigins: ['https://host.example'] })
+    const add = window.addEventListener.bind(window)
+    vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
+      if (type === 'message' && listener) messageListeners.push(listener)
+      add(type, listener, options)
+    })
   })
 
   afterEach(() => {
+    for (const listener of messageListeners.splice(0)) {
+      window.removeEventListener('message', listener)
+    }
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
     window.__quackbackNative = undefined
     setEmbedder({})
   })
 
-  it('sends via postMessage to the host origin in iframe mode', async () => {
-    const { sendToHost } = await import('../widget-bridge')
-    sendToHost({ type: 'quackback:ready' })
-    expect(window.parent.postMessage).toHaveBeenCalledWith(
-      { type: 'quackback:ready' },
-      'https://host.example'
-    )
-  })
-
-  it('falls back to the referrer origin when ancestor origins are unavailable', async () => {
-    setEmbedder({ referrer: 'https://app.example/settings?tab=1' })
-    const { sendToHost } = await import('../widget-bridge')
-    sendToHost(identifyResult)
-    expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, 'https://app.example')
-  })
-
-  describe('when the host origin is unknown', () => {
-    beforeEach(() => setEmbedder({}))
-
+  describe('messages without user data', () => {
     it.each([
       [{ type: 'quackback:ready' }],
       [{ type: 'quackback:close' }],
@@ -63,49 +68,62 @@ describe('widget-bridge', () => {
       [{ type: 'quackback:identify-result', success: true, user: null }],
       [{ type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' }],
       [{ type: 'quackback:auth-change', user: null }],
-      [{ type: 'quackback:event', name: 'vote', payload: { postId: 'p1', voted: true } }],
       [{ type: 'quackback:navigate', url: 'https://portal.example/posts/p1' }],
-    ])('still sends %j to any origin', async (message) => {
+    ])('go to any origin even when the host origin is known: %j', async (message) => {
       const { sendToHost } = await import('../widget-bridge')
       sendToHost(message)
       expect(window.parent.postMessage).toHaveBeenCalledWith(message, '*')
     })
 
+    it('reach the host when the referrer is the frame itself', async () => {
+      setEmbedder({ referrer: `${window.location.origin}/widget` })
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost({ type: 'quackback:ready' })
+      expect(window.parent.postMessage).toHaveBeenCalledWith({ type: 'quackback:ready' }, '*')
+    })
+  })
+
+  describe('messages with user data', () => {
+    it('go to the first ancestor origin', async () => {
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, 'https://host.example')
+    })
+
+    it('fall back to the referrer origin when ancestor origins are unavailable', async () => {
+      setEmbedder({ referrer: 'https://app.example/settings?tab=1' })
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, 'https://app.example')
+    })
+
     it.each([
       [identifyResult],
       [{ type: 'quackback:auth-change', user: identifyResult.user }],
-      [
-        {
-          type: 'quackback:event',
-          name: 'identify',
-          payload: { success: true, user: identifyResult.user, anonymous: false },
-        },
-      ],
+      [{ type: 'quackback:event', name: 'vote', payload: { postId: 'p1', voted: true } }],
+      [{ type: 'quackback:event', name: 'post:created', payload: { id: 'p1', title: 'Hi' } }],
       [{ type: 'quackback:navigate', url: 'https://portal.example/auth/widget-handoff?ott=abc' }],
-    ])('does not send %j, which names the user', async (message) => {
+    ])('are held back while the host origin is unknown: %j', async (message) => {
+      setEmbedder({})
       const { sendToHost } = await import('../widget-bridge')
       sendToHost(message)
       expect(window.parent.postMessage).not.toHaveBeenCalled()
     })
+
+    it('are not addressed to the frame itself when the referrer is the frame', async () => {
+      setEmbedder({ referrer: `${window.location.origin}/widget?x=1` })
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).not.toHaveBeenCalled()
+      postFromParent('https://host.example')
+      expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, 'https://host.example')
+    })
   })
 
   describe('learning the host origin from its messages', () => {
-    function postFromParent(origin: string, source: unknown = window.parent) {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'quackback:identify', data: { ssoToken: 't' } },
-          origin,
-          source: source as MessageEventSource,
-        })
-      )
-    }
-
     it('sends identify results to the parent message origin when the frame sees no ancestors or referrer', async () => {
       setEmbedder({})
       const { sendToHost } = await import('../widget-bridge')
-      sendToHost({ type: 'quackback:ready' })
-      expect(window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'quackback:ready' }, '*')
-
       postFromParent('https://host.example')
       sendToHost(identifyResult)
       expect(window.parent.postMessage).toHaveBeenLastCalledWith(
@@ -114,15 +132,31 @@ describe('widget-bridge', () => {
       )
     })
 
+    it('flushes user data held back before the first host message, in order', async () => {
+      setEmbedder({})
+      const { sendToHost } = await import('../widget-bridge')
+      const authChange = { type: 'quackback:auth-change', user: identifyResult.user }
+      sendToHost(identifyResult)
+      sendToHost({ type: 'quackback:ready' })
+      sendToHost(authChange)
+      expect(vi.mocked(window.parent.postMessage).mock.calls).toEqual([
+        [{ type: 'quackback:ready' }, '*'],
+      ])
+
+      postFromParent('https://host.example')
+      expect(vi.mocked(window.parent.postMessage).mock.calls).toEqual([
+        [{ type: 'quackback:ready' }, '*'],
+        [identifyResult, 'https://host.example'],
+        [authChange, 'https://host.example'],
+      ])
+    })
+
     it('prefers the parent message origin over ancestor and referrer origins', async () => {
       setEmbedder({ ancestorOrigins: ['https://stale.example'], referrer: 'https://ref.example/' })
       const { sendToHost } = await import('../widget-bridge')
       postFromParent('https://host.example')
-      sendToHost({ type: 'quackback:ready' })
-      expect(window.parent.postMessage).toHaveBeenCalledWith(
-        { type: 'quackback:ready' },
-        'https://host.example'
-      )
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, 'https://host.example')
     })
 
     it('keeps the first parent origin it sees', async () => {
@@ -134,15 +168,30 @@ describe('widget-bridge', () => {
       expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, 'https://host.example')
     })
 
-    it.each([
-      ['another window', 'https://other.example', {}],
-      ['an opaque origin', 'null', undefined],
-    ])('ignores a message from %s', async (_label, origin, source) => {
+    it('ignores a message from another window', async () => {
       setEmbedder({})
       const { sendToHost } = await import('../widget-bridge')
-      postFromParent(origin, source ?? window.parent)
+      postFromParent('https://other.example', {})
       sendToHost(identifyResult)
       expect(window.parent.postMessage).not.toHaveBeenCalled()
+    })
+
+    it('answers identify with a non-personal failure when the host origin is opaque', async () => {
+      setEmbedder({})
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost(identifyResult)
+      postFromParent('null')
+      sendToHost({ type: 'quackback:auth-change', user: identifyResult.user })
+      sendToHost({ type: 'quackback:event', name: 'vote', payload: { postId: 'p1' } })
+      expect(vi.mocked(window.parent.postMessage).mock.calls).toEqual([
+        [{ type: 'quackback:identify-result', success: false, error: 'HOST_ORIGIN_UNKNOWN' }, '*'],
+      ])
+
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).toHaveBeenLastCalledWith(
+        { type: 'quackback:identify-result', success: false, error: 'HOST_ORIGIN_UNKNOWN' },
+        '*'
+      )
     })
   })
 
@@ -174,10 +223,7 @@ describe('widget-bridge', () => {
     window.__quackbackNative = {}
     const { sendToHost } = await import('../widget-bridge')
     sendToHost({ type: 'quackback:close' })
-    expect(window.parent.postMessage).toHaveBeenCalledWith(
-      { type: 'quackback:close' },
-      'https://host.example'
-    )
+    expect(window.parent.postMessage).toHaveBeenCalledWith({ type: 'quackback:close' }, '*')
   })
 
   it('strips quackback: prefix for native event type', async () => {
@@ -267,6 +313,7 @@ describe('resolveHostOrigin', () => {
     [{ referrer: '' }],
     [{ referrer: 'not a url' }],
     [{ referrer: 'file:///tmp/page.html' }],
+    [{ referrer: 'https://widget.example/widget', ownOrigin: 'https://widget.example' }],
     [{}],
   ])('returns null for %j', async (source) => {
     const { resolveHostOrigin } = await import('../widget-bridge')
