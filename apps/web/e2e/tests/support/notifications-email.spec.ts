@@ -142,10 +142,12 @@ test.describe('team emails', () => {
         expect(mail.HTML).toContain(`${customer.name} started a conversation in Acme Corp.`)
         expect(mail.HTML).toContain('Open inbox')
         expect(linksIn(mail).some((l) => l.endsWith(`/admin/inbox?i=${conversationId}`))).toBe(true)
-        const row = await waitForEmailLog(teammate.email, {
+        // A teammate is emailed about every conversation started while nobody
+        // is online, other tests' included: look for this one's row.
+        await waitForEmailLog(teammate.email, {
           email_type: 'ConversationMessageEmail',
+          conversation_id: uuidOf(conversationId),
         })
-        expect(row.conversation_id).toBe(uuidOf(conversationId))
       } finally {
         await customerApi.dispose()
         await retireTeammate(teammate)
