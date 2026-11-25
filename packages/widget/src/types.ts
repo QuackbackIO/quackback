@@ -118,11 +118,17 @@ export interface WidgetUser {
 }
 
 /**
- * Events emitted by the widget iframe. `open` and `close` carry context about
- * which view is showing so subscribers can react to deep-link flows.
+ * Events emitted by the widget. Subscribers can use `open` and `close` to
+ * react to deep-link flows.
  */
 export interface EventMap {
   ready: Record<string, never>
+  /**
+   * The panel opened. The payload reports the view and deep-link the host
+   * requested, not the view that is showing: when that surface is turned
+   * off, the panel opens without switching to it and the event still names
+   * the requested view.
+   */
   open: {
     view?: 'home' | 'feedback' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
     postId?: string
