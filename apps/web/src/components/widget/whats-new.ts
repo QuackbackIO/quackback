@@ -27,15 +27,16 @@ export interface WhatsNewPayload {
 
 /**
  * Cut plain text to `max` characters at the last word break, with an
- * ellipsis. Text without spaces (Thai, Chinese) is cut at `max`.
+ * ellipsis. Text without spaces (Thai, Chinese) is cut at `max`. Counts code
+ * points, so an emoji is never split.
  */
 export function excerptAtWord(text: string, max: number): string {
-  const plain = text.trim()
-  if (plain.length <= max) return plain
-  let cut = plain.slice(0, max)
+  const chars = Array.from(text.trim())
+  if (chars.length <= max) return chars.join('')
+  let cut = chars.slice(0, max)
   const space = cut.lastIndexOf(' ')
   if (space > max / 2) cut = cut.slice(0, space)
-  return `${cut.replace(/[\s.,;:!?]+$/, '')}…`
+  return `${cut.join('').replace(/[\s.,;:!?]+$/, '')}…`
 }
 
 export function buildWhatsNew(
@@ -81,7 +82,7 @@ export function buildWhatsNew(
  * Tell the host about the newest unread entry whenever it changes, or null
  * once nothing is unread. Sends nothing while `enabled` is off (the workspace
  * setting) or before the changelog has loaded, so a reload never flickers
- * the card away.
+ * the card away. Turning off after a card was sent clears it once.
  */
 export function useWhatsNewAnnouncement(
   enabled: boolean,
@@ -93,7 +94,9 @@ export function useWhatsNewAnnouncement(
     enabled && state.ready && state.count > 0 && state.newest
       ? buildWhatsNew(intl, state.count, state.newest)
       : null
-  const key = enabled && state.ready ? JSON.stringify(payload) : null
+  // Off after a card went out: the host must drop it.
+  const clearing = !enabled && lastSent.current !== null && lastSent.current !== 'null'
+  const key = clearing ? 'null' : enabled && state.ready ? JSON.stringify(payload) : null
   useEffect(() => {
     if (key === null || key === lastSent.current) return
     lastSent.current = key

@@ -51,6 +51,12 @@ describe('excerptAtWord', () => {
   it('cuts text without spaces at the limit', () => {
     expect(excerptAtWord('การค้นหาเร็วขึ้นสองเท่า', 10)).toBe('การค้นหาเร…')
   })
+
+  it('never splits an emoji', () => {
+    expect(excerptAtWord('\u{1F680}\u{1F680}\u{1F680}\u{1F680}', 3)).toBe(
+      '\u{1F680}\u{1F680}\u{1F680}…'
+    )
+  })
 })
 
 describe('newestUnreadChangelog', () => {
@@ -128,5 +134,24 @@ describe('useWhatsNewAnnouncement', () => {
     rerender({ e: true, s: { ready: true, count: 0, newest: null } })
     expect(sent()).toHaveLength(2)
     expect(sent()[1]!.whatsNew).toBeNull()
+  })
+
+  it('clears the card once when announcing turns off after a send', () => {
+    const { rerender } = run(true, { ready: true, count: 2, newest: entry })
+    rerender({ e: false, s: { ready: true, count: 2, newest: entry } })
+    expect(sent()).toHaveLength(2)
+    expect(sent()[1]!.whatsNew).toBeNull()
+    rerender({ e: false, s: { ready: true, count: 3, newest: entry } })
+    expect(sent()).toHaveLength(2)
+    // Turned back on, the card returns.
+    rerender({ e: true, s: { ready: true, count: 2, newest: entry } })
+    expect(sent()).toHaveLength(3)
+    expect(sent()[2]!.whatsNew).not.toBeNull()
+  })
+
+  it('sends nothing when turned off before any card went out', () => {
+    const { rerender } = run(true, { ready: false, count: 0, newest: null })
+    rerender({ e: false, s: { ready: true, count: 2, newest: entry } })
+    expect(sent()).toEqual([])
   })
 })

@@ -30,6 +30,12 @@ export const EMPTY_CHANGELOG_BASELINE = '1970-01-01T00:00:00.000Z'
  *  views re-read it without a reload. */
 export const CHANGELOG_SEEN_EVENT = 'quackback:changelog-seen'
 
+/** Whether a storage key holds a seen marker (the bare legacy key or any
+ *  person's scoped marker). */
+export function isChangelogSeenKey(key: string): boolean {
+  return key === SEEN_KEY || key.startsWith(`${SEEN_KEY}:`)
+}
+
 export function getChangelogSeenAt(scope: string, storage?: Storage): string | null {
   try {
     const raw = readScopedMarker(storage ?? window.localStorage, SEEN_KEY, scope)

@@ -7,6 +7,7 @@ import {
   EMPTY_CHANGELOG_BASELINE,
   newestUnreadChangelog,
   getChangelogSeenAt,
+  isChangelogSeenKey,
   markChangelogSeen,
   touchChangelogSeen,
   CHANGELOG_SEEN_EVENT,
@@ -41,8 +42,17 @@ export function useChangelogUnread(enabled: boolean): {
   // updates don't fire the native `storage` event, hence the custom one).
   const [markerVersion, reread] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
+    // Another tab reading the changelog advances the shared marker; the
+    // native `storage` event carries that here (null key: storage cleared).
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || isChangelogSeenKey(e.key)) reread()
+    }
     window.addEventListener(CHANGELOG_SEEN_EVENT, reread)
-    return () => window.removeEventListener(CHANGELOG_SEEN_EVENT, reread)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(CHANGELOG_SEEN_EVENT, reread)
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
   // Read once per person and per marker change, not every render.
   const seenAt = useMemo(

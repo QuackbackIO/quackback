@@ -127,3 +127,36 @@ it('reads the marker once, not on every render', async () => {
   expect(getItem).not.toHaveBeenCalled()
   getItem.mockRestore()
 })
+
+it('re-reads the marker when another tab advances it', async () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  localStorage.setItem(KEY, entry(1).publishedAt)
+  items = [entry(3), entry(2), entry(1)]
+  const { wrapper } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(result.current.unread).toBe(2))
+  expect(result.current.newest?.id).toBe('changelog_3')
+
+  // Another tab reads the changelog: only the native storage event fires here.
+  localStorage.setItem(KEY, entry(3).publishedAt)
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
+  })
+  expect(result.current.unread).toBe(0)
+  expect(result.current.newest).toBeNull()
+})
+
+it('ignores storage changes to unrelated keys', async () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  localStorage.setItem(KEY, entry(1).publishedAt)
+  items = [entry(3), entry(2), entry(1)]
+  const { wrapper } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(result.current.unread).toBe(2))
+
+  localStorage.setItem(KEY, entry(3).publishedAt)
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }))
+  })
+  expect(result.current.unread).toBe(2)
+})
