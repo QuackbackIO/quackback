@@ -94,10 +94,16 @@ export async function emailLogFor(address: string): Promise<EmailLogRow[]> {
     ORDER BY created_at DESC`
 }
 
-/** Wait for an email_log row for `address` matching `where`. */
+/**
+ * Wait for an email_log row for `address` matching `where`. Name the
+ * conversation or ticket when other tests may email the same address: the
+ * newest row wins otherwise.
+ */
 export async function waitForEmailLog(
   address: string,
-  where: Partial<Pick<EmailLogRow, 'direction' | 'email_type' | 'status'>> = {},
+  where: Partial<
+    Pick<EmailLogRow, 'direction' | 'email_type' | 'status' | 'conversation_id' | 'ticket_id'>
+  > = {},
   timeoutMs = 15_000
 ): Promise<EmailLogRow> {
   return pollFor(
