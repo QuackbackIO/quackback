@@ -66,6 +66,7 @@ import {
   type VisitorThreadCache,
 } from '@/components/conversation/events-reducer'
 import { refreshVisitorUnreadCounts } from '@/lib/client/conversation/visitor-read'
+import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import { conversationKeys } from '@/components/conversation/query-keys'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
@@ -654,6 +655,17 @@ export function VisitorConversationThread({
     },
     onCatchUp: () => void refreshMessages(),
   })
+
+  // A browser can throttle or drop a hidden frame's live stream, so a reply
+  // that arrives while the host hides the frame may never reach it. When the
+  // host shows the frame again, read the thread again to catch up.
+  const hostShown = useHostShown()
+  const wasShownRef = useRef(hostShown)
+  useEffect(() => {
+    const shownAgain = hostShown && !wasShownRef.current
+    wasShownRef.current = hostShown
+    if (shownAgain) void refreshMessages()
+  }, [hostShown, refreshMessages])
 
   // Ephemeral turn state is component-local (not keyed by resetKey); drop it when
   // switching threads so it can't bleed across conversations.
