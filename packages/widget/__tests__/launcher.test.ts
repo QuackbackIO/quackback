@@ -172,12 +172,12 @@ describe('launcher setPlacement', () => {
 
   it('moves the button between corners', () => {
     const l = make()
-    expect(l.el.style.right).toBe('24px')
+    expect(l.el.style.right).toBe('calc(24px + env(safe-area-inset-right, 0px))')
     l.setPlacement('left')
-    expect(l.el.style.left).toBe('24px')
+    expect(l.el.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
     expect(l.el.style.right).toBe('')
     l.setPlacement('right')
-    expect(l.el.style.right).toBe('24px')
+    expect(l.el.style.right).toBe('calc(24px + env(safe-area-inset-right, 0px))')
     expect(l.el.style.left).toBe('')
   })
 
@@ -186,7 +186,7 @@ describe('launcher setPlacement', () => {
     l.setGreeting('Hi')
     l.setPlacement('left')
     const bubble = bubbleOf()
-    expect(bubble.style.left).toBe('24px')
+    expect(bubble.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
     expect(bubble.style.right).toBe('')
   })
 })
@@ -220,5 +220,16 @@ describe('launcher contained in a root', () => {
     ;(bubble.lastElementChild as HTMLElement).click()
     expect(bubble.style.display).toBe('none')
     expect(sessionStorage.getItem('quackback:launcher-greeting-dismissed')).toBeNull()
+  })
+})
+
+describe('launcher on an edge-to-edge phone page', () => {
+  it('keeps the button and its bubble above the home indicator and clear of a side notch', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    expect(l.el.style.bottom).toContain('safe-area-inset-bottom')
+    expect(l.el.style.right).toContain('safe-area-inset-right')
+    l.setPlacement('left')
+    expect(l.el.style.left).toContain('safe-area-inset-left')
+    l.remove()
   })
 })

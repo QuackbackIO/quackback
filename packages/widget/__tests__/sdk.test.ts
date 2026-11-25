@@ -84,7 +84,7 @@ describe('sdk', () => {
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]'
     ) as HTMLButtonElement
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
     expect(btn.style.right).toBe('')
   })
 
@@ -557,7 +557,7 @@ describe('sdk server-driven launcher config', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'right' })
     const btn = document.querySelector('button[aria-label="Chat with us"]') as HTMLButtonElement
     expect(btn).not.toBeNull()
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
     expect(btn.style.right).toBe('')
     expect(btn.textContent).toContain('Chat with us')
   })
@@ -576,7 +576,7 @@ describe('sdk server-driven launcher config', () => {
     await new Promise((r) => setTimeout(r, 0))
     const btn = document.querySelector('button[aria-label="Feedback"]') as HTMLButtonElement
     expect(btn).not.toBeNull()
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
   })
 
   it('no server position keeps the init placement', () => {
@@ -587,7 +587,7 @@ describe('sdk server-driven launcher config', () => {
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]'
     ) as HTMLButtonElement
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
   })
 })
 
