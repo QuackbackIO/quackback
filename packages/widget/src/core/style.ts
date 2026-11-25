@@ -11,9 +11,18 @@ export function ensureStyles(side: 'left' | 'right'): void {
   currentSide = side
   const el = existing ?? document.createElement('style')
   el.id = STYLE_ID
+  // On a page drawn under the notch and system bars (viewport-fit=cover) the
+  // launcher moves in by the safe-area insets, so the panel above it does
+  // too. env() is 0px elsewhere.
+  const sideInset = `env(safe-area-inset-${side},0px)`
+  const maxHeight =
+    'calc(100vh - 108px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))'
+  const maxWidth =
+    'calc(100vw - 48px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px))'
   el.textContent = [
     '.quackback-panel{position:fixed;z-index:2147483647;overflow:hidden;pointer-events:none;',
-    `bottom:88px;${side}:24px;width:400px;height:min(600px,calc(100vh - 108px));`,
+    `bottom:calc(88px + env(safe-area-inset-bottom,0px));${side}:calc(24px + ${sideInset});`,
+    `width:400px;height:min(600px,${maxHeight});`,
     'border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,0.32),0 6px 20px rgba(0,0,0,0.18);',
     `opacity:0;transform:scale(0);transform-origin:bottom ${side};`,
     'transition:opacity 280ms cubic-bezier(0.34,1.56,0.64,1),transform 280ms cubic-bezier(0.34,1.56,0.64,1),',
@@ -21,7 +30,8 @@ export function ensureStyles(side: 'left' | 'right'): void {
     // Long-form content (posts, articles, changelog entries) grows the panel.
     // Desktop-scoped: on mobile the panel is already full-screen, and this
     // higher-specificity rule would otherwise SHRINK it there.
-    '@media(min-width:640px){.quackback-panel.quackback-expanded{width:min(720px,calc(100vw - 48px));height:min(780px,calc(100vh - 48px))}}',
+    // The panel's bottom sits 88px up, so the height leaves room for that.
+    `@media(min-width:640px){.quackback-panel.quackback-expanded{width:min(720px,${maxWidth});height:min(780px,${maxHeight})}}`,
     '.quackback-panel.quackback-open{opacity:1;transform:scale(1);pointer-events:auto}',
     '.quackback-panel.quackback-closing{opacity:0;transform:scale(0);pointer-events:none;',
     'transition:opacity 200ms cubic-bezier(0.4,0,1,1),transform 200ms cubic-bezier(0.4,0,1,1)}',
