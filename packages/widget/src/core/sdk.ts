@@ -17,6 +17,9 @@ import { clearDeviceId, getOrCreateDeviceId } from './device'
 import { FULL_SCREEN_MEDIA, removeStyles } from './style'
 
 type Command =
+  | 'isOpen'
+  | 'getUser'
+  | 'isIdentified'
   | 'init'
   | 'identify'
   | 'logout'
@@ -65,6 +68,10 @@ export function createSDK(): SDK {
   let placement: 'left' | 'right' = 'right'
   let mobileMql: MediaQueryList | null = null
   let mobileCleanup: (() => void) | null = null
+  // The server config of the live init, kept for a launcher created later by
+  // showLauncher, and whether the launcher has been revealed yet.
+  let serverConfig: ServerConfig | null = null
+  let launcherRevealed = false
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
   // banner). Tracking runs only when both the host and the instance allow it.
@@ -289,34 +296,37 @@ export function createSDK(): SDK {
   // if the config fetch is slow/fails), so users never see the default color
   // flash before the brand color lands.
   const LAUNCHER_REVEAL_FALLBACK_MS = 1800
-  function revealLauncherOnce(): () => void {
-    let revealed = false
-    return () => {
-      if (revealed) return
-      revealed = true
-      launcher?.reveal()
-    }
+  function revealLauncher(): void {
+    launcherRevealed = true
+    launcher?.reveal()
+  }
+
+  /** Theme, greeting and label: the parts of the server config the launcher
+   *  itself shows. */
+  function applyLauncherConfig(cfg: ServerConfig): void {
+    applyServerTheme(cfg)
+    launcher?.setGreeting(cfg.launcherGreeting)
+    launcher?.setLabel(cfg.launcherLabel)
   }
 
   /** Theme + greeting + launcher chrome + analytics from a resolved server
    *  config. `initToken` guards the tracker against a stale async apply after
    *  a re-init. */
-  function applyServerConfig(serverConfig: ServerConfig, initToken: InitOptions): void {
-    applyServerTheme(serverConfig)
-    launcher?.setGreeting(serverConfig.launcherGreeting)
-    launcher?.setLabel(serverConfig.launcherLabel)
-    if (serverConfig.position) {
-      placement = serverConfig.position
+  function applyServerConfig(cfg: ServerConfig, initToken: InitOptions): void {
+    if (config === initToken) serverConfig = cfg
+    applyLauncherConfig(cfg)
+    if (cfg.position) {
+      placement = cfg.position
       launcher?.setPlacement(placement)
       panel?.setPlacement(placement)
     }
     // Host-page pageview tracking is instance-controlled: it starts only when
     // the server config enables visitor analytics, and only if this init is
     // still the live one. The durable device id is a separate opt-in on top.
-    if (serverConfig.visitorAnalytics && config === initToken) {
+    if (cfg.visitorAnalytics && config === initToken) {
       analyticsConfig = {
         instanceUrl: initToken.instanceUrl,
-        deviceTracking: serverConfig.visitorDeviceTracking === true,
+        deviceTracking: cfg.visitorDeviceTracking === true,
       }
       startTracking()
     }
@@ -343,8 +353,8 @@ export function createSDK(): SDK {
     pendingDevice = null
   }
 
-  function createLauncherIfNeeded(): void {
-    if (launcher || !config || config.launcher === false) return
+  function createLauncherIfNeeded(force = false): void {
+    if (launcher || !config || (config.launcher === false && !force)) return
     launcher = createLauncher({
       placement,
       onClick: () => {
@@ -352,6 +362,11 @@ export function createSDK(): SDK {
         else dispatch('open')
       },
     })
+    // A launcher created after init (showLauncher) catches up with the
+    // server config, the panel state and the reveal it missed.
+    if (serverConfig) applyLauncherConfig(serverConfig)
+    if (panelOpen) launcher.setOpen(true)
+    if (launcherRevealed) launcher.reveal()
   }
 
   function dispatch(cmd: Command, a?: unknown, b?: unknown): unknown {
@@ -378,7 +393,10 @@ export function createSDK(): SDK {
           anonymous: true,
         }
         sendIdentity(initialIdentity)
-        const reveal = revealLauncherOnce()
+        // Only the live init reveals; a slow fetch from a replaced one does not.
+        const reveal = () => {
+          if (config === next) revealLauncher()
+        }
         // Script-tag installs get the server config baked into sdk.js, so the
         // launcher paints in brand colors and reveals with zero network round
         // trips. npm installs fall back to the config fetch.
@@ -404,10 +422,7 @@ export function createSDK(): SDK {
         sendIdentity((a as Identity | undefined) ?? { anonymous: true })
         return
       case 'logout':
-        panel?.hide()
-        launcher?.setOpen(false)
-        panelOpen = false
-        sendShownState()
+        if (panelOpen) dispatch('close')
         currentUser = null
         if (ready && bridge) bridge.send('quackback:identify', null as unknown as undefined)
         else {
@@ -431,6 +446,11 @@ export function createSDK(): SDK {
         sendShownState()
         opened.show()
         launcher?.setOpen(true)
+        // Keyboard and screen-reader users land in the panel, not on the page,
+        // unless it closed again before the frame.
+        requestAnimationFrame(() => {
+          if (panelOpen && panel === opened) opened.iframe.focus()
+        })
         const ctx = opts as {
           view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
           postId?: string
@@ -445,21 +465,32 @@ export function createSDK(): SDK {
         })
         return
       }
-      case 'close':
+      case 'close': {
+        // Focus inside the panel goes back to the launcher that opened it.
+        const focusWasInside = !!panel && document.activeElement === panel.iframe
         panel?.hide()
         launcher?.setOpen(false)
         panelOpen = false
         sendShownState()
         cancelSafeArea()
+        if (focusWasInside) launcher?.el.focus()
         emitter.emit('close', {})
         return
+      }
       case 'showLauncher':
-        if (!launcher) createLauncherIfNeeded()
-        else launcher.el.style.display = 'flex'
+        // An explicit show wins over an init-time launcher: false.
+        if (!launcher) createLauncherIfNeeded(true)
+        else launcher.setVisible(true)
         return
       case 'hideLauncher':
-        if (launcher) launcher.el.style.display = 'none'
+        launcher?.setVisible(false)
         return
+      case 'isOpen':
+        return panelOpen
+      case 'getUser':
+        return currentUser
+      case 'isIdentified':
+        return currentUser !== null
       case 'on':
         return emitter.on(a as EventName, b as EventHandler<EventName>)
       case 'off':
@@ -510,6 +541,8 @@ export function createSDK(): SDK {
         pendingOpen = null
         panelOpen = false
         currentUser = null
+        serverConfig = null
+        launcherRevealed = false
         placement = 'right'
         config = null
         return

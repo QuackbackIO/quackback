@@ -4,7 +4,7 @@
  * quackback:unread messages, it shows a count only while the widget is CLOSED
  * (an alert on the close icon, or on an already-read open widget, is noise).
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createLauncher } from '../src/core/launcher'
 
 const badgeOf = (el: HTMLButtonElement) => el.lastElementChild as HTMLElement
@@ -152,7 +152,7 @@ describe('launcher label', () => {
     l.setLabel('Chat with us')
     expect(l.el.getAttribute('aria-label')).toBe('Chat with us')
     l.setLabel(null)
-    expect(l.el.getAttribute('aria-label')).toBe('Open feedback widget')
+    expect(l.el.getAttribute('aria-label')).toBe('Open help')
   })
 
   it('clearing the label returns to the icon-only circle', () => {
@@ -231,5 +231,109 @@ describe('launcher on an edge-to-edge phone page', () => {
     l.setPlacement('left')
     expect(l.el.style.left).toContain('safe-area-inset-left')
     l.remove()
+  })
+})
+
+describe('launcher accessible name', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('names the button for what it opens and points at the panel it controls', () => {
+    const l = make()
+    expect(l.el.getAttribute('aria-label')).toBe('Open help')
+    expect(l.el.getAttribute('aria-controls')).toBe('quackback-panel')
+    expect(l.el.getAttribute('aria-expanded')).toBe('false')
+    l.setOpen(true)
+    expect(l.el.getAttribute('aria-label')).toBe('Close help')
+    expect(l.el.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('says the unread count the badge shows', () => {
+    const l = make()
+    l.setUnread(2)
+    expect(l.el.getAttribute('aria-label')).toBe('Open help, 2 unread')
+    l.setLabel('Chat with us')
+    expect(l.el.getAttribute('aria-label')).toBe('Chat with us, 2 unread')
+    l.setOpen(true)
+    expect(l.el.getAttribute('aria-label')).toBe('Close help')
+    l.setOpen(false)
+    expect(l.el.getAttribute('aria-label')).toBe('Chat with us, 2 unread')
+    l.setUnread(0)
+    expect(l.el.getAttribute('aria-label')).toBe('Chat with us')
+  })
+})
+
+describe('launcher hover', () => {
+  it('returns to its resting shadow when the pointer leaves', () => {
+    document.body.innerHTML = ''
+    const l = make()
+    const resting = l.el.style.boxShadow
+    l.el.dispatchEvent(new Event('mouseenter'))
+    expect(l.el.style.boxShadow).not.toBe(resting)
+    l.el.dispatchEvent(new Event('mouseleave'))
+    expect(l.el.style.boxShadow).toBe(resting)
+  })
+})
+
+describe('launcher visibility', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    try {
+      sessionStorage.clear()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('hides the greeting bubble with the button, and keeps it hidden', () => {
+    const l = make()
+    l.setGreeting('Need a hand?')
+    l.setVisible(false)
+    expect(l.el.style.display).toBe('none')
+    expect(bubbleOf().style.display).toBe('none')
+    // A greeting that lands later, or an open and close, does not bring it back.
+    l.setGreeting('Still here')
+    l.setOpen(true)
+    l.setOpen(false)
+    expect(bubbleOf().style.display).toBe('none')
+    l.setVisible(true)
+    expect(l.el.style.display).toBe('flex')
+    expect(bubbleOf().style.display).toBe('flex')
+  })
+})
+
+describe('launcher with reduced motion', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const icons = (l: ReturnType<typeof make>) =>
+    Array.from((l.el.firstElementChild as HTMLElement).children) as HTMLElement[]
+
+  it('drops its transitions and the hover lift', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+    )
+    const l = make()
+    expect(l.el.style.transition).toBe('none')
+    expect(icons(l)).toHaveLength(2)
+    for (const icon of icons(l)) expect(icon.style.transition).toBe('none')
+    l.el.dispatchEvent(new Event('mouseenter'))
+    expect(l.el.style.transform).not.toContain('translateY(-2px)')
+  })
+
+  it('keeps them otherwise', () => {
+    const l = make()
+    expect(l.el.style.transition).toContain('transform')
+    for (const icon of icons(l)) expect(icon.style.transition).toContain('transform')
   })
 })

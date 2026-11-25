@@ -3,7 +3,9 @@ const STYLE_ID = 'quackback-widget-styles'
 /** Where the panel fills the screen instead of floating by the launcher. The
  *  SDK matches the same query to decide whether the frame needs the host
  *  page's safe-area insets. */
-export const FULL_SCREEN_MEDIA = '(max-width:639px)'
+// Narrow screens, and short touch screens: a phone held sideways is wide but
+// short, and gets the full-screen panel too.
+export const FULL_SCREEN_MEDIA = '(max-width:639px),(max-height:500px) and (pointer:coarse)'
 
 // The panel CSS is side-specific (corner offset + transform origin), so the
 // element is rewritten when the side changes after creation — e.g. the server
@@ -27,8 +29,8 @@ export function ensureStyles(side: 'left' | 'right'): void {
   el.textContent = [
     '.quackback-panel{position:fixed;z-index:2147483647;overflow:hidden;pointer-events:none;',
     `bottom:calc(88px + env(safe-area-inset-bottom,0px));${side}:calc(24px + ${sideInset});`,
-    `width:400px;height:min(600px,${maxHeight});`,
-    'border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,0.32),0 6px 20px rgba(0,0,0,0.18);',
+    `width:min(400px,${maxWidth});height:min(704px,${maxHeight});`,
+    'border-radius:16px;box-shadow:0 0 0 1px rgba(15,23,42,0.06),0 2px 6px rgba(15,23,42,0.06),0 24px 60px -12px rgba(15,23,42,0.28);',
     `opacity:0;transform:scale(0);transform-origin:bottom ${side};`,
     'transition:opacity 280ms cubic-bezier(0.34,1.56,0.64,1),transform 280ms cubic-bezier(0.34,1.56,0.64,1),',
     'width 520ms cubic-bezier(0.26,1,0.32,1),height 520ms cubic-bezier(0.26,1,0.32,1)}',
@@ -43,7 +45,9 @@ export function ensureStyles(side: 'left' | 'right'): void {
     `@media${FULL_SCREEN_MEDIA}{`,
     // 100vh is the tallest the viewport gets (browser toolbars hidden), so it
     // runs under a visible toolbar or system bar; 100dvh is what is on screen.
-    '.quackback-panel{top:0;left:0;right:0;bottom:0;width:100%;height:100vh;height:100dvh;',
+    // The expanded selector outranks the desktop expanded size, which still
+    // matches a phone held sideways (wide, but short).
+    '.quackback-panel,.quackback-panel.quackback-expanded{top:0;left:0;right:0;bottom:0;width:100%;height:100vh;height:100dvh;',
     'border-radius:0;box-shadow:none;',
     'opacity:1;visibility:hidden;transform:translateY(100%);transform-origin:center;',
     'transition:transform 300ms cubic-bezier(0.4,0,0.2,1),visibility 0s linear 300ms}',
@@ -53,6 +57,7 @@ export function ensureStyles(side: 'left' | 'right'): void {
     'opacity:0;pointer-events:none;transition:opacity 200ms ease}',
     '.quackback-backdrop.quackback-open{opacity:1;pointer-events:auto}',
     '@media(min-width:640px){.quackback-backdrop{display:none!important}}',
+    '@media(prefers-reduced-motion:reduce){.quackback-panel,.quackback-panel.quackback-open,.quackback-panel.quackback-closing,.quackback-backdrop{transition:none!important}}',
   ].join('')
   if (!existing) document.head.appendChild(el)
 }

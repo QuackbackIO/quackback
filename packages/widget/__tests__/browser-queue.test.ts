@@ -175,12 +175,12 @@ describe('browser-queue', () => {
     await import('../src/browser-queue')
     // Let the deferred fallback fire first.
     await new Promise((r) => setTimeout(r, 0))
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).not.toBeNull()
 
     // Host's explicit init must destroy + rebuild with the new options.
     window.Quackback!('init', { launcher: false, placement: 'left' })
 
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).toBeNull()
     const styles = document.getElementById('quackback-widget-styles')?.textContent ?? ''
     expect(styles).toContain('left:calc(24px + env(safe-area-inset-left,0px))')
     expect(styles).not.toContain('right:calc(24px')
@@ -201,11 +201,28 @@ describe('browser-queue', () => {
     window.Quackback!('init', { launcher: false, placement: 'left' })
     await new Promise((r) => setTimeout(r, 0))
 
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).toBeNull()
     expect(document.querySelector('.quackback-panel')).not.toBeNull()
     const styles = document.getElementById('quackback-widget-styles')?.textContent ?? ''
     expect(styles).toContain('left:calc(24px + env(safe-area-inset-left,0px))')
     expect(styles).not.toContain('right:calc(24px')
+  })
+
+  it('end-to-end: a script-tag install reads widget state through the global', async () => {
+    vi.doUnmock('../src/core/sdk')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
+    )
+    await import('../src/browser-queue')
+
+    window.Quackback!('init', { instanceUrl: 'https://feedback.acme.com' })
+    expect(window.Quackback!('isOpen')).toBe(false)
+    expect(window.Quackback!('getUser')).toBeNull()
+    expect(window.Quackback!('isIdentified')).toBe(false)
+    window.Quackback!('open')
+    expect(window.Quackback!('isOpen')).toBe(true)
+    window.Quackback!('destroy')
   })
 
   it('does not auto-init if the queue already contains an init call', async () => {

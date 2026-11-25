@@ -10,6 +10,9 @@ export interface PanelOptions {
   onBackdropClick: () => void
 }
 
+/** The panel element's id, which the launcher names in aria-controls. */
+export const PANEL_ID = 'quackback-panel'
+
 export interface PanelHandle {
   iframe: HTMLIFrameElement
   show(): void
@@ -59,6 +62,9 @@ export function createPanel(opts: PanelOptions): PanelHandle {
   // Closed, the panel is only transparent: inert keeps its frame out of the
   // host page's tab order and the accessibility tree until it opens.
   panel.inert = true
+  panel.id = PANEL_ID
+  panel.setAttribute('role', 'dialog')
+  panel.setAttribute('aria-label', frameTitle(opts.locale))
   document.body.appendChild(panel)
 
   const iframe = document.createElement('iframe')

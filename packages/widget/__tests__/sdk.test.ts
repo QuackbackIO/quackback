@@ -57,23 +57,23 @@ describe('sdk', () => {
   it('init creates a launcher and iframe', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).not.toBeNull()
     expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
   })
 
   it('init with { launcher: false } does not create a button', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).toBeNull()
   })
 
   it('a repeat init re-applies launcher: false', () => {
     stubIframe()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).not.toBeNull()
     sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).toBeNull()
   })
 
   it('a repeat init moves an existing launcher to the new placement', () => {
@@ -81,9 +81,7 @@ describe('sdk', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'left' })
-    const btn = document.querySelector(
-      'button[aria-label="Open feedback widget"]'
-    ) as HTMLButtonElement
+    const btn = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
     expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
     expect(btn.style.right).toBe('')
   })
@@ -143,9 +141,7 @@ describe('sdk', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     fireReady()
     sdk.dispatch('logout')
-    const launcher = document.querySelector(
-      'button[aria-label="Open feedback widget"]'
-    ) as HTMLButtonElement
+    const launcher = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
     expect(launcher).not.toBeNull()
     expect(launcher.style.display).not.toBe('none')
     spy.mockRestore()
@@ -299,9 +295,7 @@ describe('sdk', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     const launcher = () =>
-      document.querySelector(
-        'button[aria-label="Open feedback widget"]'
-      ) as HTMLButtonElement | null
+      document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement | null
     sdk.dispatch('hideLauncher')
     expect(launcher()?.style.display).toBe('none')
     sdk.dispatch('showLauncher')
@@ -322,9 +316,7 @@ describe('sdk', () => {
     )
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    const btn = document.querySelector(
-      'button[aria-label="Open feedback widget"]'
-    ) as HTMLButtonElement
+    const btn = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
     expect(btn.style.opacity).toBe('0')
     resolveFetch({ ok: true, json: async () => ({ theme: {} }) })
     // Let the fetch → json → applyServerConfig → finally chain settle. Colors
@@ -343,9 +335,7 @@ describe('sdk', () => {
     }
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    const btn = document.querySelector(
-      'button[aria-label="Open feedback widget"]'
-    ) as HTMLButtonElement
+    const btn = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
     expect(btn.style.opacity).toBe('1')
     expect(btn.style.backgroundColor).toBe('#ff0000')
     expect(fetchMock).not.toHaveBeenCalled()
@@ -381,9 +371,7 @@ describe('sdk', () => {
     ) // never resolves
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    const btn = document.querySelector(
-      'button[aria-label="Open feedback widget"]'
-    ) as HTMLButtonElement
+    const btn = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
     expect(btn.style.opacity).toBe('0')
     vi.advanceTimersByTime(1800)
     expect(btn.style.opacity).toBe('1')
@@ -445,7 +433,7 @@ describe('sdk', () => {
     expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
     sdk.dispatch('destroy')
     expect(document.querySelector('iframe.quackback-widget-iframe')).toBeNull()
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).toBeNull()
   })
 
   // Earlier tests leave their SDKs listening for ORIGIN, so these use origins
@@ -526,11 +514,12 @@ describe('sdk', () => {
     // Host subscribers get the count...
     expect(handler).toHaveBeenCalledWith({ count: 5 })
     // ...and the launcher shows the badge.
-    const badge = (
-      document.querySelector('button[aria-label="Open feedback widget"]') as HTMLButtonElement
-    ).lastElementChild as HTMLElement
+    const btn = document.querySelector('button[aria-controls="quackback-panel"]') as HTMLElement
+    const badge = btn.lastElementChild as HTMLElement
     expect(badge.style.display).toBe('flex')
     expect(badge.textContent).toBe('5')
+    // ...and a screen reader hears the same count.
+    expect(btn.getAttribute('aria-label')).toBe('Open help, 5 unread')
   })
 })
 
@@ -587,9 +576,7 @@ describe('sdk server-driven launcher config', () => {
     window.__QUACKBACK_CONFIG__ = { theme: {} }
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'left' })
-    const btn = document.querySelector(
-      'button[aria-label="Open feedback widget"]'
-    ) as HTMLButtonElement
+    const btn = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
     expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
   })
 })
@@ -826,5 +813,215 @@ describe('sdk on phones', () => {
     expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 0, left: 0, right: 0 }])
     expect(measured()).toBe(0)
     sdk.dispatch('destroy')
+  })
+})
+
+describe('sdk panel as a dialog', () => {
+  // Frame callbacks run only when the test says so.
+  let frames: Array<() => void> = []
+  function runFrames() {
+    const due = frames
+    frames = []
+    for (const cb of due) cb()
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    document.head.innerHTML = ''
+    frames = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
+    )
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: () => void) => {
+        cb()
+        return 1
+      })
+    )
+    vi.stubGlobal('cancelIdleCallback', vi.fn())
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: () => void) => frames.push(cb))
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    delete (window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__
+  })
+
+  const panelEl = () => document.querySelector('.quackback-panel') as HTMLElement
+  const iframeEl = () =>
+    document.querySelector('iframe.quackback-widget-iframe') as HTMLIFrameElement
+  const launcherEl = () =>
+    document.querySelector('button[aria-controls]') as HTMLButtonElement | null
+
+  it('is a labelled dialog the launcher controls', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, locale: 'de' })
+    expect(panelEl().getAttribute('role')).toBe('dialog')
+    expect(panelEl().getAttribute('aria-label')).toBe('Hilfe')
+    expect(panelEl().id).toBe('quackback-panel')
+    expect(launcherEl()!.getAttribute('aria-controls')).toBe(panelEl().id)
+  })
+
+  it('moves focus into the panel on open and back to the launcher on close', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    launcherEl()!.focus()
+    sdk.dispatch('open')
+    runFrames()
+    expect(document.activeElement).toBe(iframeEl())
+    sdk.dispatch('close')
+    expect(document.activeElement).toBe(launcherEl())
+  })
+
+  it('leaves focus alone on close when it is elsewhere on the page', () => {
+    stubIframe()
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    sdk.dispatch('open')
+    runFrames()
+    input.focus()
+    sdk.dispatch('close')
+    expect(document.activeElement).toBe(input)
+  })
+
+  it('does not pull focus into a panel that closed before the next frame', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    sdk.dispatch('open')
+    sdk.dispatch('close')
+    runFrames()
+    expect(document.activeElement).not.toBe(iframeEl())
+  })
+
+  it('logout closes an open panel with a close event, and is quiet when closed', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const onClose = vi.fn()
+    sdk.dispatch('on', 'close', onClose)
+    sdk.dispatch('logout')
+    expect(onClose).not.toHaveBeenCalled()
+    sdk.dispatch('open')
+    sdk.dispatch('logout')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(sdk.isOpen()).toBe(false)
+  })
+
+  it('showLauncher brings up a revealed, branded launcher after init({ launcher: false })', () => {
+    stubIframe()
+    window.__QUACKBACK_CONFIG__ = {
+      theme: { lightPrimary: '#ff0000', lightPrimaryForeground: '#ffffff', themeMode: 'light' },
+      launcherLabel: 'Chat with us',
+    }
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
+    expect(launcherEl()).toBeNull()
+    sdk.dispatch('open')
+    sdk.dispatch('showLauncher')
+    const btn = launcherEl()!
+    expect(btn).not.toBeNull()
+    expect(btn.style.opacity).toBe('1')
+    expect(btn.style.backgroundColor).toBe('#ff0000')
+    expect(btn.textContent).toContain('Chat with us')
+    // It reflects the panel that is already open.
+    expect(btn.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('hideLauncher hides the greeting bubble too', () => {
+    stubIframe()
+    window.__QUACKBACK_CONFIG__ = { launcherGreeting: 'Need a hand?' }
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const bubble = Array.from(document.body.querySelectorAll('div')).find(
+      (d) => d.textContent === 'Need a hand?×'
+    ) as HTMLElement
+    expect(bubble.style.display).toBe('flex')
+    sdk.dispatch('hideLauncher')
+    expect(launcherEl()!.style.display).toBe('none')
+    expect(bubble.style.display).toBe('none')
+    sdk.dispatch('showLauncher')
+    expect(launcherEl()!.style.display).toBe('flex')
+    expect(bubble.style.display).toBe('flex')
+  })
+
+  it('answers isOpen, getUser and isIdentified through dispatch', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    expect(sdk.dispatch('isOpen')).toBe(false)
+    expect(sdk.dispatch('getUser')).toBeNull()
+    expect(sdk.dispatch('isIdentified')).toBe(false)
+    sdk.dispatch('open')
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: ORIGIN,
+        data: { type: 'quackback:identify-result', success: true, user: { id: 'user_a' } },
+      })
+    )
+    expect(sdk.dispatch('isOpen')).toBe(true)
+    expect(sdk.dispatch('getUser')).toEqual({ id: 'user_a' })
+    expect(sdk.dispatch('isIdentified')).toBe(true)
+  })
+})
+
+describe('sdk panel stylesheet', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    document.head.innerHTML = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
+    )
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function css(): string {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    sdk.dispatch('open')
+    const text = document.getElementById('quackback-widget-styles')?.textContent ?? ''
+    sdk.dispatch('destroy')
+    return text
+  }
+
+  it('sizes the desktop panel to fit the window', () => {
+    const text = css()
+    expect(text).toContain(
+      'width:min(400px,calc(100vw - 48px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)))'
+    )
+    expect(text).toContain(
+      'height:min(704px,calc(100vh - 108px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)))'
+    )
+    expect(text).toContain('border-radius:16px')
+  })
+
+  it('goes full screen on a phone held sideways, expanded or not', () => {
+    const text = css()
+    const query = '@media(max-width:639px),(max-height:500px) and (pointer:coarse){'
+    expect(text).toContain(query)
+    const phoneRules = text.slice(text.indexOf(query))
+    // The desktop "expanded" size would otherwise win on a wide, short screen.
+    expect(phoneRules).toMatch(/\.quackback-panel\.quackback-expanded[,{][^}]*height:100dvh/)
+  })
+
+  it('drops the panel and backdrop animation for reduced motion', () => {
+    const text = css()
+    const rule = text.slice(text.indexOf('@media(prefers-reduced-motion:reduce)'))
+    expect(rule).toContain('.quackback-panel')
+    expect(rule).toContain('.quackback-backdrop')
+    expect(rule).toContain('transition:none!important')
   })
 })
