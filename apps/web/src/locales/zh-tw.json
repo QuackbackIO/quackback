@@ -654,6 +654,7 @@
   "widget.messenger.replyTime.online.minutes": "我們在線，通常會在幾分鐘內回覆。",
   "widget.messenger.replyTime.online.hours": "我們在線，通常會在幾小時內回覆。",
   "widget.messenger.replyTime.online.day": "我們在線，通常會在一天內回覆。",
+  "widget.messenger.replyTime.online.off": "我們在線。",
   "widget.messenger.seen": "已讀",
   "widget.messenger.send": "傳送",
   "widget.messenger.startPrompt": "傳送訊息給我們，我們會盡快回覆你。",

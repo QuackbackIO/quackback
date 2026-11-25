@@ -654,6 +654,7 @@
   "widget.messenger.replyTime.online.minutes": "Jesteśmy online. Zwykle odpowiadamy w kilka minut.",
   "widget.messenger.replyTime.online.hours": "Jesteśmy online. Zwykle odpowiadamy w kilka godzin.",
   "widget.messenger.replyTime.online.day": "Jesteśmy online. Zwykle odpowiadamy w ciągu dnia.",
+  "widget.messenger.replyTime.online.off": "Jesteśmy online.",
   "widget.messenger.seen": "Wyświetlono",
   "widget.messenger.send": "Wyślij",
   "widget.messenger.startPrompt": "Wyślij nam wiadomość, a odpowiemy najszybciej, jak to możliwe.",

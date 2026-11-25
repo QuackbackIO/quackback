@@ -654,6 +654,7 @@
   "widget.messenger.replyTime.online.minutes": "Мы на связи, обычно отвечаем за несколько минут.",
   "widget.messenger.replyTime.online.hours": "Мы на связи, обычно отвечаем за несколько часов.",
   "widget.messenger.replyTime.online.day": "Мы на связи, обычно отвечаем в течение дня.",
+  "widget.messenger.replyTime.online.off": "Мы на связи.",
   "widget.messenger.seen": "Просмотрено",
   "widget.messenger.send": "Отправить",
   "widget.messenger.startPrompt": "Напишите нам, и мы вам ответим.",

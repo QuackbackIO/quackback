@@ -72,13 +72,17 @@ function SupportThreadPage() {
     staleTime: CONVERSATION_PRESENCE_POLL_MS,
   })
 
-  // Teammate faces for the thread header: the same few the widget shows,
-  // and hidden when the workspace turns teammate avatars off.
+  // Teammate faces for the thread header: the same few the widget shows.
+  // None when the workspace turns teammate avatars off (cached faces never
+  // linger), and no fetch when the assistant fronts the thread instead.
+  const messengerConfig = settings?.publicWidgetConfig?.messenger
+  const showTeam =
+    (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true) &&
+    !messengerConfig?.assistant?.enabled
   const teamQuery = useQuery({
     queryKey: PORTAL_TEAM_AVATARS_QUERY_KEY,
     queryFn: () => getWidgetTeamAvatarsFn(),
-    enabled:
-      supportEnabled && isLoggedIn && (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true),
+    enabled: supportEnabled && isLoggedIn && showTeam,
     staleTime: 5 * 60_000,
   })
 
@@ -141,8 +145,8 @@ function SupportThreadPage() {
             currentUser={user ? { name: user.name, avatarUrl: portalAvatar ?? user.image } : null}
             uploadFile={upload}
             presence={presenceQuery.data ?? OFFLINE}
-            team={teamQuery.data}
-            replyTime={settings?.publicWidgetConfig?.messenger?.replyTime}
+            team={showTeam ? teamQuery.data : undefined}
+            replyTime={messengerConfig?.replyTime}
             embedOpenMode="navigate"
             onConversationStarted={onConversationStarted}
           />

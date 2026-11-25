@@ -863,6 +863,22 @@ describe('applyAction', () => {
         status: 'online',
       })
     })
+
+    it('falls back to the default reply time when the messenger config cannot be read', async () => {
+      const schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+      getOfficeHoursSchedule.mockResolvedValue(schedule)
+      getMessengerConfig.mockRejectedValue(new Error('settings read failed'))
+      buildReplyTimeMessage.mockReturnValue({
+        status: 'online',
+        content: "We're online, typically replies in under an hour.",
+      })
+      const result = await applyAction(
+        { type: 'send_block', nodeId: 'n7', block: { kind: 'replyTime' } },
+        ctx
+      )
+      expect(result).toMatchObject({ label: 'sent replyTime block' })
+      expect(buildReplyTimeMessage).toHaveBeenCalledWith(schedule, undefined)
+    })
   })
 
   // The channel-gating/recipient-resolution/email-template behavior itself

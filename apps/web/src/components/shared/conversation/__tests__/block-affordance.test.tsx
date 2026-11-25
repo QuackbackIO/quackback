@@ -433,7 +433,7 @@ describe('BlockReplyTimeCaption', () => {
     ['minutes', "We're online, typically replies in a few minutes."],
     ['hours', "We're online, typically replies in a few hours."],
     ['day', "We're online, typically replies within a day."],
-    ['off', "We're online"],
+    ['off', "We're online."],
   ] as const)('words the online line from the %s reply time', (replyTime, copy) => {
     withIntl(<BlockReplyTimeCaption status="online" replyTime={replyTime} />)
     expect(screen.getByRole('status').textContent).toBe(copy)

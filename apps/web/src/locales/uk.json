@@ -654,6 +654,7 @@
   "widget.messenger.replyTime.online.minutes": "Ми онлайн, зазвичай відповідаємо за кілька хвилин.",
   "widget.messenger.replyTime.online.hours": "Ми онлайн, зазвичай відповідаємо за кілька годин.",
   "widget.messenger.replyTime.online.day": "Ми онлайн, зазвичай відповідаємо протягом дня.",
+  "widget.messenger.replyTime.online.off": "Ми онлайн.",
   "widget.messenger.seen": "Переглянуто",
   "widget.messenger.send": "Надіслати",
   "widget.messenger.startPrompt": "Напишіть нам, і ми відповімо вам.",

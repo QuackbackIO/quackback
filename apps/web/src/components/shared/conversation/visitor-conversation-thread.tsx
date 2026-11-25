@@ -517,7 +517,7 @@ export function VisitorConversationThread({
         setWelcomeMessage(res.welcomeMessage)
         setOfflineMessage(res.offlineMessage)
         setTeamName(res.teamName)
-        setReplyTime(res.replyTime)
+        setReplyTime(res.replyTime ?? initialReplyTime)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
         setTicketFormAsksEmail(res.ticketFormAsksEmail)

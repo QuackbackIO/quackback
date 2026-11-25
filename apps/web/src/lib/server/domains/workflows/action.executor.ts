@@ -405,11 +405,19 @@ async function sendBlock(
     const { buildReplyTimeMessage } =
       await import('@/lib/server/domains/office-hours/reply-time-message')
     const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
-    const [schedule, messenger] = await Promise.all([
+    // The reply time only words the line: an unreadable messenger config
+    // falls back to the default rather than failing the step.
+    const [schedule, replyTime] = await Promise.all([
       getOfficeHoursSchedule(),
-      getMessengerConfig(),
+      getMessengerConfig().then(
+        (messenger) => messenger.replyTime,
+        (error: unknown) => {
+          log.warn({ err: error }, 'messenger config unreadable; default reply time')
+          return undefined
+        }
+      ),
     ])
-    const resolved = buildReplyTimeMessage(schedule, messenger.replyTime)
+    const resolved = buildReplyTimeMessage(schedule, replyTime)
     replyTimeStatus = resolved.status
     content = resolved.content
   } else {

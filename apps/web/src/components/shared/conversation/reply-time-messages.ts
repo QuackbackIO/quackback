@@ -38,5 +38,5 @@ export const captionOnlineMessages = defineMessages({
     id: 'widget.messenger.replyTime.online.day',
     defaultMessage: "We're online, typically replies within a day.",
   },
-  off: { id: 'widget.messenger.online', defaultMessage: "We're online" },
+  off: { id: 'widget.messenger.replyTime.online.off', defaultMessage: "We're online." },
 })

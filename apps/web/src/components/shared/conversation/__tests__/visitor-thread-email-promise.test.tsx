@@ -135,6 +135,12 @@ describe('the visitor thread while the team is away', () => {
     expect(screen.getByText(/^Typically replies within a day · /)).toBeInTheDocument()
   })
 
+  it('keeps the known reply time when the thread load does not carry one', async () => {
+    await renderThread(false, { knownReplyTime: 'day' })
+    expect(await screen.findByText('Acme Support')).toBeInTheDocument()
+    expect(screen.getByText(/^Typically replies within a day · /)).toBeInTheDocument()
+  })
+
   it('does not promise email to a visitor it cannot email', async () => {
     const onReplyByEmail = vi.fn()
     await renderThread(false, { replyTime: 'off', onReplyByEmail })

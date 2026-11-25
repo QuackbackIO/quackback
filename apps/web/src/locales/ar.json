@@ -654,6 +654,7 @@
   "widget.messenger.replyTime.online.minutes": "نحن متواجدون الآن، عادةً ما نرد خلال بضع دقائق.",
   "widget.messenger.replyTime.online.hours": "نحن متواجدون الآن، عادةً ما نرد خلال بضع ساعات.",
   "widget.messenger.replyTime.online.day": "نحن متواجدون الآن، عادةً ما نرد خلال يوم.",
+  "widget.messenger.replyTime.online.off": "نحن متواجدون الآن.",
   "widget.messenger.seen": "تمت المشاهدة",
   "widget.messenger.send": "إرسال",
   "widget.messenger.startPrompt": "أرسل لنا رسالة وسنرد عليك.",

@@ -923,6 +923,7 @@
   "widget.messenger.replyTime.online.minutes": "เราออนไลน์อยู่ โดยปกติจะตอบภายในไม่กี่นาที",
   "widget.messenger.replyTime.online.hours": "เราออนไลน์อยู่ โดยปกติจะตอบภายในไม่กี่ชั่วโมง",
   "widget.messenger.replyTime.online.day": "เราออนไลน์อยู่ โดยปกติจะตอบภายในหนึ่งวัน",
+  "widget.messenger.replyTime.online.off": "เราออนไลน์อยู่",
   "widget.messenger.seen": "อ่านแล้ว",
   "widget.messenger.send": "ส่ง",
   "widget.messenger.startPrompt": "ส่งข้อความถึงเรา แล้วเราจะตอบกลับ",

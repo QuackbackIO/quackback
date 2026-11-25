@@ -654,6 +654,7 @@
   "widget.messenger.replyTime.online.minutes": "We zijn online, meestal antwoorden we binnen enkele minuten.",
   "widget.messenger.replyTime.online.hours": "We zijn online, meestal antwoorden we binnen enkele uren.",
   "widget.messenger.replyTime.online.day": "We zijn online, meestal antwoorden we binnen een dag.",
+  "widget.messenger.replyTime.online.off": "We zijn online.",
   "widget.messenger.seen": "Gezien",
   "widget.messenger.send": "Versturen",
   "widget.messenger.startPrompt": "Stuur ons een bericht, dan antwoorden we zo snel mogelijk.",
