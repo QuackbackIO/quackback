@@ -1256,6 +1256,7 @@
   "widget.help.article.askQuestion": "Posez-nous une question",
   "widget.changelog.new": "Nouveau",
   "widget.shell.tab.messages.unread": "{count} non lu(s)",
+  "widget.shell.tab.tickets.updated": "{count, plural, one {# ticket mis à jour} other {# tickets mis à jour}}",
   "automation.connectors.empty.title": "Aucun connecteur pour l'instant",
   "automation.builtinTools.agent": "Agent",
   "automation.skills.empty.title": "Aucune compétence pour l'instant",

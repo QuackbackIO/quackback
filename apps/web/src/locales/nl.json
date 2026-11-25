@@ -1256,6 +1256,7 @@
   "widget.help.article.askQuestion": "Stel ons een vraag",
   "widget.changelog.new": "Nieuw",
   "widget.shell.tab.messages.unread": "{count} ongelezen",
+  "widget.shell.tab.tickets.updated": "{count, plural, one {# ticket bijgewerkt} other {# tickets bijgewerkt}}",
   "automation.connectors.empty.title": "Nog geen connectors",
   "automation.builtinTools.agent": "Agent",
   "automation.skills.empty.title": "Nog geen skills",

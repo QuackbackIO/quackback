@@ -1577,6 +1577,7 @@
   "widget.changelog.filter.all": "ทั้งหมด",
   "widget.changelog.emptyFiltered": "ยังไม่มีอัปเดตในหมวดนี้",
   "widget.shell.tab.messages.unread": "ยังไม่อ่าน {count} รายการ",
+  "widget.shell.tab.tickets.updated": "{count, plural, other {อัปเดตคำร้อง # รายการ}}",
   "automation.connectors.empty.title": "ยังไม่มีตัวเชื่อมต่อ",
   "automation.builtinTools.agent": "เอเจนต์",
   "automation.skills.empty.title": "ยังไม่มีทักษะ",

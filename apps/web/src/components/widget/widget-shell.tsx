@@ -495,8 +495,9 @@ export function WidgetShell({
                           className="absolute -top-1 -end-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold leading-none text-primary-foreground"
                           aria-label={intl.formatMessage(
                             {
-                              id: 'widget.shell.tab.messages.unread',
-                              defaultMessage: '{count} unread',
+                              id: 'widget.shell.tab.tickets.updated',
+                              defaultMessage:
+                                '{count, plural, one {# ticket updated} other {# tickets updated}}',
                             },
                             { count: ticketStageUnread }
                           )}

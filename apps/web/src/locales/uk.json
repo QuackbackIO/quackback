@@ -1256,6 +1256,7 @@
   "widget.help.article.askQuestion": "Поставте нам запитання",
   "widget.changelog.new": "Нове",
   "widget.shell.tab.messages.unread": "Непрочитано: {count}",
+  "widget.shell.tab.tickets.updated": "{count, plural, one {# звернення оновлено} few {# звернення оновлено} many {# звернень оновлено} other {# звернення оновлено}}",
   "automation.connectors.empty.title": "Конекторів ще немає",
   "automation.builtinTools.agent": "Агент",
   "automation.skills.empty.title": "Навичок ще немає",

@@ -1256,6 +1256,7 @@
   "widget.help.article.askQuestion": "Zadaj nam pytanie",
   "widget.changelog.new": "Nowość",
   "widget.shell.tab.messages.unread": "Nieprzeczytane: {count}",
+  "widget.shell.tab.tickets.updated": "{count, plural, one {# sprawa zaktualizowana} few {# sprawy zaktualizowane} many {# spraw zaktualizowanych} other {# sprawy zaktualizowanej}}",
   "automation.connectors.empty.title": "Nie ma jeszcze konektorów",
   "automation.builtinTools.agent": "Agent",
   "automation.skills.empty.title": "Nie ma jeszcze umiejętności",
