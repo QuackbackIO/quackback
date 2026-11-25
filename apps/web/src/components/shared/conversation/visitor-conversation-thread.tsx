@@ -1208,7 +1208,12 @@ export function VisitorConversationThread({
                 <LazyBlockTicketForm
                   getAuthHeaders={getAuthHeaders}
                   askEmail={ticketFormAsksEmail}
-                  onEmailSubmitted={onEmailSubmitted}
+                  onEmailSubmitted={(email) => {
+                    // The thread now has the visitor's email: later forms
+                    // stop asking for it, so it is reported only once.
+                    setTicketFormAsksEmail(false)
+                    onEmailSubmitted?.(email)
+                  }}
                 />
               </Suspense>
             </div>
