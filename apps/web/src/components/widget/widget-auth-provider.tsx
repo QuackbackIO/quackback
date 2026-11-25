@@ -82,7 +82,7 @@ export function useWidgetAuth(): WidgetAuthContextValue {
 interface WidgetAuthProviderProps {
   /** Portal user identity — if set, the widget displays their info */
   portalUser?: WidgetUser | null
-  /** Signed session cookie token extracted during SSR (available in cross-origin iframes) */
+  /** Signed portal session token, set only when the embedding page is the instance's own origin */
   portalSessionToken?: string | null
   /** When true, inline email capture is disabled and the host app must sign users. */
   hmacRequired?: boolean
@@ -312,10 +312,8 @@ export function WidgetAuthProvider({
   // anonymous sessions; the future assistant collects contact info as lead data
   // on the principal instead of minting user sessions.
 
-  // If a portal session token was extracted during SSR, use it directly as the
-  // widget's Bearer token. This works in both same-origin AND cross-origin iframes
-  // because the token is extracted during the initial navigation (where SameSite=Lax
-  // cookies are available) and passed via loader data.
+  // If the loader passed a portal session token (only for an embedding page on
+  // the instance's own origin), use it directly as the widget's Bearer token.
   // SDK identify() calls via postMessage will override this if received.
   const portalHydratedRef = useRef(false)
   useEffect(() => {
