@@ -5,6 +5,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import {
   countUnreadChangelogs,
   EMPTY_CHANGELOG_BASELINE,
+  newestUnreadChangelog,
   getChangelogSeenAt,
   markChangelogSeen,
   touchChangelogSeen,
@@ -13,13 +14,17 @@ import {
 import { seenScope } from './seen-scope'
 
 /**
- * Unread changelog count for the visitor, plus the mark-seen action the
- * changelog surface calls once entries are on screen. Pass `enabled=false`
+ * Unread changelog count for the visitor and the newest unread entry, plus
+ * the mark-seen action the changelog surface calls once entries are on screen. Pass `enabled=false`
  * (changelog tab off) to skip the fetch. Polls so an entry published while
  * the host page sits open badges without a reload.
  */
 export function useChangelogUnread(enabled: boolean): {
   unread: number
+  /** The newest unread entry, or null. */
+  newest: { id: string; title: string; content: string; publishedAt: string } | null
+  /** Whether the list has loaded, so "nothing unread" is known. */
+  ready: boolean
   markSeen: (publishedAt: string) => void
 } {
   const { sessionVersion, user, identityResolved } = useWidgetAuth()
@@ -48,6 +53,7 @@ export function useChangelogUnread(enabled: boolean): {
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
   const unread = countUnreadChangelogs(entries, seenAt)
+  const newest = newestUnreadChangelog(entries, seenAt)
 
   // Showing the badge counts as activity, so a person whose marker has nothing
   // new to record keeps it on a browser shared by many (see seen-scope.ts).
@@ -60,11 +66,11 @@ export function useChangelogUnread(enabled: boolean): {
   // they ever open the Changelog tab (see changelog-unread.ts). An empty
   // changelog stamps a baseline older than anything, so its first entry badges.
   const loaded = data !== undefined
-  const newest = entries[0]?.publishedAt
+  const newestPublishedAt = entries[0]?.publishedAt
   useEffect(() => {
     if (scope === null || !loaded || getChangelogSeenAt(scope) !== null) return
-    markChangelogSeen(scope, newest ?? EMPTY_CHANGELOG_BASELINE)
-  }, [loaded, newest, scope])
+    markChangelogSeen(scope, newestPublishedAt ?? EMPTY_CHANGELOG_BASELINE)
+  }, [loaded, newestPublishedAt, scope])
 
   const markSeen = useCallback(
     (publishedAt: string) => {
@@ -73,5 +79,5 @@ export function useChangelogUnread(enabled: boolean): {
     [scope]
   )
 
-  return { unread, markSeen }
+  return { unread, newest, ready: loaded, markSeen }
 }

@@ -23,6 +23,7 @@ import { sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
 import { useMessengerUnread, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
+import { useWhatsNewAnnouncement } from './whats-new'
 import { useTicketStageBadge } from './use-ticket-stage-badge'
 import { hasOpenSuggestionPopup } from '@/components/ui/suggestion-popup-marker'
 
@@ -107,6 +108,9 @@ interface WidgetShellProps {
   /** Manual panel-size control beside the close button (expandable views on
    *  desktop hosts only). Collapsing is sticky — it turns auto-expansion off. */
   expandControl?: { expanded: boolean; onToggle: () => void }
+  /** The workspace announces unread changelog entries in a card above the
+   *  closed launcher. */
+  announceUpdates?: boolean
   /** Self-hosted always shows the badge. Cloud hides it only after purchase. */
   showPoweredBy?: boolean
   children: ReactNode
@@ -126,6 +130,7 @@ export function WidgetShell({
   hideTabBar = false,
   panelExpanded = false,
   expandControl,
+  announceUpdates = false,
   showPoweredBy = true,
   children,
 }: WidgetShellProps) {
@@ -146,7 +151,18 @@ export function WidgetShell({
   const messengerUnread = messengerUnreadTotal ?? 0
   // Newly published changelog entries badge the launcher until the visitor
   // opens the changelog surface (which advances their seen marker).
-  const { unread: changelogUnread } = useChangelogUnread(enabledTabs.changelog ?? false)
+  const {
+    unread: changelogUnread,
+    newest: newestChangelog,
+    ready: changelogReady,
+  } = useChangelogUnread(enabledTabs.changelog ?? false)
+  // The newest unread entry also reaches the host for the card above the
+  // closed launcher, when the workspace turns that on.
+  useWhatsNewAnnouncement(announceUpdates && (enabledTabs.changelog ?? false), {
+    ready: changelogReady,
+    count: changelogUnread,
+    newest: newestChangelog,
+  })
   // Mirror the combined total to the host so the floating launcher shows the
   // same badge while the widget is closed (the iframe keeps polling even when
   // hidden).

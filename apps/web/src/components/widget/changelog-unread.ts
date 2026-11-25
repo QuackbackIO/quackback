@@ -78,3 +78,22 @@ export function countUnreadChangelogs(
   const seen = new Date(seenAt).getTime()
   return entries.filter((e) => new Date(e.publishedAt).getTime() > seen).length
 }
+
+/**
+ * The most recently published unread entry, or null when nothing is unread
+ * (same marker rule as {@link countUnreadChangelogs}). Compares dates rather
+ * than trusting list order.
+ */
+export function newestUnreadChangelog<T extends { publishedAt: string }>(
+  entries: readonly T[],
+  seenAt: string | null
+): T | null {
+  if (!seenAt) return null
+  const seen = new Date(seenAt).getTime()
+  let newest: T | null = null
+  for (const e of entries) {
+    const at = new Date(e.publishedAt).getTime()
+    if (at > seen && (!newest || at > new Date(newest.publishedAt).getTime())) newest = e
+  }
+  return newest
+}
