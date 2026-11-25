@@ -972,7 +972,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     ConnectionActions: TrelloConnectionActions,
     setup: {
       title: 'Connect your Trello workspace',
-      description: 'Connect Trello to create cards from feedback and review incoming list changes.',
+      description:
+        'Connect Trello to create cards from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Create a Trello Power-Up in your workspace (optional, only needed for custom branding).
