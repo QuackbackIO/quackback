@@ -13,6 +13,7 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
+import { isoFromMillis } from '@/lib/server/integrations/inbound-time'
 import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 
 const CLICKUP_API = 'https://api.clickup.com/api/v2'
@@ -24,14 +25,6 @@ interface ClickUpTask {
 }
 
 /** ClickUp timestamps are Unix milliseconds, sent as a string or a number. */
-function isoFromMillis(value: unknown): string | undefined {
-  const millis = typeof value === 'string' && value.trim() ? Number(value) : value
-  if (typeof millis !== 'number' || millis <= 0) return undefined
-  const date = new Date(millis)
-  // An out-of-range time would make toISOString throw and retry the receipt forever.
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
-}
-
 /** Returns null for a deleted task; other failures throw so the receipt retries. */
 async function readTask(taskId: string, accessToken: string): Promise<ClickUpTask | null> {
   const response = await integrationFetch(`${CLICKUP_API}/task/${encodeURIComponent(taskId)}`, {

@@ -33,7 +33,7 @@ export interface InboundWebhookResult {
  * Handler interface for inbound webhooks from external platforms.
  */
 export interface InboundWebhookHandler {
-  /** Automatic adapters supply signed destination and revision evidence. */
+  /** Automatic adapters supply verified destination and revision evidence: from a signed event, or read back from the provider. */
   statusMode: 'automatic' | 'review'
   /** Acknowledge setup challenges without accepting events or storing untrusted secrets. */
   handshake?(request: Request): Response | null
