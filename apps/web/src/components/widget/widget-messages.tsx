@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { m, useReducedMotion } from 'framer-motion'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/solid'
 import type { ConversationId } from '@quackback/ids'
 import { widgetGetMyConversationsFn } from '@/lib/server/functions/widget/conversation'
@@ -41,7 +40,6 @@ export function WidgetMessages({
   onOpenMessenger,
 }: WidgetMessagesProps) {
   const intl = useIntl()
-  const reduceMotion = useReducedMotion()
   const { sessionVersion } = useWidgetAuth()
   const { data, isLoading } = useQuery({
     // Re-keyed on sessionVersion so the list refreshes after identify merges
@@ -182,17 +180,17 @@ export function WidgetMessages({
           workspaces list threads here but don't start chats). */}
       {canStartConversation && (
         <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-          <m.button
+          {/* The entrance's timing is set through animation-* properties, not
+              Tailwind's duration/ease/delay utilities, which would also retime
+              the hover scale transition. */}
+          <button
             type="button"
             onClick={() => onOpenMessenger('new')}
-            initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1], delay: 0.08 }}
-            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.98]"
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.98] animate-in fade-in slide-in-from-bottom-[10px] zoom-in-[0.92] fill-mode-backwards [animation-duration:250ms] [animation-delay:80ms] [animation-timing-function:cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none"
           >
             <FormattedMessage id="widget.messages.ask" defaultMessage="Ask a question" />
             <ChatBubbleOvalLeftEllipsisIcon className="w-4 h-4" />
-          </m.button>
+          </button>
         </div>
       )}
     </div>
