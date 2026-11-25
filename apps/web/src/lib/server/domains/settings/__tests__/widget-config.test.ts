@@ -219,6 +219,44 @@ describe('getPublicWidgetConfig — launcher projection', () => {
   })
 })
 
+describe('getPublicWidgetConfig — launcher announcement of new updates', () => {
+  it('is off when the key is absent, with no default written', async () => {
+    expect(DEFAULT_WIDGET_CONFIG.changelog).toBeUndefined()
+    settingsRow.current = fixtureRow({ enabled: true })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: false })
+  })
+
+  it('projects the switch when the changelog tab is on', async () => {
+    settingsRow.current = fixtureRow({
+      enabled: true,
+      tabs: { changelog: true },
+      changelog: { announceOnLauncher: true },
+    })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: true })
+  })
+
+  it('stays off while the changelog tab is off', async () => {
+    settingsRow.current = fixtureRow({
+      enabled: true,
+      tabs: { feedback: true, changelog: false },
+      changelog: { announceOnLauncher: true },
+    })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: false })
+  })
+
+  it('stays off when the changelog product is off', async () => {
+    settingsRow.current = fixtureRow(
+      { enabled: true, tabs: { feedback: true }, changelog: { announceOnLauncher: true } },
+      { changelog: false }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: false })
+  })
+})
+
 describe('getPublicWidgetConfig — messenger tab projection', () => {
   it('projects tabs.messenger from the flag + tab, ignoring stored messenger.enabled', async () => {
     settingsRow.current = fixtureRow(

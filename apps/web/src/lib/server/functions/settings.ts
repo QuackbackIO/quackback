@@ -735,7 +735,7 @@ const widgetHomeConfigSchema = z.object({
     .optional(),
 })
 
-const updateWidgetConfigSchema = z.object({
+export const updateWidgetConfigSchema = z.object({
   enabled: z.boolean().optional(),
   defaultBoard: z.string().optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
@@ -753,6 +753,7 @@ const updateWidgetConfigSchema = z.object({
       home: z.boolean().optional(),
     })
     .optional(),
+  changelog: z.object({ announceOnLauncher: z.boolean().optional() }).optional(),
   messenger: messengerConfigInputSchema.optional(),
   home: widgetHomeConfigSchema.optional(),
   translations: z

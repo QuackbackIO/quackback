@@ -283,6 +283,7 @@ export function TabsCard({
       tickets?: boolean
       home?: boolean
     }
+    changelog?: { announceOnLauncher?: boolean }
   }
   boards: { id: string; name: string; slug: string }[]
   helpCenterFlagEnabled: boolean
@@ -304,6 +305,9 @@ export function TabsCard({
     changelog: config.tabs?.changelog ?? true,
     help: config.tabs?.help ?? false,
   })
+  const [announceOnLauncher, setAnnounceOnLauncher] = useState(
+    config.changelog?.announceOnLauncher === true
+  )
 
   const showHelpToggle = helpCenterFlagEnabled
   const showMessagesToggle = supportInboxFlagEnabled
@@ -347,6 +351,20 @@ export function TabsCard({
       startTransition(() => router.invalidate())
     } catch {
       setTabs({ ...tabs, [key]: prev })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Persist the launcher announcement switch, reverting local state on error. */
+  async function saveAnnounce(checked: boolean) {
+    setAnnounceOnLauncher(checked)
+    setSaving(true)
+    try {
+      await updateWidgetConfig.mutateAsync({ changelog: { announceOnLauncher: checked } })
+      startTransition(() => router.invalidate())
+    } catch {
+      setAnnounceOnLauncher(!checked)
     } finally {
       setSaving(false)
     }
@@ -439,6 +457,23 @@ export function TabsCard({
               if (!checked && lockChangelogOff) return
               void saveTab('changelog', checked)
             }}
+          />
+        )}
+
+        {changelogFlagEnabled && (
+          <SettingRow
+            label="Announce new updates above the launcher"
+            description="Shows the newest update to visitors who have not seen it."
+            htmlFor="changelog-announce"
+            disabled={!tabs.changelog}
+            control={
+              <Switch
+                id="changelog-announce"
+                checked={announceOnLauncher}
+                onCheckedChange={(checked) => void saveAnnounce(checked)}
+                disabled={isBusy || !tabs.changelog}
+              />
+            }
           />
         )}
       </SettingRows>
