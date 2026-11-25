@@ -288,6 +288,27 @@ describe('sdk', () => {
     spy.mockRestore()
   })
 
+  it('emits email-submitted from the iframe to subscribers', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const seen: Array<EventMap['email-submitted']> = []
+    sdk.dispatch('on', 'email-submitted', (payload: EventMap['email-submitted']) =>
+      seen.push(payload)
+    )
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: ORIGIN,
+        data: {
+          type: 'quackback:event',
+          name: 'email-submitted',
+          payload: { email: 'sam@example.com' },
+        },
+      })
+    )
+    expect(seen).toEqual([{ email: 'sam@example.com' }])
+  })
+
   it('metadata merges and sends to iframe', () => {
     const { postMessage, spy } = stubIframe()
     const sdk = createSDK()

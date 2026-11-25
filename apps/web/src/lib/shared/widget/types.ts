@@ -31,6 +31,9 @@ export interface WidgetEventMap {
     anonymous: boolean
     error?: string
   }
+  'email-submitted': {
+    email: string
+  }
 }
 
 export type WidgetEventName = keyof WidgetEventMap

@@ -50,10 +50,13 @@ function intakeDefaultType(types: TicketIntakeType[]): TicketIntakeType | null {
 export function BlockTicketForm({
   getAuthHeaders,
   askEmail = true,
+  onEmailSubmitted,
 }: {
   getAuthHeaders: () => Record<string, string>
   /** Show the Email field: only an anonymous visitor with no email on file. */
   askEmail?: boolean
+  /** Called with the email the visitor gave once the ticket is filed. */
+  onEmailSubmitted?: (email: string) => void
 }) {
   const intl = useIntl()
   const rpc = useVisitorSurfaceRpc()
@@ -77,7 +80,10 @@ export function BlockTicketForm({
       ticketTypeId?: string
       fieldValues?: Record<string, unknown>
     }) => rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
-    onSuccess: () => setFiled(true),
+    onSuccess: (_ticket, vars) => {
+      setFiled(true)
+      if (vars.email) onEmailSubmitted?.(vars.email)
+    },
     onError: (error) => toastError(error, 'Failed to create ticket'),
   })
 
