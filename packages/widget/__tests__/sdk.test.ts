@@ -514,7 +514,7 @@ describe('sdk', () => {
     // Host subscribers get the count...
     expect(handler).toHaveBeenCalledWith({ count: 5 })
     // ...and the launcher shows the badge.
-    const btn = document.querySelector('button[aria-controls="quackback-panel"]') as HTMLElement
+    const btn = document.querySelector('button[aria-controls^="quackback-panel"]') as HTMLElement
     const badge = btn.lastElementChild as HTMLElement
     expect(badge.style.display).toBe('flex')
     expect(badge.textContent).toBe('5')
@@ -975,13 +975,28 @@ describe('sdk panel as a dialog', () => {
     expect(launcherEl()!.getAttribute('aria-controls')).toBe(panelEl().id)
   })
 
+  it('gives each widget its own panel id, which its launcher controls', () => {
+    stubIframe()
+    const first = createSDK()
+    first.dispatch('init', { instanceUrl: ORIGIN })
+    const second = createSDK()
+    second.dispatch('init', { instanceUrl: 'https://second.example.com' })
+    const panels = Array.from(document.querySelectorAll('.quackback-panel'))
+    const launchers = Array.from(document.querySelectorAll('button[aria-controls]'))
+    expect(panels).toHaveLength(2)
+    expect(panels[0]!.id).not.toBe(panels[1]!.id)
+    expect(launchers.map((l) => l.getAttribute('aria-controls'))).toEqual(panels.map((p) => p.id))
+    first.dispatch('destroy')
+    second.dispatch('destroy')
+  })
+
   it('is a labelled dialog the launcher controls', () => {
     stubIframe()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN, locale: 'de' })
     expect(panelEl().getAttribute('role')).toBe('dialog')
     expect(panelEl().getAttribute('aria-label')).toBe('Hilfe')
-    expect(panelEl().id).toBe('quackback-panel')
+    expect(panelEl().id).toMatch(/^quackback-panel-/)
     expect(launcherEl()!.getAttribute('aria-controls')).toBe(panelEl().id)
   })
 

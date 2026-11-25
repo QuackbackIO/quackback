@@ -14,8 +14,9 @@ export interface PanelOptions {
 /** How long the closing slide or fade runs before the panel settles. */
 export const PANEL_CLOSE_MS = 300
 
-/** The panel element's id, which the launcher names in aria-controls. */
-export const PANEL_ID = 'quackback-panel'
+/** Panel ids, unique per widget on the page, which the launcher names in
+ *  aria-controls. */
+let panelCount = 0
 
 export interface PanelHandle {
   /** The fixed-position wrapper around the frame. */
@@ -49,7 +50,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
   // Closed, the panel is only transparent: inert keeps its frame out of the
   // host page's tab order and the accessibility tree until it opens.
   panel.inert = true
-  panel.id = PANEL_ID
+  panel.id = `quackback-panel-${++panelCount}`
   panel.setAttribute('role', 'dialog')
   panel.setAttribute('aria-label', panelTitle(opts.locale))
   document.body.appendChild(panel)
