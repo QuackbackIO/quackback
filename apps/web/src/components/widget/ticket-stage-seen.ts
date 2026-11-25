@@ -14,7 +14,7 @@
  * badges — only CHANGES to a stage the visitor was baselined on do.
  */
 
-import { readScopedMarker, writeScopedMarker } from './seen-scope'
+import { readScopedMarker, touchScopedMarker, writeScopedMarker } from './seen-scope'
 
 // Each identity in the browser has its own map (see seen-scope.ts).
 const SEEN_KEY = 'quackback:ticket-stages-seen'
@@ -43,6 +43,15 @@ export function getTicketStagesSeen(scope: string, storage?: Storage): TicketSta
     return parsed as TicketStageSeenMap
   } catch {
     return null // corrupted JSON or storage unavailable (private mode etc.)
+  }
+}
+
+/** Keep this person's map among the most recently active (see seen-scope.ts). */
+export function touchTicketStagesSeen(scope: string): void {
+  try {
+    touchScopedMarker(window.localStorage, SEEN_KEY, scope)
+  } catch {
+    // Storage unavailable (private mode etc.).
   }
 }
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_MARKER_SCOPES, readScopedMarker, seenScope, writeScopedMarker } from '../seen-scope'
+import {
+  MAX_MARKER_SCOPES,
+  readScopedMarker,
+  seenScope,
+  touchScopedMarker,
+  writeScopedMarker,
+} from '../seen-scope'
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const store = new Map(Object.entries(initial))
@@ -58,6 +64,30 @@ describe('scoped markers', () => {
     expect(readScopedMarker(storage, 'marker', 'u2')).toBeNull()
     const markers = [...store.keys()].filter((k) => k.startsWith('marker:'))
     expect(markers).toHaveLength(MAX_MARKER_SCOPES)
+  })
+
+  it('keeps a person who is active but has nothing new to record', () => {
+    const { storage } = memoryStorage()
+    for (let i = 0; i < MAX_MARKER_SCOPES; i++) writeScopedMarker(storage, 'marker', `u${i}`, 'x')
+    // u0 is the oldest writer, but has just looked at their badge.
+    touchScopedMarker(storage, 'marker', 'u0')
+    writeScopedMarker(storage, 'marker', 'newcomer', 'x')
+    expect(readScopedMarker(storage, 'marker', 'u0')).toBe('x')
+    expect(readScopedMarker(storage, 'marker', 'u1')).toBeNull()
+  })
+
+  it('touching a person with no marker records nothing', () => {
+    const { storage, store } = memoryStorage()
+    touchScopedMarker(storage, 'marker', 'user_a')
+    expect(store.size).toBe(0)
+  })
+
+  it('touching never throws when storage refuses writes', () => {
+    const { storage } = memoryStorage({ 'marker:user_a': 'x' })
+    storage.setItem = () => {
+      throw new Error('storage is full')
+    }
+    expect(() => touchScopedMarker(storage, 'marker', 'user_a')).not.toThrow()
   })
 
   it('starts the list over when it is corrupted', () => {

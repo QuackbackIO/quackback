@@ -7,6 +7,7 @@ import {
   EMPTY_CHANGELOG_BASELINE,
   getChangelogSeenAt,
   markChangelogSeen,
+  touchChangelogSeen,
   CHANGELOG_SEEN_EVENT,
 } from './changelog-unread'
 import { seenScope } from './seen-scope'
@@ -47,6 +48,12 @@ export function useChangelogUnread(enabled: boolean): {
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
   const unread = countUnreadChangelogs(entries, seenAt)
+
+  // Showing the badge counts as activity, so a person whose marker has nothing
+  // new to record keeps it on a browser shared by many (see seen-scope.ts).
+  useEffect(() => {
+    if (scope !== null) touchChangelogSeen(scope)
+  }, [scope])
 
   // Silent first-contact baseline: what was published before the visitor
   // first met the widget never badges, and later entries do, whether or not

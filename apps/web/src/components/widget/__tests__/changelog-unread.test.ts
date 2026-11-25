@@ -46,6 +46,16 @@ describe('seen marker storage', () => {
     expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
   })
 
+  it('a mark that does not move the marker still keeps the person among the most recent', () => {
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    markChangelogSeen('u2', '2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-01T10:00:00Z')
+    expect(JSON.parse(window.localStorage.getItem('quackback:changelog-seen-at.scopes')!)).toEqual([
+      'u2',
+      'u1',
+    ])
+  })
+
   it('dispatches the seen event so open listeners re-read the marker', () => {
     const listener = vi.fn()
     window.addEventListener(CHANGELOG_SEEN_EVENT, listener)

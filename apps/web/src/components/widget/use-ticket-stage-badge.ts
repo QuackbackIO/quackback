@@ -8,6 +8,7 @@ import {
   countTicketStageChanges,
   getTicketStagesSeen,
   markTicketStagesSeen,
+  touchTicketStagesSeen,
   TICKET_STAGES_SEEN_EVENT,
 } from './ticket-stage-seen'
 import { seenScope } from './seen-scope'
@@ -62,11 +63,16 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
 
   const tickets = data?.tickets ?? []
 
+  // Showing the badge counts as activity, so a person whose map has nothing
+  // new to record keeps it on a browser shared by many (see seen-scope.ts).
+  useEffect(() => {
+    if (counts) touchTicketStagesSeen(scope)
+  }, [counts, scope])
+
   // Silent first-contact baseline: stamp the stages current at the first
   // load so historical states never badge (see ticket-stage-seen.ts).
   useEffect(() => {
-    // An anonymous identify keeps the last person's tickets cached under the
-    // same key: they are not this visitor's, so they never stamp or count.
+    // Widget tickets are identified-only: an anonymous visitor never stamps.
     if (!counts || !data) return
     if (getTicketStagesSeen(scope) === null) markTicketStagesSeen(scope, data.tickets)
   }, [data, scope, counts])

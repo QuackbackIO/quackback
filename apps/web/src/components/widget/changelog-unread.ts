@@ -16,7 +16,7 @@
  * Each identity in the browser has its own marker (see seen-scope.ts).
  */
 
-import { readScopedMarker, writeScopedMarker } from './seen-scope'
+import { readScopedMarker, touchScopedMarker, writeScopedMarker } from './seen-scope'
 
 const SEEN_KEY = 'quackback:changelog-seen-at'
 
@@ -42,7 +42,17 @@ export function getChangelogSeenAt(scope: string, storage?: Storage): string | n
   }
 }
 
+/** Keep this person's marker among the most recently active (see seen-scope.ts). */
+export function touchChangelogSeen(scope: string): void {
+  try {
+    touchScopedMarker(window.localStorage, SEEN_KEY, scope)
+  } catch {
+    // Storage unavailable (private mode etc.).
+  }
+}
+
 export function markChangelogSeen(scope: string, publishedAt: string): void {
+  touchChangelogSeen(scope)
   const existing = getChangelogSeenAt(scope)
   // The marker only moves forward — an older page of the infinite list must
   // not re-badge entries the visitor already saw.
