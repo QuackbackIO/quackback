@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { cn } from '@/lib/shared/utils'
 import type { BoardPermission } from '@/lib/shared/types/boards'
 import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -12,7 +13,6 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
-import { LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
@@ -325,21 +325,10 @@ export const Route = createFileRoute('/widget/')({
   component: WidgetRoute,
 })
 
-/**
- * Loads the "dom" animation engine (fades, slides, transforms), not the
- * larger "dom-max" build's drag/layout/3d support the widget never uses. `m`
- * components read it from context; `motion` components would ignore it and
- * bundle their own copy, which is why every framer-motion usage under this
- * root uses `m`.
- */
 function WidgetRoute() {
   const { tabs } = Route.useLoaderData()
   if (contentSurfaceCount(tabs) === 0) return null
-  return (
-    <LazyMotion features={domAnimation}>
-      <WidgetPage />
-    </LazyMotion>
-  )
+  return <WidgetPage />
 }
 
 interface SuccessPost {
@@ -351,6 +340,14 @@ interface SuccessPost {
   /** Held for review: only its author sees it until the team approves it. */
   pendingReview?: boolean
 }
+
+/**
+ * The view entrance, in CSS (tw-animate-css `animate-in`) so the embeddable
+ * widget ships no animation library: 220 ms on the widget's push curve, from
+ * transparent and offset (the slide class sets the direction and distance).
+ */
+const VIEW_ENTRANCE =
+  'animate-in fade-in duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none'
 
 /**
  * Entry transition for a widget view. Root views (tab switches) rise and fade
@@ -383,7 +380,6 @@ function ViewTransition({
   focusOnMount?: boolean
   children: ReactNode
 }) {
-  const reduceMotion = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (focusOnMount) ref.current?.focus({ preventScroll: true })
@@ -392,19 +388,18 @@ function ViewTransition({
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
-    <m.div
+    <div
       key={id}
       ref={ref}
       tabIndex={-1}
-      initial={
-        reduceMotion ? false : kind === 'push' ? { x: 28, opacity: 0 } : { y: 10, opacity: 0 }
-      }
-      animate={{ x: 0, y: 0, opacity: 1 }}
-      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-      className="h-full outline-none"
+      className={cn(
+        VIEW_ENTRANCE,
+        kind === 'push' ? 'slide-in-from-right-[28px]' : 'slide-in-from-bottom-[10px]',
+        'h-full outline-none'
+      )}
     >
       <Suspense fallback={fallback}>{children}</Suspense>
-    </m.div>
+    </div>
   )
 }
 
@@ -468,6 +463,10 @@ function WidgetPage() {
   const [view, setView] = useState<WidgetView>(
     resumeConversationId && threadTab ? 'messenger' : resolveInitialView(tabs)
   )
+  // The feedback view's entrance plays each time it is shown again, never on
+  // the first paint: false while it has been visible since mount.
+  const [feedbackEntrance, setFeedbackEntrance] = useState(view !== 'feedback')
+  if (view !== 'feedback' && !feedbackEntrance) setFeedbackEntrance(true)
   const [activeTab, setActiveTab] = useState<WidgetTab>(
     resumeConversationId && threadTab ? threadTab : initialTab
   )
@@ -1113,12 +1112,14 @@ function WidgetPage() {
         }
       >
         {/* Kept mounted, so it can't use the remount-keyed ViewTransition;
-            instead the same root entrance replays whenever it becomes visible. */}
-        <m.div
-          initial={false}
-          animate={view === 'feedback' ? { y: 0, opacity: 1 } : { y: 10, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-          className="flex flex-col h-full"
+            instead the same root entrance replays whenever it becomes visible:
+            a CSS animation restarts when its hidden (display: none) wrapper
+            shows again. Not on first paint, only once it has been hidden. */}
+        <div
+          className={cn(
+            feedbackEntrance && [VIEW_ENTRANCE, 'slide-in-from-bottom-[10px]'],
+            'flex flex-col h-full'
+          )}
         >
           <WidgetHome
             initialPosts={allPosts}
@@ -1133,7 +1134,7 @@ function WidgetPage() {
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}
           />
-        </m.div>
+        </div>
       </div>
 
       {view === 'post-detail' && selectedPostId && (

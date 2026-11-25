@@ -5,7 +5,7 @@
  * thanks flow (and its local-phase survival across a state flip to
  * 'chosen'), and inline collect validation.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import {
@@ -18,12 +18,22 @@ import type { WorkflowBlockPayload } from '@/lib/shared/db-types'
 
 // Reduced motion: no entrance animations, so a test that ends mid-animation
 // leaves no cancelled happy-dom animation behind.
-vi.mock('framer-motion', async (original) => ({
-  ...(await original<typeof import('framer-motion')>()),
-  useReducedMotion: () => true,
-}))
+beforeEach(() => {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: query.includes('prefers-reduced-motion: reduce'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList
+  )
+})
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 function withIntl(node: React.ReactNode) {
   return render(
