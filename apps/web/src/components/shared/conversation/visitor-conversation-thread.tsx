@@ -183,8 +183,8 @@ export interface VisitorConversationThreadProps {
   presence: VisitorConversationThreadPresence
   /** Teammates shown beside the team name in the built-in header. */
   team?: TeamFace[]
-  /** The messenger's usual reply time as the surface already knows it, so
-   *  the header words it right before the thread loads; the load refreshes it. */
+  /** The messenger's usual reply time as the surface knows it, so the header
+   *  words it right before the thread loads; a loaded value takes over. */
   replyTime?: ReplyTime
   /** Live agent activity observed on the stream (message/typing) — lets the
    *  surface mark agents present in its own presence cache. */
@@ -305,7 +305,7 @@ export function VisitorConversationThread({
   uploadFile,
   presence,
   team = NO_TEAM,
-  replyTime: initialReplyTime,
+  replyTime: surfaceReplyTime,
   onAgentActivity,
   helpSearch,
   embedOpenMode = 'newTab',
@@ -338,8 +338,10 @@ export function VisitorConversationThread({
   // no header card — a plain chat is completely untouched by ticket-ness.
   const [linkedTicket, setLinkedTicket] = useState<RequesterTicketDTO | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
-  // The messenger's usual reply time (header line + reply-time caption).
-  const [replyTime, setReplyTime] = useState<ReplyTime | undefined>(initialReplyTime)
+  // The messenger's usual reply time (header line + reply-time caption): the
+  // thread load's value, else the surface's.
+  const [loadedReplyTime, setLoadedReplyTime] = useState<ReplyTime | undefined>(undefined)
+  const replyTime = loadedReplyTime ?? surfaceReplyTime
   // AI-assistant display identity (fronts new conversations); null when disabled.
   const [assistant, setAssistant] = useState<{
     name: string
@@ -517,7 +519,7 @@ export function VisitorConversationThread({
         setWelcomeMessage(res.welcomeMessage)
         setOfflineMessage(res.offlineMessage)
         setTeamName(res.teamName)
-        setReplyTime(res.replyTime ?? initialReplyTime)
+        setLoadedReplyTime(res.replyTime)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
         setTicketFormAsksEmail(res.ticketFormAsksEmail)
@@ -1186,7 +1188,13 @@ export function VisitorConversationThread({
         // chat bubble — localized client-side from `block.status` (the
         // stored `content` is only the English transcript/email fallback).
         if (block?.kind === 'replyTime') {
-          return <BlockReplyTimeCaption status={block.status} replyTime={replyTime} />
+          return (
+            <BlockReplyTimeCaption
+              status={block.status}
+              replyTime={block.replyTime}
+              liveReplyTime={replyTime}
+            />
+          )
         }
         const bubble = (
           <VisitorMessageBubble
@@ -1524,7 +1532,8 @@ export function VisitorConversationThread({
               />
             )}
           </p>
-          {hasBackAtTime(presence.nextOpenAt) && (
+          {/* The built-in team header already says when the team is back. */}
+          {!showHeader && hasBackAtTime(presence.nextOpenAt) && (
             <p className="mt-0.5">
               <FormattedMessage
                 id="widget.messenger.offline.backAt"

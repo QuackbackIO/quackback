@@ -449,15 +449,21 @@ function GrowOpen({ className, children }: { className: string; children: ReactN
 export function BlockReplyTimeCaption({
   status,
   replyTime,
+  liveReplyTime,
 }: {
   status: Extract<WorkflowBlockPayload, { kind: 'replyTime' }>['status']
-  /** The messenger's usual reply time; absent reads as under an hour. */
+  /** The reply time stored on the block when it was posted. */
   replyTime?: ReplyTime
+  /** The messenger's current setting, for older blocks that stored none;
+   *  absent reads as under an hour. */
+  liveReplyTime?: ReplyTime
 }) {
   return (
     <p className="px-1 py-1 text-center text-[11px] text-muted-foreground" role="status">
       {status === 'online' ? (
-        <FormattedMessage {...captionOnlineMessages[resolveReplyTime(replyTime)]} />
+        <FormattedMessage
+          {...captionOnlineMessages[resolveReplyTime(replyTime ?? liveReplyTime)]}
+        />
       ) : (
         <FormattedMessage
           id="widget.messenger.replyTime.away"

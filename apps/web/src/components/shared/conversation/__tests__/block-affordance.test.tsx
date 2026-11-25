@@ -438,4 +438,18 @@ describe('BlockReplyTimeCaption', () => {
     withIntl(<BlockReplyTimeCaption status="online" replyTime={replyTime} />)
     expect(screen.getByRole('status').textContent).toBe(copy)
   })
+
+  it('keeps the reply time stored on the block when the setting changes later', () => {
+    withIntl(<BlockReplyTimeCaption status="online" replyTime="minutes" liveReplyTime="day" />)
+    expect(screen.getByRole('status').textContent).toBe(
+      "We're online, typically replies in a few minutes."
+    )
+  })
+
+  it('uses the live setting for an older block that stored none', () => {
+    withIntl(<BlockReplyTimeCaption status="online" liveReplyTime="day" />)
+    expect(screen.getByRole('status').textContent).toBe(
+      "We're online, typically replies within a day."
+    )
+  })
 })

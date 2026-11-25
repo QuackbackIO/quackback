@@ -1095,7 +1095,13 @@ export type WorkflowBlockPayload =
       allowTypingInterrupt: boolean
       commentPrompt: string
     })
-  | (WorkflowBlockPayloadBase & { kind: 'replyTime'; status: 'online' | 'away' })
+  | (WorkflowBlockPayloadBase & {
+      kind: 'replyTime'
+      status: 'online' | 'away'
+      /** The messenger's usual reply time when posted, so the caption keeps
+       *  that wording after the setting changes. Absent on older blocks. */
+      replyTime?: 'minutes' | 'hour' | 'hours' | 'day' | 'off'
+    })
 
 /** The customer's structured reply to a block, stored on the VISITOR message
  *  it was sent as. `inReplyToMessageId` is the block message's own id — the

@@ -71,11 +71,15 @@ async function renderThread(
     replyTime,
     knownReplyTime,
     pending = false,
+    presence = AWAY,
+    showHeader,
     onReplyByEmail = vi.fn(),
   }: {
     replyTime?: string
     knownReplyTime?: ReplyTime
     pending?: boolean
+    presence?: typeof AWAY
+    showHeader?: boolean
     onReplyByEmail?: () => void
   } = {}
 ) {
@@ -101,23 +105,27 @@ async function renderThread(
     markConversationRead: vi.fn(async () => ({})),
     getConversationLinkedTicket: vi.fn(),
   }
-  render(
-    <QueryClientProvider client={new QueryClient()}>
+  const client = new QueryClient()
+  const tree = (surfaceReplyTime?: ReplyTime) => (
+    <QueryClientProvider client={client}>
       {withIntl(
         <VisitorSurfaceRpcProvider value={rpc as unknown as VisitorSurfaceRpc}>
           <VisitorConversationThread
             conversationTarget="new"
             uploadFile={vi.fn()}
-            presence={AWAY}
+            presence={presence}
+            showHeader={showHeader}
             team={[{ name: 'Ada Lovelace', avatarUrl: null }]}
-            replyTime={knownReplyTime}
+            replyTime={surfaceReplyTime}
             onReplyByEmailChange={onReplyByEmail}
           />
         </VisitorSurfaceRpcProvider>
       )}
     </QueryClientProvider>
   )
+  const { rerender } = render(tree(knownReplyTime))
   await waitFor(() => expect(rpc.getMyConversation).toHaveBeenCalled())
+  return { rerenderWith: (surfaceReplyTime?: ReplyTime) => rerender(tree(surfaceReplyTime)) }
 }
 
 describe('the visitor thread while the team is away', () => {
@@ -133,6 +141,31 @@ describe('the visitor thread while the team is away', () => {
   it('words the reply time the surface already knows before the thread loads', async () => {
     await renderThread(false, { knownReplyTime: 'day', pending: true })
     expect(screen.getByText(/^Typically replies within a day · /)).toBeInTheDocument()
+  })
+
+  it('follows a reply time the surface passes later, before the thread loads', async () => {
+    const { rerenderWith } = await renderThread(false, { knownReplyTime: 'day', pending: true })
+    rerenderWith('minutes')
+    expect(screen.getByText(/^Typically replies in a few minutes · /)).toBeInTheDocument()
+  })
+
+  it('says when the team is back once: in the header, not again in the body', async () => {
+    const closed = { ...AWAY, withinOfficeHours: false, nextOpenAt: '2030-01-07T09:00:00.000Z' }
+    await renderThread(false, { replyTime: 'off', presence: closed })
+    expect(await screen.findByText('Acme Support')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText(/we'll reply here when we're back/)).toBeInTheDocument()
+    )
+    expect(screen.getAllByText(/\bBack\b/)).toHaveLength(1)
+  })
+
+  it('keeps the body time when the surface draws its own header', async () => {
+    const closed = { ...AWAY, withinOfficeHours: false, nextOpenAt: '2030-01-07T09:00:00.000Z' }
+    await renderThread(false, { replyTime: 'off', presence: closed, showHeader: false })
+    await waitFor(() =>
+      expect(screen.getByText(/we'll reply here when we're back/)).toBeInTheDocument()
+    )
+    expect(screen.getAllByText(/\bBack\b/)).toHaveLength(1)
   })
 
   it('keeps the known reply time when the thread load does not carry one', async () => {

@@ -861,6 +861,8 @@ describe('applyAction', () => {
         kind: 'replyTime',
         waiting: false,
         status: 'online',
+        // Stored so the caption keeps the posting-time wording.
+        replyTime: 'minutes',
       })
     })
 
@@ -877,7 +879,9 @@ describe('applyAction', () => {
         ctx
       )
       expect(result).toMatchObject({ label: 'sent replyTime block' })
-      expect(buildReplyTimeMessage).toHaveBeenCalledWith(schedule, undefined)
+      expect(buildReplyTimeMessage).toHaveBeenCalledWith(schedule, 'hour')
+      const [, , , opts] = appendAssistantReply.mock.calls[0]!
+      expect(opts.metadata.block).toMatchObject({ kind: 'replyTime', replyTime: 'hour' })
     })
   })
 
