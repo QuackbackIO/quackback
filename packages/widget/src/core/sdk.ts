@@ -80,11 +80,13 @@ export function createSDK(): SDK {
 
   // On a phone the panel fills the screen, so its top and bottom meet the
   // host page's notch and system bars. The frame cannot read those insets
-  // itself; send them, and again whenever they change (a rotation). The
-  // floating desktop panel never touches the screen edge, so it gets zeros.
+  // itself; send them while the panel is open, and again whenever they
+  // change (a rotation). Measuring forces a layout, so a closed panel skips
+  // it. The floating desktop panel never touches the screen edge, so it
+  // gets zeros.
   let lastSafeArea = ''
   function sendSafeArea(): void {
-    if (!ready || !bridge) return
+    if (!ready || !bridge || !panelOpen) return
     const insets = mobileMql?.matches ? measureSafeArea() : { top: 0, bottom: 0 }
     const key = `${insets.top}:${insets.bottom}`
     if (key === lastSafeArea) return
@@ -97,6 +99,21 @@ export function createSDK(): SDK {
   // the panel is closed stays unread until the visitor opens it again.
   function sendShownState(): void {
     if (ready && bridge) bridge.send('quackback:shown', panelOpen)
+  }
+
+  // A resize arrives in bursts (a rotation, a toolbar sliding away): measure
+  // at most once per frame, and only while the panel is open.
+  let safeAreaFrame = 0
+  function scheduleSafeArea(): void {
+    if (!panelOpen || safeAreaFrame) return
+    safeAreaFrame = requestAnimationFrame(() => {
+      safeAreaFrame = 0
+      sendSafeArea()
+    })
+  }
+  function cancelSafeArea(): void {
+    if (safeAreaFrame) cancelAnimationFrame(safeAreaFrame)
+    safeAreaFrame = 0
   }
 
   function iframeOrigin(): string {
@@ -234,10 +251,11 @@ export function createSDK(): SDK {
     bridge.onMessage(onIframeMessage)
     mobileMql = window.matchMedia('(max-width: 639px)')
     mobileMql.addEventListener('change', sendMobileState)
-    window.addEventListener('resize', sendSafeArea)
+    window.addEventListener('resize', scheduleSafeArea)
     mobileCleanup = () => {
       mobileMql!.removeEventListener('change', sendMobileState)
-      window.removeEventListener('resize', sendSafeArea)
+      window.removeEventListener('resize', scheduleSafeArea)
+      cancelSafeArea()
     }
     return panel
   }
@@ -398,14 +416,18 @@ export function createSDK(): SDK {
       case 'open': {
         if (!config) return // open before init is a no-op, matching close/hide
         const opts = (a as OpenOptions) ?? {}
+        // The idle preload may not have fired yet — create the panel now.
+        const opened = ensurePanel()
+        panelOpen = true
+        // The insets reach the frame before the view it opens and before the
+        // panel shows.
+        sendSafeArea()
         // Navigate first, then say the panel is shown: a view the closed panel
         // was left on must not count as seen on its way out.
         if (ready && bridge) bridge.send('quackback:open', opts)
         else pendingOpen = opts
-        panelOpen = true
         sendShownState()
-        // The idle preload may not have fired yet — create the panel now.
-        ensurePanel().show()
+        opened.show()
         launcher?.setOpen(true)
         const ctx = opts as {
           view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
@@ -426,6 +448,7 @@ export function createSDK(): SDK {
         launcher?.setOpen(false)
         panelOpen = false
         sendShownState()
+        cancelSafeArea()
         emitter.emit('close', {})
         return
       case 'showLauncher':

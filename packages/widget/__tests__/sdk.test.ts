@@ -623,13 +623,43 @@ describe('sdk on phones', () => {
 
   // The host page's safe-area insets (a home indicator, an edge-to-edge
   // navigation bar). The frame cannot read them, so the SDK measures them.
+  // Returns how many times it measured.
   function hostInsets(top: string, bottom: string) {
     const real = window.getComputedStyle.bind(window)
-    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) =>
-      (el as HTMLElement).dataset?.quackbackSafeArea !== undefined
-        ? ({ paddingTop: top, paddingBottom: bottom } as CSSStyleDeclaration)
-        : real(el)
+    let measured = 0
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
+      if ((el as HTMLElement).dataset?.quackbackSafeArea === undefined) return real(el)
+      measured++
+      return { paddingTop: top, paddingBottom: bottom } as CSSStyleDeclaration
+    })
+    return () => measured
+  }
+
+  // Animation frames run only when the test flushes them.
+  function manualFrames() {
+    let queue: FrameRequestCallback[] = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => queue.push(cb))
     )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    return () => {
+      const run = queue
+      queue = []
+      for (const cb of run) cb(0)
+    }
+  }
+
+  function frameWindow() {
+    const postMessage = vi.fn()
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage,
+    } as unknown as Window)
+    return postMessage
+  }
+
+  function frameReady() {
+    window.dispatchEvent(new MessageEvent('message', { origin, data: { type: 'quackback:ready' } }))
   }
 
   function sentSafeAreas(postMessage: ReturnType<typeof vi.fn>) {
@@ -650,40 +680,96 @@ describe('sdk on phones', () => {
     sdk.dispatch('destroy')
   })
 
-  it('tells the frame the host page insets, so its bottom bar clears the system bar', () => {
+  it('measures nothing while the panel is closed', () => {
     phone(true)
-    hostInsets('47px', '34px')
-    const postMessage = vi.fn()
-    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
-      postMessage,
-    } as unknown as Window)
+    const measured = hostInsets('47px', '34px')
+    const flush = manualFrames()
+    const postMessage = frameWindow()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: origin })
-    window.dispatchEvent(new MessageEvent('message', { origin, data: { type: 'quackback:ready' } }))
-    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34 }])
+    frameReady()
+    window.dispatchEvent(new Event('resize'))
+    flush()
+    expect(measured()).toBe(0)
+    expect(sentSafeAreas(postMessage)).toEqual([])
+    sdk.dispatch('destroy')
+  })
 
-    // A rotation changes the insets; the frame hears about it once.
-    hostInsets('0px', '21px')
+  it('tells the frame the host page insets before the open panel shows', () => {
+    phone(true)
+    hostInsets('47px', '34px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    let shownWhenSent: boolean | null = null
+    postMessage.mockImplementation((msg: { type: string }) => {
+      if (msg.type !== 'quackback:safe-area') return
+      const panel = document.querySelector('.quackback-panel')
+      shownWhenSent = !!panel?.classList.contains('quackback-open')
+    })
+    sdk.dispatch('open')
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34 }])
+    expect(shownWhenSent).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('sends the insets when a frame loads behind an open panel', () => {
+    phone(true)
+    hostInsets('47px', '34px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    sdk.dispatch('open')
+    expect(sentSafeAreas(postMessage)).toEqual([])
+    frameReady()
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34 }])
+    sdk.dispatch('destroy')
+  })
+
+  it('measures a rotation once per frame while open, and sends only a change', () => {
+    phone(true)
+    const opened = hostInsets('47px', '34px')
+    const flush = manualFrames()
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    sdk.dispatch('open')
+    expect(opened()).toBe(1)
+
+    // A rotation fires a burst of resizes; one measurement per frame.
+    const rotated = hostInsets('0px', '21px')
     window.dispatchEvent(new Event('resize'))
     window.dispatchEvent(new Event('resize'))
+    expect(rotated()).toBe(0)
+    flush()
+    expect(rotated()).toBe(1)
+    window.dispatchEvent(new Event('resize'))
+    flush()
     expect(sentSafeAreas(postMessage)).toEqual([
       { top: 47, bottom: 34 },
       { top: 0, bottom: 21 },
     ])
+
+    // Closed again, resizes cost nothing.
+    sdk.dispatch('close')
+    window.dispatchEvent(new Event('resize'))
+    flush()
+    expect(rotated()).toBe(2)
     sdk.dispatch('destroy')
   })
 
   it('sends no insets for the floating desktop panel, which never touches the screen edge', () => {
     phone(false)
-    hostInsets('47px', '34px')
-    const postMessage = vi.fn()
-    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
-      postMessage,
-    } as unknown as Window)
+    const measured = hostInsets('47px', '34px')
+    const postMessage = frameWindow()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: origin })
-    window.dispatchEvent(new MessageEvent('message', { origin, data: { type: 'quackback:ready' } }))
+    frameReady()
+    sdk.dispatch('open')
     expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 0 }])
+    expect(measured()).toBe(0)
     sdk.dispatch('destroy')
   })
 })
