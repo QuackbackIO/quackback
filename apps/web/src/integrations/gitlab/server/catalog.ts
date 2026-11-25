@@ -4,7 +4,7 @@ export const gitlabCatalog: IntegrationCatalogEntry = {
   id: 'gitlab',
   name: 'GitLab',
   description:
-    'Create issues in GitLab (GitLab.com or self-hosted) from feedback and review status changes.',
+    'Create issues in GitLab (GitLab.com or self-hosted) from feedback and update statuses when issues are closed or reopened.',
   category: 'issue_tracking',
   iconBg: 'bg-[#FC6D26]',
   settingsPath: '/admin/settings/integrations/gitlab',
