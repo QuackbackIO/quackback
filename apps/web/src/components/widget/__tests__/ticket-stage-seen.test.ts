@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  adoptLegacyTicketStagesSeen,
   countTicketStageChanges,
   getTicketStagesSeen,
   markTicketStagesSeen,
@@ -78,8 +79,20 @@ describe('stage marker storage', () => {
 
   it('keeps the map saved before maps were kept per person', () => {
     window.localStorage.setItem('quackback:ticket-stages-seen', JSON.stringify({ tkt_1: 'open' }))
+    // Reading never writes: the map moves only when someone adopts it.
+    expect(getTicketStagesSeen('u1')).toEqual({ tkt_1: 'open' })
+    expect(window.localStorage.getItem('quackback:ticket-stages-seen')).not.toBeNull()
+
+    adoptLegacyTicketStagesSeen('u1')
     expect(getTicketStagesSeen('u1')).toEqual({ tkt_1: 'open' })
     expect(window.localStorage.getItem('quackback:ticket-stages-seen')).toBeNull()
+    expect(getTicketStagesSeen('u2')).toBeNull()
+  })
+
+  it('a mark merges into the old map and adopts it', () => {
+    window.localStorage.setItem('quackback:ticket-stages-seen', JSON.stringify({ tkt_1: 'open' }))
+    markTicketStagesSeen('u1', [ticket('tkt_2', 'open')])
+    expect(getTicketStagesSeen('u1')).toEqual({ tkt_1: 'open', tkt_2: 'open' })
     expect(getTicketStagesSeen('u2')).toBeNull()
   })
 

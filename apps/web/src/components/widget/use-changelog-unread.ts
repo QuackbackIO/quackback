@@ -3,6 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { widgetChangelogListQuery } from './widget-changelog-query'
 import { useWidgetAuth } from './widget-auth-provider'
 import {
+  adoptLegacyChangelogSeen,
   countUnreadChangelogs,
   getChangelogSeenAt,
   markChangelogSeen,
@@ -20,8 +21,10 @@ export function useChangelogUnread(enabled: boolean): {
   unread: number
   markSeen: (publishedAt: string) => void
 } {
-  const { sessionVersion, user } = useWidgetAuth()
-  const scope = seenScope(user)
+  const { sessionVersion, user, identityResolved } = useWidgetAuth()
+  // Null until the identity round trip settles: no marker is read or written
+  // for a visitor the widget cannot yet tell apart, and the badge stays 0.
+  const scope = seenScope(user, identityResolved)
   const { data } = useInfiniteQuery({
     ...widgetChangelogListQuery(sessionVersion),
     enabled,
@@ -35,7 +38,7 @@ export function useChangelogUnread(enabled: boolean): {
     window.addEventListener(CHANGELOG_SEEN_EVENT, reread)
     return () => window.removeEventListener(CHANGELOG_SEEN_EVENT, reread)
   }, [])
-  const seenAt = getChangelogSeenAt(scope)
+  const seenAt = scope === null ? null : getChangelogSeenAt(scope)
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
   const unread = countUnreadChangelogs(entries, seenAt)
@@ -45,11 +48,17 @@ export function useChangelogUnread(enabled: boolean): {
   // they ever open the Changelog tab (see changelog-unread.ts).
   const newest = entries[0]?.publishedAt
   useEffect(() => {
+    if (scope === null) return
+    // A marker saved before markers were kept per person becomes this
+    // person's, so the next person in the browser does not inherit it.
+    adoptLegacyChangelogSeen(scope)
     if (newest && getChangelogSeenAt(scope) === null) markChangelogSeen(scope, newest)
   }, [newest, scope])
 
   const markSeen = useCallback(
-    (publishedAt: string) => markChangelogSeen(scope, publishedAt),
+    (publishedAt: string) => {
+      if (scope !== null) markChangelogSeen(scope, publishedAt)
+    },
     [scope]
   )
 

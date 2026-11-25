@@ -4,9 +4,10 @@ import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-const auth: { user: { id: string } | null; sessionVersion: number } = {
+const auth: { user: { id: string } | null; sessionVersion: number; identityResolved: boolean } = {
   user: { id: 'user_a' },
   sessionVersion: 1,
+  identityResolved: true,
 }
 let tickets: { ticketId: string; stage: { slot: string | null } }[] = []
 
@@ -15,7 +16,7 @@ vi.mock('../widget-auth-provider', () => ({
     sessionVersion: auth.sessionVersion,
     user: auth.user,
     isIdentified: auth.user !== null,
-    identityResolved: true,
+    identityResolved: auth.identityResolved,
   }),
 }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
@@ -29,6 +30,7 @@ beforeEach(() => {
   localStorage.clear()
   auth.user = { id: 'user_a' }
   auth.sessionVersion = 1
+  auth.identityResolved = true
 })
 
 it('a second person signed in on the same browser gets their own stage badges', async () => {
@@ -72,4 +74,28 @@ it("an anonymous identify neither counts nor stamps the last person's cached tic
   hook.rerender()
   expect(hook.result.current.unread).toBe(0)
   expect(localStorage.getItem('quackback:ticket-stages-seen:anonymous')).toBeNull()
+})
+
+it('counts and writes nothing until the identity round trip settles', async () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  )
+  localStorage.setItem('quackback:ticket-stages-seen', JSON.stringify({ tkt_a: 'open' }))
+  tickets = [{ ticketId: 'tkt_a', stage: { slot: 'resolved' } }]
+  auth.identityResolved = false
+  const hook = renderHook(() => useTicketStageBadge(true), { wrapper })
+  await waitFor(() => expect(qc.getQueryData(['widget', 'myTickets', 1])).toBeDefined())
+  expect(hook.result.current.unread).toBe(0)
+  expect(localStorage.getItem('quackback:ticket-stages-seen:user_a')).toBeNull()
+  expect(localStorage.getItem('quackback:ticket-stages-seen:anonymous')).toBeNull()
+
+  // Settled as person A: they adopt the old map, and the moved stage badges.
+  auth.identityResolved = true
+  hook.rerender()
+  await waitFor(() => expect(hook.result.current.unread).toBe(1))
+  expect(JSON.parse(localStorage.getItem('quackback:ticket-stages-seen:user_a')!)).toEqual({
+    tkt_a: 'open',
+  })
+  expect(localStorage.getItem('quackback:ticket-stages-seen')).toBeNull()
 })

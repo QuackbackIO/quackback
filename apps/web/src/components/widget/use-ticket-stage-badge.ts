@@ -5,6 +5,7 @@ import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import { widgetMyTicketsKey } from './widget-tickets'
 import {
+  adoptLegacyTicketStagesSeen,
   countTicketStageChanges,
   getTicketStagesSeen,
   markTicketStagesSeen,
@@ -33,7 +34,9 @@ export type HasTickets = boolean | null
  */
 export function useTicketStageBadge(enabled: boolean): { unread: number; hasTickets: HasTickets } {
   const { sessionVersion, isIdentified, identityResolved, user } = useWidgetAuth()
-  const scope = seenScope(user)
+  // Null until the identity round trip settles: no marker is read or written
+  // for a visitor the widget cannot yet tell apart, and the badge stays 0.
+  const scope = seenScope(user, identityResolved)
   const { data, isError } = useQuery({
     queryKey: widgetMyTicketsKey(sessionVersion),
     queryFn: () => widgetGetMyTicketsFn({ headers: getWidgetAuthHeaders() }),
@@ -49,7 +52,9 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
     window.addEventListener(TICKET_STAGES_SEEN_EVENT, reread)
     return () => window.removeEventListener(TICKET_STAGES_SEEN_EVENT, reread)
   }, [])
-  const seen = getTicketStagesSeen(scope)
+  // Widget tickets are identified-only: an anonymous scope has no markers.
+  const counts = scope !== null && isIdentified
+  const seen = counts ? getTicketStagesSeen(scope) : null
 
   const tickets = data?.tickets ?? []
 
@@ -58,12 +63,13 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
   useEffect(() => {
     // An anonymous identify keeps the last person's tickets cached under the
     // same key: they are not this visitor's, so they never stamp or count.
-    if (!isIdentified || !data) return
+    if (!counts || !data) return
+    adoptLegacyTicketStagesSeen(scope)
     if (getTicketStagesSeen(scope) === null) markTicketStagesSeen(scope, data.tickets)
-  }, [data, scope, isIdentified])
+  }, [data, scope, counts])
 
   return {
-    unread: isIdentified ? countTicketStageChanges(tickets, seen) : 0,
+    unread: counts ? countTicketStageChanges(tickets, seen) : 0,
     hasTickets: resolveHasTickets({ enabled, identityResolved, isIdentified, data, isError }),
   }
 }

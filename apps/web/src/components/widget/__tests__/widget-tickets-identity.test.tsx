@@ -22,7 +22,12 @@ function ticket(id: string, slot: string) {
 }
 
 vi.mock('../widget-auth-provider', () => ({
-  useWidgetAuth: () => ({ sessionVersion: auth.sessionVersion, user: auth.user }),
+  useWidgetAuth: () => ({
+    sessionVersion: auth.sessionVersion,
+    user: auth.user,
+    isIdentified: true,
+    identityResolved: true,
+  }),
 }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
 vi.mock('@/lib/server/functions/widget/tickets', () => ({

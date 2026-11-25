@@ -21,6 +21,7 @@ vi.mock('../widget-auth-provider', () => ({
     canPortalHandoff: true,
     closeWidget: vi.fn(),
     sessionVersion: 1,
+    identityResolved: true,
   }),
 }))
 vi.mock('../use-messenger-unread', () => ({

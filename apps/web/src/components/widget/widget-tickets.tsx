@@ -40,8 +40,11 @@ export function WidgetTickets({
   /** Opens the pair's conversation thread for a tapped row. */
   onOpenTicket: (conversationId: ConversationId) => void
 }) {
-  const { sessionVersion, user } = useWidgetAuth()
-  const scope = seenScope(user)
+  const { sessionVersion, user, isIdentified, identityResolved } = useWidgetAuth()
+  // Whose stage markers this list reads and advances: none until the identity
+  // round trip settles, and none for an anonymous visitor, whose cached list
+  // may still be the last person's tickets (same guard as the badge).
+  const scope = isIdentified ? seenScope(user, identityResolved) : null
   const { data, isLoading } = useQuery({
     // Re-keyed on sessionVersion so the list refreshes after identify.
     queryKey: widgetMyTicketsKey(sessionVersion),
@@ -58,10 +61,10 @@ export function WidgetTickets({
   // — so the changed rows keep their marker for this visit. Another person
   // signed in on this frame reads their own map.
   const baselineRef = useRef<{ scope: string; seen: TicketStageSeenMap | null } | null>(null)
-  if (data && baselineRef.current?.scope !== scope) {
+  if (data && scope !== null && baselineRef.current?.scope !== scope) {
     baselineRef.current = { scope, seen: getTicketStagesSeen(scope) }
   }
-  const baselineSeen = baselineRef.current?.seen
+  const baselineSeen = baselineRef.current?.scope === scope ? baselineRef.current.seen : null
   const changedIds = useMemo(() => {
     const seen = baselineSeen
     if (!seen) return new Set<string>()
@@ -78,7 +81,7 @@ export function WidgetTickets({
   // the panel is shown again.
   const hostShown = useHostShown()
   useEffect(() => {
-    if (data && hostShown) markTicketStagesSeen(scope, data.tickets)
+    if (data && hostShown && scope !== null) markTicketStagesSeen(scope, data.tickets)
   }, [data, hostShown, scope])
 
   return (

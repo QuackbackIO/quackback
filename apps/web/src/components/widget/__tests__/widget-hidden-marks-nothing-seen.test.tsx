@@ -9,7 +9,12 @@ import { getTicketStagesSeen } from '../ticket-stage-seen'
 import { getChangelogSeenAt } from '../changelog-unread'
 
 vi.mock('../widget-auth-provider', () => ({
-  useWidgetAuth: () => ({ sessionVersion: 0, isIdentified: true }),
+  useWidgetAuth: () => ({
+    sessionVersion: 0,
+    user: { id: 'user_a' },
+    isIdentified: true,
+    identityResolved: true,
+  }),
 }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
 vi.mock('@/lib/server/functions/widget/tickets', () => ({
@@ -77,25 +82,22 @@ describe('a closed widget marks nothing seen', () => {
   afterEach(() => hostShows(true))
 
   it('a ticket stage that moved keeps its badge until the panel is shown', async () => {
-    localStorage.setItem(
-      'quackback:ticket-stages-seen:anonymous',
-      JSON.stringify({ tkt_1: 'open' })
-    )
+    localStorage.setItem('quackback:ticket-stages-seen:user_a', JSON.stringify({ tkt_1: 'open' }))
     render(<WidgetTickets onOpenTicket={() => {}} />, { wrapper })
     await screen.findByText('Ticket 1')
-    expect(getTicketStagesSeen('anonymous')).toEqual({ tkt_1: 'open' })
+    expect(getTicketStagesSeen('user_a')).toEqual({ tkt_1: 'open' })
 
     hostShows(true)
-    expect(getTicketStagesSeen('anonymous')).toEqual({ tkt_1: 'resolved' })
+    expect(getTicketStagesSeen('user_a')).toEqual({ tkt_1: 'resolved' })
   })
 
   it('a new changelog entry keeps its badge until the panel is shown', async () => {
-    localStorage.setItem('quackback:changelog-seen-at:anonymous', '2026-11-01T00:00:00.000Z')
+    localStorage.setItem('quackback:changelog-seen-at:user_a', '2026-11-01T00:00:00.000Z')
     render(<WidgetChangelog />, { wrapper })
     await screen.findByText('Entry 1')
-    expect(getChangelogSeenAt('anonymous')).toBe('2026-11-01T00:00:00.000Z')
+    expect(getChangelogSeenAt('user_a')).toBe('2026-11-01T00:00:00.000Z')
 
     hostShows(true)
-    expect(getChangelogSeenAt('anonymous')).toBe('2026-11-25T10:00:00.000Z')
+    expect(getChangelogSeenAt('user_a')).toBe('2026-11-25T10:00:00.000Z')
   })
 })

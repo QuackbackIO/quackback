@@ -52,8 +52,10 @@ const lastVisit: {
 const FILTER_LOOKAHEAD_MIN_ROWS = 3
 
 export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProps) {
-  const { sessionVersion, user } = useWidgetAuth()
-  const scope = seenScope(user)
+  const { sessionVersion, user, identityResolved } = useWidgetAuth()
+  // Null until the identity round trip settles: until then no marker is read
+  // or advanced, so nothing lands under the wrong person.
+  const scope = seenScope(user, identityResolved)
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError, isLoading } =
     useInfiniteQuery(widgetChangelogListQuery(sessionVersion))
   const { data: categories = [] } = useQuery(widgetChangelogLabelsQuery(sessionVersion))
@@ -70,11 +72,18 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   // Capture the seen marker once per session, when the list first has data —
   // before the effect below advances it — so "New" holds across detail
   // round-trips and not just this mount.
-  if (data && (lastVisit.seenBaseline === undefined || lastVisit.seenBaselineScope !== scope)) {
+  if (
+    data &&
+    scope !== null &&
+    (lastVisit.seenBaseline === undefined || lastVisit.seenBaselineScope !== scope)
+  ) {
     lastVisit.seenBaseline = getChangelogSeenAt(scope)
     lastVisit.seenBaselineScope = scope
   }
-  const baseline = lastVisit.seenBaseline ? new Date(lastVisit.seenBaseline).getTime() : null
+  const baseline =
+    scope !== null && lastVisit.seenBaselineScope === scope && lastVisit.seenBaseline
+      ? new Date(lastVisit.seenBaseline).getTime()
+      : null
   const isNew = (publishedAt: string) =>
     baseline !== null && new Date(publishedAt).getTime() > baseline
 
@@ -96,7 +105,7 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   // published meanwhile keeps its badge until the panel is shown again.
   const hostShown = useHostShown()
   useEffect(() => {
-    if (!hostShown) return
+    if (!hostShown || scope === null) return
     const newest = entries[0]?.publishedAt
     if (newest) markChangelogSeen(scope, newest)
   }, [entries, hostShown, scope])

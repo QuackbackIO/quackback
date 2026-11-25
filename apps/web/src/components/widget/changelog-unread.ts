@@ -14,7 +14,7 @@
  * Each identity in the browser has its own marker (see seen-scope.ts).
  */
 
-import { readScopedMarker } from './seen-scope'
+import { adoptLegacyMarker, readScopedMarker } from './seen-scope'
 
 const SEEN_KEY = 'quackback:changelog-seen-at'
 const seenKey = (scope: string) => `${SEEN_KEY}:${scope}`
@@ -35,7 +35,17 @@ export function getChangelogSeenAt(scope: string, storage?: Storage): string | n
   }
 }
 
+/** Give this person the marker saved before markers were kept per person. */
+export function adoptLegacyChangelogSeen(scope: string): void {
+  try {
+    adoptLegacyMarker(window.localStorage, SEEN_KEY, scope)
+  } catch {
+    // Storage unavailable (private mode etc.).
+  }
+}
+
 export function markChangelogSeen(scope: string, publishedAt: string): void {
+  adoptLegacyChangelogSeen(scope)
   const existing = getChangelogSeenAt(scope)
   // The marker only moves forward — an older page of the infinite list must
   // not re-badge entries the visitor already saw.
