@@ -404,8 +404,12 @@ async function sendBlock(
       await import('@/lib/server/domains/settings/settings.office-hours')
     const { buildReplyTimeMessage } =
       await import('@/lib/server/domains/office-hours/reply-time-message')
-    const schedule = await getOfficeHoursSchedule()
-    const resolved = buildReplyTimeMessage(schedule)
+    const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
+    const [schedule, messenger] = await Promise.all([
+      getOfficeHoursSchedule(),
+      getMessengerConfig(),
+    ])
+    const resolved = buildReplyTimeMessage(schedule, messenger.replyTime)
     replyTimeStatus = resolved.status
     content = resolved.content
   } else {

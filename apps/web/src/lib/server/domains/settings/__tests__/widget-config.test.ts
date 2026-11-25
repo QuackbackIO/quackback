@@ -166,6 +166,13 @@ describe('Widget Config Types', () => {
       })
       expect('routing' in projected).toBe(false)
     })
+
+    it('projects the usual reply time, and leaves it absent when unset', () => {
+      expect(publicMessengerConfig({ enabled: true, replyTime: 'minutes' }).replyTime).toBe(
+        'minutes'
+      )
+      expect(publicMessengerConfig({ enabled: true }).replyTime).toBeUndefined()
+    })
   })
 
   describe('home config merge semantics', () => {

@@ -155,6 +155,7 @@ export function publicMessengerConfig(
     welcomeMessage: messenger.welcomeMessage,
     offlineMessage: messenger.offlineMessage,
     teamName: messenger.teamName,
+    replyTime: messenger.replyTime,
     // Absent or unknown reads as a preview.
     replyAlerts: ['badge', 'full'].includes(messenger.replyAlerts ?? '')
       ? messenger.replyAlerts

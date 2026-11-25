@@ -10,6 +10,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
+import type { ReplyTime } from '@/lib/shared/widget/reply-time'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
@@ -650,6 +651,12 @@ export interface MessengerConfig {
   offlineMessage?: string
   /** Heading shown for the messenger tab/view (falls back to the workspace name). */
   teamName?: string
+  /**
+   * How quickly the team usually replies, shown under the team name in the
+   * conversation header and in the reply-time caption. Absent reads as
+   * 'hour' (see resolveReplyTime); 'off' shows no expectation.
+   */
+  replyTime?: ReplyTime
   /**
    * When true, a visitor cannot reply to a CLOSED conversation from the
    * Messenger — the send is refused instead of reopening the thread (support

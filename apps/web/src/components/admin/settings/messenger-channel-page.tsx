@@ -12,10 +12,26 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import { WIDGET_LOCALE_LABELS, type WidgetTranslations } from '@/lib/shared/widget/translations'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { REPLY_TIMES, resolveReplyTime, type ReplyTime } from '@/lib/shared/widget/reply-time'
+
+const REPLY_TIME_LABELS: Record<ReplyTime, string> = {
+  minutes: 'In a few minutes',
+  hour: 'Under an hour',
+  hours: 'In a few hours',
+  day: 'Within a day',
+  off: "Don't show",
+}
 
 export function MessengerChannelPage() {
   const router = useRouter()
@@ -39,6 +55,7 @@ export function MessengerChannelPage() {
   const [welcomeMessage, setWelcomeMessage] = useState(messengerConfig?.welcomeMessage ?? '')
   const [offlineMessage, setOfflineMessage] = useState(messengerConfig?.offlineMessage ?? '')
   const [teamName, setTeamName] = useState(messengerConfig?.teamName ?? '')
+  const [replyTime, setReplyTime] = useState(resolveReplyTime(messengerConfig?.replyTime))
   const [translations, setTranslations] = useState<WidgetTranslations>(config.translations ?? {})
   const [translationLocale, setTranslationLocale] = useState<string>('en')
 
@@ -116,7 +133,10 @@ export function MessengerChannelPage() {
         </SettingRows>
       </SettingsCard>
 
-      <SettingsCard title="Messaging" description="Greeting and team name shown to visitors.">
+      <SettingsCard
+        title="Messaging"
+        description="Greeting, team name and reply time shown to visitors."
+      >
         <div className="space-y-5">
           <div className="space-y-1.5">
             <Label htmlFor="messenger-team-name">Team name</Label>
@@ -131,6 +151,33 @@ export function MessengerChannelPage() {
             />
             <p className="text-xs text-muted-foreground">
               Shown in the messenger header. Falls back to the workspace name.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="messenger-reply-time">Usual reply time</Label>
+            <Select
+              value={replyTime}
+              onValueChange={(value) => {
+                const prev = replyTime
+                const next = resolveReplyTime(value)
+                setReplyTime(next)
+                persist('replyTime', { messenger: { replyTime: next } }, () => setReplyTime(prev))
+              }}
+              disabled={isBusy}
+            >
+              <SelectTrigger id="messenger-reply-time" className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REPLY_TIMES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {REPLY_TIME_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Shown under the team name when nobody is online.
             </p>
           </div>
           <div className="space-y-1.5">
