@@ -98,7 +98,7 @@ Before `sdk.js` loads, the install snippet only queues calls, so a state read ma
 
 ### The launcher
 
-The floating button is named "Open help" for screen readers (or your launcher label, when one is set), with the unread count added when there is one: "Open help, 2 unread". While the panel is open it reads "Close help". The panel is a labelled dialog: opening it moves keyboard focus into it, and closing it returns focus to the launcher.
+The floating button is named "Open help" for screen readers (or your launcher label, when one is set), with the unread count added when there is one: "Open help, 2 unread". While the panel is open it reads "Close help". The panel is a labelled dialog: opening it with a click or key press moves keyboard focus into it, and closing it returns focus to the element that opened it, or to the launcher when that element is gone. An open while the visitor is typing in a field leaves their focus there.
 
 `hideLauncher()` hides the button and its greeting bubble together. `showLauncher()` brings them back, and also works after `init({ launcher: false })`, so you can start with your own button and show the default one later.
 
