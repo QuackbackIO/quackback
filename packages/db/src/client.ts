@@ -25,6 +25,12 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
     max: options?.max ?? 10,
     prepare: options?.prepare ?? true,
     idle_timeout: options?.idleTimeout ?? 20,
+    // Never look custom types up at runtime. The driver does that lookup on a
+    // different connection while the one that met the type waits with its
+    // connection held, which hangs behind a transaction pooler that has fewer
+    // server connections than this pool has clients. Drizzle maps the
+    // pgvector columns itself, and the schema has no enum or domain types.
+    fetch_types: false,
     // postgres-js prints every server NOTICE to the console by default, and
     // idempotent DDL (`CREATE TABLE IF NOT EXISTS` for page_views partitions at
     // boot) emits one per skipped object. Errors still throw; notices carry
