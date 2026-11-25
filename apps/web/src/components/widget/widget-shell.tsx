@@ -141,8 +141,9 @@ export function WidgetShell({
   const showTabBar = tabsToShow.length > 1 && !hideTabBar
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
-  const messengerUnread = useMessengerUnread(enabledTabs.messages ?? false)
-  useRefreshSummaryOnUnreadChange(messengerUnread)
+  const messengerUnreadTotal = useMessengerUnread(enabledTabs.messages ?? false)
+  useRefreshSummaryOnUnreadChange(messengerUnreadTotal)
+  const messengerUnread = messengerUnreadTotal ?? 0
   // Newly published changelog entries badge the launcher until the visitor
   // opens the changelog surface (which advances their seen marker).
   const { unread: changelogUnread } = useChangelogUnread(enabledTabs.changelog ?? false)

@@ -14,6 +14,8 @@
  * Each identity in the browser has its own marker (see seen-scope.ts).
  */
 
+import { readScopedMarker } from './seen-scope'
+
 const SEEN_KEY = 'quackback:changelog-seen-at'
 const seenKey = (scope: string) => `${SEEN_KEY}:${scope}`
 
@@ -23,7 +25,7 @@ export const CHANGELOG_SEEN_EVENT = 'quackback:changelog-seen'
 
 export function getChangelogSeenAt(scope: string, storage?: Storage): string | null {
   try {
-    const raw = (storage ?? window.localStorage).getItem(seenKey(scope))
+    const raw = readScopedMarker(storage ?? window.localStorage, SEEN_KEY, scope)
     if (!raw) return null
     // Guard against a corrupted value: an unparseable marker behaves as no
     // marker rather than poisoning every comparison with NaN.

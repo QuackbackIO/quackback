@@ -56,11 +56,14 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
   // Silent first-contact baseline: stamp the stages current at the first
   // load so historical states never badge (see ticket-stage-seen.ts).
   useEffect(() => {
-    if (data && getTicketStagesSeen(scope) === null) markTicketStagesSeen(scope, data.tickets)
-  }, [data, scope])
+    // An anonymous identify keeps the last person's tickets cached under the
+    // same key: they are not this visitor's, so they never stamp or count.
+    if (!isIdentified || !data) return
+    if (getTicketStagesSeen(scope) === null) markTicketStagesSeen(scope, data.tickets)
+  }, [data, scope, isIdentified])
 
   return {
-    unread: countTicketStageChanges(tickets, seen),
+    unread: isIdentified ? countTicketStageChanges(tickets, seen) : 0,
     hasTickets: resolveHasTickets({ enabled, identityResolved, isIdentified, data, isError }),
   }
 }

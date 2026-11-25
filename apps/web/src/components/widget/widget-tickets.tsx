@@ -55,18 +55,22 @@ export function WidgetTickets({
   // The launcher/tab badge counts tickets whose stage moved since the visitor
   // last looked; the list should point at WHICH ones. Capture the seen map
   // once, when the list first has data — before the effect below advances it
-  // — so the changed rows keep their marker for this visit.
-  const baselineRef = useRef<TicketStageSeenMap | null | undefined>(undefined)
-  if (data && baselineRef.current === undefined) baselineRef.current = getTicketStagesSeen(scope)
+  // — so the changed rows keep their marker for this visit. Another person
+  // signed in on this frame reads their own map.
+  const baselineRef = useRef<{ scope: string; seen: TicketStageSeenMap | null } | null>(null)
+  if (data && baselineRef.current?.scope !== scope) {
+    baselineRef.current = { scope, seen: getTicketStagesSeen(scope) }
+  }
+  const baselineSeen = baselineRef.current?.seen
   const changedIds = useMemo(() => {
-    const seen = baselineRef.current
+    const seen = baselineSeen
     if (!seen) return new Set<string>()
     return new Set(
       tickets
         .filter((t) => t.ticketId in seen && seen[t.ticketId] !== t.stage.slot)
         .map((t) => t.ticketId)
     )
-  }, [tickets])
+  }, [tickets, baselineSeen])
 
   // The Tickets tab IS the stage-seen surface: having the list on screen
   // advances the visitor's stage markers, clearing the launcher badge. Not

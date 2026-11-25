@@ -76,6 +76,13 @@ describe('stage marker storage', () => {
     window.removeEventListener(TICKET_STAGES_SEEN_EVENT, listener)
   })
 
+  it('keeps the map saved before maps were kept per person', () => {
+    window.localStorage.setItem('quackback:ticket-stages-seen', JSON.stringify({ tkt_1: 'open' }))
+    expect(getTicketStagesSeen('u1')).toEqual({ tkt_1: 'open' })
+    expect(window.localStorage.getItem('quackback:ticket-stages-seen')).toBeNull()
+    expect(getTicketStagesSeen('u2')).toBeNull()
+  })
+
   it('ignores a corrupted stored value instead of throwing', () => {
     window.localStorage.setItem('quackback:ticket-stages-seen:u1', '{not json')
     expect(getTicketStagesSeen('u1')).toBeNull()

@@ -4,14 +4,17 @@ import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-const auth = { user: { id: 'user_a' }, sessionVersion: 1 }
+const auth: { user: { id: string } | null; sessionVersion: number } = {
+  user: { id: 'user_a' },
+  sessionVersion: 1,
+}
 let tickets: { ticketId: string; stage: { slot: string | null } }[] = []
 
 vi.mock('../widget-auth-provider', () => ({
   useWidgetAuth: () => ({
     sessionVersion: auth.sessionVersion,
     user: auth.user,
-    isIdentified: true,
+    isIdentified: auth.user !== null,
     identityResolved: true,
   }),
 }))
@@ -22,7 +25,11 @@ vi.mock('@/lib/server/functions/widget/tickets', () => ({
 
 import { useTicketStageBadge } from '../use-ticket-stage-badge'
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  auth.user = { id: 'user_a' }
+  auth.sessionVersion = 1
+})
 
 it('a second person signed in on the same browser gets their own stage badges', async () => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -48,4 +55,21 @@ it('a second person signed in on the same browser gets their own stage badges', 
   tickets = [{ ticketId: 'tkt_b', stage: { slot: 'resolved' } }]
   await act(() => qc.invalidateQueries({ queryKey: ['widget', 'myTickets', 2] }))
   await waitFor(() => expect(b.result.current.unread).toBe(1))
+})
+
+it("an anonymous identify neither counts nor stamps the last person's cached tickets", async () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  )
+  localStorage.setItem('quackback:ticket-stages-seen:user_a', JSON.stringify({ tkt_a: 'open' }))
+  tickets = [{ ticketId: 'tkt_a', stage: { slot: 'resolved' } }]
+  const hook = renderHook(() => useTicketStageBadge(true), { wrapper })
+  await waitFor(() => expect(hook.result.current.unread).toBe(1))
+
+  // The host switches to anonymous: the same query key keeps A's tickets.
+  auth.user = null
+  hook.rerender()
+  expect(hook.result.current.unread).toBe(0)
+  expect(localStorage.getItem('quackback:ticket-stages-seen:anonymous')).toBeNull()
 })

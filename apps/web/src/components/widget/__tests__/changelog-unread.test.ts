@@ -62,6 +62,13 @@ describe('seen marker storage', () => {
     expect(getChangelogSeenAt('u2')).toBe('2026-07-01T10:00:00Z')
   })
 
+  it('keeps the marker saved before markers were kept per person', () => {
+    window.localStorage.setItem('quackback:changelog-seen-at', '2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
+    expect(window.localStorage.getItem('quackback:changelog-seen-at')).toBeNull()
+    expect(getChangelogSeenAt('u2')).toBeNull()
+  })
+
   it('ignores an unparseable stored marker instead of throwing', () => {
     window.localStorage.setItem('quackback:changelog-seen-at:u1', 'not-a-date')
     expect(getChangelogSeenAt('u1')).toBeNull()

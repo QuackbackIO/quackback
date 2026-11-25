@@ -62,20 +62,55 @@ describe('useConversationSummary', () => {
 })
 
 describe('useRefreshSummaryOnUnreadChange', () => {
-  it('refreshes the Home card when the unread total moves, not on first sight', () => {
+  function setup() {
     const qc = new QueryClient()
-    const key = conversationKeys.widgetConversationSummary(0)
-    qc.setQueryData(key, { conversation: null, teamName: null })
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     )
-    const { rerender } = renderHook(({ total }) => useRefreshSummaryOnUnreadChange(total), {
-      wrapper,
-      initialProps: { total: 0 },
-    })
-    expect(qc.getQueryState(key)?.isInvalidated).toBe(false)
+    const current = vi.fn().mockResolvedValue({ conversation: null, teamName: null })
+    const older = vi.fn().mockResolvedValue({ conversation: null, teamName: null })
+    return { qc, wrapper, current, older }
+  }
 
-    rerender({ total: 1 })
-    expect(qc.getQueryState(key)?.isInvalidated).toBe(true)
+  it('refetches the current Home card when the total moves, even with Home off screen', async () => {
+    const { qc, wrapper, current, older } = setup()
+    // Fetched but not observed: Home is off screen.
+    await qc.fetchQuery({
+      queryKey: conversationKeys.widgetConversationSummary(0),
+      queryFn: current,
+    })
+    await qc.fetchQuery({
+      queryKey: conversationKeys.widgetConversationSummary(-1),
+      queryFn: older,
+    })
+    current.mockClear()
+    older.mockClear()
+    const hook = renderHook(
+      ({ total }: { total: number | undefined }) => useRefreshSummaryOnUnreadChange(total),
+      { wrapper, initialProps: { total: 2 } }
+    )
+    hook.rerender({ total: 0 })
+    await vi.waitFor(() => expect(current).toHaveBeenCalledTimes(1))
+    // An earlier identity's card is left alone.
+    expect(older).not.toHaveBeenCalled()
+  })
+
+  it('does not count the first total after a load as a change', async () => {
+    const { qc, wrapper, current } = setup()
+    await qc.fetchQuery({
+      queryKey: conversationKeys.widgetConversationSummary(0),
+      queryFn: current,
+    })
+    current.mockClear()
+    const hook = renderHook(
+      ({ total }: { total: number | undefined }) => useRefreshSummaryOnUnreadChange(total),
+      { wrapper, initialProps: { total: undefined as number | undefined } }
+    )
+    hook.rerender({ total: 2 })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(current).not.toHaveBeenCalled()
+    expect(qc.getQueryState(conversationKeys.widgetConversationSummary(0))?.isInvalidated).toBe(
+      false
+    )
   })
 })

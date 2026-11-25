@@ -11,8 +11,9 @@ import { widgetGetMessengerUnreadFn } from '@/lib/server/functions/widget/conver
  * Re-keyed on sessionVersion (Bearer identify swaps the actor). Pass
  * `enabled=false` (e.g. messenger off) to skip the fetch. Polls on a modest
  * interval so a reply surfaces on this surface even without a live stream.
+ * Undefined until the first count arrives.
  */
-export function useMessengerUnread(enabled: boolean): number {
+export function useMessengerUnread(enabled: boolean): number | undefined {
   const { sessionVersion } = useWidgetAuth()
   const { data } = useQuery({
     queryKey: conversationKeys.widgetMessengerUnread(sessionVersion),
@@ -23,21 +24,29 @@ export function useMessengerUnread(enabled: boolean): number {
     refetchOnMount: 'always',
     retry: false,
   })
-  return data?.total ?? 0
+  return data?.total
 }
 
 /**
  * Refresh the Home card when the visitor's unread total moves. The total is
- * already polled for the badges; a reply that arrives while Home sits open
- * changes it, and the card's preview and count follow without a poll of
- * their own.
+ * already polled for the badges, and a read refreshes it: a reply that
+ * arrives while Home sits open, or a read made elsewhere, changes it, and the
+ * card follows without a poll of its own. It refetches even while Home is
+ * off screen, so going back to Home never shows the count from before. The
+ * first count after a load or an identity change is not a change.
  */
-export function useRefreshSummaryOnUnreadChange(total: number): void {
+export function useRefreshSummaryOnUnreadChange(total: number | undefined): void {
+  const { sessionVersion } = useWidgetAuth()
   const queryClient = useQueryClient()
   const last = useRef(total)
   useEffect(() => {
-    if (total === last.current) return
+    const previous = last.current
     last.current = total
-    void queryClient.invalidateQueries({ queryKey: conversationKeys.widgetConversationSummaries() })
-  }, [total, queryClient])
+    if (previous === undefined || total === undefined || total === previous) return
+    void queryClient.invalidateQueries({
+      queryKey: conversationKeys.widgetConversationSummary(sessionVersion),
+      exact: true,
+      refetchType: 'all',
+    })
+  }, [total, sessionVersion, queryClient])
 }

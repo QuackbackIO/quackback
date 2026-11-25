@@ -14,6 +14,8 @@
  * badges — only CHANGES to a stage the visitor was baselined on do.
  */
 
+import { readScopedMarker } from './seen-scope'
+
 // Each identity in the browser has its own map (see seen-scope.ts).
 const SEEN_KEY = 'quackback:ticket-stages-seen'
 const seenKey = (scope: string) => `${SEEN_KEY}:${scope}`
@@ -33,7 +35,7 @@ export interface TicketStageSeenInput {
 
 export function getTicketStagesSeen(scope: string, storage?: Storage): TicketStageSeenMap | null {
   try {
-    const raw = (storage ?? window.localStorage).getItem(seenKey(scope))
+    const raw = readScopedMarker(storage ?? window.localStorage, SEEN_KEY, scope)
     if (!raw) return null
     // Guard against a corrupted value: an unparseable or non-map marker
     // behaves as no marker rather than poisoning every comparison.
