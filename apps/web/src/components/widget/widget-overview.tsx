@@ -197,13 +197,16 @@ export function WidgetOverview({
               </span>
             </span>
             {faces.length > 0 ? (
-              <span className="flex items-center -space-x-2 shrink-0" aria-hidden>
+              // A small overlap with earlier faces stacked on top keeps every
+              // avatar's initials clear of the next one.
+              <span className="isolate flex items-center -space-x-1 shrink-0" aria-hidden>
                 {faces.map((f, i) => (
                   <Avatar
                     key={`${f.name}-${i}`}
                     src={f.avatarUrl}
                     name={f.name}
                     className="size-7 text-xs ring-2 ring-card"
+                    style={{ zIndex: faces.length - i }}
                   />
                 ))}
               </span>
