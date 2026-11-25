@@ -3,6 +3,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 // The widget loader hands the frame the visitor's portal session only when the
 // frame's document navigation comes from the instance's own origin.
 const request = vi.hoisted(() => ({ headers: new Headers() }))
+// Lets a test hold the locale lookup open to see what runs alongside it.
+const localeGate = vi.hoisted(() => ({ wait: null as Promise<void> | null }))
 
 // Server functions run their handler in-process, as they do during the frame's
 // server render.
@@ -32,6 +34,10 @@ vi.mock('@/lib/server/functions/portal', () => ({
 vi.mock('@/lib/shared/i18n', async (original) => ({
   ...(await original<typeof import('@/lib/shared/i18n')>()),
   loadWidgetMessages: vi.fn(async () => ({})),
+  resolveLocale: async () => {
+    if (localeGate.wait) await localeGate.wait
+    return 'en'
+  },
 }))
 
 const { fetchUserAvatar } = await import('@/lib/server/functions/portal')
@@ -97,5 +103,23 @@ describe('widget loader portal session reuse', () => {
     const data = await runLoader()
     expect(data.portalSessionToken).toBeNull()
     expect(data.portalUser).toBeNull()
+  })
+
+  it('looks up the avatar alongside the locale, not after it', async () => {
+    setRequest({ 'sec-fetch-site': 'same-origin', 'sec-fetch-mode': 'navigate' })
+    let releaseLocale = () => {}
+    localeGate.wait = new Promise((resolve) => {
+      releaseLocale = resolve
+    })
+    try {
+      const run = runLoader()
+      await vi.waitFor(() => expect(fetchUserAvatar).toHaveBeenCalled())
+      releaseLocale()
+      const data = await run
+      expect(data.portalUser).toMatchObject({ avatarUrl: '/avatar.png' })
+    } finally {
+      localeGate.wait = null
+      releaseLocale()
+    }
   })
 })

@@ -98,27 +98,31 @@ export const Route = createFileRoute('/widget')({
     // visitor until the host identifies the user with a signed identity token.
     // The token is read here, during the frame's document request, because
     // later fetches from inside the frame cannot say who embeds it.
-    const [portalSessionToken, locale] = await Promise.all([
-      session?.user ? getPortalSessionToken() : Promise.resolve(null),
+    // The avatar lookup starts as soon as the token resolves, alongside the
+    // locale lookup.
+    const portalSessionPromise = (
+      session?.user ? getPortalSessionToken() : Promise.resolve(null)
+    ).then(async (portalSessionToken) => {
+      const user = session?.user
+      if (!portalSessionToken || !user || user.principalType === 'anonymous') {
+        return { portalSessionToken, portalUser: null }
+      }
+      const fallbackImageUrl = user.image ?? null
+      const avatar = await fetchUserAvatar({ data: { userId: user.id, fallbackImageUrl } })
+      return {
+        portalSessionToken,
+        portalUser: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          avatarUrl: avatar?.avatarUrl ?? fallbackImageUrl,
+        },
+      }
+    })
+    const [{ portalSessionToken, portalUser }, locale] = await Promise.all([
+      portalSessionPromise,
       getWidgetLocale({ data: { explicitLocale } }),
     ])
-    const portalUserBase =
-      portalSessionToken && session?.user && session.user.principalType !== 'anonymous'
-        ? {
-            id: session.user.id,
-            name: session.user.name,
-            email: session.user.email,
-            avatarUrl: session.user.image ?? null,
-          }
-        : null
-    const portalAvatar = portalUserBase
-      ? await fetchUserAvatar({
-          data: { userId: portalUserBase.id, fallbackImageUrl: portalUserBase.avatarUrl },
-        })
-      : null
-    const portalUser = portalUserBase
-      ? { ...portalUserBase, avatarUrl: portalAvatar?.avatarUrl ?? portalUserBase.avatarUrl }
-      : null
     // Serialize the widget's catalog slice into loader data so the first
     // client render is already translated (the route is ssr: 'data-only' —
     // there's no SSR HTML to seed from).

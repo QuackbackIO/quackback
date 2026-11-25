@@ -80,7 +80,12 @@ export function useWidgetAuth(): WidgetAuthContextValue {
 }
 
 interface WidgetAuthProviderProps {
-  /** Portal user identity — if set, the widget displays their info */
+  /**
+   * Portal user identity — if set, the widget displays their info. Adopted
+   * once with `portalSessionToken`: a later null (the loader re-running on the
+   * client, where it never carries the portal session) leaves the adopted
+   * session and user in place.
+   */
   portalUser?: WidgetUser | null
   /** Signed portal session token, set only when the embedding page is the instance's own origin */
   portalSessionToken?: string | null
