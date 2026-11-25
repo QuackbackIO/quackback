@@ -44,6 +44,7 @@ import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query
 import { widgetFetchBoardCapabilitiesFn } from '@/lib/server/functions/widget/posts'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { getWidgetPortalOriginFn } from '@/lib/server/functions/widget/portal-origin'
+import { widgetPortalSessionReusedFn } from '@/lib/server/functions/widget/portal-session'
 import { widgetListPublicArticlesFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -152,6 +153,14 @@ export const Route = createFileRoute('/widget/')({
     const changelogTabEnabled =
       changelogProductEnabled && (settings?.publicWidgetConfig?.tabs?.changelog ?? false)
 
+    // The visitor's portal session counts here only when the frame holds it
+    // (an embedding page on the instance's own origin). Otherwise the frame is
+    // anonymous and the seed is too: the call also serves the rest of this
+    // request as anonymous, so the reads below never act as the cookie
+    // session. Settled first, before any of them starts.
+    const portalSessionReused = await widgetPortalSessionReusedFn()
+    const viewerId = portalSessionReused ? session?.user?.id : undefined
+
     // Every branch below is independent, so the whole SSR seed runs as ONE
     // parallel batch — document TTFB is the slowest branch, not the sum.
     //
@@ -177,7 +186,7 @@ export const Route = createFileRoute('/widget/')({
             portalQueries.portalData({
               boardSlug: search.board,
               sort: 'top',
-              userId: session?.user?.id,
+              userId: viewerId,
             })
           )
         : Promise.resolve(emptyPortalData),
@@ -246,7 +255,7 @@ export const Route = createFileRoute('/widget/')({
 
     queryClient.setQueryData(
       widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
-      new Set(portalData.votedPostIds)
+      new Set(portalSessionReused ? portalData.votedPostIds : [])
     )
 
     return {
