@@ -252,6 +252,13 @@ export function WidgetShell({
       {/* The Home hero backdrop fills the panel behind the header row and
           body; the header/content render transparently over it. */}
       {backdrop}
+      {/* On a phone the panel fills the screen: keep the header out from under
+          the host page's notch or status bar (see widget-host-safe-area). */}
+      <div
+        aria-hidden
+        className="relative z-10 shrink-0"
+        style={{ height: 'var(--qb-safe-top, 0px)' }}
+      />
       <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
         {/* Left: back button on detail views; workspace logo on Home. min-w-0 so
             header content (presence copy) truncates instead of pushing the
@@ -366,7 +373,12 @@ export function WidgetShell({
       {/* Bottom tab bar + footer — solid so the hero backdrop never bleeds through. */}
       <div
         className="relative z-10 border-t border-border/40 shrink-0 bg-background"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        // A frame reads env(safe-area-inset-bottom) as zero; the host page's
+        // inset arrives as --qb-safe-bottom, so the tab bar and footer clear
+        // a home indicator or an edge-to-edge system bar.
+        style={{
+          paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--qb-safe-bottom, 0px))',
+        }}
       >
         {tabBar.mounted && (
           <div

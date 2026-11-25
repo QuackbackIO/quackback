@@ -43,6 +43,8 @@ export interface WidgetInboundMessages {
   'quackback:locale': string
   /** Whether the host shows the panel; a hidden panel leaves new replies unread. */
   'quackback:shown': boolean
+  /** The host page's safe-area insets in CSS pixels, for the full-screen phone panel. */
+  'quackback:safe-area': { top: number; bottom: number }
   'quackback:open':
     | {
         view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'

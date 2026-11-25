@@ -590,3 +590,100 @@ describe('sdk server-driven launcher config', () => {
     expect(btn.style.left).toBe('24px')
   })
 })
+
+describe('sdk on phones', () => {
+  const origin = 'https://safe-area.example.com'
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    document.head.innerHTML = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
+    )
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: () => void) => {
+        cb()
+        return 1
+      })
+    )
+    vi.stubGlobal('cancelIdleCallback', vi.fn())
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function phone(matches: boolean) {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    )
+  }
+
+  // The host page's safe-area insets (a home indicator, an edge-to-edge
+  // navigation bar). The frame cannot read them, so the SDK measures them.
+  function hostInsets(top: string, bottom: string) {
+    const real = window.getComputedStyle.bind(window)
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) =>
+      (el as HTMLElement).dataset?.quackbackSafeArea !== undefined
+        ? ({ paddingTop: top, paddingBottom: bottom } as CSSStyleDeclaration)
+        : real(el)
+    )
+  }
+
+  function sentSafeAreas(postMessage: ReturnType<typeof vi.fn>) {
+    return postMessage.mock.calls
+      .filter(
+        ([msg, to]) => to === origin && (msg as { type: string }).type === 'quackback:safe-area'
+      )
+      .map(([msg]) => (msg as { data: unknown }).data)
+  }
+
+  it('sizes the full-screen panel to the visible viewport, not the largest one', () => {
+    phone(true)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    const css = document.getElementById('quackback-widget-styles')?.textContent ?? ''
+    const phoneRules = css.slice(css.indexOf('@media(max-width:639px)'))
+    expect(phoneRules).toContain('height:100dvh')
+    sdk.dispatch('destroy')
+  })
+
+  it('tells the frame the host page insets, so its bottom bar clears the system bar', () => {
+    phone(true)
+    hostInsets('47px', '34px')
+    const postMessage = vi.fn()
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage,
+    } as unknown as Window)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    window.dispatchEvent(new MessageEvent('message', { origin, data: { type: 'quackback:ready' } }))
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34 }])
+
+    // A rotation changes the insets; the frame hears about it once.
+    hostInsets('0px', '21px')
+    window.dispatchEvent(new Event('resize'))
+    window.dispatchEvent(new Event('resize'))
+    expect(sentSafeAreas(postMessage)).toEqual([
+      { top: 47, bottom: 34 },
+      { top: 0, bottom: 21 },
+    ])
+    sdk.dispatch('destroy')
+  })
+
+  it('sends no insets for the floating desktop panel, which never touches the screen edge', () => {
+    phone(false)
+    hostInsets('47px', '34px')
+    const postMessage = vi.fn()
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage,
+    } as unknown as Window)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    window.dispatchEvent(new MessageEvent('message', { origin, data: { type: 'quackback:ready' } }))
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 0 }])
+    sdk.dispatch('destroy')
+  })
+})

@@ -8,6 +8,7 @@ import type {
 } from '../types'
 import { createEmitter } from './events'
 import { createBridge, type Bridge } from './postmessage'
+import { measureSafeArea } from './safe-area'
 import { createLauncher, type LauncherHandle } from './launcher'
 import { createPanel, type PanelHandle } from './panel'
 import { fetchServerConfig, type ServerConfig } from './config'
@@ -74,6 +75,21 @@ export function createSDK(): SDK {
 
   function sendMobileState(): void {
     if (ready && bridge) bridge.send('quackback:mobile', !!mobileMql?.matches)
+    sendSafeArea()
+  }
+
+  // On a phone the panel fills the screen, so its top and bottom meet the
+  // host page's notch and system bars. The frame cannot read those insets
+  // itself; send them, and again whenever they change (a rotation). The
+  // floating desktop panel never touches the screen edge, so it gets zeros.
+  let lastSafeArea = ''
+  function sendSafeArea(): void {
+    if (!ready || !bridge) return
+    const insets = mobileMql?.matches ? measureSafeArea() : { top: 0, bottom: 0 }
+    const key = `${insets.top}:${insets.bottom}`
+    if (key === lastSafeArea) return
+    lastSafeArea = key
+    bridge.send('quackback:safe-area', insets)
   }
 
   // Closing only hides the panel, so the frame and any open conversation stay
@@ -106,6 +122,8 @@ export function createSDK(): SDK {
           bridge!.send('quackback:open', pendingOpen)
           pendingOpen = null
         }
+        // A frame that (re)loads starts with no insets: always send them.
+        lastSafeArea = ''
         sendMobileState()
         sendShownState()
         emitter.emit('ready', {})
@@ -216,7 +234,11 @@ export function createSDK(): SDK {
     bridge.onMessage(onIframeMessage)
     mobileMql = window.matchMedia('(max-width: 639px)')
     mobileMql.addEventListener('change', sendMobileState)
-    mobileCleanup = () => mobileMql!.removeEventListener('change', sendMobileState)
+    window.addEventListener('resize', sendSafeArea)
+    mobileCleanup = () => {
+      mobileMql!.removeEventListener('change', sendMobileState)
+      window.removeEventListener('resize', sendSafeArea)
+    }
     return panel
   }
 
@@ -451,6 +473,7 @@ export function createSDK(): SDK {
         mobileCleanup?.()
         mobileCleanup = null
         mobileMql = null
+        lastSafeArea = ''
         removeStyles()
         panel = null
         launcher = null

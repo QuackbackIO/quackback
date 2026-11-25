@@ -26,7 +26,9 @@ export function ensureStyles(side: 'left' | 'right'): void {
     '.quackback-panel.quackback-closing{opacity:0;transform:scale(0);pointer-events:none;',
     'transition:opacity 200ms cubic-bezier(0.4,0,1,1),transform 200ms cubic-bezier(0.4,0,1,1)}',
     '@media(max-width:639px){',
-    '.quackback-panel{top:0;left:0;right:0;bottom:0;width:100%;height:100vh;',
+    // 100vh is the tallest the viewport gets (browser toolbars hidden), so it
+    // runs under a visible toolbar or system bar; 100dvh is what is on screen.
+    '.quackback-panel{top:0;left:0;right:0;bottom:0;width:100%;height:100vh;height:100dvh;',
     'border-radius:0;box-shadow:none;',
     'opacity:1;visibility:hidden;transform:translateY(100%);transform-origin:center;',
     'transition:transform 300ms cubic-bezier(0.4,0,0.2,1),visibility 0s linear 300ms}',
