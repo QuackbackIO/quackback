@@ -7,6 +7,7 @@ import type { ConversationId } from '@quackback/ids'
 import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
+import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import {
   getTicketStagesSeen,
   markTicketStagesSeen,
@@ -66,10 +67,13 @@ export function WidgetTickets({
   }, [tickets])
 
   // The Tickets tab IS the stage-seen surface: having the list on screen
-  // advances the visitor's stage markers, clearing the launcher badge.
+  // advances the visitor's stage markers, clearing the launcher badge. Not
+  // while the widget is closed: a stage that moves then keeps its badge until
+  // the panel is shown again.
+  const hostShown = useHostShown()
   useEffect(() => {
-    if (data) markTicketStagesSeen(data.tickets)
-  }, [data])
+    if (data && hostShown) markTicketStagesSeen(data.tickets)
+  }, [data, hostShown])
 
   return (
     <div className="relative flex h-full flex-col">
