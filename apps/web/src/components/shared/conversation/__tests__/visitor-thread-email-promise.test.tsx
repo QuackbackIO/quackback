@@ -5,7 +5,8 @@
  * address. An anonymous visitor (whose account email is a placeholder) and
  * anyone else without one sees "We'll reply here" while the team is away.
  * The server decides (`canEmailVisitor`); the thread shows it in its own
- * header and reports it to the widget, whose header shows the same badge.
+ * header when the workspace hides its usual reply time, and reports it to
+ * the widget, whose header shows the same line.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -50,7 +51,6 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 
 import { VisitorSurfaceRpcProvider, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { VisitorConversationThread } from '../visitor-conversation-thread'
-import { ConversationPresenceBadge } from '../conversation-presence-badge'
 
 afterEach(cleanup)
 
@@ -64,12 +64,16 @@ function withIntl(ui: React.ReactNode) {
   )
 }
 
-async function renderThread(canEmailVisitor: boolean, onReplyByEmail = vi.fn()) {
+async function renderThread(
+  canEmailVisitor: boolean,
+  { replyTime, onReplyByEmail = vi.fn() }: { replyTime?: string; onReplyByEmail?: () => void } = {}
+) {
   const rpc = {
     getMyConversation: vi.fn(async () => ({
       welcomeMessage: 'Hi there',
       offlineMessage: 'We will get back to you soon.',
-      teamName: 'Team',
+      teamName: 'Acme Support',
+      replyTime,
       assistant: null,
       canEmailVisitor,
       linkedTicket: null,
@@ -93,6 +97,7 @@ async function renderThread(canEmailVisitor: boolean, onReplyByEmail = vi.fn()) 
             conversationTarget="new"
             uploadFile={vi.fn()}
             presence={AWAY}
+            team={[{ name: 'Ada Lovelace', avatarUrl: null }]}
             onReplyByEmailChange={onReplyByEmail}
           />
         </VisitorSurfaceRpcProvider>
@@ -100,37 +105,27 @@ async function renderThread(canEmailVisitor: boolean, onReplyByEmail = vi.fn()) 
     </QueryClientProvider>
   )
   await waitFor(() => expect(rpc.getMyConversation).toHaveBeenCalled())
-  return { onReplyByEmail }
 }
 
-describe('the away badge', () => {
-  it('promises email only when a reply can reach the visitor by email', () => {
-    const { rerender } = render(
-      withIntl(<ConversationPresenceBadge available={false} canReplyByEmail />)
-    )
-    expect(screen.getByText("We'll reply by email")).toBeInTheDocument()
-
-    rerender(withIntl(<ConversationPresenceBadge available={false} canReplyByEmail={false} />))
-    expect(screen.queryByText("We'll reply by email")).not.toBeInTheDocument()
-    expect(screen.getByText("We'll reply here")).toBeInTheDocument()
-  })
-
-  it('says the team is online either way', () => {
-    render(withIntl(<ConversationPresenceBadge available canReplyByEmail={false} />))
-    expect(screen.getByText("We're online")).toBeInTheDocument()
-  })
-})
-
 describe('the visitor thread while the team is away', () => {
+  it('names the team and its usual reply time in the header', async () => {
+    await renderThread(false)
+    expect(await screen.findByText('Acme Support')).toBeInTheDocument()
+    expect(screen.getByText('AL')).toBeInTheDocument()
+    expect(screen.getByText('Typically replies in under an hour')).toBeInTheDocument()
+  })
+
   it('does not promise email to a visitor it cannot email', async () => {
-    const { onReplyByEmail } = await renderThread(false)
+    const onReplyByEmail = vi.fn()
+    await renderThread(false, { replyTime: 'off', onReplyByEmail })
     expect(await screen.findByText("We'll reply here")).toBeInTheDocument()
     expect(screen.queryByText("We'll reply by email")).not.toBeInTheDocument()
     expect(onReplyByEmail).toHaveBeenLastCalledWith(false)
   })
 
   it('promises email to a visitor with a real address', async () => {
-    const { onReplyByEmail } = await renderThread(true)
+    const onReplyByEmail = vi.fn()
+    await renderThread(true, { replyTime: 'off', onReplyByEmail })
     expect(await screen.findByText("We'll reply by email")).toBeInTheDocument()
     await waitFor(() => expect(onReplyByEmail).toHaveBeenLastCalledWith(true))
   })

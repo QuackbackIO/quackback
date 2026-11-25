@@ -30,6 +30,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
+import { resolveReplyTime, type ReplyTime } from '@/lib/shared/widget/reply-time'
+import { captionOnlineMessages } from './reply-time-messages'
 
 // Animated with CSS (tw-animate-css `animate-in`) and the Web Animations API,
 // not framer-motion: the widget preloads the messenger thread these render in,
@@ -442,20 +444,20 @@ function GrowOpen({ className, children }: { className: string; children: ReactN
 
 /** "We're online, typically replies in under an hour" / away variant: a
  *  quiet system-style caption (never a chat bubble), localized client-side
- *  from `block.status` (the message's stored `content` is only the English
- *  transcript/email fallback). */
+ *  from `block.status` and the messenger's usual reply time (the message's
+ *  stored `content` is only the English transcript/email fallback). */
 export function BlockReplyTimeCaption({
   status,
+  replyTime,
 }: {
   status: Extract<WorkflowBlockPayload, { kind: 'replyTime' }>['status']
+  /** The messenger's usual reply time; absent reads as under an hour. */
+  replyTime?: ReplyTime
 }) {
   return (
     <p className="px-1 py-1 text-center text-[11px] text-muted-foreground" role="status">
       {status === 'online' ? (
-        <FormattedMessage
-          id="widget.messenger.replyTime.online"
-          defaultMessage="We're online, typically replies in under an hour."
-        />
+        <FormattedMessage {...captionOnlineMessages[resolveReplyTime(replyTime)]} />
       ) : (
         <FormattedMessage
           id="widget.messenger.replyTime.away"

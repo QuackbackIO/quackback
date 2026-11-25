@@ -10,7 +10,10 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { usePortalFileUpload } from '@/lib/client/hooks/use-file-upload'
-import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
+import {
+  getConversationPresenceFn,
+  getWidgetTeamAvatarsFn,
+} from '@/lib/server/functions/conversation'
 import {
   CONVERSATION_PRESENCE_POLL_MS,
   type ConversationPresence,
@@ -18,6 +21,7 @@ import {
 import {
   PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
+  PORTAL_TEAM_AVATARS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
@@ -66,6 +70,16 @@ function SupportThreadPage() {
     enabled: supportEnabled && isLoggedIn,
     refetchInterval: CONVERSATION_PRESENCE_POLL_MS,
     staleTime: CONVERSATION_PRESENCE_POLL_MS,
+  })
+
+  // Teammate faces for the thread header: the same few the widget shows,
+  // and hidden when the workspace turns teammate avatars off.
+  const teamQuery = useQuery({
+    queryKey: PORTAL_TEAM_AVATARS_QUERY_KEY,
+    queryFn: () => getWidgetTeamAvatarsFn(),
+    enabled:
+      supportEnabled && isLoggedIn && (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true),
+    staleTime: 5 * 60_000,
   })
 
   // The first send creates the thread: move /support/new → /support/<id> so a
@@ -127,6 +141,7 @@ function SupportThreadPage() {
             currentUser={user ? { name: user.name, avatarUrl: portalAvatar ?? user.image } : null}
             uploadFile={upload}
             presence={presenceQuery.data ?? OFFLINE}
+            team={teamQuery.data}
             embedOpenMode="navigate"
             onConversationStarted={onConversationStarted}
           />
