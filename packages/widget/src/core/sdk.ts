@@ -10,7 +10,7 @@ import { createEmitter } from './events'
 import { createBridge, type Bridge } from './postmessage'
 import { measureSafeArea, NO_SAFE_AREA } from './safe-area'
 import { createLauncher, type LauncherHandle } from './launcher'
-import { createPanel, type PanelHandle } from './panel'
+import { createPanel, PANEL_CLOSE_MS, type PanelHandle } from './panel'
 import { fetchServerConfig, type ServerConfig } from './config'
 import { createTracker, type Tracker } from './tracker'
 import { clearDeviceId, getOrCreateDeviceId } from './device'
@@ -72,6 +72,8 @@ export function createSDK(): SDK {
   let mobileCleanup: (() => void) | null = null
   // Set while the panel is open: undoes its fit to the visual viewport.
   let detachViewport: (() => void) | null = null
+  // A fit to the visual viewport kept while the phone panel slides out.
+  let pendingDetach: { detach: () => void; timer: number } | null = null
   // What had focus when the panel opened, for close to give it back.
   let returnFocus: HTMLElement | null = null
   // Set while the launcher's own click opens the panel.
@@ -134,6 +136,29 @@ export function createSDK(): SDK {
   function cancelSafeArea(): void {
     if (safeAreaFrame) cancelAnimationFrame(safeAreaFrame)
     safeAreaFrame = 0
+  }
+
+  /** Undo the panel's fit to the visual viewport. On close the panel keeps
+   *  its size until it has slid out, unless motion is reduced; `now` skips
+   *  the wait. */
+  function releaseViewport(now = false): void {
+    if (pendingDetach) {
+      window.clearTimeout(pendingDetach.timer)
+      pendingDetach.detach()
+      pendingDetach = null
+    }
+    const detach = detachViewport
+    detachViewport = null
+    if (!detach) return
+    const reduceMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (now || reduceMotion) return detach()
+    const timer = window.setTimeout(() => {
+      pendingDetach = null
+      detach()
+    }, PANEL_CLOSE_MS)
+    pendingDetach = { detach, timer }
   }
 
   function iframeOrigin(): string {
@@ -473,6 +498,12 @@ export function createSDK(): SDK {
               : null
         }
         panelOpen = true
+        // Opened again while sliding out: keep the fit it still has.
+        if (pendingDetach) {
+          window.clearTimeout(pendingDetach.timer)
+          detachViewport ??= pendingDetach.detach
+          pendingDetach = null
+        }
         // The insets reach the frame before the view it opens and before the
         // panel shows.
         sendSafeArea()
@@ -521,8 +552,7 @@ export function createSDK(): SDK {
         panelOpen = false
         sendShownState()
         cancelSafeArea()
-        detachViewport?.()
-        detachViewport = null
+        releaseViewport()
         if (focusWasInside) focusTarget?.focus()
         emitter.emit('close', {})
         return
@@ -571,8 +601,7 @@ export function createSDK(): SDK {
         return
       case 'destroy':
         cancelPanelPreload()
-        detachViewport?.()
-        detachViewport = null
+        releaseViewport(true)
         returnFocus = null
         panel?.destroy()
         launcher?.remove()

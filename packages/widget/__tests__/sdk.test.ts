@@ -1150,15 +1150,44 @@ describe('sdk panel as a dialog', () => {
     sdk.dispatch('open')
     expect(panelEl().style.height).toBe('380px')
     expect(panelEl().style.top).toBe('12px')
+    // The panel keeps its size while it slides out, then lets go of it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     sdk.dispatch('close')
+    expect(panelEl().style.height).toBe('380px')
+    vi.advanceTimersByTime(300)
     expect(panelEl().style.height).toBe('')
     expect(panelEl().style.top).toBe('')
-    // Destroy stops listening.
+    // Opened again mid-slide, it stays fitted.
     sdk.dispatch('open')
+    sdk.dispatch('close')
+    sdk.dispatch('open')
+    vi.advanceTimersByTime(300)
+    expect(panelEl().style.height).toBe('380px')
+    vi.useRealTimers()
+    // Destroy stops listening.
     sdk.dispatch('destroy')
     frames = []
     viewport.dispatchEvent(new Event('resize'))
     expect(frames).toHaveLength(0)
+  })
+  it('lets go of the fitted size at once under reduced motion', () => {
+    stubIframe()
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('max-width:639px') || query.includes('prefers-reduced-motion'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+    )
+    vi.stubGlobal('visualViewport', Object.assign(new EventTarget(), { height: 380, offsetTop: 0 }))
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    sdk.dispatch('open')
+    expect(panelEl().style.height).toBe('380px')
+    sdk.dispatch('close')
+    expect(panelEl().style.height).toBe('')
+    sdk.dispatch('destroy')
   })
 })
 

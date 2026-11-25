@@ -10,6 +10,9 @@ export interface PanelOptions {
   onBackdropClick: () => void
 }
 
+/** How long the closing slide or fade runs before the panel settles. */
+export const PANEL_CLOSE_MS = 300
+
 /** The panel element's id, which the launcher names in aria-controls. */
 export const PANEL_ID = 'quackback-panel'
 
@@ -112,7 +115,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
       setTimeout(() => {
         panel.classList.remove('quackback-closing')
         backdrop.classList.remove('quackback-closing')
-      }, 300)
+      }, PANEL_CLOSE_MS)
     },
     setExpanded(expanded) {
       panel.classList.toggle('quackback-expanded', expanded)
