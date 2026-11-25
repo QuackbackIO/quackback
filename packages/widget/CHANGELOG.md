@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Screen readers hear the launcher as "Open help" (or your launcher label) with the unread count, for example "Open help, 2 unread", and "Close help" while the panel is open, in the visitor's language when `init` passes a `locale`. The panel is announced as a dialog named in the same language.
-- Opening the panel from the launcher or your own help button moves keyboard focus into it, and closing it returns focus to whatever opened it (or to the launcher if that is gone). An `open()` call while the visitor is typing in a field leaves their focus there.
+- Opening the panel from the launcher or your own help button moves keyboard focus into it, and closing it returns focus to whatever opened it (or to the launcher if that is gone). An `open()` call while the visitor is typing in a field leaves their focus there, and in browsers that report user activation, so does an open on a timer or a route change.
 - The desktop panel is taller (up to 704px) and narrower windows shrink it to fit, with rounder corners and a softer shadow. The launcher keeps the same shadow after a hover.
 - Phones held sideways get the full-screen panel too, and on phones the panel stays above the on-screen keyboard while typing.
 - With reduced motion turned on in the visitor's system settings, the panel and launcher no longer animate, including when the setting changes while the page is open.

@@ -1094,6 +1094,72 @@ describe('sdk panel as a dialog', () => {
     expect(document.activeElement).toBe(iframeEl())
   })
 
+  describe('with user activation', () => {
+    // Whether a click or key press just happened, as the browser reports it.
+    function userActivation(isActive: boolean) {
+      Object.defineProperty(navigator, 'userActivation', {
+        value: { isActive, hasBeenActive: isActive },
+        configurable: true,
+      })
+    }
+    afterEach(() => {
+      delete (navigator as { userActivation?: unknown }).userActivation
+    })
+
+    function openWith(focused: HTMLElement | null) {
+      stubIframe()
+      if (focused) document.body.appendChild(focused)
+      const sdk = createSDK()
+      sdk.dispatch('init', { instanceUrl: ORIGIN })
+      focused?.focus()
+      sdk.dispatch('open')
+      runFrames()
+      return document.activeElement
+    }
+
+    it('a timed or route-driven open leaves focus alone', () => {
+      userActivation(false)
+      expect(openWith(hostButton())).not.toBe(iframeEl())
+      document.body.innerHTML = ''
+      expect(openWith(null)).not.toBe(iframeEl())
+    })
+
+    it("an open from the visitor's click or key press moves focus into the panel", () => {
+      userActivation(true)
+      expect(openWith(hostButton())).toBe(iframeEl())
+    })
+
+    it.each(['checkbox', 'radio', 'submit', 'button', 'range', 'color', 'file'])(
+      'an open from a %s input moves focus into the panel',
+      (type) => {
+        userActivation(true)
+        const input = document.createElement('input')
+        input.type = type
+        expect(openWith(input)).toBe(iframeEl())
+      }
+    )
+
+    it.each(['text', 'email', 'search', 'number'])(
+      'an open while typing in a %s input leaves focus there',
+      (type) => {
+        userActivation(true)
+        const input = document.createElement('input')
+        input.type = type
+        expect(openWith(input)).toBe(input)
+      }
+    )
+
+    it('a launcher click moves focus into the panel', () => {
+      userActivation(false)
+      stubIframe()
+      const sdk = createSDK()
+      sdk.dispatch('init', { instanceUrl: ORIGIN })
+      launcherEl()!.click()
+      runFrames()
+      expect(document.activeElement).toBe(iframeEl())
+    })
+  })
+
   it('a launcher click moves focus into the panel even if a field kept focus', () => {
     stubIframe()
     const field = document.createElement('input')
