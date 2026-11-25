@@ -355,10 +355,12 @@ export function createSDK(): SDK {
   }
 
   /** Theme + greeting + launcher chrome + analytics from a resolved server
-   *  config. `initToken` guards the tracker against a stale async apply after
+   *  config. `initToken` drops a stale async apply after
    *  a re-init. */
   function applyServerConfig(cfg: ServerConfig, initToken: InitOptions): void {
-    if (config === initToken) serverConfig = cfg
+    // A config fetched for an init that has since been replaced is stale.
+    if (config !== initToken) return
+    serverConfig = cfg
     applyLauncherConfig(cfg)
     if (cfg.position) {
       placement = cfg.position
@@ -368,7 +370,7 @@ export function createSDK(): SDK {
     // Host-page pageview tracking is instance-controlled: it starts only when
     // the server config enables visitor analytics, and only if this init is
     // still the live one. The durable device id is a separate opt-in on top.
-    if (cfg.visitorAnalytics && config === initToken) {
+    if (cfg.visitorAnalytics) {
       analyticsConfig = {
         instanceUrl: initToken.instanceUrl,
         deviceTracking: cfg.visitorDeviceTracking === true,

@@ -554,6 +554,39 @@ describe('sdk server-driven launcher config', () => {
     expect(btn.textContent).toContain('Chat with us')
   })
 
+  it('a server config that lands after a re-init leaves the new launcher alone', async () => {
+    stubIframe()
+    let resolveStale: (cfg: unknown) => void = () => {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        url.startsWith('https://stale.example.com')
+          ? new Promise((resolve) => {
+              resolveStale = (cfg) => resolve({ ok: true, json: async () => cfg })
+            })
+          : Promise.resolve({ ok: true, json: async () => ({}) })
+      )
+    )
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: 'https://stale.example.com' })
+    sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'right' })
+    await new Promise((r) => setTimeout(r, 0))
+    resolveStale({
+      position: 'left',
+      launcherLabel: 'Old label',
+      launcherGreeting: 'Old greeting',
+      theme: { light: { primary: '#ff0000' } },
+    })
+    await new Promise((r) => setTimeout(r, 0))
+    const btn = document.querySelector('button[aria-label="Open help"]') as HTMLButtonElement
+    expect(btn).not.toBeNull()
+    expect(btn.style.left).toBe('')
+    expect(btn.textContent).not.toContain('Old label')
+    expect(document.body.textContent).not.toContain('Old greeting')
+    expect(btn.style.backgroundColor).not.toBe('rgb(255, 0, 0)')
+    sdk.dispatch('destroy')
+  })
+
   it('a fetched server config positions and labels the launcher', async () => {
     stubIframe()
     vi.stubGlobal(
