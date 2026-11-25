@@ -13,6 +13,7 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
+import { isoTimestamp } from '@/lib/server/integrations/inbound-time'
 import { getJiraIssueStatus, type JiraIssueStatus } from '@/integrations/jira/server/issues'
 import { jiraProjectRef } from '@/integrations/jira/server/webhook-registration'
 
@@ -24,13 +25,6 @@ function matchesProject(projectRef: string, issue: JiraIssueStatus): boolean | n
     return issue.projectId ? issue.projectId === projectRef : null
   }
   return issue.projectKey ? issue.projectKey.toLowerCase() === projectRef.toLowerCase() : null
-}
-
-/** Jira sends `+0000` style offsets; add the colon so parsing does not rely on engine leniency. */
-function isoDate(value: string | undefined): string | undefined {
-  if (!value) return undefined
-  const ms = Date.parse(value.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'))
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined
 }
 
 async function verifyHs256Jwt(token: string, secret: string): Promise<boolean> {
@@ -120,7 +114,7 @@ export const jiraInboundHandler: InboundWebhookHandler = {
       externalStatus: current.status,
       eventType,
       destinationId: projectMatch && sameIssue ? channelId : undefined,
-      occurredAt: isoDate(current.updated),
+      occurredAt: isoTimestamp(current.updated),
     }
   },
 }

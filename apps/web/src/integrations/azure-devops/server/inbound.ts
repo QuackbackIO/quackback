@@ -13,16 +13,12 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
+import { isoTimestamp } from '@/lib/server/integrations/inbound-time'
 import { getWorkItemStatus, type WorkItemStatus } from '@/integrations/azure-devops/server/api'
 import { organizationFromUrl } from '@/integrations/azure-devops/server/url'
 
 function lowerCaseString(value: unknown): string | null {
   return typeof value === 'string' && value ? value.toLowerCase() : null
-}
-
-function isoDate(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return undefined
-  return new Date(value).toISOString()
 }
 
 export const azureDevOpsInboundHandler: InboundWebhookHandler = {
@@ -107,7 +103,7 @@ export const azureDevOpsInboundHandler: InboundWebhookHandler = {
       externalStatus: current.state,
       eventType: 'workitem.updated',
       destinationId: project && configuredProject ? channelId : undefined,
-      occurredAt: isoDate(current.changedDate),
+      occurredAt: isoTimestamp(current.changedDate),
     }
   },
 }

@@ -17,6 +17,7 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
+import { isoTimestamp } from '@/lib/server/integrations/inbound-time'
 import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 import { logger } from '@/lib/server/logger'
 
@@ -25,11 +26,6 @@ const log = logger.child({ component: 'shortcut' })
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 
 const EVENT_TYPE = 'story.workflow_state_changed'
-
-function isoDate(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return undefined
-  return new Date(value).toISOString()
-}
 
 interface ShortcutStoryScope {
   group_id?: string | null
@@ -119,7 +115,7 @@ export const shortcutInboundHandler: InboundWebhookHandler = {
     return {
       ...review,
       destinationId: groupId,
-      occurredAt: isoDate(payload.changed_at),
+      occurredAt: isoTimestamp(payload.changed_at),
     }
   },
 }

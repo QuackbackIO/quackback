@@ -13,12 +13,8 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
+import { isoTimestamp } from '@/lib/server/integrations/inbound-time'
 import { getTrelloCardList, type TrelloCardList } from '@/integrations/trello/server/boards'
-
-function isoDate(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return undefined
-  return new Date(value).toISOString()
-}
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null
@@ -102,7 +98,7 @@ export const trelloInboundHandler: InboundWebhookHandler = {
       externalStatus: card.listName,
       eventType: 'card.moved',
       destinationId: channelId,
-      occurredAt: isoDate(payload.action.date),
+      occurredAt: isoTimestamp(payload.action.date),
     }
   },
 }

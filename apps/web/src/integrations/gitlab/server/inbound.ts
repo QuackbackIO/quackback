@@ -13,17 +13,13 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
+import { isoTimestamp } from '@/lib/server/integrations/inbound-time'
 import { getGitLabIssueState } from '@/integrations/gitlab/server/issues'
 
 // Map GitLab states: opened, closed
 const STATUS_MAP: Record<string, string> = {
   opened: 'Open',
   closed: 'Closed',
-}
-
-function isoDate(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return undefined
-  return new Date(value).toISOString()
 }
 
 export const gitlabInboundHandler: InboundWebhookHandler = {
@@ -99,7 +95,7 @@ export const gitlabInboundHandler: InboundWebhookHandler = {
       externalStatus,
       eventType: 'issue.state_changed',
       destinationId: configuredProject,
-      occurredAt: isoDate(current.updatedAt),
+      occurredAt: isoTimestamp(current.updatedAt),
     }
   },
 }
