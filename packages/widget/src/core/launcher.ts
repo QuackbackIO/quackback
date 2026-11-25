@@ -177,6 +177,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     iconMessenger.style.transition = reduceMotion ? 'none' : ICON_TRANSITION
     iconClose.style.transition = reduceMotion ? 'none' : ICON_TRANSITION
     if (reduceMotion) btn.style.transform = 'translateY(0)'
+    whatsNewCard?.applyMotion()
   }
   const onMotionChange = () => {
     reduceMotion = !!motionQuery?.matches
@@ -338,7 +339,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       mount,
       side: cardSide,
       contained,
-      reduceMotion,
+      reduceMotion: () => reduceMotion,
       sideEdge,
       bottom: bottomEdge(84, 84),
       onOpen: (entryId) => opts.onWhatsNewOpen?.(entryId),

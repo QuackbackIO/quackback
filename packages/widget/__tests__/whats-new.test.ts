@@ -244,6 +244,27 @@ describe("launcher What's new card", () => {
     expect(cardEl()!.style.transition).toContain('transform')
   })
 
+  it('follows a reduced-motion change made while the page is open', () => {
+    const listeners: (() => void)[] = []
+    const motion = { matches: false }
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        get matches() {
+          return query.includes('prefers-reduced-motion') && motion.matches
+        },
+        addEventListener: (_: string, cb: () => void) => listeners.push(cb),
+        removeEventListener: vi.fn(),
+      }))
+    )
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    l.setWhatsNew(sample())
+    expect(cardEl()!.style.transition).toContain('transform')
+    motion.matches = true
+    listeners.forEach((cb) => cb())
+    expect(cardEl()!.style.transition).toBe('none')
+  })
+
   it('goes with the launcher', () => {
     const l = createLauncher({ placement: 'right', onClick: () => {} })
     l.setWhatsNew(sample())
@@ -346,7 +367,7 @@ describe("sdk What's new card", () => {
       through: '2026-11-20T10:00:00.000Z',
       answered: ['changelog_1'],
     })
-    const btn = document.querySelector('button[aria-controls="quackback-panel"]') as HTMLElement
+    const btn = document.querySelector('button[aria-label^="Open help"]') as HTMLElement
     expect((btn.lastElementChild as HTMLElement).style.display).toBe('flex')
     expect(btn.getAttribute('aria-label')).toBe('Open help, 2 unread')
 

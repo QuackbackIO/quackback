@@ -67,7 +67,8 @@ export interface WhatsNewCardOptions {
   side: 'left' | 'right'
   /** Inside the admin preview: absolute, no phone layout. */
   contained: boolean
-  reduceMotion: boolean
+  /** Read live: the visitor can change the setting while the page is open. */
+  reduceMotion: () => boolean
   /** Offsets shared with the launcher's greeting bubble. */
   sideEdge: (side: 'left' | 'right') => string
   bottom: string
@@ -83,6 +84,8 @@ export interface WhatsNewCardHandle {
   render(data: WhatsNew | null): void
   setSide(side: 'left' | 'right'): void
   setAccent(colors: { backgroundColor: string; foregroundColor: string }): void
+  /** Re-read the reduced-motion setting. */
+  applyMotion(): void
   remove(): void
 }
 
@@ -121,7 +124,6 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
     textAlign: 'start',
     cursor: 'pointer',
     boxShadow: '0 12px 32px rgba(0,0,0,0.22), 0 4px 12px rgba(0,0,0,0.12)',
-    transition: opts.reduceMotion ? 'none' : 'opacity 220ms ease, transform 220ms ease',
   })
 
   const top = document.createElement('div')
@@ -242,8 +244,18 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
   place()
   phoneMql?.addEventListener?.('change', place)
 
+  function applyMotion(): void {
+    const reduce = opts.reduceMotion()
+    card.style.transition = reduce ? 'none' : 'opacity 220ms ease, transform 220ms ease'
+    if (reduce) {
+      card.style.opacity = ''
+      card.style.transform = ''
+    }
+  }
+  applyMotion()
+
   const enter = () => {
-    if (opts.reduceMotion) return
+    if (opts.reduceMotion()) return
     card.style.opacity = '0'
     card.style.transform = 'translateY(8px)'
     requestAnimationFrame(() => {
@@ -281,6 +293,7 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
       side = next
       place()
     },
+    applyMotion,
     setAccent({ backgroundColor, foregroundColor }) {
       pill.style.backgroundColor = backgroundColor
       pill.style.color = foregroundColor
