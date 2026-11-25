@@ -141,7 +141,8 @@ export interface EventMap {
    *  the launcher badge. */
   unread: { count: number }
   /** The "What's new" card appeared above the closed launcher for the newest
-   *  unread changelog entry. Fires once per entry. */
+   *  unread changelog entry. Fires once per entry for each visitor: the host
+   *  page remembers which entries it announced, per instance. */
   'whats-new': { count: number; entryId: string }
 }
 

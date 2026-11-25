@@ -305,6 +305,30 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const mount = opts.root ?? document.body
   mount.appendChild(bubble)
 
+  // Screen readers hear a card once, politely, when it appears. The region
+  // lives from creation, outside any card that toggles display, and gets its
+  // text a frame after the card shows, so the change is announced.
+  const live = document.createElement('span')
+  live.setAttribute('role', 'status')
+  live.setAttribute('aria-live', 'polite')
+  Object.assign(live.style, {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '-1px',
+    padding: '0',
+    border: '0',
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+  })
+  mount.appendChild(live)
+  const announce = (text: string) => {
+    requestAnimationFrame(() => {
+      live.textContent = text
+    })
+  }
+
   // The "What's new" card, created when there is first something to show.
   let cardSide: 'left' | 'right' = side
   let accent: { backgroundColor: string; foregroundColor: string } | null = null
@@ -325,7 +349,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
         if (hadFocus) btn.focus()
         opts.onWhatsNewDismiss?.(entryId)
       },
-      onShown: (data) => opts.onWhatsNewShown?.(data),
+      onShown: (data) => {
+        announce(`${data.strings.pill}: ${data.entry.title}`)
+        opts.onWhatsNewShown?.(data)
+      },
     })
     if (accent) whatsNewCard.setAccent(accent)
     return whatsNewCard
@@ -419,6 +446,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       motionQuery?.removeEventListener?.('change', onMotionChange)
       btn.remove()
       bubble.remove()
+      live.remove()
       whatsNewCard?.remove()
     },
   }

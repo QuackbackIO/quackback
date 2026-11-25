@@ -60,6 +60,13 @@ describe('parseWhatsNew', () => {
     expect(parseWhatsNew(sample({ title: '' }))).toBeNull()
     expect(parseWhatsNew({ count: 1, entry: 'nope' })).toBeNull()
   })
+
+  it('caps long text between code points, never inside an emoji', () => {
+    const title = 'a'.repeat(199) + '\u{1F680}' + 'tail'
+    const parsed = parseWhatsNew(sample({ title }))!
+    expect(Array.from(parsed.entry.title)).toHaveLength(200)
+    expect(parsed.entry.title.endsWith('\u{1F680}')).toBe(true)
+  })
 })
 
 describe("launcher What's new card", () => {
@@ -96,20 +103,32 @@ describe("launcher What's new card", () => {
   })
 
   it('is a named region announced politely, once per entry', () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb))
+    const flush = () => frames.splice(0).forEach((cb) => cb(0))
     const onShown = vi.fn()
     const l = createLauncher({ placement: 'right', onClick: () => {}, onWhatsNewShown: onShown })
+    // The polite region exists before any card, outside it.
+    const status = document.querySelector('[role="status"]') as HTMLElement
+    expect(status.getAttribute('aria-live')).toBe('polite')
     l.setWhatsNew(sample())
     expect(cardEl()!.getAttribute('role')).toBe('region')
     expect(cardEl()!.getAttribute('aria-label')).toBe("What's new")
-    const status = cardEl()!.querySelector('[role="status"]') as HTMLElement
+    expect(cardEl()!.contains(status)).toBe(false)
+    // The text lands a frame after the card shows.
+    expect(status.textContent).toBe('')
+    flush()
     expect(status.textContent).toBe('2 new updates: Faster search')
     l.setOpen(true)
     l.setOpen(false)
     l.setWhatsNew(sample())
     expect(onShown).toHaveBeenCalledTimes(1)
     l.setWhatsNew(sample({ id: 'changelog_2', title: 'Dark mode' }, 3))
+    flush()
     expect(onShown).toHaveBeenCalledTimes(2)
     expect(status.textContent).toBe('3 new updates: Dark mode')
+    l.remove()
+    expect(document.querySelector('[role="status"]')).toBeNull()
   })
 
   it('hides while the widget is open or the launcher is hidden', () => {
@@ -323,7 +342,10 @@ describe("sdk What's new card", () => {
     announce(sample())
     dismissBtn().click()
     expect(shown()).toBe(false)
-    expect(localStorage.getItem(`quackback:whats-new-dismissed:${ORIGIN}`)).toBe('changelog_1')
+    expect(JSON.parse(localStorage.getItem(`quackback:whats-new:${ORIGIN}:anon`)!)).toMatchObject({
+      through: '2026-11-20T10:00:00.000Z',
+      answered: ['changelog_1'],
+    })
     const btn = document.querySelector('button[aria-controls="quackback-panel"]') as HTMLElement
     expect((btn.lastElementChild as HTMLElement).style.display).toBe('flex')
     expect(btn.getAttribute('aria-label')).toBe('Open help, 2 unread')
@@ -335,9 +357,89 @@ describe("sdk What's new card", () => {
     announce(sample())
     expect(shown()).toBe(false)
     // ...until a newer entry is published.
-    announce(sample({ id: 'changelog_2', title: 'Dark mode' }, 3))
+    announce(
+      sample({ id: 'changelog_2', title: 'Dark mode', publishedAt: '2026-11-22T10:00:00.000Z' }, 3)
+    )
     expect(shown()).toBe(true)
     again.dispatch('destroy')
+  })
+
+  it('fires whats-new once per entry per visitor, across page loads', () => {
+    const first = createSDK()
+    first.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    first.dispatch('on', 'whats-new', handler)
+    announce(sample())
+    expect(handler).toHaveBeenCalledTimes(1)
+    first.dispatch('destroy')
+
+    const second = createSDK()
+    second.dispatch('init', { instanceUrl: ORIGIN })
+    second.dispatch('on', 'whats-new', handler)
+    announce(sample())
+    // The card shows again (not answered), but the event does not repeat.
+    expect(shown()).toBe(true)
+    expect(handler).toHaveBeenCalledTimes(1)
+    announce(sample({ id: 'changelog_2', publishedAt: '2026-11-22T10:00:00.000Z' }, 3))
+    expect(handler).toHaveBeenLastCalledWith({ count: 3, entryId: 'changelog_2' })
+    second.dispatch('destroy')
+  })
+
+  it('keeps an older entry answered when a newer answered one is unpublished', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample({ id: 'changelog_2', publishedAt: '2026-11-22T10:00:00.000Z' }))
+    dismissBtn().click()
+    // changelog_2 is unpublished: changelog_1, older, becomes the newest unread.
+    announce(sample({ id: 'changelog_1', publishedAt: '2026-11-20T10:00:00.000Z' }))
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('bounds the remembered entries', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    for (let i = 0; i < 30; i++) {
+      announce(
+        sample({ id: `changelog_${i}`, publishedAt: `2026-11-${10 + (i % 18)}T10:00:00.000Z` })
+      )
+      if (shown()) dismissBtn().click()
+    }
+    const stored = JSON.parse(localStorage.getItem(`quackback:whats-new:${ORIGIN}:anon`)!)
+    expect(stored.answered.length).toBeLessThanOrEqual(20)
+    expect(stored.announced.length).toBeLessThanOrEqual(20)
+    sdk.dispatch('destroy')
+  })
+
+  it("keeps one visitor's dismissal from hiding the card for another", () => {
+    stubFrame()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, identity: { ssoToken: 'token-a' } })
+    post({ type: 'quackback:ready' })
+    announce(sample())
+    // Waits for the identity to resolve before showing anything.
+    expect(shown()).toBe(false)
+    post({
+      type: 'quackback:identify-result',
+      success: true,
+      user: { id: 'user_a', name: 'Ada', email: 'ada@example.com' },
+    })
+    expect(shown()).toBe(true)
+    dismissBtn().click()
+    expect(shown()).toBe(false)
+
+    // Another person signs in on the same browser.
+    sdk.dispatch('identify', { ssoToken: 'token-b' })
+    post({
+      type: 'quackback:identify-result',
+      success: true,
+      user: { id: 'user_b', name: 'Bo', email: 'bo@example.com' },
+    })
+    expect(shown()).toBe(true)
+    // And an anonymous visitor has their own memory too.
+    sdk.dispatch('logout')
+    expect(shown()).toBe(true)
+    sdk.dispatch('destroy')
   })
 
   it('a launcher shown later carries the card', () => {

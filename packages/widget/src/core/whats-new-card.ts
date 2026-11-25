@@ -29,8 +29,10 @@ export interface WhatsNew {
   }
 }
 
+/** Trimmed text of at most `max` characters, cut between code points so an
+ *  emoji is never split. */
 const str = (v: unknown, max: number): string =>
-  typeof v === 'string' ? v.trim().slice(0, max) : ''
+  typeof v === 'string' ? Array.from(v.trim()).slice(0, max).join('').trim() : ''
 
 /** Read a frame payload defensively; anything malformed reads as no card. */
 export function parseWhatsNew(raw: unknown): WhatsNew | null {
@@ -92,7 +94,8 @@ const PHONE_MARGIN = '16px'
 export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandle {
   let side = opts.side
   let current: WhatsNew | null = null
-  // Announced and entered once per entry, not on every reopen of the launcher.
+  // Entered (and reported shown) once per entry, not on every reopen of the
+  // launcher.
   let announcedId: string | null = null
 
   const card = document.createElement('div')
@@ -119,18 +122,6 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
     cursor: 'pointer',
     boxShadow: '0 12px 32px rgba(0,0,0,0.22), 0 4px 12px rgba(0,0,0,0.12)',
     transition: opts.reduceMotion ? 'none' : 'opacity 220ms ease, transform 220ms ease',
-  })
-
-  // Screen readers hear the card once, politely, when it appears.
-  const live = document.createElement('span')
-  live.setAttribute('role', 'status')
-  Object.assign(live.style, {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    overflow: 'hidden',
-    clip: 'rect(0 0 0 0)',
-    whiteSpace: 'nowrap',
   })
 
   const top = document.createElement('div')
@@ -209,7 +200,7 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
   Object.assign(date.style, { color: '#6b7280', fontSize: '12px', whiteSpace: 'nowrap' })
   foot.append(action, date)
 
-  card.append(live, top, title, excerpt, foot)
+  card.append(top, title, excerpt, foot)
   opts.mount.appendChild(card)
 
   // The card is one target; the action button is its keyboard entry point.
@@ -282,7 +273,6 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
       card.style.display = 'flex'
       if (announcedId !== data.entry.id) {
         announcedId = data.entry.id
-        live.textContent = `${data.strings.pill}: ${data.entry.title}`
         if (appearing) enter()
         opts.onShown(data)
       }

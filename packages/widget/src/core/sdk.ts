@@ -18,6 +18,7 @@ import { FULL_SCREEN_MEDIA, removeStyles } from './style'
 import { fitToVisualViewport, keyboardShown } from './viewport'
 import { canRestoreFocus, openerWantsFocusMoved } from './focus'
 import { parseWhatsNew, type WhatsNew } from './whats-new-card'
+import { createWhatsNewMemory, type WhatsNewMemory } from './whats-new-memory'
 
 type Command =
   | 'isOpen'
@@ -169,30 +170,29 @@ export function createSDK(): SDK {
   }
 
   // A dismissed (or opened) card stays away until a newer entry is
-  // published: the host page remembers the entry it was for, per instance.
-  // Read state is the frame's alone, so the launcher badge is untouched.
-  let dismissedFallback: string | null = null
-  function whatsNewKey(): string {
-    return `quackback:whats-new-dismissed:${iframeOrigin()}`
+  // published, and the whats-new event fires once per entry. The host page
+  // remembers both per instance and per visitor: an identified user has
+  // their own memory, anonymous visitors share one. Read state is the
+  // frame's alone, so the launcher badge is untouched.
+  let whatsNewMemory: WhatsNewMemory | null = null
+  // An identity sent to the frame and not yet resolved: the card waits, so it
+  // never shows (or announces) under the wrong visitor's memory.
+  let identityPending = false
+  function memory(): WhatsNewMemory {
+    return (whatsNewMemory ??= createWhatsNewMemory(iframeOrigin()))
   }
-  function whatsNewDismissedId(): string | null {
-    try {
-      return localStorage.getItem(whatsNewKey()) ?? dismissedFallback
-    } catch {
-      return dismissedFallback
-    }
+  function visitorScope(): string {
+    return currentUser?.id ? `user:${currentUser.id}` : 'anon'
   }
-  function rememberWhatsNew(entryId: string): void {
-    dismissedFallback = entryId
-    try {
-      localStorage.setItem(whatsNewKey(), entryId)
-    } catch {
-      /* storage blocked: remembered for this page load */
-    }
+  function answerWhatsNew(entryId: string): void {
+    if (whatsNew?.entry.id === entryId) memory().answer(visitorScope(), whatsNew.entry)
   }
   function applyWhatsNew(): void {
     if (!launcher || !config) return
-    const show = whatsNew && whatsNew.entry.id !== whatsNewDismissedId() ? whatsNew : null
+    const show =
+      whatsNew && !identityPending && !memory().isAnswered(visitorScope(), whatsNew.entry)
+        ? whatsNew
+        : null
     launcher.setWhatsNew(show)
   }
 
@@ -256,6 +256,8 @@ export function createSDK(): SDK {
           error?: string
         }
         currentUser = m.user ?? null
+        identityPending = false
+        applyWhatsNew()
         emitter.emit('identify', {
           success: !!m.success,
           user: currentUser,
@@ -267,6 +269,7 @@ export function createSDK(): SDK {
       case 'quackback:auth-change': {
         const m = msg as { user?: WidgetUser }
         currentUser = m.user ?? null
+        applyWhatsNew()
         break
       }
       case 'quackback:event': {
@@ -352,6 +355,11 @@ export function createSDK(): SDK {
   }
 
   function sendIdentity(data: unknown) {
+    const signedIn = !!data && typeof data === 'object' && !('anonymous' in data)
+    if (signedIn !== identityPending) {
+      identityPending = signedIn
+      applyWhatsNew()
+    }
     if (ready && bridge) bridge.send('quackback:identify', data)
     else {
       pendingIdentify = data
@@ -456,16 +464,19 @@ export function createSDK(): SDK {
       },
       onWhatsNewOpen: (entryId) => {
         // Opening the entry answers the card, as a dismiss does.
-        rememberWhatsNew(entryId)
+        answerWhatsNew(entryId)
         dispatch('open', { view: 'changelog', entryId })
         applyWhatsNew()
       },
       onWhatsNewDismiss: (entryId) => {
-        rememberWhatsNew(entryId)
+        answerWhatsNew(entryId)
         applyWhatsNew()
       },
-      onWhatsNewShown: (data) =>
-        emitter.emit('whats-new', { count: data.count, entryId: data.entry.id }),
+      onWhatsNewShown: (data) => {
+        if (memory().announce(visitorScope(), data.entry.id)) {
+          emitter.emit('whats-new', { count: data.count, entryId: data.entry.id })
+        }
+      },
     })
     // A launcher created after init (showLauncher) catches up with the
     // server config, unread count, panel state and reveal it missed.
@@ -532,6 +543,8 @@ export function createSDK(): SDK {
       case 'logout':
         if (panelOpen) dispatch('close')
         currentUser = null
+        identityPending = false
+        applyWhatsNew()
         if (ready && bridge) bridge.send('quackback:identify', null as unknown as undefined)
         else {
           pendingIdentify = null
@@ -683,7 +696,8 @@ export function createSDK(): SDK {
         launcherRevealed = false
         unreadCount = 0
         whatsNew = null
-        dismissedFallback = null
+        whatsNewMemory = null
+        identityPending = false
         placement = 'right'
         config = null
         return
