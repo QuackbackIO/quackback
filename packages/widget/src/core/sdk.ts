@@ -5,6 +5,7 @@ import type {
   WidgetUser,
   EventName,
   EventHandler,
+  EventMap,
 } from '../types'
 import { createEmitter } from './events'
 import { createBridge, type Bridge } from './postmessage'
@@ -761,13 +762,7 @@ export function createSDK(): SDK {
             if (panelOpen && panel === opened) opened.iframe.focus()
           })
         }
-        const ctx = opts as {
-          view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
-          postId?: string
-          articleId?: string
-          entryId?: string
-          conversationId?: string
-        }
+        const ctx = opts as EventMap['open']
         emitter.emit('open', {
           view: ctx.view,
           postId: ctx.postId,

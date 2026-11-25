@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createSDK } from '../src/core/sdk'
+import type { EventMap, OpenOptions } from '../src/types'
 
 const ORIGIN = 'https://feedback.acme.com'
 
@@ -267,6 +268,24 @@ describe('sdk', () => {
     sdk.dispatch('open', { view: 'messages' })
     sdk.dispatch('open', { view: 'tickets' })
     expect(seen.map((payload) => payload.view)).toEqual(['messages', 'tickets'])
+  })
+
+  it('open forwards the feedback view and reports it on the open event', () => {
+    const { postMessage, spy } = stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    fireReady()
+    const seen: Array<EventMap['open']['view']> = []
+    sdk.dispatch('on', 'open', (payload: EventMap['open']) => seen.push(payload.view))
+    const opts: OpenOptions = { view: 'feedback' }
+    sdk.dispatch('open', opts)
+    expect(postMessage).toHaveBeenLastCalledWith(
+      { type: 'quackback:open', data: { view: 'feedback' } },
+      ORIGIN
+    )
+    const expected: EventMap['open']['view'] = 'feedback'
+    expect(seen).toEqual([expected])
+    spy.mockRestore()
   })
 
   it('metadata merges and sends to iframe', () => {

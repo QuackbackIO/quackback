@@ -668,6 +668,11 @@ function WidgetPage() {
           setActiveTab('feedback')
           setView('feedback')
           break
+        case 'feedback':
+          setSelectedPostId(null)
+          setActiveTab('feedback')
+          setView('feedback')
+          break
         case 'post':
           setActiveTab('feedback')
           setSelectedPostId(command.postId)

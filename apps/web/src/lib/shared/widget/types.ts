@@ -47,7 +47,8 @@ export interface WidgetInboundMessages {
   'quackback:safe-area': { top: number; bottom: number; left: number; right: number }
   'quackback:open':
     | {
-        view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
+        view?:
+          'home' | 'feedback' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
         title?: string
         body?: string
         board?: string

@@ -167,6 +167,7 @@ The server only accepts a signed `ssoToken`. An unsigned `{ id, email, name }` i
 
 ```ts
 Quackback.open() // home
+Quackback.open({ view: 'feedback' }) // feedback list
 Quackback.open({ view: 'new-post', title: 'Bug:', body: '...', board: 'bugs' }) // pre-filled form
 Quackback.open({ view: 'changelog' }) // changelog feed
 Quackback.open({ view: 'help', query: 'pricing' }) // help search
