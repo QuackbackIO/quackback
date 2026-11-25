@@ -13,6 +13,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import { getChangelogSeenAt, markChangelogSeen } from './changelog-unread'
+import { seenScope } from './seen-scope'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
 import type { ChangelogCategoryId } from '@quackback/ids'
 import { WidgetChangelogListSkeleton, WidgetChangelogMoreSkeleton } from './widget-skeletons'
@@ -38,17 +39,21 @@ const lastVisit: {
    *  `undefined` until captured. Lives here, not in the component, because
    *  opening an entry unmounts the list and the marker has advanced by then. */
   seenBaseline: string | null | undefined
+  /** Whose marker the baseline was read from; another identity reads its own. */
+  seenBaselineScope: string | null
 } = {
   scrollTop: 0,
   categoryId: null,
   seenBaseline: undefined,
+  seenBaselineScope: null,
 }
 
 /** Filtered pages to pull ahead before conceding "nothing in this category". */
 const FILTER_LOOKAHEAD_MIN_ROWS = 3
 
 export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProps) {
-  const { sessionVersion } = useWidgetAuth()
+  const { sessionVersion, user } = useWidgetAuth()
+  const scope = seenScope(user)
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError, isLoading } =
     useInfiniteQuery(widgetChangelogListQuery(sessionVersion))
   const { data: categories = [] } = useQuery(widgetChangelogLabelsQuery(sessionVersion))
@@ -65,7 +70,10 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   // Capture the seen marker once per session, when the list first has data —
   // before the effect below advances it — so "New" holds across detail
   // round-trips and not just this mount.
-  if (data && lastVisit.seenBaseline === undefined) lastVisit.seenBaseline = getChangelogSeenAt()
+  if (data && (lastVisit.seenBaseline === undefined || lastVisit.seenBaselineScope !== scope)) {
+    lastVisit.seenBaseline = getChangelogSeenAt(scope)
+    lastVisit.seenBaselineScope = scope
+  }
   const baseline = lastVisit.seenBaseline ? new Date(lastVisit.seenBaseline).getTime() : null
   const isNew = (publishedAt: string) =>
     baseline !== null && new Date(publishedAt).getTime() > baseline
@@ -90,8 +98,8 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   useEffect(() => {
     if (!hostShown) return
     const newest = entries[0]?.publishedAt
-    if (newest) markChangelogSeen(newest)
-  }, [entries, hostShown])
+    if (newest) markChangelogSeen(scope, newest)
+  }, [entries, hostShown, scope])
 
   const sentinelRef = useInfiniteScroll({
     hasMore: hasNextPage ?? false,

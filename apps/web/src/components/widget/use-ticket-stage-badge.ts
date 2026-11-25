@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -10,6 +10,7 @@ import {
   markTicketStagesSeen,
   TICKET_STAGES_SEEN_EVENT,
 } from './ticket-stage-seen'
+import { seenScope } from './seen-scope'
 
 /**
  * Whether this visitor has any tickets: `true`/`false` once known, `null`
@@ -31,7 +32,8 @@ export type HasTickets = boolean | null
  * never badge; only later moves do (see ticket-stage-seen.ts).
  */
 export function useTicketStageBadge(enabled: boolean): { unread: number; hasTickets: HasTickets } {
-  const { sessionVersion, isIdentified, identityResolved } = useWidgetAuth()
+  const { sessionVersion, isIdentified, identityResolved, user } = useWidgetAuth()
+  const scope = seenScope(user)
   const { data, isError } = useQuery({
     queryKey: widgetMyTicketsKey(sessionVersion),
     queryFn: () => widgetGetMyTicketsFn({ headers: getWidgetAuthHeaders() }),
@@ -42,20 +44,20 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
 
   // Re-read the markers whenever the Tickets tab advances them (same-tab
   // updates don't fire the native `storage` event, hence the custom one).
-  const [seen, setSeen] = useState(() => getTicketStagesSeen())
+  const [, reread] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
-    const onSeen = () => setSeen(getTicketStagesSeen())
-    window.addEventListener(TICKET_STAGES_SEEN_EVENT, onSeen)
-    return () => window.removeEventListener(TICKET_STAGES_SEEN_EVENT, onSeen)
+    window.addEventListener(TICKET_STAGES_SEEN_EVENT, reread)
+    return () => window.removeEventListener(TICKET_STAGES_SEEN_EVENT, reread)
   }, [])
+  const seen = getTicketStagesSeen(scope)
 
   const tickets = data?.tickets ?? []
 
   // Silent first-contact baseline: stamp the stages current at the first
   // load so historical states never badge (see ticket-stage-seen.ts).
   useEffect(() => {
-    if (data && getTicketStagesSeen() === null) markTicketStagesSeen(data.tickets)
-  }, [data])
+    if (data && getTicketStagesSeen(scope) === null) markTicketStagesSeen(scope, data.tickets)
+  }, [data, scope])
 
   return {
     unread: countTicketStageChanges(tickets, seen),

@@ -10,17 +10,20 @@
  * A visitor with no marker yet gets a silent baseline (everything historical
  * is read): the first list load stamps the marker, so only entries published
  * AFTER the visitor's first contact badge as new.
+ *
+ * Each identity in the browser has its own marker (see seen-scope.ts).
  */
 
 const SEEN_KEY = 'quackback:changelog-seen-at'
+const seenKey = (scope: string) => `${SEEN_KEY}:${scope}`
 
 /** Event name dispatched on window after the marker advances, so open widget
  *  views re-read it without a reload. */
 export const CHANGELOG_SEEN_EVENT = 'quackback:changelog-seen'
 
-export function getChangelogSeenAt(storage?: Storage): string | null {
+export function getChangelogSeenAt(scope: string, storage?: Storage): string | null {
   try {
-    const raw = (storage ?? window.localStorage).getItem(SEEN_KEY)
+    const raw = (storage ?? window.localStorage).getItem(seenKey(scope))
     if (!raw) return null
     // Guard against a corrupted value: an unparseable marker behaves as no
     // marker rather than poisoning every comparison with NaN.
@@ -30,13 +33,13 @@ export function getChangelogSeenAt(storage?: Storage): string | null {
   }
 }
 
-export function markChangelogSeen(publishedAt: string): void {
-  const existing = getChangelogSeenAt()
+export function markChangelogSeen(scope: string, publishedAt: string): void {
+  const existing = getChangelogSeenAt(scope)
   // The marker only moves forward — an older page of the infinite list must
   // not re-badge entries the visitor already saw.
   if (existing && new Date(existing).getTime() >= new Date(publishedAt).getTime()) return
   try {
-    window.localStorage.setItem(SEEN_KEY, publishedAt)
+    window.localStorage.setItem(seenKey(scope), publishedAt)
   } catch {
     // Storage unavailable — the badge returns next load; never break the view.
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useReducer } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { widgetChangelogListQuery } from './widget-changelog-query'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -8,6 +8,7 @@ import {
   markChangelogSeen,
   CHANGELOG_SEEN_EVENT,
 } from './changelog-unread'
+import { seenScope } from './seen-scope'
 
 /**
  * Unread changelog count for the visitor, plus the mark-seen action the
@@ -19,7 +20,8 @@ export function useChangelogUnread(enabled: boolean): {
   unread: number
   markSeen: (publishedAt: string) => void
 } {
-  const { sessionVersion } = useWidgetAuth()
+  const { sessionVersion, user } = useWidgetAuth()
+  const scope = seenScope(user)
   const { data } = useInfiniteQuery({
     ...widgetChangelogListQuery(sessionVersion),
     enabled,
@@ -28,17 +30,20 @@ export function useChangelogUnread(enabled: boolean): {
 
   // Re-read the marker whenever the changelog surface advances it (same-tab
   // updates don't fire the native `storage` event, hence the custom one).
-  const [seenAt, setSeenAt] = useState<string | null>(() => getChangelogSeenAt())
+  const [, reread] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
-    const onSeen = () => setSeenAt(getChangelogSeenAt())
-    window.addEventListener(CHANGELOG_SEEN_EVENT, onSeen)
-    return () => window.removeEventListener(CHANGELOG_SEEN_EVENT, onSeen)
+    window.addEventListener(CHANGELOG_SEEN_EVENT, reread)
+    return () => window.removeEventListener(CHANGELOG_SEEN_EVENT, reread)
   }, [])
+  const seenAt = getChangelogSeenAt(scope)
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
   const unread = countUnreadChangelogs(entries, seenAt)
 
-  const markSeen = useCallback((publishedAt: string) => markChangelogSeen(publishedAt), [])
+  const markSeen = useCallback(
+    (publishedAt: string) => markChangelogSeen(scope, publishedAt),
+    [scope]
+  )
 
   return { unread, markSeen }
 }

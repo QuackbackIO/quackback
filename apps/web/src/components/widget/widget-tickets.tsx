@@ -8,6 +8,7 @@ import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import { useHostShown } from '@/lib/client/hooks/use-host-shown'
+import { seenScope } from './seen-scope'
 import {
   getTicketStagesSeen,
   markTicketStagesSeen,
@@ -39,7 +40,8 @@ export function WidgetTickets({
   /** Opens the pair's conversation thread for a tapped row. */
   onOpenTicket: (conversationId: ConversationId) => void
 }) {
-  const { sessionVersion } = useWidgetAuth()
+  const { sessionVersion, user } = useWidgetAuth()
+  const scope = seenScope(user)
   const { data, isLoading } = useQuery({
     // Re-keyed on sessionVersion so the list refreshes after identify.
     queryKey: widgetMyTicketsKey(sessionVersion),
@@ -55,7 +57,7 @@ export function WidgetTickets({
   // once, when the list first has data — before the effect below advances it
   // — so the changed rows keep their marker for this visit.
   const baselineRef = useRef<TicketStageSeenMap | null | undefined>(undefined)
-  if (data && baselineRef.current === undefined) baselineRef.current = getTicketStagesSeen()
+  if (data && baselineRef.current === undefined) baselineRef.current = getTicketStagesSeen(scope)
   const changedIds = useMemo(() => {
     const seen = baselineRef.current
     if (!seen) return new Set<string>()
@@ -72,8 +74,8 @@ export function WidgetTickets({
   // the panel is shown again.
   const hostShown = useHostShown()
   useEffect(() => {
-    if (data && hostShown) markTicketStagesSeen(data.tickets)
-  }, [data, hostShown])
+    if (data && hostShown) markTicketStagesSeen(scope, data.tickets)
+  }, [data, hostShown, scope])
 
   return (
     <div className="relative flex h-full flex-col">

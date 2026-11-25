@@ -35,27 +35,35 @@ describe('seen marker storage', () => {
   })
 
   it('round-trips the marker through window.localStorage', () => {
-    expect(getChangelogSeenAt()).toBeNull()
-    markChangelogSeen('2026-07-30T10:00:00Z')
-    expect(getChangelogSeenAt()).toBe('2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBeNull()
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
   })
 
   it('never moves the marker backwards', () => {
-    markChangelogSeen('2026-07-30T10:00:00Z')
-    markChangelogSeen('2026-07-01T10:00:00Z')
-    expect(getChangelogSeenAt()).toBe('2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-01T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
   })
 
   it('dispatches the seen event so open listeners re-read the marker', () => {
     const listener = vi.fn()
     window.addEventListener(CHANGELOG_SEEN_EVENT, listener)
-    markChangelogSeen('2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
     expect(listener).toHaveBeenCalledTimes(1)
     window.removeEventListener(CHANGELOG_SEEN_EVENT, listener)
   })
 
+  it('keeps a marker for each identity in the browser', () => {
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u2')).toBeNull()
+    markChangelogSeen('u2', '2026-07-01T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u2')).toBe('2026-07-01T10:00:00Z')
+  })
+
   it('ignores an unparseable stored marker instead of throwing', () => {
-    window.localStorage.setItem('quackback:changelog-seen-at', 'not-a-date')
-    expect(getChangelogSeenAt()).toBeNull()
+    window.localStorage.setItem('quackback:changelog-seen-at:u1', 'not-a-date')
+    expect(getChangelogSeenAt('u1')).toBeNull()
   })
 })

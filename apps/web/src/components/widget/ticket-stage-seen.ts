@@ -14,7 +14,9 @@
  * badges — only CHANGES to a stage the visitor was baselined on do.
  */
 
+// Each identity in the browser has its own map (see seen-scope.ts).
 const SEEN_KEY = 'quackback:ticket-stages-seen'
+const seenKey = (scope: string) => `${SEEN_KEY}:${scope}`
 
 /** Event name dispatched on window after markers advance, so open widget
  *  views re-read them without a reload. */
@@ -29,9 +31,9 @@ export interface TicketStageSeenInput {
   stage: { slot: string | null }
 }
 
-export function getTicketStagesSeen(storage?: Storage): TicketStageSeenMap | null {
+export function getTicketStagesSeen(scope: string, storage?: Storage): TicketStageSeenMap | null {
   try {
-    const raw = (storage ?? window.localStorage).getItem(SEEN_KEY)
+    const raw = (storage ?? window.localStorage).getItem(seenKey(scope))
     if (!raw) return null
     // Guard against a corrupted value: an unparseable or non-map marker
     // behaves as no marker rather than poisoning every comparison.
@@ -48,11 +50,14 @@ export function getTicketStagesSeen(storage?: Storage): TicketStageSeenMap | nul
  * into the existing map so a paginated/limited list never drops markers for
  * tickets it didn't happen to load.
  */
-export function markTicketStagesSeen(tickets: readonly TicketStageSeenInput[]): void {
-  const next: TicketStageSeenMap = { ...getTicketStagesSeen() }
+export function markTicketStagesSeen(
+  scope: string,
+  tickets: readonly TicketStageSeenInput[]
+): void {
+  const next: TicketStageSeenMap = { ...getTicketStagesSeen(scope) }
   for (const t of tickets) next[t.ticketId] = t.stage.slot
   try {
-    window.localStorage.setItem(SEEN_KEY, JSON.stringify(next))
+    window.localStorage.setItem(seenKey(scope), JSON.stringify(next))
   } catch {
     // Storage unavailable — the badge returns next load; never break the view.
   }
