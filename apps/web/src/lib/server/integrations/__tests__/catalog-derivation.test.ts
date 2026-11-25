@@ -46,9 +46,18 @@ describe('getIntegrationCatalog capability derivation', () => {
     )
   })
 
+  it('read-back inbound adapters advertise automatic status updates', async () => {
+    const catalog = await getIntegrationCatalog()
+    for (const id of ['azure_devops', 'gitlab', 'shortcut', 'trello', 'clickup', 'jira']) {
+      const labels = catalog.find((entry) => entry.id === id)!.capabilities!.map((cap) => cap.label)
+      expect(labels, id).toContain('Receive status updates')
+      expect(labels, id).not.toContain('Review status updates')
+    }
+  })
+
   it('review-only inbound adapters do not advertise automatic status updates', async () => {
     const catalog = await getIntegrationCatalog()
-    for (const id of ['jira', 'azure_devops', 'asana', 'clickup', 'gitlab', 'shortcut', 'trello']) {
+    for (const id of ['asana']) {
       const labels = catalog.find((entry) => entry.id === id)!.capabilities!.map((cap) => cap.label)
       expect(labels, id).toContain('Review status updates')
       expect(labels, id).not.toContain('Receive status updates')

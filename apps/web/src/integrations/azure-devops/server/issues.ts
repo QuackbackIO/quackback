@@ -7,6 +7,7 @@
  */
 import type { IssueTrackerCapability, ParsedIssueRef } from '@/lib/server/integrations/types'
 import { createWorkItem } from '@/integrations/azure-devops/server/api'
+import { organizationFromUrl } from '@/integrations/azure-devops/server/url'
 import { escapeHtml, issueError } from '@/lib/server/integrations/message-utils'
 import { ValidationError } from '@/lib/shared/errors'
 
@@ -23,18 +24,18 @@ function markdownToHtml(markdown: string): string {
 // https://dev.azure.com/org/project/_workitems/edit/123 or
 // https://org.visualstudio.com/project/_workitems/edit/123
 const WORK_ITEM_URL_RE =
-  /^https?:\/\/(dev\.azure\.com\/([^/\s]+)|([^/.\s]+)\.visualstudio\.com)\/[^\s]*_workitems\/edit\/(\d+)\/?(?:[?#].*)?$/i
+  /^https?:\/\/(dev\.azure\.com\/[^/\s]+|[^/.\s]+\.visualstudio\.com)\/[^\s]*_workitems\/edit\/(\d+)\/?(?:[?#].*)?$/i
 
 export const azureDevOpsIssues: IssueTrackerCapability = {
   parseRef(input: string, config: Record<string, unknown>): ParsedIssueRef | null {
     const trimmed = input.trim()
     const m = WORK_ITEM_URL_RE.exec(trimmed)
     if (!m) return null
-    const id = Number.parseInt(m[4], 10)
+    const id = Number.parseInt(m[2], 10)
     if (!Number.isSafeInteger(id) || id <= 0) return null
     // Pin the connected organization when known: inbound reverse-lookup is by
     // bare work item id, so a foreign org's #123 would collide.
-    const urlOrg = (m[2] ?? m[3])?.toLowerCase()
+    const urlOrg = organizationFromUrl(trimmed)?.toLowerCase()
     const configuredOrg =
       typeof config.organizationName === 'string' ? config.organizationName.toLowerCase() : null
     if (configuredOrg && urlOrg && urlOrg !== configuredOrg) {

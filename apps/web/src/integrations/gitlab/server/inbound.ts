@@ -1,6 +1,11 @@
 /**
  * GitLab inbound webhook handler.
  * Receives issue state change events for two-way status sync.
+ * Authentication: shared secret in the `X-Gitlab-Token` header.
+ * Issue numbers (`iid`) are only unique within a project, and the webhook can be
+ * registered on a group, so events from other projects are ignored.
+ * The body is unsigned, so the event is only a trigger: the issue is read back
+ * from the connected project, which also proves it belongs to that project.
  */
 
 import { timingSafeEqual } from 'crypto'
@@ -8,9 +13,17 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
+import { isoTimestamp } from '@/lib/server/integrations/inbound-time'
+import { getGitLabIssueState } from '@/integrations/gitlab/server/issues'
+
+// Map GitLab states: opened, closed
+const STATUS_MAP: Record<string, string> = {
+  opened: 'Open',
+  closed: 'Closed',
+}
 
 export const gitlabInboundHandler: InboundWebhookHandler = {
-  statusMode: 'review',
+  statusMode: 'automatic',
   async verifySignature(request: Request, _body: string, secret: string): Promise<true | Response> {
     // GitLab uses a shared secret token in the X-Gitlab-Token header
     const token = request.headers.get('X-Gitlab-Token')
@@ -28,9 +41,15 @@ export const gitlabInboundHandler: InboundWebhookHandler = {
     return true
   },
 
-  async parseStatusChange(body: string): Promise<InboundWebhookResult | null> {
+  async parseStatusChange(
+    body: string,
+    config: Record<string, unknown>,
+    secrets: Record<string, unknown>
+  ): Promise<InboundWebhookResult | null> {
     const payload = JSON.parse(body) as {
       object_kind?: string
+      project?: { id?: number | string }
+      changes?: { state_id?: unknown }
       object_attributes?: {
         iid?: number
         action?: string
@@ -42,22 +61,41 @@ export const gitlabInboundHandler: InboundWebhookHandler = {
     if (!payload.object_attributes?.iid) return null
 
     const { action, state, iid } = payload.object_attributes
-    if (action !== 'update' && action !== 'close' && action !== 'reopen') return null
-    if (!state) return null
+    const stateChanged =
+      action === 'close' ||
+      action === 'reopen' ||
+      (action === 'update' && !!payload.changes?.state_id)
+    if (!stateChanged || !state) return null
 
-    // Map GitLab states: opened, closed
-    const statusMap: Record<string, string> = {
-      opened: 'Open',
-      closed: 'Closed',
+    const configuredProject = typeof config.channelId === 'string' ? config.channelId : null
+    if (configuredProject && String(payload.project?.id ?? '') !== configuredProject) return null
+
+    const externalId = String(iid)
+    const accessToken = typeof secrets.accessToken === 'string' ? secrets.accessToken : null
+    if (!configuredProject || !accessToken) {
+      const externalStatus = STATUS_MAP[state]
+      if (!externalStatus) return null
+      return { externalId, externalStatus, eventType: 'issue.state_changed' }
     }
 
-    const externalStatus = statusMap[state]
+    const instanceUrl = typeof config.instanceUrl === 'string' ? config.instanceUrl : null
+    const current = await getGitLabIssueState(
+      accessToken,
+      instanceUrl,
+      configuredProject,
+      externalId
+    )
+    if (!current || current.projectId !== configuredProject) return null
+
+    const externalStatus = current.state ? STATUS_MAP[current.state] : undefined
     if (!externalStatus) return null
 
     return {
-      externalId: String(iid),
+      externalId,
       externalStatus,
       eventType: 'issue.state_changed',
+      destinationId: configuredProject,
+      occurredAt: isoTimestamp(current.updatedAt),
     }
   },
 }
