@@ -67,4 +67,39 @@ describe('MessengerChannelPage usual reply time', () => {
     expect(updateWidgetConfig).toHaveBeenCalledWith({ messenger: { replyTime: 'off' } })
     expect(checked()).toEqual(["Don't show"])
   })
+
+  it('checks under an hour for a stored value it does not know', () => {
+    renderPage({ replyTime: 'weeks' })
+    expect(checked()).toEqual(['Under an hour'])
+  })
+
+  it('is one tab stop: only the checked option is focusable', () => {
+    renderPage({ replyTime: 'day' })
+    const tabbable = screen
+      .getAllByRole('radio')
+      .filter((radio) => radio.getAttribute('tabindex') === '0')
+      .map((radio) => radio.textContent)
+    expect(tabbable).toEqual(['Within a day'])
+  })
+
+  it('moves the choice with the arrow keys and keeps focus on it', () => {
+    updateWidgetConfig.mockReturnValue(new Promise(() => {}))
+    renderPage({})
+    const hour = screen.getByRole('radio', { name: 'Under an hour' })
+    hour.focus()
+    fireEvent.keyDown(hour, { key: 'ArrowRight' })
+    const hours = screen.getByRole('radio', { name: 'In a few hours' })
+    expect(checked()).toEqual(['In a few hours'])
+    expect(document.activeElement).toBe(hours)
+    expect(updateWidgetConfig).toHaveBeenLastCalledWith({ messenger: { replyTime: 'hours' } })
+  })
+
+  it('wraps from the first option to the last with the left arrow', () => {
+    updateWidgetConfig.mockResolvedValue({})
+    renderPage({ replyTime: 'minutes' })
+    fireEvent.keyDown(screen.getByRole('radio', { name: 'In a few minutes' }), {
+      key: 'ArrowLeft',
+    })
+    expect(checked()).toEqual(["Don't show"])
+  })
 })

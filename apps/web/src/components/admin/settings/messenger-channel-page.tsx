@@ -1,4 +1,4 @@
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type KeyboardEvent } from 'react'
 import { useRouter, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -61,8 +61,29 @@ export function MessengerChannelPage() {
   const [welcomeMessage, setWelcomeMessage] = useState(messengerConfig?.welcomeMessage ?? '')
   const [offlineMessage, setOfflineMessage] = useState(messengerConfig?.offlineMessage ?? '')
   const [teamName, setTeamName] = useState(messengerConfig?.teamName ?? '')
-  // Absent reads as under an hour (the shared DEFAULT_REPLY_TIME).
-  const [replyTime, setReplyTime] = useState<ReplyTime>(messengerConfig?.replyTime ?? 'hour')
+  // Absent or unknown reads as under an hour (the shared DEFAULT_REPLY_TIME).
+  const storedReplyTime = messengerConfig?.replyTime
+  const [replyTime, setReplyTime] = useState<ReplyTime>(
+    storedReplyTime && REPLY_TIME_OPTIONS.includes(storedReplyTime) ? storedReplyTime : 'hour'
+  )
+
+  function chooseReplyTime(value: ReplyTime) {
+    if (value === replyTime) return
+    const prev = replyTime
+    setReplyTime(value)
+    persist('replyTime', { messenger: { replyTime: value } }, () => setReplyTime(prev))
+  }
+
+  // Radio-group keys: arrows move the choice (wrapping) and focus with it.
+  function onReplyTimeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+    if (step === undefined) return
+    event.preventDefault()
+    const count = REPLY_TIME_OPTIONS.length
+    const index = (REPLY_TIME_OPTIONS.indexOf(replyTime) + step + count) % count
+    chooseReplyTime(REPLY_TIME_OPTIONS[index])
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[index]?.focus()
+  }
   const [translations, setTranslations] = useState<WidgetTranslations>(config.translations ?? {})
   const [translationLocale, setTranslationLocale] = useState<string>('en')
 
@@ -166,6 +187,7 @@ export function MessengerChannelPage() {
               role="radiogroup"
               aria-labelledby="messenger-reply-time"
               className="flex flex-wrap gap-1.5"
+              onKeyDown={onReplyTimeKeyDown}
             >
               {REPLY_TIME_OPTIONS.map((value) => (
                 <button
@@ -173,15 +195,11 @@ export function MessengerChannelPage() {
                   type="button"
                   role="radio"
                   aria-checked={replyTime === value}
-                  onClick={() => {
-                    if (value === replyTime) return
-                    const prev = replyTime
-                    setReplyTime(value)
-                    persist('replyTime', { messenger: { replyTime: value } }, () =>
-                      setReplyTime(prev)
-                    )
-                  }}
-                  disabled={isBusy}
+                  // One tab stop: the checked option; arrows move between them.
+                  tabIndex={replyTime === value ? 0 : -1}
+                  onClick={() => chooseReplyTime(value)}
+                  // The checked option stays enabled while saving so focus stays put.
+                  disabled={isBusy && replyTime !== value}
                   className={pillClass(replyTime === value)}
                 >
                   {REPLY_TIME_LABELS[value]}
