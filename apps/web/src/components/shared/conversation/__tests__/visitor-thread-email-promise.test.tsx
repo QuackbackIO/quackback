@@ -125,12 +125,14 @@ describe('the visitor thread while the team is away', () => {
     await renderThread(false)
     expect(await screen.findByText('Acme Support')).toBeInTheDocument()
     expect(screen.getByText('AL')).toBeInTheDocument()
-    expect(screen.getByText('Typically replies in under an hour')).toBeInTheDocument()
+    expect(
+      screen.getByText(/^Typically replies in under an hour · We'll reply here$/)
+    ).toBeInTheDocument()
   })
 
   it('words the reply time the surface already knows before the thread loads', async () => {
     await renderThread(false, { knownReplyTime: 'day', pending: true })
-    expect(screen.getByText('Typically replies within a day')).toBeInTheDocument()
+    expect(screen.getByText(/^Typically replies within a day · /)).toBeInTheDocument()
   })
 
   it('does not promise email to a visitor it cannot email', async () => {

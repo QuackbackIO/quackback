@@ -8,11 +8,12 @@ import { TeamFacepile, type TeamFace } from './team-facepile'
 /**
  * Who the visitor is talking to and when to expect a reply: up to three
  * teammates, the team name, and a status line. The line reads "Online now"
- * while the team is available (see conversationAvailable); otherwise the
- * workspace's usual reply time, or, when that is hidden, "We'll reply by
- * email" / "We'll reply here". When office hours are configured the away
- * line adds when the team is back. Used by the widget's messenger top bar
- * and the thread's own header so the two never drift.
+ * while the team is available (see conversationAvailable). Away, it always
+ * keeps the reply promise ("We'll reply by email" / "We'll reply here"),
+ * led by when the team is back when office hours say it is closed, else by
+ * the workspace's usual reply time unless that is hidden. Used by the
+ * widget's messenger top bar and the thread's own header so the two never
+ * drift.
  */
 export function ConversationTeamHeader({
   team,
@@ -58,7 +59,7 @@ export function ConversationTeamHeader({
             )}
             aria-hidden
           />
-          <span className="min-w-0 truncate">
+          <span data-slot="team-status" className="min-w-0 truncate">
             {available ? (
               <FormattedMessage
                 id="widget.messenger.header.onlineNow"
@@ -66,9 +67,24 @@ export function ConversationTeamHeader({
               />
             ) : (
               <>
-                {expectation !== 'off' ? (
-                  <FormattedMessage {...headerReplyTimeMessages[expectation]} />
-                ) : canReplyByEmail ? (
+                {/* Closed for the day: when the team is back, no reply time
+                    claim. Otherwise the usual reply time, unless hidden. */}
+                {hasBackAtTime(nextOpenAt) ? (
+                  <>
+                    <FormattedMessage
+                      id="widget.messenger.offline.backAt"
+                      defaultMessage="Back {when}"
+                      values={{ when: <BackAtTime at={nextOpenAt} /> }}
+                    />
+                    {' · '}
+                  </>
+                ) : expectation !== 'off' ? (
+                  <>
+                    <FormattedMessage {...headerReplyTimeMessages[expectation]} />
+                    {' · '}
+                  </>
+                ) : null}
+                {canReplyByEmail ? (
                   <FormattedMessage
                     id="widget.messenger.offline"
                     defaultMessage="We'll reply by email"
@@ -78,16 +94,6 @@ export function ConversationTeamHeader({
                     id="widget.messenger.offline.replyHere"
                     defaultMessage="We'll reply here"
                   />
-                )}
-                {hasBackAtTime(nextOpenAt) && (
-                  <span className="text-muted-foreground/70">
-                    {' · '}
-                    <FormattedMessage
-                      id="widget.messenger.offline.backAt"
-                      defaultMessage="Back {when}"
-                      values={{ when: <BackAtTime at={nextOpenAt} /> }}
-                    />
-                  </span>
                 )}
               </>
             )}

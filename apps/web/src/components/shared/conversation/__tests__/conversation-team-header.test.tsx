@@ -29,6 +29,10 @@ const TEAM = [
   { name: 'Edsger Dijkstra', avatarUrl: null },
 ]
 
+function statusLine(container: HTMLElement) {
+  return container.querySelector('[data-slot="team-status"]')?.textContent
+}
+
 function renderHeader(props: Partial<Parameters<typeof ConversationTeamHeader>[0]> = {}) {
   return render(
     withIntl(
@@ -60,14 +64,13 @@ describe('ConversationTeamHeader', () => {
   })
 
   it('says online now while the team is available', () => {
-    renderHeader({ available: true, replyTime: 'day' })
-    expect(screen.getByText('Online now')).toBeInTheDocument()
-    expect(screen.queryByText(/Typically replies/)).not.toBeInTheDocument()
+    const { container } = renderHeader({ available: true, replyTime: 'day' })
+    expect(statusLine(container)).toBe('Online now')
   })
 
-  it('shows under an hour while away when the workspace never set a reply time', () => {
-    renderHeader()
-    expect(screen.getByText('Typically replies in under an hour')).toBeInTheDocument()
+  it('keeps the reply promise while away when the workspace never set a reply time', () => {
+    const { container } = renderHeader()
+    expect(statusLine(container)).toBe("Typically replies in under an hour · We'll reply here")
   })
 
   it.each([
@@ -75,14 +78,14 @@ describe('ConversationTeamHeader', () => {
     ['hour', 'Typically replies in under an hour'],
     ['hours', 'Typically replies in a few hours'],
     ['day', 'Typically replies within a day'],
-  ] as const)('words the %s reply time while away', (replyTime, copy) => {
-    renderHeader({ replyTime })
-    expect(screen.getByText(copy)).toBeInTheDocument()
+  ] as const)('words the %s reply time before the promise while away', (replyTime, copy) => {
+    const { container } = renderHeader({ replyTime, canReplyByEmail: true })
+    expect(statusLine(container)).toBe(`${copy} · We'll reply by email`)
   })
 
-  it('falls back to the away copy when the reply time is hidden', () => {
-    const { rerender } = renderHeader({ replyTime: 'off', canReplyByEmail: true })
-    expect(screen.getByText("We'll reply by email")).toBeInTheDocument()
+  it('shows only the promise when the reply time is hidden', () => {
+    const { container, rerender } = renderHeader({ replyTime: 'off', canReplyByEmail: true })
+    expect(statusLine(container)).toBe("We'll reply by email")
     rerender(
       withIntl(
         <ConversationTeamHeader
@@ -94,13 +97,18 @@ describe('ConversationTeamHeader', () => {
         />
       )
     )
-    expect(screen.getByText("We'll reply here")).toBeInTheDocument()
-    expect(screen.queryByText(/Typically replies/)).not.toBeInTheDocument()
+    expect(statusLine(container)).toBe("We'll reply here")
   })
 
-  it('adds when the team is back while away', () => {
-    renderHeader({ nextOpenAt: '2030-01-07T09:00:00.000Z' })
-    expect(screen.getByText(/Back/)).toBeInTheDocument()
+  it('says when the team is back, with no reply time claim, while closed', () => {
+    const { container } = renderHeader({
+      replyTime: 'minutes',
+      canReplyByEmail: true,
+      nextOpenAt: '2030-01-07T09:00:00.000Z',
+    })
+    const line = statusLine(container)
+    expect(line).toMatch(/^Back .+ · We'll reply by email$/)
+    expect(line).not.toMatch(/Typically replies/)
   })
 })
 
