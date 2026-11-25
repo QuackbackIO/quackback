@@ -481,7 +481,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect GitLab',
       description:
-        'Connect GitLab.com or a self-hosted GitLab instance to create issues from feedback and review incoming status changes.',
+        'Connect GitLab.com or a self-hosted GitLab instance to create issues from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Configure your GitLab{' '}
@@ -566,7 +566,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Jira instance',
       description:
-        'Connect Jira to create issues from feedback and review incoming status changes.',
+        'Connect Jira to create issues from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Click <span className="font-medium text-foreground">Connect Jira</span> to authorize
@@ -852,7 +852,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Shortcut workspace',
       description:
-        'Connect Shortcut to create stories from feedback and review incoming status changes.',
+        'Connect Shortcut to create stories from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Generate an API token from your Shortcut account settings and paste it below.
@@ -972,7 +972,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     ConnectionActions: TrelloConnectionActions,
     setup: {
       title: 'Connect your Trello workspace',
-      description: 'Connect Trello to create cards from feedback and review incoming list changes.',
+      description:
+        'Connect Trello to create cards from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Create a Trello Power-Up in your workspace (optional, only needed for custom branding).
