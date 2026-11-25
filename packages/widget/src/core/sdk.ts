@@ -14,7 +14,7 @@ import { createPanel, type PanelHandle } from './panel'
 import { fetchServerConfig, type ServerConfig } from './config'
 import { createTracker, type Tracker } from './tracker'
 import { clearDeviceId, getOrCreateDeviceId } from './device'
-import { removeStyles } from './style'
+import { FULL_SCREEN_MEDIA, removeStyles } from './style'
 
 type Command =
   | 'init'
@@ -78,12 +78,12 @@ export function createSDK(): SDK {
     sendSafeArea()
   }
 
-  // On a phone the panel fills the screen, so its edges meet the
-  // host page's notch and system bars. The frame cannot read those insets
-  // itself; send them while the panel is open, and again whenever they
-  // change (a rotation). Measuring forces a layout, so a closed panel skips
-  // it. The floating desktop panel never touches the screen edge, so it
-  // gets zeros.
+  // Where the panel fills the screen (FULL_SCREEN_MEDIA), its edges meet the
+  // host page's notch, cutouts and system bars. The frame cannot read those
+  // insets itself; send them while the panel is open, and again whenever
+  // they change (a rotation). Measuring forces a layout, so a closed panel
+  // skips it. The floating panel never touches the screen edge (its CSS
+  // offsets already move it in by the insets), so the frame gets zeros.
   let lastSafeArea = ''
   function sendSafeArea(): void {
     if (!ready || !bridge || !panelOpen) return
@@ -135,13 +135,15 @@ export function createSDK(): SDK {
           bridge!.send('quackback:device', pendingDevice)
           pendingDevice = null
         }
+        // A frame that (re)loads starts with no insets: send them (when the
+        // panel is open) before a queued open, so its view renders with them.
+        lastSafeArea = ''
+        sendMobileState()
         if (pendingOpen) {
           bridge!.send('quackback:open', pendingOpen)
           pendingOpen = null
         }
-        // A frame that (re)loads starts with no insets: always send them.
-        lastSafeArea = ''
-        sendMobileState()
+        // Say the panel is shown only after the queued open has navigated.
         sendShownState()
         emitter.emit('ready', {})
         break
@@ -249,7 +251,7 @@ export function createSDK(): SDK {
       origin: iframeOrigin(),
     })
     bridge.onMessage(onIframeMessage)
-    mobileMql = window.matchMedia('(max-width: 639px)')
+    mobileMql = window.matchMedia(FULL_SCREEN_MEDIA)
     mobileMql.addEventListener('change', sendMobileState)
     window.addEventListener('resize', scheduleSafeArea)
     mobileCleanup = () => {

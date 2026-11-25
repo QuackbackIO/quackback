@@ -1,5 +1,10 @@
 const STYLE_ID = 'quackback-widget-styles'
 
+/** Where the panel fills the screen instead of floating by the launcher. The
+ *  SDK matches the same query to decide whether the frame needs the host
+ *  page's safe-area insets. */
+export const FULL_SCREEN_MEDIA = '(max-width:639px)'
+
 // The panel CSS is side-specific (corner offset + transform origin), so the
 // element is rewritten when the side changes after creation — e.g. the server
 // config's position landing after an idle-time panel preload.
@@ -35,7 +40,7 @@ export function ensureStyles(side: 'left' | 'right'): void {
     '.quackback-panel.quackback-open{opacity:1;transform:scale(1);pointer-events:auto}',
     '.quackback-panel.quackback-closing{opacity:0;transform:scale(0);pointer-events:none;',
     'transition:opacity 200ms cubic-bezier(0.4,0,1,1),transform 200ms cubic-bezier(0.4,0,1,1)}',
-    '@media(max-width:639px){',
+    `@media${FULL_SCREEN_MEDIA}{`,
     // 100vh is the tallest the viewport gets (browser toolbars hidden), so it
     // runs under a visible toolbar or system bar; 100dvh is what is on screen.
     '.quackback-panel{top:0;left:0;right:0;bottom:0;width:100%;height:100vh;height:100dvh;',

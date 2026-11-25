@@ -9,8 +9,9 @@ export const NO_SAFE_AREA: SafeArea = { top: 0, bottom: 0, left: 0, right: 0 }
 
 /**
  * The host page's safe-area insets in CSS pixels: the space a notch, a home
- * indicator or an edge-to-edge navigation bar takes from the screen. A phone
- * held sideways has its notch on the left or right. A frame always reads zero
+ * indicator or an edge-to-edge navigation bar takes from the screen, on any
+ * side (a cutout is on the left or right when the screen is sideways). A
+ * frame always reads zero
  * for these, so the page that embeds it measures them. Zero when the page
  * does not draw under those areas (no `viewport-fit=cover`), which is most
  * pages.

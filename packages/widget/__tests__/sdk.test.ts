@@ -685,6 +685,39 @@ describe('sdk on phones', () => {
     sdk.dispatch('destroy')
   })
 
+  it('decides full screen by the same media query as the panel stylesheet', () => {
+    const queries: string[] = []
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => {
+        queries.push(query)
+        return { matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }
+      })
+    )
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    const css = document.getElementById('quackback-widget-styles')?.textContent ?? ''
+    const fullScreen = queries.filter((q) => !q.includes('prefers-reduced-motion'))
+    expect(fullScreen.length).toBeGreaterThan(0)
+    for (const query of fullScreen) expect(css).toContain(`@media${query}{`)
+    sdk.dispatch('destroy')
+  })
+
+  it('sends the insets before an open queued until the frame was ready', () => {
+    phone(true)
+    hostInsets('47px', '34px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    sdk.dispatch('open', { view: 'messages' })
+    frameReady()
+    const types = postMessage.mock.calls
+      .map(([msg]) => (msg as { type: string }).type)
+      .filter((t) => t === 'quackback:safe-area' || t === 'quackback:open')
+    expect(types).toEqual(['quackback:safe-area', 'quackback:open'])
+    sdk.dispatch('destroy')
+  })
+
   it('measures nothing while the panel is closed', () => {
     phone(true)
     const measured = hostInsets('47px', '34px')
@@ -765,7 +798,7 @@ describe('sdk on phones', () => {
     sdk.dispatch('destroy')
   })
 
-  it('tells the frame the side insets of a phone held sideways', () => {
+  it('tells the frame the side insets the full-screen panel meets', () => {
     phone(true)
     hostInsets('0px', '21px', '47px', '0px')
     const postMessage = frameWindow()
@@ -777,7 +810,9 @@ describe('sdk on phones', () => {
     sdk.dispatch('destroy')
   })
 
-  it('sends no insets for the floating desktop panel, which never touches the screen edge', () => {
+  // The floating panel never touches the screen edge: its CSS offsets
+  // already move it in by the side and bottom insets.
+  it('sends no insets for the floating panel', () => {
     phone(false)
     const measured = hostInsets('47px', '34px')
     const postMessage = frameWindow()
