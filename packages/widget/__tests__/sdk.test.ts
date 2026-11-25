@@ -614,8 +614,8 @@ describe('sdk on phones', () => {
   // The host page's safe-area insets (a home indicator, an edge-to-edge
   // navigation bar). The frame cannot read them, so the SDK measures them.
   // Returns how many times it measured.
+  const real = window.getComputedStyle.bind(window)
   function hostInsets(top: string, bottom: string, left = '0px', right = '0px') {
-    const real = window.getComputedStyle.bind(window)
     let measured = 0
     vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
       if ((el as HTMLElement).dataset?.quackbackSafeArea === undefined) return real(el)
@@ -941,6 +941,105 @@ describe('sdk panel as a dialog', () => {
     input.focus()
     sdk.dispatch('close')
     expect(document.activeElement).toBe(input)
+  })
+
+  function hostButton(): HTMLButtonElement {
+    const button = document.createElement('button')
+    button.textContent = 'Help'
+    document.body.appendChild(button)
+    return button
+  }
+
+  it("returns focus to the host page's own button when there is no launcher", () => {
+    stubIframe()
+    const button = hostButton()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
+    button.focus()
+    sdk.dispatch('open')
+    runFrames()
+    expect(document.activeElement).toBe(iframeEl())
+    sdk.dispatch('close')
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('returns focus to the opener after hideLauncher', () => {
+    stubIframe()
+    const button = hostButton()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    sdk.dispatch('hideLauncher')
+    button.focus()
+    sdk.dispatch('open')
+    runFrames()
+    sdk.dispatch('close')
+    expect(document.activeElement).toBe(button)
+  })
+
+  it.each([
+    ['removed', (b: HTMLElement) => b.remove()],
+    ['hidden', (b: HTMLElement) => (b.style.display = 'none')],
+  ])('falls back to the launcher when the opener was %s', (_, change) => {
+    stubIframe()
+    const button = hostButton()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    button.focus()
+    sdk.dispatch('open')
+    runFrames()
+    change(button)
+    sdk.dispatch('close')
+    expect(document.activeElement).toBe(launcherEl())
+  })
+
+  it.each([
+    ['input', () => document.createElement('input')],
+    ['textarea', () => document.createElement('textarea')],
+    ['select', () => document.createElement('select')],
+    [
+      'contenteditable',
+      () => {
+        const div = document.createElement('div')
+        div.contentEditable = 'true'
+        div.tabIndex = 0
+        return div
+      },
+    ],
+  ])('a host-triggered open leaves focus in a %s the visitor is typing in', (_, make) => {
+    stubIframe()
+    const field = make()
+    document.body.appendChild(field)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    field.focus()
+    expect(document.activeElement).toBe(field)
+    sdk.dispatch('open')
+    runFrames()
+    expect(document.activeElement).toBe(field)
+  })
+
+  it('a host-triggered open with nothing focused moves focus into the panel', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    sdk.dispatch('open')
+    runFrames()
+    expect(document.activeElement).toBe(iframeEl())
+  })
+
+  it('a launcher click moves focus into the panel even if a field kept focus', () => {
+    stubIframe()
+    const field = document.createElement('input')
+    document.body.appendChild(field)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    field.focus()
+    // Some browsers do not focus a button on click.
+    launcherEl()!.click()
+    runFrames()
+    expect(document.activeElement).toBe(iframeEl())
+    launcherEl()!.click()
+    expect(document.activeElement).toBe(field)
   })
 
   it('does not pull focus into a panel that closed before the next frame', () => {

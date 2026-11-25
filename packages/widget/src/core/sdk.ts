@@ -16,6 +16,7 @@ import { createTracker, type Tracker } from './tracker'
 import { clearDeviceId, getOrCreateDeviceId } from './device'
 import { FULL_SCREEN_MEDIA, removeStyles } from './style'
 import { fitToVisualViewport, keyboardShown } from './viewport'
+import { canRestoreFocus, openerWantsFocusMoved } from './focus'
 
 type Command =
   | 'isOpen'
@@ -71,6 +72,10 @@ export function createSDK(): SDK {
   let mobileCleanup: (() => void) | null = null
   // Set while the panel is open: undoes its fit to the visual viewport.
   let detachViewport: (() => void) | null = null
+  // What had focus when the panel opened, for close to give it back.
+  let returnFocus: HTMLElement | null = null
+  // Set while the launcher's own click opens the panel.
+  let openingFromLauncher = false
   // The server config of the live init, kept for a launcher created later by
   // showLauncher, and whether the launcher has been revealed yet.
   let serverConfig: ServerConfig | null = null
@@ -371,8 +376,16 @@ export function createSDK(): SDK {
     launcher = createLauncher({
       placement,
       onClick: () => {
-        if (panelOpen) dispatch('close')
-        else dispatch('open')
+        if (panelOpen) {
+          dispatch('close')
+          return
+        }
+        openingFromLauncher = true
+        try {
+          dispatch('open')
+        } finally {
+          openingFromLauncher = false
+        }
       },
     })
     // A launcher created after init (showLauncher) catches up with the
@@ -449,6 +462,16 @@ export function createSDK(): SDK {
         const opts = (a as OpenOptions) ?? {}
         // The idle preload may not have fired yet — create the panel now.
         const opened = ensurePanel()
+        const active = document.activeElement
+        const moveFocus = openingFromLauncher || openerWantsFocusMoved(active)
+        // Where focus goes back to on close: the host's own button, a field,
+        // or the launcher. An open while already open keeps the first one.
+        if (!panelOpen) {
+          returnFocus =
+            active instanceof HTMLElement && active !== opened.iframe && active !== document.body
+              ? active
+              : null
+        }
         panelOpen = true
         // The insets reach the frame before the view it opens and before the
         // panel shows.
@@ -461,11 +484,14 @@ export function createSDK(): SDK {
         opened.show()
         launcher?.setOpen(true)
         detachViewport ??= fitToVisualViewport(opened.el, mobileMql!)
-        // Keyboard and screen-reader users land in the panel, not on the page,
-        // unless it closed again before the frame.
-        requestAnimationFrame(() => {
-          if (panelOpen && panel === opened) opened.iframe.focus()
-        })
+        // Keyboard and screen-reader users who asked for the panel land in
+        // it, unless it closed again before the frame. An open the host page
+        // triggers while the visitor types elsewhere leaves their focus alone.
+        if (moveFocus) {
+          requestAnimationFrame(() => {
+            if (panelOpen && panel === opened) opened.iframe.focus()
+          })
+        }
         const ctx = opts as {
           view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
           postId?: string
@@ -481,8 +507,15 @@ export function createSDK(): SDK {
         return
       }
       case 'close': {
-        // Focus inside the panel goes back to the launcher that opened it.
+        // Focus inside the panel goes back to what had it before the panel
+        // opened, or to the launcher when that is gone or hidden.
         const focusWasInside = !!panel && document.activeElement === panel.iframe
+        const focusTarget = canRestoreFocus(returnFocus)
+          ? returnFocus
+          : launcher && canRestoreFocus(launcher.el)
+            ? launcher.el
+            : null
+        returnFocus = null
         panel?.hide()
         launcher?.setOpen(false)
         panelOpen = false
@@ -490,7 +523,7 @@ export function createSDK(): SDK {
         cancelSafeArea()
         detachViewport?.()
         detachViewport = null
-        if (focusWasInside) launcher?.el.focus()
+        if (focusWasInside) focusTarget?.focus()
         emitter.emit('close', {})
         return
       }
@@ -540,6 +573,7 @@ export function createSDK(): SDK {
         cancelPanelPreload()
         detachViewport?.()
         detachViewport = null
+        returnFocus = null
         panel?.destroy()
         launcher?.remove()
         bridge?.dispose()
