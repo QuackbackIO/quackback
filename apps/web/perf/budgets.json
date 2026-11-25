@@ -522,7 +522,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/messenger": {
       "dbQueries": 6,
-      "htmlKB": 79.3
+      "htmlKB": 80.5
     },
     "sweep:ui:admin:/admin/settings/channels/messenger": {
       "dbQueries": 6,
