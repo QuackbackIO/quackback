@@ -12,7 +12,6 @@
  * still waits for a pause and drops a request a later keystroke replaces.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
@@ -52,29 +51,6 @@ vi.mock('../use-widget-image-upload', () => ({
   WidgetSessionError: class WidgetSessionError extends Error {},
 }))
 vi.mock('../widget-vote-button', () => ({ WidgetVoteButton: () => null }))
-vi.mock('framer-motion', async () => {
-  const { createElement, forwardRef } = await import('react')
-  const MOTION_PROPS = new Set(['initial', 'animate', 'exit', 'transition', 'variants', 'layout'])
-  const make = (tag: string) =>
-    forwardRef<HTMLElement, Record<string, unknown>>((props, ref) => {
-      const { children, ...rest } = props
-      const dom: Record<string, unknown> = { ref }
-      for (const [key, value] of Object.entries(rest)) {
-        if (!MOTION_PROPS.has(key)) dom[key] = value
-      }
-      return createElement(tag, dom, children as ReactNode)
-    })
-  const proxy = new Proxy(
-    {},
-    { get: (_target, prop) => (typeof prop === 'string' ? make(prop) : undefined) }
-  )
-  return {
-    AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    motion: proxy,
-    m: proxy,
-    useReducedMotion: () => true,
-  }
-})
 vi.mock('@/components/ui/rich-text-editor', () => ({
   RichTextEditor: (props: {
     value?: unknown
@@ -336,7 +312,8 @@ describe('widget home post composer', () => {
     await screen.findByTestId('editor')
 
     typeTitle('')
-    expect(screen.queryByTestId('editor')).toBeNull()
+    // Gone once the details block has collapsed out.
+    await waitFor(() => expect(screen.queryByTestId('editor')).toBeNull())
   })
 
   it('stays open when the title is cleared after details were written', async () => {
