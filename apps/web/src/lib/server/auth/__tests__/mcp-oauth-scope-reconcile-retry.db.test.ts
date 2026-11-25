@@ -122,6 +122,16 @@ async function signedInHeaders(): Promise<Headers> {
   return new Headers({ authorization: `Bearer ${token}` })
 }
 
+/**
+ * Let a background reconcile that a request just started reach the reconcile
+ * call. The retry imports the db module first, and that import settles a number
+ * of microtasks after the request has been answered, so a count read straight
+ * away can miss an attempt that did start.
+ */
+async function backgroundStarted(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 /** Ask the authorize endpoint, as a signed-in person, for `scope` on behalf of `clientId`. */
 async function authorize(
   auth: { handler: (request: Request) => Promise<Response> },
@@ -189,6 +199,7 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
 
     // Within the minute, a request does not try again.
     expect(await getAuth()).toBe(auth)
+    await backgroundStarted()
     expect(control.calls).toBe(1)
 
     // A minute on, the next requests start one background reconcile between
@@ -202,12 +213,14 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
     vi.spyOn(Date, 'now').mockReturnValue(later)
     const served = await Promise.all([getAuth(), getAuth(), getAuth()])
     expect(served.every((instance) => instance === auth)).toBe(true)
+    await backgroundStarted()
     expect(control.calls).toBe(2)
     expect(await scopesOf(clientId)).not.toContain('read:settings')
 
     // An attempt still running a minute later is not joined by a second one.
     vi.spyOn(Date, 'now').mockReturnValue(later + 61_000)
     expect(await getAuth()).toBe(auth)
+    await backgroundStarted()
     expect(control.calls).toBe(2)
 
     release()
@@ -219,6 +232,7 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
     // Done: no further attempt, however late the next request.
     vi.spyOn(Date, 'now').mockReturnValue(later + 10 * 61_000)
     expect(await getAuth()).toBe(auth)
+    await backgroundStarted()
     expect(control.calls).toBe(2)
   })
 
@@ -286,6 +300,7 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
 
     vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000)
     expect(await getAuth()).toBe(auth)
+    await backgroundStarted()
     expect(control.calls).toBe(1)
     expect(control.warns).toBe(0)
   })
