@@ -3,10 +3,17 @@
  * Covers the languages the widget itself ships; anything else reads English.
  */
 
-/** The entry for a locale tag: the exact tag, then its language. */
+/** Traditional Chinese script, or a region that writes it. */
+const TRADITIONAL_CHINESE = /^zh-(hant|hk|mo|tw)(-|$)/
+
+/** The entry for a locale tag: the exact tag, then its language. Only the
+ *  table's own entries count, so a tag like "constructor" reads English. */
 export function forLocale<T>(table: Record<string, T>, locale: string | undefined): T | undefined {
-  const tag = (locale ?? '').toLowerCase()
-  return table[tag] ?? table[tag.split('-')[0]!]
+  let tag = (locale ?? '').toLowerCase().replace(/_/g, '-')
+  if (TRADITIONAL_CHINESE.test(tag)) tag = 'zh-tw'
+  const own = (key: string) =>
+    Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined
+  return own(tag) ?? own(tag.split('-')[0]!)
 }
 
 /** The panel's (and its frame's) accessible name. */
