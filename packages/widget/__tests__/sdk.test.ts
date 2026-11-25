@@ -800,6 +800,55 @@ describe('sdk on phones', () => {
     sdk.dispatch('destroy')
   })
 
+  it('drops the bottom inset while the on-screen keyboard covers the home indicator', () => {
+    phone(true)
+    const measured = hostInsets('47px', '34px')
+    const flush = manualFrames()
+    const viewport = Object.assign(new EventTarget(), {
+      height: window.innerHeight,
+      offsetTop: 0,
+    })
+    vi.stubGlobal('visualViewport', viewport)
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+
+    // Closed, the keyboard (for the host page's own fields) costs nothing.
+    viewport.height = window.innerHeight - 300
+    viewport.dispatchEvent(new Event('resize'))
+    flush()
+    expect(measured()).toBe(0)
+    viewport.height = window.innerHeight
+    viewport.dispatchEvent(new Event('resize'))
+    flush()
+
+    sdk.dispatch('open')
+    flush()
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34, left: 0, right: 0 }])
+
+    // The keyboard opens in steps; one update per frame.
+    viewport.height = window.innerHeight - 150
+    viewport.dispatchEvent(new Event('resize'))
+    viewport.height = window.innerHeight - 300
+    viewport.dispatchEvent(new Event('resize'))
+    flush()
+    // A toolbar sliding away is not a keyboard.
+    viewport.height = window.innerHeight - 60
+    viewport.dispatchEvent(new Event('resize'))
+    flush()
+    // The keyboard closes.
+    viewport.height = window.innerHeight
+    viewport.dispatchEvent(new Event('resize'))
+    flush()
+    expect(sentSafeAreas(postMessage)).toEqual([
+      { top: 47, bottom: 34, left: 0, right: 0 },
+      { top: 47, bottom: 0, left: 0, right: 0 },
+      { top: 47, bottom: 34, left: 0, right: 0 },
+    ])
+    sdk.dispatch('destroy')
+  })
+
   // The floating panel never touches the screen edge: its CSS offsets
   // already move it in by the side and bottom insets.
   it('sends no insets for the floating panel', () => {

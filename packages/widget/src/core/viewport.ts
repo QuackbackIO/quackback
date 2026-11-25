@@ -42,3 +42,17 @@ export function fitToVisualViewport(el: HTMLElement, phone: MediaQueryList): () 
     clear()
   }
 }
+
+/** Less than this is a browser toolbar sliding away, not a keyboard. */
+const KEYBOARD_MIN_PX = 120
+
+/**
+ * Whether an on-screen keyboard is up: the visual viewport is well short of
+ * the layout viewport. A pinch zoom also shrinks the visual viewport, so a
+ * zoomed page does not count.
+ */
+export function keyboardShown(): boolean {
+  const viewport = window.visualViewport
+  if (!viewport || (viewport.scale ?? 1) > 1) return false
+  return window.innerHeight - viewport.height >= KEYBOARD_MIN_PX
+}

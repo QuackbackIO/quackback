@@ -15,7 +15,7 @@ import { fetchServerConfig, type ServerConfig } from './config'
 import { createTracker, type Tracker } from './tracker'
 import { clearDeviceId, getOrCreateDeviceId } from './device'
 import { FULL_SCREEN_MEDIA, removeStyles } from './style'
-import { fitToVisualViewport } from './viewport'
+import { fitToVisualViewport, keyboardShown } from './viewport'
 
 type Command =
   | 'isOpen'
@@ -95,10 +95,13 @@ export function createSDK(): SDK {
   // they change (a rotation). Measuring forces a layout, so a closed panel
   // skips it. The floating panel never touches the screen edge (its CSS
   // offsets already move it in by the insets), so the frame gets zeros.
+  // While the on-screen keyboard is up it covers the home indicator, so a
+  // bottom inset would only leave a gap above the keyboard.
   let lastSafeArea = ''
   function sendSafeArea(): void {
     if (!ready || !bridge || !panelOpen) return
-    const insets = mobileMql?.matches ? measureSafeArea() : NO_SAFE_AREA
+    let insets = mobileMql?.matches ? measureSafeArea() : NO_SAFE_AREA
+    if (insets.bottom && keyboardShown()) insets = { ...insets, bottom: 0 }
     const key = `${insets.top}:${insets.bottom}:${insets.left}:${insets.right}`
     if (key === lastSafeArea) return
     lastSafeArea = key
@@ -112,7 +115,8 @@ export function createSDK(): SDK {
     if (ready && bridge) bridge.send('quackback:shown', panelOpen)
   }
 
-  // A resize arrives in bursts (a rotation, a toolbar sliding away): measure
+  // A resize arrives in bursts (a rotation, a toolbar sliding away, the
+  // keyboard opening): measure
   // at most once per frame, and only while the panel is open.
   let safeAreaFrame = 0
   function scheduleSafeArea(): void {
@@ -266,9 +270,13 @@ export function createSDK(): SDK {
     mobileMql = window.matchMedia(FULL_SCREEN_MEDIA)
     mobileMql.addEventListener('change', sendMobileState)
     window.addEventListener('resize', scheduleSafeArea)
+    // The keyboard resizes only the visual viewport.
+    const viewport = window.visualViewport
+    viewport?.addEventListener('resize', scheduleSafeArea)
     mobileCleanup = () => {
       mobileMql!.removeEventListener('change', sendMobileState)
       window.removeEventListener('resize', scheduleSafeArea)
+      viewport?.removeEventListener('resize', scheduleSafeArea)
       cancelSafeArea()
     }
     return panel

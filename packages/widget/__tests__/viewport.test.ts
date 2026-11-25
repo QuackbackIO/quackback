@@ -5,7 +5,7 @@
  * keyboard. The panel follows window.visualViewport while it is open.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fitToVisualViewport } from '../src/core/viewport'
+import { fitToVisualViewport, keyboardShown } from '../src/core/viewport'
 
 function fakeViewport(height: number, offsetTop = 0) {
   return Object.assign(new EventTarget(), { height, offsetTop })
@@ -103,5 +103,26 @@ describe('fitToVisualViewport', () => {
     expect(el.style.height).toBe('')
     detach()
     expect(el.style.height).toBe('')
+  })
+})
+
+describe('keyboardShown', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('is a visual viewport well short of the window', () => {
+    vi.stubGlobal('visualViewport', fakeViewport(window.innerHeight - 300))
+    expect(keyboardShown()).toBe(true)
+    vi.stubGlobal('visualViewport', fakeViewport(window.innerHeight - 60))
+    expect(keyboardShown()).toBe(false)
+    vi.stubGlobal('visualViewport', undefined)
+    expect(keyboardShown()).toBe(false)
+  })
+
+  it('is not a pinch zoom', () => {
+    vi.stubGlobal(
+      'visualViewport',
+      Object.assign(fakeViewport(window.innerHeight / 2), { scale: 2 })
+    )
+    expect(keyboardShown()).toBe(false)
   })
 })
