@@ -50,7 +50,10 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 }))
 
 import { VisitorSurfaceRpcProvider, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
-import { VisitorConversationThread } from '../visitor-conversation-thread'
+import {
+  VisitorConversationThread,
+  type VisitorConversationThreadPresence,
+} from '../visitor-conversation-thread'
 import type { ReplyTime } from '@/lib/shared/widget/reply-time'
 
 afterEach(cleanup)
@@ -78,7 +81,7 @@ async function renderThread(
     replyTime?: string
     knownReplyTime?: ReplyTime
     pending?: boolean
-    presence?: typeof AWAY
+    presence?: VisitorConversationThreadPresence
     showHeader?: boolean
     onReplyByEmail?: () => void
   } = {}

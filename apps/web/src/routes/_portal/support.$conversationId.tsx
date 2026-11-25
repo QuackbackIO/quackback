@@ -26,7 +26,29 @@ import {
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
+type PortalSettings = ReturnType<typeof useWorkspaceSettings>
+
+/** Teammate faces show in the thread header unless the workspace turns team
+ *  avatars off or the assistant fronts the thread instead. */
+function showsTeamFaces(settings: PortalSettings): boolean {
+  const widget = settings?.publicWidgetConfig
+  return (widget?.home?.showTeamAvatars ?? true) && !widget?.messenger?.assistant?.enabled
+}
+
+const teamAvatarsQuery = () => ({
+  queryKey: PORTAL_TEAM_AVATARS_QUERY_KEY,
+  queryFn: () => getWidgetTeamAvatarsFn(),
+  staleTime: 5 * 60_000,
+})
+
 export const Route = createFileRoute('/_portal/support/$conversationId')({
+  // Seed the faces before render so the header does not shift when they
+  // arrive. Best effort: a failed read leaves the client query to retry.
+  loader: async ({ context }) => {
+    const user = context.session?.user
+    if (!user || user.principalType === 'anonymous' || !showsTeamFaces(context.settings)) return
+    await context.queryClient.ensureQueryData(teamAvatarsQuery()).catch(() => {})
+  },
   component: SupportThreadPage,
 })
 
@@ -73,17 +95,12 @@ function SupportThreadPage() {
   })
 
   // Teammate faces for the thread header: the same few the widget shows.
-  // None when the workspace turns teammate avatars off (cached faces never
-  // linger), and no fetch when the assistant fronts the thread instead.
+  // None when they are switched off (cached faces never linger).
   const messengerConfig = settings?.publicWidgetConfig?.messenger
-  const showTeam =
-    (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true) &&
-    !messengerConfig?.assistant?.enabled
+  const showTeam = showsTeamFaces(settings)
   const teamQuery = useQuery({
-    queryKey: PORTAL_TEAM_AVATARS_QUERY_KEY,
-    queryFn: () => getWidgetTeamAvatarsFn(),
+    ...teamAvatarsQuery(),
     enabled: supportEnabled && isLoggedIn && showTeam,
-    staleTime: 5 * 60_000,
   })
 
   // The first send creates the thread: move /support/new → /support/<id> so a

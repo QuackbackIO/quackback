@@ -641,7 +641,6 @@
   "widget.messenger.assistant.teamAlso": "Команда тоже может помочь",
   "widget.messenger.offline.backAt": "Вернёмся {when}",
   "widget.messenger.offline.noEmail": "Нас сейчас нет на месте. Оставьте сообщение, и мы ответим здесь, когда вернёмся.",
-  "widget.messenger.online": "Мы в сети",
   "widget.messenger.placeholder": "Сообщение...",
   "widget.messenger.defaultGreeting": "Здравствуйте! 👋 Чем мы можем помочь сегодня?",
   "widget.messenger.replyTime.away": "Нас сейчас нет на месте. Мы ответим вам, как только снова будем на связи.",

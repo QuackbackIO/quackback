@@ -641,7 +641,6 @@
   "widget.messenger.assistant.teamAlso": "团队也可以提供帮助",
   "widget.messenger.offline.backAt": "我们将于 {when} 回来",
   "widget.messenger.offline.noEmail": "我们暂时不在。请留言，我们回来后会在这里回复你。",
-  "widget.messenger.online": "我们在线",
   "widget.messenger.placeholder": "输入消息…",
   "widget.messenger.defaultGreeting": "你好！👋 今天我们能帮你什么？",
   "widget.messenger.replyTime.away": "我们目前不在线。我们回来后会尽快与你联系。",

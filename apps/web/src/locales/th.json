@@ -911,7 +911,6 @@
   "widget.messenger.assistant.searched": "ค้นหาฐานความรู้แล้ว · {count, plural, one {# แหล่งข้อมูล} other {# แหล่งข้อมูล}}",
   "widget.messenger.offline.backAt": "กลับมา {when}",
   "widget.messenger.offline.noEmail": "ขณะนี้เราไม่อยู่ ฝากข้อความไว้แล้วเราจะตอบที่นี่เมื่อกลับมา",
-  "widget.messenger.online": "เราออนไลน์อยู่",
   "widget.messenger.placeholder": "ข้อความ...",
   "widget.messenger.replyTime.away": "ขณะนี้เราไม่อยู่ เราจะตอบกลับโดยเร็วเมื่อกลับมาออนไลน์",
   "widget.messenger.replyTime.online": "เราออนไลน์อยู่ โดยปกติจะตอบภายในหนึ่งชั่วโมง",

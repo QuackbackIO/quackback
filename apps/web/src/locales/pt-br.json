@@ -641,7 +641,6 @@
   "widget.messenger.assistant.teamAlso": "A equipe também pode ajudar",
   "widget.messenger.offline.backAt": "De volta {when}",
   "widget.messenger.offline.noEmail": "Estamos ausentes no momento. Deixe uma mensagem e responderemos aqui quando voltarmos.",
-  "widget.messenger.online": "Estamos online",
   "widget.messenger.placeholder": "Mensagem...",
   "widget.messenger.defaultGreeting": "Olá! 👋 Como podemos ajudar você hoje?",
   "widget.messenger.replyTime.away": "Estamos ausentes no momento. Retornaremos assim que estivermos online novamente.",
