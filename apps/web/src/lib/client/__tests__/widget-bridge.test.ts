@@ -195,6 +195,123 @@ describe('widget-bridge', () => {
     })
   })
 
+  describe('the same-origin parent', () => {
+    it('receives user data when the referrer is the frame and the parent is readably on that origin', async () => {
+      const own = window.location.origin
+      setEmbedder({ referrer: `${own}/admin/settings/widget` })
+      vi.stubGlobal('parent', { postMessage: vi.fn(), location: { origin: own } })
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).toHaveBeenCalledWith(identifyResult, own)
+    })
+
+    it('holds user data back when the parent cannot be read', async () => {
+      setEmbedder({ referrer: `${window.location.origin}/widget` })
+      vi.stubGlobal('parent', {
+        postMessage: vi.fn(),
+        get location(): never {
+          throw new DOMException('Blocked a frame', 'SecurityError')
+        },
+      })
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost(identifyResult)
+      expect(window.parent.postMessage).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('the portal handoff link', () => {
+    const handoff = {
+      type: 'quackback:navigate',
+      url: 'https://portal.example/auth/widget-handoff?ott=abc',
+    }
+
+    it('is never held for later', async () => {
+      setEmbedder({})
+      const { sendToHost } = await import('../widget-bridge')
+      sendToHost(handoff)
+      postFromParent('https://host.example')
+      expect(window.parent.postMessage).not.toHaveBeenCalled()
+    })
+
+    it('reports whether user data can reach the host now', async () => {
+      setEmbedder({})
+      const { canDeliverUserData } = await import('../widget-bridge')
+      expect(canDeliverUserData()).toBe(false)
+      postFromParent('https://host.example')
+      expect(canDeliverUserData()).toBe(true)
+    })
+
+    it('reports that an opaque host can never receive it', async () => {
+      setEmbedder({ ancestorOrigins: ['https://host.example'] })
+      const { canDeliverUserData } = await import('../widget-bridge')
+      postFromParent('null')
+      expect(canDeliverUserData()).toBe(false)
+    })
+
+    it('reports the native bridge as always reachable', async () => {
+      setEmbedder({})
+      window.__quackbackNative = { dispatch: vi.fn() }
+      const { canDeliverUserData } = await import('../widget-bridge')
+      expect(canDeliverUserData()).toBe(true)
+    })
+  })
+
+  describe('a full queue of held-back user data', () => {
+    const event = (n: number) => ({
+      type: 'quackback:event',
+      name: 'vote',
+      payload: { postId: `p${n}` },
+    })
+    const identify = (id: string) => ({
+      type: 'quackback:identify-result',
+      success: true,
+      user: { id },
+    })
+
+    async function fill() {
+      setEmbedder({})
+      const bridge = await import('../widget-bridge')
+      bridge.sendToHost(identify('u_old'))
+      for (let n = 1; n < bridge.MAX_PENDING_USER_MESSAGES; n++) bridge.sendToHost(event(n))
+      return bridge
+    }
+
+    function flushed() {
+      postFromParent('https://host.example')
+      return vi.mocked(window.parent.postMessage).mock.calls.map(([message]) => message)
+    }
+
+    it('replaces the older identify result with the latest one', async () => {
+      const { sendToHost, MAX_PENDING_USER_MESSAGES } = await fill()
+      sendToHost(identify('u_new'))
+      const sent = flushed()
+      expect(sent).toHaveLength(MAX_PENDING_USER_MESSAGES)
+      expect(sent).not.toContainEqual(identify('u_old'))
+      expect(sent.at(-1)).toEqual(identify('u_new'))
+    })
+
+    it('drops the oldest event to keep a new auth change', async () => {
+      const { sendToHost, MAX_PENDING_USER_MESSAGES } = await fill()
+      const authChange = { type: 'quackback:auth-change', user: { id: 'u_new' } }
+      sendToHost(authChange)
+      const sent = flushed()
+      expect(sent).toHaveLength(MAX_PENDING_USER_MESSAGES)
+      expect(sent[0]).toEqual(identify('u_old'))
+      expect(sent).not.toContainEqual(event(1))
+      expect(sent.at(-1)).toEqual(authChange)
+    })
+
+    it('drops the oldest event to keep a new one', async () => {
+      const { sendToHost, MAX_PENDING_USER_MESSAGES } = await fill()
+      sendToHost(event(99))
+      const sent = flushed()
+      expect(sent).toHaveLength(MAX_PENDING_USER_MESSAGES)
+      expect(sent).not.toContainEqual(event(1))
+      expect(sent).toContainEqual(event(2))
+      expect(sent.at(-1)).toEqual(event(99))
+    })
+  })
+
   it('still dispatches user data through the native bridge', async () => {
     setEmbedder({})
     const dispatch = vi.fn()
@@ -314,10 +431,28 @@ describe('resolveHostOrigin', () => {
     [{ referrer: 'not a url' }],
     [{ referrer: 'file:///tmp/page.html' }],
     [{ referrer: 'https://widget.example/widget', ownOrigin: 'https://widget.example' }],
+    [
+      {
+        referrer: 'https://widget.example/widget',
+        ownOrigin: 'https://widget.example',
+        parentOrigin: 'https://other.example',
+      },
+    ],
     [{}],
   ])('returns null for %j', async (source) => {
     const { resolveHostOrigin } = await import('../widget-bridge')
     expect(resolveHostOrigin(source)).toBeNull()
+  })
+
+  it('trusts a referrer on its own origin when the readable parent is on it too', async () => {
+    const { resolveHostOrigin } = await import('../widget-bridge')
+    expect(
+      resolveHostOrigin({
+        referrer: 'https://widget.example/admin/settings',
+        ownOrigin: 'https://widget.example',
+        parentOrigin: 'https://widget.example',
+      })
+    ).toBe('https://widget.example')
   })
 })
 

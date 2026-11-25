@@ -19,7 +19,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
 import { widgetGetUserStatsFn } from '@/lib/server/functions/widget/user'
-import { sendToHost } from '@/lib/client/widget-bridge'
+import { canDeliverUserData, sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
 import { useMessengerUnreadState, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
@@ -271,8 +271,10 @@ export function WidgetShell({
     setPortalCtaError(false)
     const origin = portalOrigin || window.location.origin
     // Teammates skip OTT mint entirely — a portal cookie would replace a
-    // dashboard login. Send them to the site unsigned.
-    if (!canPortalHandoff) {
+    // dashboard login. Send them to the site unsigned. So does a host the
+    // one-time sign-in link cannot reach right now (its origin not yet known,
+    // or opaque): the link is never sent to any origin.
+    if (!canPortalHandoff || !canDeliverUserData()) {
       sendToHost({ type: 'quackback:navigate', url: `${origin}/?auth=signin` })
       return
     }

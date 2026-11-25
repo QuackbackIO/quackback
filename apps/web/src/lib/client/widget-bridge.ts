@@ -23,19 +23,33 @@ function httpOrigin(value: string | null | undefined): string | null {
  * The origin of the page embedding the widget frame as the frame itself can
  * see it: the first ancestor origin where the browser exposes it, else the
  * origin of the document referrer. A referrer on the frame's own origin is
- * ignored, since a navigation started inside the frame leaves the frame's own
- * URL there. Null when neither gives an http(s) origin.
+ * trusted only when the parent is readable and on that origin too
+ * (`parentOrigin`), since a navigation started inside the frame also leaves
+ * the frame's own URL there. Null when nothing gives an http(s) origin.
  */
 export function resolveHostOrigin(source: {
   ancestorOrigins?: ArrayLike<string> | null
   referrer?: string | null
   ownOrigin?: string | null
+  parentOrigin?: string | null
 }): string | null {
   const ancestor = source.ancestorOrigins?.length ? source.ancestorOrigins[0] : null
   if (ancestor) return httpOrigin(ancestor)
   const referrerOrigin = httpOrigin(source.referrer)
-  if (referrerOrigin && referrerOrigin === source.ownOrigin) return null
+  if (referrerOrigin && referrerOrigin === source.ownOrigin) {
+    return source.parentOrigin === referrerOrigin ? referrerOrigin : null
+  }
   return referrerOrigin
+}
+
+/** The parent window's origin when it is readable (same origin), else null. */
+function readableParentOrigin(): string | null {
+  try {
+    if (window.parent === window) return null
+    return window.parent.location.origin
+  } catch {
+    return null
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -75,7 +89,30 @@ let remembered: RememberedOrigin = { kind: 'unknown' }
 let cachedFallbackOrigin: string | null | undefined
 /** Messages with user data held back until the host origin is known. */
 let pending: Record<string, unknown>[] = []
-const MAX_PENDING = 50
+export const MAX_PENDING_USER_MESSAGES = 50
+
+/** Identity messages whose latest copy supersedes an older one. */
+function isIdentityMessage(message: Record<string, unknown>): boolean {
+  return message.type === 'quackback:identify-result' || message.type === 'quackback:auth-change'
+}
+
+/**
+ * Hold `message` until the host origin is known. When the queue is full, an
+ * identity message replaces the oldest of its type, and otherwise the oldest
+ * event makes room; when nothing can make room, the new message is not held.
+ */
+function holdBack(message: Record<string, unknown>): void {
+  if (pending.length >= MAX_PENDING_USER_MESSAGES) {
+    const sameType = isIdentityMessage(message)
+      ? pending.findIndex((held) => held.type === message.type)
+      : -1
+    const victim =
+      sameType >= 0 ? sameType : pending.findIndex((held) => held.type === 'quackback:event')
+    if (victim < 0) return
+    pending.splice(victim, 1)
+  }
+  pending.push(message)
+}
 
 function fallbackOrigin(): string | null {
   if (cachedFallbackOrigin === undefined) {
@@ -83,6 +120,7 @@ function fallbackOrigin(): string | null {
       ancestorOrigins: window.location.ancestorOrigins,
       referrer: document.referrer,
       ownOrigin: window.location.origin,
+      parentOrigin: readableParentOrigin(),
     })
   }
   return cachedFallbackOrigin
@@ -111,7 +149,20 @@ function deliverUserData(message: Record<string, unknown>): void {
     }
     return
   }
-  if (pending.length < MAX_PENDING) pending.push(message)
+  // A sign-in link is only useful at the moment it is asked for, so it is
+  // never held for later.
+  if (carriesSignInToken(message)) return
+  holdBack(message)
+}
+
+/**
+ * Whether a message with user data sent now reaches the host straight away.
+ * The portal handoff asks before minting its one-time sign-in token, and
+ * falls back to a plain sign-in link when it would not.
+ */
+export function canDeliverUserData(): boolean {
+  if (window.__quackbackNative?.dispatch) return true
+  return targetOrigin().kind === 'known'
 }
 
 /**
