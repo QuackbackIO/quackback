@@ -735,7 +735,7 @@ const widgetHomeConfigSchema = z.object({
     .optional(),
 })
 
-export const updateWidgetConfigSchema = z.object({
+const updateWidgetConfigSchema = z.object({
   enabled: z.boolean().optional(),
   defaultBoard: z.string().optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
