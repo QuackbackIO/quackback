@@ -1,5 +1,16 @@
 # @quackback/widget
 
+## Unreleased
+
+- Screen readers hear the launcher as "Open help" (or your launcher label) with the unread count, for example "Open help, 2 unread", and "Close help" while the panel is open. The panel is announced as a dialog named in the visitor's language.
+- Opening the panel moves keyboard focus into it, and closing it returns focus to the launcher.
+- The desktop panel is taller (up to 704px) and narrower windows shrink it to fit, with rounder corners and a softer shadow. The launcher keeps the same shadow after a hover.
+- Phones held sideways get the full-screen panel too, and on phones the panel stays above the on-screen keyboard while typing.
+- With reduced motion turned on in the visitor's system settings, the panel and launcher no longer animate.
+- `hideLauncher()` hides the greeting bubble along with the button, and `showLauncher()` works after `init({ launcher: false })`.
+- `logout()` on an open panel closes it and fires the `close` event.
+- Script-tag installs can read state with `Quackback('isOpen')`, `Quackback('getUser')` and `Quackback('isIdentified')`.
+
 ## 0.1.6 - 2026-11-23
 
 - The package is now MIT licensed (was AGPL-3.0), so you can ship it in closed-source apps. The script-tag `sdk.js` is built from this package and is MIT too. The Quackback server stays AGPL-3.0.
