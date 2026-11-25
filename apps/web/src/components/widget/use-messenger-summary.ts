@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { useIntl } from 'react-intl'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -17,8 +18,7 @@ export interface ConversationSummary {
  *  The widget loader seeds the initial-session key server-side (cookie-authed
  *  visitors get their summary SSR'd; anonymous get a settled null) so Home
  *  paints complete without a post-render pop-in. */
-export const conversationSummaryKey = (sessionVersion: number | string) =>
-  ['widget', 'conversation-summary', sessionVersion] as const
+export const conversationSummaryKey = conversationKeys.widgetConversationSummary
 
 /**
  * Lightweight read of the visitor's conversation summary: the most-recent conversation

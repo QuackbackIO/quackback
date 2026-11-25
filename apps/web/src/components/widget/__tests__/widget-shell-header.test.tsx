@@ -23,7 +23,10 @@ vi.mock('../widget-auth-provider', () => ({
     sessionVersion: 1,
   }),
 }))
-vi.mock('../use-messenger-unread', () => ({ useMessengerUnread: () => 0 }))
+vi.mock('../use-messenger-unread', () => ({
+  useMessengerUnread: () => 0,
+  useRefreshSummaryOnUnreadChange: () => {},
+}))
 vi.mock('../use-changelog-unread', () => ({
   useChangelogUnread: () => ({ unread: 0, markSeen: vi.fn() }),
 }))

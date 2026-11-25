@@ -21,7 +21,7 @@ import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-
 import { widgetGetUserStatsFn } from '@/lib/server/functions/widget/user'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
-import { useMessengerUnread } from './use-messenger-unread'
+import { useMessengerUnread, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
 import { useTicketStageBadge } from './use-ticket-stage-badge'
 import { hasOpenSuggestionPopup } from '@/components/ui/suggestion-popup-marker'
@@ -142,6 +142,7 @@ export function WidgetShell({
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
   const messengerUnread = useMessengerUnread(enabledTabs.messages ?? false)
+  useRefreshSummaryOnUnreadChange(messengerUnread)
   // Newly published changelog entries badge the launcher until the visitor
   // opens the changelog surface (which advances their seen marker).
   const { unread: changelogUnread } = useChangelogUnread(enabledTabs.changelog ?? false)

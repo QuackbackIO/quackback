@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { renderHook } from '@testing-library/react'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
@@ -15,11 +16,13 @@ vi.mock('@/lib/client/widget-auth', () => ({
 // Keep both fetches pending: presence comes from the seeded shared query, and
 // the thread fetch stays pending so only the seed is under test.
 vi.mock('@/lib/server/functions/widget/conversation', () => ({
+  widgetGetMessengerUnreadFn: () => new Promise(() => {}),
   widgetGetMyConversationFn: () => new Promise(() => {}),
   widgetGetConversationPresenceFn: () => new Promise(() => {}),
 }))
 
 import { useConversationSummary } from '../use-messenger-summary'
+import { useRefreshSummaryOnUnreadChange } from '../use-messenger-unread'
 import { CONVERSATION_PRESENCE_QUERY_KEY } from '../use-messenger-presence'
 
 function seeded(seed?: unknown) {
@@ -55,5 +58,24 @@ describe('useConversationSummary', () => {
     const { result } = renderHook(() => useConversationSummary(true), { wrapper: seeded() })
     expect(result.current.agentsOnline).toBe(false)
     expect(result.current.withinOfficeHours).toBe(null)
+  })
+})
+
+describe('useRefreshSummaryOnUnreadChange', () => {
+  it('refreshes the Home card when the unread total moves, not on first sight', () => {
+    const qc = new QueryClient()
+    const key = conversationKeys.widgetConversationSummary(0)
+    qc.setQueryData(key, { conversation: null, teamName: null })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    )
+    const { rerender } = renderHook(({ total }) => useRefreshSummaryOnUnreadChange(total), {
+      wrapper,
+      initialProps: { total: 0 },
+    })
+    expect(qc.getQueryState(key)?.isInvalidated).toBe(false)
+
+    rerender({ total: 1 })
+    expect(qc.getQueryState(key)?.isInvalidated).toBe(true)
   })
 })
