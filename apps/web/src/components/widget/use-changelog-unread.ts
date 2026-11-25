@@ -40,6 +40,14 @@ export function useChangelogUnread(enabled: boolean): {
   const entries = data?.pages.flatMap((page) => page.items) ?? []
   const unread = countUnreadChangelogs(entries, seenAt)
 
+  // Silent first-contact baseline: what was published before the visitor
+  // first met the widget never badges, and later entries do, whether or not
+  // they ever open the Changelog tab (see changelog-unread.ts).
+  const newest = entries[0]?.publishedAt
+  useEffect(() => {
+    if (newest && getChangelogSeenAt(scope) === null) markChangelogSeen(scope, newest)
+  }, [newest, scope])
+
   const markSeen = useCallback(
     (publishedAt: string) => markChangelogSeen(scope, publishedAt),
     [scope]

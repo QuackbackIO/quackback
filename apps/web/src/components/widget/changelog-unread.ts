@@ -8,8 +8,8 @@
  * visitor opens the changelog surface, which advances the marker.
  *
  * A visitor with no marker yet gets a silent baseline (everything historical
- * is read): the first list load stamps the marker, so only entries published
- * AFTER the visitor's first contact badge as new.
+ * is read): the badge's first load stamps the marker, so only entries
+ * published AFTER the visitor's first contact badge as new.
  *
  * Each identity in the browser has its own marker (see seen-scope.ts).
  */
