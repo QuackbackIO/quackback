@@ -35,17 +35,15 @@ interface WidgetChangelogProps {
 const lastVisit: {
   scrollTop: number
   categoryId: ChangelogCategoryId | null
-  /** Seen marker as it stood when the list first had data this session;
-   *  `undefined` until captured. Lives here, not in the component, because
-   *  opening an entry unmounts the list and the marker has advanced by then. */
-  seenBaseline: string | null | undefined
-  /** Whose marker the baseline was read from; another identity reads its own. */
-  seenBaselineScope: string | null
+  /** Each person's seen marker as it stood when the list first had data for
+   *  them this session. Lives here, not in the component, because opening an
+   *  entry unmounts the list and the marker has advanced by then; kept per
+   *  person so switching to someone else and back keeps the first one's view. */
+  seenBaselines: Map<string, string | null>
 } = {
   scrollTop: 0,
   categoryId: null,
-  seenBaseline: undefined,
-  seenBaselineScope: null,
+  seenBaselines: new Map(),
 }
 
 /** Filtered pages to pull ahead before conceding "nothing in this category". */
@@ -69,21 +67,14 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   const allEntries = data?.pages.flatMap((page) => page.items) ?? []
 
   // The launcher badge counted unread entries; the list should show which.
-  // Capture the seen marker once per session, when the list first has data —
-  // before the effect below advances it — so "New" holds across detail
-  // round-trips and not just this mount.
-  if (
-    data &&
-    scope !== null &&
-    (lastVisit.seenBaseline === undefined || lastVisit.seenBaselineScope !== scope)
-  ) {
-    lastVisit.seenBaseline = getChangelogSeenAt(scope)
-    lastVisit.seenBaselineScope = scope
+  // Capture each person's seen marker once per session, when the list first
+  // has data and before the effect below advances it, so "New" holds across
+  // detail round-trips and not just this mount.
+  if (data && scope !== null && !lastVisit.seenBaselines.has(scope)) {
+    lastVisit.seenBaselines.set(scope, getChangelogSeenAt(scope))
   }
-  const baseline =
-    scope !== null && lastVisit.seenBaselineScope === scope && lastVisit.seenBaseline
-      ? new Date(lastVisit.seenBaseline).getTime()
-      : null
+  const seenBaseline = scope === null ? null : lastVisit.seenBaselines.get(scope)
+  const baseline = seenBaseline ? new Date(seenBaseline).getTime() : null
   const isNew = (publishedAt: string) =>
     baseline !== null && new Date(publishedAt).getTime() > baseline
 

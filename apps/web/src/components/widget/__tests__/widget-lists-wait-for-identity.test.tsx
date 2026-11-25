@@ -130,3 +130,26 @@ it('the Changelog tab marks nothing seen until the identity round trip settles',
     )
   )
 })
+
+it('the Changelog tab keeps each person\'s "New" labels across a switch and back', async () => {
+  localStorage.setItem('quackback:changelog-seen-at:user_c', '2026-11-01T00:00:00.000Z')
+  auth.user = { id: 'user_c' }
+  auth.identityResolved = true
+  const { wrapper } = setup()
+  const view = render(<WidgetChangelog />, { wrapper })
+  await screen.findByText('Entry 1')
+  expect(screen.getByText('New')).toBeTruthy()
+  // Having the list on screen marks the entry seen for person C.
+  await waitFor(() =>
+    expect(localStorage.getItem('quackback:changelog-seen-at:user_c')).toBe(
+      '2026-11-25T10:00:00.000Z'
+    )
+  )
+
+  // Another person signs in on this frame, then C again, within one visit.
+  auth.user = { id: 'user_d' }
+  view.rerender(<WidgetChangelog />)
+  auth.user = { id: 'user_c' }
+  view.rerender(<WidgetChangelog />)
+  expect(screen.getByText('New')).toBeTruthy()
+})
