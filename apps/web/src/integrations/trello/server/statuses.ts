@@ -2,9 +2,9 @@ import { listTrelloLists } from '@/integrations/trello/server/boards'
 import type { ExternalStatusItem } from '@/lib/server/integrations/types'
 
 /**
- * Trello "statuses" are the board's lists. Keyed by list NAME, not id — the
- * inbound handler reports listAfter.name as externalStatus (see inbound.ts),
- * and status mappings are keyed by that name.
+ * Trello "statuses" are the board's lists. Keyed by list NAME, not id: the
+ * inbound handler reports the card's current list name as externalStatus
+ * (see inbound.ts), and status mappings are keyed by that name.
  */
 export async function fetchTrelloStatuses(params: {
   accessToken: string

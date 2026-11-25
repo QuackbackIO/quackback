@@ -176,6 +176,13 @@ test(
     // In the Unassigned queue the first message reaches S too: the control
     // that S can hear about this conversation at all.
     await waitForBell(s, conv, `First message ${marker}`)
+    // With nobody online the first message mails S as well. Wait for that mail
+    // so it lands before the window below opens and is never mistaken for one
+    // about the follow-up.
+    const start = new Date(0)
+    await pollFor('S mail for the first message', async () =>
+      (await mailSince(s.email, conv, start)).length > 0 ? true : null
+    )
     const admin = await personApi(playwright, 'admin')
     const moved = await callServerFn(admin, 'assignConversationTeamFn', {
       conversationId: conv,
@@ -184,7 +191,7 @@ test(
     expect(moved.ok, moved.error).toBe(true)
 
     // Nobody is online, so the follow-up rings and mails team B.
-    const since = new Date(Date.now() - 1_000)
+    const since = new Date()
     const text = `${marker} follow-up for team B`
     await followUp(request, customerEmail, conv, text)
     await waitForBell(b1, conv, text)
