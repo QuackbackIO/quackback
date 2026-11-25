@@ -176,9 +176,7 @@ export function MessengerChannelPage() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Shown under the team name when nobody is online.
-            </p>
+            <p className="text-xs text-muted-foreground">Shown to visitors in the messenger.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="messenger-welcome">Welcome message</Label>

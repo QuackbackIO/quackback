@@ -62,7 +62,7 @@ function SupportThreadPage() {
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'
 
-  // Team availability for the presence strip — portal twin of the widget's
+  // Team availability for the thread header — portal twin of the widget's
   // shared presence query (cookie-authed, so no headers needed).
   const presenceQuery = useQuery({
     queryKey: PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
@@ -142,6 +142,7 @@ function SupportThreadPage() {
             uploadFile={upload}
             presence={presenceQuery.data ?? OFFLINE}
             team={teamQuery.data}
+            replyTime={settings?.publicWidgetConfig?.messenger?.replyTime}
             embedOpenMode="navigate"
             onConversationStarted={onConversationStarted}
           />

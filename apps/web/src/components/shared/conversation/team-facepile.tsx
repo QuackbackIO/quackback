@@ -7,7 +7,7 @@ export interface TeamFace {
 }
 
 /**
- * Overlapping teammate avatars. The overlap stays shallow (4px) and earlier
+ * Overlapping teammate avatars. The overlap stays shallow (2px, plus the 2px ring) and earlier
  * faces stack on top, so two-letter initials are never cut by a neighbour.
  * `ringClassName` matches the surface behind the pile (e.g. `ring-card`).
  */
@@ -21,13 +21,13 @@ export function TeamFacepile({
   className?: string
 }) {
   return (
-    <span className={cn('flex shrink-0 items-center -space-x-1', className)} aria-hidden>
+    <span className={cn('flex shrink-0 items-center -space-x-0.5', className)} aria-hidden>
       {faces.map((face, i) => (
         <Avatar
           key={`${face.name}-${i}`}
           src={face.avatarUrl}
           name={face.name}
-          className={cn('size-7 text-[11px] ring-2', ringClassName)}
+          className={cn('size-7 text-[10px] ring-2', ringClassName)}
           style={{ zIndex: faces.length - i }}
         />
       ))}

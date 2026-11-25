@@ -1,5 +1,3 @@
-import { z } from 'zod'
-
 /**
  * How quickly the team usually replies, as set on the messenger config. The
  * widget shows it under the team name in the conversation header and in the
@@ -18,6 +16,3 @@ export function resolveReplyTime(value: unknown): ReplyTime {
     ? (value as ReplyTime)
     : DEFAULT_REPLY_TIME
 }
-
-/** Write-side validation for the messenger setting. */
-export const replyTimeSchema = z.enum(REPLY_TIMES)

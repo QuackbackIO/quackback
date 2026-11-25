@@ -51,6 +51,7 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 
 import { VisitorSurfaceRpcProvider, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { VisitorConversationThread } from '../visitor-conversation-thread'
+import type { ReplyTime } from '@/lib/shared/widget/reply-time'
 
 afterEach(cleanup)
 
@@ -66,21 +67,32 @@ function withIntl(ui: React.ReactNode) {
 
 async function renderThread(
   canEmailVisitor: boolean,
-  { replyTime, onReplyByEmail = vi.fn() }: { replyTime?: string; onReplyByEmail?: () => void } = {}
+  {
+    replyTime,
+    knownReplyTime,
+    pending = false,
+    onReplyByEmail = vi.fn(),
+  }: {
+    replyTime?: string
+    knownReplyTime?: ReplyTime
+    pending?: boolean
+    onReplyByEmail?: () => void
+  } = {}
 ) {
+  const loaded = {
+    welcomeMessage: 'Hi there',
+    offlineMessage: 'We will get back to you soon.',
+    teamName: 'Acme Support',
+    replyTime,
+    assistant: null,
+    canEmailVisitor,
+    linkedTicket: null,
+    conversation: null,
+    messages: [],
+    hasMore: false,
+  }
   const rpc = {
-    getMyConversation: vi.fn(async () => ({
-      welcomeMessage: 'Hi there',
-      offlineMessage: 'We will get back to you soon.',
-      teamName: 'Acme Support',
-      replyTime,
-      assistant: null,
-      canEmailVisitor,
-      linkedTicket: null,
-      conversation: null,
-      messages: [],
-      hasMore: false,
-    })),
+    getMyConversation: vi.fn(() => (pending ? new Promise(() => {}) : Promise.resolve(loaded))),
     sendConversationMessage: vi.fn(),
     sendConversationTyping: vi.fn(async () => ({})),
     listConversationMessages: vi.fn(),
@@ -98,6 +110,7 @@ async function renderThread(
             uploadFile={vi.fn()}
             presence={AWAY}
             team={[{ name: 'Ada Lovelace', avatarUrl: null }]}
+            replyTime={knownReplyTime}
             onReplyByEmailChange={onReplyByEmail}
           />
         </VisitorSurfaceRpcProvider>
@@ -113,6 +126,11 @@ describe('the visitor thread while the team is away', () => {
     expect(await screen.findByText('Acme Support')).toBeInTheDocument()
     expect(screen.getByText('AL')).toBeInTheDocument()
     expect(screen.getByText('Typically replies in under an hour')).toBeInTheDocument()
+  })
+
+  it('words the reply time the surface already knows before the thread loads', async () => {
+    await renderThread(false, { knownReplyTime: 'day', pending: true })
+    expect(screen.getByText('Typically replies within a day')).toBeInTheDocument()
   })
 
   it('does not promise email to a visitor it cannot email', async () => {

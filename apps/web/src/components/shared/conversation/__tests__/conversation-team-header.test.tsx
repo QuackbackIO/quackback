@@ -116,8 +116,8 @@ describe('TeamFacepile', () => {
       expect(avatar.className).toContain('ring-2')
       expect(avatar.className).toContain('ring-card')
     }
-    // A shallow overlap (4px) keeps two-letter initials clear of the next face.
-    expect(container.firstElementChild?.className).toContain('-space-x-1')
+    // A 2px overlap plus the 2px ring keeps even wide initials (MW at 10px) clear.
+    expect(container.firstElementChild?.className).toContain('-space-x-0.5')
     expect(container.firstElementChild?.className).not.toContain('-space-x-2')
   })
 })

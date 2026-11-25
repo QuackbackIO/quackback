@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { REPLY_TIMES, DEFAULT_REPLY_TIME, replyTimeSchema, resolveReplyTime } from '../reply-time'
+import { REPLY_TIMES, DEFAULT_REPLY_TIME, resolveReplyTime } from '../reply-time'
 
 describe('resolveReplyTime', () => {
   it('defaults to under an hour', () => {
@@ -19,13 +19,5 @@ describe('resolveReplyTime', () => {
 
   it('offers off alongside the reply expectations', () => {
     expect([...REPLY_TIMES]).toEqual(['minutes', 'hour', 'hours', 'day', 'off'])
-  })
-})
-
-describe('replyTimeSchema', () => {
-  it('accepts every option and refuses anything else', () => {
-    for (const value of REPLY_TIMES) expect(replyTimeSchema.parse(value)).toBe(value)
-    expect(replyTimeSchema.safeParse('weeks').success).toBe(false)
-    expect(replyTimeSchema.safeParse('').success).toBe(false)
   })
 })

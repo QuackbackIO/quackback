@@ -183,6 +183,9 @@ export interface VisitorConversationThreadProps {
   presence: VisitorConversationThreadPresence
   /** Teammates shown beside the team name in the built-in header. */
   team?: TeamFace[]
+  /** The messenger's usual reply time as the surface already knows it, so
+   *  the header words it right before the thread loads; the load refreshes it. */
+  replyTime?: ReplyTime
   /** Live agent activity observed on the stream (message/typing) — lets the
    *  surface mark agents present in its own presence cache. */
   onAgentActivity?: () => void
@@ -193,7 +196,7 @@ export interface VisitorConversationThreadProps {
   }
   /** How embedded post cards open. The widget's iframe opens a new tab. */
   embedOpenMode?: EmbedOpenMode
-  /** Render the built-in header row (assistant identity / presence strip).
+  /** Render the built-in header row (assistant identity / team header).
    *  The widget passes false — its shell shows the same content in the top
    *  bar beside the back button, keeping one header row like the reference
    *  messengers. The portal keeps the built-in row. */
@@ -202,7 +205,7 @@ export interface VisitorConversationThreadProps {
   onConversationStarted?: (id: ConversationId) => void
   /** Notified with whether a reply can reach this visitor by email: false
    *  until the thread loads, then the server's verdict. A surface that draws
-   *  its own presence badge (the widget's header, with `showHeader` false)
+   *  its own team header (the widget's, with `showHeader` false)
    *  words its away copy from it. */
   onReplyByEmailChange?: (canReplyByEmail: boolean) => void
   /** Notified with the email a visitor gives in the in-thread ticket form,
@@ -284,7 +287,7 @@ const SNAPSHOT_EVENT_KINDS: ReadonlySet<ConversationStreamEvent['kind']> = new S
 /**
  * The visitor side of a conversation: virtualized thread, live SSE updates,
  * composer (rich text + file attachments + emoji), pre-chat email capture,
- * presence strip, offline hints, and the post-conversation CSAT prompt.
+ * team header, offline hints, and the post-conversation CSAT prompt.
  *
  * Shared by the widget messenger tab and the portal Support tab — every
  * surface-specific dependency (auth headers, session minting, presence,
@@ -302,6 +305,7 @@ export function VisitorConversationThread({
   uploadFile,
   presence,
   team = NO_TEAM,
+  replyTime: initialReplyTime,
   onAgentActivity,
   helpSearch,
   embedOpenMode = 'newTab',
@@ -335,7 +339,7 @@ export function VisitorConversationThread({
   const [linkedTicket, setLinkedTicket] = useState<RequesterTicketDTO | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
   // The messenger's usual reply time (header line + reply-time caption).
-  const [replyTime, setReplyTime] = useState<ReplyTime | undefined>(undefined)
+  const [replyTime, setReplyTime] = useState<ReplyTime | undefined>(initialReplyTime)
   // AI-assistant display identity (fronts new conversations); null when disabled.
   const [assistant, setAssistant] = useState<{
     name: string
@@ -1399,7 +1403,7 @@ export function VisitorConversationThread({
       {/* Header: with the assistant enabled the thread is always fronted by its
           identity — the AI is always available, so no availability promise is
           made at any point (matching the AI-first messenger model). Without an
-          assistant, the classic live presence strip shows. */}
+          assistant, the team header shows who replies and when. */}
       {showHeader && assistant ? (
         <div className="flex items-center gap-2.5 px-4 py-2 border-b border-border/40 shrink-0">
           <Avatar src={assistant.avatarUrl} name={assistant.name} className="size-7 text-xs" />
