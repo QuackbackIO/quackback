@@ -17,6 +17,7 @@ import { clearDeviceId, getOrCreateDeviceId } from './device'
 import { FULL_SCREEN_MEDIA, removeStyles } from './style'
 import { fitToVisualViewport, keyboardShown } from './viewport'
 import { canRestoreFocus, openerWantsFocusMoved } from './focus'
+import { parseWhatsNew, type WhatsNew } from './whats-new-card'
 
 type Command =
   | 'isOpen'
@@ -83,6 +84,8 @@ export function createSDK(): SDK {
   let serverConfig: ServerConfig | null = null
   let launcherRevealed = false
   let unreadCount = 0
+  // The frame's newest unread changelog entry, for the launcher's card.
+  let whatsNew: WhatsNew | null = null
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
   // banner). Tracking runs only when both the host and the instance allow it.
@@ -165,6 +168,34 @@ export function createSDK(): SDK {
     return new URL(config!.instanceUrl).origin
   }
 
+  // A dismissed (or opened) card stays away until a newer entry is
+  // published: the host page remembers the entry it was for, per instance.
+  // Read state is the frame's alone, so the launcher badge is untouched.
+  let dismissedFallback: string | null = null
+  function whatsNewKey(): string {
+    return `quackback:whats-new-dismissed:${iframeOrigin()}`
+  }
+  function whatsNewDismissedId(): string | null {
+    try {
+      return localStorage.getItem(whatsNewKey()) ?? dismissedFallback
+    } catch {
+      return dismissedFallback
+    }
+  }
+  function rememberWhatsNew(entryId: string): void {
+    dismissedFallback = entryId
+    try {
+      localStorage.setItem(whatsNewKey(), entryId)
+    } catch {
+      /* storage blocked: remembered for this page load */
+    }
+  }
+  function applyWhatsNew(): void {
+    if (!launcher || !config) return
+    const show = whatsNew && whatsNew.entry.id !== whatsNewDismissedId() ? whatsNew : null
+    launcher.setWhatsNew(show)
+  }
+
   function onIframeMessage(msg: { type: string; [k: string]: unknown }) {
     switch (msg.type) {
       case 'quackback:ready':
@@ -204,6 +235,12 @@ export function createSDK(): SDK {
         // Also surface it to host SDK subscribers (Quackback.on('unread', ...))
         // so a host can mirror the count in its own UI.
         emitter.emit('unread', { count })
+        break
+      }
+      case 'quackback:whats-new': {
+        // The newest unread changelog entry, or null; a bad payload clears it.
+        whatsNew = parseWhatsNew((msg as { whatsNew?: unknown }).whatsNew)
+        applyWhatsNew()
         break
       }
       case 'quackback:expand': {
@@ -417,11 +454,24 @@ export function createSDK(): SDK {
           openingFromLauncher = false
         }
       },
+      onWhatsNewOpen: (entryId) => {
+        // Opening the entry answers the card, as a dismiss does.
+        rememberWhatsNew(entryId)
+        dispatch('open', { view: 'changelog', entryId })
+        applyWhatsNew()
+      },
+      onWhatsNewDismiss: (entryId) => {
+        rememberWhatsNew(entryId)
+        applyWhatsNew()
+      },
+      onWhatsNewShown: (data) =>
+        emitter.emit('whats-new', { count: data.count, entryId: data.entry.id }),
     })
     // A launcher created after init (showLauncher) catches up with the
     // server config, unread count, panel state and reveal it missed.
     if (serverConfig) applyLauncherConfig(serverConfig)
     if (unreadCount) launcher.setUnread(unreadCount)
+    applyWhatsNew()
     if (panelOpen) launcher.setOpen(true)
     if (launcherRevealed) launcher.reveal()
     if (panel) launcher.el.setAttribute('aria-controls', panel.el.id)
@@ -632,6 +682,8 @@ export function createSDK(): SDK {
         serverConfig = null
         launcherRevealed = false
         unreadCount = 0
+        whatsNew = null
+        dismissedFallback = null
         placement = 'right'
         config = null
         return
