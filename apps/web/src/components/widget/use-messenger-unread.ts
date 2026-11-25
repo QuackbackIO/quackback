@@ -40,19 +40,27 @@ export function useMessengerUnread(enabled: boolean): number | undefined {
  * It fetches with the fetch function in hand, because the loader seeds the
  * card with data only, and a card nobody has shown yet has no other way to
  * refetch. A fetch already running, such as the one a read starts, is joined
- * rather than repeated.
+ * rather than repeated. A total that drops after the card was already
+ * refreshed (a read here refreshes it directly) does not fetch it again; a
+ * total that rises always does, since that is a new reply.
  */
 export function useRefreshSummaryOnUnreadChange(total: number | undefined): void {
   const { sessionVersion } = useWidgetAuth()
   const { locale } = useIntl()
   const queryClient = useQueryClient()
   const last = useRef(total)
+  const lastReceivedAt = useRef(Date.now())
   useEffect(() => {
     const previous = last.current
+    const previousAt = lastReceivedAt.current
     last.current = total
+    lastReceivedAt.current = Date.now()
     if (previous === undefined || total === undefined || total === previous) return
+    const queryKey = conversationKeys.widgetConversationSummary(sessionVersion)
+    const cardUpdatedAt = queryClient.getQueryState(queryKey)?.dataUpdatedAt ?? 0
+    if (total < previous && cardUpdatedAt > previousAt) return
     void queryClient.prefetchQuery({
-      queryKey: conversationKeys.widgetConversationSummary(sessionVersion),
+      queryKey,
       queryFn: () => fetchConversationSummary(locale),
       staleTime: 0,
       retry: false,
