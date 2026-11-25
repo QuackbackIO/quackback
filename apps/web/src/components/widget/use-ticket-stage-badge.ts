@@ -1,11 +1,10 @@
-import { useEffect, useReducer } from 'react'
+import { useEffect, useMemo, useReducer } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import { widgetMyTicketsKey } from './widget-tickets'
 import {
-  adoptLegacyTicketStagesSeen,
   countTicketStageChanges,
   getTicketStagesSeen,
   markTicketStagesSeen,
@@ -47,14 +46,19 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
 
   // Re-read the markers whenever the Tickets tab advances them (same-tab
   // updates don't fire the native `storage` event, hence the custom one).
-  const [, reread] = useReducer((n: number) => n + 1, 0)
+  const [markersVersion, reread] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
     window.addEventListener(TICKET_STAGES_SEEN_EVENT, reread)
     return () => window.removeEventListener(TICKET_STAGES_SEEN_EVENT, reread)
   }, [])
   // Widget tickets are identified-only: an anonymous scope has no markers.
   const counts = scope !== null && isIdentified
-  const seen = counts ? getTicketStagesSeen(scope) : null
+  // Read and parsed once per person and per marker change, not every render.
+  const seen = useMemo(
+    () => (counts ? getTicketStagesSeen(scope) : null),
+    // markersVersion is the re-read trigger: storage is not React state.
+    [counts, scope, markersVersion]
+  )
 
   const tickets = data?.tickets ?? []
 
@@ -64,7 +68,6 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
     // An anonymous identify keeps the last person's tickets cached under the
     // same key: they are not this visitor's, so they never stamp or count.
     if (!counts || !data) return
-    adoptLegacyTicketStagesSeen(scope)
     if (getTicketStagesSeen(scope) === null) markTicketStagesSeen(scope, data.tickets)
   }, [data, scope, counts])
 

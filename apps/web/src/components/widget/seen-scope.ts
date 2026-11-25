@@ -15,33 +15,40 @@ export function seenScope(
   return user?.id ?? 'anonymous'
 }
 
-/**
- * Read a scoped marker without writing anything, so it is safe during render.
- * Markers saved before they were kept per person sit under the bare key and
- * are read as this person's until someone adopts them (see adoptLegacyMarker).
- */
+/** How many people's markers of one kind a browser keeps. */
+export const MAX_MARKER_SCOPES = 20
+
+const scopedKey = (key: string, scope: string) => `${key}:${scope}`
+// The list of scopes holding a marker of this kind, least recently written
+// first. The dot keeps it apart from every `${key}:${scope}` marker.
+const indexKey = (key: string) => `${key}.scopes`
+
+/** Read one person's marker. Never writes, so it is safe during render. */
 export function readScopedMarker(storage: Storage, key: string, scope: string): string | null {
-  return storage.getItem(`${key}:${scope}`) ?? storage.getItem(key)
+  return storage.getItem(scopedKey(key, scope))
 }
 
 /**
- * Move a marker saved before markers were kept per person to this scope and
- * remove the bare key, so an upgrade keeps the first person's badges and the
- * next person does not inherit them. Returns the marker now in effect. When
- * storage refuses the write the legacy value is still returned and left in
- * place for a later attempt.
+ * Write one person's marker. A browser shared by many people keeps only the
+ * markers of the most recently active few: the oldest are removed, and those
+ * people start again from a silent baseline. A marker saved before markers
+ * were kept per person sits under the bare key; nobody can tell whose it is,
+ * so it is removed rather than handed to whoever writes first.
  */
-export function adoptLegacyMarker(storage: Storage, key: string, scope: string): string | null {
-  const scopedKey = `${key}:${scope}`
-  const scoped = storage.getItem(scopedKey)
-  if (scoped !== null) return scoped
-  const legacy = storage.getItem(key)
-  if (legacy === null) return null
+export function writeScopedMarker(storage: Storage, key: string, scope: string, value: string) {
+  storage.setItem(scopedKey(key, scope), value)
+  storage.removeItem(key)
+  const scopes = [...readIndex(storage, key).filter((s) => s !== scope), scope]
+  const evicted = scopes.splice(0, Math.max(0, scopes.length - MAX_MARKER_SCOPES))
+  for (const old of evicted) storage.removeItem(scopedKey(key, old))
+  storage.setItem(indexKey(key), JSON.stringify(scopes))
+}
+
+function readIndex(storage: Storage, key: string): string[] {
   try {
-    storage.setItem(scopedKey, legacy)
-    storage.removeItem(key)
+    const parsed: unknown = JSON.parse(storage.getItem(indexKey(key)) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : []
   } catch {
-    // Storage full or unavailable: the marker still applies for this read.
+    return [] // a corrupted index starts over
   }
-  return legacy
 }

@@ -14,11 +14,10 @@
  * badges — only CHANGES to a stage the visitor was baselined on do.
  */
 
-import { adoptLegacyMarker, readScopedMarker } from './seen-scope'
+import { readScopedMarker, writeScopedMarker } from './seen-scope'
 
 // Each identity in the browser has its own map (see seen-scope.ts).
 const SEEN_KEY = 'quackback:ticket-stages-seen'
-const seenKey = (scope: string) => `${SEEN_KEY}:${scope}`
 
 /** Event name dispatched on window after markers advance, so open widget
  *  views re-read them without a reload. */
@@ -47,15 +46,6 @@ export function getTicketStagesSeen(scope: string, storage?: Storage): TicketSta
   }
 }
 
-/** Give this person the map saved before maps were kept per person. */
-export function adoptLegacyTicketStagesSeen(scope: string): void {
-  try {
-    adoptLegacyMarker(window.localStorage, SEEN_KEY, scope)
-  } catch {
-    // Storage unavailable (private mode etc.).
-  }
-}
-
 /**
  * Advance the markers for the given tickets to their current stages. Merges
  * into the existing map so a paginated/limited list never drops markers for
@@ -65,11 +55,10 @@ export function markTicketStagesSeen(
   scope: string,
   tickets: readonly TicketStageSeenInput[]
 ): void {
-  adoptLegacyTicketStagesSeen(scope)
   const next: TicketStageSeenMap = { ...getTicketStagesSeen(scope) }
   for (const t of tickets) next[t.ticketId] = t.stage.slot
   try {
-    window.localStorage.setItem(seenKey(scope), JSON.stringify(next))
+    writeScopedMarker(window.localStorage, SEEN_KEY, scope, JSON.stringify(next))
   } catch {
     // Storage unavailable — the badge returns next load; never break the view.
   }

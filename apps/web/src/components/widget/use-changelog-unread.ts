@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { widgetChangelogListQuery } from './widget-changelog-query'
 import { useWidgetAuth } from './widget-auth-provider'
 import {
-  adoptLegacyChangelogSeen,
   countUnreadChangelogs,
+  EMPTY_CHANGELOG_BASELINE,
   getChangelogSeenAt,
   markChangelogSeen,
   CHANGELOG_SEEN_EVENT,
@@ -33,27 +33,31 @@ export function useChangelogUnread(enabled: boolean): {
 
   // Re-read the marker whenever the changelog surface advances it (same-tab
   // updates don't fire the native `storage` event, hence the custom one).
-  const [, reread] = useReducer((n: number) => n + 1, 0)
+  const [markerVersion, reread] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
     window.addEventListener(CHANGELOG_SEEN_EVENT, reread)
     return () => window.removeEventListener(CHANGELOG_SEEN_EVENT, reread)
   }, [])
-  const seenAt = scope === null ? null : getChangelogSeenAt(scope)
+  // Read once per person and per marker change, not every render.
+  const seenAt = useMemo(
+    () => (scope === null ? null : getChangelogSeenAt(scope)),
+    // markerVersion is the re-read trigger: storage is not React state.
+    [scope, markerVersion]
+  )
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
   const unread = countUnreadChangelogs(entries, seenAt)
 
   // Silent first-contact baseline: what was published before the visitor
   // first met the widget never badges, and later entries do, whether or not
-  // they ever open the Changelog tab (see changelog-unread.ts).
+  // they ever open the Changelog tab (see changelog-unread.ts). An empty
+  // changelog stamps a baseline older than anything, so its first entry badges.
+  const loaded = data !== undefined
   const newest = entries[0]?.publishedAt
   useEffect(() => {
-    if (scope === null) return
-    // A marker saved before markers were kept per person becomes this
-    // person's, so the next person in the browser does not inherit it.
-    adoptLegacyChangelogSeen(scope)
-    if (newest && getChangelogSeenAt(scope) === null) markChangelogSeen(scope, newest)
-  }, [newest, scope])
+    if (scope === null || !loaded || getChangelogSeenAt(scope) !== null) return
+    markChangelogSeen(scope, newest ?? EMPTY_CHANGELOG_BASELINE)
+  }, [loaded, newest, scope])
 
   const markSeen = useCallback(
     (publishedAt: string) => {

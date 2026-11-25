@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  adoptLegacyChangelogSeen,
   countUnreadChangelogs,
   getChangelogSeenAt,
   markChangelogSeen,
@@ -63,22 +62,13 @@ describe('seen marker storage', () => {
     expect(getChangelogSeenAt('u2')).toBe('2026-07-01T10:00:00Z')
   })
 
-  it('keeps the marker saved before markers were kept per person', () => {
+  it('ignores the marker saved before markers were kept per person, and removes it', () => {
     window.localStorage.setItem('quackback:changelog-seen-at', '2026-07-30T10:00:00Z')
-    // Reading never writes: the marker moves only when someone adopts it.
-    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
-    expect(window.localStorage.getItem('quackback:changelog-seen-at')).not.toBeNull()
-
-    adoptLegacyChangelogSeen('u1')
-    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
-    expect(window.localStorage.getItem('quackback:changelog-seen-at')).toBeNull()
-    expect(getChangelogSeenAt('u2')).toBeNull()
-  })
-
-  it('a mark adopts the old marker even when it does not move it forward', () => {
-    window.localStorage.setItem('quackback:changelog-seen-at', '2026-07-30T10:00:00Z')
+    // Nobody can tell whose it was: each person starts from their own baseline.
+    expect(getChangelogSeenAt('u1')).toBeNull()
     markChangelogSeen('u1', '2026-07-01T10:00:00Z')
-    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-01T10:00:00Z')
+    expect(window.localStorage.getItem('quackback:changelog-seen-at')).toBeNull()
     expect(getChangelogSeenAt('u2')).toBeNull()
   })
 

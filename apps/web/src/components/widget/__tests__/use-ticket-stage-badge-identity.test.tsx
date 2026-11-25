@@ -81,21 +81,50 @@ it('counts and writes nothing until the identity round trip settles', async () =
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   )
-  localStorage.setItem('quackback:ticket-stages-seen', JSON.stringify({ tkt_a: 'open' }))
+  localStorage.setItem('quackback:ticket-stages-seen:user_a', JSON.stringify({ tkt_a: 'open' }))
   tickets = [{ ticketId: 'tkt_a', stage: { slot: 'resolved' } }]
   auth.identityResolved = false
   const hook = renderHook(() => useTicketStageBadge(true), { wrapper })
   await waitFor(() => expect(qc.getQueryData(['widget', 'myTickets', 1])).toBeDefined())
   expect(hook.result.current.unread).toBe(0)
-  expect(localStorage.getItem('quackback:ticket-stages-seen:user_a')).toBeNull()
   expect(localStorage.getItem('quackback:ticket-stages-seen:anonymous')).toBeNull()
 
-  // Settled as person A: they adopt the old map, and the moved stage badges.
+  // Settled as person A: their map applies, and the moved stage badges.
   auth.identityResolved = true
   hook.rerender()
   await waitFor(() => expect(hook.result.current.unread).toBe(1))
-  expect(JSON.parse(localStorage.getItem('quackback:ticket-stages-seen:user_a')!)).toEqual({
-    tkt_a: 'open',
-  })
+})
+
+it('ignores a map saved before maps were kept per person', async () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  )
+  localStorage.setItem('quackback:ticket-stages-seen', JSON.stringify({ tkt_a: 'open' }))
+  tickets = [{ ticketId: 'tkt_a', stage: { slot: 'resolved' } }]
+  const hook = renderHook(() => useTicketStageBadge(true), { wrapper })
+  // Person A starts from their own silent baseline; the shared key is gone.
+  await waitFor(() =>
+    expect(JSON.parse(localStorage.getItem('quackback:ticket-stages-seen:user_a')!)).toEqual({
+      tkt_a: 'resolved',
+    })
+  )
   expect(localStorage.getItem('quackback:ticket-stages-seen')).toBeNull()
+  expect(hook.result.current.unread).toBe(0)
+})
+
+it('reads the map once, not on every render', async () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  )
+  localStorage.setItem('quackback:ticket-stages-seen:user_a', JSON.stringify({ tkt_a: 'open' }))
+  tickets = [{ ticketId: 'tkt_a', stage: { slot: 'open' } }]
+  const hook = renderHook(() => useTicketStageBadge(true), { wrapper })
+  await waitFor(() => expect(qc.getQueryData(['widget', 'myTickets', 1])).toBeDefined())
+  const getItem = vi.spyOn(window.localStorage, 'getItem')
+  hook.rerender()
+  hook.rerender()
+  expect(getItem).not.toHaveBeenCalled()
+  getItem.mockRestore()
 })
