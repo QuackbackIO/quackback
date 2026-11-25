@@ -28,6 +28,63 @@ function markdownToAdf(markdown: string): Record<string, unknown> {
 const BROWSE_URL_RE = /^https?:\/\/([^/\s]+)\/browse\/([A-Za-z][A-Za-z0-9_]*-\d+)\/?(?:[?#].*)?$/
 const KEY_RE = /^([A-Za-z][A-Za-z0-9_]*-\d+)$/
 
+export interface JiraIssueStatus {
+  /** The current key, which differs from the requested one after a project move. */
+  key?: string
+  status?: string
+  projectId?: string
+  projectKey?: string
+  /** Jira's own format, e.g. `2026-11-24T13:07:35.977+0000`. */
+  updated?: string
+}
+
+function jiraFailure(status: number, detail: string): Error {
+  if (status === 401) {
+    return issueError('Authentication failed. Please reconnect Jira.', {
+      status,
+      retryable: false,
+    })
+  }
+  if (status === 429) return issueError('Rate limited by Jira API.', { status, retryable: true })
+  return issueError(`HTTP ${status}: ${detail}`, { status })
+}
+
+/**
+ * Read an issue's current status and project from the connected site.
+ * Returns null on 404, which Jira also sends when the token cannot see the issue.
+ */
+export async function getJiraIssueStatus(
+  accessToken: string,
+  cloudId: string,
+  issueIdOrKey: string
+): Promise<JiraIssueStatus | null> {
+  const response = await integrationFetch(
+    `https://api.atlassian.com/ex/jira/${encodeURIComponent(cloudId)}/rest/api/3/issue/${encodeURIComponent(issueIdOrKey)}?fields=status,project,updated`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    }
+  )
+  if (response.status === 404) return null
+  if (!response.ok) throw jiraFailure(response.status, await response.text())
+
+  const data = (await response.json()) as {
+    key?: unknown
+    fields?: {
+      status?: { name?: unknown }
+      project?: { id?: unknown; key?: unknown }
+      updated?: unknown
+    }
+  }
+  const text = (value: unknown) => (typeof value === 'string' && value ? value : undefined)
+  return {
+    key: text(data.key),
+    status: text(data.fields?.status?.name),
+    projectId: text(data.fields?.project?.id),
+    projectKey: text(data.fields?.project?.key),
+    updated: text(data.fields?.updated),
+  }
+}
+
 export const jiraIssues: IssueTrackerCapability = {
   parseRef(input: string, config: Record<string, unknown>): ParsedIssueRef | null {
     const trimmed = input.trim()
@@ -93,19 +150,7 @@ export const jiraIssues: IssueTrackerCapability = {
       }
     )
 
-    if (!response.ok) {
-      const status = response.status
-      if (status === 401) {
-        throw issueError('Authentication failed. Please reconnect Jira.', {
-          status,
-          retryable: false,
-        })
-      }
-      if (status === 429) {
-        throw issueError('Rate limited by Jira API.', { status, retryable: true })
-      }
-      throw issueError(`HTTP ${status}: ${await response.text()}`, { status })
-    }
+    if (!response.ok) throw jiraFailure(response.status, await response.text())
 
     const result = (await response.json()) as { key?: string }
     if (!result.key) {
