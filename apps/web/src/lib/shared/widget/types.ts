@@ -41,6 +41,8 @@ export interface WidgetInboundMessages {
   'quackback:identify': { anonymous: true } | Record<string, unknown> | null
   'quackback:metadata': WidgetMetadata
   'quackback:locale': string
+  /** Whether the host shows the panel; a hidden panel leaves new replies unread. */
+  'quackback:shown': boolean
   'quackback:open':
     | {
         view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
