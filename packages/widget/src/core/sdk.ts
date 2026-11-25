@@ -8,7 +8,7 @@ import type {
 } from '../types'
 import { createEmitter } from './events'
 import { createBridge, type Bridge } from './postmessage'
-import { measureSafeArea } from './safe-area'
+import { measureSafeArea, NO_SAFE_AREA } from './safe-area'
 import { createLauncher, type LauncherHandle } from './launcher'
 import { createPanel, type PanelHandle } from './panel'
 import { fetchServerConfig, type ServerConfig } from './config'
@@ -78,7 +78,7 @@ export function createSDK(): SDK {
     sendSafeArea()
   }
 
-  // On a phone the panel fills the screen, so its top and bottom meet the
+  // On a phone the panel fills the screen, so its edges meet the
   // host page's notch and system bars. The frame cannot read those insets
   // itself; send them while the panel is open, and again whenever they
   // change (a rotation). Measuring forces a layout, so a closed panel skips
@@ -87,8 +87,8 @@ export function createSDK(): SDK {
   let lastSafeArea = ''
   function sendSafeArea(): void {
     if (!ready || !bridge || !panelOpen) return
-    const insets = mobileMql?.matches ? measureSafeArea() : { top: 0, bottom: 0 }
-    const key = `${insets.top}:${insets.bottom}`
+    const insets = mobileMql?.matches ? measureSafeArea() : NO_SAFE_AREA
+    const key = `${insets.top}:${insets.bottom}:${insets.left}:${insets.right}`
     if (key === lastSafeArea) return
     lastSafeArea = key
     bridge.send('quackback:safe-area', insets)

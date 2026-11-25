@@ -94,3 +94,16 @@ describe('WidgetShell header', () => {
     expect(document.querySelectorAll('.size-7').length).toBe(0)
   })
 })
+
+describe('WidgetShell on a phone held sideways', () => {
+  it('keeps the header, content and tab bar clear of a side notch', () => {
+    const { container } = renderHome()
+    const shell = container.firstElementChild as HTMLElement
+    expect(shell.classList).toContain(
+      'pl-[max(env(safe-area-inset-left,0px),var(--qb-safe-left,0px))]'
+    )
+    expect(shell.classList).toContain(
+      'pr-[max(env(safe-area-inset-right,0px),var(--qb-safe-right,0px))]'
+    )
+  })
+})

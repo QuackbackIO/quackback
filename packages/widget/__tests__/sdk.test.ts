@@ -624,13 +624,18 @@ describe('sdk on phones', () => {
   // The host page's safe-area insets (a home indicator, an edge-to-edge
   // navigation bar). The frame cannot read them, so the SDK measures them.
   // Returns how many times it measured.
-  function hostInsets(top: string, bottom: string) {
+  function hostInsets(top: string, bottom: string, left = '0px', right = '0px') {
     const real = window.getComputedStyle.bind(window)
     let measured = 0
     vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
       if ((el as HTMLElement).dataset?.quackbackSafeArea === undefined) return real(el)
       measured++
-      return { paddingTop: top, paddingBottom: bottom } as CSSStyleDeclaration
+      return {
+        paddingTop: top,
+        paddingBottom: bottom,
+        paddingLeft: left,
+        paddingRight: right,
+      } as CSSStyleDeclaration
     })
     return () => measured
   }
@@ -709,7 +714,7 @@ describe('sdk on phones', () => {
       shownWhenSent = !!panel?.classList.contains('quackback-open')
     })
     sdk.dispatch('open')
-    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34 }])
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34, left: 0, right: 0 }])
     expect(shownWhenSent).toBe(false)
     sdk.dispatch('destroy')
   })
@@ -723,7 +728,7 @@ describe('sdk on phones', () => {
     sdk.dispatch('open')
     expect(sentSafeAreas(postMessage)).toEqual([])
     frameReady()
-    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34 }])
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34, left: 0, right: 0 }])
     sdk.dispatch('destroy')
   })
 
@@ -748,8 +753,8 @@ describe('sdk on phones', () => {
     window.dispatchEvent(new Event('resize'))
     flush()
     expect(sentSafeAreas(postMessage)).toEqual([
-      { top: 47, bottom: 34 },
-      { top: 0, bottom: 21 },
+      { top: 47, bottom: 34, left: 0, right: 0 },
+      { top: 0, bottom: 21, left: 0, right: 0 },
     ])
 
     // Closed again, resizes cost nothing.
@@ -757,6 +762,18 @@ describe('sdk on phones', () => {
     window.dispatchEvent(new Event('resize'))
     flush()
     expect(rotated()).toBe(2)
+    sdk.dispatch('destroy')
+  })
+
+  it('tells the frame the side insets of a phone held sideways', () => {
+    phone(true)
+    hostInsets('0px', '21px', '47px', '0px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    sdk.dispatch('open')
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 21, left: 47, right: 0 }])
     sdk.dispatch('destroy')
   })
 
@@ -768,7 +785,7 @@ describe('sdk on phones', () => {
     sdk.dispatch('init', { instanceUrl: origin })
     frameReady()
     sdk.dispatch('open')
-    expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 0 }])
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 0, left: 0, right: 0 }])
     expect(measured()).toBe(0)
     sdk.dispatch('destroy')
   })

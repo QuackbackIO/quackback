@@ -248,7 +248,11 @@ export function WidgetShell({
   }, [canPortalHandoff, portalOrigin])
 
   return (
-    <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden">
+    // Held sideways, a phone's notch sits on the left or right. A frame reads
+    // env(safe-area-inset-*) as zero; the host page's side insets arrive as
+    // --qb-safe-left and --qb-safe-right, so the header, content and tab bar
+    // stay clear of it.
+    <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden pl-[max(env(safe-area-inset-left,0px),var(--qb-safe-left,0px))] pr-[max(env(safe-area-inset-right,0px),var(--qb-safe-right,0px))]">
       {/* The Home hero backdrop fills the panel behind the header row and
           body; the header/content render transparently over it. */}
       {backdrop}
