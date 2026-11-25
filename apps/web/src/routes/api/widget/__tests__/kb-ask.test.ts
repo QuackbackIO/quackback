@@ -49,6 +49,11 @@ vi.mock('@/lib/server/functions/workspace', () => ({
   getSettings: (...args: unknown[]) => mockGetSettings(...args),
 }))
 
+const mockResolveWidgetViewer = vi.fn()
+vi.mock('@/lib/server/widget/widget-viewer', () => ({
+  resolveWidgetViewer: (...args: unknown[]) => mockResolveWidgetViewer(...args),
+}))
+
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { handleKbAsk, handleKbAskProbe, KB_ASK_MAX_QUERY_CHARS, KB_ASK_RATE_LIMIT } from '../kb-ask'
 import { makeKbArticle } from '@/lib/server/domains/assistant/__tests__/kb-fixtures'
@@ -103,7 +108,11 @@ beforeEach(() => {
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
   mockLogAiUsage.mockResolvedValue(undefined)
   mockGetChatModel.mockReturnValue('gpt-test')
-  mockGetSettings.mockResolvedValue({ id: 'settings_1' })
+  mockGetSettings.mockResolvedValue({
+    id: 'settings_1',
+    portalConfig: JSON.stringify({ features: { allowAnonymous: true } }),
+  })
+  mockResolveWidgetViewer.mockResolvedValue(ANONYMOUS_ACTOR)
   mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
   mockSynthesize.mockResolvedValue({
     kind: 'grounded',
@@ -231,8 +240,43 @@ describe('POST /api/widget/kb-ask', () => {
     expect(mockRetrieve).not.toHaveBeenCalled()
   })
 
+  it('403s anonymous callers when allowAnonymous is disabled or unset, without consuming AI budget or retrieving', async () => {
+    mockGetSettings.mockResolvedValue({
+      id: 'settings_1',
+      portalConfig: JSON.stringify({ features: { allowAnonymous: false } }),
+    })
+    const resFalse = await handleKbAsk({ request: makePost('hello') })
+    expect(resFalse.status).toBe(403)
+    expect((await resFalse.json()).error.code).toBe('ANONYMOUS_DISABLED')
+    expect(mockEnforceAiTokenBudget).not.toHaveBeenCalled()
+    expect(mockRetrieve).not.toHaveBeenCalled()
+
+    mockGetSettings.mockResolvedValue({ id: 'settings_1' })
+    const resUnset = await handleKbAsk({ request: makePost('hello') })
+    expect(resUnset.status).toBe(403)
+    expect((await resUnset.json()).error.code).toBe('ANONYMOUS_DISABLED')
+  })
+
+  it('allows authenticated user callers even when allowAnonymous is false', async () => {
+    mockGetSettings.mockResolvedValue({
+      id: 'settings_1',
+      portalConfig: JSON.stringify({ features: { allowAnonymous: false } }),
+    })
+    mockResolveWidgetViewer.mockResolvedValue({
+      principalId: 'principal_user_1',
+      role: 'user',
+      principalType: 'user',
+      segmentIds: [],
+    })
+    const res = await handleKbAsk({ request: makePost('hello') })
+    expect(res.status).toBe(200)
+  })
+
   it('keys the workspace bucket off the resolved workspace id, not a caller-supplied header', async () => {
-    mockGetSettings.mockResolvedValue({ id: 'settings_evade_test' })
+    mockGetSettings.mockResolvedValue({
+      id: 'settings_evade_test',
+      portalConfig: JSON.stringify({ features: { allowAnonymous: true } }),
+    })
     await handleKbAsk({ request: makePost('hello') })
     const keys = mockIncrementBucket.mock.calls.map(([spec]) => spec.key)
     expect(keys).toContain('kbask:workspace:settings_evade_test')

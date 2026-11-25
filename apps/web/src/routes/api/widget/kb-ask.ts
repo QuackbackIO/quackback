@@ -56,6 +56,7 @@ import {
 import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
 import { isPortalOpenToRequest } from '@/lib/server/widget/portal-gate'
 import { getSettings } from '@/lib/server/functions/workspace'
+import { workspaceAllowsAnonymous } from '@/lib/server/domains/settings/settings.types'
 import type { Actor } from '@/lib/server/policy/types'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
@@ -187,6 +188,14 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
   const settings = await getSettings()
   if (!settings) return widgetJsonError(503, 'WORKSPACE_UNAVAILABLE', 'Workspace unavailable')
 
+  // Identified widget users may answer from segment-gated categories they
+  // belong to; unidentified callers resolve anonymous and are refused when the
+  // workspace disables anonymous access (fail closed before spending rate/AI budget).
+  const viewer = await resolveWidgetViewer()
+  if (!workspaceAllowsAnonymous(settings.portalConfig) && viewer.principalType !== 'user') {
+    return widgetJsonError(403, 'ANONYMOUS_DISABLED', 'Sign in to ask AI')
+  }
+
   const limited = await enforceWidgetQuota(request, {
     keyPrefix: 'kbask',
     workspaceKey: settings.id,
@@ -208,9 +217,7 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
 
   const retrievalStartedAt = Date.now()
   // Identified widget users may answer from segment-gated categories they
-  // belong to; unidentified callers resolve anonymous and see only ungated
-  // articles (fail closed).
-  const viewer = await resolveWidgetViewer()
+  // belong to; unidentified callers see only ungated articles.
   let articles
   try {
     articles = await retrieveKbArticles(query, { audience: 'public', viewer })

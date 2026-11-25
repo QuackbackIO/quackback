@@ -270,6 +270,16 @@ async function assertConversationsEnabled(principalId: PrincipalId): Promise<voi
  */
 async function assertVisitorConversationAccess(ctx: AuthContext): Promise<void> {
   await assertConversationsEnabled(ctx.principal.id)
+  if (!isTeamMember(ctx.principal.role) && ctx.principal.type === 'anonymous') {
+    const [{ getSettings }, { workspaceAllowsAnonymous }] = await Promise.all([
+      import('./workspace'),
+      import('@/lib/server/domains/settings/settings.types'),
+    ])
+    const settings = await getSettings()
+    if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
+      throw new ForbiddenError('ANONYMOUS_DISABLED', 'Sign in to start a conversation')
+    }
+  }
   if (isTeamMember(ctx.principal.role) || ctx.scope === 'widget') return
   const { resolvePortalAccessForRequest } = await import('./portal-access')
   const access = await resolvePortalAccessForRequest()
