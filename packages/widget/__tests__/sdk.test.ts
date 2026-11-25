@@ -898,10 +898,11 @@ describe('sdk panel as a dialog', () => {
     stubIframe()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const focus = vi.spyOn(iframeEl(), 'focus')
     sdk.dispatch('open')
     sdk.dispatch('close')
     runFrames()
-    expect(document.activeElement).not.toBe(iframeEl())
+    expect(focus).not.toHaveBeenCalled()
   })
 
   it('logout closes an open panel with a close event, and is quiet when closed', () => {
@@ -927,15 +928,24 @@ describe('sdk panel as a dialog', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
     expect(launcherEl()).toBeNull()
-    sdk.dispatch('open')
+    window.dispatchEvent(
+      new MessageEvent('message', { origin: ORIGIN, data: { type: 'quackback:unread', count: 2 } })
+    )
     sdk.dispatch('showLauncher')
     const btn = launcherEl()!
     expect(btn).not.toBeNull()
     expect(btn.style.opacity).toBe('1')
     expect(btn.style.backgroundColor).toBe('#ff0000')
     expect(btn.textContent).toContain('Chat with us')
-    // It reflects the panel that is already open.
-    expect(btn.getAttribute('aria-expanded')).toBe('true')
+    // It carries the unread count that arrived before it existed...
+    expect(btn.getAttribute('aria-label')).toBe('Chat with us, 2 unread')
+    // ...and reflects a panel that is already open.
+    sdk.dispatch('hideLauncher')
+    sdk.dispatch('destroy')
+    sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
+    sdk.dispatch('open')
+    sdk.dispatch('showLauncher')
+    expect(launcherEl()!.getAttribute('aria-expanded')).toBe('true')
   })
 
   it('hideLauncher hides the greeting bubble too', () => {

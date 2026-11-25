@@ -75,6 +75,7 @@ export function createSDK(): SDK {
   // showLauncher, and whether the launcher has been revealed yet.
   let serverConfig: ServerConfig | null = null
   let launcherRevealed = false
+  let unreadCount = 0
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
   // banner). Tracking runs only when both the host and the instance allow it.
@@ -164,6 +165,7 @@ export function createSDK(): SDK {
         // Total unread from the iframe → the launcher badge (shown only while
         // closed). Coerced defensively; a bad payload clears the badge.
         const count = typeof msg.count === 'number' ? msg.count : 0
+        unreadCount = count
         launcher?.setUnread(count)
         // Also surface it to host SDK subscribers (Quackback.on('unread', ...))
         // so a host can mirror the count in its own UI.
@@ -366,8 +368,9 @@ export function createSDK(): SDK {
       },
     })
     // A launcher created after init (showLauncher) catches up with the
-    // server config, the panel state and the reveal it missed.
+    // server config, unread count, panel state and reveal it missed.
     if (serverConfig) applyLauncherConfig(serverConfig)
+    if (unreadCount) launcher.setUnread(unreadCount)
     if (panelOpen) launcher.setOpen(true)
     if (launcherRevealed) launcher.reveal()
   }
@@ -551,6 +554,7 @@ export function createSDK(): SDK {
         currentUser = null
         serverConfig = null
         launcherRevealed = false
+        unreadCount = 0
         placement = 'right'
         config = null
         return
