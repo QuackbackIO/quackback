@@ -12,25 +12,31 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import { WIDGET_LOCALE_LABELS, type WidgetTranslations } from '@/lib/shared/widget/translations'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { REPLY_TIMES, resolveReplyTime, type ReplyTime } from '@/lib/shared/widget/reply-time'
+import type { ReplyTime } from '@/lib/shared/widget/reply-time'
 
-const REPLY_TIME_LABELS: Record<ReplyTime, string> = {
+// Type-only import: the options live here so this page pulls no shared
+// runtime module (or chunk) in with the widget.
+const REPLY_TIME_LABELS = {
   minutes: 'In a few minutes',
   hour: 'Under an hour',
   hours: 'In a few hours',
   day: 'Within a day',
   off: "Don't show",
+} satisfies Record<ReplyTime, string>
+const REPLY_TIME_OPTIONS = Object.keys(REPLY_TIME_LABELS) as ReplyTime[]
+
+/** A small pill button, picked or not (reply time and translation locale). */
+function pillClass(selected: boolean) {
+  return cn(
+    'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
+    selected
+      ? 'border-primary bg-primary/10 text-foreground'
+      : 'border-border/50 text-muted-foreground hover:text-foreground'
+  )
 }
 
 export function MessengerChannelPage() {
@@ -55,7 +61,8 @@ export function MessengerChannelPage() {
   const [welcomeMessage, setWelcomeMessage] = useState(messengerConfig?.welcomeMessage ?? '')
   const [offlineMessage, setOfflineMessage] = useState(messengerConfig?.offlineMessage ?? '')
   const [teamName, setTeamName] = useState(messengerConfig?.teamName ?? '')
-  const [replyTime, setReplyTime] = useState(resolveReplyTime(messengerConfig?.replyTime))
+  // Absent reads as under an hour (the shared DEFAULT_REPLY_TIME).
+  const [replyTime, setReplyTime] = useState<ReplyTime>(messengerConfig?.replyTime ?? 'hour')
   const [translations, setTranslations] = useState<WidgetTranslations>(config.translations ?? {})
   const [translationLocale, setTranslationLocale] = useState<string>('en')
 
@@ -154,28 +161,33 @@ export function MessengerChannelPage() {
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="messenger-reply-time">Usual reply time</Label>
-            <Select
-              value={replyTime}
-              onValueChange={(value) => {
-                const prev = replyTime
-                const next = resolveReplyTime(value)
-                setReplyTime(next)
-                persist('replyTime', { messenger: { replyTime: next } }, () => setReplyTime(prev))
-              }}
-              disabled={isBusy}
+            <Label id="messenger-reply-time">Usual reply time</Label>
+            <div
+              role="radiogroup"
+              aria-labelledby="messenger-reply-time"
+              className="flex flex-wrap gap-1.5"
             >
-              <SelectTrigger id="messenger-reply-time" className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {REPLY_TIMES.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {REPLY_TIME_LABELS[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {REPLY_TIME_OPTIONS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={replyTime === value}
+                  onClick={() => {
+                    if (value === replyTime) return
+                    const prev = replyTime
+                    setReplyTime(value)
+                    persist('replyTime', { messenger: { replyTime: value } }, () =>
+                      setReplyTime(prev)
+                    )
+                  }}
+                  disabled={isBusy}
+                  className={pillClass(replyTime === value)}
+                >
+                  {REPLY_TIME_LABELS[value]}
+                </button>
+              ))}
+            </div>
             <p className="text-xs text-muted-foreground">Shown to visitors in the messenger.</p>
           </div>
           <div className="space-y-1.5">
@@ -318,12 +330,7 @@ function MessengerTranslations({
             type="button"
             onClick={() => onSelectLocale(locale)}
             disabled={disabled}
-            className={cn(
-              'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
-              selectedLocale === locale
-                ? 'border-primary bg-primary/10 text-foreground'
-                : 'border-border/50 text-muted-foreground hover:text-foreground'
-            )}
+            className={pillClass(selectedLocale === locale)}
           >
             {WIDGET_LOCALE_LABELS[locale] ?? locale}
           </button>

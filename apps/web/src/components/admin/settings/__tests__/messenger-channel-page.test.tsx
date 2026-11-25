@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const updateWidgetConfig = vi.fn()
@@ -43,15 +43,28 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('MessengerChannelPage usual reply time', () => {
+  function checked() {
+    const group = screen.getByRole('radiogroup', { name: 'Usual reply time' })
+    return [...group.querySelectorAll('[role="radio"][aria-checked="true"]')].map(
+      (el) => el.textContent
+    )
+  }
+
   it('shows under an hour when the workspace never set it', () => {
     renderPage({})
-    const trigger = screen.getByRole('combobox', { name: 'Usual reply time' })
-    expect(trigger.textContent).toContain('Under an hour')
+    expect(checked()).toEqual(['Under an hour'])
   })
 
   it('shows the stored choice', () => {
     renderPage({ replyTime: 'day' })
-    const trigger = screen.getByRole('combobox', { name: 'Usual reply time' })
-    expect(trigger.textContent).toContain('Within a day')
+    expect(checked()).toEqual(['Within a day'])
+  })
+
+  it('saves a new choice', () => {
+    updateWidgetConfig.mockResolvedValue({})
+    renderPage({})
+    fireEvent.click(screen.getByRole('radio', { name: "Don't show" }))
+    expect(updateWidgetConfig).toHaveBeenCalledWith({ messenger: { replyTime: 'off' } })
+    expect(checked()).toEqual(["Don't show"])
   })
 })
