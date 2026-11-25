@@ -17,7 +17,11 @@ import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import { lazyOptional } from '@/lib/client/lazy-with-preload'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
-import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
+import {
+  documentThemeProviderProps,
+  resolveDocumentTheme,
+  SYSTEM_THEME_SCRIPT,
+} from '@/lib/shared/theme'
 import { MinimalDocument } from '@/components/shared/minimal-document'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { DocumentHead, DocumentScripts } from '@/components/shared/document-head'
@@ -264,9 +268,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const forcedTheme =
     searchForcedTheme ?? (isPortalRoute && themeMode !== 'user' ? themeMode : undefined)
 
-  // next-themes' inline script sets the class on <html> before first paint.
-  // We pass the resolved default so the script knows what to apply.
-  const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
+  const themeProviderProps = documentThemeProviderProps({ forcedTheme, themeCookie })
+  // What this document shows first: the forced theme, else the visitor's own.
+  const defaultTheme = forcedTheme ?? themeProviderProps.defaultTheme
 
   // ...but that script sits in <body>, after content that may paint first, so
   // when the theme is known we also commit the class and color-scheme on the
@@ -317,9 +321,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       <body className="min-h-screen bg-background font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme={defaultTheme}
-          enableSystem={!forcedTheme}
-          forcedTheme={forcedTheme}
+          {...themeProviderProps}
           disableTransitionOnChange
           // Never write the shared theme cookie from a forced-theme document:
           // the widget iframe and the same-origin portal preview iframe would
