@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { LocalDate } from '@/components/ui/local-date'
 import {
   DocumentTextIcon,
@@ -101,6 +101,8 @@ export function ChangelogMetadataSidebarContent({
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Rendered in the desktop sidebar and the mobile sheet at once.
+  const announceId = useId()
   const { upload: uploadFeaturedImage } = useImageUpload({ prefix: 'changelog' })
   const [featuredImageUploading, setFeaturedImageUploading] = useState(false)
 
@@ -282,14 +284,14 @@ export function ChangelogMetadataSidebarContent({
       {workspaceAnnounces && (
         <div className="flex items-center justify-between gap-2">
           <label
-            htmlFor="changelog-announce-on-launcher"
+            htmlFor={announceId}
             className="flex items-center gap-2 text-sm text-muted-foreground"
           >
             <MegaphoneIcon className="h-4 w-4" />
             Announce above the launcher
           </label>
           <Checkbox
-            id="changelog-announce-on-launcher"
+            id={announceId}
             checked={announceOnLauncher}
             onCheckedChange={(checked) => onAnnounceOnLauncherChange(checked === true)}
           />
