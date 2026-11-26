@@ -140,6 +140,14 @@ export interface BootstrapData {
     maskInputs: boolean
     workspaceId: string | null
   } | null
+  /**
+   * Resolved visitor-analytics switches for the root beacon (entitlement +
+   * workspace `visitorAnalytics` and `visitorDeviceTracking` settings).
+   */
+  visitorTracking: {
+    analytics: boolean
+    deviceTracking: boolean
+  }
 }
 
 /** The session's role, `user` for a paused seat (the plan has fewer team seats than members). */
@@ -301,6 +309,9 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { sectionOriginsOf },
     { compactSectionLinks },
     { hostingOf, routableSectionDomains, withoutPausedHosts },
+    { parseWidgetConfig },
+    { resolveVisitorTracking },
+    { resolveTierLimitsFromRow },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/auth/registered-providers'),
@@ -312,6 +323,9 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     import('@/lib/server/domains/settings/section-links'),
     import('@/lib/shared/section-links'),
     import('@/lib/server/domains/settings/section-domains.hosting'),
+    import('@/lib/server/domains/settings/settings.helpers'),
+    import('@/lib/server/domains/analytics/visitor-tracking'),
+    import('@/lib/server/domains/settings/tier-limits.service'),
   ])
 
   // Single principal read returns both session.principalType + userRole;
@@ -430,6 +444,22 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
   )
   const setupState = getSetupState(settings?.settings?.setupState ?? null)
+  const rawTierLimits =
+    typeof settings?.settings?.tierLimits === 'string' ? settings.settings.tierLimits : null
+  const rawProjection =
+    (settings?.settings as { cloud?: { projection?: unknown } } | undefined)?.cloud?.projection ??
+    null
+  const visitorEntitled =
+    resolveTierLimitsFromRow(rawTierLimits, rawProjection, new Date()).features.visitorAnalytics ===
+    true
+  const widgetTrackingConfig = parseWidgetConfig(
+    typeof settings?.settings?.widgetConfig === 'string' ? settings.settings.widgetConfig : null
+  )
+  const visitorTracking = resolveVisitorTracking({
+    entitled: visitorEntitled,
+    analytics: widgetTrackingConfig.visitorAnalytics,
+    deviceId: widgetTrackingConfig.visitorDeviceTracking,
+  })
 
   return {
     baseUrl,
@@ -467,6 +497,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
           ),
         }
       : null,
+    visitorTracking,
   }
 })
 

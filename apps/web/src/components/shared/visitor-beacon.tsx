@@ -12,6 +12,23 @@ import { browserOptedOutOfTracking } from '@/lib/client/analytics'
  */
 const DEVICE_COOKIE = 'qb_device'
 
+function hasDeviceCookie(): boolean {
+  try {
+    return new RegExp(`(?:^|; )${DEVICE_COOKIE}=[^;]+`).test(document.cookie)
+  } catch {
+    return false
+  }
+}
+
+function clearDeviceCookie(): void {
+  if (!hasDeviceCookie()) return
+  try {
+    document.cookie = `${DEVICE_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`
+  } catch {
+    // Best-effort clear; never block navigation
+  }
+}
+
 /** First-party durable device id (layer-2 identity, instance-opt-in). */
 function getOrCreateDeviceId(): string | null {
   try {
@@ -25,7 +42,13 @@ function getOrCreateDeviceId(): string | null {
   }
 }
 
-export function VisitorBeacon() {
+export function VisitorBeacon({
+  analytics = true,
+  deviceTracking = true,
+}: {
+  analytics?: boolean
+  deviceTracking?: boolean
+} = {}) {
   // The URL to track, or null off the public visitor-facing surfaces (the
   // portal tree plus the standalone changelog and help-center trees, the
   // latter also serving the subdomain), so a navigation elsewhere renders
@@ -43,11 +66,19 @@ export function VisitorBeacon() {
   const lastTracked = useRef<string | null>(null)
 
   useEffect(() => {
+    if (!analytics) {
+      clearDeviceCookie()
+      lastTracked.current = null
+      return
+    }
+    if (!deviceTracking) {
+      clearDeviceCookie()
+    }
     if (!href || lastTracked.current === href) return
     if (browserOptedOutOfTracking()) return
     lastTracked.current = href
 
-    const deviceId = getOrCreateDeviceId()
+    const deviceId = deviceTracking ? getOrCreateDeviceId() : null
     const body = JSON.stringify({
       url: window.location.href,
       referrer: document.referrer,
@@ -57,7 +88,7 @@ export function VisitorBeacon() {
     if (!navigator.sendBeacon?.('/api/track', body)) {
       fetch('/api/track', { method: 'POST', body, keepalive: true }).catch(() => {})
     }
-  }, [href])
+  }, [href, analytics, deviceTracking])
 
   return null
 }
