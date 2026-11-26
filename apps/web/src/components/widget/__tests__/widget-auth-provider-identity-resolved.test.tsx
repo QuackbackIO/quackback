@@ -6,7 +6,7 @@
  * to the anonymous bar on mount and never restores the Home landing once a
  * ticket-holding visitor is identified.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 import { type ReactNode } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -16,6 +16,8 @@ import { clearWidgetToken } from '@/lib/client/widget-auth'
 installInMemoryLocalStorage()
 
 vi.mock('@/lib/client/widget-bridge', () => ({ sendToHost: vi.fn() }))
+const frame = { hasHost: true }
+vi.mock('@/lib/client/widget-frame', () => ({ frameHasHost: () => frame.hasHost }))
 vi.mock('@/lib/client/auth-client', () => ({
   authClient: { signIn: { anonymous: vi.fn().mockResolvedValue({ data: null, error: null }) } },
 }))
@@ -24,7 +26,11 @@ vi.mock('@/lib/shared/i18n', async (orig) => ({
   loadMessages: vi.fn().mockResolvedValue({}),
 }))
 
-import { WidgetAuthProvider, useWidgetAuth } from '../widget-auth-provider'
+import {
+  IDENTITY_HANDSHAKE_TIMEOUT_MS,
+  WidgetAuthProvider,
+  useWidgetAuth,
+} from '../widget-auth-provider'
 
 function Probe() {
   const { identityResolved, isIdentified } = useWidgetAuth()
@@ -82,6 +88,96 @@ describe('WidgetAuthProvider — identityResolved', () => {
     clearWidgetToken()
     window.localStorage.clear()
     vi.unstubAllGlobals()
+    frame.hasHost = true
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('resolves as anonymous at once in a frame nobody embeds', async () => {
+    frame.hasHost = false
+    vi.stubGlobal('fetch', vi.fn())
+    renderWidget()
+    await waitFor(() => expect(screen.getByTestId('probe').textContent).toBe('resolved:anonymous'))
+  })
+
+  it('resolves as anonymous when the host never sends an identity', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn())
+    renderWidget()
+    act(() => vi.advanceTimersByTime(IDENTITY_HANDSHAKE_TIMEOUT_MS - 1))
+    expect(screen.getByTestId('probe').textContent).toBe('pending:anonymous')
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:anonymous')
+  })
+
+  it('waits for an identify already on its way, past the handshake wait', async () => {
+    vi.useFakeTimers()
+    let finish!: (value: unknown) => void
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise((r) => (finish = r)))
+    )
+    renderWidget()
+    postFromHost({ id: 'u1', ssoToken: 'sso' })
+    act(() => vi.advanceTimersByTime(IDENTITY_HANDSHAKE_TIMEOUT_MS * 2))
+    expect(screen.getByTestId('probe').textContent).toBe('pending:anonymous')
+    await act(async () => {
+      finish({
+        ok: true,
+        json: async () => ({
+          sessionToken: 'tok',
+          user: { id: 'u1', name: 'Ada', email: 'ada@example.com', avatarUrl: null },
+        }),
+      })
+    })
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:identified')
+  })
+
+  it('goes back to pending while an identify that arrives after the wait is in flight', async () => {
+    vi.useFakeTimers()
+    let finish!: (value: unknown) => void
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise((r) => (finish = r)))
+    )
+    renderWidget()
+    act(() => vi.advanceTimersByTime(IDENTITY_HANDSHAKE_TIMEOUT_MS))
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:anonymous')
+
+    postFromHost({ id: 'u1', ssoToken: 'sso' })
+    // Not "anonymous" any more: who the visitor is is on its way.
+    expect(screen.getByTestId('probe').textContent).toBe('pending:anonymous')
+    await act(async () => {
+      finish({
+        ok: true,
+        json: async () => ({
+          sessionToken: 'tok',
+          user: { id: 'u1', name: 'Ada', email: 'ada@example.com', avatarUrl: null },
+        }),
+      })
+    })
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:identified')
+  })
+
+  it('still takes an identify that arrives after the handshake wait', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          sessionToken: 'tok',
+          user: { id: 'u1', name: 'Ada', email: 'ada@example.com', avatarUrl: null },
+        }),
+      })
+    )
+    renderWidget()
+    act(() => vi.advanceTimersByTime(IDENTITY_HANDSHAKE_TIMEOUT_MS))
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:anonymous')
+    postFromHost({ id: 'u1', ssoToken: 'sso' })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.getByTestId('probe').textContent).toBe('resolved:identified')
   })
 
   it('is pending on mount, before the SDK has identified anyone', async () => {

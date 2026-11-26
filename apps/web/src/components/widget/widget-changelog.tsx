@@ -13,6 +13,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import { getChangelogSeenAt, markChangelogSeen } from './changelog-unread'
+import { seenScope } from './seen-scope'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
 import type { ChangelogCategoryId } from '@quackback/ids'
 import { WidgetChangelogListSkeleton, WidgetChangelogMoreSkeleton } from './widget-skeletons'
@@ -34,21 +35,25 @@ interface WidgetChangelogProps {
 const lastVisit: {
   scrollTop: number
   categoryId: ChangelogCategoryId | null
-  /** Seen marker as it stood when the list first had data this session;
-   *  `undefined` until captured. Lives here, not in the component, because
-   *  opening an entry unmounts the list and the marker has advanced by then. */
-  seenBaseline: string | null | undefined
+  /** Each person's seen marker as it stood when the list first had data for
+   *  them this session. Lives here, not in the component, because opening an
+   *  entry unmounts the list and the marker has advanced by then; kept per
+   *  person so switching to someone else and back keeps the first one's view. */
+  seenBaselines: Map<string, string | null>
 } = {
   scrollTop: 0,
   categoryId: null,
-  seenBaseline: undefined,
+  seenBaselines: new Map(),
 }
 
 /** Filtered pages to pull ahead before conceding "nothing in this category". */
 const FILTER_LOOKAHEAD_MIN_ROWS = 3
 
 export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProps) {
-  const { sessionVersion } = useWidgetAuth()
+  const { sessionVersion, user, identityResolved } = useWidgetAuth()
+  // Null until the identity round trip settles: until then no marker is read
+  // or advanced, so nothing lands under the wrong person.
+  const scope = seenScope(user, identityResolved)
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError, isLoading } =
     useInfiniteQuery(widgetChangelogListQuery(sessionVersion))
   const { data: categories = [] } = useQuery(widgetChangelogLabelsQuery(sessionVersion))
@@ -62,11 +67,14 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   const allEntries = data?.pages.flatMap((page) => page.items) ?? []
 
   // The launcher badge counted unread entries; the list should show which.
-  // Capture the seen marker once per session, when the list first has data —
-  // before the effect below advances it — so "New" holds across detail
-  // round-trips and not just this mount.
-  if (data && lastVisit.seenBaseline === undefined) lastVisit.seenBaseline = getChangelogSeenAt()
-  const baseline = lastVisit.seenBaseline ? new Date(lastVisit.seenBaseline).getTime() : null
+  // Capture each person's seen marker once per session, when the list first
+  // has data and before the effect below advances it, so "New" holds across
+  // detail round-trips and not just this mount.
+  if (data && scope !== null && !lastVisit.seenBaselines.has(scope)) {
+    lastVisit.seenBaselines.set(scope, getChangelogSeenAt(scope))
+  }
+  const seenBaseline = scope === null ? null : lastVisit.seenBaselines.get(scope)
+  const baseline = seenBaseline ? new Date(seenBaseline).getTime() : null
   const isNew = (publishedAt: string) =>
     baseline !== null && new Date(publishedAt).getTime() > baseline
 
@@ -88,10 +96,10 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   // published meanwhile keeps its badge until the panel is shown again.
   const hostShown = useHostShown()
   useEffect(() => {
-    if (!hostShown) return
+    if (!hostShown || scope === null) return
     const newest = entries[0]?.publishedAt
-    if (newest) markChangelogSeen(newest)
-  }, [entries, hostShown])
+    if (newest) markChangelogSeen(scope, newest)
+  }, [entries, hostShown, scope])
 
   const sentinelRef = useInfiniteScroll({
     hasMore: hasNextPage ?? false,

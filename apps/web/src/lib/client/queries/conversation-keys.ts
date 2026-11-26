@@ -77,6 +77,13 @@ export const conversationKeys = {
   widgetMessengerUnread: (sessionVersion: number | string) =>
     [...conversationKeys.widgetMessengerUnreads(), sessionVersion] as const,
 
+  /** Prefix of every widget Home "Recent message" card, across sessions. */
+  widgetConversationSummaries: () => ['widget', 'conversation-summary'] as const,
+
+  /** The widget Home "Recent message" card, re-keyed when identify swaps the actor. */
+  widgetConversationSummary: (sessionVersion: number | string) =>
+    [...conversationKeys.widgetConversationSummaries(), sessionVersion] as const,
+
   /** The portal Support tab list. */
   portalConversationList: () => ['portal', 'my-conversations'] as const,
 }

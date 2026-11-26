@@ -19,6 +19,7 @@ import {
   clearPersistedToken,
 } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
+import { frameHasHost } from '@/lib/client/widget-frame'
 import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/client/auth-client'
 import { resolveIdentifyAction, type SessionSource } from './identify-precedence'
@@ -99,6 +100,13 @@ interface WidgetAuthProviderProps {
   children: ReactNode
 }
 
+/**
+ * How long an embedded frame waits for its host's first identity before it
+ * treats the visitor as anonymous. The SDK sends one as soon as the frame is
+ * ready; a frame shown without the SDK (a settings preview) never gets one.
+ */
+export const IDENTITY_HANDSHAKE_TIMEOUT_MS = 1500
+
 export function WidgetAuthProvider({
   portalUser,
   portalSessionToken,
@@ -124,6 +132,11 @@ export function WidgetAuthProvider({
   const [sessionVersion, setSessionVersion] = useState(initialSessionVersion)
   const [identityResolved, setIdentityResolved] = useState(false)
   const isIdentified = user !== null
+  // The current person, for message handlers registered once at mount.
+  const userRef = useRef(user)
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
   const sessionReadyRef = useRef(portalSessionAdopted)
   const sessionSourceRef = useRef<SessionSource>(portalSessionAdopted ? 'portal' : null)
 
@@ -351,6 +364,24 @@ export function WidgetAuthProvider({
 
   const [widgetMetadata, setWidgetMetadata] = useState<WidgetMetadata | null>(null)
 
+  // A frame nobody will identify settles as anonymous: at once when it has no
+  // host at all, or once the handshake wait passes with no identity. An
+  // identify already on its way settles it instead, and a later one still
+  // applies as usual. A portal session settles it on its own (above).
+  const identifyReceivedRef = useRef(false)
+  useEffect(() => {
+    if (portalSessionToken) return
+    const settleAnonymous = () => {
+      if (!identifyReceivedRef.current) setIdentityResolved(true)
+    }
+    if (!frameHasHost()) {
+      settleAnonymous()
+      return
+    }
+    const timer = setTimeout(settleAnonymous, IDENTITY_HANDSHAKE_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [portalSessionToken])
+
   useEffect(() => {
     async function handleIdentify(data: Record<string, unknown>) {
       try {
@@ -393,7 +424,21 @@ export function WidgetAuthProvider({
       }
     }
 
+    // Drop the current session and start a new session version, so every
+    // identity-keyed read refetches for whoever comes next.
+    function dropSession() {
+      clearWidgetToken()
+      sessionReadyRef.current = false
+      sessionSourceRef.current = null
+      sessionPromiseRef.current = null
+      sessionVersionRef.current += 1
+      setSessionVersion(sessionVersionRef.current)
+    }
+
     async function handleAnonymousIdentify() {
+      // Anonymous on top of a signed-in person is a sign-out: what was fetched
+      // for them (their tickets, segment-gated entries) must not carry over.
+      if (userRef.current !== null) dropSession()
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
       setUser(null)
@@ -434,6 +479,7 @@ export function WidgetAuthProvider({
       }
 
       if (msg.type === 'quackback:identify') {
+        identifyReceivedRef.current = true
         const action = resolveIdentifyAction({
           identifyData: msg.data,
           hasPortalSession: !!portalSessionToken,
@@ -442,12 +488,7 @@ export function WidgetAuthProvider({
 
         switch (action) {
           case 'clear':
-            clearWidgetToken()
-            sessionReadyRef.current = false
-            sessionSourceRef.current = null
-            sessionPromiseRef.current = null
-            sessionVersionRef.current += 1
-            setSessionVersion(sessionVersionRef.current)
+            dropSession()
             setUser(null)
             setCanPortalHandoff(true)
             setIdentityResolved(true)
@@ -459,6 +500,10 @@ export function WidgetAuthProvider({
             break
           case 'identify':
             sessionSourceRef.current = 'sdk'
+            // Who the visitor is stays unknown until this round trip settles,
+            // even if the frame had already settled as anonymous while it
+            // waited for its host.
+            setIdentityResolved(false)
             handleIdentify(msg.data as Record<string, unknown>)
             break
           case 'skip':

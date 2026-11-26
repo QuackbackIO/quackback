@@ -14,6 +14,9 @@
  * badges — only CHANGES to a stage the visitor was baselined on do.
  */
 
+import { readScopedMarker, touchScopedMarker, writeScopedMarker } from './seen-scope'
+
+// Each identity in the browser has its own map (see seen-scope.ts).
 const SEEN_KEY = 'quackback:ticket-stages-seen'
 
 /** Event name dispatched on window after markers advance, so open widget
@@ -29,9 +32,9 @@ export interface TicketStageSeenInput {
   stage: { slot: string | null }
 }
 
-export function getTicketStagesSeen(storage?: Storage): TicketStageSeenMap | null {
+export function getTicketStagesSeen(scope: string, storage?: Storage): TicketStageSeenMap | null {
   try {
-    const raw = (storage ?? window.localStorage).getItem(SEEN_KEY)
+    const raw = readScopedMarker(storage ?? window.localStorage, SEEN_KEY, scope)
     if (!raw) return null
     // Guard against a corrupted value: an unparseable or non-map marker
     // behaves as no marker rather than poisoning every comparison.
@@ -43,16 +46,28 @@ export function getTicketStagesSeen(storage?: Storage): TicketStageSeenMap | nul
   }
 }
 
+/** Keep this person's map among the most recently active (see seen-scope.ts). */
+export function touchTicketStagesSeen(scope: string): void {
+  try {
+    touchScopedMarker(window.localStorage, SEEN_KEY, scope)
+  } catch {
+    // Storage unavailable (private mode etc.).
+  }
+}
+
 /**
  * Advance the markers for the given tickets to their current stages. Merges
  * into the existing map so a paginated/limited list never drops markers for
  * tickets it didn't happen to load.
  */
-export function markTicketStagesSeen(tickets: readonly TicketStageSeenInput[]): void {
-  const next: TicketStageSeenMap = { ...getTicketStagesSeen() }
+export function markTicketStagesSeen(
+  scope: string,
+  tickets: readonly TicketStageSeenInput[]
+): void {
+  const next: TicketStageSeenMap = { ...getTicketStagesSeen(scope) }
   for (const t of tickets) next[t.ticketId] = t.stage.slot
   try {
-    window.localStorage.setItem(SEEN_KEY, JSON.stringify(next))
+    writeScopedMarker(window.localStorage, SEEN_KEY, scope, JSON.stringify(next))
   } catch {
     // Storage unavailable — the badge returns next load; never break the view.
   }

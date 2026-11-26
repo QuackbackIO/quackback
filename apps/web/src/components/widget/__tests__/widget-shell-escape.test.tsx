@@ -17,9 +17,13 @@ vi.mock('../widget-auth-provider', () => ({
     canPortalHandoff: true,
     closeWidget: auth.closeWidget,
     sessionVersion: 1,
+    identityResolved: true,
   }),
 }))
-vi.mock('../use-messenger-unread', () => ({ useMessengerUnread: () => 0 }))
+vi.mock('../use-messenger-unread', () => ({
+  useMessengerUnread: () => 0,
+  useRefreshSummaryOnUnreadChange: () => {},
+}))
 vi.mock('../use-changelog-unread', () => ({
   useChangelogUnread: () => ({ unread: 0, markSeen: vi.fn() }),
 }))

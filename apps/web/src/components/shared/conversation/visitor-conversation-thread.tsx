@@ -34,7 +34,6 @@ import { TypingDots } from '@/components/shared/typing-dots'
 import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
 import { shownGreeting } from '@/lib/shared/conversation/default-greeting'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
-import { useHostVisibleCount } from '@/lib/client/hooks/use-host-visible'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useAssistantTurn } from '@/lib/client/hooks/use-assistant-turn'
 import {
@@ -67,6 +66,7 @@ import {
   type VisitorThreadCache,
 } from '@/components/conversation/events-reducer'
 import { refreshVisitorUnreadCounts } from '@/lib/client/conversation/visitor-read'
+import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import { conversationKeys } from '@/components/conversation/query-keys'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
@@ -656,6 +656,17 @@ export function VisitorConversationThread({
     onCatchUp: () => void refreshMessages(),
   })
 
+  // A browser can throttle or drop a hidden frame's live stream, so a reply
+  // that arrives while the host hides the frame may never reach it. When the
+  // host shows the frame again, read the thread again to catch up.
+  const hostShown = useHostShown()
+  const wasShownRef = useRef(hostShown)
+  useEffect(() => {
+    const shownAgain = hostShown && !wasShownRef.current
+    wasShownRef.current = hostShown
+    if (shownAgain) void refreshMessages()
+  }, [hostShown, refreshMessages])
+
   // Ephemeral turn state is component-local (not keyed by resetKey); drop it when
   // switching threads so it can't bleed across conversations.
   useEffect(() => clearAssistantTurn, [conversationId, clearAssistantTurn])
@@ -987,14 +998,9 @@ export function VisitorConversationThread({
   // Clear unread on the visitor side once an agent reply newer than the
   // visitor's watermark is on screen. The visitor's own sends and system events
   // never trigger a write. A read changes the unread counts on the lists and
-  // badges outside this thread, so they refetch.
-  // A host that hid this frame says when it shows it again: catch up on any
-  // reply the live stream missed meanwhile, and read the newest one.
+  // badges outside this thread, so they refetch. While the host hides the
+  // frame nothing is read; showing it again reads the newest reply.
   const onVisitorRead = useCallback(() => refreshVisitorUnreadCounts(queryClient), [queryClient])
-  const shownAgain = useHostVisibleCount()
-  useEffect(() => {
-    if (shownAgain > 0) void refreshMessages()
-  }, [shownAgain, refreshMessages])
   useMarkReadOnIncoming({
     conversationId,
     messages,
@@ -1002,7 +1008,6 @@ export function VisitorConversationThread({
     readThrough: visitorReadAt,
     getHeaders: getAuthHeaders,
     onMarked: onVisitorRead,
-    recheck: shownAgain,
   })
 
   const send = useCallback(async () => {
