@@ -10,11 +10,11 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { excerptAtWord } from './whats-new'
 
 /**
- * The reply preview the SDK shows above the closed launcher, sent to the host
- * as `quackback:reply-preview`, and the tab title flash, sent as
- * `quackback:title-alert`. The frame holds the catalogue, so the card's words
- * travel with the replies. Both carry message text or a teammate's name, so
- * they go out only when the workspace turns them on.
+ * The newest unread replies, sent to the host as `quackback:reply-preview`.
+ * The SDK fires its `message` event from them whatever the workspace shows,
+ * renders the card above the closed launcher only when `card` is set, and
+ * flashes `title` in the tab title when there is one. The frame holds the
+ * catalogue, so the card's words travel with the replies.
  */
 
 export type ReplyAlerts = 'badge' | 'preview' | 'full'
@@ -37,7 +37,11 @@ export interface ReplyPreviewPayload {
   teamName: string
   messages: Array<{ id: string; text: string; createdAt: string }>
   count: number
+  /** Show the card above the launcher; off with the badge only. */
+  card: boolean
   full: boolean
+  /** The tab title flash, e.g. "Alex replied", or null when that is off. */
+  title: string | null
   strings: {
     header: string
     replyTo: string
@@ -68,8 +72,9 @@ function absoluteUrl(url: string | null): string | null {
 export function buildReplyPreview(
   intl: IntlShape,
   data: UnreadReplies,
-  full: boolean
+  settings: { replyAlerts: ReplyAlerts; titleAlerts: boolean }
 ): ReplyPreviewPayload {
+  const full = settings.replyAlerts === 'full'
   const names = namesOf(data)
   const header =
     names.full && names.team
@@ -100,7 +105,14 @@ export function buildReplyPreview(
       createdAt: m.createdAt,
     })),
     count: data.count,
+    card: settings.replyAlerts !== 'badge',
     full,
+    title: settings.titleAlerts
+      ? intl.formatMessage(
+          { id: 'widget.replyPreview.replied', defaultMessage: '{name} replied' },
+          { name: names.first }
+        )
+      : null,
     strings: {
       header,
       replyTo: intl.formatMessage(
@@ -119,13 +131,6 @@ export function buildReplyPreview(
       announce,
     },
   }
-}
-
-export function buildTitleAlert(intl: IntlShape, data: UnreadReplies): string {
-  return intl.formatMessage(
-    { id: 'widget.replyPreview.replied', defaultMessage: '{name} replied' },
-    { name: namesOf(data).first }
-  )
 }
 
 /**
@@ -155,65 +160,36 @@ export function useUnreadReplies(
   return { ready: data !== undefined, data: data ?? null }
 }
 
-/** Send `{ type, [field]: value }` to the host when the value changes, or
- *  the session does; once off after a send, send a null value once. */
-function useSendOnChange(
-  type: string,
-  field: string,
-  enabled: boolean,
-  ready: boolean,
-  session: number,
-  value: unknown
+/**
+ * Tell the host about the newest unread replies whenever they change, or
+ * null once nothing is unread, while `enabled` (the Messages tab shows).
+ * Sent whatever the card setting: the host's `message` event relies on it.
+ * A new widget session sends again, even when the payload is the same: the
+ * host drops the previous visitor's replies and waits for this one. Turning
+ * off after a send clears them once.
+ */
+export function useReplyPreviewAnnouncement(
+  settings: { enabled: boolean; replyAlerts: ReplyAlerts; titleAlerts: boolean },
+  state: { ready: boolean; data: UnreadReplies | null; session?: number }
 ): void {
-  // What went out last, as "<session>\n<value JSON>".
+  const intl = useIntl()
+  const session = state.session ?? 0
+  const preview =
+    settings.enabled && state.data ? buildReplyPreview(intl, state.data, settings) : null
+  // What went out last, as "<session>\n<payload JSON>".
   const lastSent = useRef<string | null>(null)
   let key: string | null = null
-  if (enabled) {
-    if (ready) key = `${session}\n${JSON.stringify(value)}`
+  if (settings.enabled) {
+    if (state.ready) key = `${session}\n${JSON.stringify(preview)}`
   } else if (lastSent.current !== null && !lastSent.current.endsWith('\nnull')) {
-    // Off after something went out: the host must drop it.
     key = `${lastSent.current.slice(0, lastSent.current.indexOf('\n'))}\nnull`
   }
   useEffect(() => {
     if (key === null || key === lastSent.current) return
     lastSent.current = key
-    sendToHost({ type, [field]: JSON.parse(key.slice(key.indexOf('\n') + 1)) })
-  }, [type, field, key])
-}
-
-/**
- * Tell the host about the newest unread replies whenever they change, or
- * null once nothing is unread. The card goes out only while `replyAlerts`
- * is not 'badge', the tab title text only while `titleAlerts` is on. A new
- * widget session sends again, even when the payload is the same: the host
- * drops the previous visitor's card and waits for this one.
- */
-export function useReplyPreviewAnnouncement(
-  settings: { replyAlerts: ReplyAlerts; titleAlerts: boolean },
-  state: { ready: boolean; data: UnreadReplies | null; session?: number }
-): void {
-  const intl = useIntl()
-  const session = state.session ?? 0
-  const showCard = settings.replyAlerts !== 'badge'
-  const preview =
-    showCard && state.data
-      ? buildReplyPreview(intl, state.data, settings.replyAlerts === 'full')
-      : null
-  const title = settings.titleAlerts && state.data ? buildTitleAlert(intl, state.data) : null
-  useSendOnChange(
-    'quackback:reply-preview',
-    'replyPreview',
-    showCard,
-    state.ready,
-    session,
-    preview
-  )
-  useSendOnChange(
-    'quackback:title-alert',
-    'text',
-    settings.titleAlerts,
-    state.ready,
-    session,
-    title
-  )
+    sendToHost({
+      type: 'quackback:reply-preview',
+      replyPreview: JSON.parse(key.slice(key.indexOf('\n') + 1)),
+    })
+  }, [key])
 }

@@ -154,8 +154,9 @@ export interface EventMap {
    *  page remembers which entries it announced, per instance. */
   'whats-new': { count: number; entryId: string }
   /** A new unread reply from a teammate or the AI assistant. Fires once per
-   *  reply for each visitor while the workspace shows reply previews: the
-   *  host page remembers which replies it reported, per instance. */
+   *  reply for each visitor, whichever way the workspace shows replies
+   *  (including the badge only): the host page remembers which replies it
+   *  reported, per instance. */
   message: {
     conversationId: string
     author: { name: string; avatarUrl: string | null }

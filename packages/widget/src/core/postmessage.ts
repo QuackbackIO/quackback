@@ -28,7 +28,6 @@ export type OutboundMessage =
       tickets?: number
     }
   | { type: 'quackback:reply-preview'; replyPreview: unknown }
-  | { type: 'quackback:title-alert'; text: string | null }
 
 export interface BridgeOptions {
   getIframe: () => HTMLIFrameElement | null

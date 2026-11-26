@@ -34,7 +34,9 @@ function sample(over: Partial<ReplyPreview> = {}): ReplyPreview {
     teamName: 'Acme',
     messages: [msg(1), msg(2)],
     count: 2,
+    card: true,
     full: false,
+    title: null,
     strings: {
       header: 'Alex from Acme',
       replyTo: 'Reply to Alex…',
@@ -647,33 +649,74 @@ describe('sdk reply preview', () => {
     sdk.dispatch('destroy')
   })
 
-  it('flashes the tab title from the frame while hidden, and restores it', () => {
+  function hiddenPage() {
     vi.useFakeTimers()
-    let hidden = true
+    const page = { hidden: true }
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
-      get: () => (hidden ? 'hidden' : 'visible'),
+      get: () => (page.hidden ? 'hidden' : 'visible'),
     })
     document.title = 'Acme dashboard'
+    return page
+  }
+  function restorePage() {
+    vi.useRealTimers()
+    delete (document as { visibilityState?: unknown }).visibilityState
+  }
+
+  it('flashes the tab title from the payload while hidden, and restores it', () => {
+    const page = hiddenPage()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    post({ type: 'quackback:title-alert', text: 'Alex replied' })
+    preview(sample({ title: 'Alex replied' }))
     expect(document.title).toBe('Alex replied')
     vi.advanceTimersByTime(TITLE_ALERT_INTERVAL_MS)
     expect(document.title).toBe('Acme dashboard')
     vi.advanceTimersByTime(TITLE_ALERT_INTERVAL_MS)
-    post({ type: 'quackback:title-alert', text: null })
+    // Read: the frame sends null.
+    preview(null)
     expect(document.title).toBe('Acme dashboard')
-    post({ type: 'quackback:title-alert', text: 'Alex replied' })
-    hidden = false
+    // A payload without a title (the setting is off) leaves the title alone.
+    preview(sample())
+    vi.advanceTimersByTime(TITLE_ALERT_INTERVAL_MS * 2)
+    expect(document.title).toBe('Acme dashboard')
+    preview(sample({ title: 'Alex replied' }))
+    page.hidden = false
     document.dispatchEvent(new Event('visibilitychange'))
     expect(document.title).toBe('Acme dashboard')
-    hidden = true
+    page.hidden = true
     document.dispatchEvent(new Event('visibilitychange'))
     expect(document.title).toBe('Alex replied')
     sdk.dispatch('destroy')
     expect(document.title).toBe('Acme dashboard')
-    vi.useRealTimers()
-    delete (document as { visibilityState?: unknown }).visibilityState
+    restorePage()
+  })
+
+  it('with the badge only fires message and flashes the title, but shows no card', () => {
+    const page = hiddenPage()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'message', handler)
+    preview(sample({ card: false, title: 'Alex replied' }))
+    expect(handler).toHaveBeenCalledTimes(2)
+    expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ preview: 'Reply 2' }))
+    expect(cardEl()).toBeNull()
+    expect(document.title).toBe('Alex replied')
+    // Once per reply: the same replies again report nothing new.
+    preview(sample({ card: false, title: 'Alex replied' }))
+    expect(handler).toHaveBeenCalledTimes(2)
+    preview(sample({ card: false, messages: [msg(1), msg(2), msg(3)], count: 3 }))
+    expect(handler).toHaveBeenCalledTimes(3)
+    expect(cardEl()).toBeNull()
+    page.hidden = false
+    sdk.dispatch('destroy')
+    restorePage()
+  })
+
+  it('reads a payload without the card flag, from an older frame, as a card', () => {
+    const { card: _card, ...older } = sample()
+    expect(parseReplyPreview(older)?.card).toBe(true)
+    expect(parseReplyPreview({ ...sample(), card: false })?.card).toBe(false)
   })
 })

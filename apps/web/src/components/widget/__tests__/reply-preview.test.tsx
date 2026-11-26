@@ -31,7 +31,6 @@ import {
   buildReplyPreview,
   useReplyPreviewAnnouncement,
   useUnreadReplies,
-  type ReplyAlerts,
   type UnreadReplies,
 } from '../reply-preview'
 import { useMessengerUnread } from '../use-messenger-unread'
@@ -64,7 +63,9 @@ function wrapper({ children }: { children: ReactNode }) {
   )
 }
 
-type Settings = { replyAlerts: ReplyAlerts; titleAlerts: boolean }
+type Settings = Parameters<typeof useReplyPreviewAnnouncement>[0]
+const PREVIEW = { replyAlerts: 'preview', titleAlerts: false } as const
+const FULL = { replyAlerts: 'full', titleAlerts: false } as const
 type State = Parameters<typeof useReplyPreviewAnnouncement>[1]
 
 function run(settings: Settings, state: State) {
@@ -95,7 +96,7 @@ function withClient() {
 
 describe('buildReplyPreview', () => {
   it('names the author from the team, cuts long replies at a word and resolves the avatar', () => {
-    const payload = buildReplyPreview(intl(), replies, false)
+    const payload = buildReplyPreview(intl(), replies, PREVIEW)
     expect(payload.author).toEqual({
       name: 'Alex Kim',
       firstName: 'Alex',
@@ -115,10 +116,19 @@ describe('buildReplyPreview', () => {
     expect(Array.from(cut).length).toBeLessThanOrEqual(181)
     expect(cut).not.toMatch(/ \S{1,3}…$/)
     expect(payload.full).toBe(false)
+    expect(payload.card).toBe(true)
+    expect(payload.title).toBeNull()
+  })
+
+  it('flags no card with the badge only, and carries the tab title when that is on', () => {
+    const payload = buildReplyPreview(intl(), replies, { replyAlerts: 'badge', titleAlerts: true })
+    expect(payload.card).toBe(false)
+    expect(payload.title).toBe('Alex replied')
+    expect(payload.messages).toHaveLength(2)
   })
 
   it('keeps the whole reply when the workspace shows it in full', () => {
-    const payload = buildReplyPreview(intl(), replies, true)
+    const payload = buildReplyPreview(intl(), replies, FULL)
     expect(payload.messages[1].text).toBe(replies.messages[1].text)
     expect(payload.full).toBe(true)
   })
@@ -127,7 +137,7 @@ describe('buildReplyPreview', () => {
     const payload = buildReplyPreview(
       intl(),
       { ...replies, author: { name: null, avatarUrl: null } },
-      false
+      PREVIEW
     )
     expect(payload.strings.header).toBe('Acme')
     expect(payload.strings.replyTo).toBe('Reply to Acme…')
@@ -138,13 +148,13 @@ describe('buildReplyPreview', () => {
     const payload = buildReplyPreview(
       intl(),
       { ...replies, messages: [{ id: 'm', text: '', createdAt: '' }] },
-      false
+      PREVIEW
     )
     expect(payload.messages[0].text).toBe('Sent an attachment')
   })
 
   it('speaks the visitor language', () => {
-    const payload = buildReplyPreview(intl('de', de), replies, false)
+    const payload = buildReplyPreview(intl('de', de), replies, PREVIEW)
     expect(payload.strings.header).toBe(
       de['widget.replyPreview.header'].replace('{name}', 'Alex').replace('{team}', 'Acme')
     )
@@ -153,25 +163,25 @@ describe('buildReplyPreview', () => {
 })
 
 describe('useReplyPreviewAnnouncement', () => {
+  const on = (over: Partial<Settings> = {}): Settings => ({
+    enabled: true,
+    replyAlerts: 'preview',
+    titleAlerts: false,
+    ...over,
+  })
+
   it('sends the preview once per change, and null once nothing is unread', () => {
-    const { rerender } = run(
-      { replyAlerts: 'preview', titleAlerts: false },
-      { ready: true, data: replies, session: 1 }
-    )
+    const { rerender } = run(on(), { ready: true, data: replies, session: 1 })
     expect(sent('quackback:reply-preview')).toHaveLength(1)
     expect(sent('quackback:reply-preview')[0].replyPreview).toMatchObject({
       conversationId: 'conversation_1',
       count: 2,
+      card: true,
+      title: null,
     })
-    rerender({
-      settings: { replyAlerts: 'preview', titleAlerts: false },
-      state: { ready: true, data: { ...replies }, session: 1 },
-    })
+    rerender({ settings: on(), state: { ready: true, data: { ...replies }, session: 1 } })
     expect(sent('quackback:reply-preview')).toHaveLength(1)
-    rerender({
-      settings: { replyAlerts: 'preview', titleAlerts: false },
-      state: { ready: true, data: null, session: 1 },
-    })
+    rerender({ settings: on(), state: { ready: true, data: null, session: 1 } })
     expect(sent('quackback:reply-preview').at(-1)).toEqual({
       type: 'quackback:reply-preview',
       replyPreview: null,
@@ -180,59 +190,61 @@ describe('useReplyPreviewAnnouncement', () => {
   })
 
   it('sends again for a new session, even with the same replies', () => {
-    const { rerender } = run(
-      { replyAlerts: 'preview', titleAlerts: false },
-      { ready: true, data: replies, session: 1 }
-    )
-    rerender({
-      settings: { replyAlerts: 'preview', titleAlerts: false },
-      state: { ready: true, data: replies, session: 2 },
-    })
+    const { rerender } = run(on(), { ready: true, data: replies, session: 1 })
+    rerender({ settings: on(), state: { ready: true, data: replies, session: 2 } })
     expect(sent('quackback:reply-preview')).toHaveLength(2)
   })
 
   it('waits until the replies are read', () => {
-    run({ replyAlerts: 'preview', titleAlerts: true }, { ready: false, data: null, session: 1 })
+    run(on({ titleAlerts: true }), { ready: false, data: null, session: 1 })
     expect(sendToHost).not.toHaveBeenCalled()
   })
 
-  it('sends no card with the badge only, and drops one sent before', () => {
-    const { rerender } = run(
-      { replyAlerts: 'badge', titleAlerts: false },
-      { ready: true, data: replies, session: 1 }
-    )
-    expect(sendToHost).not.toHaveBeenCalled()
+  it('still sends the replies with the badge only, flagged as no card', () => {
+    const { rerender } = run(on({ replyAlerts: 'badge' }), {
+      ready: true,
+      data: replies,
+      session: 1,
+    })
+    expect(sent('quackback:reply-preview')).toHaveLength(1)
+    expect(sent('quackback:reply-preview')[0].replyPreview).toMatchObject({
+      card: false,
+      messages: [{ id: 'conversation_msg_1' }, { id: 'conversation_msg_2' }],
+    })
     rerender({
-      settings: { replyAlerts: 'full', titleAlerts: false },
+      settings: on({ replyAlerts: 'full' }),
       state: { ready: true, data: replies, session: 1 },
     })
-    expect(sent('quackback:reply-preview').at(-1)?.replyPreview).toMatchObject({ full: true })
+    expect(sent('quackback:reply-preview').at(-1)?.replyPreview).toMatchObject({
+      card: true,
+      full: true,
+    })
+  })
+
+  it('carries the tab title in the same payload while that is on', () => {
+    run(on({ replyAlerts: 'badge', titleAlerts: true }), {
+      ready: true,
+      data: replies,
+      session: 1,
+    })
+    expect(sent('quackback:reply-preview')[0].replyPreview).toMatchObject({
+      card: false,
+      title: 'Alex replied',
+    })
+    expect(sent('quackback:title-alert')).toHaveLength(0)
+  })
+
+  it('sends nothing while the Messages tab is off, and clears what went out before', () => {
+    const { rerender } = run(on({ enabled: false }), { ready: true, data: replies, session: 1 })
+    expect(sendToHost).not.toHaveBeenCalled()
+    rerender({ settings: on(), state: { ready: true, data: replies, session: 1 } })
     rerender({
-      settings: { replyAlerts: 'badge', titleAlerts: false },
+      settings: on({ enabled: false }),
       state: { ready: true, data: replies, session: 1 },
     })
     expect(sent('quackback:reply-preview').at(-1)).toEqual({
       type: 'quackback:reply-preview',
       replyPreview: null,
-    })
-  })
-
-  it('sends the tab title text only while that is on, without message text', () => {
-    const { rerender } = run(
-      { replyAlerts: 'badge', titleAlerts: true },
-      { ready: true, data: replies, session: 1 }
-    )
-    expect(sent('quackback:reply-preview')).toHaveLength(0)
-    expect(sent('quackback:title-alert')).toEqual([
-      { type: 'quackback:title-alert', text: 'Alex replied' },
-    ])
-    rerender({
-      settings: { replyAlerts: 'badge', titleAlerts: true },
-      state: { ready: true, data: null, session: 1 },
-    })
-    expect(sent('quackback:title-alert').at(-1)).toEqual({
-      type: 'quackback:title-alert',
-      text: null,
     })
   })
 })

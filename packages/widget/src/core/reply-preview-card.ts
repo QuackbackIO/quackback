@@ -22,8 +22,13 @@ export interface ReplyPreview {
   messages: Array<{ id: string; text: string; createdAt: string }>
   /** Unread replies in the conversation; may exceed `messages`. */
   count: number
+  /** Show the card above the launcher. Off when the workspace shows the
+   *  badge only: the replies still drive the message event and tab title. */
+  card: boolean
   /** Show each reply whole, without the four-line clamp. */
   full: boolean
+  /** The tab title flash, e.g. "Alex replied", or null when that is off. */
+  title: string | null
   strings: {
     /** e.g. "Alex from Acme". */
     header: string
@@ -86,7 +91,10 @@ export function parseReplyPreview(raw: unknown, base?: string): ReplyPreview | n
     teamName: str(r.teamName, 120),
     messages,
     count: typeof r.count === 'number' && r.count > 0 ? Math.floor(r.count) : messages.length,
+    // A frame that sends no flag predates the badge-only setting: a card.
+    card: r.card !== false,
     full,
+    title: str(r.title, 160) || null,
     strings: {
       header: str(strings.header, 160),
       replyTo: str(strings.replyTo, 160),

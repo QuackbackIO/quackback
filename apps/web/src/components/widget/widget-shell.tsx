@@ -177,14 +177,11 @@ export function WidgetShell({
     more: moreChangelog,
     session: sessionVersion,
   })
-  // The newest unread replies reach the host for the reply preview and the
-  // tab title, as the workspace chooses.
-  const unreadReplies = useUnreadReplies(
-    messagesOn && (replyAlerts !== 'badge' || titleAlerts),
-    messengerUnread
-  )
+  // The newest unread replies reach the host for its message event, and for
+  // the reply preview and the tab title as the workspace chooses.
+  const unreadReplies = useUnreadReplies(messagesOn, messengerUnread)
   useReplyPreviewAnnouncement(
-    { replyAlerts: messagesOn ? replyAlerts : 'badge', titleAlerts: messagesOn && titleAlerts },
+    { enabled: messagesOn, replyAlerts, titleAlerts },
     { ...unreadReplies, session: sessionVersion }
   )
   // Mirror the combined total to the host so the floating launcher shows the

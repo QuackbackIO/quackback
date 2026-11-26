@@ -77,33 +77,28 @@ describe('WidgetShell unread for the host', () => {
     })
   })
 
-  it('reads the replies for a preview, and polls in the background only for the tab title', () => {
-    renderShell({ replyAlerts: 'preview', titleAlerts: false })
+  it('reads the replies whatever the card setting, polling hidden pages only for the title', () => {
+    renderShell({ replyAlerts: 'badge', titleAlerts: false })
     expect(h.useMessengerUnread).toHaveBeenLastCalledWith(true, { background: false })
     expect(h.useUnreadReplies).toHaveBeenLastCalledWith(true, 3)
     expect(h.useReplyPreviewAnnouncement).toHaveBeenLastCalledWith(
-      { replyAlerts: 'preview', titleAlerts: false },
+      { enabled: true, replyAlerts: 'badge', titleAlerts: false },
       { ready: true, data: null, session: 4 }
     )
-    renderShell({ replyAlerts: 'badge', titleAlerts: true })
+    renderShell({ replyAlerts: 'preview', titleAlerts: true })
     expect(h.useMessengerUnread).toHaveBeenLastCalledWith(true, { background: true })
-    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(true, 3)
   })
 
-  it('reads no replies with the badge only and no tab title', () => {
-    renderShell({ replyAlerts: 'badge', titleAlerts: false })
-    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(false, 3)
-  })
-
-  it('sends neither while the Messages tab is off', () => {
+  it('sends nothing while the Messages tab is off', () => {
     renderShell({
       enabledTabs: { feedback: true, changelog: true },
       replyAlerts: 'full',
       titleAlerts: true,
     })
+    expect(h.useMessengerUnread).toHaveBeenLastCalledWith(false, { background: false })
     expect(h.useUnreadReplies).toHaveBeenLastCalledWith(false, 3)
     expect(h.useReplyPreviewAnnouncement).toHaveBeenLastCalledWith(
-      { replyAlerts: 'badge', titleAlerts: false },
+      { enabled: false, replyAlerts: 'full', titleAlerts: true },
       expect.anything()
     )
   })

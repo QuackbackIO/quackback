@@ -94,9 +94,8 @@ export function createSDK(): SDK {
   let unreadCount = 0
   // The frame's newest unread changelog entry, for the launcher's card.
   let whatsNew: WhatsNew | null = null
-  // The frame's newest unread replies, and the tab title text for them.
+  // The frame's newest unread replies, and the tab title flash for them.
   let replyPreview: ReplyPreview | null = null
-  let titleText: string | null = null
   let titleAlert: TitleAlert | null = null
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
@@ -206,7 +205,6 @@ export function createSDK(): SDK {
     if (visitorScope() !== before) {
       whatsNew = null
       replyPreview = null
-      titleText = null
     }
     applyWhatsNew()
     applyReplyPreview()
@@ -236,8 +234,9 @@ export function createSDK(): SDK {
         data.messages.map((m) => m.id)
       )
   }
-  /** The card, the message event and the tab title, from the frame's latest
-   *  payload. All wait while a new identity resolves. */
+  /** The message event, the card and the tab title, from the frame's latest
+   *  payload. The event fires whatever the card setting; the card shows only
+   *  when the payload asks for it. All wait while a new identity resolves. */
   function applyReplyPreview(): void {
     if (!config) return
     const data = identityPending ? null : replyPreview
@@ -252,11 +251,13 @@ export function createSDK(): SDK {
       }
     }
     const newest = data?.messages[data.messages.length - 1]
-    const show = data && newest && !replies().isAnswered(visitorScope(), newest.id) ? data : null
+    const show =
+      data?.card && newest && !replies().isAnswered(visitorScope(), newest.id) ? data : null
     launcher?.setReplyPreview(show)
-    if (titleText !== null || titleAlert) {
+    const title = data?.title ?? null
+    if (title !== null || titleAlert) {
       titleAlert ??= createTitleAlert()
-      titleAlert.set(identityPending ? null : titleText)
+      titleAlert.set(title)
     }
   }
   function answerWhatsNew(entryId: string): void {
@@ -324,12 +325,6 @@ export function createSDK(): SDK {
           (msg as { replyPreview?: unknown }).replyPreview,
           iframeOrigin()
         )
-        applyReplyPreview()
-        break
-      }
-      case 'quackback:title-alert': {
-        const text = (msg as { text?: unknown }).text
-        titleText = typeof text === 'string' && text.trim() ? text.trim().slice(0, 160) : null
         applyReplyPreview()
         break
       }
@@ -819,7 +814,6 @@ export function createSDK(): SDK {
         whatsNewMemory = null
         replyPreview = null
         replyMemory = null
-        titleText = null
         titleAlert?.destroy()
         titleAlert = null
         identityPending = false

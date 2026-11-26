@@ -196,7 +196,7 @@ unsubscribe()
 | `whats-new`       | `{ count, entryId }`                                        |
 | `message`         | `{ conversationId, author: { name, avatarUrl }, preview }`  |
 
-`unread.count` is the total the launcher badge shows; `messages`, `changelog` and `tickets` are its parts. `message` fires once for each new unread reply from a teammate or the AI assistant, while the workspace shows reply previews. `preview` is the reply as plain text, cut to the card's length unless the workspace shows the whole reply. The host page remembers which replies it reported, per instance and per visitor, so a reload does not repeat them.
+`unread.count` is the total the launcher badge shows; `messages`, `changelog` and `tickets` are its parts. `message` fires once for each new unread reply from a teammate or the AI assistant, whichever way the workspace shows replies, including the badge only, so you can build your own indicator. `preview` is the reply as plain text, cut to the card's length unless the workspace shows the whole reply. The host page remembers which replies it reported, per instance and per visitor, so a reload does not repeat them.
 
 ## Docs
 
