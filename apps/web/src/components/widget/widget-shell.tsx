@@ -283,6 +283,11 @@ export function WidgetShell({
       setPortalCtaError(true)
       return
     }
+    // The host may have become unreachable while the token was minted.
+    if (!canDeliverUserData()) {
+      sendToHost({ type: 'quackback:navigate', url: `${origin}/?auth=signin` })
+      return
+    }
     // Prefer the server-resolved portal origin so the handoff URL targets the
     // portal host — not the widget iframe's origin, which may differ in
     // self-hosted setups where the widget is served from a separate domain.

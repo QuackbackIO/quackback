@@ -86,4 +86,19 @@ describe('WidgetShell portal CTA', () => {
     )
     expect(widgetAuth.generateOneTimeToken).not.toHaveBeenCalled()
   })
+
+  it('falls back to the plain sign-in page when the host became unreachable during the mint', async () => {
+    bridge.canDeliverUserData.mockReturnValueOnce(true).mockReturnValue(false)
+    clickPortal()
+    await waitFor(() =>
+      expect(bridge.sendToHost).toHaveBeenCalledWith({
+        type: 'quackback:navigate',
+        url: 'https://portal.example/?auth=signin',
+      })
+    )
+    expect(widgetAuth.generateOneTimeToken).toHaveBeenCalledTimes(1)
+    expect(bridge.sendToHost).not.toHaveBeenCalledWith(
+      expect.objectContaining({ url: expect.stringContaining('ott=') })
+    )
+  })
 })
