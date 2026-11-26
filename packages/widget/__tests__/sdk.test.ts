@@ -279,7 +279,8 @@ describe('sdk', () => {
     sdk.dispatch('on', 'open', (payload: EventMap['open']) => seen.push(payload.view))
     const opts: OpenOptions = { view: 'feedback' }
     sdk.dispatch('open', opts)
-    expect(postMessage).toHaveBeenLastCalledWith(
+    // The shown state follows the open, so the open is not the last message.
+    expect(postMessage).toHaveBeenCalledWith(
       { type: 'quackback:open', data: { view: 'feedback' } },
       ORIGIN
     )

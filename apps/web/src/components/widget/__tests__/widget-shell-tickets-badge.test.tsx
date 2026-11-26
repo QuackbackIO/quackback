@@ -17,9 +17,24 @@ vi.mock('../widget-auth-provider', () => ({
     sessionVersion: 1,
   }),
 }))
-vi.mock('../use-messenger-unread', () => ({ useMessengerUnread: () => 3 }))
+vi.mock('../use-messenger-unread', () => ({
+  useMessengerUnread: () => 3,
+  useMessengerUnreadState: () => ({ total: 3, newestReplyId: null }),
+  useRefreshSummaryOnUnreadChange: () => {},
+}))
 vi.mock('../use-changelog-unread', () => ({
-  useChangelogUnread: () => ({ unread: 0, markSeen: vi.fn() }),
+  useChangelogUnread: () => ({
+    unread: 0,
+    newest: null,
+    announced: { count: 0, newest: null, more: false },
+    ready: true,
+    more: false,
+    markSeen: vi.fn(),
+  }),
+}))
+vi.mock('../reply-preview', () => ({
+  useUnreadReplies: () => ({ ready: true, data: null }),
+  useReplyPreviewAnnouncement: () => {},
 }))
 vi.mock('../use-ticket-stage-badge', () => ({
   useTicketStageBadge: () => ({ unread: 2, hasTickets: true }),
