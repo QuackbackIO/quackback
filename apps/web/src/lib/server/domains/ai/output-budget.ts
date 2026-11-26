@@ -34,9 +34,6 @@ type TokenParam = 'max_tokens' | 'max_completion_tokens'
  */
 export const REASONING_HEADROOM_TOKENS = 8_000
 
-/** The `reasoning_effort` values OpenAI's Chat Completions API accepts. */
-const OPENAI_REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
-
 function isOpenAiApi(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false
   try {
@@ -54,21 +51,18 @@ export function outputTokenParam(): TokenParam {
 }
 
 /**
- * Request-body options that cap a reply at `maxTokens` visible tokens.
+ * Request-body options that cap a reply at `maxTokens` visible tokens. With
+ * `max_completion_tokens` the cap gets {@link REASONING_HEADROOM_TOKENS} on top.
  *
- * With `max_completion_tokens` the cap gets {@link REASONING_HEADROOM_TOKENS}
- * on top, and `AI_REASONING_EFFORT`, when set to a value OpenAI accepts, is
- * sent as a top-level `reasoning_effort`. It is never sent unasked: models
- * that do not reason reject it. (OpenRouter takes effort as
- * `reasoning.effort` instead; see `reasoningEffortProviderOptions`.)
+ * `AI_REASONING_EFFORT` is deliberately not forwarded as `reasoning_effort`:
+ * it is documented as OpenRouter-only, and models that do not reason reject
+ * the parameter, so an operator who set it for a non-reasoning OpenAI model
+ * would start getting 400s.
  */
 export function outputBudgetOptions(
   maxTokens: number
-): { max_tokens: number } | { max_completion_tokens: number; reasoning_effort?: string } {
-  if (outputTokenParam() === 'max_tokens') return { max_tokens: maxTokens }
-  const effort = config.aiReasoningEffort?.trim().toLowerCase()
-  return {
-    max_completion_tokens: maxTokens + REASONING_HEADROOM_TOKENS,
-    ...(effort && OPENAI_REASONING_EFFORTS.has(effort) ? { reasoning_effort: effort } : {}),
-  }
+): { max_tokens: number } | { max_completion_tokens: number } {
+  return outputTokenParam() === 'max_tokens'
+    ? { max_tokens: maxTokens }
+    : { max_completion_tokens: maxTokens + REASONING_HEADROOM_TOKENS }
 }

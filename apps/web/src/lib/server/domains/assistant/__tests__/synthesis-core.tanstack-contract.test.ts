@@ -331,7 +331,7 @@ describe('requests to api.openai.com', () => {
     expect(bodies[0].max_completion_tokens).toBe(300 + REASONING_HEADROOM_TOKENS)
   })
 
-  it('caps a structuredChat request with max_completion_tokens and forwards the effort', async () => {
+  it('caps a structuredChat request with max_completion_tokens and no reasoning_effort', async () => {
     mockConfig.aiReasoningEffort = 'low'
     stubProvider([
       (body) =>
@@ -351,7 +351,7 @@ describe('requests to api.openai.com', () => {
     expect(result).toEqual({ text: 'ok' })
     expect(bodies).toHaveLength(1)
     expect(bodies[0].max_completion_tokens).toBe(100 + REASONING_HEADROOM_TOKENS)
-    expect(bodies[0].reasoning_effort).toBe('low')
+    expect(bodies[0]).not.toHaveProperty('reasoning_effort')
     expect(bodies[0]).not.toHaveProperty('max_tokens')
     expect(bodies[0]).not.toHaveProperty('provider')
   })

@@ -64,15 +64,11 @@ describe('outputBudgetOptions', () => {
     })
   })
 
-  it('forwards an OpenAI reasoning effort only when one is set', () => {
+  it('never sends reasoning_effort, even with AI_REASONING_EFFORT set', () => {
     mockConfig.openaiBaseUrl = 'https://api.openai.com/v1'
-    mockConfig.aiReasoningEffort = 'Minimal'
-    expect(outputBudgetOptions(100)).toMatchObject({ reasoning_effort: 'minimal' })
-  })
-
-  it('drops an effort OpenAI does not accept', () => {
-    mockConfig.openaiBaseUrl = 'https://api.openai.com/v1'
-    mockConfig.aiReasoningEffort = 'max'
-    expect(outputBudgetOptions(100)).not.toHaveProperty('reasoning_effort')
+    mockConfig.aiReasoningEffort = 'low'
+    expect(outputBudgetOptions(100)).toEqual({
+      max_completion_tokens: 100 + REASONING_HEADROOM_TOKENS,
+    })
   })
 })
