@@ -180,10 +180,16 @@ export interface ReplyPreviewCardHandle {
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 const PHONE_MARGIN = '16px'
-const SHADOW = '0 8px 24px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.10)'
+/** The card column on wider screens. */
+const WIDTH = '348px'
 const AVATAR = 32
-const SEND_ICON =
-  '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z"/></svg>'
+const GAP = 8
+const INK = '#0f172a'
+const MUTED = '#64748b'
+const BUBBLE_SHADOW = '0 8px 24px rgba(15,23,42,0.10), 0 1px 3px rgba(15,23,42,0.08)'
+const SOFT_SHADOW = '0 4px 14px rgba(15,23,42,0.08)'
+const UP_ARROW =
+  '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd"/></svg>'
 
 const media = (query: string): MediaQueryList | null =>
   typeof window.matchMedia === 'function' ? window.matchMedia(query) : null
@@ -207,63 +213,39 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     flexDirection: 'column',
     gap: '6px',
     boxSizing: 'border-box',
-    width: '320px',
+    width: WIDTH,
     fontFamily: FONT,
     fontSize: '14px',
-    lineHeight: '1.4',
-    color: '#111827',
+    lineHeight: '1.45',
+    color: INK,
     textAlign: 'start',
   })
 
+  // The dismiss button sits above the stack at the right.
   const head = document.createElement('div')
-  Object.assign(head.style, {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    paddingInlineStart: `${AVATAR + 8}px`,
-  })
-  const header = document.createElement('span')
-  Object.assign(header.style, {
-    minWidth: '0',
-    padding: '3px 10px',
-    borderRadius: '999px',
-    backgroundColor: '#ffffff',
-    color: '#4b5563',
-    fontSize: '12px',
-    fontWeight: '600',
-    boxShadow: SHADOW,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  })
-  const headerName = document.createElement('span')
-  const headerCount = document.createElement('span')
-  Object.assign(headerCount.style, { marginInlineStart: '6px', color: '#111827' })
-  header.append(headerName, headerCount)
-  const spacer = document.createElement('span')
-  spacer.style.flex = '1'
+  Object.assign(head.style, { display: 'flex', justifyContent: 'flex-end' })
   const dismiss = document.createElement('button')
   dismiss.type = 'button'
   dismiss.textContent = '×'
   Object.assign(dismiss.style, {
-    flexShrink: '0',
     width: '32px',
     height: '32px',
     padding: '0',
-    border: 'none',
+    border: '1px solid rgba(15,23,42,0.08)',
     borderRadius: '50%',
     backgroundColor: '#ffffff',
-    color: '#4b5563',
-    fontSize: '20px',
+    color: MUTED,
+    fontSize: '18px',
     lineHeight: '1',
     cursor: 'pointer',
-    boxShadow: SHADOW,
+    boxShadow: SOFT_SHADOW,
     transition: 'opacity 150ms ease',
   })
-  head.append(header, spacer, dismiss)
+  head.append(dismiss)
 
+  // The avatar sits outside the bubbles, level with the newest one.
   const body = document.createElement('div')
-  Object.assign(body.style, { display: 'flex', alignItems: 'flex-end', gap: '8px' })
+  Object.assign(body.style, { display: 'flex', alignItems: 'flex-end', gap: `${GAP}px` })
   const avatar = document.createElement('span')
   avatar.setAttribute('aria-hidden', 'true')
   Object.assign(avatar.style, {
@@ -276,19 +258,43 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     borderRadius: '50%',
     overflow: 'hidden',
     fontSize: '13px',
-    fontWeight: '700',
-    boxShadow: SHADOW,
+    fontWeight: '600',
   })
   const stack = document.createElement('div')
   Object.assign(stack.style, {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: '4px',
+    alignItems: 'stretch',
+    gap: '6px',
     minWidth: '0',
     flex: '1',
   })
   body.append(avatar, stack)
+
+  // The header, drawn inside the first bubble: the first name in ink, the
+  // rest muted, and on phones the number of new replies at the right.
+  const header = document.createElement('span')
+  header.setAttribute('data-reply-header', '')
+  Object.assign(header.style, {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px',
+    marginBottom: '3px',
+    fontSize: '12.5px',
+    lineHeight: '1.3',
+    color: MUTED,
+  })
+  const headerText = document.createElement('span')
+  Object.assign(headerText.style, {
+    flex: '1',
+    minWidth: '0',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  })
+  const headerCount = document.createElement('span')
+  Object.assign(headerCount.style, { flexShrink: '0', fontWeight: '600' })
+  header.append(headerText, headerCount)
 
   const pill = document.createElement('button')
   pill.type = 'button'
@@ -297,17 +303,19 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
-    marginInlineStart: `${AVATAR + 8}px`,
-    padding: '9px 12px',
-    border: '1px solid #e5e7eb',
-    borderRadius: '999px',
+    boxSizing: 'border-box',
+    height: '42px',
+    marginInlineStart: `${AVATAR + GAP}px`,
+    padding: '0 5px 0 16px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '21px',
     backgroundColor: '#ffffff',
-    color: '#6b7280',
+    color: MUTED,
     fontFamily: FONT,
     fontSize: '14px',
     textAlign: 'start',
     cursor: 'pointer',
-    boxShadow: SHADOW,
+    boxShadow: SOFT_SHADOW,
   })
   const pillText = document.createElement('span')
   Object.assign(pillText.style, {
@@ -315,10 +323,20 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   })
-  const pillIcon = document.createElement('span')
-  Object.assign(pillIcon.style, { display: 'flex', flexShrink: '0', color: '#111827' })
-  pillIcon.innerHTML = SEND_ICON
-  pill.append(pillText, pillIcon)
+  const send = document.createElement('span')
+  send.setAttribute('data-reply-send', '')
+  Object.assign(send.style, {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: '0',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    color: '#ffffff',
+  })
+  send.innerHTML = UP_ARROW
+  pill.append(pillText, send)
 
   card.append(head, body, pill)
   opts.mount.appendChild(card)
@@ -373,7 +391,7 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     } else {
       card.style.left = side === 'left' ? opts.sideEdge('left') : ''
       card.style.right = side === 'right' ? opts.sideEdge('right') : ''
-      card.style.width = '320px'
+      card.style.width = WIDTH
       card.style.maxWidth = opts.contained ? 'calc(100% - 16px)' : 'calc(100vw - 48px)'
     }
   }
@@ -383,6 +401,13 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
   }
   place()
   phoneMql?.addEventListener?.('change', onPhoneChange)
+
+  /** The brand colour on the send button and the count of new replies. */
+  function paintAccent(): void {
+    send.style.backgroundColor = accent.backgroundColor
+    headerCount.style.color = accent.backgroundColor
+  }
+  paintAccent()
 
   function paintAvatar(data: ReplyPreview): void {
     avatar.textContent = ''
@@ -403,24 +428,45 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     avatar.appendChild(img)
   }
 
+  /** The header's words, with the first name in ink wherever the visitor's
+   *  language puts it. */
+  function paintHeader(data: ReplyPreview): void {
+    const words = data.strings.header
+    const name = data.author.firstName
+    const at = name ? words.indexOf(name) : -1
+    headerText.textContent = ''
+    if (at < 0) {
+      headerText.textContent = words
+      return
+    }
+    const strong = document.createElement('span')
+    Object.assign(strong.style, { fontWeight: '600', color: INK })
+    strong.textContent = name
+    headerText.append(words.slice(0, at), strong, words.slice(at + name.length))
+  }
+
   function bubble(text: string, full: boolean, newest: boolean): HTMLButtonElement {
     const b = document.createElement('button')
     b.type = 'button'
+    b.setAttribute('data-reply-bubble', '')
     Object.assign(b.style, {
-      maxWidth: '100%',
-      padding: '9px 12px',
-      border: 'none',
-      borderRadius: newest ? '14px 14px 14px 4px' : '14px',
+      display: 'block',
+      boxSizing: 'border-box',
+      width: '100%',
+      padding: '11px 14px 12px',
+      border: '1px solid rgba(15,23,42,0.06)',
+      borderRadius: newest ? '16px 16px 16px 6px' : '16px',
       backgroundColor: '#ffffff',
-      color: '#111827',
+      color: INK,
       fontFamily: FONT,
       fontSize: '14px',
-      lineHeight: '1.4',
+      lineHeight: '1.45',
       textAlign: 'start',
       cursor: 'pointer',
-      boxShadow: SHADOW,
+      boxShadow: BUBBLE_SHADOW,
     })
     const t = document.createElement('span')
+    t.setAttribute('data-reply-text', '')
     Object.assign(t.style, {
       display: full ? 'block' : '-webkit-box',
       whiteSpace: 'pre-wrap',
@@ -428,8 +474,8 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
       overflow: 'hidden',
     })
     if (!full) {
-      // Four lines; the height caps it where line clamping is unsupported.
-      t.style.maxHeight = '5.6em'
+      // Four lines of 1.45; the height caps it where clamping is unsupported.
+      t.style.maxHeight = '5.8em'
       t.style.setProperty('-webkit-line-clamp', '4')
       t.style.setProperty('-webkit-box-orient', 'vertical')
     }
@@ -446,16 +492,19 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     const collapse = phone() && data.messages.length > 1
     const shownMessages = collapse ? data.messages.slice(-1) : data.messages
     card.setAttribute('aria-label', data.strings.label || data.strings.header)
-    headerName.textContent = data.strings.header
+    paintHeader(data)
     const showCount = phone() && data.count > 1 && !!data.strings.newReplies
     headerCount.textContent = showCount ? data.strings.newReplies : ''
     headerCount.style.display = showCount ? 'inline' : 'none'
     dismiss.setAttribute('aria-label', data.strings.dismiss)
     pillText.textContent = data.strings.replyTo
     stack.textContent = ''
-    shownMessages.forEach((m, i) =>
-      stack.appendChild(bubble(m.text, data.full, i === shownMessages.length - 1))
-    )
+    shownMessages.forEach((m, i) => {
+      const b = bubble(m.text, data.full, i === shownMessages.length - 1)
+      // The header opens the first bubble shown.
+      if (i === 0) b.prepend(header)
+      stack.appendChild(b)
+    })
     // A whole long reply scrolls inside the card rather than off the screen.
     stack.style.maxHeight = data.full ? 'min(60vh, 480px)' : ''
     stack.style.overflowY = data.full ? 'auto' : ''
@@ -511,6 +560,7 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     },
     setAccent(colors) {
       accent = colors
+      paintAccent()
       if (current) paintAvatar(current)
     },
     applyMotion,

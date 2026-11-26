@@ -81,8 +81,12 @@ const cardEl = () => document.querySelector('[data-quackback-reply-preview]') as
 const shown = () => !!cardEl() && cardEl()!.style.display !== 'none'
 const buttons = () => Array.from(cardEl()!.querySelectorAll('button'))
 const dismissBtn = () => buttons().find((b) => b.getAttribute('aria-label') === 'Dismiss')!
-const pillBtn = () => buttons().find((b) => b.textContent === 'Reply to Alex…')!
-const bubbles = () => buttons().filter((b) => /^Reply \d/.test(b.textContent ?? ''))
+const pillBtn = () => buttons().find((b) => b.textContent?.startsWith('Reply to Alex…'))!
+const bubbles = () =>
+  Array.from(cardEl()!.querySelectorAll('[data-reply-bubble]')) as HTMLButtonElement[]
+/** Each bubble's reply text, without the header the first one opens with. */
+const bodies = () =>
+  bubbles().map((b) => (b.querySelector('[data-reply-text]') as HTMLElement).textContent)
 const whatsNewShown = () => {
   const el = document.querySelector('[data-quackback-whats-new]') as HTMLElement | null
   return !!el && el.style.display !== 'none'
@@ -188,7 +192,7 @@ describe('launcher reply preview', () => {
     l.setReplyPreview(sample({ messages: [msg(1), msg(2), msg(3)], count: 3 }))
     expect(shown()).toBe(true)
     expect(cardEl()!.textContent).toContain('Alex from Acme')
-    expect(bubbles().map((b) => b.textContent)).toEqual(['Reply 1', 'Reply 2', 'Reply 3'])
+    expect(bodies()).toEqual(['Reply 1', 'Reply 2', 'Reply 3'])
     expect(pillBtn().querySelector('svg')).not.toBeNull()
     // The avatar sits outside the bubbles, initials on the brand colour.
     const avatar = cardEl()!.querySelector('span[aria-hidden="true"]') as HTMLElement
@@ -197,6 +201,58 @@ describe('launcher reply preview', () => {
     l.setColors({ backgroundColor: '#123456', foregroundColor: '#ffffff' })
     expect(avatar.style.backgroundColor).toBe('#123456')
     expect(avatar.style.color).toBe('#ffffff')
+  })
+
+  it('opens the first bubble with the header, the first name in ink', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    l.setReplyPreview(sample({ messages: [msg(1), msg(2)] }))
+    const header = cardEl()!.querySelector('[data-reply-header]') as HTMLElement
+    expect(bubbles()[0].contains(header)).toBe(true)
+    expect(bubbles()[1].querySelector('[data-reply-header]')).toBeNull()
+    expect(header.textContent).toBe('Alex from Acme')
+    expect(header.style.fontSize).toBe('12.5px')
+    expect(header.style.color).toBe('#64748b')
+    const name = Array.from(header.querySelectorAll('span')).find((s) => s.textContent === 'Alex')!
+    expect(name.style.fontWeight).toBe('600')
+    expect(name.style.color).toBe('#0f172a')
+    // The header is not a separate chip outside the bubbles.
+    expect(bubbles().length).toBe(2)
+  })
+
+  it('finds the first name wherever the language puts it', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    l.setReplyPreview(sample({ strings: { ...sample().strings, header: 'Acme 的 Alex' } }))
+    const header = cardEl()!.querySelector('[data-reply-header]') as HTMLElement
+    expect(header.textContent).toBe('Acme 的 Alex')
+    const name = Array.from(header.querySelectorAll('span')).find((s) => s.textContent === 'Alex')!
+    expect(name.style.fontWeight).toBe('600')
+  })
+
+  it('matches the approved sizes on a wider screen', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    l.setColors({ backgroundColor: '#123456', foregroundColor: '#ffffff' })
+    l.setReplyPreview(sample())
+    const card = cardEl()!
+    expect(card.style.width).toBe('348px')
+    expect(card.style.maxWidth).toBe('calc(100vw - 48px)')
+    expect(card.style.bottom).toContain('88px')
+    const [older, newest] = bubbles()
+    expect(older.style.borderRadius).toBe('16px')
+    expect(newest.style.borderRadius).toBe('16px 16px 16px 6px')
+    expect(newest.style.padding).toBe('11px 14px 12px')
+    expect(newest.style.border.replace(/\s/g, '')).toContain('rgba(15,23,42,0.06)')
+    expect(newest.style.fontSize).toBe('14px')
+    expect(newest.style.lineHeight).toBe('1.45')
+    const pill = pillBtn()
+    expect(pill.style.height).toBe('42px')
+    expect(pill.style.borderRadius).toBe('21px')
+    expect(pill.style.marginInlineStart).toBe('40px')
+    const sendBtn = pill.querySelector('[data-reply-send]') as HTMLElement
+    expect(sendBtn.style.width).toBe('32px')
+    expect(sendBtn.style.backgroundColor).toBe('#123456')
+    expect(sendBtn.style.color).toBe('#ffffff')
+    expect(dismissBtn().style.width).toBe('32px')
+    expect(dismissBtn().style.border).not.toBe('none')
   })
 
   it('shows the photo when there is one, and initials if it fails to load', () => {
@@ -219,9 +275,9 @@ describe('launcher reply preview', () => {
   it('clamps each reply to four lines, unless the whole reply shows', () => {
     const l = createLauncher({ placement: 'right', onClick: () => {} })
     l.setReplyPreview(sample())
-    const text = () => bubbles()[0].firstElementChild as HTMLElement
-    // Four lines of 1.4: a cap even where line clamping is unsupported.
-    expect(text().style.maxHeight).toBe('5.6em')
+    const text = () => bubbles()[0].querySelector('[data-reply-text]') as HTMLElement
+    // Four lines of 1.45: a cap even where line clamping is unsupported.
+    expect(text().style.maxHeight).toBe('5.8em')
     l.setReplyPreview(sample({ full: true }))
     expect(text().style.maxHeight).toBe('')
     expect(text().style.display).toBe('block')
@@ -298,8 +354,14 @@ describe('launcher reply preview', () => {
         strings: { ...sample().strings, newReplies: '5 new replies' },
       })
     )
-    expect(bubbles().map((b) => b.textContent)).toEqual(['Reply 3'])
+    expect(bodies()).toEqual(['Reply 3'])
     expect(cardEl()!.textContent).toContain('5 new replies')
+    // The count sits in the header inside the bubble, in the brand colour.
+    const count = Array.from(cardEl()!.querySelectorAll('[data-reply-header] span')).find(
+      (el) => el.textContent === '5 new replies'
+    ) as HTMLElement
+    expect(bubbles()[0].contains(count)).toBe(true)
+    expect(count.style.color).toBe('#000000')
     expect(cardEl()!.style.left).toContain('safe-area-inset-left')
     expect(cardEl()!.style.right).toContain('safe-area-inset-right')
     expect(cardEl()!.style.width).toBe('auto')

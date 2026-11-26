@@ -417,7 +417,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       contained,
       reduceMotion: () => reduceMotion,
       sideEdge,
-      bottom: bottomEdge(84, 84),
+      bottom: bottomEdge(88, 88),
       onOpen: (conversationId) => opts.onReplyOpen?.(conversationId),
       onDismiss: (data) => {
         const hadFocus = replyCard?.el.contains(document.activeElement) ?? false
