@@ -154,6 +154,34 @@ describe('runGetReplyPreview', () => {
     expect(preview?.author).toEqual({ name: null, avatarUrl: null })
   })
 
+  it("drops an assistant reply's source markers, and keeps brackets in other replies", async () => {
+    hoisted.listVisitorUnreadReplies.mockResolvedValue({
+      conversationId: 'conversation_1',
+      count: 2,
+      messages: [
+        {
+          id: 'conversation_msg_1',
+          content: 'Step [1] of the guide',
+          createdAt: new Date('2026-11-20T10:00:00.000Z'),
+          principalId: null,
+          cited: false,
+        },
+        {
+          id: 'conversation_msg_2',
+          content: 'Export from Settings [1] and import it again [2].',
+          createdAt: new Date('2026-11-20T10:01:00.000Z'),
+          principalId: null,
+          cited: true,
+        },
+      ],
+    })
+    const preview = await runGetReplyPreview(widgetCtx)
+    expect(preview!.messages.map((m) => m.text)).toEqual([
+      'Step [1] of the guide',
+      'Export from Settings and import it again.',
+    ])
+  })
+
   it('caps a long reply between code points', async () => {
     hoisted.listVisitorUnreadReplies.mockResolvedValue({
       conversationId: 'conversation_1',

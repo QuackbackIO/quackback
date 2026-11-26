@@ -300,6 +300,27 @@ describe('launcher reply preview', () => {
     expect(whatsNewShown()).toBe(true)
   })
 
+  it('keeps the greeting back for the page load after a dismiss', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    l.setGreeting('Need a hand?')
+    l.setReplyPreview(sample())
+    dismissBtn().click()
+    const bubble = document.querySelector('body > div') as HTMLElement
+    expect(bubble.style.display).toBe('none')
+  })
+
+  it('keeps focus in a bubble when the card is drawn again with the same replies', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    const data = sample()
+    l.setReplyPreview(data)
+    bubbles()[1].focus()
+    const focused = document.activeElement
+    l.setGreeting('Need a hand?')
+    l.setReplyPreview(data)
+    expect(document.activeElement).toBe(focused)
+    expect(focused?.isConnected).toBe(true)
+  })
+
   it('waits for the reveal, and hides while open or hidden', () => {
     const l = createHiddenLauncher({ placement: 'right', onClick: () => {} })
     l.setReplyPreview(sample())

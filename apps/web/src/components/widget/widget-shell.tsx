@@ -154,7 +154,9 @@ export function WidgetShell({
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
   const messagesOn = enabledTabs.messages ?? false
-  const messengerUnreadTotal = useMessengerUnread(messagesOn, { background: titleAlerts })
+  const messengerUnreadTotal = useMessengerUnread(messagesOn, {
+    background: messagesOn && titleAlerts,
+  })
   useRefreshSummaryOnUnreadChange(messengerUnreadTotal, homeEnabled(enabledTabs))
   const messengerUnread = messengerUnreadTotal ?? 0
   // Newly published changelog entries badge the launcher until the visitor

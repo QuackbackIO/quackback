@@ -293,8 +293,8 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   })
   // Cards wait for the button: none shows above a launcher not yet revealed.
   let revealed = false
-  // A visitor who dismissed the What's new card is not offered the greeting
-  // in its place for the rest of the page load.
+  // A visitor who dismissed the reply preview or the What's new card is not
+  // offered the greeting in its place for the rest of the page load.
   let whatsNewDismissed = false
   // One card at a time above the button, by priority.
   const pickCard = (): 'reply' | 'whats-new' | 'greeting' | null => {
@@ -418,6 +418,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       onDismiss: (data) => {
         const hadFocus = replyCard?.el.contains(document.activeElement) ?? false
         replyPreview = null
+        whatsNewDismissed = true
         renderGreeting()
         if (hadFocus) btn.focus()
         opts.onReplyDismiss?.(data)

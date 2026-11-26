@@ -143,7 +143,9 @@ export function useUnreadReplies(
     queryKey: [...conversationKeys.widgetReplyPreview(sessionVersion), unread] as const,
     queryFn: () => widgetGetReplyPreviewFn({ headers: getWidgetAuthHeaders() }),
     enabled: active,
-    staleTime: 15_000,
+    // Keyed on the count, so a count seen before must not serve old replies.
+    staleTime: 0,
+    gcTime: 0,
     retry: false,
     // Keep the card while a newer read loads, never across a session change.
     placeholderData: (prev, prevQuery) =>

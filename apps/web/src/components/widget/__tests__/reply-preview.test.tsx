@@ -8,24 +8,29 @@
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { sendToHost, unreadFn } = vi.hoisted(() => ({
+const { sendToHost, unreadFn, replyFn, auth } = vi.hoisted(() => ({
   sendToHost: vi.fn(),
   unreadFn: vi.fn(),
+  replyFn: vi.fn(),
+  auth: { sessionVersion: 1 },
 }))
 vi.mock('@/lib/client/widget-bridge', () => ({ sendToHost }))
 vi.mock('@/lib/server/functions/widget/conversation', () => ({
   widgetGetMessengerUnreadFn: unreadFn,
-  widgetGetReplyPreviewFn: vi.fn(),
+  widgetGetReplyPreviewFn: replyFn,
 }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
-vi.mock('../widget-auth-provider', () => ({ useWidgetAuth: () => ({ sessionVersion: 1 }) }))
+vi.mock('../widget-auth-provider', () => ({
+  useWidgetAuth: () => ({ sessionVersion: auth.sessionVersion }),
+}))
 
 import {
   buildReplyPreview,
   useReplyPreviewAnnouncement,
+  useUnreadReplies,
   type ReplyAlerts,
   type UnreadReplies,
 } from '../reply-preview'
@@ -76,7 +81,17 @@ const sent = (type: string) =>
 beforeEach(() => {
   sendToHost.mockClear()
   unreadFn.mockReset()
+  replyFn.mockReset()
+  auth.sessionVersion = 1
 })
+
+function withClient() {
+  const client = new QueryClient()
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  )
+  return { client, wrapper: Wrapper }
+}
 
 describe('buildReplyPreview', () => {
   it('names the author from the team, cuts long replies at a word and resolves the avatar', () => {
@@ -248,6 +263,57 @@ describe('useMessengerUnread freshness', () => {
     })
     await waitFor(() => expect(result.current).toBe(3))
     delete (document as { visibilityState?: unknown }).visibilityState
+    client.clear()
+  })
+})
+
+describe('useMessengerUnread in the background', () => {
+  async function pollsWhileHidden(background: boolean): Promise<number> {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    unreadFn.mockResolvedValue({ conversations: 1, total: 1 })
+    const { client, wrapper: w } = withClient()
+    renderHook(() => useMessengerUnread(true, { background }), { wrapper: w })
+    await vi.advanceTimersByTimeAsync(0)
+    const before = unreadFn.mock.calls.length
+    focusManager.setFocused(false)
+    await vi.advanceTimersByTimeAsync(61_000)
+    const polled = unreadFn.mock.calls.length - before
+    focusManager.setFocused(undefined)
+    client.clear()
+    vi.useRealTimers()
+    return polled
+  }
+
+  it('keeps polling while the page is hidden only when asked, for the tab title', async () => {
+    expect(await pollsWhileHidden(true)).toBeGreaterThanOrEqual(2)
+    expect(await pollsWhileHidden(false)).toBe(0)
+  })
+})
+
+describe('useUnreadReplies', () => {
+  it('reads nothing while nothing is unread', () => {
+    const { wrapper: w } = withClient()
+    const { result } = renderHook(() => useUnreadReplies(true, 0), { wrapper: w })
+    expect(result.current).toEqual({ ready: true, data: null })
+    expect(replyFn).not.toHaveBeenCalled()
+  })
+
+  it("never carries the previous visitor's replies into a new session", async () => {
+    replyFn.mockResolvedValue(replies)
+    const { client, wrapper: w } = withClient()
+    const { result, rerender } = renderHook(
+      ({ unread }: { unread: number }) => useUnreadReplies(true, unread),
+      { wrapper: w, initialProps: { unread: 2 } }
+    )
+    await waitFor(() => expect(result.current.data).toEqual(replies))
+    // A newer count keeps the card while the next read loads...
+    replyFn.mockReturnValue(new Promise(() => {}))
+    rerender({ unread: 3 })
+    expect(result.current.data).toEqual(replies)
+    // ...but a new session starts empty.
+    auth.sessionVersion = 2
+    rerender({ unread: 3 })
+    expect(result.current).toEqual({ ready: false, data: null })
     client.clear()
   })
 })

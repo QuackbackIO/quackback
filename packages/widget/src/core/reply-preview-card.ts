@@ -400,7 +400,10 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
     return b
   }
 
+  // The layout the bubbles were last built for.
+  let filledPhone: boolean | null = null
   function fill(data: ReplyPreview): void {
+    filledPhone = phone()
     const collapse = phone() && data.messages.length > 1
     const shownMessages = collapse ? data.messages.slice(-1) : data.messages
     card.setAttribute('aria-label', data.strings.label || data.strings.header)
@@ -444,13 +447,15 @@ export function createReplyPreviewCard(opts: ReplyPreviewCardOptions): ReplyPrev
   return {
     el: card,
     render(data) {
+      const unchanged = data === current && filledPhone === phone()
       current = data
       if (!data) {
         card.style.display = 'none'
         shownId = null
         return
       }
-      fill(data)
+      // The same payload again keeps the bubbles, and the focus in them.
+      if (!unchanged) fill(data)
       const newestId = data.messages[data.messages.length - 1].id
       const appearing = card.style.display === 'none'
       card.style.display = 'flex'

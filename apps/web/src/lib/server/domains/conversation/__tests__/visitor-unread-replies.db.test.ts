@@ -14,7 +14,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { conversations, conversationMessages, principal, user } from '@/lib/server/db'
+import { conversations, conversationMessages, principal, user, eq } from '@/lib/server/db'
 import { listVisitorUnreadReplies } from '../conversation.query'
 
 const fixture = await createDbTestFixture({
@@ -115,7 +115,7 @@ describe.skipIf(!fixture.available)('listVisitorUnreadReplies (real DB)', () => 
     expect(result!.conversationId).toBe(c)
     expect(result!.count).toBe(4)
     expect(result!.messages.map((m) => m.content)).toEqual(['Two', 'Three', 'Four'])
-    expect(result!.messages[2]).toMatchObject({ id: newestId, principalId: agent })
+    expect(result!.messages[2]).toMatchObject({ id: newestId, principalId: agent, cited: false })
     expect(result!.messages[2].createdAt).toBeInstanceOf(Date)
   })
 
@@ -129,6 +129,18 @@ describe.skipIf(!fixture.available)('listVisitorUnreadReplies (real DB)', () => 
     const result = await listVisitorUnreadReplies(visitor)
     expect(result!.messages.map((m) => m.content)).toEqual(['Hello there'])
     expect(result!.count).toBe(1)
+  })
+
+  it('marks a reply that cites sources', async () => {
+    const visitor = await seedPrincipal()
+    const c = await seedConversation(visitor)
+    const id = await addMessage(c, 'See the guide [1]', '2026-11-20T10:00:00.000Z')
+    await testDb
+      .update(conversationMessages)
+      .set({ citations: [{ title: 'Guide', url: 'https://example.com/guide' }] as never })
+      .where(eq(conversationMessages.id, id))
+    const result = await listVisitorUnreadReplies(visitor)
+    expect(result!.messages[0].cited).toBe(true)
   })
 
   it("never reads another visitor's conversations", async () => {

@@ -917,6 +917,8 @@ export interface VisitorUnreadReplies {
     content: string
     createdAt: Date
     principalId: PrincipalId | null
+    /** The reply grounds itself in sources, with inline [n] markers. */
+    cited: boolean
   }>
 }
 
@@ -957,6 +959,7 @@ export async function listVisitorUnreadReplies(
       content: conversationMessages.content,
       createdAt: conversationMessages.createdAt,
       principalId: conversationMessages.principalId,
+      cited: sql<boolean>`coalesce(jsonb_array_length(${conversationMessages.citations}), 0) > 0`,
       total: sql<number>`(count(*) over ())::int`,
     })
     .from(conversationMessages)

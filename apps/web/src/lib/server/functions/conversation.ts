@@ -752,11 +752,15 @@ export const runGetReplyPreview = createServerOnlyFn(async function runGetReplyP
     author: { name, avatarUrl: name ? (author?.avatarUrl ?? null) : null },
     teamName,
     count: replies.count,
-    messages: replies.messages.map((m) => ({
-      id: m.id,
-      text: Array.from(contentPreview(m.content).trim()).slice(0, REPLY_PREVIEW_MAX_TEXT).join(''),
-      createdAt: m.createdAt.toISOString(),
-    })),
+    messages: replies.messages.map((m) => {
+      // An assistant reply's [n] source markers mean nothing without the list.
+      const content = m.cited ? m.content.replace(/\s?\[\d+\]/g, '') : m.content
+      return {
+        id: m.id,
+        text: Array.from(contentPreview(content).trim()).slice(0, REPLY_PREVIEW_MAX_TEXT).join(''),
+        createdAt: m.createdAt.toISOString(),
+      }
+    }),
   }
 })
 
