@@ -490,9 +490,12 @@ describe('sdk', () => {
     fireFrom(origin, 'quackback:ready')
     postMessage.mockClear()
     sdk.dispatch('open', { view: 'messages' })
+    // The safe-area insets go first (see the safe-area tests); this checks
+    // only that the view navigates before the panel says it is shown.
     const types = postMessage.mock.calls
       .filter(([, to]) => to === origin)
       .map(([msg]) => (msg as { type: string }).type)
+      .filter((type) => type !== 'quackback:safe-area')
     expect(types).toEqual(['quackback:open', 'quackback:shown'])
     sdk.dispatch('destroy')
     spy.mockRestore()
