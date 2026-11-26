@@ -282,7 +282,7 @@
       "serverRequests": 2,
       "requests": 101,
       "jsRequests": 95,
-      "jsKB": 494.5,
+      "jsKB": 504.4,
       "htmlTransferKB": 28.3,
       "componentRenders": 330
     },
@@ -711,7 +711,7 @@
     },
     "sweep:doc:admin:/admin/settings/moderation": {
       "dbQueries": 6,
-      "htmlKB": 73.9
+      "htmlKB": 77.6
     },
     "sweep:ui:admin:/admin/settings/moderation": {
       "dbQueries": 6,
