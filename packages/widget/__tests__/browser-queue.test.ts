@@ -72,6 +72,22 @@ describe('browser-queue', () => {
     expect(dispatched[1]).toEqual(['identify', { id: 'u1', email: 'a@b.c' }, undefined])
   })
 
+  it('replays a queued whatsNew choice', async () => {
+    const dispatched = mockSDK()
+    installQueueStub()
+    window.Quackback!('init', { instanceUrl: 'https://feedback.acme.com', whatsNew: false })
+    window.Quackback!('whatsNew', true)
+
+    await import('../src/browser-queue')
+
+    expect(dispatched[0]).toEqual([
+      'init',
+      { instanceUrl: 'https://feedback.acme.com', whatsNew: false },
+      undefined,
+    ])
+    expect(dispatched[1]).toEqual(['whatsNew', true, undefined])
+  })
+
   it('replaces window.Quackback with a live dispatcher after loading', async () => {
     vi.doMock('../src/core/sdk', () => ({
       createSDK: () => ({
