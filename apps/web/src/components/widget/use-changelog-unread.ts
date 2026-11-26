@@ -5,7 +5,9 @@ import { useWidgetAuth } from './widget-auth-provider'
 import {
   countUnreadChangelogs,
   EMPTY_CHANGELOG_BASELINE,
+  newestUnreadChangelog,
   getChangelogSeenAt,
+  isChangelogSeenKey,
   markChangelogSeen,
   touchChangelogSeen,
   CHANGELOG_SEEN_EVENT,
@@ -13,20 +15,27 @@ import {
 import { seenScope } from './seen-scope'
 
 /**
- * Unread changelog count for the visitor, plus the mark-seen action the
- * changelog surface calls once entries are on screen. Pass `enabled=false`
+ * Unread changelog count for the visitor and the newest unread entry, plus
+ * the mark-seen action the changelog surface calls once entries are on screen. Pass `enabled=false`
  * (changelog tab off) to skip the fetch. Polls so an entry published while
  * the host page sits open badges without a reload.
  */
 export function useChangelogUnread(enabled: boolean): {
   unread: number
+  /** The newest unread entry, or null. */
+  newest: { id: string; title: string; content: string; publishedAt: string } | null
+  /** Whether the list has loaded, so "nothing unread" is known. */
+  ready: boolean
+  /** Every loaded entry is unread and more pages exist: `unread` is a lower
+   *  bound. */
+  more: boolean
   markSeen: (publishedAt: string) => void
 } {
   const { sessionVersion, user, identityResolved } = useWidgetAuth()
   // Null until the identity round trip settles: no marker is read or written
   // for a visitor the widget cannot yet tell apart, and the badge stays 0.
   const scope = seenScope(user, identityResolved)
-  const { data } = useInfiniteQuery({
+  const { data, hasNextPage } = useInfiniteQuery({
     ...widgetChangelogListQuery(sessionVersion),
     enabled,
     refetchInterval: 60_000,
@@ -36,8 +45,17 @@ export function useChangelogUnread(enabled: boolean): {
   // updates don't fire the native `storage` event, hence the custom one).
   const [markerVersion, reread] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
+    // Another tab reading the changelog advances the shared marker; the
+    // native `storage` event carries that here (null key: storage cleared).
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || isChangelogSeenKey(e.key)) reread()
+    }
     window.addEventListener(CHANGELOG_SEEN_EVENT, reread)
-    return () => window.removeEventListener(CHANGELOG_SEEN_EVENT, reread)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(CHANGELOG_SEEN_EVENT, reread)
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
   // Read once per person and per marker change, not every render.
   const seenAt = useMemo(
@@ -48,6 +66,7 @@ export function useChangelogUnread(enabled: boolean): {
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
   const unread = countUnreadChangelogs(entries, seenAt)
+  const newest = newestUnreadChangelog(entries, seenAt)
 
   // Showing the badge counts as activity, so a person whose marker has nothing
   // new to record keeps it on a browser shared by many (see seen-scope.ts).
@@ -60,11 +79,11 @@ export function useChangelogUnread(enabled: boolean): {
   // they ever open the Changelog tab (see changelog-unread.ts). An empty
   // changelog stamps a baseline older than anything, so its first entry badges.
   const loaded = data !== undefined
-  const newest = entries[0]?.publishedAt
+  const newestPublishedAt = entries[0]?.publishedAt
   useEffect(() => {
     if (scope === null || !loaded || getChangelogSeenAt(scope) !== null) return
-    markChangelogSeen(scope, newest ?? EMPTY_CHANGELOG_BASELINE)
-  }, [loaded, newest, scope])
+    markChangelogSeen(scope, newestPublishedAt ?? EMPTY_CHANGELOG_BASELINE)
+  }, [loaded, newestPublishedAt, scope])
 
   const markSeen = useCallback(
     (publishedAt: string) => {
@@ -73,5 +92,7 @@ export function useChangelogUnread(enabled: boolean): {
     [scope]
   )
 
-  return { unread, markSeen }
+  const more = unread > 0 && unread === entries.length && hasNextPage === true
+
+  return { unread, newest, ready: loaded, more, markSeen }
 }

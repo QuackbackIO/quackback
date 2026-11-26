@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -12,6 +12,7 @@ const entry = (n: number) => ({
   categories: [],
 })
 let items = [entry(1)]
+let nextCursor: string | null = null
 const auth: { user: { id: string } | null; identityResolved: boolean } = {
   user: null,
   identityResolved: true,
@@ -26,7 +27,7 @@ vi.mock('../widget-auth-provider', () => ({
 }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
 vi.mock('@/lib/server/functions/widget/changelog', () => ({
-  widgetListPublicChangelogsFn: () => Promise.resolve({ items, nextCursor: null }),
+  widgetListPublicChangelogsFn: () => Promise.resolve({ items, nextCursor }),
   widgetListChangelogCategoriesFn: () => Promise.resolve([]),
 }))
 
@@ -35,6 +36,7 @@ import { useChangelogUnread } from '../use-changelog-unread'
 beforeEach(() => {
   localStorage.clear()
   items = [entry(1)]
+  nextCursor = null
   auth.user = null
   auth.identityResolved = true
 })
@@ -126,4 +128,70 @@ it('reads the marker once, not on every render', async () => {
   hook.rerender()
   expect(getItem).not.toHaveBeenCalled()
   getItem.mockRestore()
+})
+
+it('re-reads the marker when another tab advances it', async () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  localStorage.setItem(KEY, entry(1).publishedAt)
+  items = [entry(3), entry(2), entry(1)]
+  const { wrapper } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(result.current.unread).toBe(2))
+  expect(result.current.newest?.id).toBe('changelog_3')
+
+  // Another tab reads the changelog: only the native storage event fires here.
+  localStorage.setItem(KEY, entry(3).publishedAt)
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
+  })
+  expect(result.current.unread).toBe(0)
+  expect(result.current.newest).toBeNull()
+})
+
+it('ignores storage changes to unrelated keys', async () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  localStorage.setItem(KEY, entry(1).publishedAt)
+  items = [entry(3), entry(2), entry(1)]
+  const { wrapper } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(result.current.unread).toBe(2))
+
+  localStorage.setItem(KEY, entry(3).publishedAt)
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }))
+  })
+  expect(result.current.unread).toBe(2)
+})
+
+describe('the unread count as a lower bound', () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+
+  it('flags the count when every loaded entry is unread and more exist', async () => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+    items = [entry(3), entry(2)]
+    nextCursor = 'page_2'
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(2))
+    expect(result.current.more).toBe(true)
+  })
+
+  it('is exact when the loaded pages are the whole changelog', async () => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+    items = [entry(3), entry(2)]
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(2))
+    expect(result.current.more).toBe(false)
+  })
+
+  it('is exact when a loaded entry is already read', async () => {
+    localStorage.setItem(KEY, entry(2).publishedAt)
+    items = [entry(3), entry(2)]
+    nextCursor = 'page_2'
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(1))
+    expect(result.current.more).toBe(false)
+  })
 })

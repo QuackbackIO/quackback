@@ -140,6 +140,10 @@ export interface EventMap {
    *  mirror the count in its own UI (e.g. a nav badge), same value that drives
    *  the launcher badge. */
   unread: { count: number }
+  /** The "What's new" card appeared above the closed launcher for the newest
+   *  unread changelog entry. Fires once per entry for each visitor: the host
+   *  page remembers which entries it announced, per instance. */
+  'whats-new': { count: number; entryId: string }
 }
 
 export type EventName = keyof EventMap

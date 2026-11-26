@@ -9,6 +9,7 @@
 - With reduced motion turned on in the visitor's system settings, the panel and launcher no longer animate, including when the setting changes while the page is open.
 - `hideLauncher()` hides the greeting bubble along with the button, and `showLauncher()` works after `init({ launcher: false })`.
 - `logout()` on an open panel closes it and fires the `close` event.
+- A "What's new" card above the closed launcher shows the newest unread changelog entry when the workspace turns it on. Clicking it opens the widget on that entry, and dismissing it hides the card until a newer entry is published. The new `whats-new` event (`{ count, entryId }`) fires the first time the card shows an entry to a visitor.
 - Script-tag installs can read state with `Quackback('isOpen')`, `Quackback('getUser')` and `Quackback('isIdentified')`.
 
 ## 0.1.6 - 2026-11-23

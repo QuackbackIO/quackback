@@ -17,6 +17,8 @@ import { clearDeviceId, getOrCreateDeviceId } from './device'
 import { FULL_SCREEN_MEDIA, removeStyles } from './style'
 import { fitToVisualViewport, keyboardShown } from './viewport'
 import { canRestoreFocus, openerWantsFocusMoved } from './focus'
+import { parseWhatsNew, type WhatsNew } from './whats-new-card'
+import { createWhatsNewMemory, type WhatsNewMemory } from './whats-new-memory'
 
 type Command =
   | 'isOpen'
@@ -83,6 +85,8 @@ export function createSDK(): SDK {
   let serverConfig: ServerConfig | null = null
   let launcherRevealed = false
   let unreadCount = 0
+  // The frame's newest unread changelog entry, for the launcher's card.
+  let whatsNew: WhatsNew | null = null
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
   // banner). Tracking runs only when both the host and the instance allow it.
@@ -165,6 +169,51 @@ export function createSDK(): SDK {
     return new URL(config!.instanceUrl).origin
   }
 
+  // A dismissed (or opened) card stays away until a newer entry is
+  // published, and the whats-new event fires once per entry. The host page
+  // remembers both per instance and per visitor: an identified user has
+  // their own memory, anonymous visitors share one. Read state is the
+  // frame's alone, so the launcher badge is untouched.
+  let whatsNewMemory: WhatsNewMemory | null = null
+  // A new identity sent to the frame and not yet resolved: the card waits, so
+  // it never shows (or announces) under the wrong visitor's memory. The same
+  // identity sent again (a page change in a single-page app) does not wait.
+  let identityPending = false
+  let sentIdentityKey: string | null = null
+  let resolvedIdentityKey: string | null = null
+  function memory(): WhatsNewMemory {
+    return (whatsNewMemory ??= createWhatsNewMemory(iframeOrigin()))
+  }
+  function visitorScope(): string {
+    return currentUser?.id ? `user:${currentUser.id}` : 'anon'
+  }
+  /** The visitor changed: the card the frame worked out for the previous
+   *  session is dropped until the frame sends one for this session. */
+  function setVisitor(user: WidgetUser | null): void {
+    const before = visitorScope()
+    currentUser = user
+    if (visitorScope() !== before) whatsNew = null
+    applyWhatsNew()
+  }
+  // A dismiss or open in another tab of the host page hides the card here.
+  function onWhatsNewStorage(e: StorageEvent): void {
+    if (!config) return
+    if (e.key === null || e.key.startsWith(`quackback:whats-new:${iframeOrigin()}:`)) {
+      applyWhatsNew()
+    }
+  }
+  function answerWhatsNew(entryId: string): void {
+    if (whatsNew?.entry.id === entryId) memory().answer(visitorScope(), whatsNew.entry)
+  }
+  function applyWhatsNew(): void {
+    if (!launcher || !config) return
+    const show =
+      whatsNew && !identityPending && !memory().isAnswered(visitorScope(), whatsNew.entry)
+        ? whatsNew
+        : null
+    launcher.setWhatsNew(show)
+  }
+
   function onIframeMessage(msg: { type: string; [k: string]: unknown }) {
     switch (msg.type) {
       case 'quackback:ready':
@@ -206,6 +255,12 @@ export function createSDK(): SDK {
         emitter.emit('unread', { count })
         break
       }
+      case 'quackback:whats-new': {
+        // The newest unread changelog entry, or null; a bad payload clears it.
+        whatsNew = parseWhatsNew((msg as { whatsNew?: unknown }).whatsNew)
+        applyWhatsNew()
+        break
+      }
       case 'quackback:expand': {
         // Long-form content (article/changelog detail) grows the panel.
         const m = msg as { expanded?: boolean }
@@ -218,7 +273,9 @@ export function createSDK(): SDK {
           user?: WidgetUser
           error?: string
         }
-        currentUser = m.user ?? null
+        identityPending = false
+        resolvedIdentityKey = m.success ? sentIdentityKey : null
+        setVisitor(m.user ?? null)
         emitter.emit('identify', {
           success: !!m.success,
           user: currentUser,
@@ -229,7 +286,7 @@ export function createSDK(): SDK {
       }
       case 'quackback:auth-change': {
         const m = msg as { user?: WidgetUser }
-        currentUser = m.user ?? null
+        setVisitor(m.user ?? null)
         break
       }
       case 'quackback:event': {
@@ -315,6 +372,13 @@ export function createSDK(): SDK {
   }
 
   function sendIdentity(data: unknown) {
+    const signedIn = !!data && typeof data === 'object' && !('anonymous' in data)
+    sentIdentityKey = signedIn ? JSON.stringify(data) : null
+    const pending = signedIn && sentIdentityKey !== resolvedIdentityKey
+    if (pending !== identityPending) {
+      identityPending = pending
+      applyWhatsNew()
+    }
     if (ready && bridge) bridge.send('quackback:identify', data)
     else {
       pendingIdentify = data
@@ -417,11 +481,27 @@ export function createSDK(): SDK {
           openingFromLauncher = false
         }
       },
+      onWhatsNewOpen: (entryId) => {
+        // Opening the entry answers the card, as a dismiss does.
+        answerWhatsNew(entryId)
+        dispatch('open', { view: 'changelog', entryId })
+        applyWhatsNew()
+      },
+      onWhatsNewDismiss: (entryId) => {
+        answerWhatsNew(entryId)
+        applyWhatsNew()
+      },
+      onWhatsNewShown: (data) => {
+        if (memory().announce(visitorScope(), data.entry.id)) {
+          emitter.emit('whats-new', { count: data.count, entryId: data.entry.id })
+        }
+      },
     })
     // A launcher created after init (showLauncher) catches up with the
     // server config, unread count, panel state and reveal it missed.
     if (serverConfig) applyLauncherConfig(serverConfig)
     if (unreadCount) launcher.setUnread(unreadCount)
+    applyWhatsNew()
     if (panelOpen) launcher.setOpen(true)
     if (launcherRevealed) launcher.reveal()
     if (panel) launcher.el.setAttribute('aria-controls', panel.el.id)
@@ -441,6 +521,7 @@ export function createSDK(): SDK {
         // made before init, or before a re-init, is never silently undone.
         if (next.tracking !== undefined) hostTracking = next.tracking
         placement = next.placement ?? 'right'
+        window.addEventListener('storage', onWhatsNewStorage)
         createLauncherIfNeeded()
         // Preload the hidden panel iframe off the host page's critical path:
         // init typically runs while the host is still loading, and the iframe
@@ -481,7 +562,10 @@ export function createSDK(): SDK {
         return
       case 'logout':
         if (panelOpen) dispatch('close')
-        currentUser = null
+        identityPending = false
+        sentIdentityKey = null
+        resolvedIdentityKey = null
+        setVisitor(null)
         if (ready && bridge) bridge.send('quackback:identify', null as unknown as undefined)
         else {
           pendingIdentify = null
@@ -632,6 +716,12 @@ export function createSDK(): SDK {
         serverConfig = null
         launcherRevealed = false
         unreadCount = 0
+        whatsNew = null
+        whatsNewMemory = null
+        identityPending = false
+        sentIdentityKey = null
+        resolvedIdentityKey = null
+        window.removeEventListener('storage', onWhatsNewStorage)
         placement = 'right'
         config = null
         return

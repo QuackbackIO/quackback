@@ -753,6 +753,7 @@ const updateWidgetConfigSchema = z.object({
       home: z.boolean().optional(),
     })
     .optional(),
+  changelog: z.object({ announceOnLauncher: z.boolean().optional() }).optional(),
   messenger: messengerConfigInputSchema.optional(),
   home: widgetHomeConfigSchema.optional(),
   translations: z

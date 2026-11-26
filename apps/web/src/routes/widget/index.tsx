@@ -291,6 +291,10 @@ export const Route = createFileRoute('/widget/')({
         // Admin opt-out for the aggregated Home tab (defaults to shown).
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
       },
+      // Card above the closed launcher for unread changelog entries.
+      announceUpdates:
+        changelogTabEnabled &&
+        (settings?.publicWidgetConfig?.changelog?.announceOnLauncher ?? false),
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
       // Workspace logo for the Home header (branding config).
@@ -417,6 +421,7 @@ function WidgetPage() {
     orgSlug,
     boardPermissions,
     tabs,
+    announceUpdates,
     defaultBoard,
     portalAccess,
     portalOrigin,
@@ -917,6 +922,7 @@ function WidgetPage() {
       onTabChange={handleTabChange}
       onBack={shellOnBack}
       enabledTabs={tabs}
+      announceUpdates={announceUpdates}
       portalAccess={portalAccess}
       portalOrigin={portalOrigin}
       showPoweredBy={showPoweredBy}

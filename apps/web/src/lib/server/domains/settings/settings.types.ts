@@ -759,6 +759,12 @@ export interface WidgetHomeConfig {
   cards?: WidgetHomeCard[]
 }
 
+export interface WidgetChangelogConfig {
+  /** Show a card above the closed launcher when the visitor has unread
+   *  changelog entries. Absent means off. */
+  announceOnLauncher?: boolean
+}
+
 export interface WidgetConfig {
   enabled: boolean
   /** Board slug to filter/default to */
@@ -784,6 +790,8 @@ export interface WidgetConfig {
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
+  /** Changelog surface settings. */
+  changelog?: WidgetChangelogConfig
   /** Messenger settings, stored under `messenger`. */
   messenger?: MessengerConfig
   /** Home surface customisation (greeting, hero style, quick-link cards). */
@@ -816,6 +824,9 @@ export type PublicWidgetConfig = Pick<
   | 'launcherLabel'
   | 'translations'
 > & {
+  /** Resolved changelog settings: the announcement is on only while the
+   *  changelog tab shows. */
+  changelog?: { announceOnLauncher: boolean }
   /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
   /** Client-safe messenger config (no agent-only fields like routing). */
@@ -888,6 +899,7 @@ export interface UpdateWidgetConfigInput {
     tickets?: boolean
     home?: boolean
   }
+  changelog?: WidgetChangelogConfig
   messenger?: Partial<MessengerConfig>
   home?: WidgetHomeConfig
   translations?: WidgetTranslations

@@ -30,6 +30,12 @@ export const EMPTY_CHANGELOG_BASELINE = '1970-01-01T00:00:00.000Z'
  *  views re-read it without a reload. */
 export const CHANGELOG_SEEN_EVENT = 'quackback:changelog-seen'
 
+/** Whether a storage key holds a seen marker (the bare legacy key or any
+ *  person's scoped marker). */
+export function isChangelogSeenKey(key: string): boolean {
+  return key === SEEN_KEY || key.startsWith(`${SEEN_KEY}:`)
+}
+
 export function getChangelogSeenAt(scope: string, storage?: Storage): string | null {
   try {
     const raw = readScopedMarker(storage ?? window.localStorage, SEEN_KEY, scope)
@@ -77,4 +83,23 @@ export function countUnreadChangelogs(
   if (!seenAt) return 0
   const seen = new Date(seenAt).getTime()
   return entries.filter((e) => new Date(e.publishedAt).getTime() > seen).length
+}
+
+/**
+ * The most recently published unread entry, or null when nothing is unread
+ * (same marker rule as {@link countUnreadChangelogs}). Compares dates rather
+ * than trusting list order.
+ */
+export function newestUnreadChangelog<T extends { publishedAt: string }>(
+  entries: readonly T[],
+  seenAt: string | null
+): T | null {
+  if (!seenAt) return null
+  const seen = new Date(seenAt).getTime()
+  let newest: T | null = null
+  for (const e of entries) {
+    const at = new Date(e.publishedAt).getTime()
+    if (at > seen && (!newest || at > new Date(newest.publishedAt).getTime())) newest = e
+  }
+  return newest
 }
