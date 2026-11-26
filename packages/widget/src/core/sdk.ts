@@ -19,7 +19,7 @@ import { fitToVisualViewport, keyboardShown } from './viewport'
 import { canRestoreFocus, openerWantsFocusMoved } from './focus'
 import { parseWhatsNew, type WhatsNew } from './whats-new-card'
 import { createWhatsNewMemory, type WhatsNewMemory } from './whats-new-memory'
-import { parseReplyPreview, type ReplyPreview } from './reply-preview-card'
+import { createReplyPreviewCard, parseReplyPreview, type ReplyPreview } from './reply-preview-card'
 import {
   createReplyPreviewMemory,
   replyPreviewKeyPrefix,
@@ -587,6 +587,7 @@ export function createSDK(): SDK {
           emitter.emit('whats-new', { count: data.count, entryId: data.entry.id })
         }
       },
+      replyCard: createReplyPreviewCard,
       onReplyOpen: (conversationId) => {
         // Opening the conversation answers the card, as a dismiss does, and
         // the visitor lands in its message box.

@@ -1,73 +1,35 @@
-import { useState, useTransition, type ReactNode } from 'react'
+import { useState, useTransition } from 'react'
+import { Radio } from '@base-ui/react/radio'
 import { useRouter } from '@tanstack/react-router'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
-import { RADIO_TILE_DOT, RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { RadioGroup } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import { useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
-import { cn } from '@/lib/shared/utils'
 
 type ReplyAlerts = 'badge' | 'preview' | 'full'
 
-/** A mini launcher in the corner of each picture. */
-function Launcher({ badge = false }: { badge?: boolean }) {
-  return (
-    <>
-      <circle cx="76" cy="50" r="8" className="fill-foreground/80" />
-      {badge && <circle cx="82" cy="44" r="3.5" className="fill-red-600" />}
-    </>
-  )
+/** Each tile's picture: a mini reply card (none, short, tall) above a mini
+ *  launcher with its badge. Few nodes, as the page renders on the server. */
+const CARD_PATHS: Record<ReplyAlerts, { card: string; bars: string } | null> = {
+  badge: null,
+  preview: { card: 'M26 10h58v28H26z', bars: 'M31 15h46v3H31zM31 21h30v3H31zM31 29h48v5H31z' },
+  full: {
+    card: 'M26 2h58v40H26z',
+    bars: 'M31 7h46v3H31zM31 13h46v3H31zM31 19h46v3H31zM31 25h30v3H31zM31 33h48v5H31z',
+  },
 }
 
-/** A mini reply card above the launcher: `lines` text bars and a reply pill. */
-function MiniCard({ lines, top }: { lines: number; top: number }) {
+function Picture({ kind }: { kind: ReplyAlerts }) {
+  const paths = CARD_PATHS[kind]
   return (
-    <>
-      <rect
-        x="26"
-        y={top}
-        width="58"
-        height={lines * 6 + 16}
-        rx="4"
-        className="fill-background stroke-border"
-      />
-      {Array.from({ length: lines }, (_, i) => (
-        <rect
-          key={i}
-          x="31"
-          y={top + 5 + i * 6}
-          width={i === lines - 1 ? 30 : 46}
-          height="3"
-          rx="1.5"
-          className="fill-muted-foreground/50"
-        />
-      ))}
-      <rect
-        x="31"
-        y={top + lines * 6 + 7}
-        width="48"
-        height="5"
-        rx="2.5"
-        className="fill-muted-foreground/20"
-      />
-    </>
+    <svg viewBox="0 0 96 64" aria-hidden="true" className="w-full rounded-md bg-muted">
+      {paths && <path d={paths.card} className="fill-background stroke-border" />}
+      {paths && <path d={paths.bars} className="fill-muted-foreground/50" />}
+      <circle cx="76" cy="50" r="8" className="fill-primary" />
+      <circle cx="82" cy="44" r="3.5" className="fill-destructive" />
+    </svg>
   )
-}
-
-const PICTURES: Record<ReplyAlerts, ReactNode> = {
-  badge: <Launcher badge />,
-  preview: (
-    <>
-      <MiniCard lines={2} top={10} />
-      <Launcher badge />
-    </>
-  ),
-  full: (
-    <>
-      <MiniCard lines={4} top={2} />
-      <Launcher badge />
-    </>
-  ),
 }
 
 const OPTIONS: { value: ReplyAlerts; title: string }[] = [
@@ -132,35 +94,16 @@ export function ReplyAlertsCard({
         disabled={isBusy}
         className="grid-cols-3 gap-2.5"
       >
-        {OPTIONS.map((option) => {
-          const selected = option.value === replyAlerts
-          return (
-            <label
-              key={option.value}
-              data-slot="reply-alerts-tile"
-              data-selected={selected}
-              className={cn(
-                'flex flex-col gap-2 rounded-xl border p-2.5 transition-colors',
-                selected
-                  ? 'border-primary bg-primary/10 ring-1 ring-primary'
-                  : 'border-border hover:bg-muted/40',
-                isBusy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-              )}
-            >
-              <svg
-                viewBox="0 0 96 64"
-                aria-hidden="true"
-                className="h-auto w-full rounded-md bg-muted/60"
-              >
-                {PICTURES[option.value]}
-              </svg>
-              <span className="flex items-center gap-2">
-                <RadioGroupItem value={option.value} disabled={isBusy} className={RADIO_TILE_DOT} />
-                <span className="text-sm font-medium">{option.title}</span>
-              </span>
-            </label>
-          )
-        })}
+        {OPTIONS.map((option) => (
+          <Radio.Root
+            key={option.value}
+            value={option.value}
+            className="flex cursor-pointer flex-col gap-1.5 rounded-xl border p-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring data-checked:border-primary data-checked:bg-primary/10 data-disabled:opacity-50"
+          >
+            <Picture kind={option.value} />
+            {option.title}
+          </Radio.Root>
+        ))}
       </RadioGroup>
 
       <SettingRows className="mt-4">

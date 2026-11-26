@@ -8,15 +8,25 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createLauncher as createHiddenLauncher } from '../src/core/launcher'
-import { initialsOf, parseReplyPreview, type ReplyPreview } from '../src/core/reply-preview-card'
+import {
+  createReplyPreviewCard,
+  initialsOf,
+  parseReplyPreview,
+  type ReplyPreview,
+} from '../src/core/reply-preview-card'
 import { createTitleAlert, TITLE_ALERT_INTERVAL_MS } from '../src/core/title-alert'
 import { createSDK } from '../src/core/sdk'
 import type { WhatsNew } from '../src/core/whats-new-card'
 
 const ORIGIN = 'https://feedback.acme.com'
 
+/** A launcher with the reply card, as the SDK builds it. */
+function createCardLauncher(opts: Parameters<typeof createHiddenLauncher>[0]) {
+  return createHiddenLauncher({ replyCard: createReplyPreviewCard, ...opts })
+}
+
 function createLauncher(opts: Parameters<typeof createHiddenLauncher>[0]) {
-  const l = createHiddenLauncher(opts)
+  const l = createCardLauncher(opts)
   l.reveal()
   return l
 }
@@ -320,6 +330,31 @@ describe('launcher reply preview', () => {
     expect(whatsNewShown()).toBe(true)
   })
 
+  it('shows one card at a time: reply preview, then What\u2019s new, never the greeting after', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    l.setGreeting('Need a hand?')
+    l.setWhatsNew(whatsNew)
+    l.setReplyPreview(sample())
+    const greeting = document.querySelector('body > div') as HTMLElement
+    const whatsNewEl = () => document.querySelector('[data-quackback-whats-new]') as HTMLElement
+    // All three are available: only the reply preview shows.
+    expect(shown()).toBe(true)
+    expect(whatsNewShown()).toBe(false)
+    expect(greeting.style.display).toBe('none')
+    // Dismissing it shows What's new.
+    dismissBtn().click()
+    expect(shown()).toBe(false)
+    expect(whatsNewShown()).toBe(true)
+    expect(greeting.style.display).toBe('none')
+    // Dismissing that keeps the greeting back for the page load.
+    ;(whatsNewEl().querySelector('button[aria-label="Dismiss"]') as HTMLElement).click()
+    expect(whatsNewShown()).toBe(false)
+    expect(greeting.style.display).toBe('none')
+    l.setOpen(true)
+    l.setOpen(false)
+    expect(greeting.style.display).toBe('none')
+  })
+
   it('keeps the greeting back for the page load after a dismiss', () => {
     const l = createLauncher({ placement: 'right', onClick: () => {} })
     l.setGreeting('Need a hand?')
@@ -342,7 +377,7 @@ describe('launcher reply preview', () => {
   })
 
   it('waits for the reveal, and hides while open or hidden', () => {
-    const l = createHiddenLauncher({ placement: 'right', onClick: () => {} })
+    const l = createCardLauncher({ placement: 'right', onClick: () => {} })
     l.setReplyPreview(sample())
     expect(shown()).toBe(false)
     l.reveal()
@@ -384,6 +419,15 @@ describe('launcher reply preview', () => {
     l.setReplyPreview(sample())
     expect(cardEl()!.style.transition).toBe('none')
     expect(cardEl()!.style.transform).toBe('')
+  })
+
+  it('shows no reply preview without the card builder, as in the admin preview', () => {
+    const l = createHiddenLauncher({ placement: 'right', onClick: () => {} })
+    l.reveal()
+    l.setWhatsNew(whatsNew)
+    l.setReplyPreview(sample())
+    expect(cardEl()).toBeNull()
+    expect(whatsNewShown()).toBe(true)
   })
 
   it('goes with the launcher', () => {

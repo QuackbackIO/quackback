@@ -1,9 +1,9 @@
 import { launcherLabels } from './labels'
 import { createWhatsNewCard, type WhatsNew, type WhatsNewCardHandle } from './whats-new-card'
-import {
-  createReplyPreviewCard,
-  type ReplyPreview,
-  type ReplyPreviewCardHandle,
+import type {
+  ReplyPreview,
+  ReplyPreviewCardHandle,
+  ReplyPreviewCardOptions,
 } from './reply-preview-card'
 
 export interface LauncherOptions {
@@ -23,6 +23,10 @@ export interface LauncherOptions {
   onWhatsNewDismiss?: (entryId: string) => void
   /** The "What's new" card appeared for an entry it had not shown yet. */
   onWhatsNewShown?: (data: WhatsNew) => void
+  /** Builds the reply preview card. The SDK passes it; a launcher without
+   *  it (the admin preview) shows no reply preview and leaves the card's
+   *  code out of its bundle. */
+  replyCard?: (opts: ReplyPreviewCardOptions) => ReplyPreviewCardHandle
   /** The reply preview was clicked: open the widget on this conversation. */
   onReplyOpen?: (conversationId: string) => void
   /** The reply preview was dismissed. */
@@ -299,7 +303,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // One card at a time above the button, by priority.
   const pickCard = (): 'reply' | 'whats-new' | 'greeting' | null => {
     if (!revealed || !visible || isOpen) return null
-    if (replyPreview) return 'reply'
+    if (replyPreview && opts.replyCard) return 'reply'
     if (whatsNew) return 'whats-new'
     if (greetingText && !greetingDismissed() && !whatsNewDismissed) return 'greeting'
     return null
@@ -405,9 +409,9 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
 
   // The reply preview, created when there is first a reply to show.
   let spokenReplyId: string | null = null
-  const ensureReplyCard = (): ReplyPreviewCardHandle => {
-    if (replyCard) return replyCard
-    replyCard = createReplyPreviewCard({
+  const ensureReplyCard = (build: NonNullable<LauncherOptions['replyCard']>) => {
+    if (replyCard) return
+    replyCard = build({
       mount,
       side: cardSide,
       contained,
@@ -433,7 +437,6 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       },
     })
     if (accent) replyCard.setAccent(accent)
-    return replyCard
   }
 
   btn.addEventListener('mouseenter', () => {
@@ -500,7 +503,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     },
     setReplyPreview(data) {
       replyPreview = data
-      if (data) ensureReplyCard()
+      if (data && opts.replyCard) ensureReplyCard(opts.replyCard)
       renderGreeting()
     },
     setLabel(text) {

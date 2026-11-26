@@ -1,6 +1,6 @@
 import { useRouter, useHydrated, Link, Outlet, useChildMatches } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import { useState, useTransition, useMemo } from 'react'
+import { lazy, Suspense, useState, useTransition, useMemo } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useTheme } from 'next-themes'
 import { SparklesIcon, TrashIcon, ArrowRightIcon, PhotoIcon } from '@heroicons/react/24/solid'
@@ -16,7 +16,6 @@ import {
   type WidgetConnectionStatus,
 } from '@/components/admin/settings/widget/widget-connection-row'
 import { HomeCardsList } from '@/components/admin/settings/widget/home-cards-list'
-import { ReplyAlertsCard } from '@/components/admin/settings/widget/reply-alerts-card'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
 import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
 import { Label } from '@/components/ui/label'
@@ -47,6 +46,14 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useAdminBoards } from '@/lib/client/hooks/use-admin-catalogues'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+
+// Its own chunk: the install page renders inside this module's gate and
+// never shows the card.
+const ReplyAlertsCard = lazy(() =>
+  import('@/components/admin/settings/widget/reply-alerts-card').then((m) => ({
+    default: m.ReplyAlertsCard,
+  }))
+)
 
 export function WidgetSettingsGate() {
   const childMatches = useChildMatches()
@@ -117,7 +124,11 @@ function WidgetSettingsPage() {
             onGreetingChange={setLauncherGreeting}
           />
 
-          {supportInboxFlagEnabled && <ReplyAlertsCard config={config} />}
+          {supportInboxFlagEnabled && (
+            <Suspense fallback={null}>
+              <ReplyAlertsCard config={config} />
+            </Suspense>
+          )}
 
           <VisitorTrackingCard config={config} />
 

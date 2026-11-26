@@ -41,7 +41,7 @@ describe('ReplyAlertsCard', () => {
     expect(screen.getByText('Reply alerts')).toBeTruthy()
     for (const name of ['Badge only', 'Preview', 'Full message']) expect(tile(name)).toBeTruthy()
     expect(tile('Preview').getAttribute('aria-checked')).toBe('true')
-    const tiles = document.querySelectorAll('[data-slot="reply-alerts-tile"]')
+    const tiles = screen.getAllByRole('radio')
     expect(tiles).toHaveLength(3)
     tiles.forEach((t) => expect(t.querySelector('svg[aria-hidden="true"]')).not.toBeNull())
   })
