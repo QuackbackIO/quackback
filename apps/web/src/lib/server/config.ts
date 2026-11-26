@@ -313,6 +313,7 @@ const configSchema = z
     aiReasoningEffort: z.string().optional(),
     aiMaxTokensParam: z.string().optional(),
     aiCombinedToolsAndSchema: envBoolean,
+    aiEmbeddingZeroPad: envBoolean,
 
     // Telemetry (optional)
     disableTelemetry: envBoolean,
@@ -502,6 +503,7 @@ function buildConfigFromEnv(): unknown {
     aiReasoningEffort: env('AI_REASONING_EFFORT'),
     aiMaxTokensParam: env('AI_MAX_TOKENS_PARAM'),
     aiCombinedToolsAndSchema: env('AI_COMBINED_TOOLS_AND_SCHEMA'),
+    aiEmbeddingZeroPad: env('AI_EMBEDDING_ZERO_PAD'),
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
@@ -822,6 +824,9 @@ export const config = {
   },
   get aiCombinedToolsAndSchema() {
     return loadConfig().aiCombinedToolsAndSchema
+  },
+  get aiEmbeddingZeroPad() {
+    return loadConfig().aiEmbeddingZeroPad
   },
 
   // Telemetry

@@ -127,6 +127,12 @@
         "kind": "tristate",
         "group": "advanced",
         "sensitive": false
+      },
+      {
+        "key": "AI_EMBEDDING_ZERO_PAD",
+        "kind": "tristate",
+        "group": "advanced",
+        "sensitive": false
       }
     ]
   },

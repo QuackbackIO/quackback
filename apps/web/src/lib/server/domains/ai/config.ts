@@ -160,3 +160,8 @@ export function reasoningEffortProviderOptions(): { reasoning?: { effort: string
     return {}
   return { reasoning: { effort } }
 }
+
+/** `AI_EMBEDDING_ZERO_PAD`: pad narrower provider embeddings to the column width. */
+export function embeddingZeroPadEnabled(): boolean {
+  return config.aiEmbeddingZeroPad === true
+}
