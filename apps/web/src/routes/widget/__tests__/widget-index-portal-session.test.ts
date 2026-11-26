@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // The widget Home seeds visitor-specific data (the feed's viewer and their
@@ -46,11 +47,9 @@ async function runLoader(queryClient: ReturnType<typeof makeQueryClient>) {
   } as never)
 }
 
-function seededVotes(queryClient: ReturnType<typeof makeQueryClient>) {
+function seededVotes(queryClient: ReturnType<typeof makeQueryClient>, version: number) {
   const call = queryClient.setQueryData.mock.calls.find(
-    ([key]) =>
-      JSON.stringify(key) ===
-      JSON.stringify(widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION))
+    ([key]) => JSON.stringify(key) === JSON.stringify(widgetQueryKeys.votedPosts.bySession(version))
   )
   return call?.[1] as Set<string> | undefined
 }
@@ -73,7 +72,7 @@ describe('widget Home loader: visitor-specific seed', () => {
 
     expect(widgetPortalSessionReusedFn).toHaveBeenCalledTimes(1)
     expect(feedViewer(queryClient)).toBeUndefined()
-    expect(seededVotes(queryClient)).toEqual(new Set())
+    expect(seededVotes(queryClient, INITIAL_SESSION_VERSION)).toEqual(new Set())
   })
 
   it("seeds the portal visitor's feed and votes when the frame holds their session", async () => {
@@ -82,7 +81,9 @@ describe('widget Home loader: visitor-specific seed', () => {
     await runLoader(queryClient)
 
     expect(feedViewer(queryClient)).toBe('user_1')
-    expect(seededVotes(queryClient)).toEqual(new Set(['post_1']))
+    // Under the version the widget starts on once it adopts the session.
+    expect(seededVotes(queryClient, INITIAL_SESSION_VERSION + 1)).toEqual(new Set(['post_1']))
+    expect(seededVotes(queryClient, INITIAL_SESSION_VERSION)).toBeUndefined()
   })
 
   it('settles the decision before any seed read starts', async () => {

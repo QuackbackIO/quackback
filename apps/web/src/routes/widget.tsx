@@ -97,7 +97,9 @@ export const Route = createFileRoute('/widget')({
     // returns null for those, and the widget then starts as for an anonymous
     // visitor until the host identifies the user with a signed identity token.
     // The token is read here, during the frame's document request, because
-    // later fetches from inside the frame cannot say who embeds it.
+    // later fetches from inside the frame cannot say who embeds it. The frame
+    // still adopts it only under a parent page on its own origin
+    // (WidgetAuthProvider, widget-frame.ts).
     // The avatar lookup starts as soon as the token resolves, alongside the
     // locale lookup.
     const portalSessionPromise = (

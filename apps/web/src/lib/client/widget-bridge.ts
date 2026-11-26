@@ -1,3 +1,5 @@
+import { readableParentOrigin } from './widget-frame'
+
 interface NativeBridge {
   dispatch: (event: string, data: unknown) => void
 }
@@ -40,16 +42,6 @@ export function resolveHostOrigin(source: {
     return source.parentOrigin === referrerOrigin ? referrerOrigin : null
   }
   return referrerOrigin
-}
-
-/** The parent window's origin when it is readable (same origin), else null. */
-function readableParentOrigin(): string | null {
-  try {
-    if (window.parent === window) return null
-    return window.parent.location.origin
-  } catch {
-    return null
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,6 +145,11 @@ function deliverUserData(message: Record<string, unknown>): void {
   // never held for later.
   if (carriesSignInToken(message)) return
   holdBack(message)
+}
+
+/** Whether the host's own messages come from an opaque origin, so user data can never reach it. */
+export function hostOriginIsOpaque(): boolean {
+  return remembered.kind === 'opaque'
 }
 
 /**

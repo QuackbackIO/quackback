@@ -15,6 +15,11 @@
  * - `Sec-Fetch-Mode` must be `navigate`. Calls the frame makes after it loads
  *   (a loader re-run, for instance) are same-origin fetches whoever embeds the
  *   frame, so only the document navigation itself says who the embedder is.
+ *
+ * This is the first gate. Fetch Metadata describes who started a navigation,
+ * so a navigation the frame starts itself (a reload, a link inside it) also
+ * passes; the frame makes the final check in the browser, adopting the
+ * session only under a parent page on its own origin (widget-frame.ts).
  */
 export function shouldReusePortalSession(fetchMetadata: {
   site: string | null | undefined

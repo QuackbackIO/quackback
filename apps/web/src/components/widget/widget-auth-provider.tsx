@@ -18,9 +18,13 @@ import {
   readPersistedToken,
   clearPersistedToken,
 } from '@/lib/client/widget-auth'
-import { sendToHost } from '@/lib/client/widget-bridge'
-import { frameHasHost } from '@/lib/client/widget-frame'
-import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { hostOriginIsOpaque, sendToHost } from '@/lib/client/widget-bridge'
+import {
+  frameHasHost,
+  frameParentIsSameOrigin,
+  setFrameHoldsPortalSession,
+} from '@/lib/client/widget-frame'
+import { startingSessionVersion, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/client/auth-client'
 import { resolveIdentifyAction, type SessionSource } from './identify-precedence'
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
@@ -87,7 +91,11 @@ interface WidgetAuthProviderProps {
    * session and user in place.
    */
   portalUser?: WidgetUser | null
-  /** Signed portal session token, set only when the embedding page is the instance's own origin */
+  /**
+   * Signed portal session token, set by the server only for a same-origin
+   * frame navigation; the frame adopts it only when its parent page is on its
+   * own origin too.
+   */
   portalSessionToken?: string | null
   /** When true, inline email capture is disabled and the host app must sign users. */
   hmacRequired?: boolean
@@ -113,8 +121,8 @@ interface WidgetAuthProviderProps {
 export const IDENTITY_HANDSHAKE_TIMEOUT_MS = 1500
 
 export function WidgetAuthProvider({
-  portalUser,
-  portalSessionToken,
+  portalUser: portalUserProp,
+  portalSessionToken: portalSessionTokenProp,
   hmacRequired,
   canPortalHandoff: canPortalHandoffFromPortal,
   initialLocale,
@@ -122,26 +130,39 @@ export function WidgetAuthProvider({
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
+  // The server hands over the portal session only for a same-origin
+  // navigation, which a navigation started inside the frame also is. The frame
+  // takes it only when its parent page is on its own origin (or it is the top
+  // page); otherwise it starts as for an anonymous visitor (widget-frame.ts).
+  const [frameMayHoldPortalSession] = useState(frameParentIsSameOrigin)
+  const portalSessionToken = frameMayHoldPortalSession ? portalSessionTokenProp : null
+  const portalUser = frameMayHoldPortalSession ? portalUserProp : null
   // A portal session the page hands the widget is adopted before the first
   // render, so every identity-keyed read starts on it, one version past the
   // anonymous server-rendered baseline. Adopted in an effect after mount, each
   // of those reads ran once without it and then again for the new version.
+  // Decided before any child renders, so the frame's server function calls
+  // know from the start whether they may carry cookies.
   const [portalSessionAdopted] = useState(() => {
-    if (!portalSessionToken || typeof window === 'undefined') return false
-    setWidgetToken(portalSessionToken)
-    return true
+    if (typeof window === 'undefined') return false
+    const adopted = !!portalSessionToken
+    setFrameHoldsPortalSession(adopted)
+    if (adopted) setWidgetToken(portalSessionToken)
+    return adopted
   })
-  const initialSessionVersion = INITIAL_SESSION_VERSION + (portalSessionAdopted ? 1 : 0)
-  const [user, setUser] = useState<WidgetUser | null>(null)
+  const initialSessionVersion = startingSessionVersion(portalSessionAdopted)
+  const [user, setUserState] = useState<WidgetUser | null>(null)
   const [canPortalHandoff, setCanPortalHandoff] = useState(canPortalHandoffFromPortal ?? true)
   const [sessionVersion, setSessionVersion] = useState(initialSessionVersion)
   const [identityResolved, setIdentityResolved] = useState(false)
   const isIdentified = user !== null
-  // The current person, for message handlers registered once at mount.
+  // The current user for handlers registered once at mount, whose `user`
+  // closure would still be the initial null. Written with every change.
   const userRef = useRef(user)
-  useEffect(() => {
-    userRef.current = user
-  }, [user])
+  const setUser = useCallback((next: WidgetUser | null) => {
+    userRef.current = next
+    setUserState(next)
+  }, [])
   const sessionReadyRef = useRef(portalSessionAdopted)
   const sessionSourceRef = useRef<SessionSource>(portalSessionAdopted ? 'portal' : null)
 
@@ -308,7 +329,7 @@ export function WidgetAuthProvider({
       sendToHost({ type: 'quackback:identify-result', success: true, user: result.user })
       sendToHost({ type: 'quackback:auth-change', user: result.user })
     },
-    [storeToken, queryClient]
+    [storeToken, queryClient, setUser]
   )
 
   // NOTE: there is deliberately no inline email-capture identify. A verified
@@ -328,6 +349,7 @@ export function WidgetAuthProvider({
     if (!portalSessionAdopted) {
       if (sessionReadyRef.current) return
       sessionSourceRef.current = 'portal'
+      setFrameHoldsPortalSession(true)
       storeToken(portalSessionToken)
     }
     portalHydratedRef.current = true
@@ -338,7 +360,14 @@ export function WidgetAuthProvider({
       sendToHost({ type: 'quackback:auth-change', user: portalUser })
     }
     setIdentityResolved(true)
-  }, [portalSessionToken, portalSessionAdopted, portalUser, canPortalHandoffFromPortal, storeToken])
+  }, [
+    portalSessionToken,
+    portalSessionAdopted,
+    portalUser,
+    canPortalHandoffFromPortal,
+    storeToken,
+    setUser,
+  ])
 
   // Restore a persisted anonymous session on mount so a returning visitor's
   // conversation is visible immediately, without waiting for a write. Skipped
@@ -502,6 +531,17 @@ export function WidgetAuthProvider({
             handleAnonymousIdentify()
             break
           case 'identify':
+            // A host on an opaque origin can never receive the identified
+            // user, so the identify is refused without touching the session.
+            if (hostOriginIsOpaque()) {
+              setIdentityResolved(true)
+              sendToHost({
+                type: 'quackback:identify-result',
+                success: false,
+                error: 'HOST_ORIGIN_UNKNOWN',
+              })
+              break
+            }
             sessionSourceRef.current = 'sdk'
             // Who the visitor is stays unknown until this round trip settles,
             // even if the frame had already settled as anonymous while it
@@ -527,7 +567,7 @@ export function WidgetAuthProvider({
     sendToHost({ type: 'quackback:ready' })
 
     return () => window.removeEventListener('message', handleMessage)
-  }, [storeToken, applyIdentifyResult])
+  }, [storeToken, applyIdentifyResult, setUser])
 
   const contextValue = useMemo(
     () => ({
