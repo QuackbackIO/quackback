@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "Nieuw antwoord van {name}",
   "widget.replyPreview.replied": "{name} heeft geantwoord",
   "widget.replyPreview.attachment": "Heeft een bijlage gestuurd",
+  "widget.replyPreview.newReply": "Nieuw antwoord",
+  "widget.replyPreview.replyGeneric": "Schrijf een antwoord…",
   "widget.shell.aria.goBack": "Terug",
   "widget.shell.aria.close": "Widget sluiten",
   "widget.shell.aria.expand": "Widget vergroten",

@@ -24,15 +24,15 @@ export function useMessengerUnread(
   return useMessengerUnreadState(enabled, opts).total
 }
 
-/** The total (undefined until the first read), and when it was last read (0
- *  before the first read): every poll moves `updatedAt`, even when the total
- *  stays the same. */
+/** The total (undefined until the first read), and the newest unread reply's
+ *  id: a new reply changes it even when a read elsewhere keeps the total the
+ *  same. */
 export function useMessengerUnreadState(
   enabled: boolean,
   opts: { background?: boolean } = {}
-): { total: number | undefined; updatedAt: number } {
+): { total: number | undefined; newestReplyId: string | null } {
   const { sessionVersion } = useWidgetAuth()
-  const { data, dataUpdatedAt, refetch } = useQuery({
+  const { data, refetch } = useQuery({
     queryKey: conversationKeys.widgetMessengerUnread(sessionVersion),
     queryFn: () => widgetGetMessengerUnreadFn({ headers: getWidgetAuthHeaders() }),
     enabled,
@@ -52,7 +52,7 @@ export function useMessengerUnreadState(
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [enabled, refetch])
-  return { total: data?.total, updatedAt: dataUpdatedAt }
+  return { total: data?.total, newestReplyId: data?.newestReplyId ?? null }
 }
 
 /**

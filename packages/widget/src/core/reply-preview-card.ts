@@ -135,9 +135,18 @@ export function parseReplyPreview(raw: unknown, base?: string): ReplyPreview | n
       announce: str(strings.announce, 160),
     },
   }
+  // The card needs its replies and words; the reported replies do not, so a
+  // card that cannot show never holds back the message event.
   const s = parsed.strings
-  if (!parsed.conversationId || messages.length === 0) return null
-  if (!s.header || !s.replyTo || !s.dismiss || !s.announce) return null
+  const cardReady =
+    !!parsed.conversationId &&
+    messages.length > 0 &&
+    !!s.header &&
+    !!s.replyTo &&
+    !!s.dismiss &&
+    !!s.announce
+  if (!cardReady && recent.length === 0) return null
+  parsed.card = parsed.card && cardReady
   return parsed
 }
 

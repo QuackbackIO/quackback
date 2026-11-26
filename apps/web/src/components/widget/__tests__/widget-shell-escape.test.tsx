@@ -22,7 +22,7 @@ vi.mock('../widget-auth-provider', () => ({
 }))
 vi.mock('../use-messenger-unread', () => ({
   useMessengerUnread: () => 0,
-  useMessengerUnreadState: () => ({ total: 0, updatedAt: 0 }),
+  useMessengerUnreadState: () => ({ total: 0, newestReplyId: null }),
   useRefreshSummaryOnUnreadChange: () => {},
 }))
 vi.mock('../reply-preview', () => ({

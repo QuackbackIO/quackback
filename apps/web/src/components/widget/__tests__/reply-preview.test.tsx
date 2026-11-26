@@ -179,6 +179,18 @@ describe('buildReplyPreview', () => {
     expect(payload.author.avatarUrl).toBeNull()
   })
 
+  it('always has words for the card, with neither a name nor a team', () => {
+    const payload = buildReplyPreview(
+      intl(),
+      { ...replies, author: { name: null, avatarUrl: null }, teamName: null },
+      { replyAlerts: 'preview', titleAlerts: true }
+    )
+    expect(payload.strings.header).toBe('New reply')
+    expect(payload.strings.announce).toBe('New reply')
+    expect(payload.strings.replyTo).toBe('Write a reply…')
+    expect(payload.title).toBe('New reply')
+  })
+
   it('names a reply with only attachments', () => {
     const payload = buildReplyPreview(
       intl(),
@@ -340,7 +352,7 @@ describe('useMessengerUnread in the background', () => {
 describe('useUnreadReplies', () => {
   it('reads nothing while nothing is unread', () => {
     const { wrapper: w } = withClient()
-    const { result } = renderHook(() => useUnreadReplies(true, 0, 1), { wrapper: w })
+    const { result } = renderHook(() => useUnreadReplies(true, 0, null), { wrapper: w })
     expect(result.current).toEqual({ ready: true, data: null })
     expect(replyFn).not.toHaveBeenCalled()
   })
@@ -349,22 +361,22 @@ describe('useUnreadReplies', () => {
     replyFn.mockResolvedValue(replies)
     const { client, wrapper: w } = withClient()
     const { result, rerender } = renderHook(
-      ({ unread, at }: { unread: number; at: number }) => useUnreadReplies(true, unread, at),
-      { wrapper: w, initialProps: { unread: 2, at: 1 } }
+      ({ unread, id }: { unread: number; id: string }) => useUnreadReplies(true, unread, id),
+      { wrapper: w, initialProps: { unread: 2, id: 'm1' } }
     )
     await waitFor(() => expect(result.current.data).toEqual(replies))
-    // A newer poll keeps the card while the next read loads...
+    // A newer reply keeps the card while the next read loads...
     replyFn.mockReturnValue(new Promise(() => {}))
-    rerender({ unread: 3, at: 2 })
+    rerender({ unread: 3, id: 'm2' })
     expect(result.current.data).toEqual(replies)
     // ...but a new session starts empty.
     auth.sessionVersion = 2
-    rerender({ unread: 3, at: 3 })
+    rerender({ unread: 3, id: 'm2' })
     expect(result.current).toEqual({ ready: false, data: null })
     client.clear()
   })
 
-  it('reads again after every poll, even when the total stays the same', async () => {
+  it('reads again for a new newest reply, even when the total stays the same', async () => {
     // One conversation read and a new reply in another within one poll: the
     // total is unchanged, the replies are not.
     const later: UnreadReplies = {
@@ -378,11 +390,14 @@ describe('useUnreadReplies', () => {
     replyFn.mockResolvedValueOnce(replies).mockResolvedValueOnce(later)
     const { client, wrapper: w } = withClient()
     const { result, rerender } = renderHook(
-      ({ at }: { at: number }) => useUnreadReplies(true, 2, at),
-      { wrapper: w, initialProps: { at: 1 } }
+      ({ id }: { id: string }) => useUnreadReplies(true, 2, id),
+      { wrapper: w, initialProps: { id: 'conversation_msg_2' } }
     )
     await waitFor(() => expect(result.current.data).toEqual(replies))
-    rerender({ at: 2 })
+    // A poll with the same total and newest reply reads nothing more.
+    rerender({ id: 'conversation_msg_2' })
+    expect(replyFn).toHaveBeenCalledTimes(1)
+    rerender({ id: 'conversation_msg_7' })
     await waitFor(() => expect(result.current.data).toEqual(later))
     expect(replyFn).toHaveBeenCalledTimes(2)
     client.clear()

@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "Nova resposta de {name}",
   "widget.replyPreview.replied": "{name} respondeu",
   "widget.replyPreview.attachment": "Enviou um anexo",
+  "widget.replyPreview.newReply": "Nova resposta",
+  "widget.replyPreview.replyGeneric": "Escreva uma resposta…",
   "widget.shell.aria.goBack": "Voltar",
   "widget.shell.aria.close": "Fechar widget de feedback",
   "widget.shell.aria.expand": "Expandir o widget",

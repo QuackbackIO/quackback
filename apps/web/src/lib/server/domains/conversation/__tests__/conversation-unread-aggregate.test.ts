@@ -17,7 +17,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { conversations, conversationMessages, principal, user } from '@/lib/server/db'
-import { countVisitorUnreadMessages } from '../conversation.query'
+import { conversationToDTO, countVisitorUnreadMessages } from '../conversation.query'
+import { eq } from '@/lib/server/db'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -107,6 +108,20 @@ describe.skipIf(!fixture.available)('countVisitorUnreadMessages (real DB)', () =
     await addMessage(c, { senderType: 'agent' })
     await addMessage(c, { senderType: 'agent', replyTime: true })
     expect(await countVisitorUnreadMessages(visitor)).toBe(1)
+  })
+
+  it("agrees with the conversation's own visitor unread count", async () => {
+    const visitor = await seedVisitor()
+    const c = await seedConversation(visitor, null)
+    await addMessage(c, { senderType: 'agent' })
+    await addMessage(c, { senderType: 'agent' })
+    await addMessage(c, { senderType: 'agent', replyTime: true })
+    await addMessage(c, { senderType: 'agent', isInternal: true })
+    await addMessage(c, { senderType: 'visitor' })
+    const [row] = await testDb.select().from(conversations).where(eq(conversations.id, c))
+    const dto = await conversationToDTO(row, 'visitor')
+    expect(dto.unreadCount).toBe(2)
+    expect(await countVisitorUnreadMessages(visitor)).toBe(dto.unreadCount)
   })
 
   it('counts only the given visitor’s conversations', async () => {

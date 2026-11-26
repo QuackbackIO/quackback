@@ -171,6 +171,24 @@ describe('parseReplyPreview', () => {
     expect(parsed.recent[19].text.endsWith('…')).toBe(true)
   })
 
+  it('keeps the reported replies when the card cannot show', () => {
+    const recent = [
+      {
+        id: 'm_1',
+        conversationId: 'conversation_2',
+        author: { name: '', avatarUrl: null },
+        text: 'Hi',
+      },
+    ]
+    const parsed = parseReplyPreview({
+      ...sample({ recent }),
+      strings: { ...sample().strings, header: '' },
+    })!
+    expect(parsed.card).toBe(false)
+    expect(parsed.recent).toHaveLength(1)
+    expect(parseReplyPreview({ ...sample({ recent: [] }), strings: {} })).toBeNull()
+  })
+
   it('makes initials by code point', () => {
     expect(initialsOf('Alex Kim')).toBe('AK')
     expect(initialsOf('ada')).toBe('A')
@@ -603,6 +621,7 @@ describe('sdk reply preview', () => {
     first.dispatch('init', { instanceUrl: ORIGIN })
     const handler = vi.fn()
     first.dispatch('on', 'message', handler)
+    preview(null) // nothing unread yet: this visitor's memory starts
     preview(sample())
     expect(shown()).toBe(true)
     expect(handler).toHaveBeenCalledTimes(2)
@@ -624,11 +643,53 @@ describe('sdk reply preview', () => {
     second.dispatch('destroy')
   })
 
+  it('records what is already unread on a first visit without reporting it', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'message', handler)
+    // Two replies were waiting before this device ever loaded the widget.
+    preview(sample())
+    expect(handler).not.toHaveBeenCalled()
+    // The card still shows them.
+    expect(shown()).toBe(true)
+    // A reply that arrives while the page is open is reported.
+    preview(sample({ messages: [msg(1), msg(2), msg(3)], count: 3 }))
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ preview: 'Reply 3' }))
+    sdk.dispatch('destroy')
+  })
+
+  it('fires message even when the card has no words to show', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'message', handler)
+    preview(null) // nothing unread yet: this visitor's memory starts
+    const recent = [
+      {
+        id: 'm_1',
+        conversationId: 'conversation_2',
+        author: { name: '', avatarUrl: null },
+        text: 'Hi',
+      },
+    ]
+    preview({ ...sample({ recent, teamName: '' }), strings: { ...sample().strings, header: '' } })
+    expect(cardEl()).toBeNull()
+    expect(handler).toHaveBeenCalledWith({
+      conversationId: 'conversation_2',
+      author: { name: '', avatarUrl: null },
+      preview: 'Hi',
+    })
+    sdk.dispatch('destroy')
+  })
+
   it('names a reply that shows as the team after the team', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     const handler = vi.fn()
     sdk.dispatch('on', 'message', handler)
+    preview(null) // nothing unread yet: this visitor's memory starts
     preview(sample({ author: { name: '', firstName: '', avatarUrl: null }, messages: [msg(1)] }))
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ author: { name: 'Acme', avatarUrl: null } })
@@ -714,6 +775,7 @@ describe('sdk reply preview', () => {
     post({ type: 'quackback:ready' })
     const handler = vi.fn()
     sdk.dispatch('on', 'message', handler)
+    preview(null) // nothing unread yet: this visitor's memory starts
     preview(sample())
     expect(handler).toHaveBeenCalledTimes(2)
     sdk.dispatch('identify', { ssoToken: 'token-a' })
@@ -723,6 +785,7 @@ describe('sdk reply preview', () => {
     expect(shown()).toBe(false)
     expect(handler).toHaveBeenCalledTimes(2)
     resolved(userA)
+    preview(null) // nothing unread yet: this visitor's memory starts
     expect(shown()).toBe(false)
     preview(sample({ messages: [msg(5)], count: 1 }))
     expect(shown()).toBe(true)
@@ -750,6 +813,7 @@ describe('sdk reply preview', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
     const handler = vi.fn()
     sdk.dispatch('on', 'message', handler)
+    preview(null) // nothing unread yet: this visitor's memory starts
     preview(sample())
     expect(handler).toHaveBeenCalledTimes(2)
     expect(cardEl()).toBeNull()
@@ -860,6 +924,7 @@ describe('sdk reply preview', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     const handler = vi.fn()
     sdk.dispatch('on', 'message', handler)
+    preview(null) // nothing unread yet: this visitor's memory starts
     const other = {
       id: 'conversation_msg_9',
       conversationId: 'conversation_2',
@@ -896,6 +961,7 @@ describe('sdk reply preview', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     const handler = vi.fn()
     sdk.dispatch('on', 'message', handler)
+    preview(null) // nothing unread yet: this visitor's memory starts
     preview(sample({ card: false, title: 'Alex replied' }))
     expect(handler).toHaveBeenCalledTimes(2)
     expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ preview: 'Reply 2' }))

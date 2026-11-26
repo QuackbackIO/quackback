@@ -151,7 +151,7 @@ describe('runGetReplyPreview', () => {
       conversationId: 'conversation_1',
       author: alex,
       teamName: 'Acme',
-      count: 4,
+      count: 2,
       messages: [
         {
           id: 'conversation_msg_1',
@@ -179,9 +179,9 @@ describe('runGetReplyPreview', () => {
         },
       ],
     })
-    expect(hoisted.listVisitorUnreadReplies).toHaveBeenCalledWith('principal_v', 3)
+    expect(hoisted.listVisitorUnreadReplies).toHaveBeenCalledWith('principal_v', 20)
     expect(hoisted.loadAuthors).toHaveBeenCalledWith(
-      ['principal_alex', 'principal_alex', 'principal_alex', 'principal_alex'],
+      ['principal_alex', 'principal_alex', 'principal_alex'],
       { forCustomer: true }
     )
   })
@@ -218,7 +218,23 @@ describe('runGetReplyPreview', () => {
       'From the assistant',
       'Also from the assistant',
     ])
-    expect(preview!.count).toBe(3)
+    // The count is the run the header names, not the conversation's total.
+    expect(preview!.count).toBe(2)
+  })
+
+  it('counts the whole run, beyond the three replies it shows', async () => {
+    hoisted.listVisitorUnreadReplies.mockResolvedValue(
+      listed([
+        row(1, 'Other', 'principal_bot'),
+        row(2, 'A', 'principal_alex'),
+        row(3, 'B', 'principal_alex'),
+        row(4, 'C', 'principal_alex'),
+        row(5, 'D', 'principal_alex'),
+      ])
+    )
+    const preview = await runGetReplyPreview(widgetCtx)
+    expect(preview!.count).toBe(4)
+    expect(preview!.messages.map((m) => m.text)).toEqual(['B', 'C', 'D'])
   })
 
   it('shows a reply that reads as the team as the team alone', async () => {

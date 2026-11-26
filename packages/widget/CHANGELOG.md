@@ -13,7 +13,7 @@
 - A reply preview above the closed launcher shows the newest unread replies from a teammate or the AI assistant, with the author's photo or initials and a "Reply to ..." button that opens the conversation with the message box focused. Dismissing it hides it until a newer reply; the badge stays. It goes ahead of the "What's new" card and the greeting. The workspace can show the whole reply instead, or only the badge, and can flash the reply in the page title while the visitor is on another tab.
 - `Quackback.open({ view: 'messages', conversationId })` opens one conversation with its message box focused, and the `open` event carries `conversationId`.
 - The `unread` event payload adds `messages`, `changelog` and `tickets` beside the unchanged `count`.
-- The new `message` event (`{ conversationId, author: { name, avatarUrl }, preview }`) fires once for each new unread reply in any of the visitor's conversations (the 20 newest at each check), whichever way the workspace shows replies, including the badge only, so you can build your own indicator.
+- The new `message` event (`{ conversationId, author: { name, avatarUrl }, preview }`) fires once for each new unread reply in any of the visitor's conversations (the 20 newest at each check) that arrives while the page is open or since the visitor's last visit on that device, whichever way the workspace shows replies, including the badge only, so you can build your own indicator.
 - The unread count refreshes as soon as the visitor comes back to the page, instead of on the next poll.
 - Script-tag installs can read state with `Quackback('isOpen')`, `Quackback('getUser')` and `Quackback('isIdentified')`.
 

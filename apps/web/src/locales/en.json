@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "New reply from {name}",
   "widget.replyPreview.replied": "{name} replied",
   "widget.replyPreview.attachment": "Sent an attachment",
+  "widget.replyPreview.newReply": "New reply",
+  "widget.replyPreview.replyGeneric": "Write a reply…",
   "widget.shell.aria.goBack": "Go back",
   "widget.shell.aria.close": "Close feedback widget",
   "widget.shell.aria.expand": "Expand widget",

@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "رد جديد من {name}",
   "widget.replyPreview.replied": "ردّ {name}",
   "widget.replyPreview.attachment": "أرسل مرفقًا",
+  "widget.replyPreview.newReply": "رد جديد",
+  "widget.replyPreview.replyGeneric": "اكتب ردًا…",
   "widget.shell.aria.goBack": "رجوع",
   "widget.shell.aria.close": "إغلاق أداة الملاحظات",
   "widget.shell.aria.expand": "توسيع الأداة",

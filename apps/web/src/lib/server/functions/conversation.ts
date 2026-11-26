@@ -683,7 +683,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
 export const runGetMessengerUnread = createServerOnlyFn(async function runGetMessengerUnread(
   ctx: AuthContext | null
 ) {
-  const zero = { conversations: 0, total: 0 }
+  const zero = { conversations: 0, total: 0, newestReplyId: null as string | null }
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
   if (!ctx?.principal || !(await isConversationsEnabledFor(ctx.principal.id))) return zero
@@ -694,10 +694,12 @@ export const runGetMessengerUnread = createServerOnlyFn(async function runGetMes
     if (!access.granted) return zero
   }
 
-  const { countVisitorUnreadMessages } =
+  const { summarizeVisitorUnreadReplies } =
     await import('@/lib/server/domains/conversation/conversation.query')
-  const conversationUnread = await countVisitorUnreadMessages(ctx.principal.id)
-  return { conversations: conversationUnread, total: conversationUnread }
+  const unread = await summarizeVisitorUnreadReplies(ctx.principal.id)
+  // The newest unread reply lets the widget tell a new reply from a read
+  // one when the total stays the same.
+  return { conversations: unread.count, total: unread.count, newestReplyId: unread.newestId }
 })
 
 /** Longest reply text the preview carries, in code points. */
@@ -725,10 +727,11 @@ export interface ReplyPreviewDTO {
   author: ReplyAuthorDTO
   /** The support team's name, falling back to the workspace name. */
   teamName: string | null
-  /** Unread replies in the conversation; may exceed `messages`. */
+  /** The newest author's latest run of unread replies (counted up to 20);
+   *  may exceed `messages`. */
   count: number
-  /** The newest author's latest run of unread replies, oldest first, at most
-   *  three. Plain text; empty text is a reply with only attachments. */
+  /** The newest of that run, oldest first, at most three. Plain text; empty
+   *  text is a reply with only attachments. */
   messages: Array<{ id: ConversationMessageId; text: string; createdAt: string }>
   /** Every conversation's newest unread replies, at most 20, oldest first,
    *  each with its own author and a short text: the host reports each once. */
@@ -757,15 +760,17 @@ export const runGetReplyPreview = createServerOnlyFn(async function runGetReplyP
 
   const { listVisitorUnreadReplies } =
     await import('@/lib/server/domains/conversation/conversation.query')
-  const replies = await listVisitorUnreadReplies(ctx.principal.id, 3)
+  // Enough of the conversation to count the newest author's run.
+  const replies = await listVisitorUnreadReplies(ctx.principal.id, 20)
   if (!replies) return null
 
   const { loadAuthors, getSupportTeamName } =
     await import('@/lib/server/domains/principals/principal-display')
   const { contentPreview } = await import('@/lib/shared/utils/string')
   const [authors, teamName] = await Promise.all([
+    // The card's replies share the newest one's author.
     loadAuthors(
-      [...replies.messages, ...replies.recent].map((m) => m.principalId),
+      [replies.messages[replies.messages.length - 1], ...replies.recent].map((m) => m.principalId),
       { forCustomer: true }
     ),
     getSupportTeamName(),
@@ -785,12 +790,13 @@ export const runGetReplyPreview = createServerOnlyFn(async function runGetReplyP
   const newest = replies.messages[replies.messages.length - 1]
   let start = replies.messages.length - 1
   while (start > 0 && replies.messages[start - 1].principalId === newest.principalId) start--
+  const run = replies.messages.slice(start)
   return {
     conversationId: replies.conversationId,
     author: authorOf(newest.principalId),
     teamName,
-    count: replies.count,
-    messages: replies.messages.slice(start).map((m) => ({
+    count: run.length,
+    messages: run.slice(-3).map((m) => ({
       id: m.id,
       text: textOf(m, REPLY_PREVIEW_MAX_TEXT),
       createdAt: m.createdAt.toISOString(),

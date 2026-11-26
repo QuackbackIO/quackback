@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "การตอบกลับใหม่จาก {name}",
   "widget.replyPreview.replied": "{name} ตอบกลับแล้ว",
   "widget.replyPreview.attachment": "ส่งไฟล์แนบ",
+  "widget.replyPreview.newReply": "การตอบกลับใหม่",
+  "widget.replyPreview.replyGeneric": "เขียนคำตอบ…",
   "widget.shell.aria.goBack": "ย้อนกลับ",
   "widget.shell.aria.close": "ปิดวิดเจ็ตความคิดเห็น",
   "widget.shell.aria.expand": "ขยายวิดเจ็ต",

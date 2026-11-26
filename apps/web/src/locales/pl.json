@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "Nowa odpowiedź od: {name}",
   "widget.replyPreview.replied": "{name} odpowiada",
   "widget.replyPreview.attachment": "Wysłano załącznik",
+  "widget.replyPreview.newReply": "Nowa odpowiedź",
+  "widget.replyPreview.replyGeneric": "Napisz odpowiedź…",
   "widget.shell.aria.goBack": "Wstecz",
   "widget.shell.aria.close": "Zamknij widżet",
   "widget.shell.aria.expand": "Rozwiń widżet",

@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "Нова відповідь: {name}",
   "widget.replyPreview.replied": "{name}: нова відповідь",
   "widget.replyPreview.attachment": "Надіслано вкладення",
+  "widget.replyPreview.newReply": "Нова відповідь",
+  "widget.replyPreview.replyGeneric": "Написати відповідь…",
   "widget.shell.aria.goBack": "Назад",
   "widget.shell.aria.close": "Закрити віджет відгуків",
   "widget.shell.aria.expand": "Розгорнути віджет",

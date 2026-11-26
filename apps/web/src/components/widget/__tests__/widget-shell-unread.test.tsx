@@ -12,9 +12,9 @@ const h = vi.hoisted(() => ({
   sendToHost: vi.fn(),
   useMessengerUnreadState: vi.fn((_enabled: boolean, _opts?: { background?: boolean }) => ({
     total: 3,
-    updatedAt: 1700,
+    newestReplyId: 'conversation_msg_9',
   })),
-  useUnreadReplies: vi.fn((_enabled: boolean, _unread: number, _at: number) => ({
+  useUnreadReplies: vi.fn((_enabled: boolean, _unread: number, _id: string | null) => ({
     ready: true,
     data: null,
   })),
@@ -86,7 +86,7 @@ describe('WidgetShell unread for the host', () => {
   it('reads the replies whatever the card setting, polling hidden pages only for the title', () => {
     renderShell({ replyAlerts: 'badge', titleAlerts: false })
     expect(h.useMessengerUnreadState).toHaveBeenLastCalledWith(true, { background: false })
-    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(true, 3, 1700)
+    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(true, 3, 'conversation_msg_9')
     expect(h.useReplyPreviewAnnouncement).toHaveBeenLastCalledWith(
       { enabled: true, replyAlerts: 'badge', titleAlerts: false },
       { ready: true, data: null, session: 4 }
@@ -102,7 +102,7 @@ describe('WidgetShell unread for the host', () => {
       titleAlerts: true,
     })
     expect(h.useMessengerUnreadState).toHaveBeenLastCalledWith(false, { background: false })
-    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(false, 3, 1700)
+    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(false, 3, 'conversation_msg_9')
     expect(h.useReplyPreviewAnnouncement).toHaveBeenLastCalledWith(
       { enabled: false, replyAlerts: 'full', titleAlerts: true },
       expect.anything()

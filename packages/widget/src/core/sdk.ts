@@ -100,6 +100,8 @@ export function createSDK(): SDK {
   // The newest reply the visitor has had the page visible for: the title
   // flashes only for a newer one.
   let titleSeenId: string | null = null
+  // Whether the frame has sent replies for the current visitor yet.
+  let replyPayloadReceived = false
   function onVisibility(): void {
     if (document.visibilityState === 'visible' && replyPreview) applyReplyPreview()
   }
@@ -211,6 +213,7 @@ export function createSDK(): SDK {
     if (visitorScope() !== before) {
       whatsNew = null
       replyPreview = null
+      replyPayloadReceived = false
     }
     applyWhatsNew()
     applyReplyPreview()
@@ -246,10 +249,11 @@ export function createSDK(): SDK {
   function applyReplyPreview(): void {
     if (!config) return
     const data = identityPending ? null : replyPreview
-    if (data) {
-      // Every new reply, in any conversation; an older frame sends only the
-      // card's replies.
-      const reported = data.recent.length
+    // Every new reply, in any conversation; an older frame sends only the
+    // card's replies.
+    const reported = !data
+      ? []
+      : data.recent.length
         ? data.recent
         : data.messages.map((m) => ({
             id: m.id,
@@ -257,6 +261,15 @@ export function createSDK(): SDK {
             author: { name: data.author.name, avatarUrl: data.author.avatarUrl },
             text: m.text,
           }))
+    // The first payload for a visitor new to this device records what is
+    // already unread without reporting it: the event covers replies that
+    // arrive while the page is open, or since the last visit here.
+    if (!identityPending && replyPayloadReceived && !replies().known(visitorScope())) {
+      replies().learn(
+        visitorScope(),
+        reported.map((m) => m.id)
+      )
+    } else if (data) {
       for (const m of reported) {
         if (!replies().announce(visitorScope(), m.id)) continue
         emitter.emit('message', {
@@ -266,7 +279,8 @@ export function createSDK(): SDK {
         })
       }
     }
-    const newest = data?.messages[data.messages.length - 1]
+    // The newest reply: the card's, or the newest reported one.
+    const newest = data?.messages[data.messages.length - 1] ?? reported[reported.length - 1]
     const unanswered = !!newest && !replies().isAnswered(visitorScope(), newest.id)
     launcher?.setReplyPreview(data?.card && unanswered ? data : null)
     // A visible page has shown the newest reply: no flash for it later.
@@ -342,6 +356,7 @@ export function createSDK(): SDK {
           (msg as { replyPreview?: unknown }).replyPreview,
           iframeOrigin()
         )
+        replyPayloadReceived = true
         applyReplyPreview()
         break
       }
@@ -841,6 +856,7 @@ export function createSDK(): SDK {
         window.removeEventListener('storage', onWhatsNewStorage)
         document.removeEventListener('visibilitychange', onVisibility)
         titleSeenId = null
+        replyPayloadReceived = false
         placement = 'right'
         config = null
         return

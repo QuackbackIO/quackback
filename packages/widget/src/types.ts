@@ -157,7 +157,8 @@ export interface EventMap {
    *  visitor's conversations. Fires once per reply for each visitor,
    *  whichever way the workspace shows replies (including the badge only),
    *  for the 20 newest unread replies at each check: the host page remembers
-   *  which replies it reported, per instance. */
+   *  which replies it reported, per instance. Replies already unread the
+   *  first time a visitor loads the widget on a device are not reported. */
   message: {
     conversationId: string
     author: { name: string; avatarUrl: string | null }

@@ -34,6 +34,8 @@
   "widget.replyPreview.announce": "來自 {name} 的新回覆",
   "widget.replyPreview.replied": "{name} 已回覆",
   "widget.replyPreview.attachment": "傳送了附件",
+  "widget.replyPreview.newReply": "新回覆",
+  "widget.replyPreview.replyGeneric": "撰寫回覆…",
   "widget.shell.aria.goBack": "返回",
   "widget.shell.aria.close": "關閉意見回饋小工具",
   "widget.shell.aria.expand": "展開小工具",

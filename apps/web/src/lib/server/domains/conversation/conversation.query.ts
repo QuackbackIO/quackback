@@ -589,7 +589,6 @@ async function unreadCountFor(
   conversation: Conversation,
   side: MessageSenderType
 ): Promise<number> {
-  const otherSide: MessageSenderType = side === 'agent' ? 'visitor' : 'agent'
   const readAt = side === 'agent' ? conversation.agentLastReadAt : conversation.visitorLastReadAt
   const [row] = await db
     .select({ c: sql<number>`count(*)::int` })
@@ -597,10 +596,15 @@ async function unreadCountFor(
     .where(
       and(
         eq(conversationMessages.conversationId, conversation.id),
-        eq(conversationMessages.senderType, otherSide),
-        isNull(conversationMessages.deletedAt),
-        // Internal notes never count toward unread (esp. for the visitor side).
-        eq(conversationMessages.isInternal, false),
+        // The visitor's side counts replies by the one rule the badge and the
+        // reply preview use; the agent's counts the visitor's messages.
+        side === 'visitor'
+          ? visitorReplyMessageSql()
+          : and(
+              eq(conversationMessages.senderType, 'visitor'),
+              isNull(conversationMessages.deletedAt),
+              eq(conversationMessages.isInternal, false)
+            ),
         // Use the gt() operator (not a raw sql template) so the Date watermark
         // is bound through Drizzle's timestamp encoder — embedding a Date in a
         // raw sql fragment makes the driver reject it ("expected string, got
@@ -888,12 +892,25 @@ export async function listConversationsForVisitor(
  * mirroring `unreadCountFor`; internal notes and deleted rows never count.
  */
 export async function countVisitorUnreadMessages(visitorPrincipalId: PrincipalId): Promise<number> {
+  return (await summarizeVisitorUnreadReplies(visitorPrincipalId)).count
+}
+
+/**
+ * The badge total and the newest unread reply's id, in one read: the widget
+ * reads the reply preview again only when either changes.
+ */
+export async function summarizeVisitorUnreadReplies(
+  visitorPrincipalId: PrincipalId
+): Promise<{ count: number; newestId: ConversationMessageId | null }> {
   const [row] = await db
-    .select({ c: sql<number>`count(*)::int` })
+    .select({
+      c: sql<number>`count(*)::int`,
+      newest: sql<ConversationMessageId | null>`(array_agg(${conversationMessages.id} order by ${conversationMessages.createdAt} desc, ${conversationMessages.id} desc))[1]`,
+    })
     .from(conversationMessages)
     .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
     .where(visitorUnreadReplySql(visitorPrincipalId))
-  return row?.c ?? 0
+  return { count: row?.c ?? 0, newestId: row?.newest ?? null }
 }
 
 /**
@@ -905,14 +922,25 @@ export async function countVisitorUnreadMessages(visitorPrincipalId: PrincipalId
 function visitorUnreadReplySql(visitorPrincipalId: PrincipalId) {
   return and(
     eq(conversations.visitorPrincipalId, visitorPrincipalId),
-    eq(conversationMessages.senderType, 'agent'),
-    eq(conversationMessages.isInternal, false),
-    isNull(conversationMessages.deletedAt),
-    sql`coalesce(${conversationMessages.metadata} -> 'block' ->> 'kind', '') <> 'replyTime'`,
+    visitorReplyMessageSql(),
     or(
       isNull(conversations.visitorLastReadAt),
       gt(conversationMessages.createdAt, conversations.visitorLastReadAt)
     )
+  )
+}
+
+/**
+ * A message that counts as a reply to the visitor: a public, live agent
+ * message that is not a reply-time caption. Every visitor unread count (the
+ * badge, each conversation's count, the reply preview) uses this one rule.
+ */
+function visitorReplyMessageSql() {
+  return and(
+    eq(conversationMessages.senderType, 'agent'),
+    eq(conversationMessages.isInternal, false),
+    isNull(conversationMessages.deletedAt),
+    sql`coalesce(${conversationMessages.metadata} -> 'block' ->> 'kind', '') <> 'replyTime'`
   )
 }
 

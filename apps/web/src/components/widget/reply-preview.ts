@@ -91,17 +91,25 @@ export function buildReplyPreview(
 ): ReplyPreviewPayload {
   const full = settings.replyAlerts === 'full'
   const names = namesOf(data)
-  const header =
-    names.full && names.team
+  // With neither a name nor a team, the card still has words: "New reply".
+  const newReply = intl.formatMessage({
+    id: 'widget.replyPreview.newReply',
+    defaultMessage: 'New reply',
+  })
+  const header = !names.first
+    ? newReply
+    : names.full && names.team
       ? intl.formatMessage(
           { id: 'widget.replyPreview.header', defaultMessage: '{name} from {team}' },
           { name: names.first, team: names.team }
         )
       : names.first
-  const announce = intl.formatMessage(
-    { id: 'widget.replyPreview.announce', defaultMessage: 'New reply from {name}' },
-    { name: names.first }
-  )
+  const announce = names.first
+    ? intl.formatMessage(
+        { id: 'widget.replyPreview.announce', defaultMessage: 'New reply from {name}' },
+        { name: names.first }
+      )
+    : newReply
   const attachment = intl.formatMessage({
     id: 'widget.replyPreview.attachment',
     defaultMessage: 'Sent an attachment',
@@ -131,18 +139,25 @@ export function buildReplyPreview(
     count: data.count,
     card: settings.replyAlerts !== 'badge',
     full,
-    title: settings.titleAlerts
-      ? intl.formatMessage(
-          { id: 'widget.replyPreview.replied', defaultMessage: '{name} replied' },
-          { name: names.first }
-        )
-      : null,
+    title: !settings.titleAlerts
+      ? null
+      : names.first
+        ? intl.formatMessage(
+            { id: 'widget.replyPreview.replied', defaultMessage: '{name} replied' },
+            { name: names.first }
+          )
+        : newReply,
     strings: {
       header,
-      replyTo: intl.formatMessage(
-        { id: 'widget.replyPreview.replyTo', defaultMessage: 'Reply to {name}…' },
-        { name: names.first }
-      ),
+      replyTo: names.first
+        ? intl.formatMessage(
+            { id: 'widget.replyPreview.replyTo', defaultMessage: 'Reply to {name}…' },
+            { name: names.first }
+          )
+        : intl.formatMessage({
+            id: 'widget.replyPreview.replyGeneric',
+            defaultMessage: 'Write a reply…',
+          }),
       newReplies: intl.formatMessage(
         {
           id: 'widget.replyPreview.newReplies',
@@ -159,23 +174,27 @@ export function buildReplyPreview(
 
 /**
  * The visitor's newest unread replies, read while `enabled` and something is
- * unread. Read again after every unread poll (`unreadAt`), not only when the
- * total changes: a read in one conversation and a new reply in another can
- * leave the total as it was. The previous answer stays while the next loads,
- * within one widget session.
+ * unread. Read again when the total or the newest unread reply changes, not
+ * on every poll: a read in one conversation and a new reply in another can
+ * leave the total as it was, but never the newest reply. The previous
+ * answer stays while the next loads, within one widget session.
  */
 export function useUnreadReplies(
   enabled: boolean,
   unread: number,
-  unreadAt: number
+  newestReplyId: string | null
 ): { ready: boolean; data: UnreadReplies | null } {
   const { sessionVersion } = useWidgetAuth()
   const active = enabled && unread > 0
   const { data } = useQuery({
-    queryKey: [...conversationKeys.widgetReplyPreview(sessionVersion), unreadAt] as const,
+    queryKey: [
+      ...conversationKeys.widgetReplyPreview(sessionVersion),
+      unread,
+      newestReplyId,
+    ] as const,
     queryFn: () => widgetGetReplyPreviewFn({ headers: getWidgetAuthHeaders() }),
     enabled: active,
-    // Keyed on the poll, so an earlier answer is never served again.
+    // Keyed on the total and newest reply, so a pair seen before is read again.
     staleTime: 0,
     gcTime: 0,
     retry: false,

@@ -154,7 +154,7 @@ export function WidgetShell({
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
   const messagesOn = enabledTabs.messages ?? false
-  const { total: messengerUnreadTotal, updatedAt: messengerUnreadAt } = useMessengerUnreadState(
+  const { total: messengerUnreadTotal, newestReplyId: newestUnreadReplyId } = useMessengerUnreadState(
     messagesOn,
     { background: messagesOn && titleAlerts }
   )
@@ -180,7 +180,7 @@ export function WidgetShell({
   })
   // The newest unread replies reach the host for its message event, and for
   // the reply preview and the tab title as the workspace chooses.
-  const unreadReplies = useUnreadReplies(messagesOn, messengerUnread, messengerUnreadAt)
+  const unreadReplies = useUnreadReplies(messagesOn, messengerUnread, newestUnreadReplyId)
   useReplyPreviewAnnouncement(
     { enabled: messagesOn, replyAlerts, titleAlerts },
     { ...unreadReplies, session: sessionVersion }
