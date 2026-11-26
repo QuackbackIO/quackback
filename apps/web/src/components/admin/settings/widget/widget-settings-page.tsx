@@ -16,6 +16,7 @@ import {
   type WidgetConnectionStatus,
 } from '@/components/admin/settings/widget/widget-connection-row'
 import { HomeCardsList } from '@/components/admin/settings/widget/home-cards-list'
+import { ReplyAlertsCard } from '@/components/admin/settings/widget/reply-alerts-card'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
 import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
 import { Label } from '@/components/ui/label'
@@ -115,6 +116,8 @@ function WidgetSettingsPage() {
             launcherGreeting={launcherGreeting}
             onGreetingChange={setLauncherGreeting}
           />
+
+          {supportInboxFlagEnabled && <ReplyAlertsCard config={config} />}
 
           <VisitorTrackingCard config={config} />
 
