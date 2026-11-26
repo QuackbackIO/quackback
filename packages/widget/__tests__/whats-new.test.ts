@@ -694,6 +694,27 @@ describe("sdk What's new card: first visit and page choice", () => {
     sdk.dispatch('destroy')
   })
 
+  it('shows the card as before when the host page blocks storage', () => {
+    const blocked = () => {
+      throw new DOMException('blocked', 'SecurityError')
+    }
+    vi.stubGlobal('localStorage', {
+      getItem: blocked,
+      setItem: blocked,
+      removeItem: blocked,
+      clear: blocked,
+    })
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    expect(shown()).toBe(true)
+    // A dismiss still holds for the page load.
+    dismissBtn().click()
+    announce(sample())
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
   it('starts the record from a first payload with nothing unread', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
@@ -764,6 +785,20 @@ describe("sdk What's new card: first visit and page choice", () => {
     sdk.dispatch('whatsNew', false)
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     announce(sample())
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('ignores a whatsNew call without a boolean', () => {
+    returning('anon')
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    sdk.dispatch('whatsNew')
+    sdk.dispatch('whatsNew', 'no')
+    expect(shown()).toBe(true)
+    sdk.dispatch('whatsNew', false)
+    sdk.dispatch('whatsNew', 1)
     expect(shown()).toBe(false)
     sdk.dispatch('destroy')
   })

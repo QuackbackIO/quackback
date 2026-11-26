@@ -666,7 +666,7 @@ export function createSDK(): SDK {
         if (next.tracking !== undefined) hostTracking = next.tracking
         // The same for the card: only an explicit option changes the page's
         // choice, so a whatsNew call made before init holds.
-        if (next.whatsNew !== undefined) hostWhatsNew = next.whatsNew
+        if (typeof next.whatsNew === 'boolean') hostWhatsNew = next.whatsNew
         placement = next.placement ?? 'right'
         window.addEventListener('storage', onWhatsNewStorage)
         document.addEventListener('visibilitychange', onVisibility)
@@ -840,7 +840,8 @@ export function createSDK(): SDK {
         }
         return
       case 'whatsNew':
-        hostWhatsNew = a === true
+        // Only a boolean changes it, as with the init option.
+        if (typeof a === 'boolean') hostWhatsNew = a
         applyWhatsNew()
         return
       case 'destroy':

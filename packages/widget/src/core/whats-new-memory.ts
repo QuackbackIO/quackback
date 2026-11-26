@@ -28,7 +28,9 @@ export interface WhatsNewMemory {
   answer(scope: string, entry: Entry): void
   /** Record an announcement; true only the first time for this entry. */
   announce(scope: string, entryId: string): boolean
-  /** Whether this visitor has a record on this device yet. */
+  /** Whether this visitor has a record on this device yet. When the host
+   *  page blocks storage, every visitor counts as known: a record that lasts
+   *  only for the page load would make every load a first visit. */
   known(scope: string): boolean
   /** Start a record with this entry, and every entry published before it,
    *  counted as announced and answered without showing them: what was
@@ -66,10 +68,14 @@ export function createWhatsNewMemory(origin: string): WhatsNewMemory {
   const stored = (scope: string): boolean => {
     try {
       if (localStorage.getItem(key(scope)) !== null) return true
+      // Readable but not writable (blocked, or full) is no better.
+      const probe = key('probe')
+      localStorage.setItem(probe, '1')
+      localStorage.removeItem(probe)
+      return false
     } catch {
-      /* storage blocked */
+      return true
     }
-    return fallback.has(scope)
   }
   const read = (scope: string): Stored => {
     try {
