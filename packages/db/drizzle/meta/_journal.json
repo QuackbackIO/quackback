@@ -2108,6 +2108,13 @@
       "when": 1791006300000,
       "tag": "0323_clear_legacy_header_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 301,
+      "version": "7",
+      "when": 1791006400000,
+      "tag": "0324_changelog_announce_on_launcher",
+      "breakpoints": true
     }
   ]
 }
