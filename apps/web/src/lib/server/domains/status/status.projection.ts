@@ -27,6 +27,7 @@ import { visibleStatusComponentIds } from '@/lib/server/domains/plan-limits/plan
 import type { PublicStatusIncident } from './status.types'
 
 type IncidentRow = typeof statusIncidents.$inferSelect
+type IncidentUpdateRow = typeof statusIncidentUpdates.$inferSelect
 type ComponentLinkRow = {
   incidentId: StatusIncidentId
   componentId: StatusComponentId
@@ -47,7 +48,9 @@ export async function toPublicIncident(
   links: ComponentLinkRow[],
   actor: Actor,
   /** The plan's visible components (see {@link planVisibleComponentIds}); read when omitted. */
-  planVisible?: readonly string[] | null
+  planVisible?: readonly string[] | null,
+  /** Pre-fetched timeline updates ordered by createdAt; queried when omitted. */
+  prefetchedUpdates?: IncidentUpdateRow[]
 ): Promise<PublicStatusIncident | null> {
   const shown = planVisible === undefined ? await planVisibleComponentIds() : planVisible
   const visibleLinks = links.filter(
@@ -57,10 +60,12 @@ export async function toPublicIncident(
   )
   if (visibleLinks.length === 0) return null
 
-  const updates = await db.query.statusIncidentUpdates.findMany({
-    where: eq(statusIncidentUpdates.incidentId, incident.id),
-    orderBy: [asc(statusIncidentUpdates.createdAt)],
-  })
+  const updates =
+    prefetchedUpdates ??
+    (await db.query.statusIncidentUpdates.findMany({
+      where: eq(statusIncidentUpdates.incidentId, incident.id),
+      orderBy: [asc(statusIncidentUpdates.createdAt)],
+    }))
 
   return {
     id: incident.id,
@@ -168,14 +173,31 @@ export async function projectIncidents(
   linksByIncident: Map<StatusIncidentId, ComponentLinkRow[]>,
   actor: Actor
 ): Promise<PublicStatusIncident[]> {
+  if (rows.length === 0) return []
+  const [planVisible, allUpdates] = await Promise.all([
+    planVisibleComponentIds(),
+    db.query.statusIncidentUpdates.findMany({
+      where: inArray(
+        statusIncidentUpdates.incidentId,
+        rows.map((r) => r.id)
+      ),
+      orderBy: [asc(statusIncidentUpdates.createdAt)],
+    }),
+  ])
+  const updatesByIncident = new Map<StatusIncidentId, IncidentUpdateRow[]>()
+  for (const update of allUpdates) {
+    const existing = updatesByIncident.get(update.incidentId)
+    if (existing) existing.push(update)
+    else updatesByIncident.set(update.incidentId, [update])
+  }
   const results: PublicStatusIncident[] = []
-  const planVisible = rows.length > 0 ? await planVisibleComponentIds() : null
   for (const row of rows) {
     const projected = await toPublicIncident(
       row,
       linksByIncident.get(row.id) ?? [],
       actor,
-      planVisible
+      planVisible,
+      updatesByIncident.get(row.id) ?? []
     )
     if (projected) results.push(projected)
   }
