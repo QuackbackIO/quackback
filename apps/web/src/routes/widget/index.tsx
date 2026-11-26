@@ -295,6 +295,9 @@ export const Route = createFileRoute('/widget/')({
       announceUpdates:
         changelogTabEnabled &&
         (settings?.publicWidgetConfig?.changelog?.announceOnLauncher ?? false),
+      // How an unread reply shows above the closed launcher, and the tab title.
+      replyAlerts: settings?.publicWidgetConfig?.messenger?.replyAlerts ?? 'preview',
+      titleAlerts: settings?.publicWidgetConfig?.messenger?.titleAlerts === true,
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
       // Workspace logo for the Home header (branding config).
@@ -422,6 +425,8 @@ function WidgetPage() {
     boardPermissions,
     tabs,
     announceUpdates,
+    replyAlerts,
+    titleAlerts,
     defaultBoard,
     portalAccess,
     portalOrigin,
@@ -488,9 +493,14 @@ function WidgetPage() {
   // Whether a reply can reach this visitor by email, as the open thread
   // reports it. The header's away badge promises email only then.
   const [canReplyByEmail, setCanReplyByEmail] = useState(false)
-  // A host's `open({ view: 'chat', body })`. The nonce remounts the messenger
-  // so a draft sent while it is already open still lands in the composer.
-  const [messengerDraft, setMessengerDraft] = useState<{ nonce: number; body: string } | null>(null)
+  // A host's `open({ view: 'chat', body })`, or an open on one conversation
+  // that puts the cursor in that thread's composer. The nonce remounts the
+  // messenger so a draft or focus sent while it is already open still lands.
+  const [messengerDraft, setMessengerDraft] = useState<{
+    nonce: number
+    body?: string
+    focusConversationId?: string
+  } | null>(null)
   // Manual size preference: the header's expand/collapse button flips this,
   // and it is STICKY — collapsing turns auto-expansion off for every later
   // item view until the visitor expands again. Persisted per browser.
@@ -625,6 +635,7 @@ function WidgetPage() {
         entryId?: string
         postId?: string
         articleId?: string
+        conversationId?: string
       }
       const command = resolveOpenCommand(opts, tabs)
       if (!command) return
@@ -678,11 +689,18 @@ function WidgetPage() {
           setView('help')
           break
         case 'messenger':
-          if (command.body) {
-            const body = command.body
-            setMessengerDraft((prev) => ({ nonce: (prev?.nonce ?? 0) + 1, body }))
+          if (command.body || command.conversationId) {
+            const { body, conversationId } = command
+            setMessengerDraft((prev) => ({
+              nonce: (prev?.nonce ?? 0) + 1,
+              body,
+              focusConversationId: conversationId,
+            }))
           }
-          openMessenger()
+          openMessenger(
+            command.conversationId as ConversationId | undefined,
+            command.from ?? 'messages'
+          )
           break
         case 'tickets':
           setActiveTab('tickets')
@@ -923,6 +941,8 @@ function WidgetPage() {
       onBack={shellOnBack}
       enabledTabs={tabs}
       announceUpdates={announceUpdates}
+      replyAlerts={replyAlerts}
+      titleAlerts={titleAlerts}
       portalAccess={portalAccess}
       portalOrigin={portalOrigin}
       showPoweredBy={showPoweredBy}
@@ -1005,7 +1025,10 @@ function WidgetPage() {
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}
             // A fresh thread exists to be typed into; a resumed one to be read.
             // Mobile hosts skip it — the software keyboard would cover the thread.
-            autofocusComposer={conversationTarget === 'new' && !hostIsMobile}
+            autofocusComposer={
+              (conversationTarget === 'new' && !hostIsMobile) ||
+              (!!conversationTarget && messengerDraft?.focusConversationId === conversationTarget)
+            }
             onReplyByEmailChange={setCanReplyByEmail}
           />
         </ViewTransition>

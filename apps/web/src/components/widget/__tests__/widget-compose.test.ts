@@ -143,6 +143,29 @@ describe('resolveOpenCommand', () => {
     })
   })
 
+  it('opens one conversation from messages, like the ?c= deep link', () => {
+    const id = 'conversation_01kabcde12345'
+    expect(resolveOpenCommand({ view: 'messages', conversationId: id }, allTabs)).toEqual({
+      type: 'messenger',
+      conversationId: id,
+    })
+    // Tickets owns the thread when Messages is off.
+    expect(resolveOpenCommand({ view: 'messages', conversationId: id }, { tickets: true })).toEqual(
+      { type: 'messenger', conversationId: id, from: 'tickets' }
+    )
+    expect(
+      resolveOpenCommand({ view: 'messages', conversationId: id }, { feedback: true })
+    ).toBeNull()
+  })
+
+  it('ignores a conversation id that is not one', () => {
+    for (const conversationId of ['post_01kabc', 'conversation_../x', '', 42]) {
+      expect(
+        resolveOpenCommand({ view: 'messages', conversationId } as never, allTabs)
+      ).toStrictEqual({ type: 'messenger', body: undefined })
+    }
+  })
+
   it('opens home for an empty payload when Home is enabled', () => {
     expect(resolveOpenCommand({}, allTabs)).toEqual({ type: 'home' })
     expect(resolveOpenCommand({ view: 'home' }, allTabs)).toEqual({ type: 'home' })

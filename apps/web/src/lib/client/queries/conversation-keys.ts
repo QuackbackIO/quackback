@@ -84,6 +84,10 @@ export const conversationKeys = {
   widgetConversationSummary: (sessionVersion: number | string) =>
     [...conversationKeys.widgetConversationSummaries(), sessionVersion] as const,
 
+  /** The widget's reply preview above the closed launcher, per session. */
+  widgetReplyPreview: (sessionVersion: number | string) =>
+    ['widget', 'reply-preview', sessionVersion] as const,
+
   /** The portal Support tab list. */
   portalConversationList: () => ['portal', 'my-conversations'] as const,
 }

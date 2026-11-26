@@ -28,6 +28,10 @@ vi.mock('../use-messenger-unread', () => ({
   useMessengerUnread: () => 0,
   useRefreshSummaryOnUnreadChange: () => {},
 }))
+vi.mock('../reply-preview', () => ({
+  useUnreadReplies: () => ({ ready: true, data: null }),
+  useReplyPreviewAnnouncement: () => {},
+}))
 vi.mock('../use-changelog-unread', () => ({
   useChangelogUnread: () => ({ unread: 0, markSeen: vi.fn() }),
 }))

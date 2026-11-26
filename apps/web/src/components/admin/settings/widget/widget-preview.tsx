@@ -118,8 +118,9 @@ export function WidgetPreview({
     }
   }, [theme, refreshKey])
 
-  // The frame's quackback:whats-new is not forwarded: the preview cannot
-  // open the widget on an entry, so it shows no What's new card.
+  // The frame's quackback:whats-new and quackback:reply-preview are not
+  // forwarded: the preview cannot open the widget on an entry or a
+  // conversation, so it shows neither card.
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return
