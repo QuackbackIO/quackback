@@ -12,6 +12,7 @@ const entry = (n: number) => ({
   categories: [],
 })
 let items = [entry(1)]
+let nextCursor: string | null = null
 const auth: { user: { id: string } | null; identityResolved: boolean } = {
   user: null,
   identityResolved: true,
@@ -26,7 +27,7 @@ vi.mock('../widget-auth-provider', () => ({
 }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
 vi.mock('@/lib/server/functions/widget/changelog', () => ({
-  widgetListPublicChangelogsFn: () => Promise.resolve({ items, nextCursor: null }),
+  widgetListPublicChangelogsFn: () => Promise.resolve({ items, nextCursor }),
   widgetListChangelogCategoriesFn: () => Promise.resolve([]),
 }))
 
@@ -35,6 +36,7 @@ import { useChangelogUnread } from '../use-changelog-unread'
 beforeEach(() => {
   localStorage.clear()
   items = [entry(1)]
+  nextCursor = null
   auth.user = null
   auth.identityResolved = true
 })
@@ -159,4 +161,37 @@ it('ignores storage changes to unrelated keys', async () => {
     window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }))
   })
   expect(result.current.unread).toBe(2)
+})
+
+describe('the unread count as a lower bound', () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+
+  it('flags the count when every loaded entry is unread and more exist', async () => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+    items = [entry(3), entry(2)]
+    nextCursor = 'page_2'
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(2))
+    expect(result.current.more).toBe(true)
+  })
+
+  it('is exact when the loaded pages are the whole changelog', async () => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+    items = [entry(3), entry(2)]
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(2))
+    expect(result.current.more).toBe(false)
+  })
+
+  it('is exact when a loaded entry is already read', async () => {
+    localStorage.setItem(KEY, entry(2).publishedAt)
+    items = [entry(3), entry(2)]
+    nextCursor = 'page_2'
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(1))
+    expect(result.current.more).toBe(false)
+  })
 })

@@ -26,13 +26,16 @@ export function useChangelogUnread(enabled: boolean): {
   newest: { id: string; title: string; content: string; publishedAt: string } | null
   /** Whether the list has loaded, so "nothing unread" is known. */
   ready: boolean
+  /** Every loaded entry is unread and more pages exist: `unread` is a lower
+   *  bound. */
+  more: boolean
   markSeen: (publishedAt: string) => void
 } {
   const { sessionVersion, user, identityResolved } = useWidgetAuth()
   // Null until the identity round trip settles: no marker is read or written
   // for a visitor the widget cannot yet tell apart, and the badge stays 0.
   const scope = seenScope(user, identityResolved)
-  const { data } = useInfiniteQuery({
+  const { data, hasNextPage } = useInfiniteQuery({
     ...widgetChangelogListQuery(sessionVersion),
     enabled,
     refetchInterval: 60_000,
@@ -89,5 +92,7 @@ export function useChangelogUnread(enabled: boolean): {
     [scope]
   )
 
-  return { unread, newest, ready: loaded, markSeen }
+  const more = unread > 0 && unread === entries.length && hasNextPage === true
+
+  return { unread, newest, ready: loaded, more, markSeen }
 }

@@ -154,4 +154,30 @@ describe('useWhatsNewAnnouncement', () => {
     rerender({ e: false, s: { ready: true, count: 2, newest: entry } })
     expect(sent()).toEqual([])
   })
+
+  it('sends the same card again for a new session once it loads', () => {
+    const { rerender } = run(true, { ready: true, count: 2, newest: entry, session: 1 })
+    // The visitor signs in: the new session's changelog is loading.
+    rerender({ e: true, s: { ready: false, count: 0, newest: null, session: 2 } })
+    expect(sent()).toHaveLength(1)
+    rerender({ e: true, s: { ready: true, count: 2, newest: entry, session: 2 } })
+    expect(sent()).toHaveLength(2)
+    expect(sent()[1]).toEqual(sent()[0])
+  })
+
+  it('says 10+ when every loaded entry is unread and more exist', () => {
+    run(true, { ready: true, count: 10, newest: entry, more: true })
+    const { strings, count } = sent()[0]!.whatsNew as {
+      count: number
+      strings: Record<string, string>
+    }
+    expect(strings.pill).toBe('10+ new updates')
+    expect(count).toBe(10)
+  })
+
+  it("says 10+ in the visitor's language", () => {
+    run(true, { ready: true, count: 10, newest: entry, more: true }, 'de', de)
+    const { strings } = sent()[0]!.whatsNew as { strings: Record<string, string> }
+    expect(strings.pill).toBe('10+ neue Updates')
+  })
 })

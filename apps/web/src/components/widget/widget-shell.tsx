@@ -155,13 +155,17 @@ export function WidgetShell({
     unread: changelogUnread,
     newest: newestChangelog,
     ready: changelogReady,
+    more: moreChangelog,
   } = useChangelogUnread(enabledTabs.changelog ?? false)
   // The newest unread entry also reaches the host for the card above the
   // closed launcher, when the workspace turns that on.
+  const { sessionVersion } = useWidgetAuth()
   useWhatsNewAnnouncement(announceUpdates && (enabledTabs.changelog ?? false), {
     ready: changelogReady,
     count: changelogUnread,
     newest: newestChangelog,
+    more: moreChangelog,
+    session: sessionVersion,
   })
   // Mirror the combined total to the host so the floating launcher shows the
   // same badge while the widget is closed (the iframe keeps polling even when

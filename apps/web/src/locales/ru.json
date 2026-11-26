@@ -25,6 +25,7 @@
   "widget.launcher.changelog.heading": "Что нового",
   "widget.launcher.changelog.seeAll": "Смотреть все",
   "widget.whatsNew.count": "{count, plural, one {# новое обновление} few {# новых обновления} many {# новых обновлений} other {# нового обновления}}",
+  "widget.whatsNew.countAtLeast": "{count, plural, one {#+ новое обновление} few {#+ новых обновления} many {#+ новых обновлений} other {#+ нового обновления}}",
   "widget.whatsNew.action": "Посмотреть, что нового",
   "widget.whatsNew.dismiss": "Скрыть",
   "widget.shell.aria.goBack": "Назад",

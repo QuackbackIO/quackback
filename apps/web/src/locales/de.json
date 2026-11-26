@@ -25,6 +25,7 @@
   "widget.launcher.changelog.heading": "Neuigkeiten",
   "widget.launcher.changelog.seeAll": "Alle ansehen",
   "widget.whatsNew.count": "{count, plural, one {# neues Update} other {# neue Updates}}",
+  "widget.whatsNew.countAtLeast": "{count, plural, one {#+ neues Update} other {#+ neue Updates}}",
   "widget.whatsNew.action": "Neuigkeiten ansehen",
   "widget.whatsNew.dismiss": "Schließen",
   "widget.shell.aria.goBack": "Zurück",

@@ -25,6 +25,7 @@
   "widget.launcher.changelog.heading": "มีอะไรใหม่",
   "widget.launcher.changelog.seeAll": "ดูทั้งหมด",
   "widget.whatsNew.count": "{count, plural, other {อัปเดตใหม่ # รายการ}}",
+  "widget.whatsNew.countAtLeast": "{count, plural, other {อัปเดตใหม่ #+ รายการ}}",
   "widget.whatsNew.action": "ดูสิ่งที่มีใหม่",
   "widget.whatsNew.dismiss": "ปิด",
   "widget.shell.aria.goBack": "ย้อนกลับ",

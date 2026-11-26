@@ -39,10 +39,15 @@ export function excerptAtWord(text: string, max: number): string {
   return `${cut.join('').replace(/[\s.,;:!?]+$/, '')}…`
 }
 
+/**
+ * `more`: the loaded entries are all unread and more exist, so `count` is a
+ * lower bound and the pill says so ("10+ new updates").
+ */
 export function buildWhatsNew(
   intl: IntlShape,
   count: number,
-  entry: WhatsNewEntry
+  entry: WhatsNewEntry,
+  more = false
 ): WhatsNewPayload {
   return {
     count,
@@ -58,13 +63,21 @@ export function buildWhatsNew(
       }),
     },
     strings: {
-      pill: intl.formatMessage(
-        {
-          id: 'widget.whatsNew.count',
-          defaultMessage: '{count, plural, one {# new update} other {# new updates}}',
-        },
-        { count }
-      ),
+      pill: more
+        ? intl.formatMessage(
+            {
+              id: 'widget.whatsNew.countAtLeast',
+              defaultMessage: '{count, plural, one {#+ new update} other {#+ new updates}}',
+            },
+            { count }
+          )
+        : intl.formatMessage(
+            {
+              id: 'widget.whatsNew.count',
+              defaultMessage: '{count, plural, one {# new update} other {# new updates}}',
+            },
+            { count }
+          ),
       action: intl.formatMessage({
         id: 'widget.whatsNew.action',
         defaultMessage: "See what's new",
@@ -82,24 +95,44 @@ export function buildWhatsNew(
  * Tell the host about the newest unread entry whenever it changes, or null
  * once nothing is unread. Sends nothing while `enabled` is off (the workspace
  * setting) or before the changelog has loaded, so a reload never flickers
- * the card away. Turning off after a card was sent clears it once.
+ * the card away. Turning off after a card was sent clears it once. A new
+ * widget session (the visitor signed in or out) sends again once its
+ * changelog loads, even when the card is the same: the host drops the
+ * previous visitor's card and waits for this one.
  */
 export function useWhatsNewAnnouncement(
   enabled: boolean,
-  state: { ready: boolean; count: number; newest: WhatsNewEntry | null }
+  state: {
+    ready: boolean
+    count: number
+    newest: WhatsNewEntry | null
+    /** The widget session the changelog was loaded for. */
+    session?: number
+    /** More unread entries exist than are loaded. */
+    more?: boolean
+  }
 ): void {
   const intl = useIntl()
+  // What went out last, as "<session>\n<payload JSON>".
   const lastSent = useRef<string | null>(null)
   const payload =
     enabled && state.ready && state.count > 0 && state.newest
-      ? buildWhatsNew(intl, state.count, state.newest)
+      ? buildWhatsNew(intl, state.count, state.newest, state.more)
       : null
-  // Off after a card went out: the host must drop it.
-  const clearing = !enabled && lastSent.current !== null && lastSent.current !== 'null'
-  const key = clearing ? 'null' : enabled && state.ready ? JSON.stringify(payload) : null
+  const session = state.session ?? 0
+  let key: string | null = null
+  if (enabled) {
+    if (state.ready) key = `${session}\n${JSON.stringify(payload)}`
+  } else if (lastSent.current !== null && !lastSent.current.endsWith('\nnull')) {
+    // Off after a card went out: the host must drop it.
+    key = `${lastSent.current.slice(0, lastSent.current.indexOf('\n'))}\nnull`
+  }
   useEffect(() => {
     if (key === null || key === lastSent.current) return
     lastSent.current = key
-    sendToHost({ type: 'quackback:whats-new', whatsNew: JSON.parse(key) })
+    sendToHost({
+      type: 'quackback:whats-new',
+      whatsNew: JSON.parse(key.slice(key.indexOf('\n') + 1)),
+    })
   }, [key])
 }
