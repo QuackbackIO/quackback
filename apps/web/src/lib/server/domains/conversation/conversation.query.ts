@@ -905,7 +905,12 @@ export async function summarizeVisitorUnreadReplies(
   const [row] = await db
     .select({
       c: sql<number>`count(*)::int`,
-      newest: sql<ConversationMessageId | null>`(array_agg(${conversationMessages.id} order by ${conversationMessages.createdAt} desc, ${conversationMessages.id} desc))[1]`,
+      // Decoded through the id column, so it reads as the TypeID every other
+      // message id does, not the stored UUID.
+      newest:
+        sql<ConversationMessageId | null>`(array_agg(${conversationMessages.id} order by ${conversationMessages.createdAt} desc, ${conversationMessages.id} desc))[1]`.mapWith(
+          conversationMessages.id
+        ),
     })
     .from(conversationMessages)
     .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))

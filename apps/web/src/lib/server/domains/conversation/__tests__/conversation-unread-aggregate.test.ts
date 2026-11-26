@@ -17,8 +17,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { conversations, conversationMessages, principal, user } from '@/lib/server/db'
-import { conversationToDTO, countVisitorUnreadMessages } from '../conversation.query'
-import { eq } from '@/lib/server/db'
+import {
+  conversationToDTO,
+  countVisitorUnreadMessages,
+  summarizeVisitorUnreadReplies,
+} from '../conversation.query'
+import { eq, desc } from '@/lib/server/db'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -122,6 +126,27 @@ describe.skipIf(!fixture.available)('countVisitorUnreadMessages (real DB)', () =
     const dto = await conversationToDTO(row, 'visitor')
     expect(dto.unreadCount).toBe(2)
     expect(await countVisitorUnreadMessages(visitor)).toBe(dto.unreadCount)
+  })
+
+  it('names the newest unread reply by its TypeID, like every message id', async () => {
+    const visitor = await seedVisitor()
+    const c = await seedConversation(visitor, null)
+    await addMessage(c, { createdAt: new Date('2026-07-04T10:00:00.000Z') })
+    await addMessage(c, { createdAt: new Date('2026-07-04T11:00:00.000Z') })
+    const [newest] = await testDb
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, c))
+      .orderBy(desc(conversationMessages.createdAt))
+      .limit(1)
+    const summary = await summarizeVisitorUnreadReplies(visitor)
+    expect(summary.count).toBe(2)
+    expect(summary.newestId).toMatch(/^conversation_msg_/)
+    expect(summary.newestId).toBe(newest.id)
+    expect(await summarizeVisitorUnreadReplies(await seedVisitor())).toEqual({
+      count: 0,
+      newestId: null,
+    })
   })
 
   it('counts only the given visitor’s conversations', async () => {
