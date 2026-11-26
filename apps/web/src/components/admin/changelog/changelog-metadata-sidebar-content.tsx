@@ -38,7 +38,7 @@ import {
   EnvelopeIcon,
   PhotoIcon,
   XMarkIcon,
-  MegaphoneIcon,
+  SpeakerWaveIcon,
 } from '@heroicons/react/24/outline'
 
 export interface ChangelogMetadataSidebarContentProps {
@@ -287,7 +287,7 @@ export function ChangelogMetadataSidebarContent({
             htmlFor={announceId}
             className="flex items-center gap-2 text-sm text-muted-foreground"
           >
-            <MegaphoneIcon className="h-4 w-4" />
+            <SpeakerWaveIcon className="h-4 w-4" />
             Announce above the launcher
           </label>
           <Checkbox
