@@ -6,17 +6,35 @@ import { toIsoStringOrNull } from '@/lib/shared/utils'
 
 const localeSchema = z.object({ locale: z.string().optional() })
 
+/**
+ * The language the widget reads help content in: the visitor's own when the
+ * help center has it turned on, the help center's default otherwise. Help
+ * search follows the same rule.
+ */
+async function resolveHelpLocale(
+  requested: string | undefined
+): Promise<{ locale: string; defaultLocale: string }> {
+  const { getHelpCenterConfig } = await import('@/lib/server/domains/settings/settings.service')
+  const { resolveSearchLocale } =
+    await import('@/lib/server/domains/help-center/help-center-search.service')
+  const { locales } = await getHelpCenterConfig()
+  return {
+    locale: resolveSearchLocale(requested, locales.additional, locales.default),
+    defaultLocale: locales.default,
+  }
+}
+
 export const widgetListPublicCategoriesFn = createServerFn({ method: 'GET' })
   .validator(localeSchema)
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
     const { resolveHelpPublicReader, serializeCategory } = await import('../help-center')
-    const { listPublicCategoriesForLocale } =
+    const { listPublicCategoriesWithFallback } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const reader = await resolveHelpPublicReader(await getOptionalWidgetAuth())
     if (!reader) return []
-    const categories = await listPublicCategoriesForLocale(data.locale ?? DEFAULT_LOCALE, reader)
+    const { locale } = await resolveHelpLocale(data.locale)
+    const categories = await listPublicCategoriesWithFallback(locale, reader)
     return categories.map(serializeCategory)
   })
 
@@ -25,14 +43,14 @@ export const widgetListPublicArticlesForCategoryFn = createServerFn({ method: 'G
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
     const { resolveHelpPublicReader } = await import('../help-center')
-    const { listPublicArticlesForCategoryLocale } =
+    const { listPublicArticlesForCategoryWithFallback } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const reader = await resolveHelpPublicReader(await getOptionalWidgetAuth())
     if (!reader) return []
-    const articles = await listPublicArticlesForCategoryLocale(
+    const { locale } = await resolveHelpLocale(data.locale)
+    const articles = await listPublicArticlesForCategoryWithFallback(
       data.categoryId,
-      data.locale ?? DEFAULT_LOCALE,
+      locale,
       reader
     )
     return articles.map((a) => ({
@@ -49,12 +67,11 @@ export const widgetResolvePublicArticleRefFn = createServerFn({ method: 'GET' })
     const { canonicalArticleTypeId } = await import('@/lib/shared/widget/article-ref')
     const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const { NotFoundError } = await import('@/lib/shared/errors')
     const { withDefaultLocaleFallback } = await import('@/lib/shared/widget/article-locale')
     const viewer = await resolveHelpPublicReader(await getOptionalWidgetAuth())
     if (!viewer) return null
-    const locale = data.locale ?? DEFAULT_LOCALE
+    const { locale, defaultLocale } = await resolveHelpLocale(data.locale)
     try {
       const kbId = canonicalArticleTypeId(data.ref)
       const load = (loc: string) =>
@@ -63,7 +80,7 @@ export const widgetResolvePublicArticleRefFn = createServerFn({ method: 'GET' })
           : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
       const { value: article, locale: resolvedLocale } = await withDefaultLocaleFallback(
         locale,
-        DEFAULT_LOCALE,
+        defaultLocale,
         load,
         (err) => err instanceof NotFoundError
       )

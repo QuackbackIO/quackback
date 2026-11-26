@@ -63,9 +63,10 @@ const hoisted = vi.hoisted(() => {
     listPublicChangelogs: vi.fn(),
     listChangelogCategories: vi.fn(),
     getUserStats: vi.fn(),
-    listPublicCategoriesForLocale: vi.fn(),
-    listPublicArticlesForCategoryLocale: vi.fn(),
+    listPublicCategoriesWithFallback: vi.fn(),
+    listPublicArticlesForCategoryWithFallback: vi.fn(),
     getPublicArticleBySlugForLocale: vi.fn(),
+    getHelpCenterConfig: vi.fn(),
     recordArticleFeedback: vi.fn(),
     countPublicArticleView: vi.fn(),
     listPublicArticles: vi.fn(),
@@ -74,7 +75,21 @@ const hoisted = vi.hoisted(() => {
     serializeCategory: vi.fn((c: unknown) => c),
     serializeArticle: vi.fn((a: unknown) => a),
   }
-  return { requireWidgetAuth, getOptionalWidgetAuth, requireAuth, getOptionalAuth, run }
+  // Real behaviour: the requested locale, else the help center's default.
+  const withDefaultLocaleFallback = vi.fn(
+    async (locale: string, _fallback: string, load: (loc: string) => Promise<unknown>) => ({
+      value: await load(locale),
+      locale,
+    })
+  )
+  return {
+    requireWidgetAuth,
+    getOptionalWidgetAuth,
+    requireAuth,
+    getOptionalAuth,
+    run,
+    withDefaultLocaleFallback,
+  }
 })
 
 vi.mock('@/lib/server/functions/widget-auth', () => ({
@@ -143,8 +158,8 @@ vi.mock('@/lib/server/functions/help-center', () => ({
   serializeArticle: hoisted.run.serializeArticle,
 }))
 vi.mock('@/lib/server/domains/help-center/help-center-locale.query', () => ({
-  listPublicCategoriesForLocale: hoisted.run.listPublicCategoriesForLocale,
-  listPublicArticlesForCategoryLocale: hoisted.run.listPublicArticlesForCategoryLocale,
+  listPublicCategoriesWithFallback: hoisted.run.listPublicCategoriesWithFallback,
+  listPublicArticlesForCategoryWithFallback: hoisted.run.listPublicArticlesForCategoryWithFallback,
   getPublicArticleByIdForLocale: vi.fn(),
   getPublicArticleBySlugForLocale: hoisted.run.getPublicArticleBySlugForLocale,
 }))
@@ -163,12 +178,17 @@ vi.mock('@/lib/server/domains/api/rate-limit', () => ({
 }))
 vi.mock('@/lib/shared/widget/article-ref', () => ({ canonicalArticleTypeId: () => null }))
 vi.mock('@/lib/shared/widget/article-locale', () => ({
-  withDefaultLocaleFallback: async (
-    _locale: string,
-    _fallback: string,
-    load: (loc: string) => Promise<unknown>
-  ) => ({ value: await load('en'), locale: 'en' }),
+  withDefaultLocaleFallback: hoisted.withDefaultLocaleFallback,
 }))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getHelpCenterConfig: hoisted.run.getHelpCenterConfig,
+}))
+vi.mock('@/lib/server/domains/help-center/help-center-search.service', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/lib/server/domains/help-center/help-center-search.service')
+  >('@/lib/server/domains/help-center/help-center-search.service')
+  return { resolveSearchLocale: actual.resolveSearchLocale }
+})
 vi.mock('@/lib/shared/errors', () => ({
   NotFoundError: class NotFoundError extends Error {},
 }))
@@ -244,8 +264,11 @@ beforeEach(() => {
     if (typeof fn.mockResolvedValue === 'function') fn.mockResolvedValue({ ok: true })
   }
   hoisted.run.listPublicArticles.mockResolvedValue({ items: [], nextCursor: null, hasMore: false })
-  hoisted.run.listPublicCategoriesForLocale.mockResolvedValue([{ id: 'cat_1' }])
-  hoisted.run.listPublicArticlesForCategoryLocale.mockResolvedValue([{ id: 'art_1' }])
+  hoisted.run.listPublicCategoriesWithFallback.mockResolvedValue([{ id: 'cat_1' }])
+  hoisted.run.listPublicArticlesForCategoryWithFallback.mockResolvedValue([{ id: 'art_1' }])
+  hoisted.run.getHelpCenterConfig.mockResolvedValue({
+    locales: { default: 'en', additional: ['fr'], chrome: {} },
+  })
   hoisted.run.getPublicArticleBySlugForLocale.mockResolvedValue({
     id: 'art_1',
     helpfulCount: 0,
@@ -493,5 +516,46 @@ describe('widget BFF unauthenticated workspace reads', () => {
     expect(hoisted.getOptionalWidgetAuth).not.toHaveBeenCalled()
     expectWidgetAuthOnly()
     expect(hoisted.run.getWidgetTeamAvatars).toHaveBeenCalled()
+  })
+})
+
+describe('widget help reads pick a language the help center has', () => {
+  const READER = expect.anything()
+
+  it('lists collections in the default language when the visitor language is not enabled', async () => {
+    await widgetListPublicCategoriesFn({ data: { locale: 'de' } })
+    expect(hoisted.run.listPublicCategoriesWithFallback).toHaveBeenCalledWith('en', READER)
+  })
+
+  it('lists collections in the visitor language when it is enabled', async () => {
+    await widgetListPublicCategoriesFn({ data: { locale: 'fr' } })
+    expect(hoisted.run.listPublicCategoriesWithFallback).toHaveBeenCalledWith('fr', READER)
+  })
+
+  it('uses the help center default when no locale is sent', async () => {
+    hoisted.run.getHelpCenterConfig.mockResolvedValue({
+      locales: { default: 'nl', additional: [], chrome: {} },
+    })
+    await widgetListPublicCategoriesFn({ data: {} })
+    expect(hoisted.run.listPublicCategoriesWithFallback).toHaveBeenCalledWith('nl', READER)
+  })
+
+  it("lists a collection's articles in the default language when the visitor language is not enabled", async () => {
+    await widgetListPublicArticlesForCategoryFn({ data: { categoryId: 'cat_1', locale: 'de' } })
+    expect(hoisted.run.listPublicArticlesForCategoryWithFallback).toHaveBeenCalledWith(
+      'cat_1',
+      'en',
+      READER
+    )
+  })
+
+  it('opens an article in the default language when the visitor language is not enabled', async () => {
+    await widgetResolvePublicArticleRefFn({ data: { ref: 'getting-started', locale: 'de' } })
+    expect(hoisted.withDefaultLocaleFallback).toHaveBeenCalledWith(
+      'en',
+      'en',
+      expect.any(Function),
+      expect.any(Function)
+    )
   })
 })
