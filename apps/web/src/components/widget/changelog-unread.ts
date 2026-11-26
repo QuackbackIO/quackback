@@ -8,10 +8,9 @@
  * visitor opens the changelog surface, which advances the marker.
  *
  * A visitor with no marker yet gets a silent baseline (everything historical
- * is read): the badge's first load stamps the marker, so only entries
- * published AFTER the visitor's first contact badge as new. A changelog that
- * is empty at first contact stamps EMPTY_CHANGELOG_BASELINE, so its first
- * entry badges too.
+ * is read): the badge's first load stamps the marker at the server's time of
+ * that load, so only entries published AFTER the visitor's first contact
+ * badge as new, including older entries that signing in reveals later.
  *
  * Each identity in the browser has its own marker (see seen-scope.ts).
  */
@@ -20,11 +19,6 @@ import { readScopedMarker, touchScopedMarker, writeScopedMarker } from './seen-s
 
 const SEEN_KEY = 'quackback:changelog-seen-at'
 
-/**
- * The baseline stamped when the changelog is empty at first contact: older
- * than any entry, so everything published later badges.
- */
-export const EMPTY_CHANGELOG_BASELINE = '1970-01-01T00:00:00.000Z'
 
 /** Event name dispatched on window after the marker advances, so open widget
  *  views re-read it without a reload. */
@@ -69,6 +63,28 @@ export function markChangelogSeen(scope: string, publishedAt: string): void {
     // Storage unavailable — the badge returns next load; never break the view.
   }
   window.dispatchEvent(new Event(CHANGELOG_SEEN_EVENT))
+}
+
+/**
+ * The first-contact baseline: the server's time of the first load, when the
+ * list carries it. Without it, the newest entry the visitor can see, or now
+ * when they see none (the list can be empty only because entries are gated,
+ * so it never falls back to the epoch). Only the marker's absence calls for
+ * one.
+ */
+export function changelogBaseline(
+  entries: readonly { publishedAt: string }[],
+  serverTime?: string | null
+): string {
+  if (serverTime && !Number.isNaN(new Date(serverTime).getTime())) return serverTime
+  let newest: string | null = null
+  for (const e of entries) {
+    if (Number.isNaN(new Date(e.publishedAt).getTime())) continue
+    if (!newest || new Date(e.publishedAt).getTime() > new Date(newest).getTime()) {
+      newest = e.publishedAt
+    }
+  }
+  return newest ?? new Date().toISOString()
 }
 
 /**

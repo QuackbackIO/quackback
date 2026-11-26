@@ -89,6 +89,7 @@ Before `sdk.js` loads, the install snippet only queues calls, so a state read ma
 | `Quackback.showLauncher()` / `hideLauncher()` | Show or hide the floating button and its greeting. See below.                  |
 | `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key.     |
 | `Quackback.tracking(enabled)`                 | Allow or stop host-page visitor analytics. `false` also removes the device id. |
+| `Quackback.whatsNew(enabled)`                 | Show or hide the "What's new" card on this page. The badge is unchanged.       |
 | `Quackback.on(event, handler)`                | Subscribe to a widget event. Returns an unsubscribe function.                  |
 | `Quackback.off(event, handler?)`              | Remove a specific handler, or all listeners for the event.                     |
 | `Quackback.destroy()`                         | Tear down all widget state and DOM.                                            |
@@ -100,7 +101,13 @@ Before `sdk.js` loads, the install snippet only queues calls, so a state read ma
 
 The floating button is named "Open help" for screen readers (or your launcher label, when one is set), with the unread count added when there is one: "Open help, 2 unread". While the panel is open it reads "Close help". The panel is a labelled dialog: opening it with a click or key press moves keyboard focus into it, and closing it returns focus to the element that opened it, or to the launcher when that element is gone. An open while the visitor is typing in a field leaves their focus there.
 
-When the workspace turns on "Announce new updates above the launcher", a visitor with unread changelog entries sees a card above the closed launcher with the newest one. Clicking it opens the widget on that entry. Dismissing it hides the card until a newer entry is published; the unread badge stays until the visitor reads the entries in the widget. The card takes the place of the greeting bubble while it shows. The host page remembers dismissed entries per instance and per visitor: each identified user has their own memory, and anonymous visitors share one. The `whats-new` event fires the first time the card shows an entry to a visitor, not on every page load.
+When the workspace turns on "Announce new updates above the launcher", a visitor with unread changelog entries sees a "What's new" card above the closed launcher with the newest one. Clicking it opens the widget on that entry. Dismissing it hides the card until a newer entry is published; the unread badge stays until the visitor reads the entries in the widget. The card takes the place of the greeting bubble while it shows. The host page remembers dismissed entries per instance and per visitor: each identified user has their own memory, and anonymous visitors share one. The `whats-new` event fires the first time the card shows an entry to a visitor, not on every page load.
+
+Each changelog entry can turn off "Announce above the launcher" in its settings. Such an entry still counts towards the unread badge and shows in the widget's changelog, but the card skips it: it shows the newest unread entry that is announced, and its count ("2 new updates") counts only announced entries.
+
+Unread changelog entries are those published after a visitor's first visit on a device. The first time the widget loads there, every entry published before then is recorded as seen, including entries the visitor can only see after signing in, so a visitor sees the badge and the card for later entries even if they never open the changelog. The card also keeps its own record per visitor: the first time it could show for a visitor on a device, while the workspace announces updates, entries that are already unread are recorded without showing the card or firing `whats-new`, and the badge still counts them. If the host page blocks storage, the card skips this step, and a dismiss lasts for the page load.
+
+To keep the card off on one page, such as a checkout, pass `init({ whatsNew: false })`, or call `Quackback.whatsNew(false)` and `Quackback.whatsNew(true)` while the page is open. This changes only the page, not the workspace setting, and the badge stays as it is. Like `tracking`, a later `init` without the option keeps the last choice, and a call made before `init` holds.
 
 When a teammate or the AI assistant replies and the widget is closed, a card above the launcher previews the newest unread replies of the visitor's most recent conversation, from its latest author, beside their photo or initials. Clicking a reply or "Reply to ..." opens the widget on that conversation, with the message box focused on larger screens. Dismissing the card hides it until a newer reply arrives; nothing is marked read, so the badge stays. On phones the card shows the newest reply with the number of new replies from that person. The workspace chooses between this preview, the whole reply, or the badge alone under "Reply alerts", and can also flash "Alex replied" in the page title while the visitor is on another tab. The title flashes once per new reply that the visitor has not seen or dismissed, and stops when they come back to the page. The reply preview goes ahead of the "What's new" card, which goes ahead of the greeting bubble: one card shows at a time.
 
@@ -130,6 +137,7 @@ Quackback.init({
     'uk', // override auto-detect
   identity: { ssoToken }, // bundle identify into init
   tracking: true, // false = no pageview beacons or new device id until tracking(true)
+  whatsNew: true, // false = no "What's new" card on this page; the badge is unchanged
 })
 ```
 

@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
     data: null,
   })),
   useReplyPreviewAnnouncement: vi.fn(),
+  useWhatsNewAnnouncement: vi.fn(),
 }))
 
 vi.mock('../widget-auth-provider', () => ({
@@ -39,9 +40,20 @@ vi.mock('../reply-preview', () => ({
   useUnreadReplies: h.useUnreadReplies,
   useReplyPreviewAnnouncement: h.useReplyPreviewAnnouncement,
 }))
-vi.mock('../use-changelog-unread', () => ({
-  useChangelogUnread: () => ({ unread: 2, newest: null, ready: true, more: false }),
+const { NEWEST, ANNOUNCED } = vi.hoisted(() => ({
+  NEWEST: { id: 'changelog_2', title: 'Quiet fix', content: '', publishedAt: '2026-11-22' },
+  ANNOUNCED: { id: 'changelog_1', title: 'Dark mode', content: '', publishedAt: '2026-11-20' },
 }))
+vi.mock('../use-changelog-unread', () => ({
+  useChangelogUnread: () => ({
+    unread: 2,
+    newest: NEWEST,
+    announced: { count: 1, newest: ANNOUNCED, more: false },
+    ready: true,
+    more: false,
+  }),
+}))
+vi.mock('../whats-new', () => ({ useWhatsNewAnnouncement: h.useWhatsNewAnnouncement }))
 vi.mock('../use-ticket-stage-badge', () => ({
   useTicketStageBadge: () => ({ unread: 1, hasTickets: true }),
 }))
@@ -110,5 +122,19 @@ describe('WidgetShell unread for the host', () => {
       { enabled: false, replyAlerts: 'full', titleAlerts: true },
       expect.anything()
     )
+  })
+})
+
+describe("WidgetShell What's new for the host", () => {
+  it('announces only the entries the card may announce; the badge counts them all', () => {
+    renderShell({ announceUpdates: true })
+    expect(h.useWhatsNewAnnouncement).toHaveBeenLastCalledWith(true, {
+      ready: true,
+      count: 1,
+      newest: ANNOUNCED,
+      more: false,
+      session: 4,
+    })
+    expect(h.sendToHost).toHaveBeenCalledWith(expect.objectContaining({ changelog: 2 }))
   })
 })

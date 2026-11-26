@@ -28,6 +28,14 @@ export interface WhatsNewMemory {
   answer(scope: string, entry: Entry): void
   /** Record an announcement; true only the first time for this entry. */
   announce(scope: string, entryId: string): boolean
+  /** Whether this visitor has a record on this device yet. When the host
+   *  page blocks storage, every visitor counts as known: a record that lasts
+   *  only for the page load would make every load a first visit. */
+  known(scope: string): boolean
+  /** Start a record with this entry, and every entry published before it,
+   *  counted as announced and answered without showing them: what was
+   *  unread before the first visit. */
+  learn(scope: string, entry: Entry | null): void
 }
 
 const time = (iso: string | null): number => (iso ? new Date(iso).getTime() : NaN)
@@ -57,6 +65,18 @@ export function createWhatsNewMemory(origin: string): WhatsNewMemory {
   const fallback = new Map<string, Stored>()
   const key = (scope: string) => `quackback:whats-new:${origin}:${scope}`
 
+  const stored = (scope: string): boolean => {
+    try {
+      if (localStorage.getItem(key(scope)) !== null) return true
+      // Readable but not writable (blocked, or full) is no better.
+      const probe = key('probe')
+      localStorage.setItem(probe, '1')
+      localStorage.removeItem(probe)
+      return false
+    } catch {
+      return true
+    }
+  }
   const read = (scope: string): Stored => {
     try {
       const raw = localStorage.getItem(key(scope))
@@ -75,6 +95,12 @@ export function createWhatsNewMemory(origin: string): WhatsNewMemory {
     }
   }
 
+  const answered = (m: Stored, entry: Entry): Stored => {
+    const at = time(entry.publishedAt)
+    const through = !Number.isNaN(at) && !(at <= time(m.through)) ? entry.publishedAt : m.through
+    return { ...m, through, answered: keep(m.answered, entry.id) }
+  }
+
   return {
     isAnswered(scope, entry) {
       const m = read(scope)
@@ -83,10 +109,14 @@ export function createWhatsNewMemory(origin: string): WhatsNewMemory {
       return !Number.isNaN(at) && at <= time(m.through)
     },
     answer(scope, entry) {
+      write(scope, answered(read(scope), entry))
+    },
+    known(scope) {
+      return stored(scope)
+    },
+    learn(scope, entry) {
       const m = read(scope)
-      const at = time(entry.publishedAt)
-      const through = !Number.isNaN(at) && !(at <= time(m.through)) ? entry.publishedAt : m.through
-      write(scope, { ...m, through, answered: keep(m.answered, entry.id) })
+      write(scope, entry ? { ...answered(m, entry), announced: keep(m.announced, entry.id) } : m)
     },
     announce(scope, entryId) {
       const m = read(scope)

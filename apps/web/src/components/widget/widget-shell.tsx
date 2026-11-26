@@ -164,18 +164,18 @@ export function WidgetShell({
   // opens the changelog surface (which advances their seen marker).
   const {
     unread: changelogUnread,
-    newest: newestChangelog,
+    announced: announcedChangelog,
     ready: changelogReady,
-    more: moreChangelog,
   } = useChangelogUnread(enabledTabs.changelog ?? false)
-  // The newest unread entry also reaches the host for the card above the
-  // closed launcher, when the workspace turns that on.
+  // The newest unread entry the card may announce also reaches the host for
+  // the card above the closed launcher, when the workspace turns that on. An
+  // entry kept out of the card still counts towards the badge.
   const { sessionVersion } = useWidgetAuth()
   useWhatsNewAnnouncement(announceUpdates && (enabledTabs.changelog ?? false), {
     ready: changelogReady,
-    count: changelogUnread,
-    newest: newestChangelog,
-    more: moreChangelog,
+    count: announcedChangelog.count,
+    newest: announcedChangelog.newest,
+    more: announcedChangelog.more,
     session: sessionVersion,
   })
   // The newest unread replies reach the host for its message event, and for

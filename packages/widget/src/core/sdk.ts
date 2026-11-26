@@ -41,6 +41,7 @@ type Command =
   | 'destroy'
   | 'metadata'
   | 'tracking'
+  | 'whatsNew'
   | 'on'
   | 'off'
 
@@ -94,6 +95,12 @@ export function createSDK(): SDK {
   let unreadCount = 0
   // The frame's newest unread changelog entry, for the launcher's card.
   let whatsNew: WhatsNew | null = null
+  // Whether the frame has sent the card for the current visitor yet.
+  let whatsNewPayloadReceived = false
+  // The host page's say on the card for this page (init's whatsNew option,
+  // or the whatsNew command): off hides it without touching the badge. Kept
+  // across a re-init or destroy, like the host's tracking choice.
+  let hostWhatsNew = true
   // The frame's newest unread replies, and the tab title flash for them.
   let replyPreview: ReplyPreview | null = null
   let titleAlert: TitleAlert | null = null
@@ -212,6 +219,7 @@ export function createSDK(): SDK {
     currentUser = user
     if (visitorScope() !== before) {
       whatsNew = null
+      whatsNewPayloadReceived = false
       replyPreview = null
       replyPayloadReceived = false
     }
@@ -295,9 +303,19 @@ export function createSDK(): SDK {
     if (whatsNew?.entry.id === entryId) memory().answer(visitorScope(), whatsNew.entry)
   }
   function applyWhatsNew(): void {
-    if (!launcher || !config) return
+    if (!config) return
+    // The first payload for a visitor new to this device records what is
+    // already unread as announced and answered, without showing it: the card
+    // covers entries published after the first visit here.
+    if (!identityPending && whatsNewPayloadReceived && !memory().known(visitorScope())) {
+      memory().learn(visitorScope(), whatsNew?.entry ?? null)
+    }
+    if (!launcher) return
     const show =
-      whatsNew && !identityPending && !memory().isAnswered(visitorScope(), whatsNew.entry)
+      whatsNew &&
+      hostWhatsNew &&
+      !identityPending &&
+      !memory().isAnswered(visitorScope(), whatsNew.entry)
         ? whatsNew
         : null
     launcher.setWhatsNew(show)
@@ -363,6 +381,7 @@ export function createSDK(): SDK {
       case 'quackback:whats-new': {
         // The newest unread changelog entry, or null; a bad payload clears it.
         whatsNew = parseWhatsNew((msg as { whatsNew?: unknown }).whatsNew)
+        whatsNewPayloadReceived = true
         applyWhatsNew()
         break
       }
@@ -645,6 +664,9 @@ export function createSDK(): SDK {
         // Only an explicit option changes the host's choice, so a withdrawal
         // made before init, or before a re-init, is never silently undone.
         if (next.tracking !== undefined) hostTracking = next.tracking
+        // The same for the card: only an explicit option changes the page's
+        // choice, so a whatsNew call made before init holds.
+        if (typeof next.whatsNew === 'boolean') hostWhatsNew = next.whatsNew
         placement = next.placement ?? 'right'
         window.addEventListener('storage', onWhatsNewStorage)
         document.addEventListener('visibilitychange', onVisibility)
@@ -817,6 +839,11 @@ export function createSDK(): SDK {
           if (ready && bridge) bridge.send('quackback:device', null)
         }
         return
+      case 'whatsNew':
+        // Only a boolean changes it, as with the init option.
+        if (typeof a === 'boolean') hostWhatsNew = a
+        applyWhatsNew()
+        return
       case 'destroy':
         cancelPanelPreload()
         releaseViewport(true)
@@ -845,6 +872,7 @@ export function createSDK(): SDK {
         launcherRevealed = false
         unreadCount = 0
         whatsNew = null
+        whatsNewPayloadReceived = false
         whatsNewMemory = null
         replyPreview = null
         replyMemory = null

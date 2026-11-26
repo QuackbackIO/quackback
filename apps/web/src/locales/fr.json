@@ -27,7 +27,7 @@
   "widget.whatsNew.count": "{count, plural, one {# nouvelle mise à jour} other {# nouvelles mises à jour}}",
   "widget.whatsNew.countAtLeast": "{count, plural, one {#+ nouvelle mise à jour} other {#+ nouvelles mises à jour}}",
   "widget.whatsNew.action": "Voir les nouveautés",
-  "widget.whatsNew.dismiss": "Ignorer",
+  "widget.whatsNew.dismiss": "Fermer",
   "widget.replyPreview.header": "{name} de {team}",
   "widget.replyPreview.replyTo": "Répondre à {name}…",
   "widget.replyPreview.newReplies": "{count, plural, one {# nouvelle réponse} other {# nouvelles réponses}}",

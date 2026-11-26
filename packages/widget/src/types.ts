@@ -50,6 +50,14 @@ export interface InitOptions {
    * only when the instance also enables visitor analytics.
    */
   tracking?: boolean
+  /**
+   * Set `whatsNew: false` to keep the "What's new" card above the launcher
+   * off on this page, for example on a checkout page, whatever the workspace
+   * setting. The unread badge is unchanged. Switch it at runtime with
+   * `Quackback.whatsNew(true | false)`. On by default; omitting the option
+   * keeps the last choice, so a `whatsNew` call made before `init` holds.
+   */
+  whatsNew?: boolean
 }
 
 /**
@@ -150,8 +158,12 @@ export interface EventMap {
     tickets: number
   }
   /** The "What's new" card appeared above the closed launcher for the newest
-   *  unread changelog entry. Fires once per entry for each visitor: the host
-   *  page remembers which entries it announced, per instance. */
+   *  unread changelog entry it may announce. Fires once per entry for each
+   *  visitor: the host page remembers which entries it announced, per
+   *  instance. `count` is the number of unread entries the card announces.
+   *  Does not fire on a page with the card turned off, or for entries that
+   *  were already unread the first time a visitor loads the widget on a
+   *  device. */
   'whats-new': { count: number; entryId: string }
   /** A new unread reply from a teammate or the AI assistant, in any of the
    *  visitor's conversations. Fires once per reply for each visitor,

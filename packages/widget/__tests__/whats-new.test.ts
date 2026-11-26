@@ -334,7 +334,14 @@ describe("launcher What's new card", () => {
   })
 })
 
-describe("sdk What's new card", () => {
+const memoryKey = (scope: string) => `quackback:whats-new:${ORIGIN}:${scope}`
+
+/** Visitors this device has a What's new record for. */
+function returning(...scopes: string[]) {
+  for (const scope of scopes) localStorage.setItem(memoryKey(scope), '{}')
+}
+
+describe("sdk What's new card for visitors known on this device", () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     document.head.innerHTML = ''
@@ -353,6 +360,8 @@ describe("sdk What's new card", () => {
     vi.stubGlobal('cancelIdleCallback', vi.fn())
     // Script-tag installs reveal the launcher at once from the baked config.
     ;(window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__ = { theme: {} }
+    // These visitors have been here before; first visits are tested below.
+    returning('anon', 'user:user_a', 'user:user_b')
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -551,7 +560,7 @@ describe("sdk What's new card", () => {
     sdk.dispatch('destroy')
   })
 
-  it('tells a new visitor about an entry an earlier visitor already saw', () => {
+  it('tells another known visitor about an entry an earlier visitor already saw', () => {
     stubFrame()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
@@ -610,5 +619,187 @@ describe("sdk What's new card", () => {
     expect(shown()).toBe(true)
     sdk.dispatch('destroy')
     expect(cardEl()).toBeNull()
+  })
+})
+
+describe("sdk What's new card: first visit and page choice", () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    document.head.innerHTML = ''
+    clearStorage()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
+    )
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: () => void) => {
+        cb()
+        return 1
+      })
+    )
+    vi.stubGlobal('cancelIdleCallback', vi.fn())
+    ;(window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__ = { theme: {} }
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    delete (window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__
+  })
+
+  function post(data: Record<string, unknown>) {
+    window.dispatchEvent(new MessageEvent('message', { origin: ORIGIN, data }))
+  }
+  const announce = (whatsNew: unknown) => post({ type: 'quackback:whats-new', whatsNew })
+  const badge = () => document.querySelector('button[aria-label^="Open help"]')!
+  const newer = () =>
+    sample({ id: 'changelog_2', title: 'Dark mode', publishedAt: '2026-11-22T10:00:00.000Z' }, 3)
+
+  it('records what is unread on a first visit without showing the card or firing the event', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'whats-new', handler)
+    post({ type: 'quackback:unread', count: 2, changelog: 2 })
+    announce(sample())
+    expect(shown()).toBe(false)
+    expect(handler).not.toHaveBeenCalled()
+    // The badge is unchanged.
+    expect(badge().getAttribute('aria-label')).toBe('Open help, 2 unread')
+    expect(JSON.parse(localStorage.getItem(memoryKey('anon'))!)).toMatchObject({
+      through: '2026-11-20T10:00:00.000Z',
+      announced: ['changelog_1'],
+    })
+    // The same entry on a later page load stays quiet...
+    sdk.dispatch('destroy')
+    const again = createSDK()
+    again.dispatch('init', { instanceUrl: ORIGIN })
+    again.dispatch('on', 'whats-new', handler)
+    announce(sample())
+    expect(shown()).toBe(false)
+    // ...and an entry published after the first visit is announced.
+    announce(newer())
+    expect(shown()).toBe(true)
+    expect(handler).toHaveBeenCalledWith({ count: 3, entryId: 'changelog_2' })
+    again.dispatch('destroy')
+  })
+
+  it('keeps entries older than the one recorded on the first visit quiet', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(newer())
+    // The newer one is read, so the older one becomes the newest unread.
+    announce(sample())
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('shows the card as before when the host page blocks storage', () => {
+    const blocked = () => {
+      throw new DOMException('blocked', 'SecurityError')
+    }
+    vi.stubGlobal('localStorage', {
+      getItem: blocked,
+      setItem: blocked,
+      removeItem: blocked,
+      clear: blocked,
+    })
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    expect(shown()).toBe(true)
+    // A dismiss still holds for the page load.
+    dismissBtn().click()
+    announce(sample())
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('starts the record from a first payload with nothing unread', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(null)
+    expect(localStorage.getItem(memoryKey('anon'))).not.toBeNull()
+    announce(sample())
+    expect(shown()).toBe(true)
+    sdk.dispatch('destroy')
+  })
+
+  it("waits for a new identity before recording that visitor's first visit", () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, identity: { ssoToken: 'token-a' } })
+    // A payload while the identity resolves records nothing for anyone.
+    announce(sample())
+    expect(localStorage.getItem(memoryKey('anon'))).toBeNull()
+    post({
+      type: 'quackback:identify-result',
+      success: true,
+      user: { id: 'user_a', name: 'Ada', email: 'ada@example.com' },
+    })
+    // The frame sends the card for the new session: a first visit for user A.
+    announce(sample())
+    expect(shown()).toBe(false)
+    expect(localStorage.getItem(memoryKey('user:user_a'))).not.toBeNull()
+    announce(newer())
+    expect(shown()).toBe(true)
+    sdk.dispatch('destroy')
+  })
+
+  it('init({ whatsNew: false }) keeps the card off on this page, badge unchanged', () => {
+    returning('anon')
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, whatsNew: false })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'whats-new', handler)
+    post({ type: 'quackback:unread', count: 2, changelog: 2 })
+    announce(sample())
+    expect(shown()).toBe(false)
+    expect(handler).not.toHaveBeenCalled()
+    expect(badge().getAttribute('aria-label')).toBe('Open help, 2 unread')
+    // Turned on while the page is open, the card shows.
+    sdk.dispatch('whatsNew', true)
+    expect(shown()).toBe(true)
+    expect(handler).toHaveBeenCalledTimes(1)
+    // And off again.
+    sdk.dispatch('whatsNew', false)
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('a later init without the option keeps the last choice; with it, follows it', () => {
+    returning('anon')
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, whatsNew: false })
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    expect(shown()).toBe(false)
+    sdk.dispatch('init', { instanceUrl: ORIGIN, whatsNew: true })
+    announce(sample())
+    expect(shown()).toBe(true)
+    sdk.dispatch('destroy')
+  })
+
+  it('a choice made before init holds, as with a script-tag install', () => {
+    returning('anon')
+    const sdk = createSDK()
+    sdk.dispatch('whatsNew', false)
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('ignores a whatsNew call without a boolean', () => {
+    returning('anon')
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    sdk.dispatch('whatsNew')
+    sdk.dispatch('whatsNew', 'no')
+    expect(shown()).toBe(true)
+    sdk.dispatch('whatsNew', false)
+    sdk.dispatch('whatsNew', 1)
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
   })
 })
