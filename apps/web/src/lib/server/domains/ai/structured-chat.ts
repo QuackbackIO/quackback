@@ -22,6 +22,7 @@ import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { stripCodeFences, structuredOutputProviderOptions } from './config'
 import { outputBudgetOptions } from './output-budget'
+import { safeAIError } from './safe-error'
 import { oneShotThreadId } from './thread-id'
 
 const log = logger.child({ component: 'ai-structured-chat' })
@@ -127,7 +128,12 @@ export async function structuredChat<S extends z.ZodType>(
       level = rejectsResponseFormatEntirely(err) ? 'none' : 'json_object'
       fallbackLevels.set(key, level)
       log.warn(
-        { base_url: baseURL, model: input.model, fallback: level, err },
+        {
+          base_url: baseURL,
+          model: input.model,
+          fallback: level,
+          ai_error: safeAIError(err, { stage: 'structured_chat' }),
+        },
         'provider rejected response_format json_schema; describing the schema in the prompt instead'
       )
     }
@@ -158,7 +164,12 @@ export async function structuredChat<S extends z.ZodType>(
     level = 'none'
     fallbackLevels.set(key, level)
     log.warn(
-      { base_url: baseURL, model: input.model, fallback: level, err },
+      {
+        base_url: baseURL,
+        model: input.model,
+        fallback: level,
+        ai_error: safeAIError(err, { stage: 'structured_chat' }),
+      },
       'provider rejected response_format json_object; asking for JSON in the prompt alone'
     )
     text = await promptOnly(level)

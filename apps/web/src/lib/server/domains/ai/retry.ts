@@ -6,6 +6,7 @@
  */
 
 import { logger } from '@/lib/server/logger'
+import { safeAIError } from './safe-error'
 
 const log = logger.child({ component: 'ai-retry' })
 
@@ -59,7 +60,7 @@ export async function withRetry<T>(
           attempt: attempt + 1,
           max_retries: maxRetries,
           delay_ms: Math.round(delay),
-          err: lastError,
+          ai_error: safeAIError(lastError, { attempt: attempt + 1, stage: 'retry' }),
         },
         'retrying ai call'
       )

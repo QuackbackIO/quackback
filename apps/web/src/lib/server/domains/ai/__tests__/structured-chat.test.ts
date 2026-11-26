@@ -9,6 +9,7 @@ import { z } from 'zod'
 
 const hoisted = vi.hoisted(() => ({
   chat: vi.fn(),
+  warn: vi.fn(),
   cfg: {
     openaiBaseUrl: 'https://llm.internal/v1' as string | null,
     aiRequireParameters: undefined,
@@ -34,7 +35,13 @@ vi.mock('@/lib/server/config', () => ({
   },
 }))
 vi.mock('@/lib/server/logger', () => {
-  const log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => log }
+  const log = {
+    info: () => {},
+    warn: (...args: unknown[]) => hoisted.warn(...args),
+    error: () => {},
+    debug: () => {},
+    child: () => log,
+  }
   return { logger: log }
 })
 
@@ -69,6 +76,7 @@ function rejection(message: string, param?: string) {
 
 beforeEach(() => {
   hoisted.chat.mockReset()
+  hoisted.warn.mockReset()
   hoisted.cfg.openaiBaseUrl = 'https://llm.internal/v1'
   hoisted.cfg.aiRequireParameters = undefined
   resetStructuredFallbackMemory()
@@ -118,6 +126,19 @@ describe('structuredChat', () => {
     expect(hoisted.chat.mock.calls[2][0].modelOptions.response_format).toEqual({
       type: 'json_object',
     })
+    expect(hoisted.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fallback: 'json_object',
+        ai_error: {
+          httpStatus: 400,
+          errorClass: 'upstream_4xx',
+          finishReason: null,
+          attempt: null,
+          stage: 'structured_chat',
+        },
+      }),
+      expect.any(String)
+    )
   })
 
   it('sends no response_format when the server does not implement the parameter', async () => {

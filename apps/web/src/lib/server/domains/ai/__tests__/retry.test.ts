@@ -3,7 +3,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const mockWarn = vi.fn()
+vi.mock('@/lib/server/logger', () => ({
+  logger: { child: () => ({ warn: (...args: unknown[]) => mockWarn(...args) }) },
+}))
+
 import { withRetry, isRetryableError } from '../retry'
+
+const PII_CANARY = 'secret-bearer-sk-test-123456-user@example.com-prompt-leak'
 
 describe('retry', () => {
   beforeEach(() => {
@@ -20,17 +28,30 @@ describe('retry', () => {
       expect(fn).toHaveBeenCalledTimes(1)
     })
 
-    it('should retry on retryable error and return final retryCount', async () => {
+    it('should retry on retryable error and return final retryCount without logging raw PII', async () => {
       const fn = vi
         .fn()
-        .mockRejectedValueOnce(new Error('429 rate limit'))
-        .mockRejectedValueOnce(new Error('429 rate limit'))
+        .mockRejectedValueOnce(new Error(`429 rate limit ${PII_CANARY}`))
+        .mockRejectedValueOnce(new Error(`429 rate limit ${PII_CANARY}`))
         .mockResolvedValue('ok')
 
       const out = await withRetry(fn, { maxRetries: 3, baseDelayMs: 1, maxDelayMs: 5 })
 
       expect(out).toEqual({ result: 'ok', retryCount: 2 })
       expect(fn).toHaveBeenCalledTimes(3)
+      expect(mockWarn).toHaveBeenCalledTimes(2)
+      expect(mockWarn.mock.calls[0]![0]).toMatchObject({
+        attempt: 1,
+        max_retries: 3,
+        ai_error: {
+          httpStatus: null,
+          errorClass: 'unknown',
+          finishReason: null,
+          attempt: 1,
+          stage: 'retry',
+        },
+      })
+      expect(JSON.stringify(mockWarn.mock.calls)).not.toContain(PII_CANARY)
     })
 
     it('should attach retryCount to error on final failure', async () => {

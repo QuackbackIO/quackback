@@ -55,16 +55,29 @@ describe('createUsageLoggingMiddleware', () => {
     )
   })
 
-  it('logs an error row with the error message', async () => {
+  it('logs an error row with redacted error projection', async () => {
     const mw = createUsageLoggingMiddleware({ pipelineStep: 'extraction', model: 'm' })
     const c = ctx('req-err')
+    const canary = 'secret-bearer-sk-test-123456-user@example.com'
     mw.onStart?.(c)
-    mw.onError?.(c, { error: new Error('boom') } as ErrorInfo)
+    mw.onError?.(c, { error: new Error(`boom ${canary}`) } as ErrorInfo)
     await flush()
 
     expect(logAiUsage).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'error', error: 'boom', inputTokens: 0, totalTokens: 0 })
+      expect.objectContaining({
+        status: 'error',
+        error: JSON.stringify({
+          httpStatus: null,
+          errorClass: 'unknown',
+          finishReason: null,
+          attempt: null,
+          stage: 'extraction',
+        }),
+        inputTokens: 0,
+        totalTokens: 0,
+      })
     )
+    expect(JSON.stringify(logAiUsage.mock.calls)).not.toContain(canary)
   })
 
   it('logs abort as an error outcome and never double-logs', async () => {
