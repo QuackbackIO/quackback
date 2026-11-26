@@ -13,7 +13,10 @@ import { clearWidgetToken, getWidgetToken } from '@/lib/client/widget-auth'
 
 installInMemoryLocalStorage()
 
-vi.mock('@/lib/client/widget-bridge', () => ({ sendToHost: vi.fn() }))
+vi.mock('@/lib/client/widget-bridge', () => ({
+  sendToHost: vi.fn(),
+  hostOriginIsOpaque: () => false,
+}))
 vi.mock('@/lib/client/auth-client', () => ({
   authClient: { signIn: { anonymous: vi.fn().mockResolvedValue({ data: null, error: null }) } },
 }))
@@ -21,7 +24,10 @@ vi.mock('@/lib/shared/i18n', async (orig) => ({
   ...(await orig<typeof import('@/lib/shared/i18n')>()),
   loadMessages: vi.fn().mockResolvedValue({}),
 }))
-vi.mock('@/lib/client/widget-frame', () => ({ frameHasHost: () => true }))
+vi.mock('@/lib/client/widget-frame', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/widget-frame')>()),
+  frameHasHost: () => true,
+}))
 
 // A segment-gated entry only the signed-in person sees, newer than the public one.
 const GATED = '2026-11-25T10:00:00.000Z'
