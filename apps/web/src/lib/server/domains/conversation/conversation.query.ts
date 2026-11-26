@@ -907,6 +907,71 @@ export async function countVisitorUnreadMessages(visitorPrincipalId: PrincipalId
   return row?.c ?? 0
 }
 
+export interface VisitorUnreadReplies {
+  conversationId: ConversationId
+  /** Unread replies in that conversation; may exceed the messages returned. */
+  count: number
+  /** Oldest first, so the newest sits last. */
+  messages: Array<{
+    id: ConversationMessageId
+    content: string
+    createdAt: Date
+    principalId: PrincipalId | null
+  }>
+}
+
+/**
+ * The visitor's newest unread replies, from the conversation that holds the
+ * newest one: what the reply preview above the closed launcher shows. Same
+ * unread rule as `countVisitorUnreadMessages`, so the card and the badge
+ * agree. Reply-time captions are left out, as the thread never shows them as
+ * bubbles. Null when nothing is unread.
+ */
+export async function listVisitorUnreadReplies(
+  visitorPrincipalId: PrincipalId,
+  limit = 3
+): Promise<VisitorUnreadReplies | null> {
+  const unread = and(
+    eq(conversations.visitorPrincipalId, visitorPrincipalId),
+    eq(conversationMessages.senderType, 'agent'),
+    eq(conversationMessages.isInternal, false),
+    isNull(conversationMessages.deletedAt),
+    sql`coalesce(${conversationMessages.metadata} -> 'block' ->> 'kind', '') <> 'replyTime'`,
+    or(
+      isNull(conversations.visitorLastReadAt),
+      gt(conversationMessages.createdAt, conversations.visitorLastReadAt)
+    )
+  )
+  const [newest] = await db
+    .select({ conversationId: conversationMessages.conversationId })
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
+    .where(unread)
+    .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+    .limit(1)
+  if (!newest?.conversationId) return null
+  const conversationId = newest.conversationId
+  const rows = await db
+    .select({
+      id: conversationMessages.id,
+      content: conversationMessages.content,
+      createdAt: conversationMessages.createdAt,
+      principalId: conversationMessages.principalId,
+      total: sql<number>`(count(*) over ())::int`,
+    })
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
+    .where(and(unread, eq(conversationMessages.conversationId, conversationId)))
+    .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+    .limit(limit)
+  if (rows.length === 0) return null
+  return {
+    conversationId,
+    count: rows[0].total,
+    messages: rows.reverse().map(({ total: _total, ...m }) => m),
+  }
+}
+
 export interface MessagePage {
   messages: ConversationMessageDTO[]
   hasMore: boolean

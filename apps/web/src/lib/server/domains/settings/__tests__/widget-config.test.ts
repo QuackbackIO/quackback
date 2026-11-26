@@ -301,6 +301,45 @@ describe('getPublicWidgetConfig — messenger tab projection', () => {
   })
 })
 
+describe('getPublicWidgetConfig — reply alerts', () => {
+  it('shows a preview and leaves the tab title alone when nothing is stored', async () => {
+    settingsRow.current = fixtureRow(
+      { enabled: true, tabs: { messenger: true }, messenger: { enabled: true } },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.messenger?.replyAlerts).toBe('preview')
+    expect(projected.messenger?.titleAlerts).toBe(false)
+  })
+
+  it('projects the stored choices', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { messenger: true },
+        messenger: { enabled: true, replyAlerts: 'full', titleAlerts: true },
+      },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.messenger?.replyAlerts).toBe('full')
+    expect(projected.messenger?.titleAlerts).toBe(true)
+  })
+
+  it('reads an unknown stored value as a preview', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { messenger: true },
+        messenger: { enabled: true, replyAlerts: 'loud' as never },
+      },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.messenger?.replyAlerts).toBe('preview')
+  })
+})
+
 describe('getPublicWidgetConfig — help tab projection', () => {
   it('projects tabs.help from the flag + tab, ignoring stored helpCenterConfig.enabled', async () => {
     settingsRow.current = {

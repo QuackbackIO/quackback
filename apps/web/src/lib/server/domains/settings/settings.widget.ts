@@ -155,6 +155,11 @@ export function publicMessengerConfig(
     welcomeMessage: messenger.welcomeMessage,
     offlineMessage: messenger.offlineMessage,
     teamName: messenger.teamName,
+    // Absent or unknown reads as a preview.
+    replyAlerts: ['badge', 'full'].includes(messenger.replyAlerts ?? '')
+      ? messenger.replyAlerts
+      : 'preview',
+    titleAlerts: messenger.titleAlerts === true,
     assistant: messenger.assistant
       ? {
           enabled: messenger.assistant.enabled,

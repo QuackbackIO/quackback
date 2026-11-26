@@ -46,6 +46,7 @@ const hoisted = vi.hoisted(() => {
     getMyConversation: vi.fn(),
     getMyConversations: vi.fn(),
     getMessengerUnread: vi.fn(),
+    getReplyPreview: vi.fn(),
     listConversationMessages: vi.fn(),
     markConversationRead: vi.fn(),
     sendConversationTyping: vi.fn(),
@@ -124,6 +125,7 @@ vi.mock('@/lib/server/functions/conversation', () => ({
   runGetMyConversation: hoisted.run.getMyConversation,
   runGetMyConversations: hoisted.run.getMyConversations,
   runGetMessengerUnread: hoisted.run.getMessengerUnread,
+  runGetReplyPreview: hoisted.run.getReplyPreview,
   runListConversationMessages: hoisted.run.listConversationMessages,
   runMarkConversationRead: hoisted.run.markConversationRead,
   runSendConversationTyping: hoisted.run.sendConversationTyping,
@@ -209,6 +211,7 @@ import {
   widgetGetMyConversationFn,
   widgetGetMyConversationsFn,
   widgetGetMessengerUnreadFn,
+  widgetGetReplyPreviewFn,
   widgetListConversationMessagesFn,
   widgetMarkConversationReadFn,
   widgetSendConversationTypingFn,
@@ -434,6 +437,10 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
     {
       name: 'widgetGetMessengerUnreadFn',
       call: () => widgetGetMessengerUnreadFn(),
+    },
+    {
+      name: 'widgetGetReplyPreviewFn',
+      call: () => widgetGetReplyPreviewFn(),
     },
     {
       name: 'widgetGetPublicChangelogFn',

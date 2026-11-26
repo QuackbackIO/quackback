@@ -664,6 +664,9 @@ const messengerConfigInputSchema = z.object({
   teamName: z.string().max(80).optional(),
   // Refuse visitor replies to closed conversations (Messenger only; §4.3).
   preventRepliesWhenClosed: z.boolean().optional(),
+  // How an unread reply shows above the closed launcher, and the tab title flash.
+  replyAlerts: z.enum(['badge', 'preview', 'full']).optional(),
+  titleAlerts: z.boolean().optional(),
   assistant: z
     .object({
       enabled: z.boolean().optional(),

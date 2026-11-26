@@ -634,6 +634,9 @@ export interface PublicAssistantConfig extends AssistantDeploymentConfig {
   avatarUrl: string | null
 }
 
+/** How an unread reply shows while the widget is closed. */
+export type WidgetReplyAlerts = 'badge' | 'preview' | 'full'
+
 export interface MessengerConfig {
   /**
    * @deprecated Ignored at read time. Messenger is on when the `supportInbox`
@@ -657,6 +660,15 @@ export interface MessengerConfig {
   preventRepliesWhenClosed?: boolean
   /** AI-assistant display identity (client-safe). */
   assistant?: AssistantDeploymentConfig
+  /**
+   * How an unread reply shows while the widget is closed: the launcher badge
+   * only, a preview card above the launcher, or the card with the whole
+   * reply. Absent means 'preview'.
+   */
+  replyAlerts?: WidgetReplyAlerts
+  /** Flash "{name} replied" in the host page's tab title while the visitor is
+   *  on another tab. Absent means off. */
+  titleAlerts?: boolean
   /**
    * @deprecated Migration-only. The canonical office-hours schedule now lives in
    * the `settings.metadata` bag (see settings.office-hours.ts). This field only
