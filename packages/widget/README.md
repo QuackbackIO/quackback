@@ -102,6 +102,8 @@ The floating button is named "Open help" for screen readers (or your launcher la
 
 When the workspace turns on "Announce new updates above the launcher", a visitor with unread changelog entries sees a card above the closed launcher with the newest one. Clicking it opens the widget on that entry. Dismissing it hides the card until a newer entry is published; the unread badge stays until the visitor reads the entries in the widget. The card takes the place of the greeting bubble while it shows. The host page remembers dismissed entries per instance and per visitor: each identified user has their own memory, and anonymous visitors share one. The `whats-new` event fires the first time the card shows an entry to a visitor, not on every page load.
 
+When a teammate or the AI assistant replies and the widget is closed, a card above the launcher previews the newest unread replies of the visitor's most recent conversation, beside the author's photo or initials. Clicking a reply or "Reply to ..." opens the widget on that conversation with the message box focused. Dismissing the card hides it until a newer reply arrives; nothing is marked read, so the badge stays. On phones the card shows the newest reply with the number of new replies. The workspace chooses between this preview, the whole reply, or the badge alone under "Reply alerts", and can also flash "Alex replied" in the page title while the visitor is on another tab. The reply preview goes ahead of the "What's new" card, which goes ahead of the greeting bubble: one card shows at a time.
+
 `hideLauncher()` hides the button and its greeting bubble together. `showLauncher()` brings them back, and also works after `init({ launcher: false })`, so you can start with your own button and show the default one later.
 
 ### `init` options
@@ -161,6 +163,7 @@ Quackback.open({ view: 'new-post', title: 'Bug:', body: '...', board: 'bugs' }) 
 Quackback.open({ view: 'changelog' }) // changelog feed
 Quackback.open({ view: 'help', query: 'pricing' }) // help search
 Quackback.open({ view: 'messages' }) // messenger conversations
+Quackback.open({ view: 'messages', conversationId: 'conversation_01h...' }) // one conversation, message box focused
 Quackback.open({ view: 'tickets' }) // the visitor's tickets, or messages when unavailable
 Quackback.open({ postId: 'post_01h...' }) // specific post
 Quackback.open({ articleId: 'article_01h...' }) // help article TypeID or slug
@@ -179,18 +182,21 @@ const unsubscribe = Quackback.on('vote', (payload) => {
 unsubscribe()
 ```
 
-| Event             | Payload                                    |
-| ----------------- | ------------------------------------------ |
-| `ready`           | `{}`                                       |
-| `open`            | `{ view?, postId?, articleId?, entryId? }` |
-| `close`           | `{}`                                       |
-| `post:created`    | `{ id, title, board, statusId }`           |
-| `vote`            | `{ postId, voted, voteCount }`             |
-| `comment:created` | `{ postId, commentId, parentId }`          |
-| `identify`        | `{ success, user, anonymous, error? }`     |
-| `email-submitted` | `{ email }`                                |
-| `unread`          | `{ count }`                                |
-| `whats-new`       | `{ count, entryId }`                       |
+| Event             | Payload                                                     |
+| ----------------- | ----------------------------------------------------------- |
+| `ready`           | `{}`                                                        |
+| `open`            | `{ view?, postId?, articleId?, entryId?, conversationId? }` |
+| `close`           | `{}`                                                        |
+| `post:created`    | `{ id, title, board, statusId }`                            |
+| `vote`            | `{ postId, voted, voteCount }`                              |
+| `comment:created` | `{ postId, commentId, parentId }`                           |
+| `identify`        | `{ success, user, anonymous, error? }`                      |
+| `email-submitted` | `{ email }`                                                 |
+| `unread`          | `{ count, messages, changelog, tickets }`                   |
+| `whats-new`       | `{ count, entryId }`                                        |
+| `message`         | `{ conversationId, author: { name, avatarUrl }, preview }`  |
+
+`unread.count` is the total the launcher badge shows; `messages`, `changelog` and `tickets` are its parts. `message` fires once for each new unread reply from a teammate or the AI assistant, while the workspace shows reply previews. `preview` is the reply as plain text. The host page remembers which replies it reported, per instance and per visitor, so a reload does not repeat them.
 
 ## Docs
 

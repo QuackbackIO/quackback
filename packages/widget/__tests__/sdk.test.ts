@@ -511,8 +511,8 @@ describe('sdk', () => {
       new MessageEvent('message', { origin: ORIGIN, data: { type: 'quackback:unread', count: 5 } })
     )
 
-    // Host subscribers get the count...
-    expect(handler).toHaveBeenCalledWith({ count: 5 })
+    // Host subscribers get the count (an older frame sends no breakdown)...
+    expect(handler).toHaveBeenCalledWith({ count: 5, messages: 0, changelog: 0, tickets: 0 })
     // ...and the launcher shows the badge.
     const btn = document.querySelector('button[aria-controls^="quackback-panel"]') as HTMLElement
     const badge = btn.lastElementChild as HTMLElement
@@ -520,6 +520,28 @@ describe('sdk', () => {
     expect(badge.textContent).toBe('5')
     // ...and a screen reader hears the same count.
     expect(btn.getAttribute('aria-label')).toBe('Open help, 5 unread')
+  })
+
+  it('the unread event carries the breakdown the frame sends, with the same total', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'unread', handler)
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: ORIGIN,
+        data: { type: 'quackback:unread', count: 6, messages: 3, changelog: 2, tickets: 1 },
+      })
+    )
+    expect(handler).toHaveBeenCalledWith({ count: 6, messages: 3, changelog: 2, tickets: 1 })
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: ORIGIN,
+        data: { type: 'quackback:unread', count: 1, messages: 'x', changelog: -2, tickets: 1.5 },
+      })
+    )
+    expect(handler).toHaveBeenLastCalledWith({ count: 1, messages: 0, changelog: 0, tickets: 1 })
+    sdk.dispatch('destroy')
   })
 })
 

@@ -20,7 +20,15 @@ export type OutboundMessage =
   | { type: 'quackback:identify-result'; success: boolean; user?: unknown; error?: string }
   | { type: 'quackback:auth-change'; user: unknown }
   | { type: 'quackback:event'; name: string; payload: unknown }
-  | { type: 'quackback:unread'; count: number }
+  | {
+      type: 'quackback:unread'
+      count: number
+      messages?: number
+      changelog?: number
+      tickets?: number
+    }
+  | { type: 'quackback:reply-preview'; replyPreview: unknown }
+  | { type: 'quackback:title-alert'; text: string | null }
 
 export interface BridgeOptions {
   getIframe: () => HTMLIFrameElement | null

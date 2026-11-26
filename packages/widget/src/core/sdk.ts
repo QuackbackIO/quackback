@@ -19,6 +19,13 @@ import { fitToVisualViewport, keyboardShown } from './viewport'
 import { canRestoreFocus, openerWantsFocusMoved } from './focus'
 import { parseWhatsNew, type WhatsNew } from './whats-new-card'
 import { createWhatsNewMemory, type WhatsNewMemory } from './whats-new-memory'
+import { parseReplyPreview, type ReplyPreview } from './reply-preview-card'
+import {
+  createReplyPreviewMemory,
+  replyPreviewKeyPrefix,
+  type ReplyPreviewMemory,
+} from './reply-preview-memory'
+import { createTitleAlert, type TitleAlert } from './title-alert'
 
 type Command =
   | 'isOpen'
@@ -87,6 +94,10 @@ export function createSDK(): SDK {
   let unreadCount = 0
   // The frame's newest unread changelog entry, for the launcher's card.
   let whatsNew: WhatsNew | null = null
+  // The frame's newest unread replies, and the tab title text for them.
+  let replyPreview: ReplyPreview | null = null
+  let titleText: string | null = null
+  let titleAlert: TitleAlert | null = null
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
   // banner). Tracking runs only when both the host and the instance allow it.
@@ -192,14 +203,60 @@ export function createSDK(): SDK {
   function setVisitor(user: WidgetUser | null): void {
     const before = visitorScope()
     currentUser = user
-    if (visitorScope() !== before) whatsNew = null
+    if (visitorScope() !== before) {
+      whatsNew = null
+      replyPreview = null
+      titleText = null
+    }
     applyWhatsNew()
+    applyReplyPreview()
   }
   // A dismiss or open in another tab of the host page hides the card here.
   function onWhatsNewStorage(e: StorageEvent): void {
     if (!config) return
     if (e.key === null || e.key.startsWith(`quackback:whats-new:${iframeOrigin()}:`)) {
       applyWhatsNew()
+    }
+    if (e.key === null || e.key.startsWith(replyPreviewKeyPrefix(iframeOrigin()))) {
+      applyReplyPreview()
+    }
+  }
+
+  // A dismissed (or opened) reply preview stays away until a newer reply
+  // arrives, and the message event fires once per reply. Remembered per
+  // instance and per visitor, like the What's new card.
+  let replyMemory: ReplyPreviewMemory | null = null
+  function replies(): ReplyPreviewMemory {
+    return (replyMemory ??= createReplyPreviewMemory(iframeOrigin()))
+  }
+  function answerReplyPreview(data: ReplyPreview | null): void {
+    if (data)
+      replies().answer(
+        visitorScope(),
+        data.messages.map((m) => m.id)
+      )
+  }
+  /** The card, the message event and the tab title, from the frame's latest
+   *  payload. All wait while a new identity resolves. */
+  function applyReplyPreview(): void {
+    if (!config) return
+    const data = identityPending ? null : replyPreview
+    if (data) {
+      for (const m of data.messages) {
+        if (!replies().announce(visitorScope(), m.id)) continue
+        emitter.emit('message', {
+          conversationId: data.conversationId,
+          author: { name: data.author.name || data.teamName, avatarUrl: data.author.avatarUrl },
+          preview: m.text,
+        })
+      }
+    }
+    const newest = data?.messages[data.messages.length - 1]
+    const show = data && newest && !replies().isAnswered(visitorScope(), newest.id) ? data : null
+    launcher?.setReplyPreview(show)
+    if (titleText !== null || titleAlert) {
+      titleAlert ??= createTitleAlert()
+      titleAlert.set(identityPending ? null : titleText)
     }
   }
   function answerWhatsNew(entryId: string): void {
@@ -247,12 +304,33 @@ export function createSDK(): SDK {
       case 'quackback:unread': {
         // Total unread from the iframe → the launcher badge (shown only while
         // closed). Coerced defensively; a bad payload clears the badge.
+        const num = (v: unknown) => (typeof v === 'number' && v > 0 ? Math.floor(v) : 0)
         const count = typeof msg.count === 'number' ? msg.count : 0
         unreadCount = count
         launcher?.setUnread(count)
         // Also surface it to host SDK subscribers (Quackback.on('unread', ...))
-        // so a host can mirror the count in its own UI.
-        emitter.emit('unread', { count })
+        // so a host can mirror the count, or its parts, in its own UI.
+        emitter.emit('unread', {
+          count,
+          messages: num(msg.messages),
+          changelog: num(msg.changelog),
+          tickets: num(msg.tickets),
+        })
+        break
+      }
+      case 'quackback:reply-preview': {
+        // The newest unread replies, or null; a bad payload clears them.
+        replyPreview = parseReplyPreview(
+          (msg as { replyPreview?: unknown }).replyPreview,
+          iframeOrigin()
+        )
+        applyReplyPreview()
+        break
+      }
+      case 'quackback:title-alert': {
+        const text = (msg as { text?: unknown }).text
+        titleText = typeof text === 'string' && text.trim() ? text.trim().slice(0, 160) : null
+        applyReplyPreview()
         break
       }
       case 'quackback:whats-new': {
@@ -378,6 +456,7 @@ export function createSDK(): SDK {
     if (pending !== identityPending) {
       identityPending = pending
       applyWhatsNew()
+      applyReplyPreview()
     }
     if (ready && bridge) bridge.send('quackback:identify', data)
     else {
@@ -496,12 +575,30 @@ export function createSDK(): SDK {
           emitter.emit('whats-new', { count: data.count, entryId: data.entry.id })
         }
       },
+      onReplyOpen: (conversationId) => {
+        // Opening the conversation answers the card, as a dismiss does, and
+        // the visitor lands in its message box.
+        answerReplyPreview(replyPreview)
+        openingFromLauncher = true
+        try {
+          dispatch('open', { view: 'messages', conversationId })
+        } finally {
+          openingFromLauncher = false
+        }
+        applyReplyPreview()
+      },
+      onReplyDismiss: (data) => {
+        // Hidden until a newer reply; the badge stays, as nothing is read.
+        answerReplyPreview(data)
+        applyReplyPreview()
+      },
     })
     // A launcher created after init (showLauncher) catches up with the
     // server config, unread count, panel state and reveal it missed.
     if (serverConfig) applyLauncherConfig(serverConfig)
     if (unreadCount) launcher.setUnread(unreadCount)
     applyWhatsNew()
+    applyReplyPreview()
     if (panelOpen) launcher.setOpen(true)
     if (launcherRevealed) launcher.reveal()
     if (panel) launcher.el.setAttribute('aria-controls', panel.el.id)
@@ -618,12 +715,14 @@ export function createSDK(): SDK {
           postId?: string
           articleId?: string
           entryId?: string
+          conversationId?: string
         }
         emitter.emit('open', {
           view: ctx.view,
           postId: ctx.postId,
           articleId: ctx.articleId,
           entryId: ctx.entryId,
+          conversationId: ctx.conversationId,
         })
         return
       }
@@ -718,6 +817,11 @@ export function createSDK(): SDK {
         unreadCount = 0
         whatsNew = null
         whatsNewMemory = null
+        replyPreview = null
+        replyMemory = null
+        titleText = null
+        titleAlert?.destroy()
+        titleAlert = null
         identityPending = false
         sentIdentityKey = null
         resolvedIdentityKey = null
