@@ -8,12 +8,13 @@ import type {
 } from '../types'
 import { createEmitter } from './events'
 import { createBridge, type Bridge } from './postmessage'
+import { measureSafeArea, NO_SAFE_AREA } from './safe-area'
 import { createLauncher, type LauncherHandle } from './launcher'
 import { createPanel, type PanelHandle } from './panel'
 import { fetchServerConfig, type ServerConfig } from './config'
 import { createTracker, type Tracker } from './tracker'
 import { clearDeviceId, getOrCreateDeviceId } from './device'
-import { removeStyles } from './style'
+import { FULL_SCREEN_MEDIA, removeStyles } from './style'
 
 type Command =
   | 'init'
@@ -74,6 +75,23 @@ export function createSDK(): SDK {
 
   function sendMobileState(): void {
     if (ready && bridge) bridge.send('quackback:mobile', !!mobileMql?.matches)
+    sendSafeArea()
+  }
+
+  // Where the panel fills the screen (FULL_SCREEN_MEDIA), its edges meet the
+  // host page's notch, cutouts and system bars. The frame cannot read those
+  // insets itself; send them while the panel is open, and again whenever
+  // they change (a rotation). Measuring forces a layout, so a closed panel
+  // skips it. The floating panel never touches the screen edge (its CSS
+  // offsets already move it in by the insets), so the frame gets zeros.
+  let lastSafeArea = ''
+  function sendSafeArea(): void {
+    if (!ready || !bridge || !panelOpen) return
+    const insets = mobileMql?.matches ? measureSafeArea() : NO_SAFE_AREA
+    const key = `${insets.top}:${insets.bottom}:${insets.left}:${insets.right}`
+    if (key === lastSafeArea) return
+    lastSafeArea = key
+    bridge.send('quackback:safe-area', insets)
   }
 
   // Closing only hides the panel, so the frame and any open conversation stay
@@ -81,6 +99,21 @@ export function createSDK(): SDK {
   // the panel is closed stays unread until the visitor opens it again.
   function sendShownState(): void {
     if (ready && bridge) bridge.send('quackback:shown', panelOpen)
+  }
+
+  // A resize arrives in bursts (a rotation, a toolbar sliding away): measure
+  // at most once per frame, and only while the panel is open.
+  let safeAreaFrame = 0
+  function scheduleSafeArea(): void {
+    if (!panelOpen || safeAreaFrame) return
+    safeAreaFrame = requestAnimationFrame(() => {
+      safeAreaFrame = 0
+      sendSafeArea()
+    })
+  }
+  function cancelSafeArea(): void {
+    if (safeAreaFrame) cancelAnimationFrame(safeAreaFrame)
+    safeAreaFrame = 0
   }
 
   function iframeOrigin(): string {
@@ -102,11 +135,15 @@ export function createSDK(): SDK {
           bridge!.send('quackback:device', pendingDevice)
           pendingDevice = null
         }
+        // A frame that (re)loads starts with no insets: send them (when the
+        // panel is open) before a queued open, so its view renders with them.
+        lastSafeArea = ''
+        sendMobileState()
         if (pendingOpen) {
           bridge!.send('quackback:open', pendingOpen)
           pendingOpen = null
         }
-        sendMobileState()
+        // Say the panel is shown only after the queued open has navigated.
         sendShownState()
         emitter.emit('ready', {})
         break
@@ -214,9 +251,14 @@ export function createSDK(): SDK {
       origin: iframeOrigin(),
     })
     bridge.onMessage(onIframeMessage)
-    mobileMql = window.matchMedia('(max-width: 639px)')
+    mobileMql = window.matchMedia(FULL_SCREEN_MEDIA)
     mobileMql.addEventListener('change', sendMobileState)
-    mobileCleanup = () => mobileMql!.removeEventListener('change', sendMobileState)
+    window.addEventListener('resize', scheduleSafeArea)
+    mobileCleanup = () => {
+      mobileMql!.removeEventListener('change', sendMobileState)
+      window.removeEventListener('resize', scheduleSafeArea)
+      cancelSafeArea()
+    }
     return panel
   }
 
@@ -376,14 +418,18 @@ export function createSDK(): SDK {
       case 'open': {
         if (!config) return // open before init is a no-op, matching close/hide
         const opts = (a as OpenOptions) ?? {}
+        // The idle preload may not have fired yet — create the panel now.
+        const opened = ensurePanel()
+        panelOpen = true
+        // The insets reach the frame before the view it opens and before the
+        // panel shows.
+        sendSafeArea()
         // Navigate first, then say the panel is shown: a view the closed panel
         // was left on must not count as seen on its way out.
         if (ready && bridge) bridge.send('quackback:open', opts)
         else pendingOpen = opts
-        panelOpen = true
         sendShownState()
-        // The idle preload may not have fired yet — create the panel now.
-        ensurePanel().show()
+        opened.show()
         launcher?.setOpen(true)
         const ctx = opts as {
           view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
@@ -404,6 +450,7 @@ export function createSDK(): SDK {
         launcher?.setOpen(false)
         panelOpen = false
         sendShownState()
+        cancelSafeArea()
         emitter.emit('close', {})
         return
       case 'showLauncher':
@@ -451,6 +498,7 @@ export function createSDK(): SDK {
         mobileCleanup?.()
         mobileCleanup = null
         mobileMql = null
+        lastSafeArea = ''
         removeStyles()
         panel = null
         launcher = null

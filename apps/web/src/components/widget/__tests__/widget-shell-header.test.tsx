@@ -94,3 +94,24 @@ describe('WidgetShell header', () => {
     expect(document.querySelectorAll('.size-7').length).toBe(0)
   })
 })
+
+describe('WidgetShell edges', () => {
+  it('keeps the header clear of the status bar, from the host page or its own', () => {
+    const { container } = renderHome()
+    const spacer = (container.firstElementChild as HTMLElement).querySelector('[aria-hidden]')
+    expect(spacer?.classList).toContain(
+      'h-[max(env(safe-area-inset-top,0px),var(--qb-safe-top,0px))]'
+    )
+  })
+
+  it('keeps the header, content and tab bar clear of a side cutout', () => {
+    const { container } = renderHome()
+    const shell = container.firstElementChild as HTMLElement
+    expect(shell.classList).toContain(
+      'pl-[max(env(safe-area-inset-left,0px),var(--qb-safe-left,0px))]'
+    )
+    expect(shell.classList).toContain(
+      'pr-[max(env(safe-area-inset-right,0px),var(--qb-safe-right,0px))]'
+    )
+  })
+})

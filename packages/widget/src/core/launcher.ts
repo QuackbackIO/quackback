@@ -58,6 +58,12 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   let localDismissed = false
   const contained = Boolean(opts.root)
   const edge = contained ? '0px' : '24px'
+  // On a page that draws under the notch and system bars (viewport-fit=cover),
+  // keep the button and its bubble clear of them; env() is 0px elsewhere.
+  const sideEdge = (s: 'left' | 'right') =>
+    contained ? edge : `calc(${edge} + env(safe-area-inset-${s}, 0px))`
+  const bottomEdge = (px: number, containedPx: number) =>
+    contained ? `${containedPx}px` : `calc(${px}px + env(safe-area-inset-bottom, 0px))`
   const GREETING_DISMISS_KEY = 'quackback:launcher-greeting-dismissed'
   const greetingDismissed = (): boolean => {
     if (contained) return localDismissed
@@ -71,8 +77,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const btn = document.createElement('button')
   Object.assign(btn.style, {
     position: contained ? 'absolute' : 'fixed',
-    bottom: contained ? '0px' : '24px',
-    [opts.placement === 'left' ? 'left' : 'right']: edge,
+    bottom: bottomEdge(24, 0),
+    [opts.placement === 'left' ? 'left' : 'right']: sideEdge(
+      opts.placement === 'left' ? 'left' : 'right'
+    ),
     zIndex: '2147483647',
     display: 'flex',
     alignItems: 'center',
@@ -183,8 +191,8 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const bubble = document.createElement('div')
   Object.assign(bubble.style, {
     position: contained ? 'absolute' : 'fixed',
-    bottom: '84px',
-    [side]: edge,
+    bottom: bottomEdge(84, 84),
+    [side]: sideEdge(side),
     zIndex: '2147483646',
     display: 'none',
     alignItems: 'center',
@@ -303,10 +311,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       if (!isOpen) btn.setAttribute('aria-label', labelText || 'Open feedback widget')
     },
     setPlacement(side) {
-      btn.style.left = side === 'left' ? edge : ''
-      btn.style.right = side === 'right' ? edge : ''
-      bubble.style.left = side === 'left' ? edge : ''
-      bubble.style.right = side === 'right' ? edge : ''
+      btn.style.left = side === 'left' ? sideEdge('left') : ''
+      btn.style.right = side === 'right' ? sideEdge('right') : ''
+      bubble.style.left = side === 'left' ? sideEdge('left') : ''
+      bubble.style.right = side === 'right' ? sideEdge('right') : ''
     },
     reveal() {
       btn.style.opacity = '1'

@@ -182,8 +182,8 @@ describe('browser-queue', () => {
 
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
     const styles = document.getElementById('quackback-widget-styles')?.textContent ?? ''
-    expect(styles).toContain('left:24px')
-    expect(styles).not.toContain('right:24px')
+    expect(styles).toContain('left:calc(24px + env(safe-area-inset-left,0px))')
+    expect(styles).not.toContain('right:calc(24px')
   })
 
   it('end-to-end: a post-load init({launcher:false, placement:"left"}) reconfigures the DOM', async () => {
@@ -204,8 +204,8 @@ describe('browser-queue', () => {
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
     expect(document.querySelector('.quackback-panel')).not.toBeNull()
     const styles = document.getElementById('quackback-widget-styles')?.textContent ?? ''
-    expect(styles).toContain('left:24px')
-    expect(styles).not.toContain('right:24px')
+    expect(styles).toContain('left:calc(24px + env(safe-area-inset-left,0px))')
+    expect(styles).not.toContain('right:calc(24px')
   })
 
   it('does not auto-init if the queue already contains an init call', async () => {

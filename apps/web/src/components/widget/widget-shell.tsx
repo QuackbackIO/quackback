@@ -248,10 +248,21 @@ export function WidgetShell({
   }, [canPortalHandoff, portalOrigin])
 
   return (
-    <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden">
+    // A full-screen panel can meet a side cutout. A frame reads
+    // env(safe-area-inset-*) as zero; the host page's side insets arrive as
+    // --qb-safe-left and --qb-safe-right, so the header, content and tab bar
+    // stay clear of it. Loaded as the top page, env() applies directly.
+    <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden pl-[max(env(safe-area-inset-left,0px),var(--qb-safe-left,0px))] pr-[max(env(safe-area-inset-right,0px),var(--qb-safe-right,0px))]">
       {/* The Home hero backdrop fills the panel behind the header row and
           body; the header/content render transparently over it. */}
       {backdrop}
+      {/* Keep the header out from under the notch or status bar: the host
+          page's (see widget-host-safe-area), or the widget's own when it is
+          the top page, as in an app's web view. */}
+      <div
+        aria-hidden
+        className="relative z-10 shrink-0 h-[max(env(safe-area-inset-top,0px),var(--qb-safe-top,0px))]"
+      />
       <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
         {/* Left: back button on detail views; workspace logo on Home. min-w-0 so
             header content (presence copy) truncates instead of pushing the
@@ -366,7 +377,12 @@ export function WidgetShell({
       {/* Bottom tab bar + footer — solid so the hero backdrop never bleeds through. */}
       <div
         className="relative z-10 border-t border-border/40 shrink-0 bg-background"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        // A frame reads env(safe-area-inset-bottom) as zero; the host page's
+        // inset arrives as --qb-safe-bottom, so the tab bar and footer clear
+        // a home indicator or an edge-to-edge system bar.
+        style={{
+          paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--qb-safe-bottom, 0px))',
+        }}
       >
         {tabBar.mounted && (
           <div

@@ -84,7 +84,7 @@ describe('sdk', () => {
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]'
     ) as HTMLButtonElement
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
     expect(btn.style.right).toBe('')
   })
 
@@ -490,9 +490,12 @@ describe('sdk', () => {
     fireFrom(origin, 'quackback:ready')
     postMessage.mockClear()
     sdk.dispatch('open', { view: 'messages' })
+    // The safe-area insets go first (see the safe-area tests); this checks
+    // only that the view navigates before the panel says it is shown.
     const types = postMessage.mock.calls
       .filter(([, to]) => to === origin)
       .map(([msg]) => (msg as { type: string }).type)
+      .filter((type) => type !== 'quackback:safe-area')
     expect(types).toEqual(['quackback:open', 'quackback:shown'])
     sdk.dispatch('destroy')
     spy.mockRestore()
@@ -557,7 +560,7 @@ describe('sdk server-driven launcher config', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'right' })
     const btn = document.querySelector('button[aria-label="Chat with us"]') as HTMLButtonElement
     expect(btn).not.toBeNull()
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
     expect(btn.style.right).toBe('')
     expect(btn.textContent).toContain('Chat with us')
   })
@@ -576,7 +579,7 @@ describe('sdk server-driven launcher config', () => {
     await new Promise((r) => setTimeout(r, 0))
     const btn = document.querySelector('button[aria-label="Feedback"]') as HTMLButtonElement
     expect(btn).not.toBeNull()
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
   })
 
   it('no server position keeps the init placement', () => {
@@ -587,6 +590,241 @@ describe('sdk server-driven launcher config', () => {
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]'
     ) as HTMLButtonElement
-    expect(btn.style.left).toBe('24px')
+    expect(btn.style.left).toBe('calc(24px + env(safe-area-inset-left, 0px))')
+  })
+})
+
+describe('sdk on phones', () => {
+  const origin = 'https://safe-area.example.com'
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    document.head.innerHTML = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
+    )
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: () => void) => {
+        cb()
+        return 1
+      })
+    )
+    vi.stubGlobal('cancelIdleCallback', vi.fn())
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function phone(matches: boolean) {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    )
+  }
+
+  // The host page's safe-area insets (a home indicator, an edge-to-edge
+  // navigation bar). The frame cannot read them, so the SDK measures them.
+  // Returns how many times it measured.
+  function hostInsets(top: string, bottom: string, left = '0px', right = '0px') {
+    const real = window.getComputedStyle.bind(window)
+    let measured = 0
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
+      if ((el as HTMLElement).dataset?.quackbackSafeArea === undefined) return real(el)
+      measured++
+      return {
+        paddingTop: top,
+        paddingBottom: bottom,
+        paddingLeft: left,
+        paddingRight: right,
+      } as CSSStyleDeclaration
+    })
+    return () => measured
+  }
+
+  // Animation frames run only when the test flushes them.
+  function manualFrames() {
+    let queue: FrameRequestCallback[] = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => queue.push(cb))
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    return () => {
+      const run = queue
+      queue = []
+      for (const cb of run) cb(0)
+    }
+  }
+
+  function frameWindow() {
+    const postMessage = vi.fn()
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage,
+    } as unknown as Window)
+    return postMessage
+  }
+
+  function frameReady() {
+    window.dispatchEvent(new MessageEvent('message', { origin, data: { type: 'quackback:ready' } }))
+  }
+
+  function sentSafeAreas(postMessage: ReturnType<typeof vi.fn>) {
+    return postMessage.mock.calls
+      .filter(
+        ([msg, to]) => to === origin && (msg as { type: string }).type === 'quackback:safe-area'
+      )
+      .map(([msg]) => (msg as { data: unknown }).data)
+  }
+
+  it('sizes the full-screen panel to the visible viewport, not the largest one', () => {
+    phone(true)
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    const css = document.getElementById('quackback-widget-styles')?.textContent ?? ''
+    const phoneRules = css.slice(css.indexOf('@media(max-width:639px)'))
+    expect(phoneRules).toContain('height:100dvh')
+    sdk.dispatch('destroy')
+  })
+
+  it('decides full screen by the same media query as the panel stylesheet', () => {
+    const queries: string[] = []
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => {
+        queries.push(query)
+        return { matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }
+      })
+    )
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    const css = document.getElementById('quackback-widget-styles')?.textContent ?? ''
+    const fullScreen = queries.filter((q) => !q.includes('prefers-reduced-motion'))
+    expect(fullScreen.length).toBeGreaterThan(0)
+    for (const query of fullScreen) expect(css).toContain(`@media${query}{`)
+    sdk.dispatch('destroy')
+  })
+
+  it('sends the insets before an open queued until the frame was ready', () => {
+    phone(true)
+    hostInsets('47px', '34px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    sdk.dispatch('open', { view: 'messages' })
+    frameReady()
+    const types = postMessage.mock.calls
+      .map(([msg]) => (msg as { type: string }).type)
+      .filter((t) => t === 'quackback:safe-area' || t === 'quackback:open')
+    expect(types).toEqual(['quackback:safe-area', 'quackback:open'])
+    sdk.dispatch('destroy')
+  })
+
+  it('measures nothing while the panel is closed', () => {
+    phone(true)
+    const measured = hostInsets('47px', '34px')
+    const flush = manualFrames()
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    window.dispatchEvent(new Event('resize'))
+    flush()
+    expect(measured()).toBe(0)
+    expect(sentSafeAreas(postMessage)).toEqual([])
+    sdk.dispatch('destroy')
+  })
+
+  it('tells the frame the host page insets before the open panel shows', () => {
+    phone(true)
+    hostInsets('47px', '34px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    let shownWhenSent: boolean | null = null
+    postMessage.mockImplementation((msg: { type: string }) => {
+      if (msg.type !== 'quackback:safe-area') return
+      const panel = document.querySelector('.quackback-panel')
+      shownWhenSent = !!panel?.classList.contains('quackback-open')
+    })
+    sdk.dispatch('open')
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34, left: 0, right: 0 }])
+    expect(shownWhenSent).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('sends the insets when a frame loads behind an open panel', () => {
+    phone(true)
+    hostInsets('47px', '34px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    sdk.dispatch('open')
+    expect(sentSafeAreas(postMessage)).toEqual([])
+    frameReady()
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 47, bottom: 34, left: 0, right: 0 }])
+    sdk.dispatch('destroy')
+  })
+
+  it('measures a rotation once per frame while open, and sends only a change', () => {
+    phone(true)
+    const opened = hostInsets('47px', '34px')
+    const flush = manualFrames()
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    sdk.dispatch('open')
+    expect(opened()).toBe(1)
+
+    // A rotation fires a burst of resizes; one measurement per frame.
+    const rotated = hostInsets('0px', '21px')
+    window.dispatchEvent(new Event('resize'))
+    window.dispatchEvent(new Event('resize'))
+    expect(rotated()).toBe(0)
+    flush()
+    expect(rotated()).toBe(1)
+    window.dispatchEvent(new Event('resize'))
+    flush()
+    expect(sentSafeAreas(postMessage)).toEqual([
+      { top: 47, bottom: 34, left: 0, right: 0 },
+      { top: 0, bottom: 21, left: 0, right: 0 },
+    ])
+
+    // Closed again, resizes cost nothing.
+    sdk.dispatch('close')
+    window.dispatchEvent(new Event('resize'))
+    flush()
+    expect(rotated()).toBe(2)
+    sdk.dispatch('destroy')
+  })
+
+  it('tells the frame the side insets the full-screen panel meets', () => {
+    phone(true)
+    hostInsets('0px', '21px', '47px', '0px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    sdk.dispatch('open')
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 21, left: 47, right: 0 }])
+    sdk.dispatch('destroy')
+  })
+
+  // The floating panel never touches the screen edge: its CSS offsets
+  // already move it in by the side and bottom insets.
+  it('sends no insets for the floating panel', () => {
+    phone(false)
+    const measured = hostInsets('47px', '34px')
+    const postMessage = frameWindow()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    frameReady()
+    sdk.dispatch('open')
+    expect(sentSafeAreas(postMessage)).toEqual([{ top: 0, bottom: 0, left: 0, right: 0 }])
+    expect(measured()).toBe(0)
+    sdk.dispatch('destroy')
   })
 })
