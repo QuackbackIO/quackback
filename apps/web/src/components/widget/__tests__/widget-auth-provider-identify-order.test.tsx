@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { installInMemoryLocalStorage } from '@/test/local-storage'
-import { clearWidgetToken, getWidgetToken } from '@/lib/client/widget-auth'
+import { clearWidgetToken, getWidgetToken, setWidgetToken } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 
 installInMemoryLocalStorage()
@@ -123,4 +123,34 @@ describe('WidgetAuthProvider: the latest identify wins', () => {
     await waitFor(() => expect(screen.getByTestId('probe').textContent).toBe('b'))
     expect(identifyResults().map((m) => m.user?.id ?? null)).toEqual(['b'])
   })
+
+  it('a failed identify signs out whoever was signed in before', async () => {
+    const settle = deferredIdentify()
+    renderWidget()
+    postFromHost({ ssoToken: 'a' })
+    await act(async () => settle.a(signedIn('a')))
+    expect(getWidgetToken()).toBe('token-a')
+
+    postFromHost({ ssoToken: 'b' })
+    await act(async () =>
+      settle.b({ ok: false, json: async () => ({ error: { code: 'TOKEN_EXPIRED' } }) })
+    )
+
+    expect(getWidgetToken()).toBeNull()
+    expect(screen.getByTestId('probe').textContent).toBe('anonymous')
+    expect(identifyResults().at(-1)).toMatchObject({ success: false, error: 'TOKEN_EXPIRED' })
+  })
+
+  it("a failed identify keeps an anonymous visitor's session", async () => {
+    const settle = deferredIdentify()
+    renderWidget()
+    // An anonymous session the visitor already has (minted on a first vote).
+    setWidgetToken('anonymous-token')
+    postFromHost({ ssoToken: 'b' })
+    await act(async () => settle.b({ ok: false, json: async () => ({}) }))
+
+    expect(getWidgetToken()).toBe('anonymous-token')
+    expect(identifyResults().at(-1)).toMatchObject({ success: false, error: 'SERVER_ERROR' })
+  })
+
 })

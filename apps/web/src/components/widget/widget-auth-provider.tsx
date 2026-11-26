@@ -444,11 +444,7 @@ export function WidgetAuthProvider({
         if (!response.ok) {
           const err = await response.json().catch(() => ({ error: { code: 'NETWORK_ERROR' } }))
           if (!isCurrent()) return
-          sendToHost({
-            type: 'quackback:identify-result',
-            success: false,
-            error: err.error?.code || 'SERVER_ERROR',
-          })
+          failIdentify(err.error?.code || 'SERVER_ERROR')
           return
         }
 
@@ -457,7 +453,7 @@ export function WidgetAuthProvider({
         applyIdentifyResult(result)
       } catch {
         if (!isCurrent()) return
-        sendToHost({ type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' })
+        failIdentify('NETWORK_ERROR')
       } finally {
         // Resolved only once the round trip settles: between the message and
         // the response `user` is still null, and consumers must not read that
@@ -465,6 +461,19 @@ export function WidgetAuthProvider({
         // leaves that to the identify that replaced it.
         if (isCurrent()) setIdentityResolved(true)
       }
+    }
+
+    // The host asked for a person the frame could not sign in. Whoever was
+    // signed in before is no longer who the host says is there (the SDK now
+    // reports nobody), so the frame stops acting as them too.
+    function failIdentify(error: string) {
+      if (userRef.current !== null) {
+        dropSession()
+        setUser(null)
+        setCanPortalHandoff(true)
+        sendToHost({ type: 'quackback:auth-change', user: null })
+      }
+      sendToHost({ type: 'quackback:identify-result', success: false, error })
     }
 
     // Drop the current session and start a new session version, so every
