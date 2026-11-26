@@ -95,7 +95,7 @@ export type OpenOptions =
   | { view: 'changelog'; entryId?: string }
   | { view: 'help'; query?: string }
   | { view: 'chat' }
-  | { view: 'messages' }
+  | { view: 'messages'; conversationId?: string }
   | { view: 'tickets' }
   | { postId: string }
   | { articleId: string }
@@ -118,6 +118,7 @@ export interface EventMap {
     postId?: string
     articleId?: string
     entryId?: string
+    conversationId?: string
   }
   close: Record<string, never>
   'post:created': {
@@ -139,11 +140,31 @@ export interface EventMap {
   /** Total unread across the visitor's conversations changed. Lets a host page
    *  mirror the count in its own UI (e.g. a nav badge), same value that drives
    *  the launcher badge. */
-  unread: { count: number }
+  unread: {
+    count: number
+    /** Unread replies across the visitor's conversations. */
+    messages: number
+    /** Unread changelog entries. */
+    changelog: number
+    /** Tickets whose stage moved since the visitor last looked. */
+    tickets: number
+  }
   /** The "What's new" card appeared above the closed launcher for the newest
    *  unread changelog entry. Fires once per entry for each visitor: the host
    *  page remembers which entries it announced, per instance. */
   'whats-new': { count: number; entryId: string }
+  /** A new unread reply from a teammate or the AI assistant, in any of the
+   *  visitor's conversations. Fires once per reply for each visitor,
+   *  whichever way the workspace shows replies (including the badge only),
+   *  for the 20 newest unread replies at each check: the host page remembers
+   *  which replies it reported, per instance. Replies already unread the
+   *  first time a visitor loads the widget on a device are not reported. */
+  message: {
+    conversationId: string
+    author: { name: string; avatarUrl: string | null }
+    /** The reply as plain text. */
+    preview: string
+  }
 }
 
 export type EventName = keyof EventMap

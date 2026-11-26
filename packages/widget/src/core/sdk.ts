@@ -19,6 +19,13 @@ import { fitToVisualViewport, keyboardShown } from './viewport'
 import { canRestoreFocus, openerWantsFocusMoved } from './focus'
 import { parseWhatsNew, type WhatsNew } from './whats-new-card'
 import { createWhatsNewMemory, type WhatsNewMemory } from './whats-new-memory'
+import { createReplyPreviewCard, parseReplyPreview, type ReplyPreview } from './reply-preview-card'
+import {
+  createReplyPreviewMemory,
+  replyPreviewKeyPrefix,
+  type ReplyPreviewMemory,
+} from './reply-preview-memory'
+import { createTitleAlert, type TitleAlert } from './title-alert'
 
 type Command =
   | 'isOpen'
@@ -87,6 +94,17 @@ export function createSDK(): SDK {
   let unreadCount = 0
   // The frame's newest unread changelog entry, for the launcher's card.
   let whatsNew: WhatsNew | null = null
+  // The frame's newest unread replies, and the tab title flash for them.
+  let replyPreview: ReplyPreview | null = null
+  let titleAlert: TitleAlert | null = null
+  // The newest reply the visitor has had the page visible for: the title
+  // flashes only for a newer one.
+  let titleSeenId: string | null = null
+  // Whether the frame has sent replies for the current visitor yet.
+  let replyPayloadReceived = false
+  function onVisibility(): void {
+    if (document.visibilityState === 'visible' && replyPreview) applyReplyPreview()
+  }
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
   // banner). Tracking runs only when both the host and the instance allow it.
@@ -192,14 +210,85 @@ export function createSDK(): SDK {
   function setVisitor(user: WidgetUser | null): void {
     const before = visitorScope()
     currentUser = user
-    if (visitorScope() !== before) whatsNew = null
+    if (visitorScope() !== before) {
+      whatsNew = null
+      replyPreview = null
+      replyPayloadReceived = false
+    }
     applyWhatsNew()
+    applyReplyPreview()
   }
   // A dismiss or open in another tab of the host page hides the card here.
   function onWhatsNewStorage(e: StorageEvent): void {
     if (!config) return
     if (e.key === null || e.key.startsWith(`quackback:whats-new:${iframeOrigin()}:`)) {
       applyWhatsNew()
+    }
+    if (e.key === null || e.key.startsWith(replyPreviewKeyPrefix(iframeOrigin()))) {
+      applyReplyPreview()
+    }
+  }
+
+  // A dismissed (or opened) reply preview stays away until a newer reply
+  // arrives, and the message event fires once per reply. Remembered per
+  // instance and per visitor, like the What's new card.
+  let replyMemory: ReplyPreviewMemory | null = null
+  function replies(): ReplyPreviewMemory {
+    return (replyMemory ??= createReplyPreviewMemory(iframeOrigin()))
+  }
+  function answerReplyPreview(data: ReplyPreview | null): void {
+    if (data)
+      replies().answer(
+        visitorScope(),
+        data.messages.map((m) => m.id)
+      )
+  }
+  /** The message event, the card and the tab title, from the frame's latest
+   *  payload. The event fires whatever the card setting; the card shows only
+   *  when the payload asks for it. All wait while a new identity resolves. */
+  function applyReplyPreview(): void {
+    if (!config) return
+    const data = identityPending ? null : replyPreview
+    // Every new reply, in any conversation; an older frame sends only the
+    // card's replies.
+    const reported = !data
+      ? []
+      : data.recent.length
+        ? data.recent
+        : data.messages.map((m) => ({
+            id: m.id,
+            conversationId: data.conversationId,
+            author: { name: data.author.name, avatarUrl: data.author.avatarUrl },
+            text: m.text,
+          }))
+    // The first payload for a visitor new to this device records what is
+    // already unread without reporting it: the event covers replies that
+    // arrive while the page is open, or since the last visit here.
+    if (!identityPending && replyPayloadReceived && !replies().known(visitorScope())) {
+      replies().learn(
+        visitorScope(),
+        reported.map((m) => m.id)
+      )
+    } else if (data) {
+      for (const m of reported) {
+        if (!replies().announce(visitorScope(), m.id)) continue
+        emitter.emit('message', {
+          conversationId: m.conversationId,
+          author: { name: m.author.name || data.teamName, avatarUrl: m.author.avatarUrl },
+          preview: m.text,
+        })
+      }
+    }
+    // The newest reply: the card's, or the newest reported one.
+    const newest = data?.messages[data.messages.length - 1] ?? reported[reported.length - 1]
+    const unanswered = !!newest && !replies().isAnswered(visitorScope(), newest.id)
+    launcher?.setReplyPreview(data?.card && unanswered ? data : null)
+    // A visible page has shown the newest reply: no flash for it later.
+    if (newest && document.visibilityState === 'visible') titleSeenId = newest.id
+    const title = unanswered && newest.id !== titleSeenId ? (data?.title ?? null) : null
+    if (title !== null || titleAlert) {
+      titleAlert ??= createTitleAlert()
+      titleAlert.set(title)
     }
   }
   function answerWhatsNew(entryId: string): void {
@@ -247,12 +336,28 @@ export function createSDK(): SDK {
       case 'quackback:unread': {
         // Total unread from the iframe → the launcher badge (shown only while
         // closed). Coerced defensively; a bad payload clears the badge.
+        const num = (v: unknown) => (typeof v === 'number' && v > 0 ? Math.floor(v) : 0)
         const count = typeof msg.count === 'number' ? msg.count : 0
         unreadCount = count
         launcher?.setUnread(count)
         // Also surface it to host SDK subscribers (Quackback.on('unread', ...))
-        // so a host can mirror the count in its own UI.
-        emitter.emit('unread', { count })
+        // so a host can mirror the count, or its parts, in its own UI.
+        emitter.emit('unread', {
+          count,
+          messages: num(msg.messages),
+          changelog: num(msg.changelog),
+          tickets: num(msg.tickets),
+        })
+        break
+      }
+      case 'quackback:reply-preview': {
+        // The newest unread replies, or null; a bad payload clears them.
+        replyPreview = parseReplyPreview(
+          (msg as { replyPreview?: unknown }).replyPreview,
+          iframeOrigin()
+        )
+        replyPayloadReceived = true
+        applyReplyPreview()
         break
       }
       case 'quackback:whats-new': {
@@ -378,6 +483,7 @@ export function createSDK(): SDK {
     if (pending !== identityPending) {
       identityPending = pending
       applyWhatsNew()
+      applyReplyPreview()
     }
     if (ready && bridge) bridge.send('quackback:identify', data)
     else {
@@ -496,12 +602,31 @@ export function createSDK(): SDK {
           emitter.emit('whats-new', { count: data.count, entryId: data.entry.id })
         }
       },
+      replyCard: createReplyPreviewCard,
+      onReplyOpen: (conversationId) => {
+        // Opening the conversation answers the card, as a dismiss does, and
+        // the visitor lands in its message box.
+        answerReplyPreview(replyPreview)
+        openingFromLauncher = true
+        try {
+          dispatch('open', { view: 'messages', conversationId })
+        } finally {
+          openingFromLauncher = false
+        }
+        applyReplyPreview()
+      },
+      onReplyDismiss: (data) => {
+        // Hidden until a newer reply; the badge stays, as nothing is read.
+        answerReplyPreview(data)
+        applyReplyPreview()
+      },
     })
     // A launcher created after init (showLauncher) catches up with the
     // server config, unread count, panel state and reveal it missed.
     if (serverConfig) applyLauncherConfig(serverConfig)
     if (unreadCount) launcher.setUnread(unreadCount)
     applyWhatsNew()
+    applyReplyPreview()
     if (panelOpen) launcher.setOpen(true)
     if (launcherRevealed) launcher.reveal()
     if (panel) launcher.el.setAttribute('aria-controls', panel.el.id)
@@ -522,6 +647,7 @@ export function createSDK(): SDK {
         if (next.tracking !== undefined) hostTracking = next.tracking
         placement = next.placement ?? 'right'
         window.addEventListener('storage', onWhatsNewStorage)
+        document.addEventListener('visibilitychange', onVisibility)
         createLauncherIfNeeded()
         // Preload the hidden panel iframe off the host page's critical path:
         // init typically runs while the host is still loading, and the iframe
@@ -618,12 +744,14 @@ export function createSDK(): SDK {
           postId?: string
           articleId?: string
           entryId?: string
+          conversationId?: string
         }
         emitter.emit('open', {
           view: ctx.view,
           postId: ctx.postId,
           articleId: ctx.articleId,
           entryId: ctx.entryId,
+          conversationId: ctx.conversationId,
         })
         return
       }
@@ -718,10 +846,17 @@ export function createSDK(): SDK {
         unreadCount = 0
         whatsNew = null
         whatsNewMemory = null
+        replyPreview = null
+        replyMemory = null
+        titleAlert?.destroy()
+        titleAlert = null
         identityPending = false
         sentIdentityKey = null
         resolvedIdentityKey = null
         window.removeEventListener('storage', onWhatsNewStorage)
+        document.removeEventListener('visibilitychange', onVisibility)
+        titleSeenId = null
+        replyPayloadReceived = false
         placement = 'right'
         config = null
         return

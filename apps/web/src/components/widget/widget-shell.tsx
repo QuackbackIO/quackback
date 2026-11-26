@@ -21,9 +21,10 @@ import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-
 import { widgetGetUserStatsFn } from '@/lib/server/functions/widget/user'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
-import { useMessengerUnread, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
+import { useMessengerUnreadState, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
 import { useWhatsNewAnnouncement } from './whats-new'
+import { useReplyPreviewAnnouncement, useUnreadReplies, type ReplyAlerts } from './reply-preview'
 import { useTicketStageBadge } from './use-ticket-stage-badge'
 import { hasOpenSuggestionPopup } from '@/components/ui/suggestion-popup-marker'
 
@@ -111,6 +112,10 @@ interface WidgetShellProps {
   /** The workspace announces unread changelog entries in a card above the
    *  closed launcher. */
   announceUpdates?: boolean
+  /** How an unread reply shows above the closed launcher. */
+  replyAlerts?: ReplyAlerts
+  /** Flash the reply in the host page's tab title while it is hidden. */
+  titleAlerts?: boolean
   /** Self-hosted always shows the badge. Cloud hides it only after purchase. */
   showPoweredBy?: boolean
   children: ReactNode
@@ -131,6 +136,8 @@ export function WidgetShell({
   panelExpanded = false,
   expandControl,
   announceUpdates = false,
+  replyAlerts = 'preview',
+  titleAlerts = false,
   showPoweredBy = true,
   children,
 }: WidgetShellProps) {
@@ -146,7 +153,11 @@ export function WidgetShell({
   const showTabBar = tabsToShow.length > 1 && !hideTabBar
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
-  const messengerUnreadTotal = useMessengerUnread(enabledTabs.messages ?? false)
+  const messagesOn = enabledTabs.messages ?? false
+  const { total: messengerUnreadTotal, newestReplyId: newestUnreadReplyId } = useMessengerUnreadState(
+    messagesOn,
+    { background: messagesOn && titleAlerts }
+  )
   useRefreshSummaryOnUnreadChange(messengerUnreadTotal, homeEnabled(enabledTabs))
   const messengerUnread = messengerUnreadTotal ?? 0
   // Newly published changelog entries badge the launcher until the visitor
@@ -167,6 +178,13 @@ export function WidgetShell({
     more: moreChangelog,
     session: sessionVersion,
   })
+  // The newest unread replies reach the host for its message event, and for
+  // the reply preview and the tab title as the workspace chooses.
+  const unreadReplies = useUnreadReplies(messagesOn, messengerUnread, newestUnreadReplyId)
+  useReplyPreviewAnnouncement(
+    { enabled: messagesOn, replyAlerts, titleAlerts },
+    { ...unreadReplies, session: sessionVersion }
+  )
   // Mirror the combined total to the host so the floating launcher shows the
   // same badge while the widget is closed (the iframe keeps polling even when
   // hidden).
@@ -174,6 +192,9 @@ export function WidgetShell({
     sendToHost({
       type: 'quackback:unread',
       count: messengerUnread + changelogUnread + ticketStageUnread,
+      messages: messengerUnread,
+      changelog: changelogUnread,
+      tickets: ticketStageUnread,
     })
   }, [messengerUnread, changelogUnread, ticketStageUnread])
   // When the bar was hidden for an EXPANDED view, its return waits for the

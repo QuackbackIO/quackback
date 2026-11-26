@@ -61,7 +61,7 @@ vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: hoisted.resolvePortalAccess,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
-  countVisitorUnreadMessages: hoisted.countVisitorUnread,
+  summarizeVisitorUnreadReplies: hoisted.countVisitorUnread,
 }))
 
 import { getMessengerUnreadFn } from '../conversation'
@@ -73,36 +73,56 @@ beforeEach(() => {
   hoisted.getOptionalAuth.mockResolvedValue({ principal: { id: 'principal_v', role: 'user' } })
   hoisted.isTeamMember.mockReturnValue(false)
   hoisted.resolvePortalAccess.mockResolvedValue({ granted: true })
-  hoisted.countVisitorUnread.mockResolvedValue(4)
+  hoisted.countVisitorUnread.mockResolvedValue({ count: 4, newestId: 'conversation_msg_9' })
 })
 
 describe('getMessengerUnreadFn', () => {
   it('returns 0 when conversations are disabled (never counts)', async () => {
     hoisted.isConversationsEnabled.mockResolvedValue(false)
-    expect(await getMessengerUnreadFn()).toEqual({ conversations: 0, total: 0 })
+    expect(await getMessengerUnreadFn()).toEqual({
+      conversations: 0,
+      total: 0,
+      newestReplyId: null,
+    })
     expect(hoisted.countVisitorUnread).not.toHaveBeenCalled()
   })
 
   it('returns 0 when the caller is unauthenticated', async () => {
     hoisted.getOptionalAuth.mockResolvedValue(null)
-    expect(await getMessengerUnreadFn()).toEqual({ conversations: 0, total: 0 })
+    expect(await getMessengerUnreadFn()).toEqual({
+      conversations: 0,
+      total: 0,
+      newestReplyId: null,
+    })
     expect(hoisted.countVisitorUnread).not.toHaveBeenCalled()
   })
 
   it('counts for a team member without a portal check', async () => {
     hoisted.isTeamMember.mockReturnValue(true)
-    expect(await getMessengerUnreadFn()).toEqual({ conversations: 4, total: 4 })
+    expect(await getMessengerUnreadFn()).toEqual({
+      conversations: 4,
+      total: 4,
+      newestReplyId: 'conversation_msg_9',
+    })
     expect(hoisted.resolvePortalAccess).not.toHaveBeenCalled()
     expect(hoisted.countVisitorUnread).toHaveBeenCalledWith('principal_v')
   })
 
   it('counts for a portal-authorized visitor', async () => {
-    expect(await getMessengerUnreadFn()).toEqual({ conversations: 4, total: 4 })
+    expect(await getMessengerUnreadFn()).toEqual({
+      conversations: 4,
+      total: 4,
+      newestReplyId: 'conversation_msg_9',
+    })
   })
 
   it('returns 0 for a non-team caller without portal access', async () => {
     hoisted.resolvePortalAccess.mockResolvedValue({ granted: false })
-    expect(await getMessengerUnreadFn()).toEqual({ conversations: 0, total: 0 })
+    expect(await getMessengerUnreadFn()).toEqual({
+      conversations: 0,
+      total: 0,
+      newestReplyId: null,
+    })
     expect(hoisted.countVisitorUnread).not.toHaveBeenCalled()
   })
 })

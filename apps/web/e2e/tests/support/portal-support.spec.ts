@@ -322,11 +322,17 @@ test.describe('portal support: the list', () => {
       await api.reply(conversation.id, `${marker} reply one`)
       await api.note(conversation.id, `${marker} a note`)
       await api.assign(conversation.id, people.people.agentB.principalId)
-      await api.reply(conversation.id, `${marker} reply two`)
+      const replyTwo = await api.reply(conversation.id, `${marker} reply two`)
 
       const context = await portalContext(browser, customer)
       const unread = await portalFn(context.request, 'getMessengerUnreadFn')
-      expect(unread.value).toEqual({ conversations: 2, total: 2 })
+      // The newest unread reply rides along, so the widget can tell a new
+      // reply from a read one when the total stays the same.
+      expect(unread.value).toEqual({
+        conversations: 2,
+        total: 2,
+        newestReplyId: replyTwo.data.id,
+      })
       const page = await context.newPage()
       await page.goto('/support')
       const row = page.getByRole('link', { name: new RegExp(`${marker} reply two|${opening}`) })

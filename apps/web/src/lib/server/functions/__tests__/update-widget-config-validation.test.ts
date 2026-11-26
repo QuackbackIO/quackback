@@ -68,3 +68,29 @@ describe('updateWidgetConfigFn launcher announcement', () => {
     expect(state.updateWidgetConfig).not.toHaveBeenCalled()
   })
 })
+
+describe('updateWidgetConfigFn reply alerts', () => {
+  it('saves the reply alert style and the tab title switch under the messenger', async () => {
+    await updateWidgetConfigFn({ data: { messenger: { replyAlerts: 'full', titleAlerts: true } } })
+    expect(state.updateWidgetConfig).toHaveBeenCalledWith({
+      messenger: { replyAlerts: 'full', titleAlerts: true },
+    })
+  })
+
+  it('accepts each reply alert style', async () => {
+    for (const replyAlerts of ['badge', 'preview', 'full'] as const) {
+      await updateWidgetConfigFn({ data: { messenger: { replyAlerts } } })
+      expect(state.updateWidgetConfig).toHaveBeenLastCalledWith({ messenger: { replyAlerts } })
+    }
+  })
+
+  it('refuses an unknown style or a non-boolean switch without saving', async () => {
+    await expect(
+      updateWidgetConfigFn({ data: { messenger: { replyAlerts: 'loud' } } as never })
+    ).rejects.toThrow()
+    await expect(
+      updateWidgetConfigFn({ data: { messenger: { titleAlerts: 'yes' } } as never })
+    ).rejects.toThrow()
+    expect(state.updateWidgetConfig).not.toHaveBeenCalled()
+  })
+})

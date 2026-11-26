@@ -1,6 +1,6 @@
 import { useRouter, useHydrated, Link, Outlet, useChildMatches } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import { useState, useTransition, useMemo } from 'react'
+import { lazy, Suspense, useState, useTransition, useMemo } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useTheme } from 'next-themes'
 import { SparklesIcon, TrashIcon, ArrowRightIcon, PhotoIcon } from '@heroicons/react/24/solid'
@@ -46,6 +46,14 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useAdminBoards } from '@/lib/client/hooks/use-admin-catalogues'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+
+// Its own chunk: the install page renders inside this module's gate and
+// never shows the card.
+const ReplyAlertsCard = lazy(() =>
+  import('@/components/admin/settings/widget/reply-alerts-card').then((m) => ({
+    default: m.ReplyAlertsCard,
+  }))
+)
 
 export function WidgetSettingsGate() {
   const childMatches = useChildMatches()
@@ -115,6 +123,12 @@ function WidgetSettingsPage() {
             launcherGreeting={launcherGreeting}
             onGreetingChange={setLauncherGreeting}
           />
+
+          {supportInboxFlagEnabled && (
+            <Suspense fallback={null}>
+              <ReplyAlertsCard config={config} />
+            </Suspense>
+          )}
 
           <VisitorTrackingCard config={config} />
 

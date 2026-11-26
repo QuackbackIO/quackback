@@ -12,21 +12,47 @@ import { fetchConversationSummary } from './use-messenger-summary'
  * badge — the aggregate the per-thread `unreadCount` can't give a single badge.
  * Re-keyed on sessionVersion (Bearer identify swaps the actor). Pass
  * `enabled=false` (e.g. messenger off) to skip the fetch. Polls on a modest
- * interval so a reply surfaces on this surface even without a live stream.
+ * interval so a reply surfaces on this surface even without a live stream,
+ * and reads again the moment the page is visible again. `background` keeps
+ * the poll going while the page is hidden, for the tab title flash.
  * Undefined until the first count arrives.
  */
-export function useMessengerUnread(enabled: boolean): number | undefined {
+export function useMessengerUnread(
+  enabled: boolean,
+  opts: { background?: boolean } = {}
+): number | undefined {
+  return useMessengerUnreadState(enabled, opts).total
+}
+
+/** The total (undefined until the first read), and the newest unread reply's
+ *  id: a new reply changes it even when a read elsewhere keeps the total the
+ *  same. */
+export function useMessengerUnreadState(
+  enabled: boolean,
+  opts: { background?: boolean } = {}
+): { total: number | undefined; newestReplyId: string | null } {
   const { sessionVersion } = useWidgetAuth()
-  const { data } = useQuery({
+  const { data, refetch } = useQuery({
     queryKey: conversationKeys.widgetMessengerUnread(sessionVersion),
     queryFn: () => widgetGetMessengerUnreadFn({ headers: getWidgetAuthHeaders() }),
     enabled,
     staleTime: 15_000,
     refetchInterval: 30_000,
+    refetchIntervalInBackground: opts.background === true,
     refetchOnMount: 'always',
     retry: false,
   })
-  return data?.total
+  // The frame's visibility follows the host page's tab: a visitor coming
+  // back sees replies that arrived meanwhile without waiting for the poll.
+  useEffect(() => {
+    if (!enabled) return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refetch()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [enabled, refetch])
+  return { total: data?.total, newestReplyId: data?.newestReplyId ?? null }
 }
 
 /**
