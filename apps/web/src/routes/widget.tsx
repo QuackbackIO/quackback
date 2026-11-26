@@ -12,6 +12,7 @@ import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { Button } from '@/components/ui/button'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
+import { useReseedOnPortalRefusal } from '@/components/widget/use-reseed-on-portal-refusal'
 import { isTeamMember } from '@/lib/shared/roles'
 import { shouldReusePortalSession } from '@/lib/shared/widget/portal-session-reuse'
 
@@ -188,6 +189,7 @@ function WidgetLayout() {
   // load the chosen family on demand instead of shipping every self-hosted
   // family's @font-face rules to every embedded widget.
   useBrandingFont(customCss, configFontSans)
+  useReseedOnPortalRefusal(portalSessionToken)
 
   return (
     <WidgetAuthProvider
