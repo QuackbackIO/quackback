@@ -44,22 +44,24 @@ export function ConversationTeamHeader({
   const faces = team.slice(0, 3)
   return (
     // min-w-0 down the chain: a flex item defaults to min-width:auto and
-    // would grow past its container instead of letting `truncate` ellipsize.
+    // would grow past its container instead of letting text truncate or wrap.
     <div className={cn('flex min-w-0 items-center gap-2.5', className)}>
       {faces.length > 0 && <TeamFacepile faces={faces} ringClassName={ringClassName} />}
       <div className="min-w-0">
         {teamName && (
           <p className="truncate text-sm font-semibold leading-tight text-foreground">{teamName}</p>
         )}
-        <p className="flex min-w-0 items-center gap-1.5 text-[11px] leading-tight text-muted-foreground">
+        <p className="flex min-w-0 items-start gap-1.5 text-[11px] leading-tight text-muted-foreground">
           <span
             className={cn(
-              'size-1.5 shrink-0 rounded-full',
+              // Centred on the first line: (13.75px line - 6px dot) / 2.
+              'mt-1 size-1.5 shrink-0 rounded-full',
               available ? 'bg-emerald-500' : 'bg-muted-foreground/40'
             )}
             aria-hidden
           />
-          <span data-slot="team-status" className="min-w-0 truncate">
+          {/* Wraps to a second line rather than cutting off the reply promise. */}
+          <span data-slot="team-status" className="min-w-0 line-clamp-2">
             {available ? (
               <FormattedMessage
                 id="widget.messenger.header.onlineNow"

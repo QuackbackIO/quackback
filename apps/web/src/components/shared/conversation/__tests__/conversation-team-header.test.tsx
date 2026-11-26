@@ -63,6 +63,14 @@ describe('ConversationTeamHeader', () => {
     expect(container.querySelector('[data-slot="avatar"]')).toBeNull()
   })
 
+  it('wraps the status line to two lines instead of cutting off the reply promise', () => {
+    const { container } = renderHeader({ replyTime: 'hours' })
+    const line = container.querySelector<HTMLElement>('[data-slot="team-status"]')!
+    expect(line.className).not.toContain('truncate')
+    expect(line.className).toContain('line-clamp-2')
+    expect(line.textContent).toBe("Typically replies in a few hours · We'll reply here")
+  })
+
   it('says online now while the team is available', () => {
     const { container } = renderHeader({ available: true, replyTime: 'day' })
     expect(statusLine(container)).toBe('Online now')
