@@ -76,6 +76,13 @@ export function createSDK(): SDK {
     if (ready && bridge) bridge.send('quackback:mobile', !!mobileMql?.matches)
   }
 
+  // Closing only hides the panel, so the frame and any open conversation stay
+  // live. Tell the frame whether it is shown, so a reply that arrives while
+  // the panel is closed stays unread until the visitor opens it again.
+  function sendShownState(): void {
+    if (ready && bridge) bridge.send('quackback:shown', panelOpen)
+  }
+
   function iframeOrigin(): string {
     return new URL(config!.instanceUrl).origin
   }
@@ -100,6 +107,7 @@ export function createSDK(): SDK {
           pendingOpen = null
         }
         sendMobileState()
+        sendShownState()
         emitter.emit('ready', {})
         break
       case 'quackback:close':
@@ -357,6 +365,7 @@ export function createSDK(): SDK {
         panel?.hide()
         launcher?.setOpen(false)
         panelOpen = false
+        sendShownState()
         currentUser = null
         if (ready && bridge) bridge.send('quackback:identify', null as unknown as undefined)
         else {
@@ -367,12 +376,15 @@ export function createSDK(): SDK {
       case 'open': {
         if (!config) return // open before init is a no-op, matching close/hide
         const opts = (a as OpenOptions) ?? {}
+        // Navigate first, then say the panel is shown: a view the closed panel
+        // was left on must not count as seen on its way out.
         if (ready && bridge) bridge.send('quackback:open', opts)
         else pendingOpen = opts
+        panelOpen = true
+        sendShownState()
         // The idle preload may not have fired yet — create the panel now.
         ensurePanel().show()
         launcher?.setOpen(true)
-        panelOpen = true
         const ctx = opts as {
           view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
           postId?: string
@@ -391,6 +403,7 @@ export function createSDK(): SDK {
         panel?.hide()
         launcher?.setOpen(false)
         panelOpen = false
+        sendShownState()
         emitter.emit('close', {})
         return
       case 'showLauncher':

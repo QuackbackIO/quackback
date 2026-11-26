@@ -6,6 +6,7 @@ export type InboundMessage =
   | { type: 'quackback:open'; data?: unknown }
   | { type: 'quackback:locale'; data: string }
   | { type: 'quackback:mobile'; data: boolean }
+  | { type: 'quackback:shown'; data: boolean }
 
 export type OutboundMessage =
   | { type: 'quackback:ready' }

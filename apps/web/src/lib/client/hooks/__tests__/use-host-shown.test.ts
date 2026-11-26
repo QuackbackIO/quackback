@@ -33,3 +33,11 @@ it('ignores anyone but the host page and malformed messages', () => {
   send({ type: HOST_SHOWN_MESSAGE, shown: 'no' }, window.parent)
   expect(result.current).toBe(true)
 })
+
+it('understands the embed script, which sends the state as data', () => {
+  const { result } = renderHook(() => useHostShown())
+  send({ type: HOST_SHOWN_MESSAGE, data: false }, window.parent)
+  expect(result.current).toBe(false)
+  send({ type: HOST_SHOWN_MESSAGE, data: true }, window.parent)
+  expect(result.current).toBe(true)
+})

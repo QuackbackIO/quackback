@@ -12,6 +12,13 @@ function stubIframe() {
   return { postMessage, spy }
 }
 
+// The last open command and the origin it was sent to.
+function lastOpen(postMessage: ReturnType<typeof vi.fn>) {
+  return postMessage.mock.calls
+    .filter(([msg]) => (msg as { type: string }).type === 'quackback:open')
+    .at(-1)
+}
+
 function fireReady() {
   window.dispatchEvent(
     new MessageEvent('message', {
@@ -227,13 +234,13 @@ describe('sdk', () => {
       body: 'steps',
       board: 'bug-reports',
     })
-    expect(postMessage).toHaveBeenLastCalledWith(
+    expect(lastOpen(postMessage)).toEqual([
       {
         type: 'quackback:open',
         data: { view: 'new-post', title: 'Bug:', body: 'steps', board: 'bug-reports' },
       },
-      ORIGIN
-    )
+      ORIGIN,
+    ])
     spy.mockRestore()
   })
 
@@ -243,15 +250,15 @@ describe('sdk', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     fireReady()
     sdk.dispatch('open', { view: 'messages' })
-    expect(postMessage).toHaveBeenLastCalledWith(
+    expect(lastOpen(postMessage)).toEqual([
       { type: 'quackback:open', data: { view: 'messages' } },
-      ORIGIN
-    )
+      ORIGIN,
+    ])
     sdk.dispatch('open', { view: 'tickets' })
-    expect(postMessage).toHaveBeenLastCalledWith(
+    expect(lastOpen(postMessage)).toEqual([
       { type: 'quackback:open', data: { view: 'tickets' } },
-      ORIGIN
-    )
+      ORIGIN,
+    ])
     spy.mockRestore()
   })
 
@@ -439,6 +446,68 @@ describe('sdk', () => {
     sdk.dispatch('destroy')
     expect(document.querySelector('iframe.quackback-widget-iframe')).toBeNull()
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+  })
+
+  // Earlier tests leave their SDKs listening for ORIGIN, so these use origins
+  // of their own to count only their own messages.
+  function shownStates(postMessage: ReturnType<typeof vi.fn>, origin: string) {
+    return postMessage.mock.calls
+      .filter(([msg, to]) => to === origin && (msg as { type: string }).type === 'quackback:shown')
+      .map(([msg]) => (msg as { data: unknown }).data)
+  }
+
+  function fireFrom(origin: string, type: string) {
+    window.dispatchEvent(new MessageEvent('message', { origin, data: { type } }))
+  }
+
+  it('tells the frame whether it is shown, so a closed panel leaves new replies unread', () => {
+    const origin = 'https://shown-1.example.com'
+    const { postMessage, spy } = stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+
+    // The preloaded panel starts hidden.
+    fireFrom(origin, 'quackback:ready')
+    expect(shownStates(postMessage, origin)).toEqual([false])
+
+    sdk.dispatch('open')
+    sdk.dispatch('close')
+    sdk.dispatch('open')
+    // The frame's own close button closes the panel too.
+    fireFrom(origin, 'quackback:close')
+    sdk.dispatch('open')
+    sdk.dispatch('logout')
+    expect(shownStates(postMessage, origin)).toEqual([false, true, false, true, false, true, false])
+    sdk.dispatch('destroy')
+    spy.mockRestore()
+  })
+
+  it('navigates before saying the panel is shown, so the view it was closed on stays unseen', () => {
+    const origin = 'https://shown-3.example.com'
+    const { postMessage, spy } = stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    fireFrom(origin, 'quackback:ready')
+    postMessage.mockClear()
+    sdk.dispatch('open', { view: 'messages' })
+    const types = postMessage.mock.calls
+      .filter(([, to]) => to === origin)
+      .map(([msg]) => (msg as { type: string }).type)
+    expect(types).toEqual(['quackback:open', 'quackback:shown'])
+    sdk.dispatch('destroy')
+    spy.mockRestore()
+  })
+
+  it('a panel opened before the frame was ready is shown once it is', () => {
+    const origin = 'https://shown-2.example.com'
+    const { postMessage, spy } = stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: origin })
+    sdk.dispatch('open')
+    fireFrom(origin, 'quackback:ready')
+    expect(shownStates(postMessage, origin)).toEqual([true])
+    sdk.dispatch('destroy')
+    spy.mockRestore()
   })
 
   it('an iframe unread count drives the launcher badge and unread subscribers', () => {

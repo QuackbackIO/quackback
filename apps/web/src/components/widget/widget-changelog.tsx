@@ -11,6 +11,7 @@ import {
 } from './widget-changelog-query'
 import { useWidgetAuth } from './widget-auth-provider'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import { getChangelogSeenAt, markChangelogSeen } from './changelog-unread'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
 import type { ChangelogCategoryId } from '@quackback/ids'
@@ -83,10 +84,14 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   // the first entry carries the max publishedAt. Under a restored category
   // filter a newer entry from another category is not on screen, so it must
   // keep its badge (the marker only ever moves forward, so this is safe).
+  // A closed widget keeps this list mounted but nobody is reading it: an entry
+  // published meanwhile keeps its badge until the panel is shown again.
+  const hostShown = useHostShown()
   useEffect(() => {
+    if (!hostShown) return
     const newest = entries[0]?.publishedAt
     if (newest) markChangelogSeen(newest)
-  }, [entries])
+  }, [entries, hostShown])
 
   const sentinelRef = useInfiniteScroll({
     hasMore: hasNextPage ?? false,
