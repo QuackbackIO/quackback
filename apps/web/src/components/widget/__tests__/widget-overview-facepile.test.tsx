@@ -57,8 +57,9 @@ describe('WidgetOverview ask-a-question facepile', () => {
     const { container } = renderOverview()
     const faces = Array.from(container.querySelectorAll<HTMLElement>('[data-slot="avatar"]'))
     const stack = faces[0].parentElement!
-    expect(stack.className).toContain('-space-x-1')
-    expect(stack.className).not.toMatch(/-space-x-(?!1\b)/)
+    // -space-x-0.5 (2px) or -space-x-1 (4px), and no wider overlap.
+    expect(stack.className).toMatch(/(^|\s)-space-x-(0\.5|1)(\s|$)/)
+    expect(stack.className).not.toMatch(/-space-x-(?!(0\.5|1)(\s|$))/)
     for (const face of faces) {
       expect(face.className).toContain('ring-2')
       expect(face.className).toContain('ring-card')

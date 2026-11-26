@@ -21,7 +21,10 @@ import {
   type CsatSubmitOutcome,
   BlockReplyTimeCaption,
 } from './block-affordance'
-import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
+import { BackAtTime, hasBackAtTime } from './back-at-time'
+import { ConversationTeamHeader } from './conversation-team-header'
+import type { TeamFace } from './team-facepile'
+import type { ReplyTime } from '@/lib/shared/widget/reply-time'
 import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
@@ -87,6 +90,7 @@ const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-dig
 
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
+const NO_TEAM: TeamFace[] = []
 const EMPTY_MESSAGES: ConversationMessageDTO[] = []
 
 /**
@@ -177,6 +181,11 @@ export interface VisitorConversationThreadProps {
   /** Team availability (online agents / office hours), owned by the surface so
    *  every sibling view shares one poll. */
   presence: VisitorConversationThreadPresence
+  /** Teammates shown beside the team name in the built-in header. */
+  team?: TeamFace[]
+  /** The messenger's usual reply time as the surface knows it, so the header
+   *  words it right before the thread loads; a loaded value takes over. */
+  replyTime?: ReplyTime
   /** Live agent activity observed on the stream (message/typing) — lets the
    *  surface mark agents present in its own presence cache. */
   onAgentActivity?: () => void
@@ -187,7 +196,7 @@ export interface VisitorConversationThreadProps {
   }
   /** How embedded post cards open. The widget's iframe opens a new tab. */
   embedOpenMode?: EmbedOpenMode
-  /** Render the built-in header row (assistant identity / presence strip).
+  /** Render the built-in header row (assistant identity / team header).
    *  The widget passes false — its shell shows the same content in the top
    *  bar beside the back button, keeping one header row like the reference
    *  messengers. The portal keeps the built-in row. */
@@ -196,7 +205,7 @@ export interface VisitorConversationThreadProps {
   onConversationStarted?: (id: ConversationId) => void
   /** Notified with whether a reply can reach this visitor by email: false
    *  until the thread loads, then the server's verdict. A surface that draws
-   *  its own presence badge (the widget's header, with `showHeader` false)
+   *  its own team header (the widget's, with `showHeader` false)
    *  words its away copy from it. */
   onReplyByEmailChange?: (canReplyByEmail: boolean) => void
   /** Notified with the email a visitor gives in the in-thread ticket form,
@@ -278,7 +287,7 @@ const SNAPSHOT_EVENT_KINDS: ReadonlySet<ConversationStreamEvent['kind']> = new S
 /**
  * The visitor side of a conversation: virtualized thread, live SSE updates,
  * composer (rich text + file attachments + emoji), pre-chat email capture,
- * presence strip, offline hints, and the post-conversation CSAT prompt.
+ * team header, offline hints, and the post-conversation CSAT prompt.
  *
  * Shared by the widget messenger tab and the portal Support tab — every
  * surface-specific dependency (auth headers, session minting, presence,
@@ -295,6 +304,8 @@ export function VisitorConversationThread({
   currentUser,
   uploadFile,
   presence,
+  team = NO_TEAM,
+  replyTime: surfaceReplyTime,
   onAgentActivity,
   helpSearch,
   embedOpenMode = 'newTab',
@@ -327,6 +338,10 @@ export function VisitorConversationThread({
   // no header card — a plain chat is completely untouched by ticket-ness.
   const [linkedTicket, setLinkedTicket] = useState<RequesterTicketDTO | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
+  // The messenger's usual reply time (header line + reply-time caption): the
+  // thread load's value, else the surface's.
+  const [loadedReplyTime, setLoadedReplyTime] = useState<ReplyTime | undefined>(undefined)
+  const replyTime = loadedReplyTime ?? surfaceReplyTime
   // AI-assistant display identity (fronts new conversations); null when disabled.
   const [assistant, setAssistant] = useState<{
     name: string
@@ -504,6 +519,7 @@ export function VisitorConversationThread({
         setWelcomeMessage(res.welcomeMessage)
         setOfflineMessage(res.offlineMessage)
         setTeamName(res.teamName)
+        setLoadedReplyTime(res.replyTime)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
         setTicketFormAsksEmail(res.ticketFormAsksEmail)
@@ -1172,7 +1188,13 @@ export function VisitorConversationThread({
         // chat bubble — localized client-side from `block.status` (the
         // stored `content` is only the English transcript/email fallback).
         if (block?.kind === 'replyTime') {
-          return <BlockReplyTimeCaption status={block.status} />
+          return (
+            <BlockReplyTimeCaption
+              status={block.status}
+              replyTime={block.replyTime}
+              liveReplyTime={replyTime}
+            />
+          )
         }
         const bubble = (
           <VisitorMessageBubble
@@ -1389,7 +1411,7 @@ export function VisitorConversationThread({
       {/* Header: with the assistant enabled the thread is always fronted by its
           identity — the AI is always available, so no availability promise is
           made at any point (matching the AI-first messenger model). Without an
-          assistant, the classic live presence strip shows. */}
+          assistant, the team header shows who replies and when. */}
       {showHeader && assistant ? (
         <div className="flex items-center gap-2.5 px-4 py-2 border-b border-border/40 shrink-0">
           <Avatar src={assistant.avatarUrl} name={assistant.name} className="size-7 text-xs" />
@@ -1405,7 +1427,15 @@ export function VisitorConversationThread({
         </div>
       ) : showHeader ? (
         <div className="flex items-center px-4 py-2 border-b border-border/40 shrink-0">
-          <ConversationPresenceBadge available={available} canReplyByEmail={canEmailReply} />
+          <ConversationTeamHeader
+            team={team}
+            teamName={teamName}
+            available={available}
+            replyTime={replyTime}
+            canReplyByEmail={canEmailReply}
+            nextOpenAt={presence.nextOpenAt}
+            ringClassName="ring-card"
+          />
         </div>
       ) : null}
 
@@ -1502,7 +1532,8 @@ export function VisitorConversationThread({
               />
             )}
           </p>
-          {hasBackAtTime(presence.nextOpenAt) && (
+          {/* The built-in team header already says when the team is back. */}
+          {!showHeader && hasBackAtTime(presence.nextOpenAt) && (
             <p className="mt-0.5">
               <FormattedMessage
                 id="widget.messenger.offline.backAt"

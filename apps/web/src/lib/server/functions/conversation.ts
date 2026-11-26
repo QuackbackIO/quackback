@@ -452,6 +452,7 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   const { getMessengerConfig, getWidgetConfig } =
     await import('@/lib/server/domains/settings/settings.widget')
   const { supportTeamName } = await import('@/lib/shared/support-contact-name')
+  const { resolveReplyTime } = await import('@/lib/shared/widget/reply-time')
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
   const { getSettings } = await import('./workspace')
@@ -485,6 +486,9 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     // when no team name is set. The same name stands in for an API key's
     // messages (principal-display.ts).
     teamName: supportTeamName(messengerConfig.teamName, appSettings?.name),
+    // How quickly the team usually replies: the thread header and the
+    // reply-time caption word their expectation from it.
+    replyTime: resolveReplyTime(messengerConfig.replyTime),
     // AI-assistant display identity: fronts new conversations (greeting
     // author + thread header) when enabled. Identity only — replies still
     // come from the team until the integrated agent lands.

@@ -54,7 +54,8 @@ import {
   useConversationPresence,
 } from '@/components/widget/use-messenger-presence'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
-import { ConversationPresenceBadge } from '@/components/shared/conversation/conversation-presence-badge'
+import { ConversationTeamHeader } from '@/components/shared/conversation/conversation-team-header'
+import { resolveReplyTime } from '@/lib/shared/widget/reply-time'
 import { Avatar } from '@/components/ui/avatar'
 import {
   WidgetArticleSkeleton,
@@ -311,6 +312,8 @@ export const Route = createFileRoute('/widget/')({
       // Team label for widget surfaces (changelog header, messages fallback):
       // the configured messenger team name, else the workspace name.
       teamName: settings?.publicWidgetConfig?.messenger?.teamName || settings?.name || null,
+      // How quickly the team usually replies (the messenger header's away line).
+      replyTime: resolveReplyTime(settings?.publicWidgetConfig?.messenger?.replyTime),
       // Teammate avatars for the Home header cluster (empty when disabled).
       team,
       // AI-assistant display identity — fronts unassigned conversations in the
@@ -438,6 +441,7 @@ function WidgetPage() {
     logoUrl,
     topArticles,
     teamName,
+    replyTime,
     assistant,
     team,
     messengerEnabled,
@@ -920,7 +924,7 @@ function WidgetPage() {
 
   // Messenger thread header lives in the SHELL's top bar (single header row):
   // the assistant identity when enabled — always available, no presence — or
-  // the live presence badge for assistant-less workspaces.
+  // the team (faces, name, live status line) for assistant-less workspaces.
   const presence = useConversationPresence(messengerEnabled && !assistant)
   const messengerHeader =
     view === 'messenger' ? (
@@ -940,16 +944,18 @@ function WidgetPage() {
           </div>
         </div>
       ) : (
-        <div className="min-w-0 ps-1">
-          <ConversationPresenceBadge
-            available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
-            canReplyByEmail={canReplyByEmail}
-            // When office hours are configured, the badge tells the visitor up
-            // front when the team is back; the thread body only says so once
-            // they have typed.
-            nextOpenAt={presence.nextOpenAt}
-          />
-        </div>
+        <ConversationTeamHeader
+          className="ps-1"
+          team={team}
+          teamName={teamName}
+          available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
+          replyTime={replyTime}
+          canReplyByEmail={canReplyByEmail}
+          // When office hours are configured, the header tells the visitor up
+          // front when the team is back; the thread body only says so once
+          // they have typed.
+          nextOpenAt={presence.nextOpenAt}
+        />
       )
     ) : undefined
 
