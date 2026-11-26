@@ -43,6 +43,20 @@ export type WidgetOpenCommand =
   | { type: 'messages' }
   | { type: 'home' }
 
+/**
+ * Whether the messenger puts the cursor in its composer on mount: a new
+ * thread, or the conversation an open asked to focus. Never on a phone-sized
+ * host, where the keyboard would cover the thread.
+ */
+export function autofocusesComposer(
+  target: string | null | undefined,
+  hostIsMobile: boolean,
+  focusConversationId: string | undefined
+): boolean {
+  if (hostIsMobile || !target) return false
+  return target === 'new' || target === focusConversationId
+}
+
 /** A conversation TypeID from an open payload, or undefined. */
 function conversationRef(value: unknown): string | undefined {
   return typeof value === 'string' && /^conversation_[0-9a-z]{1,64}$/.test(value)

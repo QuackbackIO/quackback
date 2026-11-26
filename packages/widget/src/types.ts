@@ -153,10 +153,11 @@ export interface EventMap {
    *  unread changelog entry. Fires once per entry for each visitor: the host
    *  page remembers which entries it announced, per instance. */
   'whats-new': { count: number; entryId: string }
-  /** A new unread reply from a teammate or the AI assistant. Fires once per
-   *  reply for each visitor, whichever way the workspace shows replies
-   *  (including the badge only): the host page remembers which replies it
-   *  reported, per instance. */
+  /** A new unread reply from a teammate or the AI assistant, in any of the
+   *  visitor's conversations. Fires once per reply for each visitor,
+   *  whichever way the workspace shows replies (including the badge only),
+   *  for the 20 newest unread replies at each check: the host page remembers
+   *  which replies it reported, per instance. */
   message: {
     conversationId: string
     author: { name: string; avatarUrl: string | null }

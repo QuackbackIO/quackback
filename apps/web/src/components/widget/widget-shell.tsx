@@ -21,7 +21,7 @@ import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-
 import { widgetGetUserStatsFn } from '@/lib/server/functions/widget/user'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
-import { useMessengerUnread, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
+import { useMessengerUnreadState, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
 import { useWhatsNewAnnouncement } from './whats-new'
 import { useReplyPreviewAnnouncement, useUnreadReplies, type ReplyAlerts } from './reply-preview'
@@ -154,9 +154,10 @@ export function WidgetShell({
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
   const messagesOn = enabledTabs.messages ?? false
-  const messengerUnreadTotal = useMessengerUnread(messagesOn, {
-    background: messagesOn && titleAlerts,
-  })
+  const { total: messengerUnreadTotal, updatedAt: messengerUnreadAt } = useMessengerUnreadState(
+    messagesOn,
+    { background: messagesOn && titleAlerts }
+  )
   useRefreshSummaryOnUnreadChange(messengerUnreadTotal, homeEnabled(enabledTabs))
   const messengerUnread = messengerUnreadTotal ?? 0
   // Newly published changelog entries badge the launcher until the visitor
@@ -179,7 +180,7 @@ export function WidgetShell({
   })
   // The newest unread replies reach the host for its message event, and for
   // the reply preview and the tab title as the workspace chooses.
-  const unreadReplies = useUnreadReplies(messagesOn, messengerUnread)
+  const unreadReplies = useUnreadReplies(messagesOn, messengerUnread, messengerUnreadAt)
   useReplyPreviewAnnouncement(
     { enabled: messagesOn, replyAlerts, titleAlerts },
     { ...unreadReplies, session: sessionVersion }

@@ -29,6 +29,13 @@ export interface UnreadReplies {
   teamName: string | null
   count: number
   messages: Array<{ id: string; text: string; createdAt: string }>
+  /** Every conversation's newest unread replies, for the host's message event. */
+  recent: Array<{
+    id: string
+    conversationId: string
+    author: { name: string | null; avatarUrl: string | null }
+    text: string
+  }>
 }
 
 export interface ReplyPreviewPayload {
@@ -36,6 +43,14 @@ export interface ReplyPreviewPayload {
   author: { name: string; firstName: string; avatarUrl: string | null }
   teamName: string
   messages: Array<{ id: string; text: string; createdAt: string }>
+  /** Every new unread reply across the visitor's conversations, oldest first,
+   *  each with its author: the SDK reports each one once. */
+  recent: Array<{
+    id: string
+    conversationId: string
+    author: { name: string; avatarUrl: string | null }
+    text: string
+  }>
   count: number
   /** Show the card above the launcher; off with the badge only. */
   card: boolean
@@ -104,6 +119,15 @@ export function buildReplyPreview(
       text: !m.text ? attachment : full ? m.text : excerptAtWord(m.text, PREVIEW_LENGTH),
       createdAt: m.createdAt,
     })),
+    recent: data.recent.map((m) => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      author: {
+        name: m.author.name?.trim() || names.team,
+        avatarUrl: absoluteUrl(m.author.avatarUrl),
+      },
+      text: m.text || attachment,
+    })),
     count: data.count,
     card: settings.replyAlerts !== 'badge',
     full,
@@ -135,20 +159,23 @@ export function buildReplyPreview(
 
 /**
  * The visitor's newest unread replies, read while `enabled` and something is
- * unread. Re-read whenever the unread count changes; the previous answer
- * stays while the next loads, within one widget session.
+ * unread. Read again after every unread poll (`unreadAt`), not only when the
+ * total changes: a read in one conversation and a new reply in another can
+ * leave the total as it was. The previous answer stays while the next loads,
+ * within one widget session.
  */
 export function useUnreadReplies(
   enabled: boolean,
-  unread: number
+  unread: number,
+  unreadAt: number
 ): { ready: boolean; data: UnreadReplies | null } {
   const { sessionVersion } = useWidgetAuth()
   const active = enabled && unread > 0
   const { data } = useQuery({
-    queryKey: [...conversationKeys.widgetReplyPreview(sessionVersion), unread] as const,
+    queryKey: [...conversationKeys.widgetReplyPreview(sessionVersion), unreadAt] as const,
     queryFn: () => widgetGetReplyPreviewFn({ headers: getWidgetAuthHeaders() }),
     enabled: active,
-    // Keyed on the count, so a count seen before must not serve old replies.
+    // Keyed on the poll, so an earlier answer is never served again.
     staleTime: 0,
     gcTime: 0,
     retry: false,

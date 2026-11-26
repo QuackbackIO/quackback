@@ -892,34 +892,51 @@ export async function countVisitorUnreadMessages(visitorPrincipalId: PrincipalId
     .select({ c: sql<number>`count(*)::int` })
     .from(conversationMessages)
     .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
-    .where(
-      and(
-        eq(conversations.visitorPrincipalId, visitorPrincipalId),
-        eq(conversationMessages.senderType, 'agent'),
-        eq(conversationMessages.isInternal, false),
-        isNull(conversationMessages.deletedAt),
-        or(
-          isNull(conversations.visitorLastReadAt),
-          gt(conversationMessages.createdAt, conversations.visitorLastReadAt)
-        )
-      )
-    )
+    .where(visitorUnreadReplySql(visitorPrincipalId))
   return row?.c ?? 0
+}
+
+/**
+ * The visitor's unread replies, for the badge and the reply preview alike:
+ * public agent messages newer than the conversation's visitor read mark (all
+ * of them in a never-read conversation). Reply-time captions are left out:
+ * the thread shows them as a quiet caption, never as a reply.
+ */
+function visitorUnreadReplySql(visitorPrincipalId: PrincipalId) {
+  return and(
+    eq(conversations.visitorPrincipalId, visitorPrincipalId),
+    eq(conversationMessages.senderType, 'agent'),
+    eq(conversationMessages.isInternal, false),
+    isNull(conversationMessages.deletedAt),
+    sql`coalesce(${conversationMessages.metadata} -> 'block' ->> 'kind', '') <> 'replyTime'`,
+    or(
+      isNull(conversations.visitorLastReadAt),
+      gt(conversationMessages.createdAt, conversations.visitorLastReadAt)
+    )
+  )
+}
+
+/** Bound on the unread replies reported across all conversations. */
+const MAX_RECENT_UNREAD_REPLIES = 20
+
+interface UnreadReplyRow {
+  id: ConversationMessageId
+  content: string
+  createdAt: Date
+  principalId: PrincipalId | null
+  /** The reply grounds itself in sources, with inline [n] markers. */
+  cited: boolean
 }
 
 export interface VisitorUnreadReplies {
   conversationId: ConversationId
   /** Unread replies in that conversation; may exceed the messages returned. */
   count: number
-  /** Oldest first, so the newest sits last. */
-  messages: Array<{
-    id: ConversationMessageId
-    content: string
-    createdAt: Date
-    principalId: PrincipalId | null
-    /** The reply grounds itself in sources, with inline [n] markers. */
-    cited: boolean
-  }>
+  /** That conversation's newest unread replies, oldest first. */
+  messages: UnreadReplyRow[]
+  /** The newest unread replies across every conversation, at most 20,
+   *  oldest first: each new one is reported to the host once. */
+  recent: Array<UnreadReplyRow & { conversationId: ConversationId }>
 }
 
 /**
@@ -933,35 +950,25 @@ export async function listVisitorUnreadReplies(
   visitorPrincipalId: PrincipalId,
   limit = 3
 ): Promise<VisitorUnreadReplies | null> {
-  const unread = and(
-    eq(conversations.visitorPrincipalId, visitorPrincipalId),
-    eq(conversationMessages.senderType, 'agent'),
-    eq(conversationMessages.isInternal, false),
-    isNull(conversationMessages.deletedAt),
-    sql`coalesce(${conversationMessages.metadata} -> 'block' ->> 'kind', '') <> 'replyTime'`,
-    or(
-      isNull(conversations.visitorLastReadAt),
-      gt(conversationMessages.createdAt, conversations.visitorLastReadAt)
-    )
-  )
-  const [newest] = await db
-    .select({ conversationId: conversationMessages.conversationId })
+  const unread = visitorUnreadReplySql(visitorPrincipalId)
+  const columns = {
+    id: conversationMessages.id,
+    content: conversationMessages.content,
+    createdAt: conversationMessages.createdAt,
+    principalId: conversationMessages.principalId,
+    cited: sql<boolean>`coalesce(jsonb_array_length(${conversationMessages.citations}), 0) > 0`,
+  }
+  const recent = await db
+    .select({ ...columns, conversationId: conversationMessages.conversationId })
     .from(conversationMessages)
     .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
     .where(unread)
     .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
-    .limit(1)
-  if (!newest?.conversationId) return null
-  const conversationId = newest.conversationId
+    .limit(MAX_RECENT_UNREAD_REPLIES)
+  const conversationId = recent[0]?.conversationId
+  if (!conversationId) return null
   const rows = await db
-    .select({
-      id: conversationMessages.id,
-      content: conversationMessages.content,
-      createdAt: conversationMessages.createdAt,
-      principalId: conversationMessages.principalId,
-      cited: sql<boolean>`coalesce(jsonb_array_length(${conversationMessages.citations}), 0) > 0`,
-      total: sql<number>`(count(*) over ())::int`,
-    })
+    .select({ ...columns, total: sql<number>`(count(*) over ())::int` })
     .from(conversationMessages)
     .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
     .where(and(unread, eq(conversationMessages.conversationId, conversationId)))
@@ -972,6 +979,9 @@ export async function listVisitorUnreadReplies(
     conversationId,
     count: rows[0].total,
     messages: rows.reverse().map(({ total: _total, ...m }) => m),
+    recent: recent
+      .reverse()
+      .flatMap((m) => (m.conversationId ? [{ ...m, conversationId: m.conversationId }] : [])),
   }
 }
 

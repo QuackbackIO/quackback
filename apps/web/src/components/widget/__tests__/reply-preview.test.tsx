@@ -50,6 +50,20 @@ const replies: UnreadReplies = {
       createdAt: '2026-11-20T10:01:00.000Z',
     },
   ],
+  recent: [
+    {
+      id: 'conversation_msg_0',
+      conversationId: 'conversation_2',
+      author: { name: null, avatarUrl: null },
+      text: '',
+    },
+    {
+      id: 'conversation_msg_2',
+      conversationId: 'conversation_1',
+      author: { name: 'Alex Kim', avatarUrl: '/api/storage/avatars/alex.png' },
+      text: 'We found the cause.',
+    },
+  ],
 }
 
 const intl = (locale = 'en', messages?: Record<string, string>) =>
@@ -125,6 +139,27 @@ describe('buildReplyPreview', () => {
     expect(payload.card).toBe(false)
     expect(payload.title).toBe('Alex replied')
     expect(payload.messages).toHaveLength(2)
+  })
+
+  it('carries every recent reply with its own author, named after the team when it reads as one', () => {
+    const payload = buildReplyPreview(intl(), replies, PREVIEW)
+    expect(payload.recent).toEqual([
+      {
+        id: 'conversation_msg_0',
+        conversationId: 'conversation_2',
+        author: { name: 'Acme', avatarUrl: null },
+        text: 'Sent an attachment',
+      },
+      {
+        id: 'conversation_msg_2',
+        conversationId: 'conversation_1',
+        author: {
+          name: 'Alex Kim',
+          avatarUrl: `${window.location.origin}/api/storage/avatars/alex.png`,
+        },
+        text: 'We found the cause.',
+      },
+    ])
   })
 
   it('keeps the whole reply when the workspace shows it in full', () => {
@@ -305,7 +340,7 @@ describe('useMessengerUnread in the background', () => {
 describe('useUnreadReplies', () => {
   it('reads nothing while nothing is unread', () => {
     const { wrapper: w } = withClient()
-    const { result } = renderHook(() => useUnreadReplies(true, 0), { wrapper: w })
+    const { result } = renderHook(() => useUnreadReplies(true, 0, 1), { wrapper: w })
     expect(result.current).toEqual({ ready: true, data: null })
     expect(replyFn).not.toHaveBeenCalled()
   })
@@ -314,18 +349,42 @@ describe('useUnreadReplies', () => {
     replyFn.mockResolvedValue(replies)
     const { client, wrapper: w } = withClient()
     const { result, rerender } = renderHook(
-      ({ unread }: { unread: number }) => useUnreadReplies(true, unread),
-      { wrapper: w, initialProps: { unread: 2 } }
+      ({ unread, at }: { unread: number; at: number }) => useUnreadReplies(true, unread, at),
+      { wrapper: w, initialProps: { unread: 2, at: 1 } }
     )
     await waitFor(() => expect(result.current.data).toEqual(replies))
-    // A newer count keeps the card while the next read loads...
+    // A newer poll keeps the card while the next read loads...
     replyFn.mockReturnValue(new Promise(() => {}))
-    rerender({ unread: 3 })
+    rerender({ unread: 3, at: 2 })
     expect(result.current.data).toEqual(replies)
     // ...but a new session starts empty.
     auth.sessionVersion = 2
-    rerender({ unread: 3 })
+    rerender({ unread: 3, at: 3 })
     expect(result.current).toEqual({ ready: false, data: null })
+    client.clear()
+  })
+
+  it('reads again after every poll, even when the total stays the same', async () => {
+    // One conversation read and a new reply in another within one poll: the
+    // total is unchanged, the replies are not.
+    const later: UnreadReplies = {
+      ...replies,
+      conversationId: 'conversation_3',
+      count: 2,
+      messages: [
+        { id: 'conversation_msg_7', text: 'New elsewhere', createdAt: '2026-11-20T11:00:00.000Z' },
+      ],
+    }
+    replyFn.mockResolvedValueOnce(replies).mockResolvedValueOnce(later)
+    const { client, wrapper: w } = withClient()
+    const { result, rerender } = renderHook(
+      ({ at }: { at: number }) => useUnreadReplies(true, 2, at),
+      { wrapper: w, initialProps: { at: 1 } }
+    )
+    await waitFor(() => expect(result.current.data).toEqual(replies))
+    rerender({ at: 2 })
+    await waitFor(() => expect(result.current.data).toEqual(later))
+    expect(replyFn).toHaveBeenCalledTimes(2)
     client.clear()
   })
 })

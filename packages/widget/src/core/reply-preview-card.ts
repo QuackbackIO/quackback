@@ -20,6 +20,15 @@ export interface ReplyPreview {
   /** Oldest first, at most three. Plain text, already cut by the frame
    *  unless `full`. */
   messages: Array<{ id: string; text: string; createdAt: string }>
+  /** Every new unread reply across the visitor's conversations, oldest
+   *  first, at most 20, each with its author: the message event reports
+   *  each once. Empty from a frame that predates it. */
+  recent: Array<{
+    id: string
+    conversationId: string
+    author: { name: string; avatarUrl: string | null }
+    text: string
+  }>
   /** Unread replies in the conversation; may exceed `messages`. */
   count: number
   /** Show the card above the launcher. Off when the workspace shows the
@@ -49,7 +58,15 @@ export interface ReplyPreview {
 const str = (v: unknown, max: number): string =>
   typeof v === 'string' ? Array.from(v.trim()).slice(0, max).join('').trim() : ''
 
+/** Message text of at most `max` code points, ending in an ellipsis when
+ *  cut, so a shortened reply never reads as whole. */
+const text = (v: unknown, max: number): string => {
+  const chars = typeof v === 'string' ? Array.from(v.trim()) : []
+  return chars.length <= max ? chars.join('') : `${chars.slice(0, max - 1).join('')}…`
+}
+
 const MAX_MESSAGES = 3
+const MAX_RECENT = 20
 
 /** An http(s) avatar URL, resolved against the instance; anything else is
  *  dropped, as it renders in the host page. */
@@ -76,11 +93,24 @@ export function parseReplyPreview(raw: unknown, base?: string): ReplyPreview | n
       const o = (m ?? {}) as Record<string, unknown>
       return {
         id: str(o.id, 128),
-        text: str(o.text, full ? 2000 : 400),
+        text: text(o.text, full ? 2000 : 400),
         createdAt: str(o.createdAt, 64),
       }
     })
     .filter((m) => m.id && m.text)
+  const recent = (Array.isArray(r.recent) ? r.recent : [])
+    .slice(-MAX_RECENT)
+    .map((m) => {
+      const o = (m ?? {}) as Record<string, unknown>
+      const a = (o.author ?? {}) as Record<string, unknown>
+      return {
+        id: str(o.id, 128),
+        conversationId: str(o.conversationId, 128),
+        author: { name: str(a.name, 120), avatarUrl: avatarUrl(a.avatarUrl, base) },
+        text: text(o.text, 280),
+      }
+    })
+    .filter((m) => m.id && m.conversationId)
   const parsed: ReplyPreview = {
     conversationId: str(r.conversationId, 128),
     author: {
@@ -90,6 +120,7 @@ export function parseReplyPreview(raw: unknown, base?: string): ReplyPreview | n
     },
     teamName: str(r.teamName, 120),
     messages,
+    recent,
     count: typeof r.count === 'number' && r.count > 0 ? Math.floor(r.count) : messages.length,
     // A frame that sends no flag predates the badge-only setting: a card.
     card: r.card !== false,

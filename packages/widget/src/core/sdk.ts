@@ -97,6 +97,12 @@ export function createSDK(): SDK {
   // The frame's newest unread replies, and the tab title flash for them.
   let replyPreview: ReplyPreview | null = null
   let titleAlert: TitleAlert | null = null
+  // The newest reply the visitor has had the page visible for: the title
+  // flashes only for a newer one.
+  let titleSeenId: string | null = null
+  function onVisibility(): void {
+    if (document.visibilityState === 'visible' && replyPreview) applyReplyPreview()
+  }
   let tracker: Tracker | null = null
   // The host page's say on pageview tracking (for example its consent
   // banner). Tracking runs only when both the host and the instance allow it.
@@ -241,20 +247,31 @@ export function createSDK(): SDK {
     if (!config) return
     const data = identityPending ? null : replyPreview
     if (data) {
-      for (const m of data.messages) {
+      // Every new reply, in any conversation; an older frame sends only the
+      // card's replies.
+      const reported = data.recent.length
+        ? data.recent
+        : data.messages.map((m) => ({
+            id: m.id,
+            conversationId: data.conversationId,
+            author: { name: data.author.name, avatarUrl: data.author.avatarUrl },
+            text: m.text,
+          }))
+      for (const m of reported) {
         if (!replies().announce(visitorScope(), m.id)) continue
         emitter.emit('message', {
-          conversationId: data.conversationId,
-          author: { name: data.author.name || data.teamName, avatarUrl: data.author.avatarUrl },
+          conversationId: m.conversationId,
+          author: { name: m.author.name || data.teamName, avatarUrl: m.author.avatarUrl },
           preview: m.text,
         })
       }
     }
     const newest = data?.messages[data.messages.length - 1]
-    const show =
-      data?.card && newest && !replies().isAnswered(visitorScope(), newest.id) ? data : null
-    launcher?.setReplyPreview(show)
-    const title = data?.title ?? null
+    const unanswered = !!newest && !replies().isAnswered(visitorScope(), newest.id)
+    launcher?.setReplyPreview(data?.card && unanswered ? data : null)
+    // A visible page has shown the newest reply: no flash for it later.
+    if (newest && document.visibilityState === 'visible') titleSeenId = newest.id
+    const title = unanswered && newest.id !== titleSeenId ? (data?.title ?? null) : null
     if (title !== null || titleAlert) {
       titleAlert ??= createTitleAlert()
       titleAlert.set(title)
@@ -614,6 +631,7 @@ export function createSDK(): SDK {
         if (next.tracking !== undefined) hostTracking = next.tracking
         placement = next.placement ?? 'right'
         window.addEventListener('storage', onWhatsNewStorage)
+        document.addEventListener('visibilitychange', onVisibility)
         createLauncherIfNeeded()
         // Preload the hidden panel iframe off the host page's critical path:
         // init typically runs while the host is still loading, and the iframe
@@ -820,6 +838,8 @@ export function createSDK(): SDK {
         sentIdentityKey = null
         resolvedIdentityKey = null
         window.removeEventListener('storage', onWhatsNewStorage)
+        document.removeEventListener('visibilitychange', onVisibility)
+        titleSeenId = null
         placement = 'right'
         config = null
         return

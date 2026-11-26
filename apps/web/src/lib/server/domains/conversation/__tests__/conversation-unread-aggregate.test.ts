@@ -56,6 +56,7 @@ async function addMessage(
     isInternal?: boolean
     createdAt?: Date
     deletedAt?: Date | null
+    replyTime?: boolean
   } = {}
 ) {
   await testDb.insert(conversationMessages).values({
@@ -65,6 +66,7 @@ async function addMessage(
     content: 'msg',
     createdAt: over.createdAt ?? new Date(),
     deletedAt: over.deletedAt ?? null,
+    metadata: over.replyTime ? ({ block: { kind: 'replyTime', status: 'online' } } as never) : null,
   })
 }
 
@@ -96,6 +98,14 @@ describe.skipIf(!fixture.available)('countVisitorUnreadMessages (real DB)', () =
     await addMessage(c, { senderType: 'agent', deletedAt: new Date() }) // deleted
     await addMessage(c, { senderType: 'visitor' }) // the visitor's own
     await addMessage(c, { senderType: 'system' }) // system event
+    expect(await countVisitorUnreadMessages(visitor)).toBe(1)
+  })
+
+  it('leaves out reply-time captions, as the reply preview does', async () => {
+    const visitor = await seedVisitor()
+    const c = await seedConversation(visitor, null)
+    await addMessage(c, { senderType: 'agent' })
+    await addMessage(c, { senderType: 'agent', replyTime: true })
     expect(await countVisitorUnreadMessages(visitor)).toBe(1)
   })
 

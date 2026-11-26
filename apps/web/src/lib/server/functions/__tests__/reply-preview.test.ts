@@ -81,25 +81,49 @@ beforeEach(() => {
       ],
     ])
   )
-  hoisted.listVisitorUnreadReplies.mockResolvedValue({
-    conversationId: 'conversation_1',
-    count: 4,
-    messages: [
-      {
-        id: 'conversation_msg_1',
-        content: '**Thanks** for waiting',
-        createdAt: new Date('2026-11-20T10:00:00.000Z'),
-        principalId: 'principal_alex',
-      },
-      {
-        id: 'conversation_msg_2',
-        content: '<p>It is fixed now</p>',
-        createdAt: new Date('2026-11-20T10:01:00.000Z'),
-        principalId: 'principal_alex',
-      },
-    ],
-  })
+  hoisted.listVisitorUnreadReplies.mockResolvedValue(
+    listed(
+      [
+        row(1, '**Thanks** for waiting', 'principal_alex'),
+        row(2, '<p>It is fixed now</p>', 'principal_alex'),
+      ],
+      4
+    )
+  )
 })
+
+type Row = {
+  id: string
+  content: string
+  createdAt: Date
+  principalId: string | null
+  cited: boolean
+}
+
+function row(n: number, content: string, principalId: string | null, cited = false): Row {
+  return {
+    id: `conversation_msg_${n}`,
+    content,
+    createdAt: new Date(`2026-11-20T10:0${n}:00.000Z`),
+    principalId,
+    cited,
+  }
+}
+
+/** The read's result: the card's rows, and the same rows as the recent list
+ *  unless given. */
+function listed(
+  messages: Row[],
+  count = messages.length,
+  recent?: Array<Row & { conversationId: string }>
+) {
+  return {
+    conversationId: 'conversation_1',
+    count,
+    messages,
+    recent: recent ?? messages.map((m) => ({ ...m, conversationId: 'conversation_1' })),
+  }
+}
 
 describe('runGetReplyPreview', () => {
   it('reads nothing without a widget session', async () => {
@@ -121,27 +145,80 @@ describe('runGetReplyPreview', () => {
     expect(await runGetReplyPreview(widgetCtx)).toBeNull()
   })
 
-  it('returns plain text, the count and the newest reply author', async () => {
+  it('returns plain text, the count, the newest reply author and the recent replies', async () => {
+    const alex = { name: 'Alex Kim', avatarUrl: 'https://cdn.example.com/a.png' }
     expect(await runGetReplyPreview(widgetCtx)).toEqual({
       conversationId: 'conversation_1',
-      author: { name: 'Alex Kim', avatarUrl: 'https://cdn.example.com/a.png' },
+      author: alex,
       teamName: 'Acme',
       count: 4,
       messages: [
         {
           id: 'conversation_msg_1',
           text: 'Thanks for waiting',
-          createdAt: '2026-11-20T10:00:00.000Z',
+          createdAt: '2026-11-20T10:01:00.000Z',
         },
         {
           id: 'conversation_msg_2',
           text: 'It is fixed now',
-          createdAt: '2026-11-20T10:01:00.000Z',
+          createdAt: '2026-11-20T10:02:00.000Z',
+        },
+      ],
+      recent: [
+        {
+          id: 'conversation_msg_1',
+          conversationId: 'conversation_1',
+          author: alex,
+          text: 'Thanks for waiting',
+        },
+        {
+          id: 'conversation_msg_2',
+          conversationId: 'conversation_1',
+          author: alex,
+          text: 'It is fixed now',
         },
       ],
     })
     expect(hoisted.listVisitorUnreadReplies).toHaveBeenCalledWith('principal_v', 3)
-    expect(hoisted.loadAuthors).toHaveBeenCalledWith(['principal_alex'], { forCustomer: true })
+    expect(hoisted.loadAuthors).toHaveBeenCalledWith(
+      ['principal_alex', 'principal_alex', 'principal_alex', 'principal_alex'],
+      { forCustomer: true }
+    )
+  })
+
+  it('reports replies in other conversations, each with its own author', async () => {
+    hoisted.listVisitorUnreadReplies.mockResolvedValue(
+      listed([row(3, 'Newest', 'principal_alex')], 1, [
+        { ...row(1, 'From the assistant', 'principal_bot'), conversationId: 'conversation_2' },
+        { ...row(3, 'Newest', 'principal_alex'), conversationId: 'conversation_1' },
+      ])
+    )
+    const preview = await runGetReplyPreview(widgetCtx)
+    expect(preview!.recent).toEqual([
+      {
+        id: 'conversation_msg_1',
+        conversationId: 'conversation_2',
+        author: { name: null, avatarUrl: null },
+        text: 'From the assistant',
+      },
+      expect.objectContaining({ id: 'conversation_msg_3', conversationId: 'conversation_1' }),
+    ])
+  })
+
+  it('keeps only the newest author\u2019s latest run of replies in the card', async () => {
+    hoisted.listVisitorUnreadReplies.mockResolvedValue(
+      listed([
+        row(1, 'From Alex', 'principal_alex'),
+        row(2, 'From the assistant', 'principal_bot'),
+        row(3, 'Also from the assistant', 'principal_bot'),
+      ])
+    )
+    const preview = await runGetReplyPreview(widgetCtx)
+    expect(preview!.messages.map((m) => m.text)).toEqual([
+      'From the assistant',
+      'Also from the assistant',
+    ])
+    expect(preview!.count).toBe(3)
   })
 
   it('shows a reply that reads as the team as the team alone', async () => {
@@ -155,26 +232,12 @@ describe('runGetReplyPreview', () => {
   })
 
   it("drops an assistant reply's source markers, and keeps brackets in other replies", async () => {
-    hoisted.listVisitorUnreadReplies.mockResolvedValue({
-      conversationId: 'conversation_1',
-      count: 2,
-      messages: [
-        {
-          id: 'conversation_msg_1',
-          content: 'Step [1] of the guide',
-          createdAt: new Date('2026-11-20T10:00:00.000Z'),
-          principalId: null,
-          cited: false,
-        },
-        {
-          id: 'conversation_msg_2',
-          content: 'Export from Settings [1] and import it again [2].',
-          createdAt: new Date('2026-11-20T10:01:00.000Z'),
-          principalId: null,
-          cited: true,
-        },
-      ],
-    })
+    hoisted.listVisitorUnreadReplies.mockResolvedValue(
+      listed([
+        row(1, 'Step [1] of the guide', null),
+        row(2, 'Export from Settings [1] and import it again [2].', null, true),
+      ])
+    )
     const preview = await runGetReplyPreview(widgetCtx)
     expect(preview!.messages.map((m) => m.text)).toEqual([
       'Step [1] of the guide',
@@ -182,22 +245,22 @@ describe('runGetReplyPreview', () => {
     ])
   })
 
-  it('caps a long reply between code points', async () => {
-    hoisted.listVisitorUnreadReplies.mockResolvedValue({
-      conversationId: 'conversation_1',
-      count: 1,
-      messages: [
-        {
-          id: 'conversation_msg_1',
-          content: 'a'.repeat(1999) + '\u{1F680}' + 'tail',
-          createdAt: new Date('2026-11-20T10:00:00.000Z'),
-          principalId: null,
-        },
-      ],
-    })
+  it('caps a long reply between code points, with an ellipsis', async () => {
+    const long = 'a'.repeat(1998) + '\u{1F680}' + 'tail'
+    hoisted.listVisitorUnreadReplies.mockResolvedValue(listed([row(1, long, null)]))
     const preview = await runGetReplyPreview(widgetCtx)
-    expect(Array.from(preview!.messages[0].text)).toHaveLength(2000)
-    expect(preview!.messages[0].text.endsWith('\u{1F680}')).toBe(true)
+    const text = preview!.messages[0].text
+    expect(Array.from(text)).toHaveLength(2000)
+    expect(text.endsWith('\u{1F680}…')).toBe(true)
+    expect(Array.from(preview!.recent[0].text)).toHaveLength(280)
+    expect(preview!.recent[0].text.endsWith('…')).toBe(true)
     expect(preview!.author).toEqual({ name: null, avatarUrl: null })
+  })
+
+  it('keeps text at the cap whole', async () => {
+    const exact = 'b'.repeat(2000)
+    hoisted.listVisitorUnreadReplies.mockResolvedValue(listed([row(1, exact, null)]))
+    const preview = await runGetReplyPreview(widgetCtx)
+    expect(preview!.messages[0].text).toBe(exact)
   })
 })

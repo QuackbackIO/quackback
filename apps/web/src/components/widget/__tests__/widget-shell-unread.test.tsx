@@ -10,8 +10,14 @@ import { IntlProvider } from 'react-intl'
 
 const h = vi.hoisted(() => ({
   sendToHost: vi.fn(),
-  useMessengerUnread: vi.fn((_enabled: boolean, _opts?: { background?: boolean }) => 3),
-  useUnreadReplies: vi.fn((_enabled: boolean, _unread: number) => ({ ready: true, data: null })),
+  useMessengerUnreadState: vi.fn((_enabled: boolean, _opts?: { background?: boolean }) => ({
+    total: 3,
+    updatedAt: 1700,
+  })),
+  useUnreadReplies: vi.fn((_enabled: boolean, _unread: number, _at: number) => ({
+    ready: true,
+    data: null,
+  })),
   useReplyPreviewAnnouncement: vi.fn(),
 }))
 
@@ -25,7 +31,7 @@ vi.mock('../widget-auth-provider', () => ({
     sessionVersion: 4,
   }),
 }))
-vi.mock('../use-messenger-unread', () => ({ useMessengerUnread: h.useMessengerUnread }))
+vi.mock('../use-messenger-unread', () => ({ useMessengerUnreadState: h.useMessengerUnreadState }))
 vi.mock('../reply-preview', () => ({
   useUnreadReplies: h.useUnreadReplies,
   useReplyPreviewAnnouncement: h.useReplyPreviewAnnouncement,
@@ -79,14 +85,14 @@ describe('WidgetShell unread for the host', () => {
 
   it('reads the replies whatever the card setting, polling hidden pages only for the title', () => {
     renderShell({ replyAlerts: 'badge', titleAlerts: false })
-    expect(h.useMessengerUnread).toHaveBeenLastCalledWith(true, { background: false })
-    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(true, 3)
+    expect(h.useMessengerUnreadState).toHaveBeenLastCalledWith(true, { background: false })
+    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(true, 3, 1700)
     expect(h.useReplyPreviewAnnouncement).toHaveBeenLastCalledWith(
       { enabled: true, replyAlerts: 'badge', titleAlerts: false },
       { ready: true, data: null, session: 4 }
     )
     renderShell({ replyAlerts: 'preview', titleAlerts: true })
-    expect(h.useMessengerUnread).toHaveBeenLastCalledWith(true, { background: true })
+    expect(h.useMessengerUnreadState).toHaveBeenLastCalledWith(true, { background: true })
   })
 
   it('sends nothing while the Messages tab is off', () => {
@@ -95,8 +101,8 @@ describe('WidgetShell unread for the host', () => {
       replyAlerts: 'full',
       titleAlerts: true,
     })
-    expect(h.useMessengerUnread).toHaveBeenLastCalledWith(false, { background: false })
-    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(false, 3)
+    expect(h.useMessengerUnreadState).toHaveBeenLastCalledWith(false, { background: false })
+    expect(h.useUnreadReplies).toHaveBeenLastCalledWith(false, 3, 1700)
     expect(h.useReplyPreviewAnnouncement).toHaveBeenLastCalledWith(
       { enabled: false, replyAlerts: 'full', titleAlerts: true },
       expect.anything()

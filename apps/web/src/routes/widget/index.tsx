@@ -28,7 +28,11 @@ import {
   isExpandedView,
   visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
-import { resolveOpenCommand, type WidgetComposeRequest } from '@/components/widget/widget-compose'
+import {
+  autofocusesComposer,
+  resolveOpenCommand,
+  type WidgetComposeRequest,
+} from '@/components/widget/widget-compose'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
@@ -501,6 +505,14 @@ function WidgetPage() {
     body?: string
     focusConversationId?: string
   } | null>(null)
+  // A focus asked for by an open on one conversation is used once: leaving
+  // the thread drops it, so a later open from the list does not focus.
+  useEffect(() => {
+    if (view === 'messenger') return
+    setMessengerDraft((prev) =>
+      prev?.focusConversationId ? { ...prev, focusConversationId: undefined } : prev
+    )
+  }, [view])
   // Manual size preference: the header's expand/collapse button flips this,
   // and it is STICKY — collapsing turns auto-expansion off for every later
   // item view until the visitor expands again. Persisted per browser.
@@ -1025,10 +1037,11 @@ function WidgetPage() {
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}
             // A fresh thread exists to be typed into; a resumed one to be read.
             // Mobile hosts skip it — the software keyboard would cover the thread.
-            autofocusComposer={
-              (conversationTarget === 'new' && !hostIsMobile) ||
-              (!!conversationTarget && messengerDraft?.focusConversationId === conversationTarget)
-            }
+            autofocusComposer={autofocusesComposer(
+              conversationTarget,
+              hostIsMobile,
+              messengerDraft?.focusConversationId
+            )}
             onReplyByEmailChange={setCanReplyByEmail}
           />
         </ViewTransition>

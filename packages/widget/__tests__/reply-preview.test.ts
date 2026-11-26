@@ -33,6 +33,7 @@ function sample(over: Partial<ReplyPreview> = {}): ReplyPreview {
     author: { name: 'Alex Kim', firstName: 'Alex', avatarUrl: null },
     teamName: 'Acme',
     messages: [msg(1), msg(2)],
+    recent: [],
     count: 2,
     card: true,
     full: false,
@@ -131,12 +132,29 @@ describe('parseReplyPreview', () => {
   })
 
   it('caps text between code points, longer when the whole reply shows', () => {
-    const text = 'a'.repeat(399) + '\u{1F680}' + 'tail'
+    const text = 'a'.repeat(398) + '\u{1F680}' + 'tail'
     const cut = parseReplyPreview(sample({ messages: [msg(1, text)] }))!
+    // Cut text ends in an ellipsis, so it never reads as the whole reply.
     expect(Array.from(cut.messages[0].text)).toHaveLength(400)
-    expect(cut.messages[0].text.endsWith('\u{1F680}')).toBe(true)
+    expect(cut.messages[0].text.endsWith('\u{1F680}…')).toBe(true)
     const full = parseReplyPreview(sample({ messages: [msg(1, text)], full: true }))!
     expect(full.messages[0].text).toBe(text)
+  })
+
+  it('keeps the newest 20 recent replies, with safe avatars and capped text', () => {
+    const recent = Array.from({ length: 25 }, (_, i) => ({
+      id: `m_${i}`,
+      conversationId: 'conversation_2',
+      author: { name: 'Bo', avatarUrl: i === 24 ? 'javascript:alert(1)' : '/b.png' },
+      text: i === 24 ? 'x'.repeat(300) : `R ${i}`,
+    }))
+    const parsed = parseReplyPreview({ ...sample(), recent }, ORIGIN)!
+    expect(parsed.recent).toHaveLength(20)
+    expect(parsed.recent[0].id).toBe('m_5')
+    expect(parsed.recent[0].author.avatarUrl).toBe(`${ORIGIN}/b.png`)
+    expect(parsed.recent[19].author.avatarUrl).toBeNull()
+    expect(Array.from(parsed.recent[19].text)).toHaveLength(280)
+    expect(parsed.recent[19].text.endsWith('…')).toBe(true)
   })
 
   it('makes initials by code point', () => {
@@ -681,15 +699,89 @@ describe('sdk reply preview', () => {
     vi.advanceTimersByTime(TITLE_ALERT_INTERVAL_MS * 2)
     expect(document.title).toBe('Acme dashboard')
     preview(sample({ title: 'Alex replied' }))
+    expect(document.title).toBe('Alex replied')
     page.hidden = false
     document.dispatchEvent(new Event('visibilitychange'))
     expect(document.title).toBe('Acme dashboard')
+    // Seen once the page was visible: switching tabs again does not repeat it.
     page.hidden = true
     document.dispatchEvent(new Event('visibilitychange'))
+    preview(sample({ title: 'Alex replied' }))
+    vi.advanceTimersByTime(TITLE_ALERT_INTERVAL_MS * 3)
+    expect(document.title).toBe('Acme dashboard')
+    // A newer reply flashes again.
+    preview(sample({ title: 'Alex replied', messages: [msg(1), msg(2), msg(3)], count: 3 }))
     expect(document.title).toBe('Alex replied')
     sdk.dispatch('destroy')
     expect(document.title).toBe('Acme dashboard')
     restorePage()
+  })
+
+  it('never flashes for a reply that arrived while the page was visible', () => {
+    const page = hiddenPage()
+    page.hidden = false
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    preview(sample({ title: 'Alex replied' }))
+    page.hidden = true
+    document.dispatchEvent(new Event('visibilitychange'))
+    vi.advanceTimersByTime(TITLE_ALERT_INTERVAL_MS * 2)
+    expect(document.title).toBe('Acme dashboard')
+    sdk.dispatch('destroy')
+    restorePage()
+  })
+
+  it('never flashes for a dismissed reply', () => {
+    const page = hiddenPage()
+    page.hidden = false
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    // Dismissed in an earlier visit.
+    localStorage.setItem(
+      `quackback:reply-preview:${ORIGIN}:anon`,
+      JSON.stringify({ answered: ['conversation_msg_2'], announced: [] })
+    )
+    page.hidden = true
+    preview(sample({ title: 'Alex replied' }))
+    vi.advanceTimersByTime(TITLE_ALERT_INTERVAL_MS * 2)
+    expect(document.title).toBe('Acme dashboard')
+    sdk.dispatch('destroy')
+    restorePage()
+  })
+
+  it('fires message for new replies in other conversations too, once each', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'message', handler)
+    const other = {
+      id: 'conversation_msg_9',
+      conversationId: 'conversation_2',
+      author: { name: '', avatarUrl: null },
+      text: 'From the assistant',
+    }
+    const newest = {
+      id: 'conversation_msg_2',
+      conversationId: 'conversation_1',
+      author: { name: 'Alex Kim', avatarUrl: null },
+      text: 'Reply 2',
+    }
+    preview(sample({ recent: [other, newest] }))
+    expect(handler.mock.calls.map(([p]) => p)).toEqual([
+      {
+        conversationId: 'conversation_2',
+        author: { name: 'Acme', avatarUrl: null },
+        preview: 'From the assistant',
+      },
+      {
+        conversationId: 'conversation_1',
+        author: { name: 'Alex Kim', avatarUrl: null },
+        preview: 'Reply 2',
+      },
+    ])
+    preview(sample({ recent: [other, newest] }))
+    expect(handler).toHaveBeenCalledTimes(2)
+    sdk.dispatch('destroy')
   })
 
   it('with the badge only fires message and flashes the title, but shows no card', () => {

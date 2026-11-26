@@ -143,6 +143,37 @@ describe.skipIf(!fixture.available)('listVisitorUnreadReplies (real DB)', () => 
     expect(result!.messages[0].cited).toBe(true)
   })
 
+  it('lists the newest unread replies across every conversation, oldest first, at most 20', async () => {
+    const visitor = await seedPrincipal()
+    const a = await seedConversation(visitor)
+    const b = await seedConversation(visitor)
+    const inA = await addMessage(a, 'In A', '2026-11-20T09:00:00.000Z')
+    for (let i = 0; i < 21; i++) {
+      await addMessage(b, `B ${i}`, new Date(Date.UTC(2026, 10, 20, 10, i)).toISOString())
+    }
+    const result = await listVisitorUnreadReplies(visitor)
+    expect(result!.conversationId).toBe(b)
+    expect(result!.recent).toHaveLength(20)
+    expect(result!.recent[0].content).toBe('B 1')
+    expect(result!.recent[19].content).toBe('B 20')
+    expect(result!.recent.every((m) => m.conversationId === b)).toBe(true)
+    expect(result!.recent.some((m) => m.id === inA)).toBe(false)
+
+    // With fewer replies, each conversation's show side by side.
+    const small = await seedPrincipal()
+    const x = await seedConversation(small)
+    const y = await seedConversation(small)
+    await addMessage(x, 'X', '2026-11-20T10:00:00.000Z')
+    await addMessage(y, 'Y', '2026-11-20T10:01:00.000Z')
+    const both = await listVisitorUnreadReplies(small)
+    expect(both!.conversationId).toBe(y)
+    expect(both!.messages.map((m) => m.content)).toEqual(['Y'])
+    expect(both!.recent.map((m) => [m.conversationId, m.content])).toEqual([
+      [x, 'X'],
+      [y, 'Y'],
+    ])
+  })
+
   it("never reads another visitor's conversations", async () => {
     const mine = await seedPrincipal()
     const other = await seedPrincipal()

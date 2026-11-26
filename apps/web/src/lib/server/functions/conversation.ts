@@ -702,26 +702,50 @@ export const runGetMessengerUnread = createServerOnlyFn(async function runGetMes
 
 /** Longest reply text the preview carries, in code points. */
 const REPLY_PREVIEW_MAX_TEXT = 2000
+/** Longest text of a reply reported to the host outside the card. */
+const RECENT_REPLY_MAX_TEXT = 280
+
+/** Plain text of at most `max` code points, ending in an ellipsis when cut. */
+function capText(text: string, max: number): string {
+  const chars = Array.from(text.trim())
+  return chars.length <= max ? chars.join('') : `${chars.slice(0, max - 1).join('')}…`
+}
+
+/** A reply author as the customer sees them. */
+interface ReplyAuthorDTO {
+  /** Null when the reply shows as the team, or its author has no name. */
+  name: string | null
+  avatarUrl: string | null
+}
 
 /** The newest unread replies for the reply preview above the closed launcher. */
 export interface ReplyPreviewDTO {
   conversationId: ConversationId
-  /** The newest reply's author. `name` is null when the reply shows as the
-   *  team, or its author has no name. */
-  author: { name: string | null; avatarUrl: string | null }
+  /** The newest reply's author. */
+  author: ReplyAuthorDTO
   /** The support team's name, falling back to the workspace name. */
   teamName: string | null
   /** Unread replies in the conversation; may exceed `messages`. */
   count: number
-  /** Plain text, oldest first. Empty text is a reply with only attachments. */
+  /** The newest author's latest run of unread replies, oldest first, at most
+   *  three. Plain text; empty text is a reply with only attachments. */
   messages: Array<{ id: ConversationMessageId; text: string; createdAt: string }>
+  /** Every conversation's newest unread replies, at most 20, oldest first,
+   *  each with its own author and a short text: the host reports each once. */
+  recent: Array<{
+    id: ConversationMessageId
+    conversationId: ConversationId
+    author: ReplyAuthorDTO
+    text: string
+  }>
 }
 
 /**
- * The widget visitor's newest unread replies, at most three, from the
- * conversation with the newest one. Widget sessions only: the preview shows
- * above the widget's closed launcher. Null when conversations are off,
- * nothing is unread, or there is no widget session.
+ * The widget visitor's newest unread replies: the card's replies from the
+ * conversation with the newest one, and a bounded list across every
+ * conversation for the host's message event. Widget sessions only. Null
+ * when conversations are off, nothing is unread, or there is no widget
+ * session.
  */
 export const runGetReplyPreview = createServerOnlyFn(async function runGetReplyPreview(
   ctx: AuthContext | null
@@ -739,28 +763,44 @@ export const runGetReplyPreview = createServerOnlyFn(async function runGetReplyP
   const { loadAuthors, getSupportTeamName } =
     await import('@/lib/server/domains/principals/principal-display')
   const { contentPreview } = await import('@/lib/shared/utils/string')
-  const newest = replies.messages[replies.messages.length - 1]
   const [authors, teamName] = await Promise.all([
-    loadAuthors([newest.principalId], { forCustomer: true }),
+    loadAuthors(
+      [...replies.messages, ...replies.recent].map((m) => m.principalId),
+      { forCustomer: true }
+    ),
     getSupportTeamName(),
   ])
-  const author = newest.principalId ? authors.get(newest.principalId) : undefined
-  // An author shown as the team reads as the team alone, never "Acme from Acme".
-  const name = author?.displayName && author.displayName !== teamName ? author.displayName : null
+  const authorOf = (principalId: PrincipalId | null): ReplyAuthorDTO => {
+    const author = principalId ? authors.get(principalId) : undefined
+    // An author shown as the team reads as the team alone, never "Acme from Acme".
+    const name = author?.displayName && author.displayName !== teamName ? author.displayName : null
+    return { name, avatarUrl: name ? (author?.avatarUrl ?? null) : null }
+  }
+  const textOf = (m: { content: string; cited: boolean }, max: number) =>
+    // An assistant reply's [n] source markers mean nothing without the list.
+    capText(contentPreview(m.cited ? m.content.replace(/\s?\[\d+\]/g, '') : m.content), max)
+
+  // The card credits every bubble to one author, so it keeps only the newest
+  // author's latest run of replies.
+  const newest = replies.messages[replies.messages.length - 1]
+  let start = replies.messages.length - 1
+  while (start > 0 && replies.messages[start - 1].principalId === newest.principalId) start--
   return {
     conversationId: replies.conversationId,
-    author: { name, avatarUrl: name ? (author?.avatarUrl ?? null) : null },
+    author: authorOf(newest.principalId),
     teamName,
     count: replies.count,
-    messages: replies.messages.map((m) => {
-      // An assistant reply's [n] source markers mean nothing without the list.
-      const content = m.cited ? m.content.replace(/\s?\[\d+\]/g, '') : m.content
-      return {
-        id: m.id,
-        text: Array.from(contentPreview(content).trim()).slice(0, REPLY_PREVIEW_MAX_TEXT).join(''),
-        createdAt: m.createdAt.toISOString(),
-      }
-    }),
+    messages: replies.messages.slice(start).map((m) => ({
+      id: m.id,
+      text: textOf(m, REPLY_PREVIEW_MAX_TEXT),
+      createdAt: m.createdAt.toISOString(),
+    })),
+    recent: replies.recent.map((m) => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      author: authorOf(m.principalId),
+      text: textOf(m, RECENT_REPLY_MAX_TEXT),
+    })),
   }
 })
 
