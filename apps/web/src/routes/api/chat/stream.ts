@@ -60,8 +60,14 @@ interface StreamPrincipal {
  * session cookie / Bearer header (admin + identified portal). */
 async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal | null> {
   const url = new URL(request.url)
-  const tokenPrincipal = verifyStreamToken(url.searchParams.get('token'))
-  if (tokenPrincipal) {
+  const token = url.searchParams.get('token')
+  // A request that brings a stream token is authenticated by that token
+  // alone. An invalid or expired one is refused rather than falling back to
+  // the session cookie, which a widget frame's request also carries when its
+  // embedder is same-site; the client mints a fresh token and reconnects.
+  if (token !== null) {
+    const tokenPrincipal = verifyStreamToken(token)
+    if (!tokenPrincipal) return null
     const row = await db.query.principal.findFirst({
       where: eq(principal.id, tokenPrincipal.principalId),
     })
