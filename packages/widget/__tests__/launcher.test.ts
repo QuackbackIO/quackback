@@ -10,7 +10,10 @@ import { createLauncher } from '../src/core/launcher'
 const badgeOf = (el: HTMLButtonElement) => el.lastElementChild as HTMLElement
 
 function make(locale?: string) {
-  return createLauncher({ placement: 'right', onClick: () => {}, locale })
+  const l = createLauncher({ placement: 'right', onClick: () => {}, locale })
+  // Cards above the button wait for it to be revealed.
+  l.reveal()
+  return l
 }
 
 describe('launcher unread badge', () => {

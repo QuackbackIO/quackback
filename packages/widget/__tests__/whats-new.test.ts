@@ -6,11 +6,18 @@
  * touching the unread badge.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createLauncher } from '../src/core/launcher'
+import { createLauncher as createHiddenLauncher } from '../src/core/launcher'
 import { parseWhatsNew, type WhatsNew } from '../src/core/whats-new-card'
 import { createSDK } from '../src/core/sdk'
 
 const ORIGIN = 'https://feedback.acme.com'
+
+/** A launcher past its reveal, as a visitor sees it. */
+function createLauncher(opts: Parameters<typeof createHiddenLauncher>[0]) {
+  const l = createHiddenLauncher(opts)
+  l.reveal()
+  return l
+}
 
 function sample(over: Partial<WhatsNew['entry']> = {}, count = 2): WhatsNew {
   return {
@@ -119,13 +126,14 @@ describe("launcher What's new card", () => {
     expect(status.textContent).toBe('')
     flush()
     expect(status.textContent).toBe('2 new updates: Faster search')
+    // Reopening the launcher does not say it again.
     l.setOpen(true)
     l.setOpen(false)
-    l.setWhatsNew(sample())
-    expect(onShown).toHaveBeenCalledTimes(1)
+    flush()
+    expect(status.textContent).toBe('')
     l.setWhatsNew(sample({ id: 'changelog_2', title: 'Dark mode' }, 3))
     flush()
-    expect(onShown).toHaveBeenCalledTimes(2)
+    expect(onShown).toHaveBeenLastCalledWith(expect.objectContaining({ count: 3 }))
     expect(status.textContent).toBe('3 new updates: Dark mode')
     l.remove()
     expect(document.querySelector('[role="status"]')).toBeNull()
@@ -265,6 +273,59 @@ describe("launcher What's new card", () => {
     expect(cardEl()!.style.transition).toBe('none')
   })
 
+  it('waits for the launcher to be revealed', () => {
+    const l = createHiddenLauncher({ placement: 'right', onClick: () => {} })
+    l.setWhatsNew(sample())
+    l.setGreeting('Need a hand?')
+    expect(shown()).toBe(false)
+    expect((document.querySelector('body > div') as HTMLElement).style.display).toBe('none')
+    l.reveal()
+    expect(shown()).toBe(true)
+  })
+
+  it('keeps the greeting back for the page load after a dismiss', () => {
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    l.setGreeting('Need a hand?')
+    l.setWhatsNew(sample())
+    dismissBtn().click()
+    const bubble = document.querySelector('body > div') as HTMLElement
+    expect(bubble.style.display).toBe('none')
+    l.setOpen(true)
+    l.setOpen(false)
+    expect(bubble.style.display).toBe('none')
+  })
+
+  it('clears the live region when the card hides, and repeats are announced afresh', () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const flush = () => frames.splice(0).forEach((cb) => cb(0))
+    const l = createLauncher({ placement: 'right', onClick: () => {} })
+    const status = document.querySelector('[role="status"]') as HTMLElement
+    l.setWhatsNew(sample())
+    flush()
+    expect(status.textContent).toBe('2 new updates: Faster search')
+    l.setOpen(true)
+    expect(status.textContent).toBe('')
+    l.setOpen(false)
+    l.setWhatsNew(sample({ id: 'changelog_2', title: 'Dark mode' }, 3))
+    // Emptied before the new words land a frame later.
+    expect(status.textContent).toBe('')
+    flush()
+    expect(status.textContent).toBe('3 new updates: Dark mode')
+  })
+
+  it('reports every appearance, so the host decides what is new', () => {
+    const onShown = vi.fn()
+    const l = createLauncher({ placement: 'right', onClick: () => {}, onWhatsNewShown: onShown })
+    l.setWhatsNew(sample())
+    l.setWhatsNew(sample())
+    expect(onShown).toHaveBeenCalledTimes(1)
+    l.setOpen(true)
+    l.setOpen(false)
+    expect(onShown).toHaveBeenCalledTimes(2)
+  })
+
   it('goes with the launcher', () => {
     const l = createLauncher({ placement: 'right', onClick: () => {} })
     l.setWhatsNew(sample())
@@ -290,10 +351,13 @@ describe("sdk What's new card", () => {
       })
     )
     vi.stubGlobal('cancelIdleCallback', vi.fn())
+    // Script-tag installs reveal the launcher at once from the baked config.
+    ;(window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__ = { theme: {} }
   })
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    delete (window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__
   })
 
   function post(data: Record<string, unknown>) {
@@ -432,34 +496,108 @@ describe("sdk What's new card", () => {
     sdk.dispatch('destroy')
   })
 
+  const userA = { id: 'user_a', name: 'Ada', email: 'ada@example.com' }
+  const userB = { id: 'user_b', name: 'Bo', email: 'bo@example.com' }
+  const resolved = (user: typeof userA | null) =>
+    post({ type: 'quackback:identify-result', success: true, user })
+
   it("keeps one visitor's dismissal from hiding the card for another", () => {
     stubFrame()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN, identity: { ssoToken: 'token-a' } })
     post({ type: 'quackback:ready' })
+    resolved(userA)
     announce(sample())
-    // Waits for the identity to resolve before showing anything.
-    expect(shown()).toBe(false)
-    post({
-      type: 'quackback:identify-result',
-      success: true,
-      user: { id: 'user_a', name: 'Ada', email: 'ada@example.com' },
-    })
     expect(shown()).toBe(true)
     dismissBtn().click()
     expect(shown()).toBe(false)
 
-    // Another person signs in on the same browser.
+    // Another person signs in on the same browser; the frame sends their card.
     sdk.dispatch('identify', { ssoToken: 'token-b' })
-    post({
-      type: 'quackback:identify-result',
-      success: true,
-      user: { id: 'user_b', name: 'Bo', email: 'bo@example.com' },
-    })
+    resolved(userB)
+    announce(sample())
     expect(shown()).toBe(true)
     // And an anonymous visitor has their own memory too.
     sdk.dispatch('logout')
+    announce(sample())
     expect(shown()).toBe(true)
+    sdk.dispatch('destroy')
+  })
+
+  it("drops the previous session's card when the visitor changes", () => {
+    stubFrame()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    post({ type: 'quackback:ready' })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'whats-new', handler)
+    announce(sample())
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    // Signing in: the anonymous session's entry is not shown as user A's.
+    sdk.dispatch('identify', { ssoToken: 'token-a' })
+    expect(shown()).toBe(false)
+    resolved(userA)
+    expect(shown()).toBe(false)
+    expect(handler).toHaveBeenCalledTimes(1)
+    // The frame's card for the new session shows, and is new to this visitor.
+    announce(sample({ id: 'changelog_2', publishedAt: '2026-11-22T10:00:00.000Z' }))
+    expect(shown()).toBe(true)
+    expect(handler).toHaveBeenLastCalledWith({ count: 2, entryId: 'changelog_2' })
+
+    // Logging out drops it too.
+    sdk.dispatch('logout')
+    expect(shown()).toBe(false)
+    sdk.dispatch('destroy')
+  })
+
+  it('tells a new visitor about an entry an earlier visitor already saw', () => {
+    stubFrame()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    post({ type: 'quackback:ready' })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'whats-new', handler)
+    announce(sample())
+    sdk.dispatch('identify', { ssoToken: 'token-a' })
+    resolved(userA)
+    announce(sample())
+    expect(handler).toHaveBeenCalledTimes(2)
+    expect(handler).toHaveBeenLastCalledWith({ count: 2, entryId: 'changelog_1' })
+    sdk.dispatch('destroy')
+  })
+
+  it('keeps the card while the same identity is sent again', () => {
+    stubFrame()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, identity: { ssoToken: 'token-a' } })
+    post({ type: 'quackback:ready' })
+    resolved(userA)
+    announce(sample())
+    expect(shown()).toBe(true)
+    sdk.dispatch('identify', { ssoToken: 'token-a' })
+    expect(shown()).toBe(true)
+    sdk.dispatch('destroy')
+  })
+
+  it('hides the card when another tab of the host page dismisses it', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    expect(shown()).toBe(true)
+    const key = `quackback:whats-new:${ORIGIN}:anon`
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        through: '2026-11-20T10:00:00.000Z',
+        answered: ['changelog_1'],
+        announced: [],
+      })
+    )
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }))
+    expect(shown()).toBe(true)
+    window.dispatchEvent(new StorageEvent('storage', { key }))
+    expect(shown()).toBe(false)
     sdk.dispatch('destroy')
   })
 

@@ -175,14 +175,32 @@ export function createSDK(): SDK {
   // their own memory, anonymous visitors share one. Read state is the
   // frame's alone, so the launcher badge is untouched.
   let whatsNewMemory: WhatsNewMemory | null = null
-  // An identity sent to the frame and not yet resolved: the card waits, so it
-  // never shows (or announces) under the wrong visitor's memory.
+  // A new identity sent to the frame and not yet resolved: the card waits, so
+  // it never shows (or announces) under the wrong visitor's memory. The same
+  // identity sent again (a page change in a single-page app) does not wait.
   let identityPending = false
+  let sentIdentityKey: string | null = null
+  let resolvedIdentityKey: string | null = null
   function memory(): WhatsNewMemory {
     return (whatsNewMemory ??= createWhatsNewMemory(iframeOrigin()))
   }
   function visitorScope(): string {
     return currentUser?.id ? `user:${currentUser.id}` : 'anon'
+  }
+  /** The visitor changed: the card the frame worked out for the previous
+   *  session is dropped until the frame sends one for this session. */
+  function setVisitor(user: WidgetUser | null): void {
+    const before = visitorScope()
+    currentUser = user
+    if (visitorScope() !== before) whatsNew = null
+    applyWhatsNew()
+  }
+  // A dismiss or open in another tab of the host page hides the card here.
+  function onWhatsNewStorage(e: StorageEvent): void {
+    if (!config) return
+    if (e.key === null || e.key.startsWith(`quackback:whats-new:${iframeOrigin()}:`)) {
+      applyWhatsNew()
+    }
   }
   function answerWhatsNew(entryId: string): void {
     if (whatsNew?.entry.id === entryId) memory().answer(visitorScope(), whatsNew.entry)
@@ -255,9 +273,9 @@ export function createSDK(): SDK {
           user?: WidgetUser
           error?: string
         }
-        currentUser = m.user ?? null
         identityPending = false
-        applyWhatsNew()
+        resolvedIdentityKey = m.success ? sentIdentityKey : null
+        setVisitor(m.user ?? null)
         emitter.emit('identify', {
           success: !!m.success,
           user: currentUser,
@@ -268,8 +286,7 @@ export function createSDK(): SDK {
       }
       case 'quackback:auth-change': {
         const m = msg as { user?: WidgetUser }
-        currentUser = m.user ?? null
-        applyWhatsNew()
+        setVisitor(m.user ?? null)
         break
       }
       case 'quackback:event': {
@@ -356,8 +373,10 @@ export function createSDK(): SDK {
 
   function sendIdentity(data: unknown) {
     const signedIn = !!data && typeof data === 'object' && !('anonymous' in data)
-    if (signedIn !== identityPending) {
-      identityPending = signedIn
+    sentIdentityKey = signedIn ? JSON.stringify(data) : null
+    const pending = signedIn && sentIdentityKey !== resolvedIdentityKey
+    if (pending !== identityPending) {
+      identityPending = pending
       applyWhatsNew()
     }
     if (ready && bridge) bridge.send('quackback:identify', data)
@@ -502,6 +521,7 @@ export function createSDK(): SDK {
         // made before init, or before a re-init, is never silently undone.
         if (next.tracking !== undefined) hostTracking = next.tracking
         placement = next.placement ?? 'right'
+        window.addEventListener('storage', onWhatsNewStorage)
         createLauncherIfNeeded()
         // Preload the hidden panel iframe off the host page's critical path:
         // init typically runs while the host is still loading, and the iframe
@@ -542,9 +562,10 @@ export function createSDK(): SDK {
         return
       case 'logout':
         if (panelOpen) dispatch('close')
-        currentUser = null
         identityPending = false
-        applyWhatsNew()
+        sentIdentityKey = null
+        resolvedIdentityKey = null
+        setVisitor(null)
         if (ready && bridge) bridge.send('quackback:identify', null as unknown as undefined)
         else {
           pendingIdentify = null
@@ -698,6 +719,9 @@ export function createSDK(): SDK {
         whatsNew = null
         whatsNewMemory = null
         identityPending = false
+        sentIdentityKey = null
+        resolvedIdentityKey = null
+        window.removeEventListener('storage', onWhatsNewStorage)
         placement = 'right'
         config = null
         return

@@ -74,7 +74,7 @@ export interface WhatsNewCardOptions {
   bottom: string
   onOpen: (entryId: string) => void
   onDismiss: (entryId: string) => void
-  /** The card appeared for an entry it has not shown before. */
+  /** The card appeared, or now shows a different entry. */
   onShown: (data: WhatsNew) => void
 }
 
@@ -97,9 +97,9 @@ const PHONE_MARGIN = '16px'
 export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandle {
   let side = opts.side
   let current: WhatsNew | null = null
-  // Entered (and reported shown) once per entry, not on every reopen of the
-  // launcher.
-  let announcedId: string | null = null
+  // The entrance plays once per entry, not on every reopen of the launcher.
+  let enteredId: string | null = null
+  let shownId: string | null = null
 
   const card = document.createElement('div')
   card.setAttribute('role', 'region')
@@ -270,6 +270,7 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
       current = data
       if (!data) {
         card.style.display = 'none'
+        shownId = null
         return
       }
       card.setAttribute('aria-label', data.strings.label || data.strings.action)
@@ -283,9 +284,10 @@ export function createWhatsNewCard(opts: WhatsNewCardOptions): WhatsNewCardHandl
       date.dateTime = data.entry.publishedAt
       const appearing = card.style.display === 'none'
       card.style.display = 'flex'
-      if (announcedId !== data.entry.id) {
-        announcedId = data.entry.id
-        if (appearing) enter()
+      if (appearing && enteredId !== data.entry.id) enter()
+      enteredId = data.entry.id
+      if (shownId !== data.entry.id) {
+        shownId = data.entry.id
         opts.onShown(data)
       }
     },

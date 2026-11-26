@@ -275,18 +275,25 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     lineHeight: '1',
     cursor: 'pointer',
   })
+  // Cards wait for the button: none shows above a launcher not yet revealed.
+  let revealed = false
+  // A visitor who dismissed the What's new card is not offered the greeting
+  // in its place for the rest of the page load.
+  let whatsNewDismissed = false
   // One card at a time above the button, by priority. A reply preview, when
   // there is one, goes first in this list.
   const pickCard = (): 'whats-new' | 'greeting' | null => {
-    if (!visible || isOpen) return null
+    if (!revealed || !visible || isOpen) return null
     if (whatsNew) return 'whats-new'
-    if (greetingText && !greetingDismissed()) return 'greeting'
+    if (greetingText && !greetingDismissed() && !whatsNewDismissed) return 'greeting'
     return null
   }
   const renderGreeting = () => {
     const card = pickCard()
     bubble.style.display = card === 'greeting' ? 'flex' : 'none'
     whatsNewCard?.render(card === 'whats-new' ? whatsNew : null)
+    // A hidden card leaves nothing behind for a screen reader to find.
+    if (card !== 'whats-new') clearAnnouncement()
   }
   bubbleClose.addEventListener('click', () => {
     if (contained) {
@@ -324,13 +331,24 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     whiteSpace: 'nowrap',
   })
   mount.appendChild(live)
+  // Emptied first, so the same words said again are announced again.
+  let announceFrame = 0
   const announce = (text: string) => {
-    requestAnimationFrame(() => {
+    live.textContent = ''
+    cancelAnimationFrame(announceFrame)
+    announceFrame = requestAnimationFrame(() => {
+      announceFrame = 0
       live.textContent = text
     })
   }
+  const clearAnnouncement = () => {
+    if (announceFrame) cancelAnimationFrame(announceFrame)
+    announceFrame = 0
+    live.textContent = ''
+  }
 
   // The "What's new" card, created when there is first something to show.
+  let spokenId: string | null = null
   let cardSide: 'left' | 'right' = side
   let accent: { backgroundColor: string; foregroundColor: string } | null = null
   const ensureWhatsNewCard = (): WhatsNewCardHandle => {
@@ -346,12 +364,17 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       onDismiss: (entryId) => {
         const hadFocus = whatsNewCard?.el.contains(document.activeElement) ?? false
         whatsNew = null
+        whatsNewDismissed = true
         renderGreeting()
         if (hadFocus) btn.focus()
         opts.onWhatsNewDismiss?.(entryId)
       },
       onShown: (data) => {
-        announce(`${data.strings.pill}: ${data.entry.title}`)
+        // Said once per entry; reopening the launcher does not repeat it.
+        if (spokenId !== data.entry.id) {
+          spokenId = data.entry.id
+          announce(`${data.strings.pill}: ${data.entry.title}`)
+        }
         opts.onWhatsNewShown?.(data)
       },
     })
@@ -442,6 +465,8 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     },
     reveal() {
       btn.style.opacity = '1'
+      revealed = true
+      renderGreeting()
     },
     remove() {
       motionQuery?.removeEventListener?.('change', onMotionChange)
