@@ -4,9 +4,18 @@ import { setThemeCookie, type Theme } from '@/lib/shared/theme'
 
 function ThemeCookieSync() {
   const { theme } = useTheme()
+  const initialTheme = React.useRef<string | undefined>(undefined)
+  const initialized = React.useRef(false)
 
   React.useEffect(() => {
-    if (theme) {
+    if (!theme) return
+    if (!initialized.current) {
+      initialized.current = true
+      initialTheme.current = theme
+      return
+    }
+    if (theme !== initialTheme.current) {
+      initialTheme.current = theme
       setThemeCookie(theme as Theme)
     }
   }, [theme])

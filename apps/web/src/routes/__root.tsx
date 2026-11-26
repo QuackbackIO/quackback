@@ -59,6 +59,7 @@ export interface RouterContext {
   sectionDomainsCloud?: boolean
   githubStarPrompt?: boolean
   productAnalytics?: BootstrapData['productAnalytics']
+  visitorTracking?: BootstrapData['visitorTracking']
 }
 
 // Paths that are allowed before onboarding is complete
@@ -170,10 +171,16 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootComponent() {
+  const analytics = Route.useRouteContext({
+    select: (context) => context.visitorTracking?.analytics,
+  })
+  const deviceTracking = Route.useRouteContext({
+    select: (context) => context.visitorTracking?.deviceTracking,
+  })
   return (
     <RootDocument>
       <OttHandler />
-      <VisitorBeacon />
+      <VisitorBeacon analytics={analytics ?? true} deviceTracking={deviceTracking ?? true} />
       <ProductAnalytics />
       <Outlet />
     </RootDocument>
