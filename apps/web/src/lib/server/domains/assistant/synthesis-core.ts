@@ -36,6 +36,7 @@ import {
   reasoningExcludeProviderOptions,
   reasoningEffortProviderOptions,
 } from '@/lib/server/domains/ai/config'
+import { outputBudgetOptions } from '@/lib/server/domains/ai/output-budget'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 import { isWireForwardable } from './agui'
@@ -261,7 +262,7 @@ async function streamOnce<TContext>(
   }
 
   const modelOptions = {
-    max_tokens: opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+    ...outputBudgetOptions(opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS),
     // NOTE: do not add sampling params (e.g. temperature) here. The provider
     // options gate routing on providers advertising EVERY param in the
     // request (require_parameters), so a param many providers don't

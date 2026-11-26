@@ -117,6 +117,12 @@
         "sensitive": false
       },
       {
+        "key": "AI_MAX_TOKENS_PARAM",
+        "kind": "text",
+        "group": "connection",
+        "sensitive": false
+      },
+      {
         "key": "AI_COMBINED_TOOLS_AND_SCHEMA",
         "kind": "tristate",
         "group": "advanced",
