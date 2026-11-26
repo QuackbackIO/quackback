@@ -5,6 +5,13 @@ import type { EventMap, OpenOptions } from '../src/types'
 
 const ORIGIN = 'https://feedback.acme.com'
 
+// Messages from the panel come from its iframe's window; the bridge drops any
+// other source.
+function panelWindow() {
+  const iframe = document.querySelector('iframe.quackback-widget-iframe') as HTMLIFrameElement | null
+  return iframe?.contentWindow ?? null
+}
+
 function stubIframe() {
   const postMessage = vi.fn()
   const spy = vi
@@ -23,6 +30,7 @@ function lastOpen(postMessage: ReturnType<typeof vi.fn>) {
 function fireReady() {
   window.dispatchEvent(
     new MessageEvent('message', {
+ source: panelWindow(),
       origin: ORIGIN,
       data: { type: 'quackback:ready' },
     })
@@ -189,6 +197,7 @@ describe('sdk', () => {
     expect(sdk.isIdentified()).toBe(false)
     window.dispatchEvent(
       new MessageEvent('message', {
+ source: panelWindow(),
         origin: ORIGIN,
         data: {
           type: 'quackback:identify-result',
@@ -440,6 +449,7 @@ describe('sdk', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
     window.dispatchEvent(
       new MessageEvent('message', {
+ source: panelWindow(),
         origin: ORIGIN,
         data: { type: 'quackback:navigate', url: 'https://example.com/thing' },
       })
@@ -459,6 +469,7 @@ describe('sdk', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
     window.dispatchEvent(
       new MessageEvent('message', {
+ source: panelWindow(),
         origin: ORIGIN,
         data: { type: 'quackback:navigate', url: 'javascript:alert(1)' },
       })
@@ -486,7 +497,8 @@ describe('sdk', () => {
   }
 
   function fireFrom(origin: string, type: string) {
-    window.dispatchEvent(new MessageEvent('message', { origin, data: { type } }))
+    window.dispatchEvent(new MessageEvent('message', {
+ source: panelWindow(), origin, data: { type } }))
   }
 
   it('tells the frame whether it is shown, so a closed panel leaves new replies unread', () => {
@@ -543,13 +555,15 @@ describe('sdk', () => {
   })
 
   it('an iframe unread count drives the launcher badge and unread subscribers', () => {
+    stubIframe()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     const handler = vi.fn()
     sdk.dispatch('on', 'unread', handler)
 
     window.dispatchEvent(
-      new MessageEvent('message', { origin: ORIGIN, data: { type: 'quackback:unread', count: 5 } })
+      new MessageEvent('message', {
+ source: panelWindow(), origin: ORIGIN, data: { type: 'quackback:unread', count: 5 } })
     )
 
     // Host subscribers get the count (an older frame sends no breakdown)...
@@ -1450,5 +1464,44 @@ describe('sdk panel stylesheet', () => {
     expect(rule).toContain('.quackback-panel')
     expect(rule).toContain('.quackback-backdrop')
     expect(rule).toContain('transition:none!important')
+  })
+
+  it('a message the old panel sent before destroy cannot change who the new panel is for', () => {
+    // Each iframe gets its own window, as in a browser.
+    const windows = new WeakMap<HTMLIFrameElement, Window>()
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (
+      this: HTMLIFrameElement
+    ) {
+      let w = windows.get(this)
+      if (!w) {
+        w = { postMessage: vi.fn() } as unknown as Window
+        windows.set(this, w)
+      }
+      return w
+    })
+    const send = (source: Window | null, data: unknown) =>
+      window.dispatchEvent(new MessageEvent('message', { origin: ORIGIN, source, data }))
+
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const windowA = panelWindow()
+    send(windowA, { type: 'quackback:ready' })
+    sdk.dispatch('identify', { ssoToken: 'token-a' })
+    send(windowA, { type: 'quackback:identify-result', success: true, user: { id: 'a' } })
+    sdk.dispatch('open')
+
+    sdk.dispatch('destroy')
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const windowB = panelWindow()
+    expect(windowB).not.toBe(windowA)
+    send(windowB, { type: 'quackback:ready' })
+    sdk.dispatch('identify', { ssoToken: 'token-b' })
+    send(windowB, { type: 'quackback:identify-result', success: true, user: { id: 'b' } })
+    sdk.dispatch('open')
+
+    // A's last message arrives late.
+    send(windowA, { type: 'quackback:identify-result', success: true, user: { id: 'a' } })
+    expect(sdk.getUser()).toEqual({ id: 'b' })
+    expect(sdk.isOpen()).toBe(true)
   })
 })
