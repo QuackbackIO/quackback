@@ -27,7 +27,7 @@
   "widget.whatsNew.count": "{count, plural, one {# новое обновление} few {# новых обновления} many {# новых обновлений} other {# нового обновления}}",
   "widget.whatsNew.countAtLeast": "{count, plural, one {#+ новое обновление} few {#+ новых обновления} many {#+ новых обновлений} other {#+ нового обновления}}",
   "widget.whatsNew.action": "Посмотреть, что нового",
-  "widget.whatsNew.dismiss": "Скрыть",
+  "widget.whatsNew.dismiss": "Закрыть",
   "widget.replyPreview.header": "{name} из {team}",
   "widget.replyPreview.replyTo": "Ответить: {name}…",
   "widget.replyPreview.newReplies": "{count, plural, one {# новый ответ} few {# новых ответа} many {# новых ответов} other {# нового ответа}}",
