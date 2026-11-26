@@ -560,7 +560,7 @@ describe('sdk server-driven launcher config', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) =>
-        url.startsWith('https://stale.example.com')
+        new URL(url).origin === 'https://stale.example.com'
           ? new Promise((resolve) => {
               resolveStale = (cfg) => resolve({ ok: true, json: async () => cfg })
             })
