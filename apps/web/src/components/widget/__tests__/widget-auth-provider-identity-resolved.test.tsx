@@ -15,9 +15,15 @@ import { clearWidgetToken } from '@/lib/client/widget-auth'
 
 installInMemoryLocalStorage()
 
-vi.mock('@/lib/client/widget-bridge', () => ({ sendToHost: vi.fn() }))
+vi.mock('@/lib/client/widget-bridge', () => ({
+  sendToHost: vi.fn(),
+  hostOriginIsOpaque: () => false,
+}))
 const frame = { hasHost: true }
-vi.mock('@/lib/client/widget-frame', () => ({ frameHasHost: () => frame.hasHost }))
+vi.mock('@/lib/client/widget-frame', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/widget-frame')>()),
+  frameHasHost: () => frame.hasHost,
+}))
 vi.mock('@/lib/client/auth-client', () => ({
   authClient: { signIn: { anonymous: vi.fn().mockResolvedValue({ data: null, error: null }) } },
 }))

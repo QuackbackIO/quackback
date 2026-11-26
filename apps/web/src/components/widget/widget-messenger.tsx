@@ -8,6 +8,7 @@ import { VisitorSurfaceRpcProvider } from '@/lib/client/visitor-surface-rpc'
 import { widgetVisitorRpc } from '@/lib/client/widget-visitor-rpc'
 import { useConversationPresence, markAgentPresentInCache } from './use-messenger-presence'
 import { useWidgetFileUpload } from './use-widget-file-upload'
+import { frameRequestCredentials } from '@/lib/client/widget-frame'
 
 interface WidgetMessengerProps {
   /** Whether the help center is available (gates in-conversation article suggestions). */
@@ -59,6 +60,7 @@ export function WidgetMessenger({
         const res = await fetch(`/api/widget/kb-search?q=${encodeURIComponent(q)}&limit=3`, {
           signal,
           headers: getWidgetAuthHeaders(),
+          credentials: frameRequestCredentials(),
         })
         if (!res.ok) return []
         const json = (await res.json()) as {

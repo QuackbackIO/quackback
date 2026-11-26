@@ -44,10 +44,16 @@ import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query
 import { widgetFetchBoardCapabilitiesFn } from '@/lib/server/functions/widget/posts'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { getWidgetPortalOriginFn } from '@/lib/server/functions/widget/portal-origin'
+import { widgetPortalSessionReusedFn } from '@/lib/server/functions/widget/portal-session'
 import { widgetListPublicArticlesFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
-import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
+import {
+  widgetQueryKeys,
+  INITIAL_SESSION_VERSION,
+  startingSessionVersion,
+} from '@/lib/client/hooks/use-widget-vote'
+import { frameHoldsPortalSession } from '@/lib/client/widget-frame'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import {
   CONVERSATION_PRESENCE_QUERY_KEY,
@@ -152,6 +158,19 @@ export const Route = createFileRoute('/widget/')({
     const changelogTabEnabled =
       changelogProductEnabled && (settings?.publicWidgetConfig?.tabs?.changelog ?? false)
 
+    // The visitor's portal session counts here only when the frame holds it
+    // (an embedding page on the instance's own origin). Otherwise the frame is
+    // anonymous and the seed is too. On the server the document request
+    // decides, and the call also serves the rest of the request as anonymous
+    // so the reads below never act as the cookie session; it settles before
+    // any of them starts. In the browser (a re-run) the frame already knows
+    // whether it adopted the session, and its calls then carry no cookies.
+    const portalSessionReused =
+      typeof window === 'undefined'
+        ? await widgetPortalSessionReusedFn()
+        : frameHoldsPortalSession()
+    const viewerId = portalSessionReused ? session?.user?.id : undefined
+
     // Every branch below is independent, so the whole SSR seed runs as ONE
     // parallel batch — document TTFB is the slowest branch, not the sum.
     //
@@ -177,7 +196,7 @@ export const Route = createFileRoute('/widget/')({
             portalQueries.portalData({
               boardSlug: search.board,
               sort: 'top',
-              userId: session?.user?.id,
+              userId: viewerId,
             })
           )
         : Promise.resolve(emptyPortalData),
@@ -245,8 +264,10 @@ export const Route = createFileRoute('/widget/')({
     ])
 
     queryClient.setQueryData(
-      widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
-      new Set(portalData.votedPostIds)
+      // Under the version the widget starts on with this session, so the
+      // first render reads the seed instead of refetching it.
+      widgetQueryKeys.votedPosts.bySession(startingSessionVersion(portalSessionReused)),
+      new Set(portalSessionReused ? portalData.votedPostIds : [])
     )
 
     return {

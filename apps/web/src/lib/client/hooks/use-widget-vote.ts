@@ -17,6 +17,15 @@ import type { PostId } from '@quackback/ids'
 /** Initial sessionVersion before any identify() call */
 export const INITIAL_SESSION_VERSION = 0
 
+/**
+ * The sessionVersion the widget starts on: one past the anonymous baseline
+ * when it adopts the visitor's portal session before its first render. The
+ * widget Home loader seeds the viewer's votes under this same version.
+ */
+export function startingSessionVersion(portalSessionAdopted: boolean): number {
+  return INITIAL_SESSION_VERSION + (portalSessionAdopted ? 1 : 0)
+}
+
 // Query keys for widget queries
 export const widgetQueryKeys = {
   votedPosts: {
