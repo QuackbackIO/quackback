@@ -188,6 +188,7 @@ export async function getPublicChangelogById(
     content: entry.content,
     contentJson: contentJsonForClient(entry.contentJson),
     publishedAt: entry.displayDate ?? entry.publishedAt,
+    announceOnLauncher: entry.announceOnLauncher,
     featuredImageUrl: entry.featuredImageUrl
       ? resignStoredAssetUrl(entry.featuredImageUrl)
       : entry.featuredImageUrl,
@@ -333,6 +334,7 @@ export async function listPublicChangelogs(
         content: entry.content,
         contentJson: contentJsonForClient(entry.contentJson),
         publishedAt: entry.displayDate ?? entry.publishedAt!,
+        announceOnLauncher: entry.announceOnLauncher,
         featuredImageUrl: entry.featuredImageUrl
           ? resignStoredAssetUrl(entry.featuredImageUrl)
           : entry.featuredImageUrl,

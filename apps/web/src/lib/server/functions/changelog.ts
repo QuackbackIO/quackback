@@ -73,6 +73,9 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
         ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
         ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
         ...(data.segmentIds !== undefined && { segmentIds: data.segmentIds as SegmentId[] }),
+        ...(data.announceOnLauncher !== undefined && {
+          announceOnLauncher: data.announceOnLauncher,
+        }),
         notify: data.notify,
       },
       {
@@ -111,6 +114,9 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
         ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
         ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
         ...(data.segmentIds !== undefined && { segmentIds: data.segmentIds as SegmentId[] }),
+        ...(data.announceOnLauncher !== undefined && {
+          announceOnLauncher: data.announceOnLauncher,
+        }),
         notify: data.notify,
       },
       { principalId: auth.principal.id }
