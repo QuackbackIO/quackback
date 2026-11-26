@@ -127,6 +127,12 @@
         "kind": "tristate",
         "group": "advanced",
         "sensitive": false
+      },
+      {
+        "key": "AI_STRUCTURED_OUTPUT_STREAM",
+        "kind": "tristate",
+        "group": "advanced",
+        "sensitive": false
       }
     ]
   },
