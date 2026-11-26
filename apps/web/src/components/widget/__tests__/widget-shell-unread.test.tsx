@@ -31,7 +31,10 @@ vi.mock('../widget-auth-provider', () => ({
     sessionVersion: 4,
   }),
 }))
-vi.mock('../use-messenger-unread', () => ({ useMessengerUnreadState: h.useMessengerUnreadState }))
+vi.mock('../use-messenger-unread', () => ({
+  useMessengerUnreadState: h.useMessengerUnreadState,
+  useRefreshSummaryOnUnreadChange: () => {},
+}))
 vi.mock('../reply-preview', () => ({
   useUnreadReplies: h.useUnreadReplies,
   useReplyPreviewAnnouncement: h.useReplyPreviewAnnouncement,
