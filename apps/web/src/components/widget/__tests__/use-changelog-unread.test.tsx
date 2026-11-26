@@ -195,3 +195,52 @@ describe('the unread count as a lower bound', () => {
     expect(result.current.more).toBe(false)
   })
 })
+
+describe('entries the What\'s new card may announce', () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  const announced = (n: number, announceOnLauncher?: boolean) =>
+    announceOnLauncher === undefined ? entry(n) : { ...entry(n), announceOnLauncher }
+
+  beforeEach(() => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+  })
+
+  async function render() {
+    const { wrapper } = setup()
+    const hook = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(hook.result.current.ready).toBe(true))
+    return hook.result
+  }
+
+  it('counts and picks only announced entries, while the badge counts them all', async () => {
+    items = [announced(3, false), announced(2, true)]
+    const result = await render()
+    expect(result.current.unread).toBe(2)
+    expect(result.current.newest?.id).toBe('changelog_3')
+    expect(result.current.announced.count).toBe(1)
+    expect(result.current.announced.newest?.id).toBe('changelog_2')
+  })
+
+  it('has nothing to announce when no unread entry is announced', async () => {
+    items = [announced(3, false), announced(2, false)]
+    const result = await render()
+    expect(result.current.unread).toBe(2)
+    expect(result.current.announced.count).toBe(0)
+    expect(result.current.announced.newest).toBeNull()
+  })
+
+  it('treats an entry without the field as announced', async () => {
+    items = [announced(3), announced(2, true)]
+    const result = await render()
+    expect(result.current.announced.count).toBe(2)
+    expect(result.current.announced.newest?.id).toBe('changelog_3')
+  })
+
+  it('is a lower bound when every loaded entry is unread and more exist', async () => {
+    items = [announced(3, false), announced(2, true)]
+    nextCursor = 'page_2'
+    const result = await render()
+    expect(result.current.announced.count).toBe(1)
+    expect(result.current.announced.more).toBe(true)
+  })
+})

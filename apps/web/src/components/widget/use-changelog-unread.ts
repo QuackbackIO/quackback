@@ -14,6 +14,8 @@ import {
 } from './changelog-unread'
 import { seenScope } from './seen-scope'
 
+type UnreadEntry = { id: string; title: string; content: string; publishedAt: string }
+
 /**
  * Unread changelog count for the visitor and the newest unread entry, plus
  * the mark-seen action the changelog surface calls once entries are on screen. Pass `enabled=false`
@@ -23,7 +25,10 @@ import { seenScope } from './seen-scope'
 export function useChangelogUnread(enabled: boolean): {
   unread: number
   /** The newest unread entry, or null. */
-  newest: { id: string; title: string; content: string; publishedAt: string } | null
+  newest: UnreadEntry | null
+  /** The unread entries the "What's new" card may announce: an entry can opt
+   *  out, and still counts towards `unread`. */
+  announced: { count: number; newest: UnreadEntry | null; more: boolean }
   /** Whether the list has loaded, so "nothing unread" is known. */
   ready: boolean
   /** Every loaded entry is unread and more pages exist: `unread` is a lower
@@ -94,5 +99,15 @@ export function useChangelogUnread(enabled: boolean): {
 
   const more = unread > 0 && unread === entries.length && hasNextPage === true
 
-  return { unread, newest, ready: loaded, more, markSeen }
+  // An entry from an older server without the field is announced.
+  const announceable = entries.filter((e) => e.announceOnLauncher !== false)
+  const announcedCount = countUnreadChangelogs(announceable, seenAt)
+  const announced = {
+    count: announcedCount,
+    newest: newestUnreadChangelog(announceable, seenAt),
+    // Every loaded entry is unread and more exist: later pages may hold more.
+    more: announcedCount > 0 && more,
+  }
+
+  return { unread, newest, announced, ready: loaded, more, markSeen }
 }

@@ -30,7 +30,11 @@ vi.mock('../reply-preview', () => ({
   useReplyPreviewAnnouncement: () => {},
 }))
 vi.mock('../use-changelog-unread', () => ({
-  useChangelogUnread: () => ({ unread: 0, markSeen: vi.fn() }),
+  useChangelogUnread: () => ({
+    unread: 0,
+    announced: { count: 0, newest: null, more: false },
+    markSeen: vi.fn(),
+  }),
 }))
 vi.mock('../use-ticket-stage-badge', () => ({
   useTicketStageBadge: () => ({ unread: 0, hasTickets: false }),
