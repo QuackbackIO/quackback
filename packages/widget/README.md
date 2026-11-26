@@ -65,6 +65,16 @@ Drop this in your `<head>` and skip the install step entirely:
 <script src="https://feedback.yourcompany.com/api/widget/sdk.js" defer></script>
 ```
 
+A script-tag install calls the global function with the method name: `Quackback('open')`, `Quackback('on', 'close', handler)`. The state methods return their value the same way once `sdk.js` has loaded:
+
+```js
+Quackback('on', 'ready', () => {
+  console.log(Quackback('isOpen'), Quackback('isIdentified'), Quackback('getUser'))
+})
+```
+
+Before `sdk.js` loads, the install snippet only queues calls, so a state read made that early returns `undefined`. Read state inside a `ready` handler, or after your own code knows the script has loaded.
+
 ## API
 
 ### Methods
@@ -76,7 +86,7 @@ Drop this in your `<head>` and skip the install step entirely:
 | `Quackback.logout()`                          | Clear identity; widget stays visible in anonymous mode.                        |
 | `Quackback.open(options?)`                    | Open the panel; optional deep-link payload (see below).                        |
 | `Quackback.close()`                           | Close the panel.                                                               |
-| `Quackback.showLauncher()` / `hideLauncher()` | Toggle the floating button.                                                    |
+| `Quackback.showLauncher()` / `hideLauncher()` | Show or hide the floating button and its greeting. See below.                  |
 | `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key.     |
 | `Quackback.tracking(enabled)`                 | Allow or stop host-page visitor analytics. `false` also removes the device id. |
 | `Quackback.on(event, handler)`                | Subscribe to a widget event. Returns an unsubscribe function.                  |
@@ -85,6 +95,12 @@ Drop this in your `<head>` and skip the install step entirely:
 | `Quackback.isOpen()`                          | Whether the panel is currently visible.                                        |
 | `Quackback.getUser()`                         | The current identified user, or `null`.                                        |
 | `Quackback.isIdentified()`                    | `true` when a user is identified (non-anonymous).                              |
+
+### The launcher
+
+The floating button is named "Open help" for screen readers (or your launcher label, when one is set), with the unread count added when there is one: "Open help, 2 unread". While the panel is open it reads "Close help". The panel is a labelled dialog: opening it with a click or key press moves keyboard focus into it, and closing it returns focus to the element that opened it, or to the launcher when that element is gone. An open while the visitor is typing in a field leaves their focus there.
+
+`hideLauncher()` hides the button and its greeting bubble together. `showLauncher()` brings them back, and also works after `init({ launcher: false })`, so you can start with your own button and show the default one later.
 
 ### `init` options
 
@@ -171,6 +187,7 @@ unsubscribe()
 | `comment:created` | `{ postId, commentId, parentId }`          |
 | `identify`        | `{ success, user, anonymous, error? }`     |
 | `email-submitted` | `{ email }`                                |
+| `unread`          | `{ count }`                                |
 
 ## Docs
 

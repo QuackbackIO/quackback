@@ -68,7 +68,7 @@ describe('sdk host-page tracking', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN, tracking: false })
     expect(trackers).toHaveLength(0)
     expect(window.localStorage.getItem(DEVICE_KEY)).toBeNull()
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).not.toBeNull()
   })
 
   it('tracking(true) after init starts the tracker the instance allows', () => {

@@ -21,7 +21,7 @@ function sendClose(origin: string) {
 }
 
 function launcher() {
-  return screen.getByRole('button', { name: /feedback widget/i })
+  return screen.getByRole('button', { name: /^(open|close) help/i })
 }
 
 describe('WidgetPreview', () => {
