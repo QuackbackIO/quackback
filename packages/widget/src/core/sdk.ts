@@ -98,7 +98,8 @@ export function createSDK(): SDK {
   // Whether the frame has sent the card for the current visitor yet.
   let whatsNewPayloadReceived = false
   // The host page's say on the card for this page (init's whatsNew option,
-  // or the whatsNew command): off hides it without touching the badge.
+  // or the whatsNew command): off hides it without touching the badge. Kept
+  // across a re-init or destroy, like the host's tracking choice.
   let hostWhatsNew = true
   // The frame's newest unread replies, and the tab title flash for them.
   let replyPreview: ReplyPreview | null = null
@@ -663,9 +664,9 @@ export function createSDK(): SDK {
         // Only an explicit option changes the host's choice, so a withdrawal
         // made before init, or before a re-init, is never silently undone.
         if (next.tracking !== undefined) hostTracking = next.tracking
-        // Each init states the page's choice; without the option the card
-        // follows the workspace setting.
-        hostWhatsNew = next.whatsNew !== false
+        // The same for the card: only an explicit option changes the page's
+        // choice, so a whatsNew call made before init holds.
+        if (next.whatsNew !== undefined) hostWhatsNew = next.whatsNew
         placement = next.placement ?? 'right'
         window.addEventListener('storage', onWhatsNewStorage)
         document.addEventListener('visibilitychange', onVisibility)
@@ -871,7 +872,6 @@ export function createSDK(): SDK {
         unreadCount = 0
         whatsNew = null
         whatsNewPayloadReceived = false
-        hostWhatsNew = true
         whatsNewMemory = null
         replyPreview = null
         replyMemory = null

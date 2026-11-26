@@ -341,7 +341,7 @@ function returning(...scopes: string[]) {
   for (const scope of scopes) localStorage.setItem(memoryKey(scope), '{}')
 }
 
-describe("sdk What's new card", () => {
+describe("sdk What's new card for visitors known on this device", () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     document.head.innerHTML = ''
@@ -560,7 +560,7 @@ describe("sdk What's new card", () => {
     sdk.dispatch('destroy')
   })
 
-  it('tells a new visitor about an entry an earlier visitor already saw', () => {
+  it('tells another known visitor about an entry an earlier visitor already saw', () => {
     stubFrame()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
@@ -745,13 +745,26 @@ describe("sdk What's new card: first visit and page choice", () => {
     sdk.dispatch('destroy')
   })
 
-  it('a later init without the option shows the card again', () => {
+  it('a later init without the option keeps the last choice; with it, follows it', () => {
     returning('anon')
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN, whatsNew: false })
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     announce(sample())
+    expect(shown()).toBe(false)
+    sdk.dispatch('init', { instanceUrl: ORIGIN, whatsNew: true })
+    announce(sample())
     expect(shown()).toBe(true)
+    sdk.dispatch('destroy')
+  })
+
+  it('a choice made before init holds, as with a script-tag install', () => {
+    returning('anon')
+    const sdk = createSDK()
+    sdk.dispatch('whatsNew', false)
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    announce(sample())
+    expect(shown()).toBe(false)
     sdk.dispatch('destroy')
   })
 })

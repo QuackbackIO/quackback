@@ -54,8 +54,8 @@ export interface InitOptions {
    * Set `whatsNew: false` to keep the "What's new" card above the launcher
    * off on this page, for example on a checkout page, whatever the workspace
    * setting. The unread badge is unchanged. Switch it at runtime with
-   * `Quackback.whatsNew(true | false)`. Each `init` starts from its own
-   * option; omitting it follows the workspace setting.
+   * `Quackback.whatsNew(true | false)`. On by default; omitting the option
+   * keeps the last choice, so a `whatsNew` call made before `init` holds.
    */
   whatsNew?: boolean
 }
