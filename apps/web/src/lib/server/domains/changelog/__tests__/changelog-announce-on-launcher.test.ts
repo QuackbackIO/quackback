@@ -30,7 +30,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { changelogEntries, eq, principal, user } from '@/lib/server/db'
 import { createChangelogSchema, updateChangelogSchema } from '@/lib/shared/schemas/changelog'
 import { createChangelog, getChangelogById, updateChangelog } from '../changelog.service'
-import { listPublicChangelogs } from '../changelog.public'
+import { getPublicChangelogById, listPublicChangelogs } from '../changelog.public'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -102,7 +102,7 @@ describe.skipIf(!fixture.available)('changelog announce above the launcher (real
     expect((await getChangelogById(entry.id)).announceOnLauncher).toBe(true)
   })
 
-  it("the public list carries each entry's choice", async () => {
+  it("the list the widget reads carries each entry's choice", async () => {
     const author = await seedAuthor()
     const published = { type: 'published' as const }
     const on = await createChangelog(
@@ -118,6 +118,15 @@ describe.skipIf(!fixture.available)('changelog announce above the launcher (real
     const byId = new Map(items.map((e) => [e.id, e.announceOnLauncher]))
     expect(byId.get(on.id)).toBe(true)
     expect(byId.get(off.id)).toBe(false)
+  })
+
+  it('leaves the choice out of a single public entry', async () => {
+    const author = await seedAuthor()
+    const entry = await createChangelog(
+      { title: 'On', content: 'Body', publishState: { type: 'published' } },
+      author
+    )
+    expect(await getPublicChangelogById(entry.id)).not.toHaveProperty('announceOnLauncher')
   })
 })
 

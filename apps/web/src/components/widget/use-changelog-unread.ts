@@ -3,8 +3,8 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { widgetChangelogListQuery } from './widget-changelog-query'
 import { useWidgetAuth } from './widget-auth-provider'
 import {
+  changelogBaseline,
   countUnreadChangelogs,
-  EMPTY_CHANGELOG_BASELINE,
   newestUnreadChangelog,
   getChangelogSeenAt,
   isChangelogSeenKey,
@@ -81,14 +81,14 @@ export function useChangelogUnread(enabled: boolean): {
 
   // Silent first-contact baseline: what was published before the visitor
   // first met the widget never badges, and later entries do, whether or not
-  // they ever open the Changelog tab (see changelog-unread.ts). An empty
-  // changelog stamps a baseline older than anything, so its first entry badges.
+  // they ever open the Changelog tab. The baseline is the server's time of
+  // the first load (see changelogBaseline in changelog-unread.ts).
   const loaded = data !== undefined
-  const newestPublishedAt = entries[0]?.publishedAt
+  const baseline = loaded ? changelogBaseline(entries, data.pages[0]?.serverTime) : null
   useEffect(() => {
-    if (scope === null || !loaded || getChangelogSeenAt(scope) !== null) return
-    markChangelogSeen(scope, newestPublishedAt ?? EMPTY_CHANGELOG_BASELINE)
-  }, [loaded, newestPublishedAt, scope])
+    if (scope === null || baseline === null || getChangelogSeenAt(scope) !== null) return
+    markChangelogSeen(scope, baseline)
+  }, [baseline, scope])
 
   const markSeen = useCallback(
     (publishedAt: string) => {

@@ -61,7 +61,7 @@ const hoisted = vi.hoisted(() => {
     watchMyTicket: vi.fn(),
     unwatchMyTicket: vi.fn(),
     getPublicChangelog: vi.fn(),
-    listPublicChangelogs: vi.fn(),
+    listWidgetChangelogs: vi.fn(),
     listChangelogCategories: vi.fn(),
     getUserStats: vi.fn(),
     listPublicCategoriesWithFallback: vi.fn(),
@@ -144,7 +144,7 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 }))
 vi.mock('@/lib/server/functions/changelog', () => ({
   runGetPublicChangelog: hoisted.run.getPublicChangelog,
-  runListPublicChangelogs: hoisted.run.listPublicChangelogs,
+  runListWidgetChangelogs: hoisted.run.listWidgetChangelogs,
 }))
 vi.mock('@/lib/server/functions/changelog-categories', () => ({
   runListChangelogCategories: hoisted.run.listChangelogCategories,

@@ -259,14 +259,12 @@ export const getPublicChangelogFn = createServerFn({ method: 'GET' })
   .validator(getChangelogSchema)
   .handler(async ({ data }) => runGetPublicChangelog(await getOptionalAuth(), data))
 
-/**
- * List published changelog entries (public view)
- */
-export const runListPublicChangelogs = createServerOnlyFn(async function runListPublicChangelogs(
+/** The published entries this caller may read, with publish times as ISO
+ *  strings and each entry's announce choice (the widget's alone). */
+async function listReadableChangelogs(
   authCtx: Awaited<ReturnType<typeof getOptionalAuth>>,
   data: z.infer<typeof listPublicChangelogsSchema>
 ) {
-  log.debug({ limit: data.limit }, 'list public changelogs')
   const actor = await resolveChangelogReader(authCtx)
   if (!actor) return { items: [], nextCursor: null, hasMore: false }
 
@@ -284,6 +282,46 @@ export const runListPublicChangelogs = createServerOnlyFn(async function runList
       ...entry,
       publishedAt: toIsoString(entry.publishedAt),
     })),
+  }
+}
+
+/**
+ * List published changelog entries (public view)
+ */
+export const runListPublicChangelogs = createServerOnlyFn(async function runListPublicChangelogs(
+  authCtx: Awaited<ReturnType<typeof getOptionalAuth>>,
+  data: z.infer<typeof listPublicChangelogsSchema>
+) {
+  log.debug({ limit: data.limit }, 'list public changelogs')
+  const result = await listReadableChangelogs(authCtx, data)
+  // The announce choice is for the widget's launcher card, not the portal.
+  return {
+    ...result,
+    items: result.items.map(({ announceOnLauncher: _announce, ...entry }) => entry),
+  }
+})
+
+/**
+ * The widget's changelog list: the public list, plus the announce choice of
+ * each entry kept out of the card above the launcher, and the server's time,
+ * which a visitor's first load records as the point after which entries are
+ * new. The choice is left off announced entries (most of them), as the frame
+ * reads a missing one as announced and the list is part of the widget page.
+ */
+export const runListWidgetChangelogs = createServerOnlyFn(async function runListWidgetChangelogs(
+  authCtx: Awaited<ReturnType<typeof getOptionalAuth>>,
+  data: z.infer<typeof listPublicChangelogsSchema>
+) {
+  log.debug({ limit: data.limit }, 'list widget changelogs')
+  const serverTime = new Date().toISOString()
+  const result = await listReadableChangelogs(authCtx, data)
+  return {
+    ...result,
+    items: result.items.map(
+      ({ announceOnLauncher, ...entry }): typeof entry & { announceOnLauncher?: false } =>
+        announceOnLauncher ? entry : { ...entry, announceOnLauncher: false }
+    ),
+    serverTime,
   }
 })
 

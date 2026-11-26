@@ -13,6 +13,7 @@ const entry = (n: number) => ({
 })
 let items = [entry(1)]
 let nextCursor: string | null = null
+let serverTime: string | undefined
 const auth: { user: { id: string } | null; identityResolved: boolean } = {
   user: null,
   identityResolved: true,
@@ -27,7 +28,7 @@ vi.mock('../widget-auth-provider', () => ({
 }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
 vi.mock('@/lib/server/functions/widget/changelog', () => ({
-  widgetListPublicChangelogsFn: () => Promise.resolve({ items, nextCursor }),
+  widgetListPublicChangelogsFn: () => Promise.resolve({ items, nextCursor, serverTime }),
   widgetListChangelogCategoriesFn: () => Promise.resolve([]),
 }))
 
@@ -37,6 +38,7 @@ beforeEach(() => {
   localStorage.clear()
   items = [entry(1)]
   nextCursor = null
+  serverTime = undefined
   auth.user = null
   auth.identityResolved = true
 })
@@ -104,18 +106,36 @@ it('ignores the marker saved before markers were kept per person', async () => {
   expect(hook.result.current.unread).toBe(0)
 })
 
-it('badges the first entry of a changelog that was empty at first contact', async () => {
+it("records everything published before the first load as seen, by the server's clock", async () => {
+  // Anonymous: every entry is gated, so the list is empty.
   items = []
+  serverTime = '2026-11-15T08:00:00.000Z'
   const { qc, wrapper, loaded } = setup()
   const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
   await waitFor(() => expect(loaded()).toBe(true))
   await waitFor(() =>
-    expect(localStorage.getItem('quackback:changelog-seen-at:anonymous')).not.toBeNull()
+    expect(localStorage.getItem('quackback:changelog-seen-at:anonymous')).toBe(serverTime)
   )
 
-  items = [entry(1)]
+  // Entries that existed at the first load stay quiet when they appear later;
+  // one published afterwards badges.
+  items = [entry(20), entry(10)]
   await act(() => qc.invalidateQueries())
   await waitFor(() => expect(result.current.unread).toBe(1))
+  expect(result.current.newest?.id).toBe('changelog_20')
+})
+
+it('falls back to now for an empty list without a server time, never the epoch', async () => {
+  items = []
+  const before = Date.now()
+  const { wrapper, loaded } = setup()
+  renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(loaded()).toBe(true))
+  await waitFor(() =>
+    expect(localStorage.getItem('quackback:changelog-seen-at:anonymous')).not.toBeNull()
+  )
+  const stamped = new Date(localStorage.getItem('quackback:changelog-seen-at:anonymous')!)
+  expect(stamped.getTime()).toBeGreaterThanOrEqual(before)
 })
 
 it('reads the marker once, not on every render', async () => {

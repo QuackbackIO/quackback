@@ -186,9 +186,6 @@ export interface PublicChangelogEntry {
   content: string
   contentJson: TiptapContent | null
   publishedAt: Date
-  /** Whether the widget's "What's new" card above the launcher may announce
-   *  this entry. */
-  announceOnLauncher: boolean
   /** Hero image URL rendered at the top of the public entry detail page */
   featuredImageUrl: string | null
   linkedPosts: PublicChangelogLinkedPost[]
@@ -212,8 +209,16 @@ export interface PublicChangelogLinkedPost {
 /**
  * Public changelog list result
  */
+/** A listed public entry, with its announce choice for the widget's card.
+ *  The portal leaves the choice out of what it sends. */
+export interface PublicChangelogListEntry extends PublicChangelogEntry {
+  /** Whether the widget's "What's new" card above the launcher may announce
+   *  this entry. */
+  announceOnLauncher: boolean
+}
+
 export interface PublicChangelogListResult {
-  items: PublicChangelogEntry[]
+  items: PublicChangelogListEntry[]
   nextCursor: string | null
   hasMore: boolean
 }
