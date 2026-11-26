@@ -1227,6 +1227,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/widget/help.ts`::widgetRecordArticleViewFn | server-fn |
 | `lib/server/functions/widget/help.ts`::widgetResolvePublicArticleRefFn | server-fn |
 | `lib/server/functions/widget/portal-origin.ts`::getWidgetPortalOriginFn | server-fn |
+| `lib/server/functions/widget/portal-session.ts`::widgetPortalSessionReusedFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetFetchBoardCapabilitiesFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetFetchPublicPostDetailFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetGetVotedPostsFn | server-fn |
