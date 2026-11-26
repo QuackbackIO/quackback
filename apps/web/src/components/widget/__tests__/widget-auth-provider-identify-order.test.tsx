@@ -152,5 +152,4 @@ describe('WidgetAuthProvider: the latest identify wins', () => {
     expect(getWidgetToken()).toBe('anonymous-token')
     expect(identifyResults().at(-1)).toMatchObject({ success: false, error: 'SERVER_ERROR' })
   })
-
 })

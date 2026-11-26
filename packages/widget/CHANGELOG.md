@@ -20,6 +20,9 @@
 - The new `message` event (`{ conversationId, author: { name, avatarUrl }, preview }`) fires once for each new unread reply in any of the visitor's conversations (the 20 newest at each check) that arrives while the page is open or since the visitor's last visit on that device, whichever way the workspace shows replies, including the badge only, so you can build your own indicator.
 - The unread count refreshes as soon as the visitor comes back to the page, instead of on the next poll.
 - Script-tag installs can read state with `Quackback('isOpen')`, `Quackback('getUser')` and `Quackback('isIdentified')`.
+- The SDK only accepts messages from the panel iframe on the page now. Before, a message from another window on the same origin, such as a removed panel's last reply, could change `getUser()`, the unread count or open a link in a new tab.
+- `useQuackbackInit` calls `logout()` when `identity` goes back to `undefined`, so signing out of your app signs out of the widget. A visitor who was never identified keeps their anonymous session.
+- New "Signing out and switching users" section in this README.
 
 ## 0.1.6 - 2026-11-23
 

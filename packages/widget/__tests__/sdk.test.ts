@@ -8,7 +8,9 @@ const ORIGIN = 'https://feedback.acme.com'
 // Messages from the panel come from its iframe's window; the bridge drops any
 // other source.
 function panelWindow() {
-  const iframe = document.querySelector('iframe.quackback-widget-iframe') as HTMLIFrameElement | null
+  const iframe = document.querySelector(
+    'iframe.quackback-widget-iframe'
+  ) as HTMLIFrameElement | null
   return iframe?.contentWindow ?? null
 }
 
@@ -30,7 +32,7 @@ function lastOpen(postMessage: ReturnType<typeof vi.fn>) {
 function fireReady() {
   window.dispatchEvent(
     new MessageEvent('message', {
- source: panelWindow(),
+      source: panelWindow(),
       origin: ORIGIN,
       data: { type: 'quackback:ready' },
     })
@@ -197,7 +199,7 @@ describe('sdk', () => {
     expect(sdk.isIdentified()).toBe(false)
     window.dispatchEvent(
       new MessageEvent('message', {
- source: panelWindow(),
+        source: panelWindow(),
         origin: ORIGIN,
         data: {
           type: 'quackback:identify-result',
@@ -449,7 +451,7 @@ describe('sdk', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
     window.dispatchEvent(
       new MessageEvent('message', {
- source: panelWindow(),
+        source: panelWindow(),
         origin: ORIGIN,
         data: { type: 'quackback:navigate', url: 'https://example.com/thing' },
       })
@@ -469,7 +471,7 @@ describe('sdk', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
     window.dispatchEvent(
       new MessageEvent('message', {
- source: panelWindow(),
+        source: panelWindow(),
         origin: ORIGIN,
         data: { type: 'quackback:navigate', url: 'javascript:alert(1)' },
       })
@@ -497,8 +499,13 @@ describe('sdk', () => {
   }
 
   function fireFrom(origin: string, type: string) {
-    window.dispatchEvent(new MessageEvent('message', {
- source: panelWindow(), origin, data: { type } }))
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: panelWindow(),
+        origin,
+        data: { type },
+      })
+    )
   }
 
   it('tells the frame whether it is shown, so a closed panel leaves new replies unread', () => {
@@ -563,7 +570,10 @@ describe('sdk', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
- source: panelWindow(), origin: ORIGIN, data: { type: 'quackback:unread', count: 5 } })
+        source: panelWindow(),
+        origin: ORIGIN,
+        data: { type: 'quackback:unread', count: 5 },
+      })
     )
 
     // Host subscribers get the count (an older frame sends no breakdown)...

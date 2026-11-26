@@ -22,7 +22,9 @@ const ORIGIN = 'https://feedback.acme.com'
 // Messages from the panel come from its iframe's window; the bridge drops any
 // other source.
 function panelWindow() {
-  const iframe = document.querySelector('iframe.quackback-widget-iframe') as HTMLIFrameElement | null
+  const iframe = document.querySelector(
+    'iframe.quackback-widget-iframe'
+  ) as HTMLIFrameElement | null
   return iframe?.contentWindow ?? null
 }
 const DEVICE_KEY = 'quackback:device-id'
@@ -171,7 +173,10 @@ describe('sdk host-page tracking', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     window.dispatchEvent(
       new MessageEvent('message', {
- source: panelWindow(), origin: ORIGIN, data: { type: 'quackback:ready' } })
+        source: panelWindow(),
+        origin: ORIGIN,
+        data: { type: 'quackback:ready' },
+      })
     )
     postMessage.mockClear()
     sdk.dispatch('tracking', false)
