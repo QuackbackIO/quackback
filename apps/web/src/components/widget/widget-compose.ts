@@ -27,6 +27,7 @@ export type WidgetOpenPayload = {
 
 export type WidgetOpenCommand =
   | { type: 'new-post'; title?: string; body?: string; boardSlug?: string }
+  | { type: 'feedback' }
   | { type: 'post'; postId: string }
   | { type: 'article'; articleId: string } // slug or `article_` TypeID (`kb_article_` still accepted)
   | { type: 'changelog'; entryId?: string }
@@ -91,6 +92,8 @@ export function resolveOpenCommand(
         body: emptyToUndef(opts.body),
         boardSlug: emptyToUndef(opts.board),
       }
+    case 'feedback':
+      return tabs.feedback ? { type: 'feedback' } : null
     case 'changelog':
       if (!tabs.changelog) return null
       return { type: 'changelog', entryId: emptyToUndef(opts.entryId) }

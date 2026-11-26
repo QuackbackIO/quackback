@@ -1256,6 +1256,7 @@
   "widget.help.article.askQuestion": "向我們提問",
   "widget.changelog.new": "新",
   "widget.shell.tab.messages.unread": "{count} 則未讀",
+  "widget.shell.tab.tickets.updated": "{count, plural, other {# 張工單有更新}}",
   "automation.connectors.empty.title": "還沒有連接器",
   "automation.builtinTools.agent": "代理",
   "automation.skills.empty.title": "還沒有技能",

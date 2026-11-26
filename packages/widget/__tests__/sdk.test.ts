@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createSDK } from '../src/core/sdk'
+import type { EventMap, OpenOptions } from '../src/types'
 
 const ORIGIN = 'https://feedback.acme.com'
 
@@ -267,6 +268,46 @@ describe('sdk', () => {
     sdk.dispatch('open', { view: 'messages' })
     sdk.dispatch('open', { view: 'tickets' })
     expect(seen.map((payload) => payload.view)).toEqual(['messages', 'tickets'])
+  })
+
+  it('open forwards the feedback view and reports it on the open event', () => {
+    const { postMessage, spy } = stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    fireReady()
+    const seen: Array<EventMap['open']['view']> = []
+    sdk.dispatch('on', 'open', (payload: EventMap['open']) => seen.push(payload.view))
+    const opts: OpenOptions = { view: 'feedback' }
+    sdk.dispatch('open', opts)
+    // The shown state follows the open, so the open is not the last message.
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'quackback:open', data: { view: 'feedback' } },
+      ORIGIN
+    )
+    const expected: EventMap['open']['view'] = 'feedback'
+    expect(seen).toEqual([expected])
+    spy.mockRestore()
+  })
+
+  it('emits email-submitted from the iframe to subscribers', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const seen: Array<EventMap['email-submitted']> = []
+    sdk.dispatch('on', 'email-submitted', (payload: EventMap['email-submitted']) =>
+      seen.push(payload)
+    )
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: ORIGIN,
+        data: {
+          type: 'quackback:event',
+          name: 'email-submitted',
+          payload: { email: 'sam@example.com' },
+        },
+      })
+    )
+    expect(seen).toEqual([{ email: 'sam@example.com' }])
   })
 
   it('metadata merges and sends to iframe', () => {

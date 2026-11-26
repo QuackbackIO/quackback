@@ -570,6 +570,7 @@ function WidgetPage() {
   } | null>(null)
   const [composeRequest, setComposeRequest] = useState<WidgetComposeRequest | null>(null)
   const composeNonceRef = useRef(0)
+  const [collapseRequest, setCollapseRequest] = useState(0)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
 
   const allPosts = useMemo(() => {
@@ -664,6 +665,13 @@ function WidgetPage() {
             body: command.body,
             boardSlug: command.boardSlug,
           })
+          setSelectedPostId(null)
+          setActiveTab('feedback')
+          setView('feedback')
+          break
+        case 'feedback':
+          composeNonceRef.current += 1
+          setCollapseRequest(composeNonceRef.current)
           setSelectedPostId(null)
           setActiveTab('feedback')
           setView('feedback')
@@ -1178,6 +1186,7 @@ function WidgetPage() {
             initialBoardSlug={initialBoardSlug}
             confirmedBoardSlugs={liveCapabilities?.boards.map((b) => b.slug) ?? null}
             composeRequest={composeRequest}
+            collapseRequest={collapseRequest}
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}
           />

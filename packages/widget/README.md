@@ -167,6 +167,7 @@ The server only accepts a signed `ssoToken`. An unsigned `{ id, email, name }` i
 
 ```ts
 Quackback.open() // home
+Quackback.open({ view: 'feedback' }) // feedback list
 Quackback.open({ view: 'new-post', title: 'Bug:', body: '...', board: 'bugs' }) // pre-filled form
 Quackback.open({ view: 'changelog' }) // changelog feed
 Quackback.open({ view: 'help', query: 'pricing' }) // help search
@@ -205,6 +206,8 @@ unsubscribe()
 | `message`         | `{ conversationId, author: { name, avatarUrl }, preview }`  |
 
 `unread.count` is the total the launcher badge shows; `messages`, `changelog` and `tickets` are its parts. `message` fires once for each new unread reply from a teammate or the AI assistant, in any of the visitor's conversations, whichever way the workspace shows replies, including the badge only, so you can build your own indicator. The widget checks the 20 newest unread replies each time the unread count is read (about every 30 seconds, and when the visitor comes back to the page), so a burst of more than 20 replies between checks reports only the newest 20. It covers replies that arrive while the page is open, and those since the visitor's last visit on that device: the first time a visitor loads the widget on a device, replies that were already unread are recorded without firing the event. `preview` is the reply as plain text, cut to 280 characters with an ellipsis. The host page remembers which replies it reported, per instance and per visitor, so a reload does not repeat them.
+
+The `open` payload reports the view and deep-link the host requested, not the view that is showing. When that surface is turned off, the panel opens without switching to it and the event still names the requested view.
 
 ## Docs
 

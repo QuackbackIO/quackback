@@ -123,6 +123,14 @@ describe('resolveOpenCommand', () => {
     })
   })
 
+  it('opens the feedback list only when the Feedback tab is enabled', () => {
+    expect(resolveOpenCommand({ view: 'feedback' }, allTabs)).toEqual({ type: 'feedback' })
+    expect(resolveOpenCommand({ view: 'feedback' }, { feedback: true })).toEqual({
+      type: 'feedback',
+    })
+    expect(resolveOpenCommand({ view: 'feedback' }, { messages: true, help: true })).toBeNull()
+  })
+
   it('opens chat aliases on the messenger and tickets with a messages fallback', () => {
     expect(resolveOpenCommand({ view: 'chat' }, allTabs)).toEqual({ type: 'messenger' })
     expect(resolveOpenCommand({ view: 'live-chat' }, allTabs)).toEqual({ type: 'messenger' })

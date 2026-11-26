@@ -86,13 +86,18 @@ function inputUnder(label: string): HTMLInputElement {
 
 function renderCard(
   headers: Record<string, string> = { 'x-widget-session': 'sess_1' },
-  askEmail?: boolean
+  askEmail?: boolean,
+  onEmailSubmitted?: (email: string) => void
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en-US" messages={{}}>
-        <BlockTicketForm getAuthHeaders={() => headers} askEmail={askEmail} />
+        <BlockTicketForm
+          getAuthHeaders={() => headers}
+          askEmail={askEmail}
+          onEmailSubmitted={onEmailSubmitted}
+        />
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -151,6 +156,59 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
         email: 'sam@example.com',
       },
       headers: { 'x-widget-session': 'sess_1' },
+    })
+  })
+
+  describe('onEmailSubmitted', () => {
+    async function fileTicket(email?: string) {
+      fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
+        target: { value: 'Cannot sign in' },
+      })
+      if (email !== undefined) {
+        fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
+          target: { value: email },
+        })
+      }
+      const submit = screen.getByRole('button', { name: /create ticket/i })
+      await waitFor(() => expect(submit).toBeEnabled())
+      fireEvent.click(submit)
+      await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
+    }
+
+    it('reports the trimmed email once the ticket is filed', async () => {
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, true, onEmailSubmitted)
+      await fileTicket('  sam@example.com ')
+      await screen.findByText(/ticket filed/i)
+      expect(onEmailSubmitted).toHaveBeenCalledTimes(1)
+      expect(onEmailSubmitted).toHaveBeenCalledWith('sam@example.com')
+    })
+
+    it('reports nothing when the email is blank', async () => {
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, true, onEmailSubmitted)
+      await fileTicket('   ')
+      await screen.findByText(/ticket filed/i)
+      expect(onEmailSubmitted).not.toHaveBeenCalled()
+    })
+
+    it('reports nothing when the form does not ask for an email', async () => {
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, false, onEmailSubmitted)
+      await fileTicket()
+      await screen.findByText(/ticket filed/i)
+      expect(onEmailSubmitted).not.toHaveBeenCalled()
+    })
+
+    it('reports nothing when filing fails', async () => {
+      vi.mocked(createMyTicketFn).mockRejectedValueOnce(new Error('down'))
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, true, onEmailSubmitted)
+      await fileTicket('sam@example.com')
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /create ticket/i })).toBeEnabled()
+      )
+      expect(onEmailSubmitted).not.toHaveBeenCalled()
     })
   })
 

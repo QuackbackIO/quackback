@@ -1256,6 +1256,7 @@
   "widget.help.article.askQuestion": "اطرح علينا سؤالًا",
   "widget.changelog.new": "جديد",
   "widget.shell.tab.messages.unread": "{count} غير مقروءة",
+  "widget.shell.tab.tickets.updated": "{count, plural, one {تذكرة واحدة محدّثة} other {# تذاكر محدّثة}}",
   "automation.connectors.empty.title": "لا توجد موصلات بعد",
   "automation.builtinTools.agent": "الوكيل",
   "automation.skills.empty.title": "لا توجد مهارات بعد",

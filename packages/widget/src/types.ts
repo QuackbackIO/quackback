@@ -79,6 +79,7 @@ export type Identity =
 /**
  * Arguments to `Quackback.open(...)`. Discriminated on the target:
  * - omit the payload or `{ view: 'home' }` to open the home view
+ * - `{ view: 'feedback' }` opens the feedback list, when it is enabled
  * - `{ view: 'new-post', title?, body?, board? }` pre-fills the new-post form
  * - `{ view: 'changelog', entryId? }` opens the changelog, optionally to one entry
  * - `{ view: 'help', query? }` opens help, optionally with search prefilled
@@ -99,6 +100,7 @@ export type Identity =
 export type OpenOptions =
   | undefined
   | { view?: 'home' }
+  | { view: 'feedback' }
   | { view: 'new-post'; title?: string; body?: string; board?: string }
   | { view: 'changelog'; entryId?: string }
   | { view: 'help'; query?: string }
@@ -116,13 +118,19 @@ export interface WidgetUser {
 }
 
 /**
- * Events emitted by the widget iframe. `open` and `close` carry context about
- * which view is showing so subscribers can react to deep-link flows.
+ * Events emitted by the widget. Subscribers can use `open` and `close` to
+ * react to deep-link flows.
  */
 export interface EventMap {
   ready: Record<string, never>
+  /**
+   * The panel opened. The payload reports the view and deep-link the host
+   * requested, not the view that is showing: when that surface is turned
+   * off, the panel opens without switching to it and the event still names
+   * the requested view.
+   */
   open: {
-    view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
+    view?: 'home' | 'feedback' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
     postId?: string
     articleId?: string
     entryId?: string

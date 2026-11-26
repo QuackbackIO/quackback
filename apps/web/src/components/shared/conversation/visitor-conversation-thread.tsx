@@ -199,6 +199,9 @@ export interface VisitorConversationThreadProps {
    *  its own presence badge (the widget's header, with `showHeader` false)
    *  words its away copy from it. */
   onReplyByEmailChange?: (canReplyByEmail: boolean) => void
+  /** Notified with the email a visitor gives in the in-thread ticket form,
+   *  once the ticket is filed. The widget reports it to the host page. */
+  onEmailSubmitted?: (email: string) => void
   /**
    * Focus the composer as soon as it mounts. The surface decides: a "new
    * conversation" landing on a desktop host wants the cursor in the box; a
@@ -298,6 +301,7 @@ export function VisitorConversationThread({
   showHeader = true,
   onConversationStarted,
   onReplyByEmailChange,
+  onEmailSubmitted,
   autofocusComposer = false,
   compact = false,
   initialDraft,
@@ -1204,6 +1208,12 @@ export function VisitorConversationThread({
                 <LazyBlockTicketForm
                   getAuthHeaders={getAuthHeaders}
                   askEmail={ticketFormAsksEmail}
+                  onEmailSubmitted={(email) => {
+                    // The thread now has the visitor's email: later forms
+                    // stop asking for it, so it is reported only once.
+                    setTicketFormAsksEmail(false)
+                    onEmailSubmitted?.(email)
+                  }}
                 />
               </Suspense>
             </div>
