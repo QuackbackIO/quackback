@@ -124,11 +124,14 @@ describe('usage-log', () => {
       )
     })
 
-    it('should log error row and rethrow on failure', async () => {
+    it('should log error row and rethrow on failure without leaking error message text', async () => {
       const { withUsageLogging } = await import('../usage-log')
 
-      const error = new Error('API failure') as Error & { retryCount?: number }
-      error.retryCount = 3
+      const canary = 'secret-bearer-sk-test-123456-user@example.com'
+      const error = Object.assign(new Error(`API failure ${canary}`), {
+        status: 502,
+        retryCount: 3,
+      })
 
       await expect(
         withUsageLogging(
@@ -147,12 +150,19 @@ describe('usage-log', () => {
         expect.objectContaining({
           pipelineStep: 'sentiment',
           status: 'error',
-          error: 'API failure',
+          error: JSON.stringify({
+            httpStatus: 502,
+            errorClass: 'upstream_5xx',
+            finishReason: null,
+            attempt: 3,
+            stage: 'sentiment',
+          }),
           retryCount: 3,
           inputTokens: 0,
           totalTokens: 0,
         })
       )
+      expect(JSON.stringify(mockValues.mock.calls)).not.toContain(canary)
     })
 
     it('should handle errors without retryCount attached', async () => {

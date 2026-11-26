@@ -24,6 +24,7 @@ import {
   type Span,
   type Tracer,
 } from '@opentelemetry/api'
+import { safeAIError } from './safe-error'
 import type {
   AfterToolCallInfo,
   ChatMiddleware,
@@ -173,13 +174,15 @@ export function createAssistantTracingMiddleware(
 
     onError(ctx: ChatMiddlewareContext, info: ErrorInfo) {
       endTurn(ctx, (state) => {
+        const safe = safeAIError(info.error)
         state.root.setAttribute('quackback.assistant.tool_call_count', state.toolCallCount)
-        // Record the infra error (message/stack only — an infra failure, not
-        // customer text). Deliberately does not attach any run content.
-        if (info.error instanceof Error) state.root.recordException(info.error)
+        state.root.setAttribute('quackback.assistant.error_class', safe.errorClass)
+        if (safe.httpStatus !== null) {
+          state.root.setAttribute('http.response.status_code', safe.httpStatus)
+        }
         state.root.setStatus({
           code: SpanStatusCode.ERROR,
-          message: info.error instanceof Error ? info.error.message : 'assistant turn failed',
+          message: safe.errorClass,
         })
       })
     },

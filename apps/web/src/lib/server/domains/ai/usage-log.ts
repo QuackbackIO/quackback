@@ -8,6 +8,7 @@
 
 import { db, aiUsageLog, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { safeAIError } from './safe-error'
 
 const log = logger.child({ component: 'ai-usage-log' })
 
@@ -132,13 +133,15 @@ export async function withUsageLogging<T>(
     return result
   } catch (error) {
     const durationMs = Date.now() - start
-    const errorMessage = error instanceof Error ? error.message : String(error)
 
     // Extract retryCount from withRetry's error context if available
     const retryCount =
       error instanceof Error && 'retryCount' in error
         ? (error as Error & { retryCount: number }).retryCount
         : undefined
+    const errorMessage = JSON.stringify(
+      safeAIError(error, { attempt: retryCount, stage: params.pipelineStep })
+    )
 
     await logAiUsage({
       ...params,

@@ -99,11 +99,13 @@ const ALLOWED_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.output_tokens',
   'gen_ai.usage.total_tokens',
   'gen_ai.tool.name',
+  'http.response.status_code',
   'quackback.assistant.role',
   'quackback.assistant.surface',
   'quackback.assistant.prompt_version',
   'quackback.assistant.config_revision',
   'quackback.assistant.tool_call_count',
+  'quackback.assistant.error_class',
   'quackback.assistant.tool.ok',
   'quackback.assistant.tool.duration_ms',
 ])
@@ -223,19 +225,22 @@ describe('createAssistantTracingMiddleware', () => {
     }
   })
 
-  it('marks the root span errored and records the infra exception on onError', () => {
+  it('marks the root span errored with redacted error attributes and no raw exception text', () => {
     const { tracer, spans } = makeTestTracer()
     const mw = createAssistantTracingMiddleware(ATTRS, tracer)
     const c = ctx()
-    const err = new Error('502 bad gateway')
+    const err = Object.assign(new Error('502 bad gateway secret-user@example.com'), { status: 502 })
 
     mw.onStart!(c)
     mw.onError!(c, { error: err, duration: 3 } as ErrorInfo)
 
     const root = spans.find((s) => s.name === 'assistant.turn')!
     expect(root.ended).toBe(true)
-    expect(root.status?.code).toBe(2) // SpanStatusCode.ERROR
-    expect(root.exceptions).toContain(err)
+    expect(root.status).toEqual({ code: 2, message: 'upstream_5xx' })
+    expect(root.attributes['quackback.assistant.error_class']).toBe('upstream_5xx')
+    expect(root.attributes['http.response.status_code']).toBe(502)
+    expect(root.exceptions).toEqual([])
+    expect(JSON.stringify(root)).not.toContain('secret-user@example.com')
   })
 
   it('closes an open tool span if the turn ends before onAfterToolCall', () => {

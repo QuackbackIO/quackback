@@ -12,6 +12,7 @@
 import type { ChatMiddleware, ChatMiddlewareContext, ErrorInfo, UsageInfo } from '@tanstack/ai'
 import { logAiUsage, type LogAiUsageParams } from './usage-log'
 import { logger } from '@/lib/server/logger'
+import { safeAIError } from './safe-error'
 
 const log = logger.child({ component: 'ai-usage-middleware' })
 
@@ -101,7 +102,7 @@ export function createUsageLoggingMiddleware(
     onError(ctx: ChatMiddlewareContext, info: ErrorInfo) {
       finalize(ctx, {
         status: 'error',
-        error: info.error instanceof Error ? info.error.message : String(info.error),
+        error: JSON.stringify(safeAIError(info.error, { stage: params.pipelineStep })),
       })
     },
 
