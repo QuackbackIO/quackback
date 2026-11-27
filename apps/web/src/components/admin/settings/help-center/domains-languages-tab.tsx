@@ -293,7 +293,7 @@ function LocalesCard({ locales }: { locales: HelpCenterConfig['locales'] }) {
   return (
     <SettingsCard
       title="Languages"
-      description="Add a locale to translate articles and categories into it."
+      description="Add a language to translate your articles and collections into it."
     >
       <div className="space-y-4">
         <ul className="divide-y divide-border/50">

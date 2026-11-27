@@ -102,7 +102,7 @@ export function LanguageCard() {
         />
       </SettingRows>
 
-      <div className="space-y-3 border-t border-border/50 pt-3.5">
+      <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
         <div>
           <p id="visitor-language" className="text-sm font-medium">
             <FormattedMessage

@@ -2,8 +2,8 @@
 /**
  * The Language card names the main language in both visitor choices, and a
  * change of main language asks first, with the counts the server gives: the
- * articles and collections relabelled, or swapped with their versions in the
- * new language.
+ * articles and collections swapped with their versions in the new language,
+ * relabelled, or left in their own language.
  */
 import '@testing-library/jest-dom/vitest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -81,9 +81,10 @@ describe('LanguageCard', () => {
 
   it('says what a new main language relabels, and changes it only once confirmed', async () => {
     server.preview.mockResolvedValue({
-      swap: false,
-      articles: 24,
-      collections: 5,
+      swappedArticles: 0,
+      swappedCollections: 0,
+      relabelledArticles: 24,
+      relabelledCollections: 5,
       keptArticles: 0,
       keptCollections: 0,
     })
@@ -108,13 +109,14 @@ describe('LanguageCard', () => {
     expect(await screen.findByText('German for everyone')).toBeInTheDocument()
   })
 
-  it('says which articles swap in and which stay', async () => {
+  it('says which articles and collections swap in and which stay', async () => {
     server.preview.mockResolvedValue({
-      swap: true,
-      articles: 1,
-      collections: 2,
+      swappedArticles: 1,
+      swappedCollections: 2,
+      relabelledArticles: 0,
+      relabelledCollections: 0,
       keptArticles: 3,
-      keptCollections: 0,
+      keptCollections: 1,
     })
     renderCard()
 
@@ -128,5 +130,62 @@ describe('LanguageCard', () => {
     expect(
       screen.getByText('3 articles have no published French version yet and stay as they are.')
     ).toBeInTheDocument()
+    expect(
+      screen.getByText('1 collection has no French name yet and stays as it is.')
+    ).toBeInTheDocument()
+  })
+
+  it('says which articles swap in and which are relabelled when both happen', async () => {
+    server.preview.mockResolvedValue({
+      swappedArticles: 4,
+      swappedCollections: 1,
+      relabelledArticles: 2,
+      relabelledCollections: 1,
+      keptArticles: 0,
+      keptCollections: 0,
+    })
+    renderCard()
+
+    fireEvent.change(screen.getByLabelText('Main language'), { target: { value: 'de' } })
+
+    expect(
+      await screen.findByText(
+        '4 articles and 1 collection have a German version, which becomes their main text. Their current text becomes a translation, so nothing is lost.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '2 articles and 1 collection with no German version will be marked as German. Nothing is rewritten or translated.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('says when the counts could not be read, and tries again on request', async () => {
+    server.preview.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
+      swappedArticles: 0,
+      swappedCollections: 0,
+      relabelledArticles: 3,
+      relabelledCollections: 1,
+      keptArticles: 0,
+      keptCollections: 0,
+    })
+    renderCard()
+
+    fireEvent.change(screen.getByLabelText('Main language'), { target: { value: 'de' } })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not check what this changes.'
+    )
+    expect(screen.getByRole('button', { name: 'Switch to German' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(
+      await screen.findByText(
+        'Your 3 articles and 1 collection will be marked as German. Nothing is rewritten or translated.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Switch to German' })).toBeEnabled()
   })
 })
