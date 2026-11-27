@@ -323,6 +323,20 @@ describe('queueAutoTranslateOnPublish', () => {
     })
   })
 
+  it('drafts an article left in a former main language into the main language, never its own', async () => {
+    mockGetHelpCenterConfig.mockResolvedValue({
+      autoTranslate: { enabled: true },
+      locales: { default: 'de', additional: ['fr', 'en'] },
+    })
+
+    await queueAutoTranslateOnPublish({ id: 'article_1', locale: 'en' } as never)
+
+    expect(mockEnqueueHelpCenterTranslateJob.mock.calls.map(([job]) => job.locale).sort()).toEqual([
+      'de',
+      'fr',
+    ])
+  })
+
   it('swallows enqueue errors rather than throwing (never blocks publish)', async () => {
     mockGetHelpCenterConfig.mockRejectedValue(new Error('settings unavailable'))
 
