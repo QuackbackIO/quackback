@@ -13,8 +13,8 @@ export const widgetListPublicChangelogsFn = createServerFn({ method: 'GET' })
   .validator(listPublicChangelogsSchema)
   .handler(async ({ data }) => {
     const { getOptionalWidgetAuth } = await import('../widget-auth')
-    const { runListPublicChangelogs } = await import('../changelog')
-    return runListPublicChangelogs(await getOptionalWidgetAuth(), data)
+    const { runListWidgetChangelogs } = await import('../changelog')
+    return runListWidgetChangelogs(await getOptionalWidgetAuth(), data)
   })
 
 export const widgetListChangelogCategoriesFn = createServerFn({ method: 'GET' }).handler(

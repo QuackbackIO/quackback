@@ -26,6 +26,7 @@ const updateChangelogSchema = z.object({
   publishedAt: z.string().datetime().nullable().optional(),
   displayDate: z.string().datetime().nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
+  announceOnLauncher: z.boolean().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/changelog/$entryId')({
@@ -108,6 +109,9 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
                   parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
               }),
               ...(linkedPostIds !== undefined && { linkedPostIds }),
+              ...(parsed.data.announceOnLauncher !== undefined && {
+                announceOnLauncher: parsed.data.announceOnLauncher,
+              }),
             },
             { principalId: authResult.principalId }
           )

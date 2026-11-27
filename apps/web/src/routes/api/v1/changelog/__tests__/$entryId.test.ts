@@ -201,3 +201,38 @@ describe('PATCH /api/v1/changelog/:entryId — linkedPostIds', () => {
     expect(mockUpdateChangelog).not.toHaveBeenCalled()
   })
 })
+
+describe('PATCH /api/v1/changelog/:entryId — announceOnLauncher', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockWithApiKeyAuth.mockResolvedValue({ principalId: 'principal_x', role: 'team' })
+    mockUpdateChangelog.mockResolvedValue({ ...baseEntry(), announceOnLauncher: false })
+  })
+
+  it('forwards the choice and echoes it', async () => {
+    const res = await PATCH({
+      request: patchRequest({ announceOnLauncher: false }),
+      params: { entryId: ENTRY_ID },
+    })
+
+    expect(res.status).toBe(200)
+    expect(mockUpdateChangelog.mock.calls[0][1]).toMatchObject({ announceOnLauncher: false })
+    const json = await res.json()
+    expect(json.data.announceOnLauncher).toBe(false)
+  })
+
+  it('leaves the choice alone when the field is omitted', async () => {
+    await PATCH({ request: patchRequest({ title: 'Renamed' }), params: { entryId: ENTRY_ID } })
+    const input = mockUpdateChangelog.mock.calls[0][1] as Record<string, unknown>
+    expect(input).not.toHaveProperty('announceOnLauncher')
+  })
+
+  it('rejects a value that is not a boolean', async () => {
+    const res = await PATCH({
+      request: patchRequest({ announceOnLauncher: 'no' }),
+      params: { entryId: ENTRY_ID },
+    })
+    expect(res.status).toBe(400)
+    expect(mockUpdateChangelog).not.toHaveBeenCalled()
+  })
+})

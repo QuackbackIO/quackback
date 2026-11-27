@@ -42,42 +42,6 @@ vi.mock('../use-widget-image-upload', () => ({
   WidgetSessionError: class WidgetSessionError extends Error {},
 }))
 vi.mock('../widget-vote-button', () => ({ WidgetVoteButton: () => null }))
-vi.mock('framer-motion', async () => {
-  const { createElement, forwardRef } = await import('react')
-  const MOTION_PROPS = new Set([
-    'initial',
-    'animate',
-    'exit',
-    'transition',
-    'variants',
-    'layout',
-    'whileHover',
-    'whileTap',
-    'whileFocus',
-    'whileInView',
-  ])
-  const make = (tag: string) =>
-    forwardRef<HTMLElement, Record<string, unknown>>((props, ref) => {
-      const { children, ...rest } = props
-      const dom: Record<string, unknown> = { ref }
-      for (const [key, value] of Object.entries(rest)) {
-        if (!MOTION_PROPS.has(key)) dom[key] = value
-      }
-      return createElement(tag, dom, children as ReactNode)
-    })
-  const proxy = new Proxy(
-    {},
-    { get: (_target, prop) => (typeof prop === 'string' ? make(prop) : undefined) }
-  )
-  return {
-    AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    // m mirrors motion here: the fake components don't care which name reaches
-    // them, only the source's switch to LazyMotion's m does.
-    motion: proxy,
-    m: proxy,
-    useReducedMotion: () => true,
-  }
-})
 vi.mock('@/components/ui/rich-text-editor', () => ({
   RichTextEditor: () => <div data-testid="editor" />,
 }))
@@ -115,6 +79,7 @@ function renderHome(props: Partial<WidgetHomeProps> = {}) {
       defaultBoard={props.defaultBoard}
       confirmedBoardSlugs={props.confirmedBoardSlugs}
       composeRequest={props.composeRequest}
+      collapseRequest={props.collapseRequest}
     />,
     { wrapper }
   )
@@ -211,5 +176,41 @@ describe('widget compose board', () => {
     fireEvent.change(screen.getByRole('combobox'), { target: { value: bugs.id } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Post' })).toBeEnabled())
     expect(screen.queryByText('Choose a board to post')).toBeNull()
+  })
+
+  it('collapses an open composer back to the post list when the host opens feedback', async () => {
+    const props = {
+      initialPosts: [],
+      statuses: [],
+      boards: [ideas],
+      boardPermissions: allow(ideas.id),
+    }
+    const view = render(
+      <WidgetHomeAnimated {...props} composeRequest={{ nonce: 1, title: 'Prefilled idea' }} />,
+      { wrapper }
+    )
+    await waitFor(() => expect(screen.getByText('Posting to')).toBeTruthy())
+
+    view.rerender(
+      <WidgetHomeAnimated
+        {...props}
+        composeRequest={{ nonce: 1, title: 'Prefilled idea' }}
+        collapseRequest={2}
+      />
+    )
+
+    await waitFor(() => expect(screen.queryByText('Posting to')).toBeNull())
+    expect(screen.getByRole('textbox', { name: 'Feedback title' })).toHaveValue('')
+  })
+
+  it('keeps the composer open when a compose request is newer than the collapse', async () => {
+    renderHome({
+      boards: [ideas],
+      boardPermissions: allow(ideas.id),
+      collapseRequest: 1,
+      composeRequest: { nonce: 2, title: 'Prefilled idea' },
+    })
+    await waitFor(() => expect(screen.getByText('Posting to')).toBeTruthy())
+    expect(screen.getByRole('textbox', { name: 'Feedback title' })).toHaveValue('Prefilled idea')
   })
 })

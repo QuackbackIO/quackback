@@ -39,6 +39,7 @@ import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
+import { outputBudgetOptions } from '@/lib/server/domains/ai/output-budget'
 import { abortControllerFor } from '@/lib/server/domains/ai/abort'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getChatModel, getEmbeddingModel } from '@/lib/server/domains/ai/models'
@@ -137,7 +138,7 @@ export async function summarizeTicketOnClose(
       outputSchema: TicketSummarySchema,
       stream: false,
       abortController: abortControllerFor(opts.signal),
-      modelOptions: { max_tokens: 400, ...structuredOutputProviderOptions() },
+      modelOptions: { ...outputBudgetOptions(400), ...structuredOutputProviderOptions() },
       middleware: [
         createUsageLoggingMiddleware({
           pipelineStep: 'ticket_summary',

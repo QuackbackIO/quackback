@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { useIntl } from 'react-intl'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -17,8 +18,18 @@ export interface ConversationSummary {
  *  The widget loader seeds the initial-session key server-side (cookie-authed
  *  visitors get their summary SSR'd; anonymous get a settled null) so Home
  *  paints complete without a post-render pop-in. */
-export const conversationSummaryKey = (sessionVersion: number | string) =>
-  ['widget', 'conversation-summary', sessionVersion] as const
+export const conversationSummaryKey = conversationKeys.widgetConversationSummary
+
+/** Fetch the visitor's conversation summary: the Home card's data. */
+export async function fetchConversationSummary(
+  locale: string
+): Promise<Pick<ConversationSummary, 'conversation' | 'teamName'>> {
+  const res = await widgetGetMyConversationFn({
+    data: { locale },
+    headers: getWidgetAuthHeaders(),
+  })
+  return { conversation: res.conversation ?? null, teamName: res.teamName }
+}
 
 /**
  * Lightweight read of the visitor's conversation summary: the most-recent conversation
@@ -37,13 +48,7 @@ export function useConversationSummary(enabled: boolean): ConversationSummary {
 
   const { data } = useQuery({
     queryKey: conversationSummaryKey(sessionVersion),
-    queryFn: async () => {
-      const res = await widgetGetMyConversationFn({
-        data: { locale },
-        headers: getWidgetAuthHeaders(),
-      })
-      return { conversation: res.conversation ?? null, teamName: res.teamName }
-    },
+    queryFn: () => fetchConversationSummary(locale),
     enabled,
     staleTime: 30_000,
     // The loader seeds the initial key from the cookie/anonymous baseline; a

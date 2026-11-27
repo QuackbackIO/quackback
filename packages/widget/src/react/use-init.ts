@@ -13,8 +13,10 @@ export interface UseQuackbackInitOptions extends Omit<InitOptions, 'identity'> {
 /**
  * Boots the Quackback widget when the host component mounts, and tears it
  * down on unmount. Identity changes (by structural equality via JSON key) fire
- * a follow-up `identify` call. Other init options are captured at mount — if
- * you need to change them, call `Quackback.destroy()` and re-mount the host.
+ * a follow-up `identify` call, and an identity that goes back to `undefined`
+ * (the host's user signed out) fires `logout`. Other init options are captured
+ * at mount — if you need to change them, call `Quackback.destroy()` and
+ * re-mount the host.
  */
 export function useQuackbackInit(options: UseQuackbackInitOptions): void {
   const { identity, shouldInitialize, initializeDelay, instanceUrl } = options
@@ -24,6 +26,10 @@ export function useQuackbackInit(options: UseQuackbackInitOptions): void {
   // at startup time without adding every field to its dependency array.
   const optsRef = useRef(options)
   optsRef.current = options
+  // The identity this widget instance was last given, so a sign-out can be
+  // told apart from a visitor who was never identified. Reset when the widget
+  // is destroyed: a fresh widget starts with nobody signed in.
+  const sentIdentityKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!shouldInit) return
@@ -45,11 +51,13 @@ export function useQuackbackInit(options: UseQuackbackInitOptions): void {
         cancelled = true
         clearTimeout(id)
         if (started) Quackback.destroy()
+        sentIdentityKeyRef.current = null
       }
     }
     start()
     return () => {
       if (started) Quackback.destroy()
+      sentIdentityKeyRef.current = null
     }
   }, [instanceUrl, shouldInit, initializeDelay])
 
@@ -61,7 +69,14 @@ export function useQuackbackInit(options: UseQuackbackInitOptions): void {
 
   useEffect(() => {
     if (!shouldInit) return
-    if (identityKey === null) return
+    if (identityKey === null) {
+      // Only a sign-out logs out. A visitor who was never identified keeps
+      // their anonymous session (logout would also clear it).
+      if (sentIdentityKeyRef.current !== null) Quackback.logout()
+      sentIdentityKeyRef.current = null
+      return
+    }
+    sentIdentityKeyRef.current = identityKey
     Quackback.identify(identityRef.current)
   }, [identityKey, shouldInit])
 }

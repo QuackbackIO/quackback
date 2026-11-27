@@ -65,6 +65,8 @@ const {
   getPublicCategoryBySlugForLocale,
   listPublicArticlesForCategoryLocale,
   getPublicArticleBySlugForLocale,
+  listPublicCategoriesWithFallback,
+  listPublicArticlesForCategoryWithFallback,
 } = await import('../help-center-locale.query')
 
 beforeEach(() => {
@@ -216,5 +218,67 @@ describe('getPublicArticleBySlugForLocale', () => {
     expect(result.title).toBe('Rechnungen')
     expect(result.content).toBe('de content')
     expect(result.contentJson).toEqual({ type: 'doc', content: [] })
+  })
+})
+
+describe('listPublicCategoriesWithFallback', () => {
+  it('returns the default-locale list unchanged for the default locale', async () => {
+    const categories = [{ id: 'kb_category_1', name: 'Billing', articleCount: 2 }]
+    mockListPublicCategories.mockResolvedValue(categories)
+
+    expect(await listPublicCategoriesWithFallback('en')).toBe(categories)
+    expect(mockCategoryTranslationFindMany).not.toHaveBeenCalled()
+  })
+
+  it('keeps an untranslated category, in the default locale, with its full article count', async () => {
+    mockListPublicCategories.mockResolvedValue([
+      { id: 'kb_category_1', name: 'Billing', description: 'EN desc', articleCount: 3 },
+    ])
+    mockCategoryTranslationFindMany.mockResolvedValue([])
+
+    expect(await listPublicCategoriesWithFallback('de')).toEqual([
+      { id: 'kb_category_1', name: 'Billing', description: 'EN desc', articleCount: 3 },
+    ])
+  })
+
+  it('overlays a translated name and description, and ignores a blank translated name', async () => {
+    mockListPublicCategories.mockResolvedValue([
+      { id: 'kb_category_1', name: 'Billing', description: 'EN', articleCount: 3 },
+      { id: 'kb_category_2', name: 'Refunds', description: 'EN', articleCount: 1 },
+    ])
+    mockCategoryTranslationFindMany.mockResolvedValue([
+      { categoryId: 'kb_category_1', name: 'Abrechnung', description: 'DE' },
+      { categoryId: 'kb_category_2', name: '  ', description: 'DE' },
+    ])
+
+    expect(await listPublicCategoriesWithFallback('de')).toEqual([
+      { id: 'kb_category_1', name: 'Abrechnung', description: 'DE', articleCount: 3 },
+      { id: 'kb_category_2', name: 'Refunds', description: 'EN', articleCount: 1 },
+    ])
+  })
+})
+
+describe('listPublicArticlesForCategoryWithFallback', () => {
+  it('returns the default-locale list unchanged for the default locale', async () => {
+    const articles = [{ id: 'article_1', title: 'Invoices' }]
+    mockListPublicArticlesForCategory.mockResolvedValue(articles)
+
+    expect(await listPublicArticlesForCategoryWithFallback('kb_category_1', 'en')).toBe(articles)
+    expect(mockArticleTranslationFindMany).not.toHaveBeenCalled()
+  })
+
+  it('overlays published translations and keeps untranslated articles in the default locale', async () => {
+    mockListPublicArticlesForCategory.mockResolvedValue([
+      { id: 'article_1', title: 'Invoices', description: 'EN' },
+      { id: 'article_2', title: 'Refunds', description: 'EN' },
+    ])
+    mockArticleTranslationFindMany.mockResolvedValue([
+      { articleId: 'article_1', title: 'Rechnungen', description: 'DE' },
+    ])
+
+    expect(await listPublicArticlesForCategoryWithFallback('kb_category_1', 'de')).toEqual([
+      { id: 'article_1', title: 'Rechnungen', description: 'DE' },
+      { id: 'article_2', title: 'Refunds', description: 'EN' },
+    ])
   })
 })
