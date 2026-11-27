@@ -131,6 +131,7 @@ export const Route = createFileRoute('/widget')({
       canPortalHandoff: !isTeamMember(userRole),
       locale,
       messages,
+      hostLocale: explicitLocale,
     }
   },
   head: () => ({ meta: [] }),
@@ -169,6 +170,7 @@ function WidgetLayout() {
     canPortalHandoff,
     locale,
     messages,
+    hostLocale,
   } = Route.useLoaderData()
 
   // Widget documents render branding fonts the same way the portal does (the
@@ -186,6 +188,7 @@ function WidgetLayout() {
       canPortalHandoff={canPortalHandoff}
       initialLocale={locale}
       initialMessages={messages}
+      hostLocale={hostLocale}
     >
       {themeStyles && (
         <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />

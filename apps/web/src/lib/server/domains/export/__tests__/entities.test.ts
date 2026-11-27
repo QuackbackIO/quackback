@@ -216,6 +216,13 @@ describe('users exporter paging (users -> leads)', () => {
     postCount: 0,
     commentCount: 0,
     voteCount: 0,
+    language: { chosen: 'pl', detected: null },
+  })
+
+  it("closes each row with the person's chosen and detected languages", () => {
+    const exporter = createUsersExporter()
+    expect(exporter.header).toMatch(/,vote_count,language,detected_language$/)
+    expect(exporter.serialize(user('a@example.com') as never).endsWith(',0,pl,')).toBe(true)
   })
 
   it('fills pages across the users/leads boundary and stops when exhausted', async () => {

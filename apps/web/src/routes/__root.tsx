@@ -53,7 +53,7 @@ export interface RouterContext {
   prefersColorScheme?: BootstrapData['prefersColorScheme']
   managedFieldPaths?: string[]
   registeredAuthProviders?: string[]
-  acceptLanguageLocale?: SupportedLocale
+  personLocale?: SupportedLocale
   visitorLocale?: SupportedLocale
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
@@ -232,8 +232,8 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const prefersColorScheme = Route.useRouteContext({
     select: (context) => context.prefersColorScheme,
   })
-  const acceptLanguageLocale = Route.useRouteContext({
-    select: (context) => context.acceptLanguageLocale,
+  const personLocale = Route.useRouteContext({
+    select: (context) => context.personLocale,
   })
   const visitorLocale = Route.useRouteContext({ select: (context) => context.visitorLocale })
   // On a portal section's own hostname, the page `/` shows there; the
@@ -295,9 +295,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     isWidgetRoute && widgetLocaleParam ? normalizeLocale(widgetLocaleParam) : null
   // A help center page in a language advertises that language.
   const hcLocale = useRouterState({ select: (s) => hcPathLocale(s.location.pathname) })
-  const requestLocale = isPortalRoute
-    ? (visitorLocale ?? acceptLanguageLocale)
-    : acceptLanguageLocale
+  const requestLocale = isPortalRoute ? (visitorLocale ?? personLocale) : personLocale
   const resolvedLocale = widgetOverride ?? hcLocale ?? requestLocale ?? DEFAULT_LOCALE
   const locale = useRouterState({
     select: (s) =>

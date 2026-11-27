@@ -113,21 +113,51 @@ export function matchAcceptLanguage(
 }
 
 /**
- * The language for a request, by the workspace's language settings:
- * `explicit` (a host page's widget locale) when the product has it; then the
- * main language when the workspace shows it to every visitor (`forVisitor`);
- * then the browser language; then the main language.
+ * The language for one person, page or email: the first step that names one
+ * of the product's languages wins, and a step with no value or with a
+ * language the product does not have falls through to the next.
+ *
+ * 1. `hostLocale`: the host page's widget `locale` (widget only)
+ * 2. `chosen`: the language the person chose in Preferences
+ * 3. `everyone`: the main language, when the workspace shows it to every
+ *    visitor (pass it only for a visitor or customer, never for admin)
+ * 4. `acceptLanguage`: the browser language of the request (pages, and
+ *    emails that answer a request)
+ * 5. `detected`, then `accountLocale`: the language recorded at the latest
+ *    sign-in, then the sign-in provider's (emails only)
+ * 6. `mainLanguage`, then English
  */
-export function resolveRequestLocale(
-  acceptLanguage: string | null | undefined,
-  language: { mainLanguage: string; visitorLanguage: 'own' | 'main' },
-  opts: { explicit?: string | null; forVisitor?: boolean } = {}
-): SupportedLocale {
-  const explicit = opts.explicit ? normalizeLocale(opts.explicit) : null
-  if (explicit) return explicit
-  const main = normalizeLocale(language.mainLanguage) ?? DEFAULT_LOCALE
-  if (opts.forVisitor && language.visitorLanguage === 'main') return main
-  return matchAcceptLanguage(acceptLanguage) ?? main
+export function resolvePersonLocale(input: {
+  hostLocale?: string | null
+  chosen?: string | null
+  everyone?: string | null
+  acceptLanguage?: string | null
+  detected?: string | null
+  accountLocale?: string | null
+  mainLanguage?: string | null
+}): SupportedLocale {
+  for (const candidate of [input.hostLocale, input.chosen, input.everyone]) {
+    const locale = candidate ? normalizeLocale(candidate) : null
+    if (locale) return locale
+  }
+  const fromBrowser = matchAcceptLanguage(input.acceptLanguage)
+  if (fromBrowser) return fromBrowser
+  for (const candidate of [input.detected, input.accountLocale, input.mainLanguage]) {
+    const locale = candidate ? normalizeLocale(candidate) : null
+    if (locale) return locale
+  }
+  return DEFAULT_LOCALE
+}
+
+/**
+ * The main language as the `everyone` step of {@link resolvePersonLocale}:
+ * set only when the workspace shows its main language to every visitor.
+ */
+export function everyoneLocale(language: {
+  mainLanguage: string
+  visitorLanguage: 'own' | 'main'
+}): string | null {
+  return language.visitorLanguage === 'main' ? language.mainLanguage : null
 }
 
 /**

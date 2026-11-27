@@ -28,7 +28,7 @@ import { onIntlError } from '@/lib/client/intl-error'
  */
 export const Route = createFileRoute('/onboarding')({
   loader: async ({ context }) => {
-    const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
+    const locale = context.personLocale ?? DEFAULT_LOCALE
     return { locale, messages: await loadOnboardingMessages(locale) }
   },
   component: OnboardingRoot,

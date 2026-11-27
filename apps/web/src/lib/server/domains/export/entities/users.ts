@@ -39,7 +39,7 @@ export function createUsersExporter(): EntityExporter<PortalUserListItem> {
     fileName: 'users.csv',
     pageSize: 5000,
     header:
-      'name,email,verified,lifecycle,segments,joined_at,last_seen_at,post_count,comment_count,vote_count',
+      'name,email,verified,lifecycle,segments,joined_at,last_seen_at,post_count,comment_count,vote_count,language,detected_language',
     fetchPage,
     serialize: (u) =>
       [
@@ -53,6 +53,8 @@ export function createUsersExporter(): EntityExporter<PortalUserListItem> {
         String(u.postCount),
         String(u.commentCount),
         String(u.voteCount),
+        u.language.chosen ?? '',
+        u.language.detected ?? '',
       ].join(','),
   }
 }

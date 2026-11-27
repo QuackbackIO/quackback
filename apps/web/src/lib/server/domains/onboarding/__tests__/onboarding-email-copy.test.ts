@@ -6,12 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
-import {
-  invitationEmailCopy,
-  nudgeEmailCopy,
-  readyEmailCopy,
-  recipientLocale,
-} from '../onboarding-email-copy'
+import { invitationEmailCopy, nudgeEmailCopy, readyEmailCopy } from '../onboarding-email-copy'
 
 const BASE = 'https://acme.quackback.test'
 const SHARE_STEP = {
@@ -37,14 +32,6 @@ function ready(locale: (typeof SUPPORTED_LOCALES)[number], trial = true) {
     trial: trial ? { days: 14, planName: 'Pro' } : null,
   })
 }
-
-describe('recipientLocale', () => {
-  it('takes the first supported language, else English', () => {
-    expect(recipientLocale(null, 'de-DE', 'fr')).toBe('de')
-    expect(recipientLocale('xx', undefined, 'pt-BR')).toBe('pt-br')
-    expect(recipientLocale(null, 'klingon')).toBe('en')
-  })
-})
 
 describe('readyEmailCopy', () => {
   it('reads as the mockup in English: share link, one step, trial line', async () => {

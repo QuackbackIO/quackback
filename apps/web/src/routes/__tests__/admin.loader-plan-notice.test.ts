@@ -56,7 +56,7 @@ function loadAdmin(permissions: PermissionKey[]) {
       user: { id: 'user_1', name: 'Ada', email: 'ada@example.com', image: null },
       principal: { id: 'principal_1', chatAvailability: 'online' },
       permissions,
-      acceptLanguageLocale: 'en',
+      personLocale: 'en',
     },
     location: { pathname: '/admin/inbox' },
   })

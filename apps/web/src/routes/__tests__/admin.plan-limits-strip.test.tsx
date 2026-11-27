@@ -110,7 +110,7 @@ function buildRouter(queryClient: QueryClient, flags: { billing: boolean }) {
       settings: { featureFlags: DEFAULT_FEATURE_FLAGS },
       billingEnabled: flags.billing,
       cloudEnabled: flags.billing,
-      acceptLanguageLocale: 'en',
+      personLocale: 'en',
     }),
     component: () => <Outlet />,
   })

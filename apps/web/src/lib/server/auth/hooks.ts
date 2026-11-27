@@ -35,6 +35,7 @@ import { AUTH_BLOCK_MESSAGES } from './redirect-errors'
 import { handleRefreshGraceHeal } from './refresh-grace'
 import { isTwoFactorPendingSession, TWO_FACTOR_PENDING_ALLOWLIST } from './two-factor-pending'
 import { captureCountryFromHeaders } from './country-capture'
+import { handleDetectedLocaleCapture } from './locale-capture'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import {
@@ -2143,6 +2144,12 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   await handleSignInSuccessAudit(ctx as Parameters<typeof handleSignInSuccessAudit>[0])
   // Geo-IP country from CDN headers; written best-effort, never blocks.
   await handleCountryCapture(ctx as Parameters<typeof handleCountryCapture>[0])
+  // The browser's language, for emails; separate from the country so a
+  // request without a geo header still records it.
+  await handleDetectedLocaleCapture(
+    ctx as Parameters<typeof handleDetectedLocaleCapture>[0],
+    getRequestHeaders()
+  )
   // Fires only on a real sign-in path when an additional device is unseen.
   await handleNewDeviceNotification(
     ctx as Parameters<typeof handleNewDeviceNotification>[0],

@@ -1,13 +1,28 @@
 import { createServerFn } from '@tanstack/react-start'
 import {
-  resolveRequestLocale,
+  everyoneLocale,
+  resolvePersonLocale,
   loadPortalMessages,
   loadUnsubscribeMessages,
   type SupportedLocale,
 } from '@/lib/shared/i18n'
 
 /**
- * Resolve the portal locale from the request's Accept-Language header.
+ * The language a signed-in person chose in Preferences, read with the
+ * request's session (memoized per request, so no read of its own), or null.
+ */
+async function chosenLocaleOfRequest(headers: Headers): Promise<string | null> {
+  if (!headers.get('cookie')) return null
+  const { getRequestSession } = await import('@/lib/server/auth/request-session')
+  const session = await getRequestSession().catch(() => null)
+  return (
+    (session?.user as { preferredLanguage?: string | null } | undefined)?.preferredLanguage ?? null
+  )
+}
+
+/**
+ * The portal locale: the signed-in person's chosen language, then the
+ * workspace's visitor rule, then the browser language, then the main language.
  *
  * Shared by the standalone `/auth/*` routes so they render under the same
  * `PortalIntlProvider` the in-portal pages get from `_portal.tsx` — without
@@ -16,14 +31,23 @@ import {
 export const getPortalLocaleFn = createServerFn({ method: 'GET' }).handler(async () => {
   const { getRequestHeaders } = await import('@tanstack/react-start/server')
   const { getLanguageConfig } = await import('@/lib/server/domains/settings/settings.service')
-  const acceptLanguage = getRequestHeaders().get('accept-language')
-  return resolveRequestLocale(acceptLanguage, await getLanguageConfig(), { forVisitor: true })
+  const headers = getRequestHeaders()
+  const [language, chosen] = await Promise.all([
+    getLanguageConfig(),
+    chosenLocaleOfRequest(headers),
+  ])
+  return resolvePersonLocale({
+    chosen,
+    everyone: everyoneLocale(language),
+    acceptLanguage: headers.get('accept-language'),
+    mainLanguage: language.mainLanguage,
+  })
 })
 
 /**
  * The widget's language, resolved on the server so SSR and hydration agree:
- * the host page's `?locale=` when the product has it, then the workspace's
- * visitor rule. Both are read server-side because navigator/URL access during
+ * the host page's `?locale=` when the product has it, then the language a
+ * person signed in on this document chose, then the workspace's visitor rule. Both are read server-side because navigator/URL access during
  * render would diverge from SSR and trigger React hydration error #418.
  */
 export const getWidgetLocaleFn = createServerFn({ method: 'GET' })
@@ -35,10 +59,17 @@ export const getWidgetLocaleFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const { getRequestHeaders } = await import('@tanstack/react-start/server')
     const { getLanguageConfig } = await import('@/lib/server/domains/settings/settings.service')
-    const acceptLanguage = getRequestHeaders().get('accept-language')
-    return resolveRequestLocale(acceptLanguage, await getLanguageConfig(), {
-      explicit: data.explicitLocale,
-      forVisitor: true,
+    const headers = getRequestHeaders()
+    const [language, chosen] = await Promise.all([
+      getLanguageConfig(),
+      chosenLocaleOfRequest(headers),
+    ])
+    return resolvePersonLocale({
+      hostLocale: data.explicitLocale,
+      chosen,
+      everyone: everyoneLocale(language),
+      acceptLanguage: headers.get('accept-language'),
+      mainLanguage: language.mainLanguage,
     })
   })
 

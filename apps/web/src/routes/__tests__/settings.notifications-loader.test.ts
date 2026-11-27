@@ -39,7 +39,7 @@ describe('notifications settings loader', () => {
   // browser's language.
   it("reads the matrix's English strings for a Polish browser", async () => {
     getNotificationPreferencesFn.mockResolvedValueOnce(null)
-    expect(await loader({ context: { acceptLanguageLocale: 'pl' } })).toEqual({
+    expect(await loader({ context: { personLocale: 'pl' } })).toEqual({
       preferences: null,
       messages: expect.objectContaining({
         'portal.settings.notifications.pauseAll.label': 'Pause all email',

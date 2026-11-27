@@ -342,7 +342,7 @@ export async function resetIdentifyBudget(): Promise<void> {
  */
 export async function openWidget(
   page: Page,
-  opts: { ssoToken?: string; visitorToken?: string } = {}
+  opts: { ssoToken?: string; visitorToken?: string; locale?: string } = {}
 ) {
   const env = supportEnv()
   const path = `/e2e/host-${randomBytes(6).toString('hex')}`
@@ -366,6 +366,7 @@ export async function openWidget(
   const init = {
     instanceUrl: env.baseUrl,
     ...(opts.ssoToken ? { identity: { ssoToken: opts.ssoToken } } : {}),
+    ...(opts.locale ? { locale: opts.locale } : {}),
   }
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>host</title></head>
 <body><h1>Widget host</h1>

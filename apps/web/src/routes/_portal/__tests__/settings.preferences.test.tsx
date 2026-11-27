@@ -18,6 +18,12 @@ vi.mock('@/lib/server/functions/user', () => ({
   getNotificationPreferencesFn: (...args: unknown[]) => getNotificationPreferencesFn(...args),
 }))
 
+const getMyLanguageFn = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/functions/person-language', () => ({
+  getMyLanguageFn: (...args: unknown[]) => getMyLanguageFn(...args),
+  setMyLanguageFn: vi.fn(),
+}))
+
 import { Route } from '../settings.preferences'
 
 beforeEach(() => {
@@ -28,11 +34,15 @@ beforeEach(() => {
     emailMuted: false,
     matrix: {},
   })
+  getMyLanguageFn.mockReset()
+  getMyLanguageFn.mockResolvedValue({ chosen: null, automatic: 'en', automaticFromBrowser: true })
 })
 
-type Loader = (args: {
-  context: { visitorLocale?: string }
-}) => Promise<{ notificationPreferences: unknown; messages: Record<string, string> }>
+type Loader = (args: { context: { visitorLocale?: string } }) => Promise<{
+  notificationPreferences: unknown
+  language: unknown
+  messages: Record<string, string>
+}>
 
 describe('settings/preferences loader', () => {
   it('fetches notification preferences once, in the document response', async () => {
@@ -45,6 +55,13 @@ describe('settings/preferences loader', () => {
       emailMuted: false,
       matrix: {},
     })
+  })
+
+  it("reads the person's language with the page, for the Language row", async () => {
+    const data = await (Route as unknown as { loader: Loader }).loader({ context: {} })
+
+    expect(getMyLanguageFn).toHaveBeenCalledTimes(1)
+    expect(data.language).toEqual({ chosen: null, automatic: 'en', automaticFromBrowser: true })
   })
 
   it("reads the matrix's strings in the visitor's language", async () => {

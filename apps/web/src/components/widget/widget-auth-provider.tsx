@@ -110,6 +110,10 @@ interface WidgetAuthProviderProps {
    *  layout loader so the first render is translated without a client
    *  catalog fetch. A runtime locale change still fetches the new catalog. */
   initialMessages?: Record<string, string>
+  /** The host page's `locale` from the frame address, when it set one. It
+   *  wins over the language an identified person chose, and is sent with an
+   *  identify as the person's detected language. */
+  hostLocale?: string
   children: ReactNode
 }
 
@@ -127,6 +131,7 @@ export function WidgetAuthProvider({
   canPortalHandoff: canPortalHandoffFromPortal,
   initialLocale,
   initialMessages,
+  hostLocale,
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
@@ -191,6 +196,10 @@ export function WidgetAuthProvider({
   // i18n locale state — seeded from the SSR-resolved prop only, so the
   // first client render matches the server (see issue #133).
   const [locale, setLocale] = useState<SupportedLocale>(initialLocale ?? DEFAULT_LOCALE)
+  // The host page's locale, from the frame address or a later SDK message.
+  const hostLocaleRef = useRef<SupportedLocale | null>(
+    hostLocale ? normalizeLocale(hostLocale) : null
+  )
   const messages = useIntlSetup(locale, initialMessages)
 
   // The widget is its own iframe document, and its locale can change at runtime
@@ -312,8 +321,12 @@ export function WidgetAuthProvider({
       user: WidgetUser
       votedPostIds?: string[]
       canPortalHandoff?: boolean
+      language?: string | null
     }) => {
       storeToken(result.sessionToken)
+      // The person's own language, unless the host page set one.
+      const chosen = result.language ? normalizeLocale(result.language) : null
+      if (chosen && !hostLocaleRef.current) setLocale(chosen)
       // Any anonymous session was merged into this identified user server-side,
       // so drop its persisted token. Identified tokens are never persisted —
       // they're re-established via SDK identify / portal passthrough on load.
@@ -426,7 +439,8 @@ export function WidgetAuthProvider({
         // Capture current token before the identify call — if it's an anonymous
         // session, the server will merge its activity into the newly identified user.
         const previousToken = getWidgetToken()
-        const payload = previousToken ? { ...data, previousToken } : data
+        const withLocale = hostLocaleRef.current ? { ...data, locale: hostLocaleRef.current } : data
+        const payload = previousToken ? { ...withLocale, previousToken } : withLocale
 
         // Send previousToken as Bearer header too — the server verifies ownership
         // by checking that the Bearer header matches the previousToken body field.
@@ -513,7 +527,10 @@ export function WidgetAuthProvider({
 
       if (msg.type === 'quackback:locale' && typeof msg.data === 'string') {
         const normalized = normalizeLocale(msg.data)
-        if (normalized) setLocale(normalized)
+        if (normalized) {
+          hostLocaleRef.current = normalized
+          setLocale(normalized)
+        }
         return
       }
 

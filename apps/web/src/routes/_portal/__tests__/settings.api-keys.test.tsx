@@ -28,7 +28,7 @@ const { Route } = await import('../settings.api-keys')
 const { SettingsNav } = await import('@/components/settings/settings-nav')
 
 type Loader = (args: {
-  context: { userRole?: string | null; acceptLanguageLocale?: string }
+  context: { userRole?: string | null; personLocale?: string }
 }) => Promise<unknown>
 
 afterEach(cleanup)

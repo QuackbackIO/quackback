@@ -45,6 +45,18 @@ export interface PortalUserListItem {
   lastSeenAt: Date | null
   /** ISO-3166-1 alpha-2 country code captured at sign-up; null when no geo-aware proxy header was present. */
   country: string | null
+  /** The language the person chose, and the one their browser last asked for. */
+  language: PersonLanguage
+}
+
+/**
+ * A person's language: `chosen` in Preferences (null for "Automatic"), and
+ * `detected`, the one their browser or the host page's widget locale asked
+ * for at their latest sign-in or widget identify (null until one does).
+ */
+export interface PersonLanguage {
+  chosen: string | null
+  detected: string | null
 }
 
 /**

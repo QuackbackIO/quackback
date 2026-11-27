@@ -109,6 +109,7 @@ const PORTAL_USER: PortalUserDetail = {
   contactEmail: null,
   lastSeenAt: null,
   country: null,
+  language: { chosen: null, detected: null },
   teamRole: null,
   hasSignedIn: true,
   engagedPosts: [],

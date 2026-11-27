@@ -46,7 +46,7 @@ async function loadAdmin(opts: { permissions: string[]; feedback: boolean }) {
       principal: { id: 'principal_1', chatAvailability: 'online' },
       permissions: opts.permissions,
       settings: { featureFlags: { feedback: opts.feedback } },
-      acceptLanguageLocale: 'en',
+      personLocale: 'en',
     },
     location: { pathname: '/admin/settings/general' },
   })

@@ -142,7 +142,7 @@ export const Route = createFileRoute('/admin')({
     // Every admin page runs this loader, so a failed read never fails the layout.
     const canViewMembers = (context.permissions ?? []).includes(PERMISSIONS.MEMBER_VIEW)
 
-    const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
+    const locale = context.personLocale ?? DEFAULT_LOCALE
     // Plan limits ride on this loader, and only with plan billing on, so an
     // install without it pays no request and no code for them.
     const planLimitsOn = Boolean(context.cloudEnabled)

@@ -81,6 +81,8 @@ export async function handleExportUsers(request: Request): Promise<Response> {
       'post_count',
       'comment_count',
       'vote_count',
+      'language',
+      'detected_language',
     ]
 
     const rows = items.map((user) => [
@@ -94,6 +96,8 @@ export async function handleExportUsers(request: Request): Promise<Response> {
       String(user.postCount),
       String(user.commentCount),
       String(user.voteCount),
+      user.language.chosen ?? '',
+      user.language.detected ?? '',
     ])
 
     const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n')

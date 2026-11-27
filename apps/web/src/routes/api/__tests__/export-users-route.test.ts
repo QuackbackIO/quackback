@@ -48,6 +48,7 @@ beforeEach(() => {
         commentCount: 1,
         voteCount: 5,
         segments: [{ id: 'segment_1', name: 'VIP', color: '#fff', type: 'manual' }],
+        language: { chosen: 'de', detected: 'fr' },
       },
     ],
     total: 1,
@@ -80,6 +81,9 @@ describe('GET /api/export/users', () => {
     expect(body).toContain('Alice')
     expect(body).toContain('alice@example.com')
     expect(body).toContain('VIP')
+    // The person's chosen and detected languages close each row.
+    expect(body.split('\n')[0]).toMatch(/,vote_count,language,detected_language$/)
+    expect(body.split('\n')[1]).toMatch(/,5,de,fr$/)
   })
 
   it('parses directory filters from the query string', async () => {
@@ -114,6 +118,7 @@ describe('GET /api/export/users', () => {
           commentCount: 0,
           voteCount: 0,
           segments: [],
+          language: { chosen: null, detected: null },
         },
       ],
       total: 1,
