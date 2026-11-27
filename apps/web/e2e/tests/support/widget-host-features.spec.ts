@@ -326,6 +326,7 @@ test.describe('widget on a host page: help in every language', () => {
               // show anyway, never the empty state.
               await expect(widget.getByText(article.collection)).toBeVisible()
               await expect(widget.getByText(words['widget.help.noCategories'])).toHaveCount(0)
+              await widget.getByText(article.collection).scrollIntoViewIfNeeded()
               await snap(page, `06-help-${tag}`)
 
               await widget.getByText(article.collection).click()
@@ -372,6 +373,7 @@ test.describe('widget on a host page: help in every language', () => {
             const widget = page.frameLocator(FRAME)
             await expect(widget.getByText(fr.collection)).toBeVisible({ timeout: 20_000 })
             await expect(widget.getByText(article.collection)).toHaveCount(0)
+            await widget.getByText(fr.collection).scrollIntoViewIfNeeded()
             await snap(page, '06c-help-translated-fr')
             await widget.getByText(fr.collection).click()
             await widget.getByText(fr.title).click()
