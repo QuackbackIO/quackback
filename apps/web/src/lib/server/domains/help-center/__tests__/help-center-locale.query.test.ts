@@ -30,6 +30,9 @@ vi.mock('../help-center-translations.service', () => ({
   getCategoryTranslation: (...args: unknown[]) => mockGetCategoryTranslation(...args),
 }))
 
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getHelpCenterConfig: async () => ({ locales: { default: 'en', additional: [] } }),
+}))
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {

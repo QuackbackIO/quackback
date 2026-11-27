@@ -471,6 +471,7 @@ export {
   helpCenterSearchQueries,
   LOCALE_TO_REGCONFIG,
   regconfigForLocale,
+  localeRegconfigCaseSql,
   // Schema tables - status page
   statusComponentGroups,
   statusComponentGroupsRelations,

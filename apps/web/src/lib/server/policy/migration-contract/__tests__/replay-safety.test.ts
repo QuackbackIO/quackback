@@ -330,6 +330,9 @@ describe('the real corpus', () => {
     // only while the header_display_name column comment it writes in the same
     // block is absent, so a second run does nothing and never clears a value
     // saved afterwards, on an old row or a new one.
+    // 0326 rebuilds kb_articles.search_vector only while its expression does
+    // not yet read the row's locale, as 0288 does for translations, so a
+    // second run changes nothing.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -363,6 +366,7 @@ describe('the real corpus', () => {
       '0313_email_senders.sql',
       '0316_personal_key_reply_cutoff.sql',
       '0323_clear_legacy_header_settings.sql',
+      '0326_kb_articles_locale.sql',
     ])
   })
 

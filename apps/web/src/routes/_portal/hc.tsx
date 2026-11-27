@@ -44,10 +44,11 @@ function HelpCenterLayoutRoute() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const additionalLocales = helpCenterConfig?.locales?.additional ?? []
   const defaultLocale = helpCenterConfig?.locales?.default ?? 'en'
-  const { locale, canonicalPath } = parseHcLocalePath(pathname, [
-    defaultLocale,
-    ...additionalLocales,
-  ])
+  const { locale, canonicalPath } = parseHcLocalePath(
+    pathname,
+    [defaultLocale, ...additionalLocales],
+    defaultLocale
+  )
 
   return (
     <AreaMessages area="helpCenter" messages={messages}>

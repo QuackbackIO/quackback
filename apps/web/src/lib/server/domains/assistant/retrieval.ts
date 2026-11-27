@@ -22,7 +22,7 @@ import {
   SEMANTIC_WEIGHT,
   SEMANTIC_SIMILARITY_FLOOR,
   KEYWORD_RANK_FLOOR,
-  orTermsTsQuery,
+  orTermsTsQueryForArticles,
   type HelpCenterAudience,
 } from '@/lib/server/domains/help-center/help-center-search.service'
 
@@ -175,7 +175,7 @@ async function hybridQuery(
   rankFloor: number
 ): Promise<RetrievalRow[]> {
   const vectorStr = `[${embedding.join(',')}]`
-  const tsQuery = orTermsTsQuery(query)
+  const tsQuery = orTermsTsQueryForArticles(query)
   const semantic = sql<number>`COALESCE(1 - (${helpCenterArticles.embedding} <=> ${vectorStr}::vector), 0)`
   const keyword = sql<number>`COALESCE(ts_rank(${helpCenterArticles.searchVector}, ${tsQuery}), 0)`
   const combined = sql<number>`(${KEYWORD_WEIGHT} * ${keyword} + ${SEMANTIC_WEIGHT} * ${semantic})`
@@ -228,7 +228,7 @@ async function keywordQuery(
   topK: number,
   rankFloor: number
 ): Promise<RetrievalRow[]> {
-  const tsQuery = orTermsTsQuery(query)
+  const tsQuery = orTermsTsQueryForArticles(query)
   const rank = sql<number>`ts_rank(${helpCenterArticles.searchVector}, ${tsQuery})`
 
   return db

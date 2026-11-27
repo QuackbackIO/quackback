@@ -18,7 +18,7 @@ import type { ConversationMessageCitation } from '@/lib/shared/conversation/type
 import { splitByTerms } from '@/lib/shared/utils/keyword-context'
 import { IDLE_STATE, blankAskAiState, type AskAiSourceMeta, type AskAiState } from './ask-ai-state'
 import type { AskAiRun } from './ask-ai-run'
-import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { useHelpCenterMainLanguage } from '@/lib/client/hooks/use-help-center-main-language'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { frameRequestCredentials } from '@/lib/client/widget-frame'
 
@@ -57,9 +57,9 @@ export function useAskAiAvailable(
 }
 
 /** Public help-center article path. */
-function articleHref(source: AskAiSourceMeta): string {
+function articleHref(source: AskAiSourceMeta, mainLanguage: string): string {
   return hcArticlePath({
-    locale: DEFAULT_LOCALE,
+    locale: mainLanguage,
     urlId: source.urlId,
     slug: source.slug,
   })
@@ -67,12 +67,15 @@ function articleHref(source: AskAiSourceMeta): string {
 
 /** Present cited sources as the shared assistant citation shape so the answer
  *  renders with the same inline citation dots the messenger uses. */
-function toCitations(sources: AskAiSourceMeta[]): ConversationMessageCitation[] {
+function toCitations(
+  sources: AskAiSourceMeta[],
+  mainLanguage: string
+): ConversationMessageCitation[] {
   return sources.map((s) => ({
     type: 'article',
     id: s.articleId,
     title: s.title,
-    url: articleHref(s),
+    url: articleHref(s, mainLanguage),
   }))
 }
 
@@ -410,6 +413,7 @@ interface AskAiAnswerPanelProps {
  * answer with the shared assistant citation dots, and the source/related list.
  */
 export function AskAiAnswerPanel({ state, onDismiss, onSourceClick }: AskAiAnswerPanelProps) {
+  const mainLanguage = useHelpCenterMainLanguage()
   const intl = useIntl()
   if (state.status === 'idle') return null
   const busy = state.status === 'loading' || state.status === 'streaming'
@@ -452,7 +456,7 @@ export function AskAiAnswerPanel({ state, onDismiss, onSourceClick }: AskAiAnswe
       {(state.status === 'streaming' || state.status === 'done') && (
         <AssistantAnswer
           text={state.answer}
-          citations={toCitations(state.citedSources)}
+          citations={toCitations(state.citedSources, mainLanguage)}
           caret={state.status === 'streaming'}
           onCitationOpen={openCitation}
         />

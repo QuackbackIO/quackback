@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, normalizeLocale, resolveLocale, type SupportedLocale } from './i18n'
+import { DEFAULT_LOCALE, matchAcceptLanguage, normalizeLocale, type SupportedLocale } from './i18n'
 
 /** Sticky manual override so browser-detect doesn't fight an explicit choice. */
 export const HC_LOCALE_COOKIE = 'hc_locale'
@@ -51,9 +51,13 @@ export function hcCollectionPath(opts: { locale: string; urlId: number; slug: st
  * path — including default-locale articles and collections — carries the
  * locale (`/hc/en/articles/...`).
  */
-export function localizedHcPath(locale: string, path: string): string {
+export function localizedHcPath(
+  locale: string,
+  path: string,
+  mainLanguage: string = DEFAULT_LOCALE
+): string {
   const isHome = path === '/hc' || path === '/hc/'
-  if (isHome) return locale === DEFAULT_LOCALE ? '/hc' : `/hc/${locale}`
+  if (isHome) return locale === mainLanguage ? '/hc' : `/hc/${locale}`
   const rest = path.replace(/^\/hc/, '')
   return `/hc/${locale}${rest}`
 }
@@ -62,18 +66,19 @@ export function localizedHcPath(locale: string, path: string): string {
  * Inverse of {@link localizedHcPath}: given an actual /hc/* pathname and the
  * set of enabled additional locales, recover which locale it's in and the
  * canonical (unprefixed) path. A first segment that isn't an enabled locale
- * is treated as default-locale content (so `/hc/categories/x` is never
+ * is treated as main-language content (so `/hc/categories/x` is never
  * mistaken for locale "categories").
  */
 export function parseHcLocalePath(
   pathname: string,
-  enabledLocales: string[]
+  enabledLocales: string[],
+  mainLanguage: string = DEFAULT_LOCALE
 ): { locale: string; canonicalPath: string } {
   const match = /^\/hc\/([^/]+)(\/.*)?$/.exec(pathname)
   if (match && enabledLocales.includes(match[1])) {
     return { locale: match[1], canonicalPath: `/hc${match[2] ?? ''}` }
   }
-  return { locale: DEFAULT_LOCALE, canonicalPath: pathname }
+  return { locale: mainLanguage, canonicalPath: pathname }
 }
 
 /**
@@ -98,8 +103,8 @@ export function resolveHcLandingLocale(params: {
     return enabledAdditionalLocales.includes(cookieLocale) ? cookieLocale : null
   }
 
-  const detected = resolveLocale(acceptLanguage)
-  if (detected !== defaultLocale && enabledAdditionalLocales.includes(detected)) {
+  const detected = matchAcceptLanguage(acceptLanguage)
+  if (detected && detected !== defaultLocale && enabledAdditionalLocales.includes(detected)) {
     return detected
   }
   return null

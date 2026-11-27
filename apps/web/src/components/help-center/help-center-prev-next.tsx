@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
-import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { useHelpCenterMainLanguage } from '@/lib/client/hooks/use-help-center-main-language'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 interface ArticleLink {
@@ -17,8 +17,9 @@ interface HelpCenterPrevNextProps {
 }
 
 export function HelpCenterPrevNext({ prev, next, locale }: HelpCenterPrevNextProps) {
+  const mainLanguage = useHelpCenterMainLanguage()
   if (!prev && !next) return null
-  const loc = locale ?? DEFAULT_LOCALE
+  const loc = locale ?? mainLanguage
 
   const hrefFor = (article: ArticleLink) =>
     hcArticlePath({ locale: loc, urlId: article.urlId, slug: article.slug }) as '/hc'

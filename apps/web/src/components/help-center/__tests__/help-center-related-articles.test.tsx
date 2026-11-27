@@ -13,6 +13,7 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
+  useRouter: () => undefined,
 }))
 
 import { HelpCenterRelatedArticles } from '../help-center-related-articles'

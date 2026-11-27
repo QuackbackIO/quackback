@@ -12,7 +12,7 @@ import {
   type AskAiSourceMeta,
 } from '@/components/help-center/ask-ai'
 import { useKbSearch, type KbSearchArticle } from '@/components/help-center/use-kb-search'
-import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { useHelpCenterMainLanguage } from '@/lib/client/hooks/use-help-center-main-language'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 // ============================================================================
@@ -29,6 +29,7 @@ interface HelpCenterHeroSearchProps {
 }
 
 export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCenterHeroSearchProps) {
+  const mainLanguage = useHelpCenterMainLanguage()
   const intl = useIntl()
   const [query, setQuery] = useState('')
   const [showResults, setShowResults] = useState(false)
@@ -65,7 +66,7 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
     setShowResults(false)
     setQuery('')
     window.location.href = hcArticlePath({
-      locale: locale ?? DEFAULT_LOCALE,
+      locale: locale ?? mainLanguage,
       urlId: result.urlId,
       slug: result.slug,
     })
@@ -74,7 +75,7 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
   const handleSourceClick = useCallback(
     (source: AskAiSourceMeta) => {
       window.location.href = hcArticlePath({
-        locale: locale ?? DEFAULT_LOCALE,
+        locale: locale ?? mainLanguage,
         urlId: source.urlId,
         slug: source.slug,
       })

@@ -6,11 +6,11 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 303. Migrations with destructive DDL: 41.
+Migrations scanned: 304. Migrations with destructive DDL: 42.
 
 | Kind | Occurrences |
 | --- | --- |
-| DROP COLUMN | 23 |
+| DROP COLUMN | 24 |
 | DROP TABLE | 21 |
 | DROP CONSTRAINT | 22 |
 | RENAME COLUMN | 15 |
@@ -64,6 +64,7 @@ Migrations scanned: 303. Migrations with destructive DDL: 41.
 | 0302_approvals_foundation.sql | DROP CONSTRAINT assistant_pending_actions.assistant_pending_actions_parent_check | annotated (safe-after 0.14.1) |
 | 0320_roadmap_slug_live_only.sql | DROP CONSTRAINT roadmaps.roadmaps_slug_unique | annotated (safe-after 0.15.0) |
 | 0321_live_taxonomy_unique.sql | DROP CONSTRAINT boards.boards_slug_unique; DROP CONSTRAINT post_statuses.post_statuses_slug_unique; DROP CONSTRAINT post_tags.post_tags_name_unique | annotated (safe-after 0.15.0) |
+| 0326_kb_articles_locale.sql | DROP COLUMN kb_articles.search_vector | annotated (safe-after 0.16.1) |
 
 ## Grandfathered (29)
 

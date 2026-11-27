@@ -1,6 +1,7 @@
 import {
   db,
   eq,
+  helpCenterArticles,
   settings,
   sql,
   ssoVerifiedDomain,
@@ -841,6 +842,20 @@ export async function getLanguageConfig(
 }
 
 /**
+ * The main language, for labelling new content. Settings that cannot be read
+ * give English, which only affects how search stems the content until the
+ * main language next changes.
+ */
+export async function getMainLanguage(): Promise<string> {
+  try {
+    return (await getLanguageConfig()).mainLanguage
+  } catch (err) {
+    log.warn({ err }, 'main language unreadable; using English')
+    return DEFAULT_LANGUAGE_CONFIG.mainLanguage
+  }
+}
+
+/**
  * Change the main language or what visitors see. The help center's default
  * language follows the main language in the same write. A language the help
  * center already offers as an extra language cannot become the main language
@@ -882,6 +897,11 @@ export async function updateLanguageConfig(
           helpCenterConfig: JSON.stringify(nextHelpCenter),
         })
         .where(eq(settings.id, org.id))
+      // Articles are relabelled, never rewritten: their text stays, and
+      // search stems it by the new language.
+      if (next.mainLanguage !== existing.mainLanguage) {
+        await tx.update(helpCenterArticles).set({ locale: next.mainLanguage })
+      }
       return next
     })
   } catch (error) {

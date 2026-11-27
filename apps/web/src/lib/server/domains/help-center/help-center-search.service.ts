@@ -19,6 +19,7 @@ import {
   lte,
   sql,
   regconfigForLocale,
+  localeRegconfigCaseSql,
 } from '@/lib/server/db'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
@@ -64,12 +65,26 @@ const CORPUS_STOPWORDS = new Set(['quackback'])
  * websearch; an empty query yields a match-nothing tsquery.
  */
 export function orTermsTsQuery(query: string) {
-  const orQuery = query
+  return sql`websearch_to_tsquery('english', ${orTermsText(query)})`
+}
+
+function orTermsText(query: string): string {
+  return query
     .trim()
     .split(/\s+/)
     .filter((w) => w && !CORPUS_STOPWORDS.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')))
     .join(' or ')
-  return sql`websearch_to_tsquery('english', ${orQuery})`
+}
+
+/**
+ * {@link orTermsTsQuery} for main-language help center articles: each row is
+ * matched with its own language's text-search config, the one its
+ * search_vector was built with (kb_articles.locale, the workspace's main
+ * language). The query must run against `kb_articles` unaliased.
+ */
+export function orTermsTsQueryForArticles(query: string) {
+  const regconfig = sql.raw(localeRegconfigCaseSql('"kb_articles"."locale"'))
+  return sql`websearch_to_tsquery(${regconfig}, ${orTermsText(query)})`
 }
 
 /**
@@ -80,13 +95,8 @@ export function orTermsTsQuery(query: string) {
  * localeRegconfigCaseSql in packages/db/src/schema/kb.ts).
  */
 export function orTermsTsQueryForLocale(query: string, locale: string) {
-  const orQuery = query
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w && !CORPUS_STOPWORDS.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')))
-    .join(' or ')
   const regconfig = regconfigForLocale(locale)
-  return sql`websearch_to_tsquery(${regconfig}::regconfig, ${orQuery})`
+  return sql`websearch_to_tsquery(${regconfig}::regconfig, ${orTermsText(query)})`
 }
 
 /** Which slice of the knowledge base a caller may see. */
@@ -216,7 +226,7 @@ async function hybridQuery(
   viewer: Actor
 ): Promise<HybridSearchResult[]> {
   const vectorStr = `[${embedding.join(',')}]`
-  const tsQuery = orTermsTsQuery(query)
+  const tsQuery = orTermsTsQueryForArticles(query)
 
   const results = await db
     .select({
@@ -328,7 +338,7 @@ export async function searchArticleIdsRanked(
     }
   }
 
-  const tsQuery = orTermsTsQuery(query)
+  const tsQuery = orTermsTsQueryForArticles(query)
   const queryEmbedding = await generateKbQueryEmbedding(query, {
     pipelineStep: 'kb_search_query_embedding',
   })
@@ -382,7 +392,7 @@ async function keywordOnlyQuery(
   limit: number,
   viewer: Actor
 ): Promise<HybridSearchResult[]> {
-  const tsQuery = orTermsTsQuery(query)
+  const tsQuery = orTermsTsQueryForArticles(query)
 
   const results = await db
     .select({
@@ -504,8 +514,8 @@ async function keywordOnlyQueryForLocale(
 }
 
 /**
- * Locale-dispatching entry point for the public /hc search box. The default
- * locale keeps the full hybrid (keyword + semantic) search unchanged;
+ * Locale-dispatching entry point for the public /hc search box. The main
+ * language keeps the full hybrid (keyword + semantic) search unchanged;
  * additional locales get keyword-only search against their translations.
  *
  * Every call is a visitor search, so the query + result count are logged
@@ -517,8 +527,10 @@ export async function hybridSearchForLocale(
   limit = 10,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HybridSearchResult[]> {
+  const { getHelpCenterConfig } = await import('@/lib/server/domains/settings/settings.service')
+  const mainLanguage = (await getHelpCenterConfig()).locales?.default ?? DEFAULT_LOCALE
   const results =
-    locale === DEFAULT_LOCALE
+    locale === mainLanguage
       ? await hybridSearch(query, limit, viewer)
       : await keywordOnlyQueryForLocale(query, locale, limit, viewer)
   logSearchQuery({ query, locale, resultsCount: results.length })

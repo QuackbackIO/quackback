@@ -32,7 +32,7 @@ import {
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError } from '@/lib/shared/errors'
-import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
 import {
   listPublicCategories,
   getPublicCategoryBySlug,
@@ -73,12 +73,22 @@ function translationBody(translation: {
   return translation.contentJson ?? markdownToTiptapJson(translation.content)
 }
 
+/**
+ * The help center's main language (the workspace's main language). Content in
+ * it lives on the article and collection rows themselves; any other language
+ * is a translation on top.
+ */
+async function mainLanguage(): Promise<string> {
+  return (await getHelpCenterConfig()).locales?.default ?? 'en'
+}
+
 export async function listPublicCategoriesForLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterCategoryWithCount[]> {
+  const main = await mainLanguage()
   const categories = await listPublicCategories(viewer)
-  if (locale === DEFAULT_LOCALE || categories.length === 0) return categories
+  if (locale === main || categories.length === 0) return categories
 
   const categoryIds = categories.map((c) => c.id)
   const [translations, articleCounts] = await Promise.all([
@@ -133,8 +143,9 @@ export async function listPublicCategoriesWithFallback(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterCategoryWithCount[]> {
+  const main = await mainLanguage()
   const categories = await listPublicCategories(viewer)
-  if (locale === DEFAULT_LOCALE || categories.length === 0) return categories
+  if (locale === main || categories.length === 0) return categories
 
   const translations = await db.query.helpCenterCategoryTranslations.findMany({
     where: and(
@@ -159,8 +170,9 @@ export async function getPublicCategoryByUrlIdForLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): ReturnType<typeof getPublicCategoryByUrlId> {
+  const main = await mainLanguage()
   const category = await getPublicCategoryByUrlId(urlId, viewer)
-  if (locale === DEFAULT_LOCALE) return category
+  if (locale === main) return category
   const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
   if (!translation || !translation.name.trim()) {
     throw new NotFoundError(
@@ -176,8 +188,9 @@ export async function getPublicCategoryByIdForLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): ReturnType<typeof getPublicCategoryById> {
+  const main = await mainLanguage()
   const category = await getPublicCategoryById(id, viewer)
-  if (locale === DEFAULT_LOCALE) return category
+  if (locale === main) return category
   const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
   if (!translation || !translation.name.trim()) {
     throw new NotFoundError('CATEGORY_NOT_FOUND', `No "${locale}" translation for category "${id}"`)
@@ -190,8 +203,9 @@ export async function getPublicCategoryBySlugForLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): ReturnType<typeof getPublicCategoryBySlug> {
+  const main = await mainLanguage()
   const category = await getPublicCategoryBySlug(slug, viewer)
-  if (locale === DEFAULT_LOCALE) return category
+  if (locale === main) return category
 
   const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
   if (!translation || !translation.name.trim()) {
@@ -208,8 +222,9 @@ export async function listPublicArticlesForCategoryLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ) {
+  const main = await mainLanguage()
   const articles = await listPublicArticlesForCategory(categoryId, viewer)
-  if (locale === DEFAULT_LOCALE || articles.length === 0) return articles
+  if (locale === main || articles.length === 0) return articles
 
   const translations = await db.query.helpCenterArticleTranslations.findMany({
     where: and(
@@ -241,8 +256,9 @@ export async function listPublicArticlesForCategoryWithFallback(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ) {
+  const main = await mainLanguage()
   const articles = await listPublicArticlesForCategory(categoryId, viewer)
-  if (locale === DEFAULT_LOCALE || articles.length === 0) return articles
+  if (locale === main || articles.length === 0) return articles
 
   const translations = await db.query.helpCenterArticleTranslations.findMany({
     where: and(
@@ -277,8 +293,9 @@ export async function listPublicArticlesForCategoriesLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<Map<string, PublicCategoryArticle[]>> {
+  const main = await mainLanguage()
   const grouped = await listPublicArticlesForCategories(categoryIds, viewer)
-  if (locale === DEFAULT_LOCALE || grouped.size === 0) return grouped
+  if (locale === main || grouped.size === 0) return grouped
 
   const allArticleIds: string[] = []
   for (const list of grouped.values()) for (const a of list) allArticleIds.push(a.id)
@@ -313,8 +330,9 @@ export async function getPublicArticleByUrlIdForLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterArticleWithCategory> {
+  const main = await mainLanguage()
   const article = await getPublicArticleByUrlId(urlId, viewer)
-  if (locale === DEFAULT_LOCALE) return article
+  if (locale === main) return article
   const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
   if (!translation) {
     throw new NotFoundError(
@@ -336,8 +354,9 @@ export async function getPublicArticleByIdForLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterArticleWithCategory> {
+  const main = await mainLanguage()
   const article = await getPublicArticleById(id, viewer)
-  if (locale === DEFAULT_LOCALE) return article
+  if (locale === main) return article
   const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
   if (!translation) {
     throw new NotFoundError(
@@ -359,8 +378,9 @@ export async function getPublicArticleBySlugForLocale(
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterArticleWithCategory> {
+  const main = await mainLanguage()
   const article = await getPublicArticleBySlug(slug, viewer)
-  if (locale === DEFAULT_LOCALE) return article
+  if (locale === main) return article
 
   const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
   if (!translation) {
@@ -391,8 +411,9 @@ export async function localizeRelatedArticles(
   related: RelatedArticle[],
   locale: string
 ): Promise<LocalizedRelatedArticle[]> {
-  if (locale === DEFAULT_LOCALE || related.length === 0) {
-    return related.map((a) => ({ ...a, locale: DEFAULT_LOCALE }))
+  const main = await mainLanguage()
+  if (locale === main || related.length === 0) {
+    return related.map((a) => ({ ...a, locale: main }))
   }
   const translations = await db.query.helpCenterArticleTranslations.findMany({
     where: and(
@@ -408,8 +429,6 @@ export async function localizeRelatedArticles(
   const byArticle = new Map(translations.map((t) => [t.articleId as string, t]))
   return related.map((a) => {
     const t = byArticle.get(a.id)
-    return t
-      ? { ...a, title: t.title, description: t.description, locale }
-      : { ...a, locale: DEFAULT_LOCALE }
+    return t ? { ...a, title: t.title, description: t.description, locale } : { ...a, locale: main }
   })
 }
