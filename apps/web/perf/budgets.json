@@ -28,7 +28,7 @@
     },
     "doc:widget": {
       "dbQueries": 19,
-      "htmlKB": 40.7
+      "htmlKB": 42.9
     },
     "doc:portal-home+session": {
       "dbQueries": 14,
@@ -282,7 +282,7 @@
       "serverRequests": 2,
       "requests": 101,
       "jsRequests": 95,
-      "jsKB": 503.7,
+      "jsKB": 504.4,
       "htmlTransferKB": 28.3,
       "componentRenders": 330
     },
@@ -522,7 +522,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/messenger": {
       "dbQueries": 6,
-      "htmlKB": 79.3
+      "htmlKB": 80.5
     },
     "sweep:ui:admin:/admin/settings/channels/messenger": {
       "dbQueries": 6,
@@ -666,7 +666,7 @@
       "serverRequests": 1,
       "requests": 100,
       "jsRequests": 96,
-      "jsKB": 396.8,
+      "jsKB": 397.3,
       "htmlTransferKB": 30.0,
       "componentRenders": 352
     },
@@ -711,7 +711,7 @@
     },
     "sweep:doc:admin:/admin/settings/moderation": {
       "dbQueries": 6,
-      "htmlKB": 73.9
+      "htmlKB": 77.6
     },
     "sweep:ui:admin:/admin/settings/moderation": {
       "dbQueries": 6,

@@ -10,7 +10,10 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { usePortalFileUpload } from '@/lib/client/hooks/use-file-upload'
-import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
+import {
+  getConversationPresenceFn,
+  getWidgetTeamAvatarsFn,
+} from '@/lib/server/functions/conversation'
 import {
   CONVERSATION_PRESENCE_POLL_MS,
   type ConversationPresence,
@@ -18,11 +21,34 @@ import {
 import {
   PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
+  PORTAL_TEAM_AVATARS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
+type PortalSettings = ReturnType<typeof useWorkspaceSettings>
+
+/** Teammate faces show in the thread header unless the workspace turns team
+ *  avatars off or the assistant fronts the thread instead. */
+function showsTeamFaces(settings: PortalSettings): boolean {
+  const widget = settings?.publicWidgetConfig
+  return (widget?.home?.showTeamAvatars ?? true) && !widget?.messenger?.assistant?.enabled
+}
+
+const teamAvatarsQuery = () => ({
+  queryKey: PORTAL_TEAM_AVATARS_QUERY_KEY,
+  queryFn: () => getWidgetTeamAvatarsFn(),
+  staleTime: 5 * 60_000,
+})
+
 export const Route = createFileRoute('/_portal/support/$conversationId')({
+  // Seed the faces before render so the header does not shift when they
+  // arrive. Best effort: a failed read leaves the client query to retry.
+  loader: async ({ context }) => {
+    const user = context.session?.user
+    if (!user || user.principalType === 'anonymous' || !showsTeamFaces(context.settings)) return
+    await context.queryClient.ensureQueryData(teamAvatarsQuery()).catch(() => {})
+  },
   component: SupportThreadPage,
 })
 
@@ -58,7 +84,7 @@ function SupportThreadPage() {
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'
 
-  // Team availability for the presence strip — portal twin of the widget's
+  // Team availability for the thread header — portal twin of the widget's
   // shared presence query (cookie-authed, so no headers needed).
   const presenceQuery = useQuery({
     queryKey: PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
@@ -66,6 +92,15 @@ function SupportThreadPage() {
     enabled: supportEnabled && isLoggedIn,
     refetchInterval: CONVERSATION_PRESENCE_POLL_MS,
     staleTime: CONVERSATION_PRESENCE_POLL_MS,
+  })
+
+  // Teammate faces for the thread header: the same few the widget shows.
+  // None when they are switched off (cached faces never linger).
+  const messengerConfig = settings?.publicWidgetConfig?.messenger
+  const showTeam = showsTeamFaces(settings)
+  const teamQuery = useQuery({
+    ...teamAvatarsQuery(),
+    enabled: supportEnabled && isLoggedIn && showTeam,
   })
 
   // The first send creates the thread: move /support/new → /support/<id> so a
@@ -127,6 +162,8 @@ function SupportThreadPage() {
             currentUser={user ? { name: user.name, avatarUrl: portalAvatar ?? user.image } : null}
             uploadFile={upload}
             presence={presenceQuery.data ?? OFFLINE}
+            team={showTeam ? teamQuery.data : undefined}
+            replyTime={messengerConfig?.replyTime}
             embedOpenMode="navigate"
             onConversationStarted={onConversationStarted}
           />

@@ -54,6 +54,7 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 }))
 
 import { VisitorSurfaceRpcProvider, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import { HOST_SHOWN_MESSAGE } from '@/lib/client/hooks/use-host-shown'
 import { VisitorConversationThread } from '../visitor-conversation-thread'
 
 class FakeEventSource {
@@ -207,5 +208,33 @@ describe('VisitorConversationThread catches up when the stream first opens', () 
 
     await waitFor(() => expect(rpc.listConversationMessages).toHaveBeenCalledTimes(2))
     expect(screen.getByText(CLOSED_HINT)).toBeInTheDocument()
+  })
+})
+
+function hostShows(shown: boolean) {
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: HOST_SHOWN_MESSAGE, data: shown },
+        source: window.parent,
+      })
+    )
+  })
+}
+
+describe('VisitorConversationThread catches up when the host shows the frame again', () => {
+  afterEach(() => hostShows(true))
+
+  it('reads the thread again, so a reply the hidden stream missed appears', async () => {
+    const rpc = makeRpc(async () => ({ messages: [message], hasMore: false }))
+    await renderThread(rpc)
+    expect(rpc.listConversationMessages).not.toHaveBeenCalled()
+
+    hostShows(false)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(rpc.listConversationMessages).not.toHaveBeenCalled()
+
+    hostShows(true)
+    await waitFor(() => expect(rpc.listConversationMessages).toHaveBeenCalledTimes(1))
   })
 })
