@@ -134,6 +134,58 @@ describe('the languages settings area', () => {
     )
   })
 
+  describe('languages the plan holds', () => {
+    const FR_LABELS = {
+      ...DE_LABELS,
+      language: 'fr',
+      homepageTitle: 'Comment pouvons-nous aider ?',
+    }
+    async function overTheCap(graceEndsAt: Date) {
+      await change({ extraLanguages: ['de', 'fr'], pageLabels: [DE_LABELS, FR_LABELS] })
+      await testDb.update(settings).set({
+        tierLimits: { maxHelpCenterLocales: 2 } as never,
+        planLimitsState: {
+          since: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+          graceEndsAt: graceEndsAt.toISOString(),
+          limitsKey: 'test',
+          overKeys: ['maxHelpCenterLocales'],
+        },
+      })
+    }
+    const renamed = { ...FR_LABELS, homepageTitle: 'Bonjour' }
+
+    it('leaves the page labels of a language past the cap editable during the grace', async () => {
+      await overTheCap(new Date(Date.now() + 86_400_000))
+      await expect(change({ pageLabels: [DE_LABELS, renamed] })).resolves.toMatchObject({
+        status: 'applied',
+      })
+    })
+
+    it('keeps the page labels of a held language after the grace', async () => {
+      await overTheCap(new Date(Date.now() - 86_400_000))
+      await expect(change({ pageLabels: [DE_LABELS, renamed] })).rejects.toMatchObject({
+        code: 'HC_LOCALE_HELD',
+      })
+      // The earliest-added language stays editable.
+      await expect(
+        change({ pageLabels: [{ ...DE_LABELS, homepageTitle: 'Hallo' }] })
+      ).resolves.toMatchObject({ status: 'applied' })
+    })
+
+    it('refuses a new order that would free a held language, and lets removal free it', async () => {
+      await overTheCap(new Date(Date.now() - 86_400_000))
+      await expect(
+        change({ extraLanguages: ['fr', 'de'], pageLabels: [renamed, DE_LABELS] })
+      ).rejects.toMatchObject({ code: 'HC_LOCALE_HELD' })
+      await expect(change({ extraLanguages: ['fr', 'de'] })).rejects.toMatchObject({
+        code: 'HC_LOCALE_HELD',
+      })
+      await expect(change({ extraLanguages: ['fr'] })).resolves.toMatchObject({
+        status: 'applied',
+      })
+    })
+  })
+
   it('swaps in an extra language as the main language, and that receipt has no undo', async () => {
     await change({ extraLanguages: ['de'], pageLabels: [DE_LABELS] })
     const result = await change({ mainLanguage: 'de' })
@@ -161,5 +213,27 @@ describe('the languages settings area', () => {
     await expect(change({ glossary: ['Acme'] }, settingsOnly)).rejects.toMatchObject({
       code: 'SETTINGS_PERMISSION_REQUIRED',
     })
+  })
+
+  it('needs the help center permission to undo a help center field, as to change it', async () => {
+    const settingsOnly: SettingsCaller = {
+      actor: {
+        ...actor,
+        permissions: new Set(ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.HELP_CENTER_MANAGE)),
+      },
+    }
+    const glossary = await change({ glossary: ['Acme'] })
+    if (glossary.status !== 'applied') throw new Error('expected applied')
+    await expect(undoSettingsReceipt(settingsOnly, glossary.receipt.id)).rejects.toMatchObject({
+      code: 'SETTINGS_PERMISSION_REQUIRED',
+    })
+    expect((await readSettingsArea(actor, 'languages')).value).toMatchObject({
+      glossary: ['Acme'],
+    })
+
+    // A change to the workspace-wide fields alone stays theirs to undo.
+    const visitors = await change({ visitorLanguage: 'main' })
+    if (visitors.status !== 'applied') throw new Error('expected applied')
+    await expect(undoSettingsReceipt(settingsOnly, visitors.receipt.id)).resolves.not.toThrow()
   })
 })
