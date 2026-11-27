@@ -166,6 +166,13 @@ describe('Widget Config Types', () => {
       })
       expect('routing' in projected).toBe(false)
     })
+
+    it('projects the usual reply time, and leaves it absent when unset', () => {
+      expect(publicMessengerConfig({ enabled: true, replyTime: 'minutes' }).replyTime).toBe(
+        'minutes'
+      )
+      expect(publicMessengerConfig({ enabled: true }).replyTime).toBeUndefined()
+    })
   })
 
   describe('home config merge semantics', () => {
@@ -219,6 +226,44 @@ describe('getPublicWidgetConfig — launcher projection', () => {
   })
 })
 
+describe('getPublicWidgetConfig — launcher announcement of new updates', () => {
+  it('is off when the key is absent, with no default written', async () => {
+    expect(DEFAULT_WIDGET_CONFIG.changelog).toBeUndefined()
+    settingsRow.current = fixtureRow({ enabled: true })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: false })
+  })
+
+  it('projects the switch when the changelog tab is on', async () => {
+    settingsRow.current = fixtureRow({
+      enabled: true,
+      tabs: { changelog: true },
+      changelog: { announceOnLauncher: true },
+    })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: true })
+  })
+
+  it('stays off while the changelog tab is off', async () => {
+    settingsRow.current = fixtureRow({
+      enabled: true,
+      tabs: { feedback: true, changelog: false },
+      changelog: { announceOnLauncher: true },
+    })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: false })
+  })
+
+  it('stays off when the changelog product is off', async () => {
+    settingsRow.current = fixtureRow(
+      { enabled: true, tabs: { feedback: true }, changelog: { announceOnLauncher: true } },
+      { changelog: false }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.changelog).toEqual({ announceOnLauncher: false })
+  })
+})
+
 describe('getPublicWidgetConfig — messenger tab projection', () => {
   it('projects tabs.messenger from the flag + tab, ignoring stored messenger.enabled', async () => {
     settingsRow.current = fixtureRow(
@@ -260,6 +305,45 @@ describe('getPublicWidgetConfig — messenger tab projection', () => {
     const projected = await getPublicWidgetConfig()
     expect(projected.tabs?.messenger).toBe(false)
     expect(projected.messenger?.enabled).toBe(false)
+  })
+})
+
+describe('getPublicWidgetConfig — reply alerts', () => {
+  it('shows a preview and leaves the tab title alone when nothing is stored', async () => {
+    settingsRow.current = fixtureRow(
+      { enabled: true, tabs: { messenger: true }, messenger: { enabled: true } },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.messenger?.replyAlerts).toBe('preview')
+    expect(projected.messenger?.titleAlerts).toBe(false)
+  })
+
+  it('projects the stored choices', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { messenger: true },
+        messenger: { enabled: true, replyAlerts: 'full', titleAlerts: true },
+      },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.messenger?.replyAlerts).toBe('full')
+    expect(projected.messenger?.titleAlerts).toBe(true)
+  })
+
+  it('reads an unknown stored value as a preview', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { messenger: true },
+        messenger: { enabled: true, replyAlerts: 'loud' as never },
+      },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.messenger?.replyAlerts).toBe('preview')
   })
 })
 

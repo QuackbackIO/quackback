@@ -19,6 +19,7 @@ import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
 import { structuredOutputProviderOptions } from '@/lib/server/domains/ai/config'
+import { outputBudgetOptions } from '@/lib/server/domains/ai/output-budget'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
@@ -158,7 +159,7 @@ export async function runClassificationCall(
     messages: [{ role: 'user', content: userContent }],
     outputSchema: ClassificationResponseSchema,
     stream: false,
-    modelOptions: { max_tokens: 1500, ...structuredOutputProviderOptions() },
+    modelOptions: { ...outputBudgetOptions(1500), ...structuredOutputProviderOptions() },
     middleware: [
       createUsageLoggingMiddleware({
         pipelineStep: 'classification',

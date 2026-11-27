@@ -72,7 +72,9 @@ if (!process.env.DATABASE_URL) {
 
 // Initialize clients. AI follows the app's central config (one client for
 // chat + embeddings; both OPENAI_API_KEY and OPENAI_BASE_URL required, #180).
-const client = postgres(process.env.DATABASE_URL)
+// No runtime type lookup: it runs on a second connection and hangs behind a
+// transaction pooler with few server connections (see packages/db client.ts).
+const client = postgres(process.env.DATABASE_URL, { fetch_types: false })
 const db = drizzle(client)
 const openai = getOpenAI()
 if (!openai) {

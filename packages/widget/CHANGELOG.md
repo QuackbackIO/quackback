@@ -1,5 +1,29 @@
 # @quackback/widget
 
+## Unreleased
+
+- Screen readers hear the launcher as "Open help" (or your launcher label) with the unread count, for example "Open help, 2 unread", and "Close help" while the panel is open, in the visitor's language when `init` passes a `locale`. The panel is announced as a dialog named in the same language.
+- Opening the panel from the launcher or your own help button moves keyboard focus into it, and closing it returns focus to whatever opened it (or to the launcher if that is gone). An `open()` call while the visitor is typing in a field leaves their focus there, and in browsers that report user activation, so does an open on a timer or a route change.
+- The desktop panel is taller (up to 704px) and narrower windows shrink it to fit, with rounder corners and a softer shadow. The launcher keeps the same shadow after a hover.
+- Phones held sideways get the full-screen panel too, and on phones the panel stays above the on-screen keyboard while typing.
+- With reduced motion turned on in the visitor's system settings, the panel and launcher no longer animate, including when the setting changes while the page is open.
+- `hideLauncher()` hides the greeting bubble along with the button, and `showLauncher()` works after `init({ launcher: false })`.
+- `logout()` on an open panel closes it and fires the `close` event.
+- A "What's new" card above the closed launcher shows the newest unread changelog entry when the workspace turns it on. Clicking it opens the widget on that entry, and dismissing it hides the card until a newer entry is published. The new `whats-new` event (`{ count, entryId }`) fires the first time the card shows an entry to a visitor.
+- An entry with "Announce above the launcher" turned off in its settings is left out of the "What's new" card and its count, and still counts towards the unread badge.
+- Unread changelog entries are those published after a visitor's first visit on a device, even if they never open the changelog. Before, nothing counted as unread until the visitor had opened the changelog once, so the badge and the "What's new" card never showed for visitors who had not.
+- The "What's new" card covers entries published after a visitor's first visit on a device: entries already unread on the first visit are recorded without showing the card or firing `whats-new`.
+- `init({ whatsNew: false })` keeps the "What's new" card off on that page, and `Quackback.whatsNew(true | false)` switches it while the page is open. The unread badge is unchanged. A later `init` without the option keeps the last choice, and a call made before `init` holds.
+- A reply preview above the closed launcher shows the newest unread replies from a teammate or the AI assistant, with the author's photo or initials and a "Reply to ..." button that opens the conversation with the message box focused. Dismissing it hides it until a newer reply; the badge stays. It goes ahead of the "What's new" card and the greeting. The workspace can show the whole reply instead, or only the badge, and can flash the reply in the page title while the visitor is on another tab.
+- `Quackback.open({ view: 'messages', conversationId })` opens one conversation with its message box focused, and the `open` event carries `conversationId`.
+- The `unread` event payload adds `messages`, `changelog` and `tickets` beside the unchanged `count`.
+- The new `message` event (`{ conversationId, author: { name, avatarUrl }, preview }`) fires once for each new unread reply in any of the visitor's conversations (the 20 newest at each check) that arrives while the page is open or since the visitor's last visit on that device, whichever way the workspace shows replies, including the badge only, so you can build your own indicator.
+- The unread count refreshes as soon as the visitor comes back to the page, instead of on the next poll.
+- Script-tag installs can read state with `Quackback('isOpen')`, `Quackback('getUser')` and `Quackback('isIdentified')`.
+- The SDK only accepts messages from the panel iframe on the page now. Before, a message from another window on the same origin, such as a removed panel's last reply, could change `getUser()`, the unread count or open a link in a new tab.
+- `useQuackbackInit` calls `logout()` when `identity` goes back to `undefined`, so signing out of your app signs out of the widget. A visitor who was never identified keeps their anonymous session.
+- New "Signing out and switching users" section in this README.
+
 ## 0.1.6 - 2026-11-23
 
 - The package is now MIT licensed (was AGPL-3.0), so you can ship it in closed-source apps. The script-tag `sdk.js` is built from this package and is MIT too. The Quackback server stays AGPL-3.0.

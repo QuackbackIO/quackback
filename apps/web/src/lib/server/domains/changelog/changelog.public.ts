@@ -26,7 +26,11 @@ import {
 } from './changelog-category.service'
 import { isChangelogOpenTo } from './changelog.audience'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
-import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
+import type {
+  PublicChangelogEntry,
+  PublicChangelogListEntry,
+  PublicChangelogListResult,
+} from './changelog.types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
@@ -322,7 +326,7 @@ export async function listPublicChangelogs(
   const categoriesByEntry = await getCategoriesForEntries(entryIds)
 
   // Transform to output format (no author info for public view)
-  const result: PublicChangelogEntry[] = items
+  const result: PublicChangelogListEntry[] = items
     .filter((entry) => entry.publishedAt !== null)
     .map((entry) => {
       const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
@@ -333,6 +337,7 @@ export async function listPublicChangelogs(
         content: entry.content,
         contentJson: contentJsonForClient(entry.contentJson),
         publishedAt: entry.displayDate ?? entry.publishedAt!,
+        announceOnLauncher: entry.announceOnLauncher,
         featuredImageUrl: entry.featuredImageUrl
           ? resignStoredAssetUrl(entry.featuredImageUrl)
           : entry.featuredImageUrl,

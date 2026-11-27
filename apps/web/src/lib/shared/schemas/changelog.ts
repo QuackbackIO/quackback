@@ -36,6 +36,9 @@ export const createChangelogSchema = z.object({
    * to every subscriber.
    */
   segmentIds: z.array(z.string()).max(50).optional(),
+  /** Whether the widget's "What's new" card above the launcher may announce
+   *  this entry; default true. */
+  announceOnLauncher: z.boolean().optional(),
   /** Publish-time "Send email to subscribers" checkbox; default true. */
   notify: z.boolean().optional(),
 })
@@ -60,6 +63,9 @@ export const updateChangelogSchema = z.object({
    * to every subscriber.
    */
   segmentIds: z.array(z.string()).max(50).optional(),
+  /** Whether the widget's "What's new" card above the launcher may announce
+   *  this entry; default true. */
+  announceOnLauncher: z.boolean().optional(),
   /** Publish-time "Send email to subscribers" checkbox; default true. */
   notify: z.boolean().optional(),
 })

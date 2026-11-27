@@ -32,6 +32,7 @@ import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
+import { outputBudgetOptions } from '@/lib/server/domains/ai/output-budget'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -159,7 +160,7 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
       ],
       outputSchema: VerdictSchema,
       stream: false,
-      modelOptions: { max_tokens: 100, ...structuredOutputProviderOptions() },
+      modelOptions: { ...outputBudgetOptions(100), ...structuredOutputProviderOptions() },
       middleware: [
         createUsageLoggingMiddleware({
           pipelineStep: 'spam_classification',
