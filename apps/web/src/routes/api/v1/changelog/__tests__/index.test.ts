@@ -137,3 +137,35 @@ describe('POST /api/v1/changelog — linked posts', () => {
     expect(mockCreateChangelog).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /api/v1/changelog — announceOnLauncher', () => {
+  it('forwards the choice to createChangelog and echoes it', async () => {
+    mockCreateChangelog.mockResolvedValue(entry({ announceOnLauncher: false }))
+    const res = await POST({
+      request: postRequest({ title: 'Dark mode', content: 'Body', announceOnLauncher: false }),
+    })
+
+    expect(res.status).toBe(201)
+    expect(mockCreateChangelog.mock.calls[0][0]).toMatchObject({ announceOnLauncher: false })
+    const json = await res.json()
+    expect(json.data.announceOnLauncher).toBe(false)
+  })
+
+  it('leaves the default to the service when omitted', async () => {
+    await POST({ request: postRequest({ title: 'Dark mode', content: 'Body' }) })
+    expect(mockCreateChangelog.mock.calls[0][0]).not.toHaveProperty('announceOnLauncher')
+  })
+})
+
+describe('GET /api/v1/changelog — announceOnLauncher', () => {
+  it("lists each entry's choice", async () => {
+    mockListChangelogs.mockResolvedValue({
+      items: [entry({ announceOnLauncher: true })],
+      nextCursor: null,
+      hasMore: false,
+    })
+    const res = await GET({ request: new Request('http://t/api/v1/changelog') })
+    const json = await res.json()
+    expect(json.data[0].announceOnLauncher).toBe(true)
+  })
+})

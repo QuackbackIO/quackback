@@ -45,6 +45,7 @@ import {
 test.describe.configure({ timeout: 60_000 })
 
 const ENTRY_KEYS = [
+  'announceOnLauncher',
   'content',
   'createdAt',
   'displayDate',

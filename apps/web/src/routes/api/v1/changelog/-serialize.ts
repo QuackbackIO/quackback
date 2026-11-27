@@ -12,6 +12,7 @@ export function formatChangelogResponse(entry: {
   displayDate: Date | null
   createdAt: Date
   updatedAt: Date
+  announceOnLauncher: boolean
   linkedPosts?: ChangelogLinkedPost[]
 }) {
   return {
@@ -22,6 +23,7 @@ export function formatChangelogResponse(entry: {
     displayDate: entry.displayDate?.toISOString() || null,
     createdAt: entry.createdAt.toISOString(),
     updatedAt: entry.updatedAt.toISOString(),
+    announceOnLauncher: entry.announceOnLauncher,
     linkedPosts: (entry.linkedPosts ?? []).map((post) => ({
       id: post.id,
       title: post.title,

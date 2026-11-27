@@ -245,7 +245,7 @@ test.describe('widget chat: what the endpoints refuse', () => {
       )
       expect(list.value?.conversations).toEqual([])
       const unread = await widgetFn(request, 'widgetGetMessengerUnreadFn')
-      expect(unread.value).toEqual({ conversations: 0, total: 0 })
+      expect(unread.value).toEqual({ conversations: 0, total: 0, newestReplyId: null })
     }
   )
 

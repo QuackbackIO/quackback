@@ -17,7 +17,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { conversations, conversationMessages, principal, user } from '@/lib/server/db'
-import { countVisitorUnreadMessages } from '../conversation.query'
+import {
+  conversationToDTO,
+  countVisitorUnreadMessages,
+  summarizeVisitorUnreadReplies,
+} from '../conversation.query'
+import { eq, desc } from '@/lib/server/db'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -56,6 +61,7 @@ async function addMessage(
     isInternal?: boolean
     createdAt?: Date
     deletedAt?: Date | null
+    replyTime?: boolean
   } = {}
 ) {
   await testDb.insert(conversationMessages).values({
@@ -65,6 +71,7 @@ async function addMessage(
     content: 'msg',
     createdAt: over.createdAt ?? new Date(),
     deletedAt: over.deletedAt ?? null,
+    metadata: over.replyTime ? ({ block: { kind: 'replyTime', status: 'online' } } as never) : null,
   })
 }
 
@@ -97,6 +104,49 @@ describe.skipIf(!fixture.available)('countVisitorUnreadMessages (real DB)', () =
     await addMessage(c, { senderType: 'visitor' }) // the visitor's own
     await addMessage(c, { senderType: 'system' }) // system event
     expect(await countVisitorUnreadMessages(visitor)).toBe(1)
+  })
+
+  it('leaves out reply-time captions, as the reply preview does', async () => {
+    const visitor = await seedVisitor()
+    const c = await seedConversation(visitor, null)
+    await addMessage(c, { senderType: 'agent' })
+    await addMessage(c, { senderType: 'agent', replyTime: true })
+    expect(await countVisitorUnreadMessages(visitor)).toBe(1)
+  })
+
+  it("agrees with the conversation's own visitor unread count", async () => {
+    const visitor = await seedVisitor()
+    const c = await seedConversation(visitor, null)
+    await addMessage(c, { senderType: 'agent' })
+    await addMessage(c, { senderType: 'agent' })
+    await addMessage(c, { senderType: 'agent', replyTime: true })
+    await addMessage(c, { senderType: 'agent', isInternal: true })
+    await addMessage(c, { senderType: 'visitor' })
+    const [row] = await testDb.select().from(conversations).where(eq(conversations.id, c))
+    const dto = await conversationToDTO(row, 'visitor')
+    expect(dto.unreadCount).toBe(2)
+    expect(await countVisitorUnreadMessages(visitor)).toBe(dto.unreadCount)
+  })
+
+  it('names the newest unread reply by its TypeID, like every message id', async () => {
+    const visitor = await seedVisitor()
+    const c = await seedConversation(visitor, null)
+    await addMessage(c, { createdAt: new Date('2026-07-04T10:00:00.000Z') })
+    await addMessage(c, { createdAt: new Date('2026-07-04T11:00:00.000Z') })
+    const [newest] = await testDb
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, c))
+      .orderBy(desc(conversationMessages.createdAt))
+      .limit(1)
+    const summary = await summarizeVisitorUnreadReplies(visitor)
+    expect(summary.count).toBe(2)
+    expect(summary.newestId).toMatch(/^conversation_msg_/)
+    expect(summary.newestId).toBe(newest.id)
+    expect(await summarizeVisitorUnreadReplies(await seedVisitor())).toEqual({
+      count: 0,
+      newestId: null,
+    })
   })
 
   it('counts only the given visitor’s conversations', async () => {
