@@ -327,7 +327,7 @@
     },
     "sweep:doc:admin:/admin/settings/skills": {
       "dbQueries": 7,
-      "htmlKB": 67.1
+      "htmlKB": 70.5
     },
     "sweep:ui:admin:/admin/settings/skills": {
       "dbQueries": 7,
@@ -509,7 +509,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/github": {
       "dbQueries": 8,
-      "htmlKB": 66.3
+      "htmlKB": 69.7
     },
     "sweep:ui:admin:/admin/settings/channels/github": {
       "dbQueries": 8,
@@ -750,7 +750,7 @@
     },
     "sweep:doc:admin:/admin/settings/people": {
       "dbQueries": 7,
-      "htmlKB": 73.2
+      "htmlKB": 76.9
     },
     "sweep:ui:admin:/admin/settings/people": {
       "dbQueries": 7,

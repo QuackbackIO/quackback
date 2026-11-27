@@ -399,6 +399,7 @@ describe('replayGateVerdict', () => {
       '0322_session_two_factor_pending',
       '0323_clear_legacy_header_settings',
       '0324_changelog_announce_on_launcher',
+      '0325_language_config',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
