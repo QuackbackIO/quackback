@@ -108,4 +108,83 @@ test.describe('help center in another language', () => {
       )
     }
   )
+
+  test(
+    "CUS-HC-L2 a German main language: German articles under the visitor's own menus, German for everyone on request, and German search",
+    { tag: ['@core', '@isolated'] },
+    async ({ browser, request, marker }) => {
+      const sql = supportDb()
+      const categoryUuid = toUuid(generateId('kb_category'))
+      const articleUuid = toUuid(generateId('article'))
+      const [author] = await sql`SELECT id FROM principal WHERE role = 'admin' AND type = 'user'
+        ORDER BY created_at LIMIT 1`
+      const slug = `${marker}-${randomBytes(3).toString('hex')}`
+      const collection = `Erste Schritte ${marker}`
+      const title = `Einstellungen ändern ${marker}`
+      await sql`INSERT INTO kb_categories (id, slug, name, is_public, position, created_at, updated_at)
+        VALUES (${categoryUuid}, ${slug}, ${collection}, true, 0, NOW(), NOW())`
+      // An article the workspace wrote in German, labelled as its main language.
+      await sql`INSERT INTO kb_articles (id, category_id, slug, title, content, locale,
+          principal_id, published_at, created_at, updated_at)
+        VALUES (${articleUuid}, ${categoryUuid}, ${slug}, ${title},
+          ${'Öffne die Einstellungen und wähle dein Konto.'}, 'de', ${author.id},
+          NOW() - interval '1 minute', NOW(), NOW())`
+
+      const visit = async (visitorLanguage: 'own' | 'main') =>
+        withSettings(
+          {
+            feature_flags: { helpCenter: true },
+            help_center_config: { 'locales.default': 'de', 'locales.additional': [] },
+            language_config: { mainLanguage: 'de', visitorLanguage },
+          },
+          async () => {
+            const context = await browser.newContext({
+              locale: 'en-US',
+              extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+            })
+            const page = await context.newPage()
+            try {
+              await page.goto('/hc')
+              await expect(page.getByText(collection)).toBeVisible({ timeout: 20_000 })
+              return {
+                lang: await page.locator('html').getAttribute('lang'),
+                searchPlaceholder: await page
+                  .getByRole('searchbox')
+                  .first()
+                  .getAttribute('placeholder'),
+              }
+            } finally {
+              await snap(page, `hc-main-de-${visitorLanguage}`)
+              await context.close()
+            }
+          }
+        )
+
+      // Each visitor's own language: English menus around the German articles.
+      const own = await visit('own')
+      expect(own.lang).toBe('en')
+
+      // German for everyone: the same English browser gets German.
+      const everyone = await visit('main')
+      expect(everyone.lang).toBe('de')
+      expect(everyone.searchPlaceholder).not.toBe(own.searchPlaceholder)
+
+      // Search stems German: "Einstellung" finds "Einstellungen".
+      await withSettings(
+        {
+          feature_flags: { helpCenter: true },
+          help_center_config: { 'locales.default': 'de', 'locales.additional': [] },
+          language_config: { mainLanguage: 'de', visitorLanguage: 'own' },
+        },
+        async () => {
+          const res = await request.get(
+            `/api/widget/kb-search?q=${encodeURIComponent('Einstellung')}`
+          )
+          expect(res.ok()).toBe(true)
+          const { data } = (await res.json()) as { data: { articles: { title: string }[] } }
+          expect(data.articles.map((a) => a.title)).toContain(title)
+        }
+      )
+    }
+  )
 })
