@@ -160,6 +160,71 @@ describe('LanguageCard', () => {
     ).toBeInTheDocument()
   })
 
+  it('names only the kinds that change, never "0 collections"', async () => {
+    server.preview.mockResolvedValue({
+      swappedArticles: 3,
+      swappedCollections: 0,
+      relabelledArticles: 0,
+      relabelledCollections: 2,
+      keptArticles: 0,
+      keptCollections: 0,
+    })
+    renderCard()
+
+    fireEvent.change(screen.getByLabelText('Main language'), { target: { value: 'de' } })
+
+    expect(
+      await screen.findByText(
+        '3 articles have a German version, which becomes their main text. Their current text becomes a translation, so nothing is lost.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '2 collections with no German version will be marked as German. Nothing is rewritten or translated.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('main-language-confirm')).not.toHaveTextContent(/\b0 /)
+  })
+
+  it('names one article alone when only it is relabelled, and one collection alone when only it swaps', async () => {
+    server.preview.mockResolvedValueOnce({
+      swappedArticles: 0,
+      swappedCollections: 0,
+      relabelledArticles: 1,
+      relabelledCollections: 0,
+      keptArticles: 0,
+      keptCollections: 0,
+    })
+    renderCard()
+
+    fireEvent.change(screen.getByLabelText('Main language'), { target: { value: 'fr' } })
+
+    expect(
+      await screen.findByText(
+        'Your 1 article will be marked as French. Nothing is rewritten or translated.'
+      )
+    ).toBeInTheDocument()
+    cleanup()
+
+    server.preview.mockResolvedValueOnce({
+      swappedArticles: 0,
+      swappedCollections: 1,
+      relabelledArticles: 0,
+      relabelledCollections: 0,
+      keptArticles: 0,
+      keptCollections: 0,
+    })
+    renderCard()
+
+    fireEvent.change(screen.getByLabelText('Main language'), { target: { value: 'fr' } })
+
+    expect(
+      await screen.findByText(
+        '1 collection has a French version, which becomes its main text. Its current text becomes a translation, so nothing is lost.'
+      )
+    ).toBeInTheDocument()
+  })
+
   it('says when the counts could not be read, and tries again on request', async () => {
     server.preview.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
       swappedArticles: 0,
