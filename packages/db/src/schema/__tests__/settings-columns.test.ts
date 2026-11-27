@@ -34,6 +34,7 @@ export const SETTINGS_SQL_COLUMNS = [
   'branding_config',
   'custom_css',
   'developer_config',
+  'language_config',
   'header_display_mode',
   'header_display_name',
   'setup_state',

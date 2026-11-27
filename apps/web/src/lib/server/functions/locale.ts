@@ -1,5 +1,4 @@
 import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
 import {
   resolveRequestLocale,
   loadPortalMessages,
@@ -28,7 +27,11 @@ export const getPortalLocaleFn = createServerFn({ method: 'GET' }).handler(async
  * render would diverge from SSR and trigger React hydration error #418.
  */
 export const getWidgetLocaleFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ explicitLocale: z.string().optional() }))
+  // A plain validator: this file rides with the portal layout's loader in the
+  // route tree chunk every page loads, so it keeps zod out of it.
+  .validator((data: { explicitLocale?: unknown }) => ({
+    explicitLocale: typeof data?.explicitLocale === 'string' ? data.explicitLocale : undefined,
+  }))
   .handler(async ({ data }) => {
     const { getRequestHeaders } = await import('@tanstack/react-start/server')
     const { getLanguageConfig } = await import('@/lib/server/domains/settings/settings.service')
