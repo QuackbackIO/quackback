@@ -470,6 +470,24 @@ describe('workspace pool cache', () => {
     expect(postgresFactory.mock.calls[0]?.[0]).toBe('postgresql://role_t1@pooler.example/t1')
   })
 
+  it('never looks custom types up at runtime', async () => {
+    // The lookup runs on a second connection while the first keeps its pooler
+    // slot, so behind a two-slot pooler a cold pool froze its workspace.
+    const cache = await loadCache()
+    await cache.acquireWorkspacePool(descriptor('t1'))
+    const options = (postgresFactory.mock.calls[0]?.[1] ?? {}) as { fetch_types?: boolean }
+    expect(options.fetch_types).toBe(false)
+    await cache.closeAllWorkspacePools()
+  })
+
+  it('never looks custom types up at runtime on a direct pool either', async () => {
+    const cache = await loadCache()
+    const direct = await cache.openWorkspaceDirectPool(descriptor('t1'))
+    const options = (postgresFactory.mock.calls.at(-1)?.[1] ?? {}) as { fetch_types?: boolean }
+    expect(options.fetch_types).toBe(false)
+    await direct.close()
+  })
+
   it('keeps prepared statements on', async () => {
     const cache = await loadCache()
     await cache.acquireWorkspacePool(descriptor('t1'))

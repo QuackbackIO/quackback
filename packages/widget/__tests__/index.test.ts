@@ -16,6 +16,7 @@ describe('public API', () => {
     expect(typeof Quackback.on).toBe('function')
     expect(typeof Quackback.off).toBe('function')
     expect(typeof Quackback.metadata).toBe('function')
+    expect(typeof Quackback.whatsNew).toBe('function')
     expect(typeof Quackback.destroy).toBe('function')
     expect(typeof Quackback.version).toBe('string')
   })

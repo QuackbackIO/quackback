@@ -21,7 +21,7 @@ function sendClose(origin: string) {
 }
 
 function launcher() {
-  return screen.getByRole('button', { name: /feedback widget/i })
+  return screen.getByRole('button', { name: /^(open|close) help/i })
 }
 
 describe('WidgetPreview', () => {
@@ -73,6 +73,37 @@ describe('WidgetPreview', () => {
 
     sendClose(window.location.origin)
     expect(screen.queryByTitle('Widget preview')).toBeNull()
+  })
+
+  it("shows no What's new card: the preview cannot open an entry", () => {
+    render(<WidgetPreview position="bottom-right" />)
+    fireEvent.click(launcher())
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        data: {
+          type: 'quackback:whats-new',
+          whatsNew: {
+            count: 1,
+            entry: {
+              id: 'changelog_1',
+              title: 'Faster search',
+              excerpt: 'Search is faster.',
+              publishedAt: '2026-11-20T10:00:00.000Z',
+              date: 'Nov 20, 2026',
+            },
+            strings: {
+              pill: '1 new update',
+              action: "See what's new",
+              dismiss: 'Dismiss',
+              label: "What's new",
+            },
+          },
+        },
+      })
+    )
+    expect(document.querySelector('[data-quackback-whats-new]')).toBeNull()
   })
 
   it('ignores quackback:close from foreign origins', () => {

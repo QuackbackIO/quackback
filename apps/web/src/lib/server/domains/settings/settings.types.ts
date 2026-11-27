@@ -10,6 +10,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
+import type { ReplyTime } from '@/lib/shared/widget/reply-time'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
@@ -634,6 +635,9 @@ export interface PublicAssistantConfig extends AssistantDeploymentConfig {
   avatarUrl: string | null
 }
 
+/** How an unread reply shows while the widget is closed. */
+export type WidgetReplyAlerts = 'badge' | 'preview' | 'full'
+
 export interface MessengerConfig {
   /**
    * @deprecated Ignored at read time. Messenger is on when the `supportInbox`
@@ -648,6 +652,12 @@ export interface MessengerConfig {
   /** Heading shown for the messenger tab/view (falls back to the workspace name). */
   teamName?: string
   /**
+   * How quickly the team usually replies, shown under the team name in the
+   * conversation header and in the reply-time caption. Absent reads as
+   * 'hour' (see resolveReplyTime); 'off' shows no expectation.
+   */
+  replyTime?: ReplyTime
+  /**
    * When true, a visitor cannot reply to a CLOSED conversation from the
    * Messenger — the send is refused instead of reopening the thread (support
    * platform §4.3). Default off (undefined = off), where a reply reopens. Email
@@ -657,6 +667,15 @@ export interface MessengerConfig {
   preventRepliesWhenClosed?: boolean
   /** AI-assistant display identity (client-safe). */
   assistant?: AssistantDeploymentConfig
+  /**
+   * How an unread reply shows while the widget is closed: the launcher badge
+   * only, a preview card above the launcher, or the card with the whole
+   * reply. Absent means 'preview'.
+   */
+  replyAlerts?: WidgetReplyAlerts
+  /** Flash "{name} replied" in the host page's tab title while the visitor is
+   *  on another tab. Absent means off. */
+  titleAlerts?: boolean
   /**
    * @deprecated Migration-only. The canonical office-hours schedule now lives in
    * the `settings.metadata` bag (see settings.office-hours.ts). This field only
@@ -759,6 +778,12 @@ export interface WidgetHomeConfig {
   cards?: WidgetHomeCard[]
 }
 
+export interface WidgetChangelogConfig {
+  /** Show a card above the closed launcher when the visitor has unread
+   *  changelog entries. Absent means off. */
+  announceOnLauncher?: boolean
+}
+
 export interface WidgetConfig {
   enabled: boolean
   /** Board slug to filter/default to */
@@ -784,6 +809,8 @@ export interface WidgetConfig {
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
+  /** Changelog surface settings. */
+  changelog?: WidgetChangelogConfig
   /** Messenger settings, stored under `messenger`. */
   messenger?: MessengerConfig
   /** Home surface customisation (greeting, hero style, quick-link cards). */
@@ -816,6 +843,9 @@ export type PublicWidgetConfig = Pick<
   | 'launcherLabel'
   | 'translations'
 > & {
+  /** Resolved changelog settings: the announcement is on only while the
+   *  changelog tab shows. */
+  changelog?: { announceOnLauncher: boolean }
   /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
   /** Client-safe messenger config (no agent-only fields like routing). */
@@ -888,6 +918,7 @@ export interface UpdateWidgetConfigInput {
     tickets?: boolean
     home?: boolean
   }
+  changelog?: WidgetChangelogConfig
   messenger?: Partial<MessengerConfig>
   home?: WidgetHomeConfig
   translations?: WidgetTranslations

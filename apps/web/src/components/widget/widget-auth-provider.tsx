@@ -18,8 +18,13 @@ import {
   readPersistedToken,
   clearPersistedToken,
 } from '@/lib/client/widget-auth'
-import { sendToHost } from '@/lib/client/widget-bridge'
-import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { hostOriginIsOpaque, sendToHost } from '@/lib/client/widget-bridge'
+import {
+  frameHasHost,
+  frameParentIsSameOrigin,
+  setFrameHoldsPortalSession,
+} from '@/lib/client/widget-frame'
+import { startingSessionVersion, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/client/auth-client'
 import { resolveIdentifyAction, type SessionSource } from './identify-precedence'
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
@@ -79,9 +84,18 @@ export function useWidgetAuth(): WidgetAuthContextValue {
 }
 
 interface WidgetAuthProviderProps {
-  /** Portal user identity — if set, the widget displays their info */
+  /**
+   * Portal user identity — if set, the widget displays their info. Adopted
+   * once with `portalSessionToken`: a later null (the loader re-running on the
+   * client, where it never carries the portal session) leaves the adopted
+   * session and user in place.
+   */
   portalUser?: WidgetUser | null
-  /** Signed session cookie token extracted during SSR (available in cross-origin iframes) */
+  /**
+   * Signed portal session token, set by the server only for a same-origin
+   * frame navigation; the frame adopts it only when its parent page is on its
+   * own origin too.
+   */
   portalSessionToken?: string | null
   /** When true, inline email capture is disabled and the host app must sign users. */
   hmacRequired?: boolean
@@ -99,9 +113,16 @@ interface WidgetAuthProviderProps {
   children: ReactNode
 }
 
+/**
+ * How long an embedded frame waits for its host's first identity before it
+ * treats the visitor as anonymous. The SDK sends one as soon as the frame is
+ * ready; a frame shown without the SDK (a settings preview) never gets one.
+ */
+export const IDENTITY_HANDSHAKE_TIMEOUT_MS = 1500
+
 export function WidgetAuthProvider({
-  portalUser,
-  portalSessionToken,
+  portalUser: portalUserProp,
+  portalSessionToken: portalSessionTokenProp,
   hmacRequired,
   canPortalHandoff: canPortalHandoffFromPortal,
   initialLocale,
@@ -109,21 +130,39 @@ export function WidgetAuthProvider({
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
+  // The server hands over the portal session only for a same-origin
+  // navigation, which a navigation started inside the frame also is. The frame
+  // takes it only when its parent page is on its own origin (or it is the top
+  // page); otherwise it starts as for an anonymous visitor (widget-frame.ts).
+  const [frameMayHoldPortalSession] = useState(frameParentIsSameOrigin)
+  const portalSessionToken = frameMayHoldPortalSession ? portalSessionTokenProp : null
+  const portalUser = frameMayHoldPortalSession ? portalUserProp : null
   // A portal session the page hands the widget is adopted before the first
   // render, so every identity-keyed read starts on it, one version past the
   // anonymous server-rendered baseline. Adopted in an effect after mount, each
   // of those reads ran once without it and then again for the new version.
+  // Decided before any child renders, so the frame's server function calls
+  // know from the start whether they may carry cookies.
   const [portalSessionAdopted] = useState(() => {
-    if (!portalSessionToken || typeof window === 'undefined') return false
-    setWidgetToken(portalSessionToken)
-    return true
+    if (typeof window === 'undefined') return false
+    const adopted = !!portalSessionToken
+    setFrameHoldsPortalSession(adopted)
+    if (adopted) setWidgetToken(portalSessionToken)
+    return adopted
   })
-  const initialSessionVersion = INITIAL_SESSION_VERSION + (portalSessionAdopted ? 1 : 0)
-  const [user, setUser] = useState<WidgetUser | null>(null)
+  const initialSessionVersion = startingSessionVersion(portalSessionAdopted)
+  const [user, setUserState] = useState<WidgetUser | null>(null)
   const [canPortalHandoff, setCanPortalHandoff] = useState(canPortalHandoffFromPortal ?? true)
   const [sessionVersion, setSessionVersion] = useState(initialSessionVersion)
   const [identityResolved, setIdentityResolved] = useState(false)
   const isIdentified = user !== null
+  // The current user for handlers registered once at mount, whose `user`
+  // closure would still be the initial null. Written with every change.
+  const userRef = useRef(user)
+  const setUser = useCallback((next: WidgetUser | null) => {
+    userRef.current = next
+    setUserState(next)
+  }, [])
   const sessionReadyRef = useRef(portalSessionAdopted)
   const sessionSourceRef = useRef<SessionSource>(portalSessionAdopted ? 'portal' : null)
 
@@ -290,7 +329,7 @@ export function WidgetAuthProvider({
       sendToHost({ type: 'quackback:identify-result', success: true, user: result.user })
       sendToHost({ type: 'quackback:auth-change', user: result.user })
     },
-    [storeToken, queryClient]
+    [storeToken, queryClient, setUser]
   )
 
   // NOTE: there is deliberately no inline email-capture identify. A verified
@@ -299,10 +338,8 @@ export function WidgetAuthProvider({
   // anonymous sessions; the future assistant collects contact info as lead data
   // on the principal instead of minting user sessions.
 
-  // If a portal session token was extracted during SSR, use it directly as the
-  // widget's Bearer token. This works in both same-origin AND cross-origin iframes
-  // because the token is extracted during the initial navigation (where SameSite=Lax
-  // cookies are available) and passed via loader data.
+  // If the loader passed a portal session token (only for an embedding page on
+  // the instance's own origin), use it directly as the widget's Bearer token.
   // SDK identify() calls via postMessage will override this if received.
   const portalHydratedRef = useRef(false)
   useEffect(() => {
@@ -312,6 +349,7 @@ export function WidgetAuthProvider({
     if (!portalSessionAdopted) {
       if (sessionReadyRef.current) return
       sessionSourceRef.current = 'portal'
+      setFrameHoldsPortalSession(true)
       storeToken(portalSessionToken)
     }
     portalHydratedRef.current = true
@@ -322,7 +360,14 @@ export function WidgetAuthProvider({
       sendToHost({ type: 'quackback:auth-change', user: portalUser })
     }
     setIdentityResolved(true)
-  }, [portalSessionToken, portalSessionAdopted, portalUser, canPortalHandoffFromPortal, storeToken])
+  }, [
+    portalSessionToken,
+    portalSessionAdopted,
+    portalUser,
+    canPortalHandoffFromPortal,
+    storeToken,
+    setUser,
+  ])
 
   // Restore a persisted anonymous session on mount so a returning visitor's
   // conversation is visible immediately, without waiting for a write. Skipped
@@ -351,8 +396,32 @@ export function WidgetAuthProvider({
 
   const [widgetMetadata, setWidgetMetadata] = useState<WidgetMetadata | null>(null)
 
+  // A frame nobody will identify settles as anonymous: at once when it has no
+  // host at all, or once the handshake wait passes with no identity. An
+  // identify already on its way settles it instead, and a later one still
+  // applies as usual. A portal session settles it on its own (above).
+  const identifyReceivedRef = useRef(false)
   useEffect(() => {
-    async function handleIdentify(data: Record<string, unknown>) {
+    if (portalSessionToken) return
+    const settleAnonymous = () => {
+      if (!identifyReceivedRef.current) setIdentityResolved(true)
+    }
+    if (!frameHasHost()) {
+      settleAnonymous()
+      return
+    }
+    const timer = setTimeout(settleAnonymous, IDENTITY_HANDSHAKE_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [portalSessionToken])
+
+  // Counts identify messages from the host. Each one supersedes the last, so a
+  // round trip that settles after a newer identify or a logout is dropped
+  // instead of signing its user back in.
+  const identifyGenerationRef = useRef(0)
+
+  useEffect(() => {
+    async function handleIdentify(data: Record<string, unknown>, generation: number) {
+      const isCurrent = () => generation === identifyGenerationRef.current
       try {
         // Capture current token before the identify call — if it's an anonymous
         // session, the server will merge its activity into the newly identified user.
@@ -374,26 +443,54 @@ export function WidgetAuthProvider({
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({ error: { code: 'NETWORK_ERROR' } }))
-          sendToHost({
-            type: 'quackback:identify-result',
-            success: false,
-            error: err.error?.code || 'SERVER_ERROR',
-          })
+          if (!isCurrent()) return
+          failIdentify(err.error?.code || 'SERVER_ERROR')
           return
         }
 
-        applyIdentifyResult(await response.json())
+        const result = await response.json()
+        if (!isCurrent()) return
+        applyIdentifyResult(result)
       } catch {
-        sendToHost({ type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' })
+        if (!isCurrent()) return
+        failIdentify('NETWORK_ERROR')
       } finally {
         // Resolved only once the round trip settles: between the message and
         // the response `user` is still null, and consumers must not read that
-        // window as "this visitor is anonymous".
-        setIdentityResolved(true)
+        // window as "this visitor is anonymous". A superseded round trip
+        // leaves that to the identify that replaced it.
+        if (isCurrent()) setIdentityResolved(true)
       }
     }
 
+    // The host asked for a person the frame could not sign in. Whoever was
+    // signed in before is no longer who the host says is there (the SDK now
+    // reports nobody), so the frame stops acting as them too.
+    function failIdentify(error: string) {
+      if (userRef.current !== null) {
+        dropSession()
+        setUser(null)
+        setCanPortalHandoff(true)
+        sendToHost({ type: 'quackback:auth-change', user: null })
+      }
+      sendToHost({ type: 'quackback:identify-result', success: false, error })
+    }
+
+    // Drop the current session and start a new session version, so every
+    // identity-keyed read refetches for whoever comes next.
+    function dropSession() {
+      clearWidgetToken()
+      sessionReadyRef.current = false
+      sessionSourceRef.current = null
+      sessionPromiseRef.current = null
+      sessionVersionRef.current += 1
+      setSessionVersion(sessionVersionRef.current)
+    }
+
     async function handleAnonymousIdentify() {
+      // Anonymous on top of a signed-in person is a sign-out: what was fetched
+      // for them (their tickets, segment-gated entries) must not carry over.
+      if (userRef.current !== null) dropSession()
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
       setUser(null)
@@ -434,6 +531,8 @@ export function WidgetAuthProvider({
       }
 
       if (msg.type === 'quackback:identify') {
+        identifyReceivedRef.current = true
+        const generation = ++identifyGenerationRef.current
         const action = resolveIdentifyAction({
           identifyData: msg.data,
           hasPortalSession: !!portalSessionToken,
@@ -442,12 +541,7 @@ export function WidgetAuthProvider({
 
         switch (action) {
           case 'clear':
-            clearWidgetToken()
-            sessionReadyRef.current = false
-            sessionSourceRef.current = null
-            sessionPromiseRef.current = null
-            sessionVersionRef.current += 1
-            setSessionVersion(sessionVersionRef.current)
+            dropSession()
             setUser(null)
             setCanPortalHandoff(true)
             setIdentityResolved(true)
@@ -458,14 +552,33 @@ export function WidgetAuthProvider({
             handleAnonymousIdentify()
             break
           case 'identify':
+            // A host on an opaque origin can never receive the identified
+            // user, so the identify is refused without touching the session.
+            if (hostOriginIsOpaque()) {
+              setIdentityResolved(true)
+              sendToHost({
+                type: 'quackback:identify-result',
+                success: false,
+                error: 'HOST_ORIGIN_UNKNOWN',
+              })
+              break
+            }
             sessionSourceRef.current = 'sdk'
-            handleIdentify(msg.data as Record<string, unknown>)
+            // Who the visitor is stays unknown until this round trip settles,
+            // even if the frame had already settled as anonymous while it
+            // waited for its host.
+            setIdentityResolved(false)
+            handleIdentify(msg.data as Record<string, unknown>, generation)
             break
           case 'skip':
             // Portal session takes precedence — ack without changing state
             setIdentityResolved(true)
-            sendToHost({ type: 'quackback:identify-result', success: true, user: user ?? null })
-            sendToHost({ type: 'quackback:auth-change', user: user ?? null })
+            sendToHost({
+              type: 'quackback:identify-result',
+              success: true,
+              user: userRef.current,
+            })
+            sendToHost({ type: 'quackback:auth-change', user: userRef.current })
             break
         }
       }
@@ -475,7 +588,7 @@ export function WidgetAuthProvider({
     sendToHost({ type: 'quackback:ready' })
 
     return () => window.removeEventListener('message', handleMessage)
-  }, [storeToken, applyIdentifyResult])
+  }, [storeToken, applyIdentifyResult, setUser])
 
   const contextValue = useMemo(
     () => ({

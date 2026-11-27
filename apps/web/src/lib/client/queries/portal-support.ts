@@ -8,3 +8,6 @@ import { conversationKeys } from './conversation-keys'
 export const PORTAL_MY_CONVERSATIONS_QUERY_KEY = conversationKeys.portalConversationList()
 
 export const PORTAL_CONVERSATION_PRESENCE_QUERY_KEY = ['portal', 'conversation-presence'] as const
+
+/** Teammate faces for the Support thread header (workspace-global). */
+export const PORTAL_TEAM_AVATARS_QUERY_KEY = ['portal', 'team-avatars'] as const

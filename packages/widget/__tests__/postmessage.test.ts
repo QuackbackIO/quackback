@@ -52,6 +52,7 @@ describe('postmessage bridge', () => {
       new MessageEvent('message', {
         origin: 'https://feedback.acme.com',
         data: { type: 'quackback:ready' },
+        source: fakeIframe.contentWindow as unknown as Window,
       })
     )
     expect(onRecv).toHaveBeenCalledWith({ type: 'quackback:ready' })
@@ -68,6 +69,7 @@ describe('postmessage bridge', () => {
       new MessageEvent('message', {
         origin: 'https://feedback.acme.com',
         data: 'hello',
+        source: fakeIframe.contentWindow as unknown as Window,
       })
     )
     expect(onRecv).not.toHaveBeenCalled()
@@ -85,6 +87,37 @@ describe('postmessage bridge', () => {
       new MessageEvent('message', {
         origin: 'https://feedback.acme.com',
         data: { type: 'quackback:ready' },
+        source: fakeIframe.contentWindow as unknown as Window,
+      })
+    )
+    expect(onRecv).not.toHaveBeenCalled()
+  })
+
+  it('ignores a message from another window on the same origin', () => {
+    const onRecv = vi.fn()
+    createBridge({
+      getIframe: () => fakeIframe as unknown as HTMLIFrameElement,
+      origin: 'https://feedback.acme.com',
+    }).onMessage(onRecv)
+    const otherWindow = { postMessage: vi.fn() } as unknown as Window
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://feedback.acme.com',
+        data: { type: 'quackback:identify-result', success: true, user: { id: 'other' } },
+        source: otherWindow,
+      })
+    )
+    expect(onRecv).not.toHaveBeenCalled()
+  })
+
+  it('ignores every message while there is no panel iframe', () => {
+    const onRecv = vi.fn()
+    createBridge({ getIframe: () => null, origin: 'https://feedback.acme.com' }).onMessage(onRecv)
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://feedback.acme.com',
+        data: { type: 'quackback:ready' },
+        source: fakeIframe.contentWindow as unknown as Window,
       })
     )
     expect(onRecv).not.toHaveBeenCalled()

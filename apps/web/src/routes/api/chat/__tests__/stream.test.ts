@@ -216,6 +216,14 @@ describe('GET /api/chat/stream - principal resolution', () => {
     expect(res.status).toBe(401)
   })
 
+  it('401s an invalid or expired stream token without falling back to the session cookie', async () => {
+    mockVerifyStreamToken.mockReturnValue(null)
+    sessionPrincipal('user', 'user', 'portal')
+    const res = await GET({ request: req('?conversationId=conversation_1&token=expired') })
+    expect(res.status).toBe(401)
+    expect(mockGetSession).not.toHaveBeenCalled()
+  })
+
   it('401s for a valid-signature token whose principal no longer exists', async () => {
     mockVerifyStreamToken.mockReturnValue({ principalId: 'principal_gone', scope: 'dashboard' })
     mockPrincipalFindFirst.mockResolvedValue(undefined)
@@ -471,7 +479,7 @@ describe('GET /api/chat/stream - ticketId scope (unified inbox §3.2, M3)', () =
   it('never touches the conversations gate check for a non-ticket, non-conversation request path', async () => {
     // Sanity: the plain inbox scope is unaffected by the new ticket-gate branch.
     tokenPrincipal('member')
-    const res = await GET({ request: req('?scope=inbox') })
+    const res = await GET({ request: req('?scope=inbox&token=t') })
     expect(res.status).toBe(200)
     await settleAndClose(res)
     expect(mockConversationsEnabled).toHaveBeenCalled()
@@ -483,7 +491,7 @@ describe('GET /api/chat/stream - connection cap (Phase 6 R1)', () => {
   it('503s when the connection limiter refuses a slot', async () => {
     tokenPrincipal('member')
     mockAcquireSlot.mockReturnValueOnce({ ok: false, release: vi.fn() })
-    const res = await GET({ request: req('?scope=inbox') })
+    const res = await GET({ request: req('?scope=inbox&token=t') })
     expect(res.status).toBe(503)
     // Refused before any stream setup — presence must never be marked.
     expect(mockMarkPresent).not.toHaveBeenCalled()
@@ -491,7 +499,7 @@ describe('GET /api/chat/stream - connection cap (Phase 6 R1)', () => {
 
   it('reserves the slot keyed on the client IP, only after auth + scope pass', async () => {
     tokenPrincipal('member')
-    const res = await GET({ request: req('?scope=inbox') })
+    const res = await GET({ request: req('?scope=inbox&token=t') })
     expect(res.status).toBe(200)
     expect(mockAcquireSlot).toHaveBeenCalledWith('203.0.113.7')
     await settleAndClose(res)
@@ -508,7 +516,7 @@ describe('GET /api/chat/stream - connection cap (Phase 6 R1)', () => {
     const release = vi.fn()
     mockAcquireSlot.mockReturnValue({ ok: true, release })
     tokenPrincipal('member')
-    const res = await GET({ request: req('?scope=inbox') })
+    const res = await GET({ request: req('?scope=inbox&token=t') })
     await settleAndClose(res)
     await vi.waitFor(() => expect(release).toHaveBeenCalled())
   })
@@ -562,7 +570,7 @@ describe('GET /api/chat/stream - assistant activity snapshot replay', () => {
 
   it('emits no frame and never reads the snapshot for the inbox/presence scopes', async () => {
     tokenPrincipal('member')
-    const res = await GET({ request: req('?scope=inbox') })
+    const res = await GET({ request: req('?scope=inbox&token=t') })
     await settleAndClose(res)
     expect(mockReadActivitySnapshot).not.toHaveBeenCalled()
   })
@@ -601,7 +609,7 @@ describe('GET /api/chat/stream - teardown keeps the workspace scope', () => {
 
     // Opened inside a workspace scope, exactly as the middleware would run it…
     const controller = new AbortController()
-    const request = new Request('http://test/api/chat/stream?scope=inbox', {
+    const request = new Request('http://test/api/chat/stream?scope=inbox&token=t', {
       signal: controller.signal,
     })
     const res = await runWithWorkspaceScope(scope, () => GET({ request }))

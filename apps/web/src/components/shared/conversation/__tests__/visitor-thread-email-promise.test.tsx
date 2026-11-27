@@ -5,7 +5,8 @@
  * address. An anonymous visitor (whose account email is a placeholder) and
  * anyone else without one sees "We'll reply here" while the team is away.
  * The server decides (`canEmailVisitor`); the thread shows it in its own
- * header and reports it to the widget, whose header shows the same badge.
+ * header when the workspace hides its usual reply time, and reports it to
+ * the widget, whose header shows the same line.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -53,8 +54,11 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 }))
 
 import { VisitorSurfaceRpcProvider, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
-import { VisitorConversationThread } from '../visitor-conversation-thread'
-import { ConversationPresenceBadge } from '../conversation-presence-badge'
+import {
+  VisitorConversationThread,
+  type VisitorConversationThreadPresence,
+} from '../visitor-conversation-thread'
+import type { ReplyTime } from '@/lib/shared/widget/reply-time'
 
 afterEach(cleanup)
 
@@ -68,19 +72,38 @@ function withIntl(ui: React.ReactNode) {
   )
 }
 
-async function renderThread(canEmailVisitor: boolean, onReplyByEmail = vi.fn()) {
+async function renderThread(
+  canEmailVisitor: boolean,
+  {
+    replyTime,
+    knownReplyTime,
+    pending = false,
+    presence = AWAY,
+    showHeader,
+    onReplyByEmail = vi.fn(),
+  }: {
+    replyTime?: string
+    knownReplyTime?: ReplyTime
+    pending?: boolean
+    presence?: VisitorConversationThreadPresence
+    showHeader?: boolean
+    onReplyByEmail?: () => void
+  } = {}
+) {
+  const loaded = {
+    welcomeMessage: 'Hi there',
+    offlineMessage: 'We will get back to you soon.',
+    teamName: 'Acme Support',
+    replyTime,
+    assistant: null,
+    canEmailVisitor,
+    linkedTicket: null,
+    conversation: null,
+    messages: [],
+    hasMore: false,
+  }
   const rpc = {
-    getMyConversation: vi.fn(async () => ({
-      welcomeMessage: 'Hi there',
-      offlineMessage: 'We will get back to you soon.',
-      teamName: 'Team',
-      assistant: null,
-      canEmailVisitor,
-      linkedTicket: null,
-      conversation: null,
-      messages: [],
-      hasMore: false,
-    })),
+    getMyConversation: vi.fn(() => (pending ? new Promise(() => {}) : Promise.resolve(loaded))),
     sendConversationMessage: vi.fn(),
     sendConversationTyping: vi.fn(async () => ({})),
     listConversationMessages: vi.fn(),
@@ -89,52 +112,86 @@ async function renderThread(canEmailVisitor: boolean, onReplyByEmail = vi.fn()) 
     markConversationRead: vi.fn(async () => ({})),
     getConversationLinkedTicket: vi.fn(),
   }
-  render(
-    <QueryClientProvider client={new QueryClient()}>
+  const client = new QueryClient()
+  const tree = (surfaceReplyTime?: ReplyTime) => (
+    <QueryClientProvider client={client}>
       {withIntl(
         <VisitorSurfaceRpcProvider value={rpc as unknown as VisitorSurfaceRpc}>
           <VisitorConversationThread
             conversationTarget="new"
             uploadFile={vi.fn()}
-            presence={AWAY}
+            presence={presence}
+            showHeader={showHeader}
+            team={[{ name: 'Ada Lovelace', avatarUrl: null }]}
+            replyTime={surfaceReplyTime}
             onReplyByEmailChange={onReplyByEmail}
           />
         </VisitorSurfaceRpcProvider>
       )}
     </QueryClientProvider>
   )
+  const { rerender } = render(tree(knownReplyTime))
   await waitFor(() => expect(rpc.getMyConversation).toHaveBeenCalled())
-  return { onReplyByEmail }
+  return { rerenderWith: (surfaceReplyTime?: ReplyTime) => rerender(tree(surfaceReplyTime)) }
 }
 
-describe('the away badge', () => {
-  it('promises email only when a reply can reach the visitor by email', () => {
-    const { rerender } = render(
-      withIntl(<ConversationPresenceBadge available={false} canReplyByEmail />)
-    )
-    expect(screen.getByText("We'll reply by email")).toBeInTheDocument()
-
-    rerender(withIntl(<ConversationPresenceBadge available={false} canReplyByEmail={false} />))
-    expect(screen.queryByText("We'll reply by email")).not.toBeInTheDocument()
-    expect(screen.getByText("We'll reply here")).toBeInTheDocument()
-  })
-
-  it('says the team is online either way', () => {
-    render(withIntl(<ConversationPresenceBadge available canReplyByEmail={false} />))
-    expect(screen.getByText("We're online")).toBeInTheDocument()
-  })
-})
-
 describe('the visitor thread while the team is away', () => {
+  it('names the team and its usual reply time in the header', async () => {
+    await renderThread(false)
+    expect(await screen.findByText('Acme Support')).toBeInTheDocument()
+    expect(screen.getByText('AL')).toBeInTheDocument()
+    expect(
+      screen.getByText(/^Typically replies in under an hour · We'll reply here$/)
+    ).toBeInTheDocument()
+  })
+
+  it('words the reply time the surface already knows before the thread loads', async () => {
+    await renderThread(false, { knownReplyTime: 'day', pending: true })
+    expect(screen.getByText(/^Typically replies within a day · /)).toBeInTheDocument()
+  })
+
+  it('follows a reply time the surface passes later, before the thread loads', async () => {
+    const { rerenderWith } = await renderThread(false, { knownReplyTime: 'day', pending: true })
+    rerenderWith('minutes')
+    expect(screen.getByText(/^Typically replies in a few minutes · /)).toBeInTheDocument()
+  })
+
+  it('says when the team is back once: in the header, not again in the body', async () => {
+    const closed = { ...AWAY, withinOfficeHours: false, nextOpenAt: '2030-01-07T09:00:00.000Z' }
+    await renderThread(false, { replyTime: 'off', presence: closed })
+    expect(await screen.findByText('Acme Support')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText(/we'll reply here when we're back/)).toBeInTheDocument()
+    )
+    expect(screen.getAllByText(/\bBack\b/)).toHaveLength(1)
+  })
+
+  it('keeps the body time when the surface draws its own header', async () => {
+    const closed = { ...AWAY, withinOfficeHours: false, nextOpenAt: '2030-01-07T09:00:00.000Z' }
+    await renderThread(false, { replyTime: 'off', presence: closed, showHeader: false })
+    await waitFor(() =>
+      expect(screen.getByText(/we'll reply here when we're back/)).toBeInTheDocument()
+    )
+    expect(screen.getAllByText(/\bBack\b/)).toHaveLength(1)
+  })
+
+  it('keeps the known reply time when the thread load does not carry one', async () => {
+    await renderThread(false, { knownReplyTime: 'day' })
+    expect(await screen.findByText('Acme Support')).toBeInTheDocument()
+    expect(screen.getByText(/^Typically replies within a day · /)).toBeInTheDocument()
+  })
+
   it('does not promise email to a visitor it cannot email', async () => {
-    const { onReplyByEmail } = await renderThread(false)
+    const onReplyByEmail = vi.fn()
+    await renderThread(false, { replyTime: 'off', onReplyByEmail })
     expect(await screen.findByText("We'll reply here")).toBeInTheDocument()
     expect(screen.queryByText("We'll reply by email")).not.toBeInTheDocument()
     expect(onReplyByEmail).toHaveBeenLastCalledWith(false)
   })
 
   it('promises email to a visitor with a real address', async () => {
-    const { onReplyByEmail } = await renderThread(true)
+    const onReplyByEmail = vi.fn()
+    await renderThread(true, { replyTime: 'off', onReplyByEmail })
     expect(await screen.findByText("We'll reply by email")).toBeInTheDocument()
     await waitFor(() => expect(onReplyByEmail).toHaveBeenLastCalledWith(true))
   })
