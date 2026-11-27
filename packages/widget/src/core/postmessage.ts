@@ -45,6 +45,11 @@ export function createBridge(opts: BridgeOptions): Bridge {
 
   const listener = (event: MessageEvent) => {
     if (event.origin !== opts.origin) return
+    // Only the panel iframe that is on the page now may speak for the widget.
+    // Another window on the same origin (a second embed, a removed iframe's
+    // last message, a popup) must not change the user, unread count or route.
+    const active = opts.getIframe()?.contentWindow
+    if (!active || event.source !== active) return
     const msg = event.data
     if (!msg || typeof msg !== 'object' || typeof (msg as { type?: unknown }).type !== 'string')
       return

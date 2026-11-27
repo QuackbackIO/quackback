@@ -163,6 +163,27 @@ Quackback.identify({ ssoToken: 'eyJ...' }) // signed by your server
 
 The server only accepts a signed `ssoToken`. An unsigned `{ id, email, name }` identity is rejected with `VALIDATION_ERROR`, so nobody can pose as another user. See the [Identify users guide](https://feedback.quackback.io/hc/en/articles/55-identify-users) for the JWT claims and server examples.
 
+### Signing out and switching users
+
+When your user signs out, call `logout()`. It closes the panel, clears the user straight away and ends their widget session. The widget stays on the page for anonymous visitors.
+
+```ts
+Quackback.logout()
+```
+
+To switch to another user (an account switcher, a shared device), log out first, then identify the next person:
+
+```ts
+Quackback.logout()
+Quackback.identify({ ssoToken: tokenForNextUser })
+```
+
+`identify` on its own also replaces the user, but it leaves an open panel showing the previous person's conversations until the new sign-in completes. Logging out first closes it. There is no need to `destroy()` and `init()` again.
+
+If an `identify` fails (an expired or invalid token), the widget signs the previous user out rather than keep acting as them, and `getUser()` returns `null`.
+
+With React, `useQuackbackInit` calls `identify` when `identity` changes and `logout` when it goes back to `undefined`. Call `Quackback.logout()` yourself before switching from one user to another.
+
 ### `open` deep-links
 
 ```ts

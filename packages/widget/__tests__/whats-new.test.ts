@@ -12,6 +12,15 @@ import { createSDK } from '../src/core/sdk'
 
 const ORIGIN = 'https://feedback.acme.com'
 
+// Messages from the panel come from its iframe's window; the bridge drops any
+// other source.
+function panelWindow() {
+  const iframe = document.querySelector(
+    'iframe.quackback-widget-iframe'
+  ) as HTMLIFrameElement | null
+  return iframe?.contentWindow ?? null
+}
+
 /** A launcher past its reveal, as a visitor sees it. */
 function createLauncher(opts: Parameters<typeof createHiddenLauncher>[0]) {
   const l = createHiddenLauncher(opts)
@@ -358,6 +367,10 @@ describe("sdk What's new card for visitors known on this device", () => {
       })
     )
     vi.stubGlobal('cancelIdleCallback', vi.fn())
+    // A panel window for messages to come from (happy-dom loads no frames).
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage: vi.fn(),
+    } as unknown as Window)
     // Script-tag installs reveal the launcher at once from the baked config.
     ;(window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__ = { theme: {} }
     // These visitors have been here before; first visits are tested below.
@@ -370,7 +383,9 @@ describe("sdk What's new card for visitors known on this device", () => {
   })
 
   function post(data: Record<string, unknown>) {
-    window.dispatchEvent(new MessageEvent('message', { origin: ORIGIN, data }))
+    window.dispatchEvent(
+      new MessageEvent('message', { source: panelWindow(), origin: ORIGIN, data })
+    )
   }
   const announce = (whatsNew: unknown) => post({ type: 'quackback:whats-new', whatsNew })
 
@@ -639,6 +654,10 @@ describe("sdk What's new card: first visit and page choice", () => {
       })
     )
     vi.stubGlobal('cancelIdleCallback', vi.fn())
+    // A panel window for messages to come from (happy-dom loads no frames).
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage: vi.fn(),
+    } as unknown as Window)
     ;(window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__ = { theme: {} }
   })
   afterEach(() => {
@@ -648,7 +667,9 @@ describe("sdk What's new card: first visit and page choice", () => {
   })
 
   function post(data: Record<string, unknown>) {
-    window.dispatchEvent(new MessageEvent('message', { origin: ORIGIN, data }))
+    window.dispatchEvent(
+      new MessageEvent('message', { source: panelWindow(), origin: ORIGIN, data })
+    )
   }
   const announce = (whatsNew: unknown) => post({ type: 'quackback:whats-new', whatsNew })
   const badge = () => document.querySelector('button[aria-label^="Open help"]')!

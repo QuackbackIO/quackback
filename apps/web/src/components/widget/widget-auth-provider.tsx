@@ -414,8 +414,14 @@ export function WidgetAuthProvider({
     return () => clearTimeout(timer)
   }, [portalSessionToken])
 
+  // Counts identify messages from the host. Each one supersedes the last, so a
+  // round trip that settles after a newer identify or a logout is dropped
+  // instead of signing its user back in.
+  const identifyGenerationRef = useRef(0)
+
   useEffect(() => {
-    async function handleIdentify(data: Record<string, unknown>) {
+    async function handleIdentify(data: Record<string, unknown>, generation: number) {
+      const isCurrent = () => generation === identifyGenerationRef.current
       try {
         // Capture current token before the identify call — if it's an anonymous
         // session, the server will merge its activity into the newly identified user.
@@ -437,23 +443,37 @@ export function WidgetAuthProvider({
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({ error: { code: 'NETWORK_ERROR' } }))
-          sendToHost({
-            type: 'quackback:identify-result',
-            success: false,
-            error: err.error?.code || 'SERVER_ERROR',
-          })
+          if (!isCurrent()) return
+          failIdentify(err.error?.code || 'SERVER_ERROR')
           return
         }
 
-        applyIdentifyResult(await response.json())
+        const result = await response.json()
+        if (!isCurrent()) return
+        applyIdentifyResult(result)
       } catch {
-        sendToHost({ type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' })
+        if (!isCurrent()) return
+        failIdentify('NETWORK_ERROR')
       } finally {
         // Resolved only once the round trip settles: between the message and
         // the response `user` is still null, and consumers must not read that
-        // window as "this visitor is anonymous".
-        setIdentityResolved(true)
+        // window as "this visitor is anonymous". A superseded round trip
+        // leaves that to the identify that replaced it.
+        if (isCurrent()) setIdentityResolved(true)
       }
+    }
+
+    // The host asked for a person the frame could not sign in. Whoever was
+    // signed in before is no longer who the host says is there (the SDK now
+    // reports nobody), so the frame stops acting as them too.
+    function failIdentify(error: string) {
+      if (userRef.current !== null) {
+        dropSession()
+        setUser(null)
+        setCanPortalHandoff(true)
+        sendToHost({ type: 'quackback:auth-change', user: null })
+      }
+      sendToHost({ type: 'quackback:identify-result', success: false, error })
     }
 
     // Drop the current session and start a new session version, so every
@@ -512,6 +532,7 @@ export function WidgetAuthProvider({
 
       if (msg.type === 'quackback:identify') {
         identifyReceivedRef.current = true
+        const generation = ++identifyGenerationRef.current
         const action = resolveIdentifyAction({
           identifyData: msg.data,
           hasPortalSession: !!portalSessionToken,
@@ -547,7 +568,7 @@ export function WidgetAuthProvider({
             // even if the frame had already settled as anonymous while it
             // waited for its host.
             setIdentityResolved(false)
-            handleIdentify(msg.data as Record<string, unknown>)
+            handleIdentify(msg.data as Record<string, unknown>, generation)
             break
           case 'skip':
             // Portal session takes precedence — ack without changing state

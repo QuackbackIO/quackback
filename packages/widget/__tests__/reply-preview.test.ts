@@ -20,6 +20,15 @@ import type { WhatsNew } from '../src/core/whats-new-card'
 
 const ORIGIN = 'https://feedback.acme.com'
 
+// Messages from the panel come from its iframe's window; the bridge drops any
+// other source.
+function panelWindow() {
+  const iframe = document.querySelector(
+    'iframe.quackback-widget-iframe'
+  ) as HTMLIFrameElement | null
+  return iframe?.contentWindow ?? null
+}
+
 /** A launcher with the reply card, as the SDK builds it. */
 function createCardLauncher(opts: Parameters<typeof createHiddenLauncher>[0]) {
   return createHiddenLauncher({ replyCard: createReplyPreviewCard, ...opts })
@@ -595,6 +604,10 @@ describe('sdk reply preview', () => {
       })
     )
     vi.stubGlobal('cancelIdleCallback', vi.fn())
+    // A panel window for messages to come from (happy-dom loads no frames).
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage: vi.fn(),
+    } as unknown as Window)
     ;(window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__ = { theme: {} }
   })
   afterEach(() => {
@@ -604,7 +617,9 @@ describe('sdk reply preview', () => {
   })
 
   function post(data: Record<string, unknown>) {
-    window.dispatchEvent(new MessageEvent('message', { origin: ORIGIN, data }))
+    window.dispatchEvent(
+      new MessageEvent('message', { source: panelWindow(), origin: ORIGIN, data })
+    )
   }
   const preview = (replyPreview: unknown) => post({ type: 'quackback:reply-preview', replyPreview })
 
