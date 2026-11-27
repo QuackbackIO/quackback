@@ -8,7 +8,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { StatusChangeEmail } from '@quackback/email'
+import { NewSignInEmail, StatusChangeEmail } from '@quackback/email'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { principal, user } from '@/lib/server/db'
 
@@ -103,6 +103,12 @@ describe.skipIf(!fixture.available)('an email reader language (real DB, rolled b
     expect(await recipientLocale({ principalId: neither.principalId })).toBe('de')
   })
 
+  it('leaves out the detected language for an alert about a sign-in', async () => {
+    const p = await person({ detected: 'ru', accountLocale: 'nl' })
+    expect(await recipientLocale({ userId: p.userId }, { skipDetected: true })).toBe('nl')
+    expect(await recipientLocale({ userId: p.userId })).toBe('ru')
+  })
+
   it('finds a person by address, and gives an address with no account the visitor rule', async () => {
     const p = await person({ chosen: 'th' })
     expect(await recipientLocale({ email: p.email.toUpperCase() })).toBe('th')
@@ -148,5 +154,15 @@ describe.skipIf(!fixture.available)('an email reader language (real DB, rolled b
     expect(html).toContain('Feedback ansehen')
     expect(html).toContain('Dark mode please')
     expect(html).not.toContain('View feedback')
+  })
+
+  it('writes a teammate alert in that language', async () => {
+    const pl = await emailLocaleFor('pl')
+    const html = renderToStaticMarkup(
+      NewSignInEmail({ workspaceName: 'Acme', occurredAt: 'now', ssoEnforced: true, i18n: pl })
+    )
+    expect(html).toContain('lang="pl"')
+    expect(html).toContain('Nowe logowanie na Twoje konto')
+    expect(html).not.toContain('New sign-in to your account')
   })
 })

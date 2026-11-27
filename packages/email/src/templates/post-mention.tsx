@@ -1,5 +1,7 @@
 import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
+import { ENGLISH_EMAIL, type EmailLocale } from '../i18n'
+import { MENTION_MESSAGES as M } from './note-mention'
 import { typography, button, colors } from './shared-styles'
 
 export interface PostMentionEmailProps {
@@ -12,6 +14,7 @@ export interface PostMentionEmailProps {
   unsubscribeUrl?: string
   preferencesUrl?: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 export function PostMentionEmail({
@@ -23,21 +26,22 @@ export function PostMentionEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: PostMentionEmailProps) {
-  const displayName = mentionerName || 'Anonymous user'
+  const { t } = i18n
+  const displayName = mentionerName || t(M.anonymous)
   const hasExcerpt = excerpt.length > 0
 
   return (
     <EmailLayout
-      preview={`${displayName} mentioned you in "${postTitle}"`}
+      preview={t(M.postSubject, { name: displayName, post: postTitle })}
       logoUrl={logoUrl}
       logoAlt={workspaceName}
+      i18n={i18n}
     >
       {/* Content */}
-      <Heading style={typography.h1}>You were mentioned</Heading>
-      <Text style={typography.text}>
-        {displayName} mentioned you in {postTitle}.
-      </Text>
+      <Heading style={typography.h1}>{t(M.postHeading)}</Heading>
+      <Text style={typography.text}>{t(M.postBody, { name: displayName, post: postTitle })}</Text>
 
       {/* Post Title */}
       <Section
@@ -56,7 +60,7 @@ export function PostMentionEmail({
             color: colors.textMuted,
           }}
         >
-          Feedback
+          {t(M.postLabel)}
         </Text>
         <Text style={{ ...typography.text, marginTop: '0', marginBottom: '0', fontWeight: '600' }}>
           {postTitle}
@@ -85,22 +89,21 @@ export function PostMentionEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={postUrl}>
-          View Feedback
+          {t(M.viewFeedback)}
         </Button>
       </Section>
 
       {/* Footer */}
       {unsubscribeUrl ? (
         <NotificationFooter
-          reason={`You received this email because you were mentioned in ${workspaceName}.`}
+          reason={t(M.reason, { workspace: workspaceName })}
           unsubscribeUrl={unsubscribeUrl}
-          unsubscribeLabel="Turn off all email"
+          unsubscribeLabel={t(M.turnOff)}
           preferencesUrl={preferencesUrl}
+          i18n={i18n}
         />
       ) : (
-        <Text style={typography.footer}>
-          You received this email because you were mentioned in {workspaceName}.
-        </Text>
+        <Text style={typography.footer}>{t(M.reason, { workspace: workspaceName })}</Text>
       )}
     </EmailLayout>
   )

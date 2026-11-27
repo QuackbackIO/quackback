@@ -1,12 +1,36 @@
 import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
 import { typography, colors } from './shared-styles'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const MESSENGER_INSTALL_MESSAGES = defineEmailMessages({
+  subject: {
+    id: 'email.messengerInstall.subject',
+    defaultMessage: 'Add {workspace} Messenger to the website',
+  },
+  heading: { id: 'email.messengerInstall.heading', defaultMessage: 'Add Messenger to the website' },
+  body: {
+    id: 'email.messengerInstall.body',
+    defaultMessage:
+      "{name} asked you to put {workspace}'s Messenger on the website. Paste this code before the closing body tag on every page.",
+  },
+  tagManager: {
+    id: 'email.messengerInstall.tagManager',
+    defaultMessage:
+      'Using Google Tag Manager? Create a Custom HTML tag with the same code and trigger it on All pages.',
+  },
+  footer: {
+    id: 'email.messengerInstall.footer',
+    defaultMessage: '{name} will see Messenger connect as soon as it loads on the site.',
+  },
+})
 
 interface MessengerInstallEmailProps {
   senderName: string
   workspaceName: string
   snippet: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 /** A teammate asks whoever edits the website to add Messenger. */
@@ -15,27 +39,26 @@ export function MessengerInstallEmail({
   workspaceName,
   snippet,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: MessengerInstallEmailProps) {
+  const { t } = i18n
   return (
     <EmailLayout
-      preview={`Add ${workspaceName} Messenger to the website`}
+      preview={t(MESSENGER_INSTALL_MESSAGES.subject, { workspace: workspaceName })}
       logoUrl={logoUrl}
       logoAlt={workspaceName}
+      i18n={i18n}
     >
-      <Heading style={typography.h1}>Add Messenger to the website</Heading>
+      <Heading style={typography.h1}>{t(MESSENGER_INSTALL_MESSAGES.heading)}</Heading>
       <Text style={typography.text}>
-        <strong>{senderName}</strong> asked you to put {workspaceName}&apos;s Messenger on the
-        website. Paste this code before the closing body tag on every page.
+        {t(MESSENGER_INSTALL_MESSAGES.body, { name: senderName, workspace: workspaceName })}
       </Text>
       <Section style={codeBlock}>
         <Text style={codeText}>{snippet}</Text>
       </Section>
-      <Text style={typography.textSmall}>
-        Using Google Tag Manager? Create a Custom HTML tag with the same code and trigger it on All
-        pages.
-      </Text>
+      <Text style={typography.textSmall}>{t(MESSENGER_INSTALL_MESSAGES.tagManager)}</Text>
       <TransactionalFooter>
-        {senderName} will see Messenger connect as soon as it loads on the site.
+        {t(MESSENGER_INSTALL_MESSAGES.footer, { name: senderName })}
       </TransactionalFooter>
     </EmailLayout>
   )

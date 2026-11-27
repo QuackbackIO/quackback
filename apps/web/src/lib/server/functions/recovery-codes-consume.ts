@@ -225,8 +225,10 @@ async function sendRecoveryCodeAlert(opts: {
     const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
     const workspace = await getWorkspaceSettings()
 
+    const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
     await sendRecoveryCodeUsedEmail({
       to,
+      i18n: await recipientEmailLocale({ userId: opts.userId }, { skipDetected: true }),
       workspaceName: workspace?.settings?.name,
       ipAddress: getClientIp(opts.headers) || null,
       userAgent: opts.headers.get('user-agent'),

@@ -6,6 +6,14 @@
  */
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
+import {
+  apiAs as fnApiAs,
+  fnOk,
+  retireTeammate,
+  seedPerson,
+  startEmailConversation,
+  waitForMailWhere,
+} from '../../support/sla-csat'
 import type { Browser, FrameLocator } from '@playwright/test'
 import {
   agentReply,
@@ -121,6 +129,46 @@ test.describe('emails in the reader language', () => {
         `${ADMIN_NAME} a répondu à votre conversation avec ${WORKSPACE}.`
       )
       expect(mail.From.Name).toBe(`${ADMIN_NAME} de ${WORKSPACE}`)
+    }
+  )
+
+  test(
+    'CUS-LANG-E3 a teammate who chose Polish gets a note mention in Polish, the note as written',
+    { tag: '@core' },
+    async ({ request, playwright, marker }) => {
+      const mate = await seedPerson(marker, 'teammate', { tag: 'pl' })
+      await supportDb()`UPDATE "user" SET preferred_language = 'pl'
+        WHERE id = (SELECT user_id FROM principal WHERE id = ${mate.principalUuid})`
+      const admin = await fnApiAs(playwright, 'admin')
+      try {
+        const conversation = await startEmailConversation(request, marker)
+        const note = `Look at this ${marker}`
+        await fnOk(admin, 'addConversationNoteFn', {
+          conversationId: conversation.id,
+          content: note,
+          contentJson: {
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  { type: 'text', text: `${note} ` },
+                  { type: 'mention', attrs: { id: mate.principalId, label: mate.name } },
+                ],
+              },
+            ],
+          },
+        })
+        const subject = `${ADMIN_NAME} wspomniał o Tobie w notatce wewnętrznej`
+        const mail = await waitForMailWhere(mate.email, 'the Polish note mention', (m) =>
+          m.Subject.includes(subject)
+        )
+        expect(mailText(mail)).toContain(note)
+        expect(mailText(mail)).toContain('Notatki wewnętrzne widzi tylko Twój zespół.')
+      } finally {
+        await admin.dispose()
+        await retireTeammate(mate)
+      }
     }
   )
 })

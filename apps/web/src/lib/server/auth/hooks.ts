@@ -1864,6 +1864,9 @@ export async function handleNewDeviceNotification(
       to
         ? sendNewSignInEmail({
             to,
+            i18n: await (
+              await import('@/lib/server/email/email-locale')
+            ).recipientEmailLocale({ userId }, { skipDetected: true }),
             workspaceName: workspace?.name,
             occurredAt,
             ipAddress: ip,
