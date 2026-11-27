@@ -1,5 +1,6 @@
 import { Column, Heading, Link, Row, Section, Text } from '@react-email/components'
 import { EmailLayout } from './email-layout'
+import type { EmailLocale } from '../i18n'
 import { typography, colors, utils } from './shared-styles'
 
 interface ConversationMessageEmailProps {
@@ -19,6 +20,7 @@ interface ConversationMessageEmailProps {
   organizationName: string
   reason: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 export function ConversationMessageEmail({
@@ -32,9 +34,10 @@ export function ConversationMessageEmail({
   organizationName,
   reason,
   logoUrl,
+  i18n,
 }: ConversationMessageEmailProps) {
   return (
-    <EmailLayout preview={heading} logoUrl={logoUrl} logoAlt={organizationName}>
+    <EmailLayout preview={heading} logoUrl={logoUrl} logoAlt={organizationName} i18n={i18n}>
       <Heading style={typography.h1}>{heading}</Heading>
       <Text style={typography.text}>{intro}</Text>
 

@@ -1,6 +1,35 @@
 import { Column, Heading, Link, Row, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
 import { typography, colors } from './shared-styles'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const CSAT_MESSAGES = defineEmailMessages({
+  heading: { id: 'email.csat.heading', defaultMessage: 'How did we do?' },
+  hint: { id: 'email.csat.hint', defaultMessage: 'Click a face above to rate your experience.' },
+  reason: {
+    id: 'email.csat.reason',
+    defaultMessage: 'You received this email because you had a conversation with {workspace}.',
+  },
+  closed: {
+    id: 'email.csat.closed',
+    defaultMessage: '{workspace} marked this conversation as resolved.',
+  },
+  autoClosed: {
+    id: 'email.csat.autoClosed',
+    defaultMessage: "This conversation was closed because we haven't heard back from you.",
+  },
+  followUpClosed: {
+    id: 'email.csat.followUpClosed',
+    defaultMessage: 'Not sorted? Just reply to this email and the conversation will reopen.',
+  },
+  followUpAutoClosed: {
+    id: 'email.csat.followUpAutoClosed',
+    defaultMessage:
+      'Need anything else? Just reply to this email and the conversation will reopen.',
+  },
+  viewOnline: { id: 'email.csat.viewOnline', defaultMessage: 'View it online' },
+})
+const M = CSAT_MESSAGES
 
 /**
  * The 5 CSAT rating faces, in order (worst to best) — mirrors CSAT_FACES
@@ -24,6 +53,7 @@ interface CsatRequestEmailProps {
   ratingUrls: readonly [string, string, string, string, string]
   workspaceName: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 export function CsatRequestEmail({
@@ -31,10 +61,12 @@ export function CsatRequestEmail({
   ratingUrls,
   workspaceName,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: CsatRequestEmailProps) {
-  const heading = 'How did we do?'
+  const { t } = i18n
+  const heading = t(M.heading)
   return (
-    <EmailLayout preview={heading} logoUrl={logoUrl} logoAlt={workspaceName}>
+    <EmailLayout preview={heading} logoUrl={logoUrl} logoAlt={workspaceName} i18n={i18n}>
       <Heading style={typography.h1}>{heading}</Heading>
       {promptText && <Text style={typography.text}>{promptText}</Text>}
 
@@ -59,12 +91,10 @@ export function CsatRequestEmail({
       </Section>
 
       <Text style={{ ...typography.textSmall, color: colors.textMuted, textAlign: 'center' }}>
-        Click a face above to rate your experience.
+        {t(M.hint)}
       </Text>
 
-      <TransactionalFooter>
-        You received this email because you had a conversation with {workspaceName}.
-      </TransactionalFooter>
+      <TransactionalFooter>{t(M.reason, { workspace: workspaceName })}</TransactionalFooter>
     </EmailLayout>
   )
 }

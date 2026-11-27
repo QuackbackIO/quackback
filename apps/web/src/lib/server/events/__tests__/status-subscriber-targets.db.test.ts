@@ -230,8 +230,20 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
     planVisible.ids = [API]
     const targets = await getStatusSubscriberTargets(incidentCreated, context)
     expect(emailedComponents(targets)).toEqual({
-      [MEMBER_EMAIL]: [{ name: `API ${runSuffix}`, status: 'Degraded performance' }],
-      [OUTSIDER_EMAIL]: [{ name: `API ${runSuffix}`, status: 'Degraded performance' }],
+      [MEMBER_EMAIL]: [
+        {
+          name: `API ${runSuffix}`,
+          status: 'Degraded performance',
+          statusKey: 'degraded_performance',
+        },
+      ],
+      [OUTSIDER_EMAIL]: [
+        {
+          name: `API ${runSuffix}`,
+          status: 'Degraded performance',
+          statusKey: 'degraded_performance',
+        },
+      ],
     })
     const notified = targets
       .filter((t) => t.type === 'notification')
@@ -281,12 +293,22 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
     const targets = await getStatusSubscriberTargets(incidentCreated, context)
     expect(emailedComponents(targets)).toEqual({
       [MEMBER_EMAIL]: [
-        { name: `API ${runSuffix}`, status: 'Degraded performance' },
-        { name: `Billing ${runSuffix}`, status: 'Major outage' },
+        {
+          name: `API ${runSuffix}`,
+          status: 'Degraded performance',
+          statusKey: 'degraded_performance',
+        },
+        { name: `Billing ${runSuffix}`, status: 'Major outage', statusKey: 'major_outage' },
       ],
       // The outsider still hears about the incident (they can see API) but
       // never learns the segment-restricted Billing component exists.
-      [OUTSIDER_EMAIL]: [{ name: `API ${runSuffix}`, status: 'Degraded performance' }],
+      [OUTSIDER_EMAIL]: [
+        {
+          name: `API ${runSuffix}`,
+          status: 'Degraded performance',
+          statusKey: 'degraded_performance',
+        },
+      ],
     })
 
     const notified = targets

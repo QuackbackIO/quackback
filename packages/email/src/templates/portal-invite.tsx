@@ -1,12 +1,37 @@
 import { Button, Heading, Link, Section, Text } from '@react-email/components'
-import { EmailLayout, TransactionalFooter } from './email-layout'
+import { EmailLayout, TransactionalFooter, LAYOUT_MESSAGES } from './email-layout'
 import { typography, button, utils } from './shared-styles'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const PORTAL_INVITE_MESSAGES = defineEmailMessages({
+  subject: {
+    id: 'email.portalInvite.subject',
+    defaultMessage: "You've been invited to {workspace}",
+  },
+  preview: {
+    id: 'email.portalInvite.preview',
+    defaultMessage: "You've been invited to access the {workspace} portal",
+  },
+  heading: { id: 'email.portalInvite.heading', defaultMessage: "You've been invited!" },
+  body: {
+    id: 'email.portalInvite.body',
+    defaultMessage:
+      "You've been invited to access the {workspace} portal. Click below to accept and sign in.",
+  },
+  cta: { id: 'email.portalInvite.cta', defaultMessage: 'Accept invitation' },
+  footer: {
+    id: 'email.portalInvite.footer',
+    defaultMessage: "If you weren't expecting this invitation, you can ignore this email.",
+  },
+})
+const M = PORTAL_INVITE_MESSAGES
 
 interface PortalInviteEmailProps {
   workspaceName: string
   inviteLink: string
   logoUrl?: string
   personalMessage?: string
+  i18n?: EmailLocale
 }
 
 export function PortalInviteEmail({
@@ -14,19 +39,19 @@ export function PortalInviteEmail({
   inviteLink,
   logoUrl,
   personalMessage,
+  i18n = ENGLISH_EMAIL,
 }: PortalInviteEmailProps) {
+  const { t } = i18n
   return (
     <EmailLayout
-      preview={`You've been invited to access the ${workspaceName} portal`}
+      preview={t(M.preview, { workspace: workspaceName })}
       logoUrl={logoUrl}
       logoAlt={workspaceName}
+      i18n={i18n}
     >
       {/* Content */}
-      <Heading style={typography.h1}>You&apos;ve been invited!</Heading>
-      <Text style={typography.text}>
-        You&apos;ve been invited to access the <strong>{workspaceName}</strong> portal. Click below
-        to accept and sign in.
-      </Text>
+      <Heading style={typography.h1}>{t(M.heading)}</Heading>
+      <Text style={typography.text}>{t(M.body, { workspace: workspaceName })}</Text>
 
       {personalMessage && (
         <Section
@@ -48,22 +73,20 @@ export function PortalInviteEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={inviteLink}>
-          Accept invitation
+          {t(M.cta)}
         </Button>
       </Section>
 
       {/* Fallback Link */}
       <Text style={typography.textSmall}>
-        Or copy and paste this link into your browser:{' '}
+        {t(LAYOUT_MESSAGES.linkFallback)}{' '}
         <Link href={inviteLink} style={utils.link}>
           {inviteLink}
         </Link>
       </Text>
 
       {/* Footer */}
-      <TransactionalFooter>
-        If you weren&apos;t expecting this invitation, you can ignore this email.
-      </TransactionalFooter>
+      <TransactionalFooter>{t(M.footer)}</TransactionalFooter>
     </EmailLayout>
   )
 }

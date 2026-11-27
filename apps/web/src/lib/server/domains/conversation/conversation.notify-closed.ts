@@ -88,8 +88,10 @@ export async function notifyConversationClosed(opts: {
     }
 
     const { sendConversationClosedEmail } = await import('@quackback/email')
+    const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
     const result = await sendConversationClosedEmail({
       to: recipient,
+      i18n: await recipientEmailLocale({ principalId: conv.visitorPrincipalId }),
       workspaceName: ctx.workspaceName,
       variant: opts.variant,
       conversationSubject: conv.subject ?? undefined,

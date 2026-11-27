@@ -109,8 +109,10 @@ export async function maybeSendColdInboundAck(opts: {
     // teammate.
     const resolved = await resolveConversationSender(opts.conversationId)
     const from = senderFrom(resolved, workspaceName)
+    const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
     const result = await sendConversationAutoAckEmail({
       to,
+      i18n: await recipientEmailLocale({ principalId: opts.senderPrincipalId, email: sender }),
       workspaceName,
       conversationSubject: opts.conversationSubject,
       replyTo: replyTo ?? undefined,

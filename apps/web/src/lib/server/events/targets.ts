@@ -1772,9 +1772,21 @@ async function requesterFacingConfig(
 
 /** Agent-facing config: branded EMAIL_FROM, no reply-by-email, inbox CTA. */
 function agentFacingConfig(
-  params: BaseTicketConfigParams & { clockLabel?: string; dueLabel?: string }
+  params: BaseTicketConfigParams & {
+    clockLabel?: string
+    dueLabel?: string
+    clock?: string
+    dueAt?: string
+  }
 ): Record<string, unknown> {
-  return { ...baseTicketConfig(params), clockLabel: params.clockLabel, dueLabel: params.dueLabel }
+  return {
+    ...baseTicketConfig(params),
+    clockLabel: params.clockLabel,
+    dueLabel: params.dueLabel,
+    // Raw facts, so the email names the clock and due time in the reader's language.
+    ...(params.clock ? { clock: params.clock } : {}),
+    ...(params.dueAt ? { dueAt: params.dueAt } : {}),
+  }
 }
 
 /**
@@ -2179,7 +2191,17 @@ export async function getSlaEmailTargets(
   return recipients.map((id) =>
     ticketEmailTarget(
       { principalId: id, email: emailMap.get(id)! },
-      agentFacingConfig({ kind, ticketLabel: '', title, ctaUrl, context, clockLabel, dueLabel })
+      agentFacingConfig({
+        kind,
+        ticketLabel: '',
+        title,
+        ctaUrl,
+        context,
+        clockLabel,
+        dueLabel,
+        clock,
+        dueAt,
+      })
     )
   )
 }
@@ -2671,6 +2693,7 @@ export async function getStatusSubscriberTargets(
     components.map((c) => ({
       name: c.name,
       status: STATUS_COMPONENT_STATUS_LABELS[c.linkedStatus ?? c.liveStatus],
+      statusKey: c.linkedStatus ?? c.liveStatus,
     }))
 
   // In-app notification targets (all eligible; ignores emailsDisabled), one
@@ -2730,6 +2753,7 @@ export async function getStatusSubscriberTargets(
                 incidentUrl,
                 impact: p.impact,
                 statusLabel: statusLifecycleLabel(incident.status),
+                incidentStatus: incident.status,
                 body: firstUpdateBody,
                 affectedComponents: affectedForEmail(p.visibleAffected),
                 scheduledStartLabel: incident.scheduledStartAt
@@ -2738,6 +2762,8 @@ export async function getStatusSubscriberTargets(
                 scheduledEndLabel: incident.scheduledEndAt
                   ? formatStatusDate(incident.scheduledEndAt)
                   : null,
+                scheduledStartAt: incident.scheduledStartAt ?? null,
+                scheduledEndAt: incident.scheduledEndAt ?? null,
                 ...sender,
               }
             )

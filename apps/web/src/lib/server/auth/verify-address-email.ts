@@ -11,9 +11,13 @@ export async function sendVerifyAddressCode(email: string, code: string): Promis
   const settings = await db.query.settings.findFirst({
     columns: { name: true, logoKey: true },
   })
+  // A request email: the account's own language, then the browser that asked.
+  const { recipientEmailLocale, requestAcceptLanguage } =
+    await import('@/lib/server/email/email-locale')
   await sendVerifyAddressEmail({
     to: email,
     code,
+    i18n: await recipientEmailLocale({ email }, { acceptLanguage: await requestAcceptLanguage() }),
     workspaceName: settings?.name ?? undefined,
     logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
   })

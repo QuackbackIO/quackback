@@ -103,6 +103,14 @@ export async function requestEmailSignin(opts: {
   // both mail it with this workspace's branding.
   const settings = await db.query.settings.findFirst({ columns: { name: true, logoKey: true } })
   const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
+  // A request email: the account's own language when the address has one,
+  // then the browser that asked. Read for both outcomes alike.
+  const { recipientEmailLocale, requestAcceptLanguage } =
+    await import('@/lib/server/email/email-locale')
+  const i18n = await recipientEmailLocale(
+    { email: opts.email },
+    { acceptLanguage: await requestAcceptLanguage() }
+  )
 
   // `openSignup`, in front of the mint rather than around it.
   //
@@ -130,6 +138,7 @@ export async function requestEmailSignin(opts: {
     if (!to) return
     await sendSignupNotAllowedEmail({
       to,
+      i18n,
       workspaceName: settings?.name ?? undefined,
       logoUrl,
     })
@@ -194,6 +203,7 @@ export async function requestEmailSignin(opts: {
   const { sealedRecipient } = await import('@/lib/server/email/recipient')
   await sendMagicLinkEmail({
     to: sealedRecipient(minted),
+    i18n,
     signInUrl: minted.url,
     code: otp,
     logoUrl,

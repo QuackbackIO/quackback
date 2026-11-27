@@ -1,4 +1,6 @@
 import { Body, Head, Html, Preview, Text } from '@react-email/components'
+import { ENGLISH_EMAIL, type EmailLocale } from '../i18n'
+import { CSAT_MESSAGES as M } from './csat-request'
 
 export interface ConversationClosedEmailProps {
   workspaceName: string
@@ -6,6 +8,7 @@ export interface ConversationClosedEmailProps {
   viewUrl?: string
   csatPrompt?: string
   ratingUrls?: readonly [string, string, string, string, string]
+  i18n?: EmailLocale
 }
 
 const CSAT_FACES = ['😞', '🙁', '😐', '🙂', '😄'] as const
@@ -33,18 +36,15 @@ export function ConversationClosedEmail({
   viewUrl,
   csatPrompt,
   ratingUrls,
+  i18n = ENGLISH_EMAIL,
 }: ConversationClosedEmailProps) {
+  const { t } = i18n
   const intro =
-    variant === 'auto_closed'
-      ? "This conversation was closed because we haven't heard back from you."
-      : `${workspaceName} marked this conversation as resolved.`
-  const followUp =
-    variant === 'auto_closed'
-      ? 'Need anything else? Just reply to this email and the conversation will reopen.'
-      : 'Not sorted? Just reply to this email and the conversation will reopen.'
+    variant === 'auto_closed' ? t(M.autoClosed) : t(M.closed, { workspace: workspaceName })
+  const followUp = t(variant === 'auto_closed' ? M.followUpAutoClosed : M.followUpClosed)
 
   return (
-    <Html>
+    <Html lang={i18n.lang} dir={i18n.dir}>
       <Head />
       <Preview>{intro}</Preview>
       <Body style={page}>
@@ -56,7 +56,7 @@ export function ConversationClosedEmail({
         {ratingUrls ? (
           <>
             <Text style={{ margin: '20px 0 8px', color: '#1d2939', fontSize: '15px' }}>
-              {csatPrompt || 'How did we do?'}
+              {csatPrompt || t(M.heading)}
             </Text>
             <Text style={{ margin: '0 0 16px', fontSize: '28px', letterSpacing: '8px' }}>
               {CSAT_FACES.map((face, i) => (
@@ -71,7 +71,7 @@ export function ConversationClosedEmail({
         {viewUrl ? (
           <Text style={muted}>
             <a href={viewUrl} style={{ color: '#667085' }}>
-              View it online
+              {t(M.viewOnline)}
             </a>
           </Text>
         ) : null}

@@ -1,6 +1,30 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button, colors } from './shared-styles'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const CHANGELOG_PUBLISHED_MESSAGES = defineEmailMessages({
+  subject: { id: 'email.changelog.subject', defaultMessage: 'New update: {title}' },
+  preview: {
+    id: 'email.changelog.preview',
+    defaultMessage: 'New update from {workspace}: {title}',
+  },
+  heading: { id: 'email.changelog.heading', defaultMessage: 'New update published' },
+  body: {
+    id: 'email.changelog.body',
+    defaultMessage: '{workspace} just published a product update.',
+  },
+  cta: { id: 'email.changelog.cta', defaultMessage: 'View update' },
+  reason: {
+    id: 'email.changelog.reason',
+    defaultMessage: "You received this email because you're subscribed to changelog updates.",
+  },
+  unsubscribe: {
+    id: 'email.changelog.unsubscribe',
+    defaultMessage: 'Unsubscribe from the changelog',
+  },
+})
+const M = CHANGELOG_PUBLISHED_MESSAGES
 
 interface ChangelogPublishedEmailProps {
   changelogTitle: string
@@ -18,6 +42,7 @@ interface ChangelogPublishedEmailProps {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 export function ChangelogPublishedEmail({
@@ -29,16 +54,19 @@ export function ChangelogPublishedEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: ChangelogPublishedEmailProps) {
+  const { t } = i18n
   return (
     <EmailLayout
-      preview={`New update from ${organizationName}: ${changelogTitle}`}
+      preview={t(M.preview, { workspace: organizationName, title: changelogTitle })}
       logoUrl={logoUrl}
       logoAlt={organizationName}
+      i18n={i18n}
     >
       {/* Content */}
-      <Heading style={typography.h1}>New update published</Heading>
-      <Text style={typography.text}>{organizationName} just published a product update.</Text>
+      <Heading style={typography.h1}>{t(M.heading)}</Heading>
+      <Text style={typography.text}>{t(M.body, { workspace: organizationName })}</Text>
 
       {/* Changelog Title */}
       <Section
@@ -78,16 +106,17 @@ export function ChangelogPublishedEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={changelogUrl}>
-          View Update
+          {t(M.cta)}
         </Button>
       </Section>
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you're subscribed to changelog updates."
+        reason={t(M.reason)}
         unsubscribeUrl={unsubscribeUrl}
-        unsubscribeLabel="Unsubscribe from the changelog"
+        unsubscribeLabel={t(M.unsubscribe)}
         preferencesUrl={preferencesUrl}
+        i18n={i18n}
       />
     </EmailLayout>
   )

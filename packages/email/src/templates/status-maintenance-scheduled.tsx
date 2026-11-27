@@ -2,6 +2,8 @@ import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button } from './shared-styles'
 import { withLineBreaks } from './line-breaks'
+import { ENGLISH_EMAIL, type EmailLocale } from '../i18n'
+import { STATUS_EMAIL_MESSAGES as M } from './status-incident-published'
 
 const MAINTENANCE_BLUE = '#3b82f6'
 const MAINTENANCE_BLUE_BG = '#eff6ff'
@@ -22,6 +24,7 @@ interface StatusMaintenanceScheduledEmailProps {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 export function StatusMaintenanceScheduledEmail({
@@ -35,12 +38,15 @@ export function StatusMaintenanceScheduledEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: StatusMaintenanceScheduledEmailProps) {
+  const { t } = i18n
   return (
     <EmailLayout
-      preview={`Scheduled maintenance: ${maintenanceTitle} (${startLabel})`}
+      preview={`${t(M.maintenanceSubject, { title: maintenanceTitle })} (${startLabel})`}
       logoUrl={logoUrl}
       logoAlt={workspaceName}
+      i18n={i18n}
     >
       {/* Content */}
       <Text
@@ -54,12 +60,10 @@ export function StatusMaintenanceScheduledEmail({
           marginBottom: '8px',
         }}
       >
-        Scheduled maintenance
+        {t(M.maintenanceLabel)}
       </Text>
       <Heading style={typography.h1}>{maintenanceTitle}</Heading>
-      <Text style={typography.text}>
-        {workspaceName} has scheduled maintenance that may affect its services.
-      </Text>
+      <Text style={typography.text}>{t(M.maintenanceBody, { workspace: workspaceName })}</Text>
       {body && <Text style={typography.text}>{withLineBreaks(body)}</Text>}
 
       {/* Maintenance window */}
@@ -81,7 +85,7 @@ export function StatusMaintenanceScheduledEmail({
             marginBottom: '4px',
           }}
         >
-          Maintenance window
+          {t(M.window)}
         </Text>
         <Text style={{ ...typography.text, marginTop: '0', marginBottom: '0', fontWeight: '600' }}>
           {startLabel} to {endLabel}
@@ -99,7 +103,7 @@ export function StatusMaintenanceScheduledEmail({
               marginBottom: '8px',
             }}
           >
-            Affected services
+            {t(M.affected)}
           </Text>
           <Text style={{ ...typography.textSmall, marginTop: '0', marginBottom: '0' }}>
             {affectedComponents.join(', ')}
@@ -110,16 +114,17 @@ export function StatusMaintenanceScheduledEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={incidentUrl}>
-          View status page
+          {t(M.viewPage)}
         </Button>
       </Section>
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you're subscribed to status updates."
+        reason={t(M.reason)}
         unsubscribeUrl={unsubscribeUrl}
-        unsubscribeLabel="Unsubscribe from status updates"
+        unsubscribeLabel={t(M.unsubscribe)}
         preferencesUrl={preferencesUrl}
+        i18n={i18n}
       />
     </EmailLayout>
   )

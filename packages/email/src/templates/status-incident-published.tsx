@@ -2,6 +2,45 @@ import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button, colors } from './shared-styles'
 import { withLineBreaks } from './line-breaks'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const STATUS_EMAIL_MESSAGES = defineEmailMessages({
+  incidentSubject: { id: 'email.status.incidentSubject', defaultMessage: 'Incident: {title}' },
+  incidentHeading: { id: 'email.status.incidentHeading', defaultMessage: 'New incident reported' },
+  incidentBody: {
+    id: 'email.status.incidentBody',
+    defaultMessage: '{workspace} just posted an update to its status page.',
+  },
+  affected: { id: 'email.status.affected', defaultMessage: 'Affected services' },
+  viewLive: { id: 'email.status.viewLive', defaultMessage: 'View live status' },
+  reason: {
+    id: 'email.status.reason',
+    defaultMessage: "You received this email because you're subscribed to status updates.",
+  },
+  unsubscribe: {
+    id: 'email.status.unsubscribe',
+    defaultMessage: 'Unsubscribe from status updates',
+  },
+  maintenanceSubject: {
+    id: 'email.status.maintenanceSubject',
+    defaultMessage: 'Scheduled maintenance: {title}',
+  },
+  maintenanceLabel: {
+    id: 'email.status.maintenanceLabel',
+    defaultMessage: 'Scheduled maintenance',
+  },
+  maintenanceBody: {
+    id: 'email.status.maintenanceBody',
+    defaultMessage: '{workspace} has scheduled maintenance that may affect its services.',
+  },
+  window: { id: 'email.status.window', defaultMessage: 'Maintenance window' },
+  viewPage: { id: 'email.status.viewPage', defaultMessage: 'View status page' },
+  impactNone: { id: 'portal.status.impact.none', defaultMessage: 'No impact' },
+  impactMinor: { id: 'portal.status.impact.minor', defaultMessage: 'Minor impact' },
+  impactMajor: { id: 'portal.status.impact.major', defaultMessage: 'Major impact' },
+  impactCritical: { id: 'portal.status.impact.critical', defaultMessage: 'Critical impact' },
+})
+const M = STATUS_EMAIL_MESSAGES
 
 export type IncidentImpact = 'none' | 'minor' | 'major' | 'critical'
 
@@ -24,6 +63,7 @@ interface StatusIncidentPublishedEmailProps {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 const impactColors: Record<IncidentImpact, string> = {
@@ -33,12 +73,12 @@ const impactColors: Record<IncidentImpact, string> = {
   critical: '#ef4444',
 }
 
-const impactLabels: Record<IncidentImpact, string> = {
-  none: 'No impact',
-  minor: 'Minor impact',
-  major: 'Major impact',
-  critical: 'Critical impact',
-}
+const impactLabels = {
+  none: M.impactNone,
+  minor: M.impactMinor,
+  major: M.impactMajor,
+  critical: M.impactCritical,
+} as const
 
 export function StatusIncidentPublishedEmail({
   workspaceName,
@@ -51,7 +91,9 @@ export function StatusIncidentPublishedEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: StatusIncidentPublishedEmailProps) {
+  const { t } = i18n
   const accentColor = impactColors[impact]
 
   return (
@@ -59,10 +101,11 @@ export function StatusIncidentPublishedEmail({
       preview={`${incidentTitle} (${statusLabel})`}
       logoUrl={logoUrl}
       logoAlt={workspaceName}
+      i18n={i18n}
     >
       {/* Content */}
-      <Heading style={typography.h1}>New incident reported</Heading>
-      <Text style={typography.text}>{workspaceName} just posted an update to its status page.</Text>
+      <Heading style={typography.h1}>{t(M.incidentHeading)}</Heading>
+      <Text style={typography.text}>{t(M.incidentBody, { workspace: workspaceName })}</Text>
 
       {/* Impact bar */}
       <Section
@@ -83,7 +126,7 @@ export function StatusIncidentPublishedEmail({
             marginBottom: '0',
           }}
         >
-          {impactLabels[impact]} &middot; {statusLabel}
+          {t(impactLabels[impact])} &middot; {statusLabel}
         </Text>
       </Section>
 
@@ -125,7 +168,7 @@ export function StatusIncidentPublishedEmail({
               marginBottom: '8px',
             }}
           >
-            Affected services
+            {t(M.affected)}
           </Text>
           {affectedComponents.map((component) => (
             <Text
@@ -141,16 +184,17 @@ export function StatusIncidentPublishedEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={incidentUrl}>
-          View live status
+          {t(M.viewLive)}
         </Button>
       </Section>
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you're subscribed to status updates."
+        reason={t(M.reason)}
         unsubscribeUrl={unsubscribeUrl}
-        unsubscribeLabel="Unsubscribe from status updates"
+        unsubscribeLabel={t(M.unsubscribe)}
         preferencesUrl={preferencesUrl}
+        i18n={i18n}
       />
     </EmailLayout>
   )

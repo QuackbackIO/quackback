@@ -201,6 +201,9 @@ export interface TicketEmailConfig {
   closedGeneric?: boolean
   clockLabel?: string
   dueLabel?: string
+  /** SLA kinds: the clock and due time, for labels in the reader's language. */
+  clock?: string
+  dueAt?: string
   /** Ticket From (resolveTicketSender result, sender-resolver.ts); absent = EMAIL_FROM. */
   from?: string
   /** The resolved address's sender name (requester mail only); used only while

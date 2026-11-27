@@ -39,6 +39,7 @@ import {
 } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { randomUUID } from 'node:crypto'
 import { agentReplyDisplayName, assembleOutboundThreading } from '@quackback/email'
+import { recipientEmailLocale } from '@/lib/server/email/email-locale'
 import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
 import type { EmailAttachment } from '@quackback/email'
 import { getChannelDescriptor } from '@/lib/shared/channels'
@@ -360,8 +361,9 @@ export async function notifyVisitorMessage(opts: {
           const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
           return to ? [{ ...t, to }] : []
         })
-        .map((t) =>
+        .map(async (t) =>
           mailContact(sendConversationMessageEmail, t.to, {
+            i18n: await recipientEmailLocale({ principalId: t.principalId }),
             direction: 'visitor_message',
             senderName: opts.authorName,
             messagePreview: body,
@@ -514,8 +516,10 @@ export async function sendVisitorConversationEmail(opts: {
   // every channel: a widget or messenger reply that reaches the customer's inbox
   // is still a person answering them, and an unnamed address reads as a robot.
   const resolved = await resolveConversationSender(opts.conversationId)
+  // The visitor's language; the reply itself stays as the agent wrote it.
+  const i18n = await recipientEmailLocale({ principalId: opts.visitorPrincipalId })
   const asAgent = (sendsAs: string) =>
-    opts.senderIsTeam ? sendsAs : agentReplyDisplayName(opts.senderName, sendsAs)
+    opts.senderIsTeam ? sendsAs : agentReplyDisplayName(opts.senderName, sendsAs, i18n)
   const from = senderFrom(resolved, opts.ctx.workspaceName, asAgent)
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const resolvedBody = await resolvedMessageBody(opts.content, opts.contentJson, opts.attachments)
@@ -527,6 +531,7 @@ export async function sendVisitorConversationEmail(opts: {
     sendWithRetry(opts.conversationId, () =>
       sendConversationMessageEmail({
         to: opts.recipient,
+        i18n,
         direction: opts.direction,
         senderName: opts.senderName,
         senderIsTeam: opts.senderIsTeam,

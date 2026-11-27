@@ -35,8 +35,15 @@ export async function sendPasswordResetLink(user: { id: string }, url: string): 
   const { db } = await import('@/lib/server/db')
   const settings = await db.query.settings.findFirst({ columns: { name: true, logoKey: true } })
   const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
+  // A request email: the person's own language, then the browser that asked.
+  const { recipientEmailLocale, requestAcceptLanguage } =
+    await import('@/lib/server/email/email-locale')
   await sendPasswordResetEmail({
     to,
+    i18n: await recipientEmailLocale(
+      { userId: user.id },
+      { acceptLanguage: await requestAcceptLanguage() }
+    ),
     resetLink: url,
     logoUrl,
     workspaceName: settings?.name ?? undefined,
