@@ -99,10 +99,13 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
           // translated there; the builder cross-links matching entities by id.
           const perLocale: LocaleSitemapEntry[] = []
           const languages = { main: defaultLocale, additional: additionalLocales }
+          // An article is listed wherever its own page is canonical, even when
+          // its collection's page is canonical in another language.
+          const allCategories = await listPublicCategories()
           for (const locale of [defaultLocale, ...additionalLocales]) {
             const categories = await listPublicCategoriesWithVersionIn(locale, languages)
             const articlesByCategory = await Promise.all(
-              categories.map(async (cat) => ({
+              allCategories.map(async (cat) => ({
                 categorySlug: cat.slug,
                 articles: await listPublicArticlesForCategoryWithVersionIn(
                   cat.id,

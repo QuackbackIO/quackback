@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
   articles: [] as unknown[],
   visibility: 'public' as 'public' | 'private',
   noSettings: false,
+  additional: [] as string[],
+  localeArticles: {} as Record<string, unknown[]>,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -35,7 +37,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
     return { access: { visibility: state.visibility } }
   },
   getHelpCenterConfig: async () => ({
-    locales: { default: 'en', additional: [] },
+    locales: { default: 'en', additional: state.additional },
     seo: { indexable: true },
     domain: { domain: null, verifiedAt: null },
   }),
@@ -52,7 +54,8 @@ vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
 
 vi.mock('@/lib/server/domains/help-center/help-center-locale.query', () => ({
   listPublicCategoriesWithVersionIn: async () => [],
-  listPublicArticlesForCategoryWithVersionIn: async () => [],
+  listPublicArticlesForCategoryWithVersionIn: async (_categoryId: string, locale: string) =>
+    state.localeArticles[locale] ?? [],
 }))
 
 import { Route } from '../hc/sitemap[.]xml'
@@ -70,6 +73,19 @@ async function sitemapLocs(requestUrl: string): Promise<string[]> {
 describe('help center sitemap origin', () => {
   beforeEach(() => {
     state.articles = []
+    state.additional = []
+    state.localeArticles = {}
+  })
+
+  it("lists an article on its own language's page even when its collection's page is canonical in another language", async () => {
+    state.origins = allOnPrimary('https://feedback.example.com')
+    state.additional = ['de']
+    state.localeArticles = {
+      en: [{ id: 'a1', urlId: 7, slug: 'reset', publishedAt: new Date('2026-01-01') }],
+    }
+    expect(await sitemapLocs('http://feedback.example.com/hc/sitemap.xml')).toContain(
+      'https://feedback.example.com/hc/en/articles/7-reset'
+    )
   })
 
   it('lists https URLs when the request reaches the app over http behind a proxy', async () => {
