@@ -13,8 +13,14 @@ import { sendToHost } from '@/lib/client/widget-bridge'
 
 installInMemoryLocalStorage()
 
-vi.mock('@/lib/client/widget-bridge', () => ({ sendToHost: vi.fn() }))
-vi.mock('@/lib/client/widget-frame', () => ({ frameHasHost: () => true }))
+vi.mock('@/lib/client/widget-bridge', () => ({
+  sendToHost: vi.fn(),
+  hostOriginIsOpaque: () => false,
+}))
+vi.mock('@/lib/client/widget-frame', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/widget-frame')>()),
+  frameHasHost: () => true,
+}))
 vi.mock('@/lib/client/auth-client', () => ({
   authClient: { signIn: { anonymous: vi.fn().mockResolvedValue({ data: null, error: null }) } },
 }))
