@@ -39,6 +39,8 @@ export function createWorkspaceDb(slot: WorkspaceSlot, connectionString: string)
     max: 2,
     idle_timeout: 10,
     connect_timeout: 15,
+    // No runtime type lookup on a second connection (see packages/db client.ts).
+    fetch_types: false,
     onnotice: () => {},
   })
 

@@ -22,18 +22,48 @@ export type WidgetOpenPayload = {
   entryId?: string
   postId?: string
   articleId?: string
+  conversationId?: string
 }
 
 export type WidgetOpenCommand =
   | { type: 'new-post'; title?: string; body?: string; boardSlug?: string }
+  | { type: 'feedback' }
   | { type: 'post'; postId: string }
   | { type: 'article'; articleId: string } // slug or `article_` TypeID (`kb_article_` still accepted)
   | { type: 'changelog'; entryId?: string }
   | { type: 'help'; query?: string }
-  | { type: 'messenger'; body?: string }
+  | {
+      type: 'messenger'
+      body?: string
+      /** One conversation to open, with the composer focused. */
+      conversationId?: string
+      /** The tab that owns the thread when Messages is off. */
+      from?: 'tickets'
+    }
   | { type: 'tickets' }
   | { type: 'messages' }
   | { type: 'home' }
+
+/**
+ * Whether the messenger puts the cursor in its composer on mount: a new
+ * thread, or the conversation an open asked to focus. Never on a phone-sized
+ * host, where the keyboard would cover the thread.
+ */
+export function autofocusesComposer(
+  target: string | null | undefined,
+  hostIsMobile: boolean,
+  focusConversationId: string | undefined
+): boolean {
+  if (hostIsMobile || !target) return false
+  return target === 'new' || target === focusConversationId
+}
+
+/** A conversation TypeID from an open payload, or undefined. */
+function conversationRef(value: unknown): string | undefined {
+  return typeof value === 'string' && /^conversation_[0-9a-z]{1,64}$/.test(value)
+    ? value
+    : undefined
+}
 
 /**
  * Map an SDK `open(...)` payload to an iframe command. Unknown or unauthorized
@@ -62,13 +92,25 @@ export function resolveOpenCommand(
         body: emptyToUndef(opts.body),
         boardSlug: emptyToUndef(opts.board),
       }
+    case 'feedback':
+      return tabs.feedback ? { type: 'feedback' } : null
     case 'changelog':
       if (!tabs.changelog) return null
       return { type: 'changelog', entryId: emptyToUndef(opts.entryId) }
     case 'help':
       if (!tabs.help) return null
       return { type: 'help', query: emptyToUndef(opts.query) }
-    case 'messages':
+    case 'messages': {
+      // One conversation, like the `?c=` deep link: Tickets owns the thread
+      // when Messages is off. Navigation only; the thread checks access.
+      const conversationId = conversationRef(opts.conversationId)
+      if (conversationId) {
+        if (tabs.messages) return { type: 'messenger', conversationId }
+        if (tabs.tickets) return { type: 'messenger', conversationId, from: 'tickets' }
+        return null
+      }
+      return tabs.messages ? { type: 'messenger', body: emptyToUndef(opts.body?.trim()) } : null
+    }
     case 'chat':
     case 'live-chat':
       return tabs.messages ? { type: 'messenger', body: emptyToUndef(opts.body?.trim()) } : null

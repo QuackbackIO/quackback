@@ -48,6 +48,12 @@ export interface CreateChangelogInput {
    */
   segmentIds?: SegmentId[]
   /**
+   * Whether the widget's "What's new" card above the launcher may announce
+   * this entry, when the workspace turns that card on. Defaults to true; off
+   * still counts the entry as unread and lists it in the widget's changelog.
+   */
+  announceOnLauncher?: boolean
+  /**
    * Whether publishing this entry should dispatch the subscriber
    * notification. Defaults to true; false stamps `notifiedAt` without
    * sending (the atomic-claim idempotence still applies — see
@@ -74,6 +80,8 @@ export interface UpdateChangelogInput {
   featuredImageUrl?: string | null
   /** See {@link CreateChangelogInput.segmentIds}. Replaces the existing list. */
   segmentIds?: SegmentId[]
+  /** See {@link CreateChangelogInput.announceOnLauncher}. */
+  announceOnLauncher?: boolean
   /** See {@link CreateChangelogInput.notify}. */
   notify?: boolean
 }
@@ -112,6 +120,8 @@ export interface ChangelogEntryWithDetails {
   featuredImageUrl: string | null
   /** Publish-notification segment targeting ([] = broadcast to everyone). */
   segmentIds: SegmentId[]
+  /** See {@link CreateChangelogInput.announceOnLauncher}. */
+  announceOnLauncher: boolean
   createdAt: Date
   updatedAt: Date
   /** Author information - only shown in admin views */
@@ -199,8 +209,16 @@ export interface PublicChangelogLinkedPost {
 /**
  * Public changelog list result
  */
+/** A listed public entry, with its announce choice for the widget's card.
+ *  The portal leaves the choice out of what it sends. */
+export interface PublicChangelogListEntry extends PublicChangelogEntry {
+  /** Whether the widget's "What's new" card above the launcher may announce
+   *  this entry. */
+  announceOnLauncher: boolean
+}
+
 export interface PublicChangelogListResult {
-  items: PublicChangelogEntry[]
+  items: PublicChangelogListEntry[]
   nextCursor: string | null
   hasMore: boolean
 }

@@ -160,6 +160,41 @@ describe('POST /api/widget/upload', () => {
     expect(await res.json()).toMatchObject({ error: 'Unauthorized' })
   })
 
+  // Request drops a Cookie header given to its constructor, so these set the
+  // headers the way an incoming browser request carries them.
+  function withHeaders(request: Request, headers: Record<string, string>): Request {
+    Object.defineProperty(request, 'headers', { value: new Headers(headers) })
+    return request
+  }
+
+  it('refuses a request carrying only a session cookie, without looking it up', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(validSession)
+    const res = await handleWidgetUpload({
+      request: withHeaders(makeRequest(mockImageFile('photo.jpg', 'image/jpeg')), {
+        cookie: 'better-auth.session_token=portal-cookie',
+      }),
+    })
+    expect(res.status).toBe(401)
+    expect(auth.api.getSession).not.toHaveBeenCalled()
+    expect(uploadObject).not.toHaveBeenCalled()
+    vi.mocked(auth.api.getSession).mockReset()
+  })
+
+  it('resolves the session from the Bearer token alone, never the cookie', async () => {
+    authAs()
+    await handleWidgetUpload({
+      request: withHeaders(makeRequest(mockImageFile('photo.jpg', 'image/jpeg')), {
+        authorization: 'Bearer widget-token',
+        cookie: 'better-auth.session_token=portal-cookie',
+      }),
+    })
+    const [{ headers }] = vi.mocked(auth.api.getSession).mock.calls[0] as unknown as [
+      { headers: Headers },
+    ]
+    expect(headers.get('authorization')).toBe('Bearer widget-token')
+    expect(headers.get('cookie')).toBeNull()
+  })
+
   it('returns 503 when S3 is not configured', async () => {
     authAs()
     vi.mocked(isS3Usable).mockReturnValue(false)

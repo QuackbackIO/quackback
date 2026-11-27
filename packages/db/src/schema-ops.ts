@@ -172,7 +172,7 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     concurrent: true,
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_subject_trgm_idx ON conversations USING gin (subject gin_trgm_ops)',
   },
-  // Ticket due dates (0324). The inbox Due date sort reads
+  // Ticket due dates (0325). The inbox Due date sort reads
   // tickets_due_at_id_idx (due_at ASC NULLS LAST, id ASC is the btree default
   // order), and the ticket-due sweep, which runs every minute, and its deadline
   // provider read the partial tickets_due_alert_pending_idx: open, live tickets
