@@ -23,7 +23,7 @@ export const Route = createFileRoute('/_portal/hc')({
     // these pages read them with the page.
     const [messages] = await Promise.all([
       seedAreaMessages(
-        hcPathLocale(location.pathname) ?? context.acceptLanguageLocale ?? DEFAULT_LOCALE,
+        hcPathLocale(location?.pathname ?? '') ?? context.acceptLanguageLocale ?? DEFAULT_LOCALE,
         'helpCenter'
       ),
       typeof window === 'undefined' ? setPublicDocumentCacheHeaders() : undefined,

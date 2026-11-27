@@ -138,7 +138,7 @@ export const Route = createFileRoute('/_portal')({
     const permissionKeysPromise = markHandled(
       isTeamMember(userRole) ? getMyPortalPermissionsFn() : Promise.resolve([] as PermissionKey[])
     )
-    const pageLocale = hcPathLocale(location.pathname)
+    const pageLocale = hcPathLocale(location?.pathname ?? '')
     const portalIntlPromise = markHandled(loadPortalIntl(pageLocale))
     // The header's notification bell (signed-in visitors) shows the unread
     // count on every portal page. Loaded with the page, the count is there at
