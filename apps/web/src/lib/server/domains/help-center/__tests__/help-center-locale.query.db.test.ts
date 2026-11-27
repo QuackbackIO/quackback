@@ -24,12 +24,13 @@ const {
   listPublicCategoriesWithFallback,
   listPublicCategoriesWithVersionIn,
   listPublicArticlesForCategoryWithFallback,
-  listPublicArticlesForCategoryWithVersionIn,
+  articlesWithVersionIn,
   listPublicArticlesForCategoriesWithFallback,
   getPublicArticleBySlugForLocale,
   getPublicCategoryBySlugForLocale,
   localizeRelatedArticles,
 } = await import('../help-center-locale.query')
+const { listPublicArticles } = await import('../help-center.article.query')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -210,6 +211,10 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
 
   describe('for the sitemap', () => {
     const languages = { main: 'en', additional: ['fr', 'de'] }
+    const publicArticles = async () =>
+      (await listPublicArticles({ limit: 50000 })).items.sort((a, b) =>
+        a.title.localeCompare(b.title)
+      )
 
     it('lists only articles with a real version in the language', async () => {
       const cat = await seedCategory('Billing')
@@ -219,9 +224,9 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
       await translateArticle(invoices.id, 'fr', 'Factures')
       await translateArticle(refunds.id, 'fr', 'Remboursements', 'draft')
 
-      const listed = await listPublicArticlesForCategoryWithVersionIn(cat, 'fr', languages)
+      const listed = await articlesWithVersionIn(await publicArticles(), 'fr', languages)
 
-      expect(listed.map((a) => a.title)).toEqual(['Factures'])
+      expect(listed.map((a) => a.title)).toEqual(['Invoices'])
     })
 
     it('lists a collection only with a version in the language and an article that has one', async () => {
@@ -250,7 +255,7 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
         ['Konto']
       )
       expect(
-        (await listPublicArticlesForCategoryWithVersionIn(cat, 'de', languages)).map((a) => a.title)
+        (await articlesWithVersionIn(await publicArticles(), 'de', languages)).map((a) => a.title)
       ).toEqual(['Passwort'])
       expect(await listPublicCategoriesWithVersionIn('en', languages)).toEqual([])
     })
@@ -281,7 +286,7 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
         ['Cuenta']
       )
       expect(
-        (await listPublicArticlesForCategoryWithVersionIn(cat, 'en', languages)).map((a) => a.title)
+        (await articlesWithVersionIn(await publicArticles(), 'en', languages)).map((a) => a.title)
       ).toEqual(['Contraseña'])
       expect(await listPublicCategoriesWithVersionIn('fr', languages)).toEqual([])
     })

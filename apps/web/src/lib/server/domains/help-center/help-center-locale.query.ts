@@ -14,7 +14,7 @@
  * can name that language. A translation never makes visible an item the main
  * reads hide.
  *
- * The sitemap reads through the `...WithVersionIn` lists instead, which keep
+ * The sitemap reads through the `...WithVersionIn` functions instead, which keep
  * only the items whose canonical page is in the language: a real version
  * there (rule 1 or 2), or, for the main language, own text in a language the
  * help center does not offer. In an extra language a collection must also
@@ -254,23 +254,32 @@ export async function listPublicArticlesForCategoryWithFallback(
   return articles.map((a) => articleIn(a, translations, locale))
 }
 
-/** The public articles in a collection whose canonical page is in `locale` (see the module doc), for the sitemap. */
-export async function listPublicArticlesForCategoryWithVersionIn(
-  categoryId: string,
+/**
+ * The articles among `articles` whose canonical page is in `locale` (see the
+ * module doc), for the sitemap. One query reads which articles have a
+ * published translation in `locale`, however many articles there are.
+ */
+export async function articlesWithVersionIn<T extends { id: string; locale: string }>(
+  articles: readonly T[],
   locale: string,
-  languages: OfferedLanguages,
-  viewer: Actor = ANONYMOUS_ACTOR
-) {
-  const articles = await listPublicArticlesForCategory(categoryId, viewer)
-  const translations = await publishedArticleTranslations(articles, locale)
-  return articles
-    .filter(
-      (a) =>
-        a.locale === locale ||
-        translations.has(a.id) ||
-        canonicalWithoutVersion(a.locale, locale, languages)
+  languages: OfferedLanguages
+): Promise<T[]> {
+  const rows = await db
+    .select({ articleId: helpCenterArticleTranslations.articleId })
+    .from(helpCenterArticleTranslations)
+    .where(
+      and(
+        eq(helpCenterArticleTranslations.locale, locale),
+        eq(helpCenterArticleTranslations.status, 'published')
+      )
     )
-    .map((a) => articleIn(a, translations, locale))
+  const translated = new Set<string>(rows.map((r) => r.articleId))
+  return articles.filter(
+    (a) =>
+      a.locale === locale ||
+      translated.has(a.id) ||
+      canonicalWithoutVersion(a.locale, locale, languages)
+  )
 }
 
 /**

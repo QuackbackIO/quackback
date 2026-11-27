@@ -2,10 +2,10 @@
 -- The language of a help center collection's own name and description. A
 -- collection whose main-language version moved to another language keeps
 -- the language its text is in, so a reader sees that language named next to
--- it. Until now a collection row held only main-language text, so every
--- existing collection is labelled with the workspace's main language: the
--- one in settings.language_config, else the help center's default language,
--- else English. A value that does not read as a supported language falls
+-- it. A collection that exists when the column is added holds
+-- main-language text, so it is labelled with the workspace's main language:
+-- the one in settings.language_config, else the help center's default
+-- language, else English. A value that does not read as a supported language falls
 -- through to the next, and settings that are not valid JSON count as unset.
 -- @replay: guarded-by kb_categories.locale not existing yet; once it exists the whole block is skipped
 DO $$
