@@ -56,7 +56,7 @@ afterEach(() => {
 const wire = () =>
   resendSend.mock.calls.at(-1)?.[0] as { subject: string; html: string; to: unknown }
 
-const rows = [{ label: 'Boards', used: 5, cap: 1, effect: '4 boards become read-only' }]
+const rows = [{ key: 'maxBoards' as const, used: 5, cap: 1 }]
 
 const base: Omit<PlanLimitsEmailProps, 'kind'> = {
   workspaceName: 'Acme Support',
@@ -65,7 +65,7 @@ const base: Omit<PlanLimitsEmailProps, 'kind'> = {
   deadline: 'Nov 24',
   deadlineHeading: 'Tue, Nov 24',
   rows,
-  pausingFeatures: ['Webhooks'],
+  pausingFeatures: ['webhooks'],
   limitsUrl: 'https://app.example.com/admin/settings/billing/limits',
   planUrl: 'https://app.example.com/admin/settings/billing',
 }

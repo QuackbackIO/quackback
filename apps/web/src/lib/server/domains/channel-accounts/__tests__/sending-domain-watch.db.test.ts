@@ -457,6 +457,12 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
     it('rings once and emails the managers, naming the record that failed', async () => {
       const admin = await seedPerson('admin')
       const member = await seedPerson('member')
+      // The email is in the manager's own language; the bell stays English.
+      const [adminRow] = await testDb.select().from(principal).where(eq(principal.id, admin))
+      await testDb
+        .update(user)
+        .set({ preferredLanguage: 'fr' })
+        .where(eq(user.id, adminRow!.userId!))
       const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
       publish('a.example', row.dnsRecords)
       providerState.set('a.example', verifiedIdentity('a.example'))
@@ -489,6 +495,7 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       expect(toAdmin[0][0]).toMatchObject({
         domain: 'a.example',
         record: { purpose: 'mail-from', type: 'MX', name: 'qb-bounce.a.example', state: 'missing' },
+        i18n: expect.objectContaining({ lang: 'fr' }),
       })
 
       // The next sweep finds it already demoted, and says nothing again.

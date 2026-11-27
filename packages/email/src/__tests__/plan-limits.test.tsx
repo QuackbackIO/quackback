@@ -3,7 +3,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { render } from '@react-email/components'
-import { PlanLimitsEmail, featureList, planLimitsSubject } from '../templates/plan-limits'
+import {
+  PlanLimitsEmail,
+  featureList,
+  planLimitsSubject,
+  type PlanLimitsEmailFeatureKey,
+} from '../templates/plan-limits'
 import {
   EMAIL_BILLABLE,
   EMAIL_TENANTED,
@@ -29,15 +34,10 @@ const base = {
   deadline: 'Nov 24',
   deadlineHeading: 'Tue, Nov 24',
   rows: [
-    { label: 'Boards', used: 5, cap: 1, effect: '4 boards become read-only' },
-    {
-      label: 'Team seats',
-      used: 3,
-      cap: 1,
-      effect: '2 teammates lose admin access until a seat frees up',
-    },
+    { key: 'maxBoards' as const, used: 5, cap: 1 },
+    { key: 'maxTeamSeats' as const, used: 3, cap: 1 },
   ],
-  pausingFeatures: ['Webhooks', 'Custom domain'],
+  pausingFeatures: ['webhooks' as const, 'customDomain' as const],
   limitsUrl: 'https://app.example.com/admin/settings/billing/limits',
   planUrl: 'https://app.example.com/admin/settings/billing',
 }
@@ -98,16 +98,21 @@ describe('PlanLimitsEmail', () => {
     expect(text).toContain('Compare plans')
   })
 
-  it('lists one, two and three features as a sentence', () => {
-    expect(featureList(['Webhooks'])).toBe('Webhooks')
-    expect(featureList(['Webhooks', 'Custom domain'])).toBe('Webhooks and your custom domain')
-    expect(featureList(['Webhooks', 'Workflows', 'Integrations'])).toBe(
-      'Webhooks, workflows and integrations'
+  it('lists one, two and three features as a sentence', async () => {
+    const line = async (pausingFeatures: PlanLimitsEmailFeatureKey[]) =>
+      visibleText(await render(PlanLimitsEmail({ ...base, kind: 'start', pausingFeatures })))
+    expect(featureList(['webhooks'])).toBe('webhooks')
+    expect(featureList(['webhooks', 'customDomain'])).toBe('webhooks and your custom domain')
+    expect(featureList(['webhooks', 'workflows', 'integrations'])).toBe(
+      'webhooks, workflows and integrations'
     )
-    expect(featureList(['Workflows', 'AI assistant', 'Custom CSS'])).toBe(
-      'Workflows, AI assistant and your custom CSS'
+    expect(featureList(['workflows', 'aiAssistant', 'customCss'])).toBe(
+      'workflows, AI assistant and your custom CSS'
     )
-    expect(featureList(['Custom domain'])).toBe('Your custom domain')
+    expect(await line(['customDomain'])).toContain('Your custom domain pauses after Nov 24.')
+    expect(await line(['webhooks', 'workflows', 'integrations'])).toContain(
+      'Webhooks, workflows and integrations pause after Nov 24.'
+    )
   })
 
   it('words the three subjects', () => {

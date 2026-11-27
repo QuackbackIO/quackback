@@ -130,6 +130,21 @@ describe.skipIf(!fixture.available)('domain ownership notices (real DB, rolled b
     })
   })
 
+  it("writes each manager's email, and its date, in their language, and keeps the bell in English", async () => {
+    const admin = await seedPerson('admin')
+    const [row] = await testDb.select().from(principal).where(eq(principal.id, admin))
+    await testDb.update(user).set({ preferredLanguage: 'de' }).where(eq(user.id, row!.userId!))
+
+    await notifyDomainOwnershipMissing(domain, new Date('2026-11-08T06:00:00Z'), { ring: true })
+
+    expect(sent.emails).toHaveLength(1)
+    const email = sent.emails[0] as { deadline: string; i18n: { lang: string } }
+    expect(email.i18n.lang).toBe('de')
+    expect(email.deadline).toBe('8. November 2026')
+    const [bell] = await bellsFor([admin])
+    expect(bell?.title).toBe('acme.com needs attention')
+  })
+
   it('says the warning was not delivered when every email failed, so it is tried again', async () => {
     await seedPerson('admin')
     sent.fail = true

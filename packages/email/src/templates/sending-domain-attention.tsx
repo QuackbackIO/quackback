@@ -1,6 +1,82 @@
 import { Heading, Link, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
 import { typography, utils } from './shared-styles'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const SENDING_DOMAIN_ATTENTION_MESSAGES = defineEmailMessages({
+  title: {
+    id: 'email.sendingDomainAttention.title',
+    defaultMessage: 'Sending from {domain} needs attention',
+  },
+  ownership: {
+    id: 'email.sendingDomainAttention.ownership',
+    defaultMessage: 'The verification record',
+  },
+  dkim: { id: 'email.sendingDomainAttention.dkim', defaultMessage: 'The DKIM record' },
+  mailFrom: {
+    id: 'email.sendingDomainAttention.mailFrom',
+    defaultMessage: 'The return path record',
+  },
+  providerStopped: {
+    id: 'email.sendingDomainAttention.providerStopped',
+    defaultMessage: 'The email provider stopped confirming {domain}.',
+  },
+  signingKey: {
+    id: 'email.sendingDomainAttention.signingKey',
+    defaultMessage: "The signing key for {domain} isn't working.",
+  },
+  proxied: {
+    id: 'email.sendingDomainAttention.proxied',
+    defaultMessage: '{purpose} ({type} {name}) is proxied. Turn off any proxy for it.',
+  },
+  truncated: {
+    id: 'email.sendingDomainAttention.truncated',
+    defaultMessage: '{purpose} ({type} {name}) was cut short by your DNS host.',
+  },
+  quoted: {
+    id: 'email.sendingDomainAttention.quoted',
+    defaultMessage: '{purpose} ({type} {name}) has quote marks saved in its value.',
+  },
+  differentSeen: {
+    id: 'email.sendingDomainAttention.differentSeen',
+    defaultMessage: '{purpose} ({type} {name}) has a different value: {seen}.',
+  },
+  different: {
+    id: 'email.sendingDomainAttention.different',
+    defaultMessage: '{purpose} ({type} {name}) has a different value.',
+  },
+  missing: {
+    id: 'email.sendingDomainAttention.missing',
+    defaultMessage: '{purpose} ({type} {name}) is missing.',
+  },
+  deadline: {
+    id: 'email.sendingDomainAttention.deadline',
+    defaultMessage: 'Add it back by {deadline} to keep sending from {domain}.',
+  },
+  untilFixed: {
+    id: 'email.sendingDomainAttention.untilFixed',
+    defaultMessage: "Until it's fixed, email from this domain comes from your default address.",
+  },
+  value: { id: 'email.sendingDomainAttention.value', defaultMessage: 'Value: {value}' },
+  openSettings: {
+    id: 'email.sendingDomainAttention.openSettings',
+    defaultMessage: 'Open email settings',
+  },
+  seeRecords: {
+    id: 'email.sendingDomainAttention.seeRecords',
+    defaultMessage: 'to see the records and check again.',
+  },
+  footer: {
+    id: 'email.sendingDomainAttention.footer',
+    defaultMessage: "You're receiving this because you manage email settings.",
+  },
+  footerNamed: {
+    id: 'email.sendingDomainAttention.footerNamed',
+    defaultMessage: "You're receiving this because you manage email settings for {workspace}.",
+  },
+})
+
+const M = SENDING_DOMAIN_ATTENTION_MESSAGES
 
 /** The record whose check failed, as the settings page names it. */
 export interface SendingDomainAttentionRecord {
@@ -36,36 +112,50 @@ export interface SendingDomainAttentionEmailProps {
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
-const PURPOSE_LABEL: Record<SendingDomainAttentionRecord['purpose'], string> = {
-  ownership: 'verification record',
-  dkim: 'DKIM record',
-  'mail-from': 'return path record',
+const PURPOSE_LABEL = {
+  ownership: M.ownership,
+  dkim: M.dkim,
+  'mail-from': M.mailFrom,
+} as const satisfies Record<SendingDomainAttentionRecord['purpose'], unknown>
+
+/** The sending domain email's subject and heading. */
+export function sendingDomainAttentionTitle(
+  domain: string,
+  i18n: EmailLocale = ENGLISH_EMAIL
+): string {
+  return i18n.t(M.title, { domain })
 }
 
 /** One sentence naming the record and what is wrong with it. */
 export function sendingDomainProblem(
   domain: string,
-  record: SendingDomainAttentionProblem | null | undefined
+  record: SendingDomainAttentionProblem | null | undefined,
+  i18n: EmailLocale = ENGLISH_EMAIL
 ): string {
-  if (!record) return `The email provider stopped confirming ${domain}.`
-  if (record === 'signing-key') return `The signing key for ${domain} isn't working.`
-  const named = `The ${PURPOSE_LABEL[record.purpose]} (${record.type} ${record.name})`
-  if (record.state === 'proxied') return `${named} is proxied. Turn off any proxy for it.`
+  const { t } = i18n
+  if (!record) return t(M.providerStopped, { domain })
+  if (record === 'signing-key') return t(M.signingKey, { domain })
+  const named = { purpose: t(PURPOSE_LABEL[record.purpose]), type: record.type, name: record.name }
+  if (record.state === 'proxied') return t(M.proxied, named)
   if (record.state === 'mismatch') {
-    if (record.reason === 'truncated') return `${named} was cut short by your DNS host.`
-    if (record.reason === 'quoted') return `${named} has quote marks saved in its value.`
-    return record.seen
-      ? `${named} has a different value: ${record.seen}.`
-      : `${named} has a different value.`
+    if (record.reason === 'truncated') return t(M.truncated, named)
+    if (record.reason === 'quoted') return t(M.quoted, named)
+    return record.seen ? t(M.differentSeen, { ...named, seen: record.seen }) : t(M.different, named)
   }
-  return `${named} is missing.`
+  return t(M.missing, named)
 }
 
 /** The sentence giving the date a record has to be fixed by. */
-export function sendingDomainDeadline(domain: string, deadline: string): string {
-  return `Add it back by ${deadline} to keep sending from ${domain}.`
+export function sendingDomainDeadline(
+  domain: string,
+  deadline: string,
+  i18n: EmailLocale = ENGLISH_EMAIL
+): string {
+  return i18n.t(M.deadline, { deadline, domain })
 }
 
 /**
@@ -82,31 +172,30 @@ export function SendingDomainAttentionEmail({
   settingsUrl,
   workspaceName,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: SendingDomainAttentionEmailProps) {
-  const title = `Sending from ${domain} needs attention`
+  const { t } = i18n
+  const title = sendingDomainAttentionTitle(domain, i18n)
   return (
-    <EmailLayout preview={title} logoUrl={logoUrl}>
+    <EmailLayout preview={title} logoUrl={logoUrl} i18n={i18n}>
       <Heading style={typography.h1}>{title}</Heading>
-      <Text style={typography.text}>{sendingDomainProblem(domain, record)}</Text>
+      <Text style={typography.text}>{sendingDomainProblem(domain, record, i18n)}</Text>
       {record && record !== 'signing-key' && record.value ? (
-        <Text style={typography.text}>Value: {record.value}</Text>
+        <Text style={typography.text}>{t(M.value, { value: record.value })}</Text>
       ) : null}
       <Text style={typography.text}>
-        {deadline
-          ? sendingDomainDeadline(domain, deadline)
-          : "Until it's fixed, email from this domain comes from your default address."}
+        {deadline ? sendingDomainDeadline(domain, deadline, i18n) : t(M.untilFixed)}
       </Text>
       {settingsUrl ? (
         <Text style={typography.text}>
           <Link href={settingsUrl} style={utils.link}>
-            Open email settings
+            {t(M.openSettings)}
           </Link>{' '}
-          to see the records and check again.
+          {t(M.seeRecords)}
         </Text>
       ) : null}
       <TransactionalFooter>
-        You&apos;re receiving this because you manage email settings
-        {workspaceName ? ` for ${workspaceName}` : ''}.
+        {workspaceName ? t(M.footerNamed, { workspace: workspaceName }) : t(M.footer)}
       </TransactionalFooter>
     </EmailLayout>
   )

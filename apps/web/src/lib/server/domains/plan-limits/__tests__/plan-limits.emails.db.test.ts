@@ -242,7 +242,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     expect(sentKinds()).toEqual(['start'])
     const params = mail.sendPlanLimitsEmail.mock.calls[0][0] as {
       to: string
-      rows: { label: string; used: number; cap: number }[]
+      rows: { key: string; used: number; cap: number }[]
       limitsUrl: string | null
       deadline: string
     }
@@ -253,7 +253,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     )
     expect(params.deadline).not.toBe(deadlineText(new Date(view.graceEndsAt!), new Date()).deadline)
     // Other test files commit boards of their own, so the count is at least ours.
-    expect(params.rows).toEqual([expect.objectContaining({ label: 'Boards', cap: 1 })])
+    expect(params.rows).toEqual([expect.objectContaining({ key: 'maxBoards', cap: 1 })])
     expect(params.rows[0]!.used).toBeGreaterThanOrEqual(2)
     expect(params.limitsUrl).toBe('https://app.example.com/admin/settings/billing/limits')
     expect((await storedState())?.emailsSent).toEqual(['start'])

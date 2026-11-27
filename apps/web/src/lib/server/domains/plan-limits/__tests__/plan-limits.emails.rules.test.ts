@@ -4,7 +4,8 @@
  * stored email record is read back.
  */
 import { afterEach, describe, expect, it } from 'vitest'
-import { deadlineText, dueEmailKind, emailRows, pausingFeatureLabels } from '../plan-limits.emails'
+import { deadlineText, dueEmailKind, emailRows, pausingFeatureKeys } from '../plan-limits.emails'
+import { PLAN_FEATURE_LINKS } from '../plan-limits.features'
 import { parseEmailState } from '../plan-limits.email-state'
 import { PLAN_FEATURE_KEYS } from '../plan-limits.features'
 import { graceEndFor, planLimitsDeadlineDay, type PlanLimitsView } from '../plan-limits.rules'
@@ -50,6 +51,14 @@ describe('dueEmailKind', () => {
 })
 
 describe('deadlineText', () => {
+  it("writes the date in the reader's language", () => {
+    const at = new Date('2026-11-23T12:00:00.000Z')
+    expect(deadlineText(at, new Date(SINCE), 'de')).toEqual({
+      deadline: '23. Nov.',
+      deadlineHeading: 'Mo., 23. Nov.',
+    })
+  })
+
   const previousTz = process.env.TZ
   afterEach(() => {
     if (previousTz === undefined) delete process.env.TZ
@@ -102,26 +111,7 @@ describe('deadlineText', () => {
 })
 
 describe('emailRows', () => {
-  const effect = (key: string, used: number, cap: number) =>
-    emailRows(view({ issues: [{ key, used, cap }] as never }))[0]!.effect
-
-  it('reads every cap as a full sentence, singular and plural', () => {
-    expect(effect('maxStatusComponents', 4, 3)).toBe(
-      '1 status component is hidden from your status page'
-    )
-    expect(effect('maxStatusComponents', 6, 3)).toBe(
-      '3 status components are hidden from your status page'
-    )
-    expect(effect('maxCustomRoles', 2, 1)).toBe('1 custom role is locked')
-    expect(effect('maxSendingDomains', 3, 1)).toBe('2 sending domains are paused')
-    expect(effect('maxHelpCenterLocales', 2, 1)).toBe('1 help center language is locked')
-    expect(effect('maxBoards', 5, 1)).toBe('4 boards become read-only')
-    expect(effect('maxBoards', 2, 1)).toBe('1 board becomes read-only')
-    expect(effect('maxTeamSeats', 2, 1)).toBe('1 teammate loses admin access until a seat frees up')
-    expect(effect('maxTeamSeats', 4, 1)).toBe('3 teammates lose admin access until a seat frees up')
-  })
-
-  it('carries the label, usage and cap of each issue in order', () => {
+  it('carries the cap, usage and limit of each issue in order, for the email to word', () => {
     const rows = emailRows(
       view({
         issues: [
@@ -130,33 +120,19 @@ describe('emailRows', () => {
         ] as never,
       })
     )
-    expect(rows.map(({ label, used, cap }) => [label, used, cap])).toEqual([
-      ['Boards', 5, 1],
-      ['Team seats', 3, 1],
+    expect(rows).toEqual([
+      { key: 'maxBoards', used: 5, cap: 1 },
+      { key: 'maxTeamSeats', used: 3, cap: 1 },
     ])
   })
 })
 
-describe('pausingFeatureLabels', () => {
-  it('names every feature that can pause, so the email never lists a blank', () => {
+describe('pausingFeatureKeys', () => {
+  it('names every feature the Plan limits page names, so the email never drops one', () => {
     const issues = PLAN_FEATURE_KEYS.map((key) => ({ key, count: 1 }))
-    const labels = pausingFeatureLabels(view({ featureIssues: issues as never }))
-    // Each key the loaders count as set up has a name.
-    for (const key of [
-      'workflows',
-      'webhooks',
-      'integrations',
-      'sso',
-      'customDomain',
-      'customCss',
-      'aiAssistant',
-      'aiArticleTranslation',
-    ]) {
-      expect(
-        pausingFeatureLabels(view({ featureIssues: [{ key, count: 1 }] as never }))
-      ).toHaveLength(1)
-    }
-    for (const label of labels) expect(label.trim()).not.toBe('')
+    expect(pausingFeatureKeys(view({ featureIssues: issues as never })).sort()).toEqual(
+      Object.keys(PLAN_FEATURE_LINKS).sort()
+    )
   })
 })
 

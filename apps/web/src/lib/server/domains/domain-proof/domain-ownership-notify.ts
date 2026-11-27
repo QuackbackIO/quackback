@@ -34,7 +34,7 @@ type NotifiedDomain = Pick<Domain, 'name' | 'ownershipToken'>
 
 /** What the notice says beyond the domain and its record. */
 interface AttentionContent {
-  deadline?: string
+  deadline?: Date
   signInDomains?: string[]
 }
 
@@ -58,7 +58,8 @@ async function ring(
     body: domainAttentionMessage({
       domain: domain.name,
       recordName: recordOf(domain).name,
-      ...content,
+      deadline: content.deadline ? formatDeadline(content.deadline) : undefined,
+      signInDomains: content.signInDomains,
     }),
     metadata: { domain: domain.name, audience: 'admin' },
   })
@@ -77,16 +78,18 @@ async function emailManagers(
   return emailEachManager(
     managers,
     TYPE,
-    (to, { base, workspaceName }) =>
+    (to, { base, workspaceName, i18n }) =>
       sendDomainAttentionEmail({
         to,
         domain: domain.name,
         record: recordOf(domain),
-        ...content,
+        deadline: content.deadline ? formatDeadline(content.deadline, i18n.lang) : undefined,
+        signInDomains: content.signInDomains,
         settingsUrl: base
           ? `${base}/admin/settings/domains/${encodeURIComponent(domain.name)}`
           : null,
         workspaceName,
+        i18n,
       }),
     { logContext: { domain: domain.name }, message: 'domain attention email failed' }
   )
@@ -106,9 +109,8 @@ export async function notifyDomainOwnershipMissing(
   try {
     const managers = await sendingDomainManagers()
     if (managers.length === 0) return true
-    const by = formatDeadline(deadline)
-    if (opts.ring) await ring(managers, domain, `${domain.name} needs attention`, { deadline: by })
-    return await emailManagers(managers, domain, { deadline: by })
+    if (opts.ring) await ring(managers, domain, `${domain.name} needs attention`, { deadline })
+    return await emailManagers(managers, domain, { deadline })
   } catch (err) {
     log.warn({ err, domain: domain.name }, 'domain ownership warning notification failed')
     return false

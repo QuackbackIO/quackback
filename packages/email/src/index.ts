@@ -94,6 +94,7 @@ import {
 } from './templates/plan-limits'
 import {
   SendingDomainAttentionEmail,
+  sendingDomainAttentionTitle,
   type SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
 import { DomainAttentionEmail, domainAttentionTitle } from './templates/domain-attention'
@@ -1074,6 +1075,8 @@ interface SendSendingDomainAttentionParams {
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -1084,11 +1087,20 @@ interface SendSendingDomainAttentionParams {
 export async function sendSendingDomainAttentionEmail(
   params: SendSendingDomainAttentionParams
 ): Promise<EmailResult> {
-  const { to, domain, record, deadline, settingsUrl, workspaceName, logoUrl } = params
+  const {
+    to,
+    domain,
+    record,
+    deadline,
+    settingsUrl,
+    workspaceName,
+    logoUrl,
+    i18n = ENGLISH_EMAIL,
+  } = params
   log.debug('sending sending-domain attention alert')
   return sendEmail({
     to,
-    subject: `Sending from ${domain} needs attention`,
+    subject: sendingDomainAttentionTitle(domain, i18n),
     react: SendingDomainAttentionEmail({
       domain,
       record,
@@ -1096,6 +1108,7 @@ export async function sendSendingDomainAttentionEmail(
       settingsUrl,
       workspaceName,
       logoUrl,
+      i18n,
     }),
     emailType: 'SendingDomainAttentionEmail',
     preview: { domain },
@@ -1126,7 +1139,8 @@ export async function sendPlanLimitsEmail(params: SendPlanLimitsParams): Promise
       props.kind,
       props.workspaceName,
       props.planName,
-      props.rows.length === 0 ? props.deadline : undefined
+      props.rows.length === 0 ? props.deadline : undefined,
+      props.i18n
     ),
     react: PlanLimitsEmail(props),
     emailType: 'PlanLimitsEmail',
@@ -1139,6 +1153,8 @@ export type {
   PlanLimitsEmailKind,
   PlanLimitsEmailProps,
   PlanLimitsEmailRow,
+  PlanLimitsEmailIssueKey,
+  PlanLimitsEmailFeatureKey,
 } from './templates/plan-limits'
 
 // ============================================================================
@@ -1157,6 +1173,8 @@ interface SendDomainAttentionParams {
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -1167,12 +1185,21 @@ interface SendDomainAttentionParams {
 export async function sendDomainAttentionEmail(
   params: SendDomainAttentionParams
 ): Promise<EmailResult> {
-  const { to, domain, record, deadline, signInDomains, settingsUrl, workspaceName, logoUrl } =
-    params
+  const {
+    to,
+    domain,
+    record,
+    deadline,
+    signInDomains,
+    settingsUrl,
+    workspaceName,
+    logoUrl,
+    i18n = ENGLISH_EMAIL,
+  } = params
   log.debug('sending domain attention alert')
   return sendEmail({
     to,
-    subject: domainAttentionTitle(domain, !!signInDomains),
+    subject: domainAttentionTitle(domain, !!signInDomains, i18n),
     react: DomainAttentionEmail({
       domain,
       record,
@@ -1181,6 +1208,7 @@ export async function sendDomainAttentionEmail(
       settingsUrl,
       workspaceName,
       logoUrl,
+      i18n,
     }),
     emailType: 'DomainAttentionEmail',
     preview: { domain },
@@ -2385,6 +2413,7 @@ export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export {
   SendingDomainAttentionEmail,
+  sendingDomainAttentionTitle,
   sendingDomainDeadline,
   sendingDomainProblem,
 } from './templates/sending-domain-attention'

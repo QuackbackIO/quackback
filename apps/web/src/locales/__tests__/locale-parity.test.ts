@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { icuArgumentNames } from './icu-arguments'
 
 // Derive the catalog registry from the JSON files on disk rather than a
 // hand-maintained import list — adding a locale is then just dropping its
@@ -20,16 +21,9 @@ const enKeys = Object.keys(en)
 const enKeySet = new Set(enKeys)
 const localesToCheck = SUPPORTED_LOCALES.filter((l) => l !== DEFAULT_LOCALE)
 
-// Collect the top-level ICU argument names in a message: `{name}` -> "name",
-// `{count, plural, ...}` -> "count". Branch keywords (plural/one/other) and the
-// `#` inside a branch are not arguments, so they are intentionally excluded.
-function icuArgNames(message: string): Set<string> {
-  const names = new Set<string>()
-  const re = /\{\s*([a-zA-Z_][\w]*)\b/g
-  let match: RegExpExecArray | null
-  while ((match = re.exec(message)) !== null) names.add(match[1])
-  return names
-}
+// The ICU argument names in a message, including those inside a plural's
+// branches; branch keywords, a branch's own words and `#` are not arguments.
+const icuArgNames = (message: string) => icuArgumentNames(message)
 
 // English strings a locale legitimately keeps as-is: cognates ("Status" in
 // German), loanwords the catalog uses on purpose ("Roadmap" in pt-br) and
@@ -229,6 +223,8 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   'zh-tw': [],
   nl: [
     'Chat',
+    'webhooks',
+    'workflows',
     '{name} (Team)',
     'Incident: {title}',
     'Accent',
