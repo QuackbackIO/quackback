@@ -51,8 +51,8 @@ vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
 }))
 
 vi.mock('@/lib/server/domains/help-center/help-center-locale.query', () => ({
-  listPublicCategoriesForLocale: async () => [],
-  listPublicArticlesForCategoryLocale: async () => [],
+  listPublicCategoriesWithVersionIn: async () => [],
+  listPublicArticlesForCategoryWithVersionIn: async () => [],
 }))
 
 import { Route } from '../hc/sitemap[.]xml'

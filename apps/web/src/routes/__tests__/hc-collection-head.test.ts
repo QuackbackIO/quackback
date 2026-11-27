@@ -26,7 +26,7 @@ const category = {
 
 function headFor(cat: Record<string, unknown>) {
   return head({
-    loaderData: { category: cat },
+    loaderData: { category: cat, canonicalLocale: 'en' },
     params: { locale: 'en', idSlug: '4-boards-portal' },
     matches: [
       {
@@ -71,7 +71,7 @@ describe('help center collection head', () => {
 
   it('omits the canonical and og:url when the request has no base URL', () => {
     const { meta, links } = head({
-      loaderData: { category },
+      loaderData: { category, canonicalLocale: 'en' },
       params: { locale: 'en', idSlug: '4-boards-portal' },
       matches: [{ routeId: '/_portal', loaderData: { workspaceName: 'Acme' }, context: {} }],
     })
