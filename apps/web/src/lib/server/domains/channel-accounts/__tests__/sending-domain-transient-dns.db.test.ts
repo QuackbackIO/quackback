@@ -285,6 +285,20 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
     expect(txtLookups).not.toContain(`system ${proofName(row)}`)
   })
 
+  it("dates the warning email in the manager's language, and the bell in English", async () => {
+    const [row0] = await testDb.select().from(principal).where(eq(principal.id, admin))
+    await testDb.update(user).set({ preferredLanguage: 'de' }).where(eq(user.id, row0!.userId!))
+    const row = await verifiedDomain()
+    zone.delete(proofName(row))
+
+    await sweepSendingDomains()
+    const email = sentAttention.mock.calls[0][0] as { deadline: string; i18n: { lang: string } }
+    expect(email.i18n.lang).toBe('de')
+    expect(email.deadline).toMatch(/^\d{1,2}\. \p{L}+ \d{4}$/u)
+    const [bell] = await attentionBells(admin)
+    expect(bell?.body).toMatch(/Add it back by [A-Z][a-z]+ \d{1,2}, \d{4} /)
+  })
+
   it('warns once and keeps a verified domain verified when its proof record first goes missing', async () => {
     const row = await verifiedDomain()
     zone.delete(proofName(row))

@@ -165,3 +165,47 @@ describe('plan limits email copy', () => {
     expect(text).toContain('Webhooks is now paused.')
   })
 })
+
+/** A reader language whose every word shows its message id, so a dropped locale reads English. */
+const MARKED: email.EmailLocale = {
+  lang: 'de',
+  dir: 'ltr',
+  t: (message) => `[${message.id}]`,
+}
+
+describe("the attention emails' language on the wire", () => {
+  it('words the plan limits subject and body in the reader language', async () => {
+    await email.sendPlanLimitsEmail({
+      to: sealedTo('billing@example.test'),
+      kind: 'start',
+      ...base,
+      i18n: MARKED,
+    })
+    expect(wire().subject).toBe('[email.planLimits.subjectStartPlan]')
+    expect(wire().html).toContain('[email.planLimits.reviewIssues]')
+    expect(wire().html).toContain('lang="de"')
+  })
+
+  it('words the domain attention subject and body in the reader language', async () => {
+    await email.sendDomainAttentionEmail({
+      to: sealedTo('admin@example.test'),
+      domain: 'acme.com',
+      record: { name: '_quackback.acme.com', value: 'token' },
+      deadline: '8. November 2026',
+      i18n: MARKED,
+    })
+    expect(wire().subject).toBe('[email.domainAttention.title]')
+    expect(wire().html).toContain('[email.domainAttention.missingBy]')
+  })
+
+  it('words the sending domain attention subject and body in the reader language', async () => {
+    await email.sendSendingDomainAttentionEmail({
+      to: sealedTo('admin@example.test'),
+      domain: 'acme.com',
+      record: 'signing-key',
+      i18n: MARKED,
+    })
+    expect(wire().subject).toBe('[email.sendingDomainAttention.title]')
+    expect(wire().html).toContain('[email.sendingDomainAttention.signingKey]')
+  })
+})
