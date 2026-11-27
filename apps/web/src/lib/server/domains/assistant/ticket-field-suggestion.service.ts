@@ -47,6 +47,7 @@ import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
+import { outputBudgetOptions } from '@/lib/server/domains/ai/output-budget'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 
@@ -263,7 +264,7 @@ export async function suggestTicketFieldValues(
       // Headroom over the classification call's 1500: a long_text answer
       // (e.g. steps-to-reproduce) plus the title must not clip mid-JSON (a
       // clipped response is unparseable → the fallback, by design).
-      modelOptions: { max_tokens: 2000, ...structuredOutputProviderOptions() },
+      modelOptions: { ...outputBudgetOptions(2000), ...structuredOutputProviderOptions() },
       middleware: [
         createUsageLoggingMiddleware({
           pipelineStep: 'ticket_field_suggest',

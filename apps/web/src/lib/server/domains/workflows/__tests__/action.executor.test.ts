@@ -39,6 +39,7 @@ const {
   getAssistantRuntimeConfig,
   getOfficeHoursSchedule,
   buildReplyTimeMessage,
+  getMessengerConfig,
   runAssistantTurnForConversation,
   previewAssistantTurnForConversation,
 } = vi.hoisted(() => ({
@@ -60,6 +61,7 @@ const {
   getAssistantRuntimeConfig: vi.fn(),
   getOfficeHoursSchedule: vi.fn(),
   buildReplyTimeMessage: vi.fn(),
+  getMessengerConfig: vi.fn(),
   runAssistantTurnForConversation: vi.fn(),
   previewAssistantTurnForConversation: vi.fn(),
 }))
@@ -89,6 +91,7 @@ vi.mock('../workflow-variables', () => ({ resolveWorkflowVariables }))
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({ getAssistantRuntimeConfig }))
 vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({ getOfficeHoursSchedule }))
 vi.mock('@/lib/server/domains/office-hours/reply-time-message', () => ({ buildReplyTimeMessage }))
+vi.mock('@/lib/server/domains/settings/settings.widget', () => ({ getMessengerConfig }))
 vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
   runAssistantTurnForConversation,
   previewAssistantTurnForConversation,
@@ -861,7 +864,9 @@ describe('applyAction', () => {
     })
 
     it('resolves a replyTime block from the office-hours service with no rich body and marks it not waiting', async () => {
-      getOfficeHoursSchedule.mockResolvedValue({ enabled: true, timezone: 'UTC', intervals: [] })
+      const schedule = { enabled: true, timezone: 'UTC', intervals: [] }
+      getOfficeHoursSchedule.mockResolvedValue(schedule)
+      getMessengerConfig.mockResolvedValue({ enabled: true, replyTime: 'minutes' })
       buildReplyTimeMessage.mockReturnValue({
         status: 'online',
         content: "We're online, typically replies in under an hour.",
@@ -871,6 +876,7 @@ describe('applyAction', () => {
         ctx
       )
       expect(result).toMatchObject({ label: 'sent replyTime block' })
+      expect(buildReplyTimeMessage).toHaveBeenCalledWith(schedule, 'minutes')
       expect(resolveWorkflowVariables).not.toHaveBeenCalled() // no body to interpolate
       const [, content, , opts] = appendAssistantReply.mock.calls[0]!
       expect(content).toBe("We're online, typically replies in under an hour.")
@@ -879,7 +885,27 @@ describe('applyAction', () => {
         kind: 'replyTime',
         waiting: false,
         status: 'online',
+        // Stored so the caption keeps the posting-time wording.
+        replyTime: 'minutes',
       })
+    })
+
+    it('falls back to the default reply time when the messenger config cannot be read', async () => {
+      const schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+      getOfficeHoursSchedule.mockResolvedValue(schedule)
+      getMessengerConfig.mockRejectedValue(new Error('settings read failed'))
+      buildReplyTimeMessage.mockReturnValue({
+        status: 'online',
+        content: "We're online, typically replies in under an hour.",
+      })
+      const result = await applyAction(
+        { type: 'send_block', nodeId: 'n7', block: { kind: 'replyTime' } },
+        ctx
+      )
+      expect(result).toMatchObject({ label: 'sent replyTime block' })
+      expect(buildReplyTimeMessage).toHaveBeenCalledWith(schedule, 'hour')
+      const [, , , opts] = appendAssistantReply.mock.calls[0]!
+      expect(opts.metadata.block).toMatchObject({ kind: 'replyTime', replyTime: 'hour' })
     })
   })
 

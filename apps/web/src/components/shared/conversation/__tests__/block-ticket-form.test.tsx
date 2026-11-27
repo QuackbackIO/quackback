@@ -89,13 +89,19 @@ function inputUnder(label: string): HTMLInputElement {
 function renderCard(
   headers: Record<string, string> = { 'x-widget-session': 'sess_1' },
   askEmail?: boolean,
+  onEmailSubmitted?: (email: string) => void,
   props: { askDueDate?: boolean } = {}
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en-US" messages={{}}>
-        <BlockTicketForm getAuthHeaders={() => headers} askEmail={askEmail} {...props} />
+        <BlockTicketForm
+          getAuthHeaders={() => headers}
+          askEmail={askEmail}
+          onEmailSubmitted={onEmailSubmitted}
+          {...props}
+        />
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -161,6 +167,59 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
         email: 'sam@example.com',
       },
       headers: { 'x-widget-session': 'sess_1' },
+    })
+  })
+
+  describe('onEmailSubmitted', () => {
+    async function fileTicket(email?: string) {
+      fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
+        target: { value: 'Cannot sign in' },
+      })
+      if (email !== undefined) {
+        fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
+          target: { value: email },
+        })
+      }
+      const submit = screen.getByRole('button', { name: /create ticket/i })
+      await waitFor(() => expect(submit).toBeEnabled())
+      fireEvent.click(submit)
+      await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
+    }
+
+    it('reports the trimmed email once the ticket is filed', async () => {
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, true, onEmailSubmitted)
+      await fileTicket('  sam@example.com ')
+      await screen.findByText(/ticket filed/i)
+      expect(onEmailSubmitted).toHaveBeenCalledTimes(1)
+      expect(onEmailSubmitted).toHaveBeenCalledWith('sam@example.com')
+    })
+
+    it('reports nothing when the email is blank', async () => {
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, true, onEmailSubmitted)
+      await fileTicket('   ')
+      await screen.findByText(/ticket filed/i)
+      expect(onEmailSubmitted).not.toHaveBeenCalled()
+    })
+
+    it('reports nothing when the form does not ask for an email', async () => {
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, false, onEmailSubmitted)
+      await fileTicket()
+      await screen.findByText(/ticket filed/i)
+      expect(onEmailSubmitted).not.toHaveBeenCalled()
+    })
+
+    it('reports nothing when filing fails', async () => {
+      vi.mocked(createMyTicketFn).mockRejectedValueOnce(new Error('down'))
+      const onEmailSubmitted = vi.fn()
+      renderCard(undefined, true, onEmailSubmitted)
+      await fileTicket('sam@example.com')
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /create ticket/i })).toBeEnabled()
+      )
+      expect(onEmailSubmitted).not.toHaveBeenCalled()
     })
   })
 
@@ -314,7 +373,7 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     })
 
     it('shows the optional field and its hint, bounded to the customer window after mount', async () => {
-      renderCard(undefined, undefined, { askDueDate: true })
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
       const input = screen.getByLabelText(/needed by/i)
       expect(input).toHaveAttribute('type', 'date')
       expect(screen.getByText('(optional)')).toBeTruthy()
@@ -326,7 +385,7 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     })
 
     it('sends the end of the picked local day as dueAt', async () => {
-      renderCard(undefined, undefined, { askDueDate: true })
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
       const day = dayFromNow(10)
       const submit = await fillSubject('Renewal paperwork')
       fireEvent.change(screen.getByLabelText(/needed by/i), { target: { value: day } })
@@ -340,7 +399,7 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     })
 
     it('leaves dueAt out when no day is picked', async () => {
-      renderCard(undefined, undefined, { askDueDate: true })
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
       fireEvent.click(await fillSubject('Refund request'))
 
       await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
@@ -354,7 +413,7 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
       ['more than two years out', 3 * 365],
       ['in the past', -3],
     ])('blocks a day %s with the inline error until it is fixed', async (_label, days) => {
-      renderCard(undefined, undefined, { askDueDate: true })
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
       const submit = await fillSubject('Renewal paperwork')
       const input = screen.getByLabelText(/needed by/i)
       fireEvent.change(input, { target: { value: dayFromNow(days) } })

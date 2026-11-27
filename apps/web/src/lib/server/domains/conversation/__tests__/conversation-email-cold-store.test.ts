@@ -81,6 +81,11 @@ vi.mock('../conversation.service', () => ({
   publishConversationStarted: (...args: unknown[]) => publishConversationStarted(...args),
 }))
 
+const notifyVisitorMessage = vi.fn(async (_opts: unknown) => {})
+vi.mock('../conversation.notify', () => ({
+  notifyVisitorMessage: (opts: unknown) => notifyVisitorMessage(opts),
+}))
+
 import { createEmailConversation } from '../conversation.email-cold-inbound'
 
 const RAW = (headers: string[]): string =>
@@ -111,6 +116,7 @@ beforeEach(() => {
   insertedMessages = []
   insertedConversations = []
   routeUnassignedConversation.mockClear()
+  notifyVisitorMessage.mockClear()
   publishConversationStarted.mockClear()
   afterInsert = []
 })
@@ -150,6 +156,19 @@ describe('the key a cold-inbound message is filed under', () => {
     )
   })
 
+  it('emails the team about a new emailed-in conversation like a widget start', async () => {
+    await store(parseRawEmail(RAW(['Message-ID: <cold-notify@example.com>'])))
+    expect(notifyVisitorMessage).toHaveBeenCalledTimes(1)
+    expect(notifyVisitorMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ channel: 'email' }),
+        content: 'Is anyone there?',
+        authorName: 'stranger@example.com',
+        isFirstMessage: true,
+      })
+    )
+  })
+
   it('puts an accepted conversation in the team inbox live, before routing runs', async () => {
     // Routing publishes only when it assigns; a conversation it leaves in the
     // Unassigned queue is live in the inbox only through this publish.
@@ -173,6 +192,7 @@ describe('the key a cold-inbound message is filed under', () => {
       quarantine: { cause: 'sender_auth_reject', note: 'refused' },
     })
     expect(routeUnassignedConversation).not.toHaveBeenCalled()
+    expect(notifyVisitorMessage).not.toHaveBeenCalled()
     expect(publishConversationStarted).not.toHaveBeenCalled()
   })
 

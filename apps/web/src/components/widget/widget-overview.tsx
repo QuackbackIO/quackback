@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { m, useReducedMotion } from 'framer-motion'
 import {
   LightBulbIcon,
   ChatBubbleLeftRightIcon,
@@ -9,7 +8,7 @@ import {
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Avatar } from '@/components/ui/avatar'
+import { TeamFacepile } from '@/components/shared/conversation/team-facepile'
 import { cn } from '@/lib/shared/utils'
 import type { WidgetHomeCard, WidgetHomeConfig } from '@/lib/shared/types/settings'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
@@ -28,6 +27,12 @@ import { type EnabledTabs } from './widget-nav'
  *  one system. Hovers use the SOLID accent token: a translucent hover over the
  *  hero backdrop would make a card see-through (reads as an opacity dip). */
 const CARD = 'rounded-2xl border border-border/60 bg-card'
+/** A card that can arrive after mount fades in over 250 ms (CSS ease-in-out). */
+const CARD_FADE_IN =
+  'animate-in fade-in duration-[250ms] ease-[cubic-bezier(0.42,0,0.58,1)] motion-reduce:animate-none'
+/** Home cards rise 8px and fade in on the push curve, staggered 45 ms apart. */
+const CARD_RISE_IN =
+  'animate-in fade-in slide-in-from-bottom-[8px] fill-mode-backwards duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none'
 const CARD_INTERACTIVE = `${CARD} transition-colors hover:bg-accent`
 
 interface WidgetOverviewProps {
@@ -101,7 +106,6 @@ export function WidgetOverview({
   const greeting = home?.greeting
   const subtitle = home?.subtitle
   const firstName = firstNameOf(user?.name)
-  const reduceMotion = useReducedMotion()
 
   // A recent-conversation resume card is a messenger concept — only fetched/shown
   // when the Messages surface is enabled.
@@ -193,16 +197,9 @@ export function WidgetOverview({
               </span>
             </span>
             {faces.length > 0 ? (
-              <span className="flex items-center -space-x-2 shrink-0" aria-hidden>
-                {faces.map((f, i) => (
-                  <Avatar
-                    key={`${f.name}-${i}`}
-                    src={f.avatarUrl}
-                    name={f.name}
-                    className="size-7 text-xs ring-2 ring-card"
-                  />
-                ))}
-              </span>
+              // Earlier faces stack on top inside their own stacking context, so
+              // every avatar's initials stay clear of the next one.
+              <TeamFacepile faces={faces} ringClassName="ring-card" className="isolate" />
             ) : (
               <ChatBubbleLeftRightIcon className="w-5 h-5 text-muted-foreground/50 shrink-0" />
             )}
@@ -325,20 +322,11 @@ export function WidgetOverview({
 
           <div className="flex flex-col gap-4 px-4">
             {/* Cards stagger in gently under the view's own entrance. */}
-            <m.div
-              className="flex flex-col gap-2.5"
-              initial={reduceMotion ? false : 'hidden'}
-              animate="visible"
-              variants={{ visible: { transition: { staggerChildren: 0.045 } } }}
-            >
+            <div className="flex flex-col gap-2.5">
               {conversation && (
                 // For Bearer-token visitors this can arrive after mount (SSR
                 // can't see their token); fade it in rather than popping.
-                <m.div
-                  initial={reduceMotion ? false : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.25 }}
-                >
+                <div className={CARD_FADE_IN}>
                   <div className={cn('p-3', CARD)}>
                     <p className="mb-2 text-sm font-semibold text-foreground">
                       <FormattedMessage
@@ -354,41 +342,30 @@ export function WidgetOverview({
                       onClick={onResumeMessenger}
                     />
                   </div>
-                </m.div>
+                </div>
               )}
 
               {tabs.tickets && (
                 // Requester-scoped like the resume card: a Bearer-token
                 // visitor's tickets can arrive after mount — fade, don't pop.
-                <m.div
-                  initial={reduceMotion ? false : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.25 }}
-                >
+                <div className={CARD_FADE_IN}>
                   <WidgetRecentTicketsCard onOpenTicket={onOpenTicket} />
-                </m.div>
+                </div>
               )}
 
-              {cards.map((card) => {
-                const node = renderCard(card)
-                if (!node) return null
-                return (
-                  <m.div
+              {cards
+                .map((card) => ({ card, node: renderCard(card) }))
+                .filter(({ node }) => node)
+                .map(({ card, node }, i) => (
+                  <div
                     key={card.id}
-                    variants={{
-                      hidden: { opacity: 0, y: 8 },
-                      visible: {
-                        opacity: 1,
-                        y: 0,
-                        transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] },
-                      },
-                    }}
+                    className={CARD_RISE_IN}
+                    style={{ animationDelay: `${i * 45}ms` }}
                   >
                     {node}
-                  </m.div>
-                )
-              })}
-            </m.div>
+                  </div>
+                ))}
+            </div>
           </div>
         </div>
       </ScrollArea>

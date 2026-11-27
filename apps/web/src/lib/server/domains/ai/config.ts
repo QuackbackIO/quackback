@@ -113,8 +113,9 @@ export function stripCodeFences(text: string): string {
  *
  * Caveat: `require_parameters` gates on EVERY request parameter, so each must be
  * one the upstream providers advertise. Cap output with `max_tokens`, not
- * `max_completion_tokens` — no OpenRouter provider lists the latter, so pairing
+ * `max_completion_tokens`: no OpenRouter provider lists the latter, so pairing
  * it with this option routes to zero endpoints (a 404 "no endpoints found").
+ * `outputBudgetOptions` (./output-budget) picks the right field per endpoint.
  *
  * `AI_REQUIRE_PARAMETERS=false` disables the gate. Escape hatch for models
  * whose providers don't advertise `response_format` at all — with the gate on,

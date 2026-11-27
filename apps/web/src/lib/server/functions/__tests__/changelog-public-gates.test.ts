@@ -153,3 +153,50 @@ describe('listChangelogCategoriesFn', () => {
     expect(await labels()).toEqual([OPEN_LABEL, VIP_LABEL])
   })
 })
+
+describe('the widget list, and only it, carries what the launcher card needs', () => {
+  beforeEach(() => {
+    mockList.mockResolvedValue({
+      items: [{ id: ENTRY, publishedAt: new Date(), announceOnLauncher: false }],
+      nextCursor: null,
+      hasMore: false,
+    })
+  })
+
+  it("keeps each entry's announce choice and the server's time", async () => {
+    const before = Date.now()
+    const res = (await widgetList({ data: {} })) as unknown as {
+      items: Array<Record<string, unknown>>
+      serverTime: string
+    }
+    expect(res.items[0].announceOnLauncher).toBe(false)
+    expect(new Date(res.serverTime).getTime()).toBeGreaterThanOrEqual(before)
+  })
+
+  it('sends the choice only for entries kept out of the card, to keep the widget page small', async () => {
+    mockList.mockResolvedValue({
+      items: [
+        { id: ENTRY, publishedAt: new Date(), announceOnLauncher: true },
+        { id: generateId('changelog'), publishedAt: new Date(), announceOnLauncher: false },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    })
+    const res = await widgetList({ data: {} })
+    const items = res.items as Array<Record<string, unknown>>
+    expect(items[0]).not.toHaveProperty('announceOnLauncher')
+    expect(items[1].announceOnLauncher).toBe(false)
+  })
+
+  it("gives the server's time even when the visitor may not read the changelog", async () => {
+    gate.audienceOk = false
+    const res = (await widgetList({ data: {} })) as unknown as { serverTime?: string }
+    expect(typeof res.serverTime).toBe('string')
+  })
+
+  it('leaves the choice out of the portal list', async () => {
+    const res = await portalList({ data: {} })
+    expect(res.items[0]).not.toHaveProperty('announceOnLauncher')
+    expect(res).not.toHaveProperty('serverTime')
+  })
+})

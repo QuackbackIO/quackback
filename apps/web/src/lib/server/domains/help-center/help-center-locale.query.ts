@@ -12,6 +12,10 @@
  * subcategory rollup is not counted, matching the direct-children semantics
  * `listPublicArticlesForCategory` already uses). Untranslated articles are
  * simply absent from the locale's article list.
+ *
+ * The widget reads through the `...WithFallback` lists instead: an item not
+ * yet translated shows in the default locale rather than disappearing, the
+ * same fallback the widget already applies when it opens one article.
  */
 import {
   db,
@@ -106,6 +110,36 @@ export async function listPublicCategoriesForLocale(
   return visible
 }
 
+/**
+ * Every public category, with its name and description in `locale` where a
+ * translation has a name, and in the default locale otherwise. Counts stay
+ * the default-locale counts, since untranslated articles still show.
+ */
+export async function listPublicCategoriesWithFallback(
+  locale: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategoryWithCount[]> {
+  const categories = await listPublicCategories(viewer)
+  if (locale === DEFAULT_LOCALE || categories.length === 0) return categories
+
+  const translations = await db.query.helpCenterCategoryTranslations.findMany({
+    where: and(
+      inArray(
+        helpCenterCategoryTranslations.categoryId,
+        categories.map((c) => c.id)
+      ),
+      eq(helpCenterCategoryTranslations.locale, locale)
+    ),
+  })
+  const byCategory = new Map(translations.map((t) => [t.categoryId, t]))
+
+  return categories.map((cat) => {
+    const translation = byCategory.get(cat.id)
+    if (!translation || !translation.name.trim()) return cat
+    return { ...cat, name: translation.name, description: translation.description }
+  })
+}
+
 export async function getPublicCategoryByUrlIdForLocale(
   urlId: number,
   locale: string,
@@ -181,6 +215,39 @@ export async function listPublicArticlesForCategoryLocale(
       const translation = byArticle.get(a.id)!
       return { ...a, title: translation.title, description: translation.description }
     })
+}
+
+/**
+ * Every public article in a category, with its title and description in
+ * `locale` where a published translation exists, and in the default locale
+ * otherwise.
+ */
+export async function listPublicArticlesForCategoryWithFallback(
+  categoryId: string,
+  locale: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+) {
+  const articles = await listPublicArticlesForCategory(categoryId, viewer)
+  if (locale === DEFAULT_LOCALE || articles.length === 0) return articles
+
+  const translations = await db.query.helpCenterArticleTranslations.findMany({
+    where: and(
+      inArray(
+        helpCenterArticleTranslations.articleId,
+        articles.map((a) => a.id)
+      ),
+      eq(helpCenterArticleTranslations.locale, locale),
+      eq(helpCenterArticleTranslations.status, 'published')
+    ),
+  })
+  const byArticle = new Map(translations.map((t) => [t.articleId, t]))
+
+  return articles.map((a) => {
+    const translation = byArticle.get(a.id)
+    return translation
+      ? { ...a, title: translation.title, description: translation.description }
+      : a
+  })
 }
 
 /**
