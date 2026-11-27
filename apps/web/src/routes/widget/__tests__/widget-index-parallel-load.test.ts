@@ -15,6 +15,10 @@ vi.mock('@/lib/server/functions/powered-by', () => ({
   }),
 }))
 
+vi.mock('@/lib/server/functions/widget/portal-session', () => ({
+  widgetPortalSessionReusedFn: vi.fn(async () => false),
+}))
+
 const { getShowPoweredByFn } = await import('@/lib/server/functions/powered-by')
 const { Route } = await import('../index')
 

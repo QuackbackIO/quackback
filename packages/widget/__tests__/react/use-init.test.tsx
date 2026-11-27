@@ -57,6 +57,51 @@ describe('useQuackbackInit', () => {
     unmount()
   })
 
+  it('logs out when the identity goes back to undefined', () => {
+    const logout = vi.spyOn(Quackback, 'logout')
+    function C({ token }: { token: string | null }) {
+      useQuackbackInit({ instanceUrl: ORIGIN, identity: token ? { ssoToken: token } : undefined })
+      return null
+    }
+    const { rerender, unmount } = render(<C token="token-a" />)
+    expect(logout).not.toHaveBeenCalled()
+    act(() => rerender(<C token={null} />))
+    expect(logout).toHaveBeenCalledTimes(1)
+    // Staying signed out does not log out again.
+    act(() => rerender(<C token={null} />))
+    expect(logout).toHaveBeenCalledTimes(1)
+    unmount()
+  })
+
+  it('never logs out a visitor who was not identified', () => {
+    const logout = vi.spyOn(Quackback, 'logout')
+    function C() {
+      useQuackbackInit({ instanceUrl: ORIGIN })
+      return null
+    }
+    const { rerender, unmount } = render(<C />)
+    act(() => rerender(<C />))
+    unmount()
+    expect(logout).not.toHaveBeenCalled()
+  })
+
+  it('a widget re-created after shouldInitialize toggles does not log out an anonymous visitor', () => {
+    const logout = vi.spyOn(Quackback, 'logout')
+    function C({ enabled, token }: { enabled: boolean; token: string | null }) {
+      useQuackbackInit({
+        instanceUrl: ORIGIN,
+        shouldInitialize: enabled,
+        identity: token ? { ssoToken: token } : undefined,
+      })
+      return null
+    }
+    const { rerender, unmount } = render(<C enabled token="token-a" />)
+    act(() => rerender(<C enabled={false} token={null} />))
+    act(() => rerender(<C enabled token={null} />))
+    expect(logout).not.toHaveBeenCalled()
+    unmount()
+  })
+
   it('does not init when shouldInitialize is false', () => {
     function C() {
       useQuackbackInit({ instanceUrl: ORIGIN, shouldInitialize: false })

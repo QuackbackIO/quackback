@@ -35,27 +35,55 @@ describe('seen marker storage', () => {
   })
 
   it('round-trips the marker through window.localStorage', () => {
-    expect(getChangelogSeenAt()).toBeNull()
-    markChangelogSeen('2026-07-30T10:00:00Z')
-    expect(getChangelogSeenAt()).toBe('2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBeNull()
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
   })
 
   it('never moves the marker backwards', () => {
-    markChangelogSeen('2026-07-30T10:00:00Z')
-    markChangelogSeen('2026-07-01T10:00:00Z')
-    expect(getChangelogSeenAt()).toBe('2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-01T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
+  })
+
+  it('a mark that does not move the marker still keeps the person among the most recent', () => {
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    markChangelogSeen('u2', '2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-01T10:00:00Z')
+    expect(JSON.parse(window.localStorage.getItem('quackback:changelog-seen-at.scopes')!)).toEqual([
+      'u2',
+      'u1',
+    ])
   })
 
   it('dispatches the seen event so open listeners re-read the marker', () => {
     const listener = vi.fn()
     window.addEventListener(CHANGELOG_SEEN_EVENT, listener)
-    markChangelogSeen('2026-07-30T10:00:00Z')
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
     expect(listener).toHaveBeenCalledTimes(1)
     window.removeEventListener(CHANGELOG_SEEN_EVENT, listener)
   })
 
+  it('keeps a marker for each identity in the browser', () => {
+    markChangelogSeen('u1', '2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u2')).toBeNull()
+    markChangelogSeen('u2', '2026-07-01T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-30T10:00:00Z')
+    expect(getChangelogSeenAt('u2')).toBe('2026-07-01T10:00:00Z')
+  })
+
+  it('ignores the marker saved before markers were kept per person, and removes it', () => {
+    window.localStorage.setItem('quackback:changelog-seen-at', '2026-07-30T10:00:00Z')
+    // Nobody can tell whose it was: each person starts from their own baseline.
+    expect(getChangelogSeenAt('u1')).toBeNull()
+    markChangelogSeen('u1', '2026-07-01T10:00:00Z')
+    expect(getChangelogSeenAt('u1')).toBe('2026-07-01T10:00:00Z')
+    expect(window.localStorage.getItem('quackback:changelog-seen-at')).toBeNull()
+    expect(getChangelogSeenAt('u2')).toBeNull()
+  })
+
   it('ignores an unparseable stored marker instead of throwing', () => {
-    window.localStorage.setItem('quackback:changelog-seen-at', 'not-a-date')
-    expect(getChangelogSeenAt()).toBeNull()
+    window.localStorage.setItem('quackback:changelog-seen-at:u1', 'not-a-date')
+    expect(getChangelogSeenAt('u1')).toBeNull()
   })
 })

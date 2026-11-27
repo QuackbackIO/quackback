@@ -20,6 +20,7 @@ import { IDLE_STATE, blankAskAiState, type AskAiSourceMeta, type AskAiState } fr
 import type { AskAiRun } from './ask-ai-run'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
+import { frameRequestCredentials } from '@/lib/client/widget-frame'
 
 // Existing importers keep the AskAiSourceMeta name.
 export type { AskAiSourceMeta } from './ask-ai-state'
@@ -41,6 +42,8 @@ export function useAskAiAvailable(
     queryFn: async () => {
       const res = await fetch('/api/widget/kb-ask', {
         headers: options?.getHeaders?.(),
+        // In a widget frame without the portal session, no cookies.
+        credentials: frameRequestCredentials(),
       })
       if (!res.ok) return false
       const json = (await res.json()) as { data?: { enabled?: boolean } }

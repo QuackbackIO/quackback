@@ -1,4 +1,4 @@
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type KeyboardEvent } from 'react'
 import { useRouter, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -16,6 +16,28 @@ import { cn } from '@/lib/shared/utils'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import { WIDGET_LOCALE_LABELS, type WidgetTranslations } from '@/lib/shared/widget/translations'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import type { ReplyTime } from '@/lib/shared/widget/reply-time'
+
+// Type-only import: the options live here so this page pulls no shared
+// runtime module (or chunk) in with the widget.
+const REPLY_TIME_LABELS = {
+  minutes: 'In a few minutes',
+  hour: 'Under an hour',
+  hours: 'In a few hours',
+  day: 'Within a day',
+  off: "Don't show",
+} satisfies Record<ReplyTime, string>
+const REPLY_TIME_OPTIONS = Object.keys(REPLY_TIME_LABELS) as ReplyTime[]
+
+/** A small pill button, picked or not (reply time and translation locale). */
+function pillClass(selected: boolean) {
+  return cn(
+    'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
+    selected
+      ? 'border-primary bg-primary/10 text-foreground'
+      : 'border-border/50 text-muted-foreground hover:text-foreground'
+  )
+}
 
 export function MessengerChannelPage() {
   const router = useRouter()
@@ -39,6 +61,29 @@ export function MessengerChannelPage() {
   const [welcomeMessage, setWelcomeMessage] = useState(messengerConfig?.welcomeMessage ?? '')
   const [offlineMessage, setOfflineMessage] = useState(messengerConfig?.offlineMessage ?? '')
   const [teamName, setTeamName] = useState(messengerConfig?.teamName ?? '')
+  // Absent or unknown reads as under an hour (the shared DEFAULT_REPLY_TIME).
+  const storedReplyTime = messengerConfig?.replyTime
+  const [replyTime, setReplyTime] = useState<ReplyTime>(
+    storedReplyTime && REPLY_TIME_OPTIONS.includes(storedReplyTime) ? storedReplyTime : 'hour'
+  )
+
+  function chooseReplyTime(value: ReplyTime) {
+    if (value === replyTime) return
+    const prev = replyTime
+    setReplyTime(value)
+    persist('replyTime', { messenger: { replyTime: value } }, () => setReplyTime(prev))
+  }
+
+  // Radio-group keys: arrows move the choice (wrapping) and focus with it.
+  function onReplyTimeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+    if (step === undefined) return
+    event.preventDefault()
+    const count = REPLY_TIME_OPTIONS.length
+    const index = (REPLY_TIME_OPTIONS.indexOf(replyTime) + step + count) % count
+    chooseReplyTime(REPLY_TIME_OPTIONS[index])
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[index]?.focus()
+  }
   const [translations, setTranslations] = useState<WidgetTranslations>(config.translations ?? {})
   const [translationLocale, setTranslationLocale] = useState<string>('en')
 
@@ -116,7 +161,10 @@ export function MessengerChannelPage() {
         </SettingRows>
       </SettingsCard>
 
-      <SettingsCard title="Messaging" description="Greeting and team name shown to visitors.">
+      <SettingsCard
+        title="Messaging"
+        description="Greeting, team name and reply time shown to visitors."
+      >
         <div className="space-y-5">
           <div className="space-y-1.5">
             <Label htmlFor="messenger-team-name">Team name</Label>
@@ -132,6 +180,33 @@ export function MessengerChannelPage() {
             <p className="text-xs text-muted-foreground">
               Shown in the messenger header. Falls back to the workspace name.
             </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label id="messenger-reply-time">Usual reply time</Label>
+            <div
+              role="radiogroup"
+              aria-labelledby="messenger-reply-time"
+              className="flex flex-wrap gap-1.5"
+              onKeyDown={onReplyTimeKeyDown}
+            >
+              {REPLY_TIME_OPTIONS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={replyTime === value}
+                  // One tab stop: the checked option; arrows move between them.
+                  tabIndex={replyTime === value ? 0 : -1}
+                  onClick={() => chooseReplyTime(value)}
+                  // The checked option stays enabled while saving so focus stays put.
+                  disabled={isBusy && replyTime !== value}
+                  className={pillClass(replyTime === value)}
+                >
+                  {REPLY_TIME_LABELS[value]}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Shown to visitors in the messenger.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="messenger-welcome">Welcome message</Label>
@@ -273,12 +348,7 @@ function MessengerTranslations({
             type="button"
             onClick={() => onSelectLocale(locale)}
             disabled={disabled}
-            className={cn(
-              'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
-              selectedLocale === locale
-                ? 'border-primary bg-primary/10 text-foreground'
-                : 'border-border/50 text-muted-foreground hover:text-foreground'
-            )}
+            className={pillClass(selectedLocale === locale)}
           >
             {WIDGET_LOCALE_LABELS[locale] ?? locale}
           </button>

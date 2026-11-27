@@ -8,7 +8,7 @@ import {
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Avatar } from '@/components/ui/avatar'
+import { TeamFacepile } from '@/components/shared/conversation/team-facepile'
 import { cn } from '@/lib/shared/utils'
 import type { WidgetHomeCard, WidgetHomeConfig } from '@/lib/shared/types/settings'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
@@ -197,16 +197,9 @@ export function WidgetOverview({
               </span>
             </span>
             {faces.length > 0 ? (
-              <span className="flex items-center -space-x-2 shrink-0" aria-hidden>
-                {faces.map((f, i) => (
-                  <Avatar
-                    key={`${f.name}-${i}`}
-                    src={f.avatarUrl}
-                    name={f.name}
-                    className="size-7 text-xs ring-2 ring-card"
-                  />
-                ))}
-              </span>
+              // Earlier faces stack on top inside their own stacking context, so
+              // every avatar's initials stay clear of the next one.
+              <TeamFacepile faces={faces} ringClassName="ring-card" className="isolate" />
             ) : (
               <ChatBubbleLeftRightIcon className="w-5 h-5 text-muted-foreground/50 shrink-0" />
             )}

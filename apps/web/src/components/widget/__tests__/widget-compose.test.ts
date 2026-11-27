@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateId } from '@quackback/ids'
 import {
+  autofocusesComposer,
   composeBodyFromPlainText,
   isArticleTypeId,
   resolveComposeBoardId,
@@ -122,6 +123,14 @@ describe('resolveOpenCommand', () => {
     })
   })
 
+  it('opens the feedback list only when the Feedback tab is enabled', () => {
+    expect(resolveOpenCommand({ view: 'feedback' }, allTabs)).toEqual({ type: 'feedback' })
+    expect(resolveOpenCommand({ view: 'feedback' }, { feedback: true })).toEqual({
+      type: 'feedback',
+    })
+    expect(resolveOpenCommand({ view: 'feedback' }, { messages: true, help: true })).toBeNull()
+  })
+
   it('opens chat aliases on the messenger and tickets with a messages fallback', () => {
     expect(resolveOpenCommand({ view: 'chat' }, allTabs)).toEqual({ type: 'messenger' })
     expect(resolveOpenCommand({ view: 'live-chat' }, allTabs)).toEqual({ type: 'messenger' })
@@ -141,6 +150,40 @@ describe('resolveOpenCommand', () => {
       type: 'messenger',
       body: undefined,
     })
+  })
+
+  it('opens one conversation from messages, like the ?c= deep link', () => {
+    const id = 'conversation_01kabcde12345'
+    expect(resolveOpenCommand({ view: 'messages', conversationId: id }, allTabs)).toEqual({
+      type: 'messenger',
+      conversationId: id,
+    })
+    // Tickets owns the thread when Messages is off.
+    expect(resolveOpenCommand({ view: 'messages', conversationId: id }, { tickets: true })).toEqual(
+      { type: 'messenger', conversationId: id, from: 'tickets' }
+    )
+    expect(
+      resolveOpenCommand({ view: 'messages', conversationId: id }, { feedback: true })
+    ).toBeNull()
+  })
+
+  it('focuses the composer for a new thread or the opened conversation, never on a phone', () => {
+    const id = 'conversation_01kabcde12345'
+    expect(autofocusesComposer('new', false, undefined)).toBe(true)
+    expect(autofocusesComposer(id, false, id)).toBe(true)
+    expect(autofocusesComposer(id, false, undefined)).toBe(false)
+    expect(autofocusesComposer('conversation_other', false, id)).toBe(false)
+    expect(autofocusesComposer(id, true, id)).toBe(false)
+    expect(autofocusesComposer('new', true, undefined)).toBe(false)
+    expect(autofocusesComposer(null, false, undefined)).toBe(false)
+  })
+
+  it('ignores a conversation id that is not one', () => {
+    for (const conversationId of ['post_01kabc', 'conversation_../x', '', 42]) {
+      expect(
+        resolveOpenCommand({ view: 'messages', conversationId } as never, allTabs)
+      ).toStrictEqual({ type: 'messenger', body: undefined })
+    }
   })
 
   it('opens home for an empty payload when Home is enabled', () => {

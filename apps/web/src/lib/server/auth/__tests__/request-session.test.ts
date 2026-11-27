@@ -143,7 +143,7 @@ const { requireWorkspaceRole } =
       data: { allowedRoles: string[] }
     }) => Promise<{ principal: { id: string }; permissions: string[] }>
   }
-const { getRequestSession, getRequestPrincipal, forgetRequestIdentity } =
+const { getRequestSession, getRequestPrincipal, forgetRequestIdentity, treatRequestAsAnonymous } =
   await import('../request-session')
 const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
 
@@ -266,6 +266,31 @@ describe('one identity read per request', () => {
     expect(before?.user.id).toBe('user_ada')
     expect(after).toBeNull()
     expect(mockGetSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('serves the rest of the request as anonymous once told to, whatever it carries', async () => {
+    const [before, session, optional, access] = await inRequest('tok_ada', async () => {
+      const before = await getOptionalAuth()
+      treatRequestAsAnonymous()
+      return [
+        before,
+        await getRequestSession(),
+        await getOptionalAuth(),
+        await resolvePortalAccessForRequest(),
+      ] as const
+    })
+    expect(before?.user.id).toBe('user_ada')
+    expect(session).toBeNull()
+    expect(optional).toBeNull()
+    expect(access.granted).toBe(false)
+    // The credentials are never looked up again.
+    expect(mockGetSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the next request to its own credentials', async () => {
+    await inRequest('tok_ada', async () => treatRequestAsAnonymous())
+    const session = await inRequest('tok_ada', () => getRequestSession())
+    expect(session?.user.id).toBe('user_ada')
   })
 
   it('reads a principal afresh after its cache key is deleted', async () => {

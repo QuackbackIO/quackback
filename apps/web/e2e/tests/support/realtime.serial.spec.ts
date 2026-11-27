@@ -14,6 +14,7 @@ import { fakeAi } from '../../support/fake-ai-client'
 import {
   createVisitor,
   openWidgetAs,
+  teamStatusLine,
   warmUpStream,
   warmUpWidgetThread,
   type TestVisitor,
@@ -100,7 +101,7 @@ test.describe('realtime and presence', () => {
         await waitForPresence(t.principalId, true)
 
         const widget = await openWidgetAs(browser, visitor, first)
-        await expect(widget.getByText("We're online")).toBeVisible({ timeout: 15_000 })
+        await expect(teamStatusLine(widget)).toHaveText('Online now', { timeout: 15_000 })
 
         const account = admin.getByRole('button', { name: new RegExp(t.name) }).last()
         await expect(async () => {
@@ -112,9 +113,7 @@ test.describe('realtime and presence', () => {
         // Still connected, no longer available: the widget's next read says offline.
         expect(await presenceRows(t.principalId)).not.toEqual([])
         await expect.poll(() => agentsOnline(visitor), { timeout: 10_000 }).toBe(false)
-        await expect(widget.getByText("We'll reply here", { exact: true })).toBeVisible({
-          timeout: 40_000,
-        })
+        await expect(teamStatusLine(widget)).toHaveText(/We'll reply here$/, { timeout: 40_000 })
         tab.close()
       } finally {
         await restore()
