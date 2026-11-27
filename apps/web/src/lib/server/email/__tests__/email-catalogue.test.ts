@@ -44,7 +44,13 @@ describe('email catalogue', () => {
       expect(text, `${locale} ${id}`).toBeTruthy()
       expect(placeholders(text!), `${locale} ${id}`).toEqual(placeholders(english))
       expect(text, `${locale} ${id}`).not.toMatch(/[–—]/)
-      intl.formatMessage({ id, defaultMessage: english }, sample(english))
+      const values = sample(english)
+      const formatted = intl.formatMessage({ id, defaultMessage: english }, values)
+      // Every value reaches the text (an apostrophe before a placeholder
+      // would quote it out in ICU).
+      for (const value of Object.values(values)) {
+        if (!/\{\w+, plural/.test(english)) expect(formatted, `${locale} ${id}`).toContain(value)
+      }
     }
     expect(errors).toEqual([])
   })
