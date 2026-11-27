@@ -209,6 +209,8 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
   })
 
   describe('for the sitemap', () => {
+    const languages = { main: 'en', additional: ['fr', 'de'] }
+
     it('lists only articles with a real version in the language', async () => {
       const cat = await seedCategory('Billing')
       const invoices = await seedArticle(cat, 'Invoices')
@@ -217,7 +219,7 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
       await translateArticle(invoices.id, 'fr', 'Factures')
       await translateArticle(refunds.id, 'fr', 'Remboursements', 'draft')
 
-      const listed = await listPublicArticlesForCategoryWithVersionIn(cat, 'fr')
+      const listed = await listPublicArticlesForCategoryWithVersionIn(cat, 'fr', languages)
 
       expect(listed.map((a) => a.title)).toEqual(['Factures'])
     })
@@ -234,7 +236,7 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
       await translateArticle(invoices.id, 'fr', 'Factures')
       await translateArticle(password.id, 'fr', 'Mot de passe')
 
-      const listed = await listPublicCategoriesWithVersionIn('fr')
+      const listed = await listPublicCategoriesWithVersionIn('fr', languages)
 
       expect(listed.map((c) => c.name)).toEqual(['Facturation'])
     })
@@ -244,11 +246,44 @@ describe.skipIf(!fixture.available)('help center reads in one language', () => {
       await seedArticle(cat, 'Passwort', { locale: 'de' })
       await seedArticle(cat, 'Invoices', { locale: 'en' })
 
-      expect((await listPublicCategoriesWithVersionIn('de')).map((c) => c.name)).toEqual(['Konto'])
+      expect((await listPublicCategoriesWithVersionIn('de', languages)).map((c) => c.name)).toEqual(
+        ['Konto']
+      )
       expect(
-        (await listPublicArticlesForCategoryWithVersionIn(cat, 'de')).map((a) => a.title)
+        (await listPublicArticlesForCategoryWithVersionIn(cat, 'de', languages)).map((a) => a.title)
       ).toEqual(['Passwort'])
-      expect(await listPublicCategoriesWithVersionIn('en')).toEqual([])
+      expect(await listPublicCategoriesWithVersionIn('en', languages)).toEqual([])
+    })
+
+    it('lists a main-language parent collection for the main language when its articles sit in a subcollection', async () => {
+      const guides = await seedCategory('Guides')
+      const setup = await testDb
+        .insert(helpCenterCategories)
+        .values({
+          id: createId('kb_category') as KbCategoryId,
+          name: 'Setup',
+          slug: 'setup',
+          parentId: guides,
+        })
+        .returning()
+      await seedArticle(setup[0]!.id as KbCategoryId, 'Install')
+
+      const listed = await listPublicCategoriesWithVersionIn('en', languages)
+
+      expect(listed.map((c) => c.name).sort()).toEqual(['Guides', 'Setup'])
+    })
+
+    it('lists under the main language the items written in a language the help center does not offer', async () => {
+      const cat = await seedCategory('Cuenta', 'es')
+      await seedArticle(cat, 'Contraseña', { locale: 'es' })
+
+      expect((await listPublicCategoriesWithVersionIn('en', languages)).map((c) => c.name)).toEqual(
+        ['Cuenta']
+      )
+      expect(
+        (await listPublicArticlesForCategoryWithVersionIn(cat, 'en', languages)).map((a) => a.title)
+      ).toEqual(['Contraseña'])
+      expect(await listPublicCategoriesWithVersionIn('fr', languages)).toEqual([])
     })
   })
 })

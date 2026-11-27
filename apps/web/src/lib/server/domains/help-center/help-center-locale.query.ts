@@ -15,8 +15,11 @@
  * reads hide.
  *
  * The sitemap reads through the `...WithVersionIn` lists instead, which keep
- * only the items with a real version in the language (rule 1 or 2), and only
- * collections that hold at least one such article directly.
+ * only the items whose canonical page is in the language: a real version
+ * there (rule 1 or 2), or, for the main language, own text in a language the
+ * help center does not offer. In an extra language a collection must also
+ * hold at least one such article directly; the main language lists every
+ * collection it is canonical for, as a help center with one language does.
  */
 import {
   db,
@@ -144,45 +147,64 @@ export async function listPublicCategoriesWithFallback(
   return categories.map((cat) => categoryIn(cat, translations, locale))
 }
 
+/** The help center's languages: the main one and the extra ones it offers. */
+export interface OfferedLanguages {
+  main: string
+  additional: readonly string[]
+}
+
 /**
- * The public collections with a real version in `locale` that directly hold
- * at least one article with a real version there, for the sitemap.
+ * Whether an item whose text is in `own` has its canonical page in `locale`
+ * without a version there: in the main language, when the help center does
+ * not offer `own`.
  */
+function canonicalWithoutVersion(own: string, locale: string, languages: OfferedLanguages) {
+  return locale === languages.main && own !== locale && !languages.additional.includes(own)
+}
+
+/** The public collections whose canonical page is in `locale` (see the module doc), for the sitemap. */
 export async function listPublicCategoriesWithVersionIn(
   locale: string,
+  languages: OfferedLanguages,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterCategoryWithCount[]> {
   const categories = await listPublicCategories(viewer)
   if (categories.length === 0) return []
-  const [translations, articleCounts] = await Promise.all([
-    namedCategoryTranslations(categories, locale),
-    db
-      .select({ categoryId: helpCenterArticles.categoryId, inLocale: count() })
-      .from(helpCenterArticles)
-      .leftJoin(
-        helpCenterArticleTranslations,
-        and(
-          eq(helpCenterArticleTranslations.articleId, helpCenterArticles.id),
-          eq(helpCenterArticleTranslations.locale, locale),
-          eq(helpCenterArticleTranslations.status, 'published')
-        )
+  const translations = await namedCategoryTranslations(categories, locale)
+  const canonical = categories.filter(
+    (cat) =>
+      cat.locale === locale ||
+      translations.has(cat.id) ||
+      canonicalWithoutVersion(cat.locale, locale, languages)
+  )
+  if (locale === languages.main || canonical.length === 0) {
+    return canonical.map((cat) => categoryIn(cat, translations, locale))
+  }
+  const articleCounts = await db
+    .select({ categoryId: helpCenterArticles.categoryId, inLocale: count() })
+    .from(helpCenterArticles)
+    .leftJoin(
+      helpCenterArticleTranslations,
+      and(
+        eq(helpCenterArticleTranslations.articleId, helpCenterArticles.id),
+        eq(helpCenterArticleTranslations.locale, locale),
+        eq(helpCenterArticleTranslations.status, 'published')
       )
-      .where(
-        and(
-          inArray(
-            helpCenterArticles.categoryId,
-            categories.map((c) => c.id)
-          ),
-          isNull(helpCenterArticles.deletedAt),
-          isNotNull(helpCenterArticles.publishedAt),
-          or(eq(helpCenterArticles.locale, locale), isNotNull(helpCenterArticleTranslations.id))
-        )
+    )
+    .where(
+      and(
+        inArray(
+          helpCenterArticles.categoryId,
+          canonical.map((c) => c.id)
+        ),
+        isNull(helpCenterArticles.deletedAt),
+        isNotNull(helpCenterArticles.publishedAt),
+        or(eq(helpCenterArticles.locale, locale), isNotNull(helpCenterArticleTranslations.id))
       )
-      .groupBy(helpCenterArticles.categoryId),
-  ])
+    )
+    .groupBy(helpCenterArticles.categoryId)
   const countByCategory = new Map(articleCounts.map((c) => [c.categoryId, Number(c.inLocale)]))
-  return categories
-    .filter((cat) => cat.locale === locale || translations.has(cat.id))
+  return canonical
     .filter((cat) => (countByCategory.get(cat.id) ?? 0) > 0)
     .map((cat) => categoryIn(cat, translations, locale))
 }
@@ -232,16 +254,22 @@ export async function listPublicArticlesForCategoryWithFallback(
   return articles.map((a) => articleIn(a, translations, locale))
 }
 
-/** The public articles in a collection with a real version in `locale`, for the sitemap. */
+/** The public articles in a collection whose canonical page is in `locale` (see the module doc), for the sitemap. */
 export async function listPublicArticlesForCategoryWithVersionIn(
   categoryId: string,
   locale: string,
+  languages: OfferedLanguages,
   viewer: Actor = ANONYMOUS_ACTOR
 ) {
   const articles = await listPublicArticlesForCategory(categoryId, viewer)
   const translations = await publishedArticleTranslations(articles, locale)
   return articles
-    .filter((a) => a.locale === locale || translations.has(a.id))
+    .filter(
+      (a) =>
+        a.locale === locale ||
+        translations.has(a.id) ||
+        canonicalWithoutVersion(a.locale, locale, languages)
+    )
     .map((a) => articleIn(a, translations, locale))
 }
 
