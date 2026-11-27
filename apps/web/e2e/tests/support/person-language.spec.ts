@@ -71,7 +71,13 @@ test.describe('a person chooses their own language', () => {
         ).toBeVisible()
         await expect(page.getByRole('menuitemradio', { name: /Deutsch\s*German/ })).toBeVisible()
         await snap(page, '01-language-list')
+        // The page changes in place: the Appearance card is the same element
+        // before and after, never mounted again behind a blank frame.
+        await page
+          .getByText('Theme and language')
+          .evaluate((node) => ((window as { appearanceCard?: Node }).appearanceCard = node))
         await page.getByRole('menuitemradio', { name: /Deutsch/ }).click()
+        await snap(page, '01b-right-after-choice')
 
         // The toast reads in the new language, and the page follows at once.
         await expect(
@@ -82,6 +88,11 @@ test.describe('a person chooses their own language', () => {
         ).toBeVisible()
         await expect(page.locator('html')).toHaveAttribute('lang', 'de')
         await snap(page, '02-german-after-choice')
+        expect(
+          await page.evaluate(
+            () => (window as { appearanceCard?: Node }).appearanceCard?.isConnected ?? false
+          )
+        ).toBe(true)
         expect((await storedLanguage(customer.userUuid)).preferred_language).toBe('de')
 
         // Still German on the next page load, whatever the browser asks for.
@@ -94,11 +105,12 @@ test.describe('a person chooses their own language', () => {
         })
         await expect(german).toHaveText('Deutsch')
         await german.click()
-        await page
-          .getByRole('menuitemradio', {
-            name: new RegExp(de['portal.settings.preferences.appearance.languageAutomatic']),
-          })
-          .click()
+        const automatic = page.getByRole('menuitemradio', {
+          name: new RegExp(de['portal.settings.preferences.appearance.languageAutomatic']),
+        })
+        await expect(automatic).toBeVisible()
+        await snap(page, '02b-german-menu')
+        await automatic.click()
         await expect(
           page.getByText(en['portal.settings.preferences.appearance.languageSaved'])
         ).toBeVisible({ timeout: 15_000 })
