@@ -46,6 +46,7 @@ const { updateLanguageConfig, getHelpCenterConfig } =
 const { previewHelpCenterMainLanguage, helpCenterConfigForMainLanguage } =
   await import('../help-center-main-language.service')
 const { hybridSearchForLocale } = await import('../help-center-search.service')
+const { extraHelpCenterLocales } = await import('../../plan-limits/plan-limits.locales')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -450,7 +451,7 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
       expect(config.homepageDescription).toBe('Suche')
       expect(config.locales).toEqual({
         default: 'de',
-        additional: ['fr', 'en'],
+        additional: ['en', 'fr'],
         chrome: {
           fr: { homepageTitle: 'Comment aider ?', homepageDescription: '', searchPlaceholder: '' },
           de: { homepageTitle: '', homepageDescription: '', searchPlaceholder: 'Suchen' },
@@ -598,5 +599,28 @@ describe('helpCenterConfigForMainLanguage', () => {
       'de'
     )
     expect(next.locales.chrome.en.homepageTitle).toBe(DEFAULT_HELP_CENTER_CONFIG.homepageTitle)
+  })
+
+  it.each(['de', 'fr', 'it'])(
+    'puts the old main language where %s was, so a trip there and back keeps the order and what the plan holds',
+    (to) => {
+      const start = { ...DEFAULT_HELP_CENTER_CONFIG, ...locales('en', ['de', 'fr', 'it']) }
+
+      const there = helpCenterConfigForMainLanguage(start, to)
+      const back = helpCenterConfigForMainLanguage(there, 'en')
+
+      expect(there.locales.additional).toEqual(['de', 'fr', 'it'].map((l) => (l === to ? 'en' : l)))
+      expect(back.locales.additional).toEqual(['de', 'fr', 'it'])
+      expect(extraHelpCenterLocales(back.locales.additional, 2)).toEqual(['fr', 'it'])
+    }
+  )
+
+  it('keeps the old main language editable when the plan holds languages and the new one was editable', () => {
+    const there = helpCenterConfigForMainLanguage(
+      { ...DEFAULT_HELP_CENTER_CONFIG, ...locales('en', ['de', 'fr', 'it']) },
+      'de'
+    )
+
+    expect(extraHelpCenterLocales(there.locales.additional, 2)).toEqual(['fr', 'it'])
   })
 })

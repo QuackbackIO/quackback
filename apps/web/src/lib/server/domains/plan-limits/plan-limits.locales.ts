@@ -9,7 +9,9 @@
  * one way back under the cap.
  *
  * `locales.additional` is kept in the order languages were added (a new one is
- * appended), so its order is the order this reads.
+ * appended), so its order is the order this reads. A change of main language
+ * to an extra language puts the old main language in that language's place,
+ * so the order, and what is held, carry over.
  */
 import { logger } from '@/lib/server/logger'
 import { ForbiddenError } from '@/lib/shared/errors'

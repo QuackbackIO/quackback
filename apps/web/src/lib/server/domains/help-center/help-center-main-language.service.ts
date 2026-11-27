@@ -376,8 +376,10 @@ async function swapCategories(tx: Executor, to: string): Promise<void> {
  * homepage words, its homepage words become the main ones, and the old main
  * language's words are kept under its own language, with the search
  * placeholder it had there before. In a swap the old main language also
- * becomes an extra language; otherwise its words wait, hidden, for it to
- * come back. The new main language keeps its search placeholder in its own
+ * becomes an extra language, in the new one's place in the list, so the
+ * order of the extra languages (which decides which ones a plan cap holds)
+ * stays the same and a trip there and back restores it; otherwise its words
+ * wait, hidden, for it to come back. The new main language keeps its search placeholder in its own
  * entry, as the main language has no placeholder of its own, so a round trip
  * loses nothing. Otherwise only the main language changes.
  */
@@ -400,9 +402,7 @@ export function helpCenterConfigForMainLanguage(
       incoming?.homepageDescription || DEFAULT_HELP_CENTER_CONFIG.homepageDescription,
     locales: {
       default: to,
-      additional: extra
-        ? [...locales.additional.filter((l) => l !== to), from]
-        : locales.additional,
+      additional: extra ? locales.additional.map((l) => (l === to ? from : l)) : locales.additional,
       chrome: {
         ...chrome,
         ...(incoming?.searchPlaceholder

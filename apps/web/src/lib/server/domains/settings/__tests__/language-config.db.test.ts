@@ -90,7 +90,7 @@ describe.skipIf(!fixture.available)('the workspace languages', () => {
     })
   })
 
-  it('swaps in an extra help center language, which then leaves the extra languages', async () => {
+  it('swaps in an extra help center language, and the old main language takes its place in the extra languages', async () => {
     await storeHelpCenterLocales({ default: 'en', additional: ['de', 'fr'] })
 
     await updateLanguageConfig({ mainLanguage: 'de' })
@@ -98,7 +98,7 @@ describe.skipIf(!fixture.available)('the workspace languages', () => {
     expect((await getLanguageConfig('fresh')).mainLanguage).toBe('de')
     const { locales } = await getHelpCenterConfig('fresh')
     expect(locales.default).toBe('de')
-    expect(locales.additional).toEqual(['fr', 'en'])
+    expect(locales.additional).toEqual(['en', 'fr'])
   })
 
   it('relabels the main-language articles, so search stems them by the new main language', async () => {
