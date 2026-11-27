@@ -153,8 +153,13 @@ test.describe('help center languages', { tag: '@isolated' }, () => {
         await expect(dialog).toContainText('Draft')
         await expect.poll(async () => (await translationRow(article, 'fr'))?.status).toBe('draft')
         expect((await translationRow(article, 'fr'))?.title).toBe(`Traduit ${marker}`)
-        // A draft translation is not public: the French URL is a 404.
-        expect((await visit(page, articlePath(article, 'fr'))).status).toBe(404)
+        // A draft translation is not public: the French page shows the
+        // original, with a notice.
+        const french = await visit(page, articlePath(article, 'fr'))
+        expect(french.status).toBe(200)
+        expect(french.text).toContain(`Original ${marker}`)
+        expect(french.text).not.toContain(`Traduit ${marker}`)
+        expect(french.text).toContain('hc-fallback-notice')
       })
     }
   )
@@ -187,7 +192,10 @@ test.describe('help center languages', { tag: '@isolated' }, () => {
 
         await dialog.getByRole('button', { name: 'Unpublish' }).click()
         await expect.poll(async () => (await translationRow(article, 'fr'))?.status).toBe('draft')
-        expect((await visit(page, articlePath(article, 'fr'))).status).toBe(404)
+        const unpublished = await visit(page, articlePath(article, 'fr'))
+        expect(unpublished.status).toBe(200)
+        expect(unpublished.text).not.toContain(`Publié ${marker}`)
+        expect(unpublished.text).toContain('hc-fallback-notice')
 
         await dialog.getByRole('button', { name: 'Delete translation' }).click()
         await expect.poll(async () => (await translationRow(article, 'fr')) ?? null).toBeNull()

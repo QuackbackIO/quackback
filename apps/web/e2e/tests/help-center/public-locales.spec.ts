@@ -66,7 +66,7 @@ test.describe('the help center in French', { tag: '@isolated' }, () => {
   )
 
   test(
-    'HC-P-27 an untranslated article has no French page, and related links on a French page work',
+    'HC-P-27 an untranslated article opens in English on its French page, and related links on a French page work',
     {
       tag: '@core',
     },
@@ -87,20 +87,27 @@ test.describe('the help center in French', { tag: '@isolated' }, () => {
       })
       await withSettings(FRENCH, async () => {
         await translate(main, `Guide du routeur ${marker}`)
-        // Strict: no English fallback on portal URLs.
+        // A reader always gets an answer: the English article, with a notice.
         const untranslated = await request.get(articlePath(sibling, 'fr'), {
           headers: { cookie: 'e2e=1' },
           maxRedirects: 0,
         })
-        expect(untranslated.status()).toBe(404)
+        expect(untranslated.status()).toBe(200)
+        const body = await untranslated.text()
+        expect(body).toContain(sibling.title)
+        expect(body).toContain('hc-fallback-notice')
 
         await page.goto(articlePath(main, 'fr'))
         await expect(
           page.getByRole('heading', { level: 1, name: `Guide du routeur ${marker}` })
         ).toBeVisible()
-        const related = page.getByRole('link', { name: new RegExp(sibling.title) })
+        const related = page
+          .locator('section[aria-labelledby="hc-related"]')
+          .getByRole('link', { name: new RegExp(sibling.title) })
         await expect(related).toBeVisible()
         const href = (await related.getAttribute('href')) ?? ''
+        // It stays in French: the untranslated article has a French page.
+        expect(href).toContain('/hc/fr/articles/')
         const res = await request.get(href, { headers: { cookie: 'e2e=1' } })
         expect(res.status(), href).toBe(200)
       })
