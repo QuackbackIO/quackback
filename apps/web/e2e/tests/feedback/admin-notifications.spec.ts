@@ -496,7 +496,7 @@ test(
       })
       const [mail] = await waitForMails(customer.email, `mentioned you in "${title}"`)
       expect(mail.Subject).toBe(`${author.name} mentioned you in "${title}"`)
-      expect(mail.Text).toContain('View feedback')
+      expect(mail.Text).toContain('View Feedback')
       for (const who of [customer, mate]) {
         const [bell] = await waitForBells(who.principalId, undefined, (rows) =>
           rows.some((r) => r.type === 'post_mentioned' && r.body === title)

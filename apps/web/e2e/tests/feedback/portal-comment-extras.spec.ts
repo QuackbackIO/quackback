@@ -184,7 +184,7 @@ test.describe('portal comment extras', () => {
       // The mentioned customer: an email and a bell.
       const mail = await mailFor(cass.email, `mentioned you in "${title}"`)
       const body = mailText(mail)
-      expect(body).toContain('View feedback')
+      expect(body).toContain('View Feedback')
       expect(body).toContain('because you were mentioned')
       const postUuid = (await supportDb()`SELECT id FROM posts WHERE title = ${title}`)[0]
         .id as string
