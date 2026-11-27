@@ -56,6 +56,11 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     users: /^(components\/device\/device-approval\.tsx|routes\/device\.tsx)$/,
     importers: /^routes\/device\.tsx$/,
   },
+  languageSettings: {
+    users: /^components\/admin\/settings\/(language\/|help-center\/domains-languages-tab\.tsx$)/,
+    importers:
+      /^(components\/admin\/settings\/(language\/|help-center\/domains-languages-tab\.tsx$)|routes\/admin\/settings\.(general|help-center)\.tsx$)/,
+  },
   statusPage: {
     users: /^(components\/portal\/status\/|routes\/_portal\/status\.(index|\$incidentId)\.tsx$)/,
     importers:

@@ -256,6 +256,9 @@ export const AREA_MESSAGE_PREFIXES = {
   personalApiKeys: ['portal.settings.apiKeys.'],
   settings: ['portal.settings.'],
   helpCenter: ['portal.hc.'],
+  // The workspace's language settings: the Language card on Settings >
+  // General and the main-language row on the help center's languages.
+  languageSettings: ['admin.settings.language.'],
   twoFactor: ['portal.auth.twoFactor.'],
   notificationText: ['portal.notifications.text.'],
   accessGate: ['portal.accessGate.'],
