@@ -140,8 +140,11 @@ export async function generateOneTimeToken(): Promise<string | null> {
   if (!token) return null
 
   try {
+    // The widget token is the only credential: no cookie, so a portal
+    // session the frame does not hold is never the one signed in.
     const res = await fetch('/api/auth/one-time-token/generate', {
       headers: { Authorization: `Bearer ${token}` },
+      credentials: 'omit',
     })
     if (!res.ok) {
       console.error(

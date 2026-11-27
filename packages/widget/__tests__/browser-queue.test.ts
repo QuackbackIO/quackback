@@ -72,6 +72,22 @@ describe('browser-queue', () => {
     expect(dispatched[1]).toEqual(['identify', { id: 'u1', email: 'a@b.c' }, undefined])
   })
 
+  it('replays a queued whatsNew choice', async () => {
+    const dispatched = mockSDK()
+    installQueueStub()
+    window.Quackback!('init', { instanceUrl: 'https://feedback.acme.com', whatsNew: false })
+    window.Quackback!('whatsNew', true)
+
+    await import('../src/browser-queue')
+
+    expect(dispatched[0]).toEqual([
+      'init',
+      { instanceUrl: 'https://feedback.acme.com', whatsNew: false },
+      undefined,
+    ])
+    expect(dispatched[1]).toEqual(['whatsNew', true, undefined])
+  })
+
   it('replaces window.Quackback with a live dispatcher after loading', async () => {
     vi.doMock('../src/core/sdk', () => ({
       createSDK: () => ({
@@ -175,15 +191,15 @@ describe('browser-queue', () => {
     await import('../src/browser-queue')
     // Let the deferred fallback fire first.
     await new Promise((r) => setTimeout(r, 0))
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).not.toBeNull()
 
     // Host's explicit init must destroy + rebuild with the new options.
     window.Quackback!('init', { launcher: false, placement: 'left' })
 
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).toBeNull()
     const styles = document.getElementById('quackback-widget-styles')?.textContent ?? ''
-    expect(styles).toContain('left:24px')
-    expect(styles).not.toContain('right:24px')
+    expect(styles).toContain('left:calc(24px + env(safe-area-inset-left,0px))')
+    expect(styles).not.toContain('right:calc(24px')
   })
 
   it('end-to-end: a post-load init({launcher:false, placement:"left"}) reconfigures the DOM', async () => {
@@ -201,11 +217,28 @@ describe('browser-queue', () => {
     window.Quackback!('init', { launcher: false, placement: 'left' })
     await new Promise((r) => setTimeout(r, 0))
 
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).toBeNull()
     expect(document.querySelector('.quackback-panel')).not.toBeNull()
     const styles = document.getElementById('quackback-widget-styles')?.textContent ?? ''
-    expect(styles).toContain('left:24px')
-    expect(styles).not.toContain('right:24px')
+    expect(styles).toContain('left:calc(24px + env(safe-area-inset-left,0px))')
+    expect(styles).not.toContain('right:calc(24px')
+  })
+
+  it('end-to-end: a script-tag install reads widget state through the global', async () => {
+    vi.doUnmock('../src/core/sdk')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
+    )
+    await import('../src/browser-queue')
+
+    window.Quackback!('init', { instanceUrl: 'https://feedback.acme.com' })
+    expect(window.Quackback!('isOpen')).toBe(false)
+    expect(window.Quackback!('getUser')).toBeNull()
+    expect(window.Quackback!('isIdentified')).toBe(false)
+    window.Quackback!('open')
+    expect(window.Quackback!('isOpen')).toBe(true)
+    window.Quackback!('destroy')
   })
 
   it('does not auto-init if the queue already contains an init call', async () => {

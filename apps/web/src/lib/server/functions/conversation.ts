@@ -452,6 +452,7 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   const { getMessengerConfig, getWidgetConfig } =
     await import('@/lib/server/domains/settings/settings.widget')
   const { supportTeamName } = await import('@/lib/shared/support-contact-name')
+  const { resolveReplyTime } = await import('@/lib/shared/widget/reply-time')
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
   const { getSettings } = await import('./workspace')
@@ -485,6 +486,9 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     // when no team name is set. The same name stands in for an API key's
     // messages (principal-display.ts).
     teamName: supportTeamName(messengerConfig.teamName, appSettings?.name),
+    // How quickly the team usually replies: the thread header and the
+    // reply-time caption word their expectation from it.
+    replyTime: resolveReplyTime(messengerConfig.replyTime),
     // AI-assistant display identity: fronts new conversations (greeting
     // author + thread header) when enabled. Identity only — replies still
     // come from the team until the integrated agent lands.
@@ -683,7 +687,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
 export const runGetMessengerUnread = createServerOnlyFn(async function runGetMessengerUnread(
   ctx: AuthContext | null
 ) {
-  const zero = { conversations: 0, total: 0 }
+  const zero = { conversations: 0, total: 0, newestReplyId: null as string | null }
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
   if (!ctx?.principal || !(await isConversationsEnabledFor(ctx.principal.id))) return zero
@@ -694,10 +698,120 @@ export const runGetMessengerUnread = createServerOnlyFn(async function runGetMes
     if (!access.granted) return zero
   }
 
-  const { countVisitorUnreadMessages } =
+  const { summarizeVisitorUnreadReplies } =
     await import('@/lib/server/domains/conversation/conversation.query')
-  const conversationUnread = await countVisitorUnreadMessages(ctx.principal.id)
-  return { conversations: conversationUnread, total: conversationUnread }
+  const unread = await summarizeVisitorUnreadReplies(ctx.principal.id)
+  // The newest unread reply lets the widget tell a new reply from a read
+  // one when the total stays the same.
+  return { conversations: unread.count, total: unread.count, newestReplyId: unread.newestId }
+})
+
+/** Longest reply text the preview carries, in code points. */
+const REPLY_PREVIEW_MAX_TEXT = 2000
+/** Longest text of a reply reported to the host outside the card. */
+const RECENT_REPLY_MAX_TEXT = 280
+
+/** Plain text of at most `max` code points, ending in an ellipsis when cut. */
+function capText(text: string, max: number): string {
+  const chars = Array.from(text.trim())
+  return chars.length <= max ? chars.join('') : `${chars.slice(0, max - 1).join('')}…`
+}
+
+/** A reply author as the customer sees them. */
+interface ReplyAuthorDTO {
+  /** Null when the reply shows as the team, or its author has no name. */
+  name: string | null
+  avatarUrl: string | null
+}
+
+/** The newest unread replies for the reply preview above the closed launcher. */
+export interface ReplyPreviewDTO {
+  conversationId: ConversationId
+  /** The newest reply's author. */
+  author: ReplyAuthorDTO
+  /** The support team's name, falling back to the workspace name. */
+  teamName: string | null
+  /** The newest author's latest run of unread replies (counted up to 20);
+   *  may exceed `messages`. */
+  count: number
+  /** The newest of that run, oldest first, at most three. Plain text; empty
+   *  text is a reply with only attachments. */
+  messages: Array<{ id: ConversationMessageId; text: string; createdAt: string }>
+  /** Every conversation's newest unread replies, at most 20, oldest first,
+   *  each with its own author and a short text: the host reports each once. */
+  recent: Array<{
+    id: ConversationMessageId
+    conversationId: ConversationId
+    author: ReplyAuthorDTO
+    text: string
+  }>
+}
+
+/**
+ * The widget visitor's newest unread replies: the card's replies from the
+ * conversation with the newest one, and a bounded list across every
+ * conversation for the host's message event. Widget sessions only. Null
+ * when conversations are off, nothing is unread, or there is no widget
+ * session.
+ */
+export const runGetReplyPreview = createServerOnlyFn(async function runGetReplyPreview(
+  ctx: AuthContext | null
+): Promise<ReplyPreviewDTO | null> {
+  if (!ctx?.principal || ctx.scope !== 'widget') return null
+  const { isConversationsEnabledFor } =
+    await import('@/lib/server/domains/settings/settings.support')
+  if (!(await isConversationsEnabledFor(ctx.principal.id))) return null
+
+  const { listVisitorUnreadReplies } =
+    await import('@/lib/server/domains/conversation/conversation.query')
+  // Enough of the conversation to count the newest author's run.
+  const replies = await listVisitorUnreadReplies(ctx.principal.id, 20)
+  if (!replies) return null
+
+  const { loadAuthors, getSupportTeamName } =
+    await import('@/lib/server/domains/principals/principal-display')
+  const { contentPreview } = await import('@/lib/shared/utils/string')
+  const [authors, teamName] = await Promise.all([
+    // The card's replies share the newest one's author.
+    loadAuthors(
+      [replies.messages[replies.messages.length - 1], ...replies.recent].map((m) => m.principalId),
+      { forCustomer: true }
+    ),
+    getSupportTeamName(),
+  ])
+  const authorOf = (principalId: PrincipalId | null): ReplyAuthorDTO => {
+    const author = principalId ? authors.get(principalId) : undefined
+    // An author shown as the team reads as the team alone, never "Acme from Acme".
+    const name = author?.displayName && author.displayName !== teamName ? author.displayName : null
+    return { name, avatarUrl: name ? (author?.avatarUrl ?? null) : null }
+  }
+  const textOf = (m: { content: string; cited: boolean }, max: number) =>
+    // An assistant reply's [n] source markers mean nothing without the list.
+    capText(contentPreview(m.cited ? m.content.replace(/\s?\[\d+\]/g, '') : m.content), max)
+
+  // The card credits every bubble to one author, so it keeps only the newest
+  // author's latest run of replies.
+  const newest = replies.messages[replies.messages.length - 1]
+  let start = replies.messages.length - 1
+  while (start > 0 && replies.messages[start - 1].principalId === newest.principalId) start--
+  const run = replies.messages.slice(start)
+  return {
+    conversationId: replies.conversationId,
+    author: authorOf(newest.principalId),
+    teamName,
+    count: run.length,
+    messages: run.slice(-3).map((m) => ({
+      id: m.id,
+      text: textOf(m, REPLY_PREVIEW_MAX_TEXT),
+      createdAt: m.createdAt.toISOString(),
+    })),
+    recent: replies.recent.map((m) => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      author: authorOf(m.principalId),
+      text: textOf(m, RECENT_REPLY_MAX_TEXT),
+    })),
+  }
 })
 
 export const getMessengerUnreadFn = createServerFn({ method: 'GET' }).handler(async () => {

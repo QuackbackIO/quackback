@@ -131,6 +131,11 @@ import { logRunEvent } from './workflow-run-events'
 import { interpolateTiptapContent } from '@/lib/shared/workflows/interpolate'
 import { tiptapJsonToText } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
+import {
+  DEFAULT_REPLY_TIME,
+  resolveReplyTime,
+  type ReplyTime,
+} from '@/lib/shared/widget/reply-time'
 import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import * as ticketService from '@/lib/server/domains/tickets/ticket.service'
 import { setTicketDueAt } from '@/lib/server/domains/tickets/ticket-due.service'
@@ -352,7 +357,7 @@ function blockFallbackContent(
 function buildBlockPayload(
   block: BlockSendSpec,
   base: { runId: string; nodeId: string },
-  replyTimeStatus: 'online' | 'away' | null
+  replyTime: { status: 'online' | 'away'; replyTime: ReplyTime } | null
 ): WorkflowBlockPayload {
   const common = { v: 1 as const, ...base, waiting: INTERACTIVE_BLOCK_KINDS.has(block.kind) }
   switch (block.kind) {
@@ -385,7 +390,12 @@ function buildBlockPayload(
         commentPrompt: block.commentPrompt ?? '',
       }
     case 'replyTime':
-      return { ...common, kind: 'replyTime', status: replyTimeStatus ?? 'online' }
+      return {
+        ...common,
+        kind: 'replyTime',
+        status: replyTime?.status ?? 'online',
+        replyTime: replyTime?.replyTime ?? DEFAULT_REPLY_TIME,
+      }
   }
 }
 
@@ -420,16 +430,28 @@ async function sendBlock(
   const assistantConfig = await getAssistantRuntimeConfig()
 
   let resolvedBody: TiptapContent | null = null
-  let replyTimeStatus: 'online' | 'away' | null = null
+  let replyTimeResolved: { status: 'online' | 'away'; replyTime: ReplyTime } | null = null
   let content: string
   if (block.kind === 'replyTime') {
     const { getOfficeHoursSchedule } =
       await import('@/lib/server/domains/settings/settings.office-hours')
     const { buildReplyTimeMessage } =
       await import('@/lib/server/domains/office-hours/reply-time-message')
-    const schedule = await getOfficeHoursSchedule()
-    const resolved = buildReplyTimeMessage(schedule)
-    replyTimeStatus = resolved.status
+    const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
+    // The reply time only words the line: an unreadable messenger config
+    // falls back to the default rather than failing the step.
+    const [schedule, replyTime] = await Promise.all([
+      getOfficeHoursSchedule(),
+      getMessengerConfig().then(
+        (messenger) => resolveReplyTime(messenger.replyTime),
+        (error: unknown) => {
+          log.warn({ err: error }, 'messenger config unreadable; default reply time')
+          return DEFAULT_REPLY_TIME
+        }
+      ),
+    ])
+    const resolved = buildReplyTimeMessage(schedule, replyTime)
+    replyTimeResolved = { status: resolved.status, replyTime }
     content = resolved.content
   } else {
     const variables = resolvedDeps?.variables ?? (await resolveWorkflowVariables(conversationId))
@@ -448,7 +470,7 @@ async function sendBlock(
     // send path) — same as Quinn's normal (non-handover) answer.
     waiting: false,
     contentJson: block.kind === 'replyTime' ? null : resolvedBody,
-    metadata: { block: buildBlockPayload(block, { runId, nodeId }, replyTimeStatus) },
+    metadata: { block: buildBlockPayload(block, { runId, nodeId }, replyTimeResolved) },
   }
   const messageDTO =
     block.kind === 'csat'

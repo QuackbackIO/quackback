@@ -5,7 +5,7 @@
  * thanks flow (and its local-phase survival across a state flip to
  * 'chosen'), and inline collect validation.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import {
@@ -18,12 +18,22 @@ import type { WorkflowBlockPayload } from '@/lib/shared/db-types'
 
 // Reduced motion: no entrance animations, so a test that ends mid-animation
 // leaves no cancelled happy-dom animation behind.
-vi.mock('framer-motion', async (original) => ({
-  ...(await original<typeof import('framer-motion')>()),
-  useReducedMotion: () => true,
-}))
+beforeEach(() => {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: query.includes('prefers-reduced-motion: reduce'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList
+  )
+})
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 function withIntl(node: React.ReactNode) {
   return render(
@@ -410,5 +420,36 @@ describe('BlockReplyTimeCaption', () => {
   it('renders the away phrasing', () => {
     withIntl(<BlockReplyTimeCaption status="away" />)
     expect(screen.getByRole('status')).toHaveTextContent(/away/i)
+  })
+
+  it('says under an hour when the workspace never set a reply time', () => {
+    withIntl(<BlockReplyTimeCaption status="online" />)
+    expect(screen.getByRole('status')).toHaveTextContent(
+      "We're online, typically replies in under an hour."
+    )
+  })
+
+  it.each([
+    ['minutes', "We're online, typically replies in a few minutes."],
+    ['hours', "We're online, typically replies in a few hours."],
+    ['day', "We're online, typically replies within a day."],
+    ['off', "We're online."],
+  ] as const)('words the online line from the %s reply time', (replyTime, copy) => {
+    withIntl(<BlockReplyTimeCaption status="online" replyTime={replyTime} />)
+    expect(screen.getByRole('status').textContent).toBe(copy)
+  })
+
+  it('keeps the reply time stored on the block when the setting changes later', () => {
+    withIntl(<BlockReplyTimeCaption status="online" replyTime="minutes" liveReplyTime="day" />)
+    expect(screen.getByRole('status').textContent).toBe(
+      "We're online, typically replies in a few minutes."
+    )
+  })
+
+  it('uses the live setting for an older block that stored none', () => {
+    withIntl(<BlockReplyTimeCaption status="online" liveReplyTime="day" />)
+    expect(screen.getByRole('status').textContent).toBe(
+      "We're online, typically replies within a day."
+    )
   })
 })

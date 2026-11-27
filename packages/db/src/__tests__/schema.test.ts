@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   posts,
   postVotes,
@@ -257,6 +259,19 @@ describe('Schema definitions', () => {
     it('has publishedAt for draft/publish workflow', () => {
       const columns = Object.keys(getTableColumns(changelogEntries))
       expect(columns).toContain('publishedAt')
+    })
+
+    it('announces entries above the launcher unless an admin turns it off (0324)', () => {
+      expect(changelogEntries.announceOnLauncher.name).toBe('announce_on_launcher')
+      expect(changelogEntries.announceOnLauncher.notNull).toBe(true)
+      expect(changelogEntries.announceOnLauncher.default).toBe(true)
+      const sql = readFileSync(
+        join(__dirname, '../../drizzle/0324_changelog_announce_on_launcher.sql'),
+        'utf8'
+      )
+      expect(sql).toMatch(
+        /ALTER TABLE "changelog_entries"\s+ADD COLUMN IF NOT EXISTS "announce_on_launcher" boolean NOT NULL DEFAULT true;/
+      )
     })
   })
 })

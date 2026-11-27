@@ -18,7 +18,14 @@ export async function handleWidgetUpload({ request }: { request: Request }): Pro
   // resolve the Bearer the same way server functions do: the better-auth bearer
   // plugin strips the token signature and looks up the session (a raw
   // `session.token` equality check fails because the bearer value is signed).
-  const sessionData = await auth.api.getSession({ headers: request.headers })
+  // The Bearer is the widget's only credential: the lookup sees that header
+  // alone, so a session cookie the frame's request also carries (a same-site
+  // embedder) never stands in for it.
+  const authorization = request.headers.get('authorization')
+  if (!authorization?.startsWith('Bearer ')) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const sessionData = await auth.api.getSession({ headers: new Headers({ authorization }) })
   if (!sessionData?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }

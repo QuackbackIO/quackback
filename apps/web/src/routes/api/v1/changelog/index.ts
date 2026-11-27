@@ -23,6 +23,7 @@ const createChangelogSchema = z.object({
   content: z.string().min(1, 'Content is required'),
   publishedAt: z.string().datetime().optional(),
   linkedPostIds: z.array(z.string()).optional(),
+  announceOnLauncher: z.boolean().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/changelog/')({
@@ -105,6 +106,9 @@ export const Route = createFileRoute('/api/v1/changelog/')({
                 'post',
                 'linked post IDs'
               ),
+              ...(parsed.data.announceOnLauncher !== undefined && {
+                announceOnLauncher: parsed.data.announceOnLauncher,
+              }),
             },
             {
               principalId: authResult.principalId,
