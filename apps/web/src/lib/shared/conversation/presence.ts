@@ -1,7 +1,7 @@
 /**
  * Whether the team should read as "available" to a visitor — drives the online
  * dot and copy on the conversation thread and the support surface's message CTA (via
- * ConversationPresenceBadge), so the two never contradict each other.
+ * ConversationTeamHeader), so the two never contradict each other.
  *
  * A live agent always counts as available. When office hours are configured
  * (`withinOfficeHours` is non-null) the schedule also marks the team available;

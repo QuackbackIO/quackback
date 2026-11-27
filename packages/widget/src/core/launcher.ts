@@ -1,3 +1,11 @@
+import { launcherLabels } from './labels'
+import { createWhatsNewCard, type WhatsNew, type WhatsNewCardHandle } from './whats-new-card'
+import type {
+  ReplyPreview,
+  ReplyPreviewCardHandle,
+  ReplyPreviewCardOptions,
+} from './reply-preview-card'
+
 export interface LauncherOptions {
   placement: 'left' | 'right'
   onClick: () => void
@@ -7,11 +15,29 @@ export interface LauncherOptions {
    * the fake page instead of `position: fixed` on the viewport.
    */
   root?: HTMLElement
+  /** The visitor's language, for the button's accessible name. */
+  locale?: string
+  /** The "What's new" card was clicked: open the widget on this entry. */
+  onWhatsNewOpen?: (entryId: string) => void
+  /** The "What's new" card was dismissed for this entry. */
+  onWhatsNewDismiss?: (entryId: string) => void
+  /** The "What's new" card appeared for an entry it had not shown yet. */
+  onWhatsNewShown?: (data: WhatsNew) => void
+  /** Builds the reply preview card. The SDK passes it; a launcher without
+   *  it (the admin preview) shows no reply preview and leaves the card's
+   *  code out of its bundle. */
+  replyCard?: (opts: ReplyPreviewCardOptions) => ReplyPreviewCardHandle
+  /** The reply preview was clicked: open the widget on this conversation. */
+  onReplyOpen?: (conversationId: string) => void
+  /** The reply preview was dismissed. */
+  onReplyDismiss?: (data: ReplyPreview) => void
 }
 
 export interface LauncherHandle {
   el: HTMLButtonElement
   setOpen(open: boolean): void
+  /** Show or hide the button together with its greeting bubble. */
+  setVisible(visible: boolean): void
   /** Replace the button colors (typically called after server config fetch). */
   setColors(colors: { backgroundColor?: string; foregroundColor?: string }): void
   /** Show an unread-count badge on the button (hidden at 0). Driven by the
@@ -22,6 +48,12 @@ export interface LauncherHandle {
    *  only while closed and not dismissed this browser session; clicking it opens
    *  the widget. Driven by the server config. */
   setGreeting(text: string | null | undefined): void
+  /** "What's new" card above the button (null hides it). Shown only while
+   *  closed, and in place of the greeting bubble. */
+  setWhatsNew(data: WhatsNew | null): void
+  /** Reply preview above the button (null hides it). Shown only while
+   *  closed, ahead of the "What's new" card and the greeting bubble. */
+  setReplyPreview(data: ReplyPreview | null): void
   /** Text label beside the icon — turns the circular button into a pill.
    *  Empty/unset restores the icon-only circle. Driven by the server config. */
   setLabel(text: string | null | undefined): void
@@ -42,6 +74,14 @@ const MESSENGER_ICON =
 const CLOSE_ICON =
   '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
+const BUTTON_TRANSITION =
+  'opacity 450ms ease, transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease'
+const ICON_TRANSITION =
+  'opacity 220ms cubic-bezier(0.34,1.56,0.64,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1)'
+
+const LAUNCHER_SHADOW = '0 1px 6px rgba(15,23,42,0.08), 0 2px 24px rgba(15,23,42,0.16)'
+const LAUNCHER_SHADOW_HOVER = '0 2px 8px rgba(15,23,42,0.10), 0 6px 28px rgba(15,23,42,0.20)'
+
 export function createLauncher(opts: LauncherOptions): LauncherHandle {
   let bg = DEFAULT_BG
   let fg = DEFAULT_FG
@@ -49,15 +89,41 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // close (X) icon would be nonsensical, and an open widget is already read.
   let unreadCount = 0
   let isOpen = false
+  // hideLauncher hides the button and its greeting bubble together.
+  let visible = true
   // Visible button label — when set, it doubles as the accessible name.
   let labelText = ''
+  // The closed button's accessible name, with the count the badge shows.
+  const labels = launcherLabels(opts.locale)
+  const openLabel = () => {
+    const base = labelText || labels.open
+    return unreadCount > 0 ? labels.unread(base, unreadCount) : base
+  }
+  // Follows the visitor's reduced-motion setting, also when it changes.
+  const motionQuery =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null
+  let reduceMotion = !!motionQuery?.matches
   // Proactive greeting bubble state. Dismissal persists per browser session so
   // the bubble invites once without nagging on every page. A contained preview
   // must not write that key — it would hide the bubble for a later host visit.
   let greetingText: string | null = null
   let localDismissed = false
+  // The "What's new" card's content, and the card once created.
+  let whatsNew: WhatsNew | null = null
+  let whatsNewCard: WhatsNewCardHandle | null = null
+  // The reply preview's content, and the card once created.
+  let replyPreview: ReplyPreview | null = null
+  let replyCard: ReplyPreviewCardHandle | null = null
   const contained = Boolean(opts.root)
   const edge = contained ? '0px' : '24px'
+  // On a page that draws under the notch and system bars (viewport-fit=cover),
+  // keep the button and its bubble clear of them; env() is 0px elsewhere.
+  const sideEdge = (s: 'left' | 'right') =>
+    contained ? edge : `calc(${edge} + env(safe-area-inset-${s}, 0px))`
+  const bottomEdge = (px: number, containedPx: number) =>
+    contained ? `${containedPx}px` : `calc(${px}px + env(safe-area-inset-bottom, 0px))`
   const GREETING_DISMISS_KEY = 'quackback:launcher-greeting-dismissed'
   const greetingDismissed = (): boolean => {
     if (contained) return localDismissed
@@ -71,8 +137,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const btn = document.createElement('button')
   Object.assign(btn.style, {
     position: contained ? 'absolute' : 'fixed',
-    bottom: contained ? '0px' : '24px',
-    [opts.placement === 'left' ? 'left' : 'right']: edge,
+    bottom: bottomEdge(24, 0),
+    [opts.placement === 'left' ? 'left' : 'right']: sideEdge(
+      opts.placement === 'left' ? 'left' : 'right'
+    ),
     zIndex: '2147483647',
     display: 'flex',
     alignItems: 'center',
@@ -88,12 +156,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     fontWeight: '600',
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     cursor: 'pointer',
-    boxShadow: '0 12px 32px rgba(0,0,0,0.28), 0 4px 12px rgba(0,0,0,0.18)',
+    boxShadow: LAUNCHER_SHADOW,
     opacity: '0',
-    transition:
-      'opacity 450ms ease, transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease',
   })
-  btn.setAttribute('aria-label', 'Open feedback widget')
+  btn.setAttribute('aria-label', openLabel())
   btn.setAttribute('aria-expanded', 'false')
 
   const wrapper = document.createElement('div')
@@ -105,8 +171,6 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     flexShrink: '0',
   })
 
-  const iconTransition =
-    'opacity 220ms cubic-bezier(0.34,1.56,0.64,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1)'
   const iconMessenger = document.createElement('span')
   Object.assign(iconMessenger.style, {
     position: 'absolute',
@@ -115,7 +179,6 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     display: 'flex',
     opacity: '1',
     transform: 'rotate(0deg)',
-    transition: iconTransition,
   })
   iconMessenger.innerHTML = MESSENGER_ICON
   const iconClose = document.createElement('span')
@@ -126,9 +189,22 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     display: 'flex',
     opacity: '0',
     transform: 'rotate(-90deg)',
-    transition: iconTransition,
   })
   iconClose.innerHTML = CLOSE_ICON
+  const applyMotion = () => {
+    btn.style.transition = reduceMotion ? 'none' : BUTTON_TRANSITION
+    iconMessenger.style.transition = reduceMotion ? 'none' : ICON_TRANSITION
+    iconClose.style.transition = reduceMotion ? 'none' : ICON_TRANSITION
+    if (reduceMotion) btn.style.transform = 'translateY(0)'
+    whatsNewCard?.applyMotion()
+    replyCard?.applyMotion()
+  }
+  const onMotionChange = () => {
+    reduceMotion = !!motionQuery?.matches
+    applyMotion()
+  }
+  applyMotion()
+  motionQuery?.addEventListener?.('change', onMotionChange)
   wrapper.appendChild(iconMessenger)
   wrapper.appendChild(iconClose)
   btn.appendChild(wrapper)
@@ -183,8 +259,8 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const bubble = document.createElement('div')
   Object.assign(bubble.style, {
     position: contained ? 'absolute' : 'fixed',
-    bottom: '84px',
-    [side]: edge,
+    bottom: bottomEdge(84, 84),
+    [side]: sideEdge(side),
     zIndex: '2147483646',
     display: 'none',
     alignItems: 'center',
@@ -219,9 +295,28 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     lineHeight: '1',
     cursor: 'pointer',
   })
+  // Cards wait for the button: none shows above a launcher not yet revealed.
+  let revealed = false
+  // A visitor who dismissed the reply preview or the What's new card is not
+  // offered the greeting in its place for the rest of the page load.
+  let whatsNewDismissed = false
+  // One card at a time above the button, by priority.
+  const pickCard = (): 'reply' | 'whats-new' | 'greeting' | null => {
+    if (!revealed || !visible || isOpen) return null
+    if (replyPreview && opts.replyCard) return 'reply'
+    if (whatsNew) return 'whats-new'
+    if (greetingText && !greetingDismissed() && !whatsNewDismissed) return 'greeting'
+    return null
+  }
+  // Which card the live region last spoke for.
+  let spokenFor: 'reply' | 'whats-new' | null = null
   const renderGreeting = () => {
-    const show = !!greetingText && !isOpen && !greetingDismissed()
-    bubble.style.display = show ? 'flex' : 'none'
+    const card = pickCard()
+    bubble.style.display = card === 'greeting' ? 'flex' : 'none'
+    replyCard?.render(card === 'reply' ? replyPreview : null)
+    whatsNewCard?.render(card === 'whats-new' ? whatsNew : null)
+    // A hidden card leaves nothing behind for a screen reader to find.
+    if (card !== spokenFor) clearAnnouncement()
   }
   bubbleClose.addEventListener('click', () => {
     if (contained) {
@@ -241,13 +336,116 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const mount = opts.root ?? document.body
   mount.appendChild(bubble)
 
+  // Screen readers hear a card once, politely, when it appears. The region
+  // lives from creation, outside any card that toggles display, and gets its
+  // text a frame after the card shows, so the change is announced.
+  const live = document.createElement('span')
+  live.setAttribute('role', 'status')
+  live.setAttribute('aria-live', 'polite')
+  Object.assign(live.style, {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '-1px',
+    padding: '0',
+    border: '0',
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+  })
+  mount.appendChild(live)
+  // Emptied first, so the same words said again are announced again.
+  let announceFrame = 0
+  const announce = (text: string, card: 'reply' | 'whats-new') => {
+    spokenFor = card
+    live.textContent = ''
+    cancelAnimationFrame(announceFrame)
+    announceFrame = requestAnimationFrame(() => {
+      announceFrame = 0
+      live.textContent = text
+    })
+  }
+  const clearAnnouncement = () => {
+    spokenFor = null
+    if (announceFrame) cancelAnimationFrame(announceFrame)
+    announceFrame = 0
+    live.textContent = ''
+  }
+
+  // The "What's new" card, created when there is first something to show.
+  let spokenId: string | null = null
+  let cardSide: 'left' | 'right' = side
+  let accent: { backgroundColor: string; foregroundColor: string } | null = null
+  const ensureWhatsNewCard = (): WhatsNewCardHandle => {
+    if (whatsNewCard) return whatsNewCard
+    whatsNewCard = createWhatsNewCard({
+      mount,
+      side: cardSide,
+      contained,
+      reduceMotion: () => reduceMotion,
+      sideEdge,
+      bottom: bottomEdge(84, 84),
+      onOpen: (entryId) => opts.onWhatsNewOpen?.(entryId),
+      onDismiss: (entryId) => {
+        const hadFocus = whatsNewCard?.el.contains(document.activeElement) ?? false
+        whatsNew = null
+        whatsNewDismissed = true
+        renderGreeting()
+        if (hadFocus) btn.focus()
+        opts.onWhatsNewDismiss?.(entryId)
+      },
+      onShown: (data) => {
+        // Said once per entry; reopening the launcher does not repeat it.
+        if (spokenId !== data.entry.id) {
+          spokenId = data.entry.id
+          announce(`${data.strings.pill}: ${data.entry.title}`, 'whats-new')
+        }
+        opts.onWhatsNewShown?.(data)
+      },
+    })
+    if (accent) whatsNewCard.setAccent(accent)
+    return whatsNewCard
+  }
+
+  // The reply preview, created when there is first a reply to show.
+  let spokenReplyId: string | null = null
+  const ensureReplyCard = (build: NonNullable<LauncherOptions['replyCard']>) => {
+    if (replyCard) return
+    replyCard = build({
+      mount,
+      side: cardSide,
+      contained,
+      reduceMotion: () => reduceMotion,
+      sideEdge,
+      bottom: bottomEdge(88, 88),
+      onOpen: (conversationId) => opts.onReplyOpen?.(conversationId),
+      onDismiss: (data) => {
+        const hadFocus = replyCard?.el.contains(document.activeElement) ?? false
+        replyPreview = null
+        whatsNewDismissed = true
+        renderGreeting()
+        if (hadFocus) btn.focus()
+        opts.onReplyDismiss?.(data)
+      },
+      onShown: (data) => {
+        // Said once per new reply; reopening the launcher does not repeat it.
+        const newest = data.messages[data.messages.length - 1].id
+        if (spokenReplyId !== newest) {
+          spokenReplyId = newest
+          announce(data.strings.announce, 'reply')
+        }
+      },
+    })
+    if (accent) replyCard.setAccent(accent)
+  }
+
   btn.addEventListener('mouseenter', () => {
-    btn.style.transform = 'translateY(-2px)'
-    btn.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)'
+    if (!reduceMotion) btn.style.transform = 'translateY(-2px)'
+    btn.style.boxShadow = LAUNCHER_SHADOW_HOVER
   })
   btn.addEventListener('mouseleave', () => {
-    btn.style.transform = 'translateY(0)'
-    btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+    if (!reduceMotion) btn.style.transform = 'translateY(0)'
+    btn.style.boxShadow = LAUNCHER_SHADOW
   })
   btn.addEventListener('click', opts.onClick)
 
@@ -258,15 +456,17 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     setOpen(open) {
       isOpen = open
       btn.setAttribute('aria-expanded', open ? 'true' : 'false')
-      btn.setAttribute(
-        'aria-label',
-        open ? 'Close feedback widget' : labelText || 'Open feedback widget'
-      )
+      btn.setAttribute('aria-label', open ? labels.close : openLabel())
       iconMessenger.style.opacity = open ? '0' : '1'
       iconMessenger.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)'
       iconClose.style.opacity = open ? '1' : '0'
       iconClose.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)'
       renderBadge()
+      renderGreeting()
+    },
+    setVisible(show) {
+      visible = show
+      btn.style.display = show ? 'flex' : 'none'
       renderGreeting()
     },
     setColors(colors) {
@@ -278,16 +478,32 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
         fg = colors.foregroundColor
         btn.style.color = fg
       }
+      // The card's count pill wears the launcher's colours.
+      accent = { backgroundColor: bg, foregroundColor: fg }
+      whatsNewCard?.setAccent(accent)
+      replyCard?.setAccent(accent)
     },
     setUnread(count) {
       unreadCount = Math.max(0, Math.floor(count))
       renderBadge()
+      // A screen reader hears the count the badge shows.
+      if (!isOpen) btn.setAttribute('aria-label', openLabel())
     },
     setGreeting(text) {
       const next = text?.trim() || null
       if (contained && next !== greetingText) localDismissed = false
       greetingText = next
       bubbleText.textContent = greetingText ?? ''
+      renderGreeting()
+    },
+    setWhatsNew(data) {
+      whatsNew = data
+      if (data) ensureWhatsNewCard()
+      renderGreeting()
+    },
+    setReplyPreview(data) {
+      replyPreview = data
+      if (data && opts.replyCard) ensureReplyCard(opts.replyCard)
       renderGreeting()
     },
     setLabel(text) {
@@ -300,20 +516,29 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       btn.style.borderRadius = show ? '24px' : '50%'
       btn.style.padding = show ? '0 16px 0 10px' : '0'
       btn.style.gap = show ? '8px' : '0'
-      if (!isOpen) btn.setAttribute('aria-label', labelText || 'Open feedback widget')
+      if (!isOpen) btn.setAttribute('aria-label', openLabel())
     },
     setPlacement(side) {
-      btn.style.left = side === 'left' ? edge : ''
-      btn.style.right = side === 'right' ? edge : ''
-      bubble.style.left = side === 'left' ? edge : ''
-      bubble.style.right = side === 'right' ? edge : ''
+      btn.style.left = side === 'left' ? sideEdge('left') : ''
+      btn.style.right = side === 'right' ? sideEdge('right') : ''
+      bubble.style.left = side === 'left' ? sideEdge('left') : ''
+      bubble.style.right = side === 'right' ? sideEdge('right') : ''
+      cardSide = side
+      whatsNewCard?.setSide(side)
+      replyCard?.setSide(side)
     },
     reveal() {
       btn.style.opacity = '1'
+      revealed = true
+      renderGreeting()
     },
     remove() {
+      motionQuery?.removeEventListener?.('change', onMotionChange)
       btn.remove()
       bubble.remove()
+      live.remove()
+      whatsNewCard?.remove()
+      replyCard?.remove()
     },
   }
 }

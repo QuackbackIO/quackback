@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { LocalDate } from '@/components/ui/local-date'
 import {
   DocumentTextIcon,
@@ -33,9 +33,15 @@ import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { cn, tomorrowAt } from '@/lib/shared/utils'
 import type { PostId, ChangelogCategoryId, SegmentId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
-import { TagIcon, EnvelopeIcon, PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import {
+  TagIcon,
+  EnvelopeIcon,
+  PhotoIcon,
+  XMarkIcon,
+  SpeakerWaveIcon,
+} from '@heroicons/react/24/outline'
 
-interface ChangelogMetadataSidebarContentProps {
+export interface ChangelogMetadataSidebarContentProps {
   publishState: PublishState
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
@@ -54,6 +60,12 @@ interface ChangelogMetadataSidebarContentProps {
   onDisplayDateClear?: () => void
   featuredImageUrl?: string | null
   onFeaturedImageChange?: (url: string | null) => void
+  /** The workspace announces new updates above the widget launcher: only
+   *  then does the entry's own choice show. */
+  workspaceAnnounces?: boolean
+  /** Whether the What's new card above the launcher may announce this entry. */
+  announceOnLauncher?: boolean
+  onAnnounceOnLauncherChange?: (announce: boolean) => void
 }
 
 const PUBLISH_DAY: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
@@ -82,10 +94,15 @@ export function ChangelogMetadataSidebarContent({
   onDisplayDateClear = () => {},
   featuredImageUrl = null,
   onFeaturedImageChange = () => {},
+  workspaceAnnounces = false,
+  announceOnLauncher = true,
+  onAnnounceOnLauncherChange = () => {},
 }: ChangelogMetadataSidebarContentProps) {
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Rendered in the desktop sidebar and the mobile sheet at once.
+  const announceId = useId()
   const { upload: uploadFeaturedImage } = useImageUpload({ prefix: 'changelog' })
   const [featuredImageUploading, setFeaturedImageUploading] = useState(false)
 
@@ -257,6 +274,26 @@ export function ChangelogMetadataSidebarContent({
           <Checkbox
             checked={notify}
             onCheckedChange={(checked) => onNotifyChange(checked === true)}
+          />
+        </div>
+      )}
+
+      {/* Announce above the launcher - the entry's say in the widget's
+          What's new card, shown only while the workspace turns that card on.
+          Off still counts the update as unread in the widget. */}
+      {workspaceAnnounces && (
+        <div className="flex items-center justify-between gap-2">
+          <label
+            htmlFor={announceId}
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+          >
+            <SpeakerWaveIcon className="h-4 w-4" />
+            Announce above the launcher
+          </label>
+          <Checkbox
+            id={announceId}
+            checked={announceOnLauncher}
+            onCheckedChange={(checked) => onAnnounceOnLauncherChange(checked === true)}
           />
         </div>
       )}

@@ -60,7 +60,7 @@ test.describe('Admin Widget Settings', () => {
   })
 
   test('shows widget preview panel', async ({ page }) => {
-    await expect(page.getByText('Preview')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Live preview')).toBeVisible({ timeout: 10000 })
   })
 
   test('can toggle the widget enabled/disabled state and auto-saves', async ({ page }) => {

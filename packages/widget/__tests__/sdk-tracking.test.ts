@@ -18,6 +18,15 @@ vi.mock('../src/core/tracker', () => ({
 const { createSDK } = await import('../src/core/sdk')
 
 const ORIGIN = 'https://feedback.acme.com'
+
+// Messages from the panel come from its iframe's window; the bridge drops any
+// other source.
+function panelWindow() {
+  const iframe = document.querySelector(
+    'iframe.quackback-widget-iframe'
+  ) as HTMLIFrameElement | null
+  return iframe?.contentWindow ?? null
+}
 const DEVICE_KEY = 'quackback:device-id'
 
 function bakeConfig(visitorDeviceTracking = true) {
@@ -68,7 +77,7 @@ describe('sdk host-page tracking', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN, tracking: false })
     expect(trackers).toHaveLength(0)
     expect(window.localStorage.getItem(DEVICE_KEY)).toBeNull()
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open help"]')).not.toBeNull()
   })
 
   it('tracking(true) after init starts the tracker the instance allows', () => {
@@ -163,7 +172,11 @@ describe('sdk host-page tracking', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     window.dispatchEvent(
-      new MessageEvent('message', { origin: ORIGIN, data: { type: 'quackback:ready' } })
+      new MessageEvent('message', {
+        source: panelWindow(),
+        origin: ORIGIN,
+        data: { type: 'quackback:ready' },
+      })
     )
     postMessage.mockClear()
     sdk.dispatch('tracking', false)

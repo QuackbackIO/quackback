@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useReducer } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -8,8 +8,10 @@ import {
   countTicketStageChanges,
   getTicketStagesSeen,
   markTicketStagesSeen,
+  touchTicketStagesSeen,
   TICKET_STAGES_SEEN_EVENT,
 } from './ticket-stage-seen'
+import { seenScope } from './seen-scope'
 
 /**
  * Whether this visitor has any tickets: `true`/`false` once known, `null`
@@ -31,7 +33,10 @@ export type HasTickets = boolean | null
  * never badge; only later moves do (see ticket-stage-seen.ts).
  */
 export function useTicketStageBadge(enabled: boolean): { unread: number; hasTickets: HasTickets } {
-  const { sessionVersion, isIdentified, identityResolved } = useWidgetAuth()
+  const { sessionVersion, isIdentified, identityResolved, user } = useWidgetAuth()
+  // Null until the identity round trip settles: no marker is read or written
+  // for a visitor the widget cannot yet tell apart, and the badge stays 0.
+  const scope = seenScope(user, identityResolved)
   const { data, isError } = useQuery({
     queryKey: widgetMyTicketsKey(sessionVersion),
     queryFn: () => widgetGetMyTicketsFn({ headers: getWidgetAuthHeaders() }),
@@ -42,23 +47,38 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
 
   // Re-read the markers whenever the Tickets tab advances them (same-tab
   // updates don't fire the native `storage` event, hence the custom one).
-  const [seen, setSeen] = useState(() => getTicketStagesSeen())
+  const [markersVersion, reread] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
-    const onSeen = () => setSeen(getTicketStagesSeen())
-    window.addEventListener(TICKET_STAGES_SEEN_EVENT, onSeen)
-    return () => window.removeEventListener(TICKET_STAGES_SEEN_EVENT, onSeen)
+    window.addEventListener(TICKET_STAGES_SEEN_EVENT, reread)
+    return () => window.removeEventListener(TICKET_STAGES_SEEN_EVENT, reread)
   }, [])
+  // Widget tickets are identified-only: an anonymous scope has no markers.
+  const counts = scope !== null && isIdentified
+  // Read and parsed once per person and per marker change, not every render.
+  const seen = useMemo(
+    () => (counts ? getTicketStagesSeen(scope) : null),
+    // markersVersion is the re-read trigger: storage is not React state.
+    [counts, scope, markersVersion]
+  )
 
   const tickets = data?.tickets ?? []
+
+  // Showing the badge counts as activity, so a person whose map has nothing
+  // new to record keeps it on a browser shared by many (see seen-scope.ts).
+  useEffect(() => {
+    if (counts) touchTicketStagesSeen(scope)
+  }, [counts, scope])
 
   // Silent first-contact baseline: stamp the stages current at the first
   // load so historical states never badge (see ticket-stage-seen.ts).
   useEffect(() => {
-    if (data && getTicketStagesSeen() === null) markTicketStagesSeen(data.tickets)
-  }, [data])
+    // Widget tickets are identified-only: an anonymous visitor never stamps.
+    if (!counts || !data) return
+    if (getTicketStagesSeen(scope) === null) markTicketStagesSeen(scope, data.tickets)
+  }, [data, scope, counts])
 
   return {
-    unread: countTicketStageChanges(tickets, seen),
+    unread: counts ? countTicketStageChanges(tickets, seen) : 0,
     hasTickets: resolveHasTickets({ enabled, identityResolved, isIdentified, data, isError }),
   }
 }

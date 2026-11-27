@@ -12,7 +12,9 @@ import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { Button } from '@/components/ui/button'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
+import { useReseedOnPortalRefusal } from '@/components/widget/use-reseed-on-portal-refusal'
 import { isTeamMember } from '@/lib/shared/roles'
+import { shouldReusePortalSession } from '@/lib/shared/widget/portal-session-reuse'
 
 const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
@@ -32,10 +34,19 @@ const getWidgetLocale = createServerFn({ method: 'GET' })
     return resolveLocale(acceptLanguage, data.explicitLocale)
   })
 
-/** Extract the signed session cookie for direct widget session reuse (same-origin only). */
+/**
+ * Extract the signed session cookie for direct widget session reuse. Returns
+ * null unless the request is the frame's document navigation from a page on
+ * the instance's own origin (see shouldReusePortalSession).
+ */
 export const getPortalSessionToken = createServerFn({ method: 'GET' }).handler(async () => {
-  const cookie = getRequestHeaders().get('cookie') ?? ''
-  return extractSessionTokenFromCookie(cookie)
+  const headers = getRequestHeaders()
+  const reuse = shouldReusePortalSession({
+    site: headers.get('sec-fetch-site'),
+    mode: headers.get('sec-fetch-mode'),
+  })
+  if (!reuse) return null
+  return extractSessionTokenFromCookie(headers.get('cookie') ?? '')
 })
 
 export const Route = createFileRoute('/widget')({
@@ -76,41 +87,45 @@ export const Route = createFileRoute('/widget')({
     const { generateWorkspaceThemeCSS } = await import('@/lib/shared/theme/generator')
     const themeStyles = generateWorkspaceThemeCSS(brandingConfig)
 
-    // If user is logged into the portal (same-origin), extract the signed
-    // session cookie so the widget can reuse it directly as a Bearer token.
-    // This prevents duplicate anonymous users and bypasses HMAC requirements.
-    const portalUserBase =
-      session?.user && session.user.principalType !== 'anonymous'
-        ? {
-            id: session.user.id,
-            name: session.user.name,
-            email: session.user.email,
-            avatarUrl: session.user.image ?? null,
-          }
-        : null
-
     // location.search isn't generically typed inside the loader — cast to
     // the validateSearch shape, matching the pattern in _portal/index.tsx.
     const { locale: explicitLocale } = location.search as { locale?: string }
 
-    // Extract the signed session cookie during SSR — this is the only point
-    // where the cookie is available in cross-origin iframes (SameSite=Lax
-    // sends cookies for the initial iframe navigation but NOT for subsequent
-    // fetch/XHR from within the iframe). The token in the iframe's serialized
-    // HTML is safe: cross-origin parent pages cannot read iframe content.
-    // Independent of locale resolution, so run both concurrently.
-    const [portalSessionToken, locale, portalAvatar] = await Promise.all([
-      session?.user ? getPortalSessionToken() : Promise.resolve(null),
+    // A visitor signed in to the portal keeps that session inside the widget
+    // only when the page embedding the frame is the instance's own origin. The
+    // session cookie is SameSite=Lax, so it also arrives on frame navigations
+    // from other same-site origins (sibling subdomains); getPortalSessionToken
+    // returns null for those, and the widget then starts as for an anonymous
+    // visitor until the host identifies the user with a signed identity token.
+    // The token is read here, during the frame's document request, because
+    // later fetches from inside the frame cannot say who embeds it. The frame
+    // still adopts it only under a parent page on its own origin
+    // (WidgetAuthProvider, widget-frame.ts).
+    // The avatar lookup starts as soon as the token resolves, alongside the
+    // locale lookup.
+    const portalSessionPromise = (
+      session?.user ? getPortalSessionToken() : Promise.resolve(null)
+    ).then(async (portalSessionToken) => {
+      const user = session?.user
+      if (!portalSessionToken || !user || user.principalType === 'anonymous') {
+        return { portalSessionToken, portalUser: null }
+      }
+      const fallbackImageUrl = user.image ?? null
+      const avatar = await fetchUserAvatar({ data: { userId: user.id, fallbackImageUrl } })
+      return {
+        portalSessionToken,
+        portalUser: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          avatarUrl: avatar?.avatarUrl ?? fallbackImageUrl,
+        },
+      }
+    })
+    const [{ portalSessionToken, portalUser }, locale] = await Promise.all([
+      portalSessionPromise,
       getWidgetLocale({ data: { explicitLocale } }),
-      portalUserBase
-        ? fetchUserAvatar({
-            data: { userId: portalUserBase.id, fallbackImageUrl: portalUserBase.avatarUrl },
-          })
-        : Promise.resolve(null),
     ])
-    const portalUser = portalUserBase
-      ? { ...portalUserBase, avatarUrl: portalAvatar?.avatarUrl ?? portalUserBase.avatarUrl }
-      : null
     // Serialize the widget's catalog slice into loader data so the first
     // client render is already translated (the route is ssr: 'data-only' —
     // there's no SSR HTML to seed from).
@@ -174,6 +189,7 @@ function WidgetLayout() {
   // load the chosen family on demand instead of shipping every self-hosted
   // family's @font-face rules to every embedded widget.
   useBrandingFont(customCss, configFontSans)
+  useReseedOnPortalRefusal(portalSessionToken)
 
   return (
     <WidgetAuthProvider
