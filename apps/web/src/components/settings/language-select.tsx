@@ -12,44 +12,34 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { loadAreaMessages, type SupportedLocale } from '@/lib/shared/i18n'
-import { LOCALE_NATIVE_NAMES } from '@/lib/shared/locale-names'
 import { setMyLanguageFn, type MyLanguage } from '@/lib/server/functions/person-language'
 
 const AUTOMATIC = 'auto'
 
 /** Each language the product has, named in English, shown beside its own name. */
-const LOCALE_ENGLISH_NAMES: Record<SupportedLocale, string> = {
-  en: 'English',
-  de: 'German',
-  fr: 'French',
-  es: 'Spanish',
-  ar: 'Arabic',
-  ru: 'Russian',
-  'pt-br': 'Portuguese',
-  'zh-cn': 'Chinese (Simplified)',
-  'zh-tw': 'Chinese (Traditional)',
-  nl: 'Dutch',
-  pl: 'Polish',
-  th: 'Thai',
-  uk: 'Ukrainian',
-}
-
-/** The order a person picks a language in: Latin script first, then the others. */
-const LOCALE_PICKER_ORDER: readonly SupportedLocale[] = [
-  'en',
-  'de',
-  'es',
-  'fr',
-  'nl',
-  'pl',
-  'pt-br',
-  'ru',
-  'uk',
-  'ar',
-  'th',
-  'zh-cn',
-  'zh-tw',
+/**
+ * The picker's languages, in the order a person picks one (Latin script
+ * first, then the others), each in its own name and in English. Kept here
+ * rather than read from the shared names, so the Preferences page does not
+ * pull that module into a chunk of its own on the pages that also use it.
+ */
+const LANGUAGES: ReadonlyArray<{ locale: SupportedLocale; own: string; english: string }> = [
+  { locale: 'en', own: 'English', english: 'English' },
+  { locale: 'de', own: 'Deutsch', english: 'German' },
+  { locale: 'es', own: 'Español', english: 'Spanish' },
+  { locale: 'fr', own: 'Français', english: 'French' },
+  { locale: 'nl', own: 'Nederlands', english: 'Dutch' },
+  { locale: 'pl', own: 'Polski', english: 'Polish' },
+  { locale: 'pt-br', own: 'Português (Brasil)', english: 'Portuguese' },
+  { locale: 'ru', own: 'Русский', english: 'Russian' },
+  { locale: 'uk', own: 'Українська', english: 'Ukrainian' },
+  { locale: 'ar', own: 'العربية', english: 'Arabic' },
+  { locale: 'th', own: 'ภาษาไทย', english: 'Thai' },
+  { locale: 'zh-cn', own: '简体中文', english: 'Chinese (Simplified)' },
+  { locale: 'zh-tw', own: '繁體中文', english: 'Chinese (Traditional)' },
 ]
+
+const ownName = (locale: string) => LANGUAGES.find((l) => l.locale === locale)?.own ?? locale
 
 const SAVED: MessageDescriptor = {
   id: 'portal.settings.preferences.appearance.languageSaved',
@@ -72,7 +62,7 @@ export function LanguageSelect({ initial }: { initial: MyLanguage }) {
   const intl = useIntl()
   const router = useRouter()
   const [chosen, setChosen] = useState<SupportedLocale | null>(initial.chosen)
-  const automaticName = LOCALE_NATIVE_NAMES[initial.automatic]
+  const automaticName = ownName(initial.automatic)
 
   const automaticLabel = intl.formatMessage(
     {
@@ -81,8 +71,7 @@ export function LanguageSelect({ initial }: { initial: MyLanguage }) {
     },
     { language: automaticName }
   )
-  const labelOf = (value: string) =>
-    value === AUTOMATIC ? automaticLabel : LOCALE_NATIVE_NAMES[value as SupportedLocale]
+  const labelOf = (value: string) => (value === AUTOMATIC ? automaticLabel : ownName(value))
 
   async function choose(value: string) {
     const next = value === AUTOMATIC ? null : (value as SupportedLocale)
@@ -142,13 +131,13 @@ export function LanguageSelect({ initial }: { initial: MyLanguage }) {
             </span>
           </DropdownMenuRadioItem>
           <DropdownMenuSeparator />
-          {LOCALE_PICKER_ORDER.map((locale) => (
+          {LANGUAGES.map(({ locale, own, english }) => (
             <DropdownMenuRadioItem key={locale} value={locale}>
               <span className="flex w-full items-center justify-between gap-4">
-                <span lang={locale}>{LOCALE_NATIVE_NAMES[locale]}</span>
+                <span lang={locale}>{own}</span>
                 {locale !== 'en' && (
                   <span lang="en" className="text-xs text-muted-foreground">
-                    {LOCALE_ENGLISH_NAMES[locale]}
+                    {english}
                   </span>
                 )}
               </span>
