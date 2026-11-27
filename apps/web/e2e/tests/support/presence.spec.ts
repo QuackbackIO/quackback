@@ -19,6 +19,7 @@ import type { TestTeammate } from '../../support/teammates'
 import {
   createVisitor,
   openWidgetAs,
+  teamStatusLine,
   warmUpStream,
   warmUpWidgetThread,
   type TestVisitor,
@@ -238,7 +239,7 @@ test.describe('presence', () => {
         const s = await goOnline(t)
 
         const widget = await openWidgetAs(browser, visitor, first)
-        await expect(widget.getByText("We're online")).toBeVisible({ timeout: 15_000 })
+        await expect(teamStatusLine(widget)).toHaveText('Online now', { timeout: 15_000 })
 
         // Online but Away: not available. The widget polls every 30 s; a reload
         // reads a fresh server answer.
@@ -252,8 +253,7 @@ test.describe('presence', () => {
         expect(await presenceRows(t.principalId)).not.toEqual([])
         await widget.reload()
         await widget.getByText(first).first().click()
-        await expect(widget.getByText("We'll reply here")).toBeVisible({ timeout: 15_000 })
-        await expect(widget.getByText("We're online")).toHaveCount(0)
+        await expect(teamStatusLine(widget)).toHaveText(/We'll reply here$/, { timeout: 15_000 })
         s.close()
       }
     )
@@ -269,13 +269,13 @@ test.describe('presence', () => {
         const first = `offline at first ${marker}`
         const { conversationId } = await visitor.send(first)
         const widget = await openWidgetAs(browser, visitor, first)
-        await expect(widget.getByText("We'll reply here")).toBeVisible({ timeout: 15_000 })
+        await expect(teamStatusLine(widget)).toHaveText(/We'll reply here$/, { timeout: 15_000 })
         // Nobody online: the teammate's typing (activity on this thread) is the
         // only sign someone is there, and the badge flips at once, well before
         // the 30 s poll (which would still say nobody is online).
         expect((await widgetPresence(visitor)).agentsOnline).toBe(false)
         await warmUpWidgetThread(widget, api, conversationId)
-        await expect(widget.getByText("We're online")).toBeVisible({ timeout: 3_000 })
+        await expect(teamStatusLine(widget)).toHaveText('Online now', { timeout: 3_000 })
         expect((await widgetPresence(visitor)).agentsOnline).toBe(false)
         expect(
           (
@@ -286,7 +286,7 @@ test.describe('presence', () => {
           ).ok
         ).toBe(true)
         await expect(widget.getByText(`here ${marker}`)).toBeVisible({ timeout: 15_000 })
-        await expect(widget.getByText("We're online")).toBeVisible()
+        await expect(teamStatusLine(widget)).toHaveText('Online now')
       }
     )
   })
@@ -460,7 +460,7 @@ test.describe('presence', () => {
           const p = await widgetPresence(visitor)
           expect(p).toMatchObject({ agentsOnline: false, withinOfficeHours: true })
           const widget = await openWidgetAs(browser, visitor, first)
-          await expect(widget.getByText("We're online")).toBeVisible({ timeout: 15_000 })
+          await expect(teamStatusLine(widget)).toHaveText('Online now', { timeout: 15_000 })
 
           // Closed now, open again tomorrow: offline, with when.
           const tomorrow = (now.getUTCDay() + 1) % 7
@@ -475,8 +475,10 @@ test.describe('presence', () => {
           expect(new Date(q.nextOpenAt!).getUTCHours()).toBe(10)
           await widget.reload()
           await widget.getByText(first).first().click()
-          await expect(widget.getByText("We'll reply here")).toBeVisible({ timeout: 15_000 })
-          await expect(widget.getByText(/Back /)).toBeVisible()
+          // Closed: when the team is back, then the promise; no reply time claim.
+          await expect(teamStatusLine(widget)).toHaveText(/^Back .+ · We'll reply here$/, {
+            timeout: 15_000,
+          })
           await admin.dispose()
         } finally {
           await restore()

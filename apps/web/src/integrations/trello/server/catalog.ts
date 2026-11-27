@@ -3,7 +3,7 @@ import type { IntegrationCatalogEntry } from '@/lib/server/integrations/types'
 export const trelloCatalog: IntegrationCatalogEntry = {
   id: 'trello',
   name: 'Trello',
-  description: 'Create cards in Trello from feedback and review status changes.',
+  description: 'Create cards in Trello from feedback and update statuses when cards move.',
   category: 'issue_tracking',
   iconBg: 'bg-[#0052CC]',
   settingsPath: '/admin/settings/integrations/trello',

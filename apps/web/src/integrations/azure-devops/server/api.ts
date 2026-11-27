@@ -80,6 +80,30 @@ export async function listWorkItemTypes(
   return data.value.map((t) => ({ name: t.name, description: t.description }))
 }
 
+export interface WorkItemStatus {
+  state?: string
+  project?: string
+  changedDate?: string
+}
+
+export async function getWorkItemStatus(
+  pat: string,
+  organization: string,
+  id: string
+): Promise<WorkItemStatus> {
+  const fields = ['System.State', 'System.TeamProject', 'System.ChangedDate'].join(',')
+  const url = `https://dev.azure.com/${encodeURIComponent(organization)}/_apis/wit/workitems/${encodeURIComponent(id)}?fields=${fields}&api-version=7.1`
+  const response = await azureDevOpsApi('GET', url, pat)
+  const data = (await response.json()) as { fields?: Record<string, unknown> }
+  const field = (name: string) =>
+    typeof data.fields?.[name] === 'string' ? (data.fields[name] as string) : undefined
+  return {
+    state: field('System.State'),
+    project: field('System.TeamProject'),
+    changedDate: field('System.ChangedDate'),
+  }
+}
+
 export interface CreateWorkItemResult {
   id: number
   url: string

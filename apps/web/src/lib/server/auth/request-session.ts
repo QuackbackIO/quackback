@@ -122,3 +122,15 @@ export function forgetRequestIdentity(): void {
   forgetPerRequestPrefix(IDENTITY_MEMO_PREFIX)
   forgetPerRequestPrefix(CACHE_KEYS.PRINCIPAL_BY_USER(''))
 }
+
+/**
+ * Serve the rest of this request as an anonymous caller, whatever credentials
+ * it carries. Only ever narrows: it forgets the identity resolved so far and
+ * answers every later session read with null. Used where a request's
+ * credentials arrive but must not be acted on, such as a widget frame embedded
+ * by a page on another origin.
+ */
+export function treatRequestAsAnonymous(): void {
+  forgetRequestIdentity()
+  rememberPerRequest(SESSION_KEY, null)
+}

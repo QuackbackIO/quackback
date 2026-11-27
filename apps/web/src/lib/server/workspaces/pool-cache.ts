@@ -191,6 +191,15 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
     // the number the cost model rests on.
     idle_timeout: config.workspacePoolIdleSeconds,
     connect_timeout: 15,
+    // Never look custom types up at runtime. The driver does that lookup on a
+    // different connection while the one that met the type (the pgvector
+    // column on posts, say) waits with its pooler slot still held. When the
+    // fleet pooler has fewer slots per database than this pool has
+    // connections, the lookup never gets one, and the workspace hangs until
+    // the pooler's wait timeout. Drizzle maps these columns itself; a raw
+    // query that selects an array of a custom type or a domain-typed column
+    // gets a string and must parse it.
+    fetch_types: false,
     password: () => resolvePassword(workspace),
     onnotice: () => {},
   })
@@ -490,6 +499,8 @@ export async function openWorkspaceDirectPool(
     idle_timeout: 0,
     connect_timeout: 15,
     prepare: true,
+    // As for the request pool: no runtime type lookup on a second connection.
+    fetch_types: false,
     password: () => resolvePassword(workspace),
     onnotice: () => {},
   })

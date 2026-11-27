@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   memo,
   useRef,
@@ -21,7 +22,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import { m, AnimatePresence } from 'framer-motion'
+import { EASE, FadeInOnMount, HeightPresence, usePresence } from './widget-presence'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { widgetListPublicPostsFn } from '@/lib/server/functions/widget/posts'
@@ -117,6 +118,12 @@ export interface WidgetHomeProps {
   confirmedBoardSlugs?: string[] | null
   /** Programmatic `open({ view: 'new-post' })` — expand and prefill. */
   composeRequest?: WidgetComposeRequest | null
+  /**
+   * Programmatic `open({ view: 'feedback' })`: a nonce from the same counter
+   * as `composeRequest.nonce`. A new value collapses the composer so the panel
+   * lands on the list, unless a later compose request supersedes it.
+   */
+  collapseRequest?: number
   onPostSelect?: (postId: string) => void
   onPostCreated?: (post: {
     id: string
@@ -374,7 +381,7 @@ function TitleInput({
   const intl = useIntl()
   const value = useStoreValue(title)
   return (
-    <m.input
+    <input
       ref={inputRef}
       type="text"
       placeholder={intl.formatMessage({
@@ -391,13 +398,11 @@ function TitleInput({
         onType(e.target.value)
       }}
       onFocus={onFocus}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary-ink"
-      initial={false}
-      animate={{
+      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary-ink transition-[font-size,font-weight] duration-200 ease-[cubic-bezier(0.42,0,0.58,1)]"
+      style={{
         fontSize: expanded ? '1rem' : '0.875rem',
         fontWeight: expanded ? 600 : 400,
       }}
-      transition={{ duration: 0.2 }}
     />
   )
 }
@@ -479,40 +484,34 @@ function SimilarIdeas({
   }, [value, sessionVersion])
 
   return (
-    <AnimatePresence>
-      {!isSimilarSearching && similarPostResults && similarPostResults.posts.length > 0 && (
-        <m.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
-          className="overflow-hidden"
-        >
-          <div className="px-3 pb-2">
-            <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
-              <LightBulbIcon className="w-3 h-3" />
-              <FormattedMessage id="widget.home.similar.heading" defaultMessage="Similar posts" />
-            </p>
-            <div className="space-y-0.5">
-              {similarPostResults.posts.slice(0, 3).map((post) => (
-                <WidgetPostRow
-                  key={post.id}
-                  post={post}
-                  statusMap={statusMap}
-                  compact
-                  canVote={rowCanVote(post.board?.id)}
-                  votingClosed={rowClosed(post.board?.id)}
-                  ensureSessionThen={ensureSessionThen}
-                  noAccessReason={noAccessReason}
-                  onAuthRequired={() => onAuthRequired(post.id)}
-                  onSelect={() => onPostSelect?.(post.id)}
-                />
-              ))}
-            </div>
-          </div>
-        </m.div>
-      )}
-    </AnimatePresence>
+    <HeightPresence
+      show={!isSimilarSearching && !!similarPostResults && similarPostResults.posts.length > 0}
+      duration={150}
+      easing={EASE.easeOut}
+    >
+      <div className="px-3 pb-2">
+        <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
+          <LightBulbIcon className="w-3 h-3" />
+          <FormattedMessage id="widget.home.similar.heading" defaultMessage="Similar posts" />
+        </p>
+        <div className="space-y-0.5">
+          {(similarPostResults?.posts ?? []).slice(0, 3).map((post) => (
+            <WidgetPostRow
+              key={post.id}
+              post={post}
+              statusMap={statusMap}
+              compact
+              canVote={rowCanVote(post.board?.id)}
+              votingClosed={rowClosed(post.board?.id)}
+              ensureSessionThen={ensureSessionThen}
+              noAccessReason={noAccessReason}
+              onAuthRequired={() => onAuthRequired(post.id)}
+              onSelect={() => onPostSelect?.(post.id)}
+            />
+          ))}
+        </div>
+      </div>
+    </HeightPresence>
   )
 }
 
@@ -528,6 +527,7 @@ export function WidgetHomeAnimated({
   initialBoardSlug,
   confirmedBoardSlugs,
   composeRequest,
+  collapseRequest,
   onPostSelect,
   onPostCreated,
 }: WidgetHomeProps) {
@@ -551,6 +551,14 @@ export function WidgetHomeAnimated({
   // or the last one goes, not with every keystroke.
   const hasTitle = useStoreValue(title, (value) => value.trim() !== '')
   const [expanded, setExpanded] = useState(false)
+  // The pencil shows at once when the composer collapses, and shrinks out of
+  // the row (closing the gap after it) when it expands.
+  const pencil = usePresence<HTMLDivElement>(!expanded, (el) =>
+    el.animate(
+      { opacity: 0, transform: 'scale(0.8)', width: '0px', marginRight: '-10px' },
+      { duration: 200, easing: EASE.easeInOut, fill: 'forwards' }
+    )
+  )
   const [selectedBoardId, setSelectedBoardId] = useState(() =>
     resolveComposeBoardId(boards, undefined, defaultBoard)
   )
@@ -824,6 +832,15 @@ export function WidgetHomeAnimated({
     fieldAnswers.reset()
   }
 
+  // Host `open({ view: 'feedback' })` lands here: the list, not a composer
+  // left open by an earlier new-post command or by the visitor.
+  const collapseForHost = useEffectEvent(collapseForm)
+  useEffect(() => {
+    if (!collapseRequest) return
+    if (composeRequest && composeRequest.nonce > collapseRequest) return
+    collapseForHost()
+  }, [collapseRequest])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const typedTitle = title.get()
@@ -967,60 +984,47 @@ export function WidgetHomeAnimated({
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <div className="w-full px-3 pt-2 pb-3">
-          <m.div
-            className="rounded-lg border border-border bg-card overflow-hidden"
-            initial={false}
-            animate={{
+          <div
+            className="rounded-lg border border-border bg-card overflow-hidden transition-shadow duration-200 ease-[cubic-bezier(0.42,0,0.58,1)]"
+            style={{
               boxShadow: expanded
                 ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
                 : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
             }}
-            transition={{ duration: 0.2 }}
           >
-            <AnimatePresence>
-              {expanded && boards.length > 0 && (
-                <m.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <div className="flex items-center px-3 pt-2.5 pb-0.5">
-                    <span className="text-[11px] text-muted-foreground me-1">
-                      <FormattedMessage
-                        id="widget.home.posting.postingTo"
-                        defaultMessage="Posting to"
-                      />
-                    </span>
-                    <BoardSelectBoundary fallback={boardPlaceholder}>
-                      <Suspense fallback={boardPlaceholder}>
-                        <WidgetBoardSelect
-                          boards={boards}
-                          value={selectedBoardId}
-                          onValueChange={handleComposeBoardChange}
-                        />
-                      </Suspense>
-                    </BoardSelectBoundary>
-                  </div>
-                </m.div>
-              )}
-            </AnimatePresence>
+            <HeightPresence
+              show={expanded && boards.length > 0}
+              duration={200}
+              easing={EASE.easeInOut}
+            >
+              <div className="flex items-center px-3 pt-2.5 pb-0.5">
+                <span className="text-[11px] text-muted-foreground me-1">
+                  <FormattedMessage
+                    id="widget.home.posting.postingTo"
+                    defaultMessage="Posting to"
+                  />
+                </span>
+                <BoardSelectBoundary fallback={boardPlaceholder}>
+                  <Suspense fallback={boardPlaceholder}>
+                    <WidgetBoardSelect
+                      boards={boards}
+                      value={selectedBoardId}
+                      onValueChange={handleComposeBoardChange}
+                    />
+                  </Suspense>
+                </BoardSelectBoundary>
+              </div>
+            </HeightPresence>
 
             <div className="flex items-center gap-2.5 px-3 py-2.5">
-              <AnimatePresence>
-                {!expanded && (
-                  <m.div
-                    initial={false}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8, width: 0, marginRight: -10 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"
-                  >
-                    <PencilIcon className="w-3.5 h-3.5 text-primary-ink" />
-                  </m.div>
-                )}
-              </AnimatePresence>
+              {pencil.mounted && (
+                <div
+                  ref={pencil.ref}
+                  className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"
+                >
+                  <PencilIcon className="w-3.5 h-3.5 text-primary-ink" />
+                </div>
+              )}
 
               <TitleInput
                 title={title}
@@ -1037,157 +1041,138 @@ export function WidgetHomeAnimated({
               />
             </div>
 
-            <AnimatePresence>
-              {expanded && (
-                <m.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-                  className="overflow-hidden"
-                >
-                  <m.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2, delay: 0.1 }}
-                    className="px-3 pb-2"
-                  >
-                    <Suspense fallback={<RichTextEditorPlaceholder minHeight="80px" />}>
-                      <LazyRichTextEditor
-                        value={editorContent || ''}
-                        onDocumentChange={handleEditorChange}
-                        placeholder={intl.formatMessage({
-                          id: 'widget.home.input.details',
-                          defaultMessage: 'Add more details...',
-                        })}
-                        minHeight="80px"
-                        borderless
-                        features={{
-                          headings: true,
-                          codeBlocks: true,
-                          taskLists: true,
-                          blockquotes: true,
-                          dividers: true,
-                          tables: true,
-                          images: true,
-                          videos: true,
-                          embeds: true,
-                          quackbackEmbeds: true,
-                          bubbleMenu: true,
-                          slashMenu: true,
-                        }}
-                        onImageUpload={uploadMedia}
-                        onVideoUpload={uploadMedia}
-                        className="text-sm"
-                      />
-                    </Suspense>
-                  </m.div>
-
-                  <WidgetBoardFields answers={fieldAnswers} />
-
-                  <SimilarIdeas
-                    title={title}
-                    sessionVersion={sessionVersion}
-                    statusMap={statusMap}
-                    rowCanVote={rowCanVote}
-                    rowClosed={rowClosed}
-                    ensureSessionThen={ensureSessionThen}
-                    noAccessReason={voteNoAccessReason}
-                    onAuthRequired={handleAuthRequired}
-                    onPostSelect={onPostSelect}
+            <HeightPresence show={expanded} duration={250} easing="cubic-bezier(0.4, 0, 0.2, 1)">
+              <FadeInOnMount duration={200} delay={100} className="px-3 pb-2">
+                <Suspense fallback={<RichTextEditorPlaceholder minHeight="80px" />}>
+                  <LazyRichTextEditor
+                    value={editorContent || ''}
+                    onDocumentChange={handleEditorChange}
+                    placeholder={intl.formatMessage({
+                      id: 'widget.home.input.details',
+                      defaultMessage: 'Add more details...',
+                    })}
+                    minHeight="80px"
+                    borderless
+                    features={{
+                      headings: true,
+                      codeBlocks: true,
+                      taskLists: true,
+                      blockquotes: true,
+                      dividers: true,
+                      tables: true,
+                      images: true,
+                      videos: true,
+                      embeds: true,
+                      quackbackEmbeds: true,
+                      bubbleMenu: true,
+                      slashMenu: true,
+                    }}
+                    onImageUpload={uploadMedia}
+                    onVideoUpload={uploadMedia}
+                    className="text-sm"
                   />
+                </Suspense>
+              </FadeInOnMount>
 
-                  {error && (
-                    <div className="px-3 pb-2">
-                      <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                        {error}
-                      </div>
-                    </div>
-                  )}
+              <WidgetBoardFields answers={fieldAnswers} />
 
-                  <m.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2, delay: 0.15 }}
-                    className="border-t border-border bg-muted/30"
-                  >
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <p className="text-[11px] text-muted-foreground truncate me-2">
-                        {selectedReadOnly ? (
+              <SimilarIdeas
+                title={title}
+                sessionVersion={sessionVersion}
+                statusMap={statusMap}
+                rowCanVote={rowCanVote}
+                rowClosed={rowClosed}
+                ensureSessionThen={ensureSessionThen}
+                noAccessReason={voteNoAccessReason}
+                onAuthRequired={handleAuthRequired}
+                onPostSelect={onPostSelect}
+              />
+
+              {error && (
+                <div className="px-3 pb-2">
+                  <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {error}
+                  </div>
+                </div>
+              )}
+
+              <FadeInOnMount
+                duration={200}
+                delay={150}
+                className="border-t border-border bg-muted/30"
+              >
+                <div className="flex items-center justify-between px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground truncate me-2">
+                    {selectedReadOnly ? (
+                      <FormattedMessage
+                        id="widget.readOnly"
+                        defaultMessage="This board isn't taking new feedback right now."
+                      />
+                    ) : submitNoAccess ? (
+                      <FormattedMessage
+                        id="widget.home.posting.noAccess"
+                        defaultMessage="You don't have access to post on this board"
+                      />
+                    ) : boards.length > 0 && !selectedBoardId ? (
+                      // Submit is disabled until a board is picked; say so
+                      // rather than leaving a dead button unexplained.
+                      <FormattedMessage
+                        id="widget.home.posting.chooseBoard"
+                        defaultMessage="Choose a board to post"
+                      />
+                    ) : user ? (
+                      <FormattedMessage
+                        id="widget.home.posting.postingAs"
+                        defaultMessage="Posting as {name}"
+                        values={{
+                          name: (
+                            <span className="font-medium text-foreground">
+                              {shownName(user.name, user.email)}
+                            </span>
+                          ),
+                        }}
+                      />
+                    ) : signInRequired ? (
+                      <FormattedMessage
+                        id="widget.home.posting.signInRequired"
+                        defaultMessage="Sign in to post on this board"
+                      />
+                    ) : (
+                      <FormattedMessage
+                        id="widget.home.posting.postingAnonymously"
+                        defaultMessage="Posting anonymously"
+                      />
+                    )}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={collapseForm}
+                      className="px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <FormattedMessage id="widget.home.form.cancel" defaultMessage="Cancel" />
+                    </button>
+                    {!selectedReadOnly && (
+                      <button
+                        type="submit"
+                        disabled={!canSubmitForm || isSubmitting}
+                        className="px-3 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                      >
+                        {isSubmitting ? (
                           <FormattedMessage
-                            id="widget.readOnly"
-                            defaultMessage="This board isn't taking new feedback right now."
-                          />
-                        ) : submitNoAccess ? (
-                          <FormattedMessage
-                            id="widget.home.posting.noAccess"
-                            defaultMessage="You don't have access to post on this board"
-                          />
-                        ) : boards.length > 0 && !selectedBoardId ? (
-                          // Submit is disabled until a board is picked; say so
-                          // rather than leaving a dead button unexplained.
-                          <FormattedMessage
-                            id="widget.home.posting.chooseBoard"
-                            defaultMessage="Choose a board to post"
-                          />
-                        ) : user ? (
-                          <FormattedMessage
-                            id="widget.home.posting.postingAs"
-                            defaultMessage="Posting as {name}"
-                            values={{
-                              name: (
-                                <span className="font-medium text-foreground">
-                                  {shownName(user.name, user.email)}
-                                </span>
-                              ),
-                            }}
-                          />
-                        ) : signInRequired ? (
-                          <FormattedMessage
-                            id="widget.home.posting.signInRequired"
-                            defaultMessage="Sign in to post on this board"
+                            id="widget.home.form.submitting"
+                            defaultMessage="Posting..."
                           />
                         ) : (
-                          <FormattedMessage
-                            id="widget.home.posting.postingAnonymously"
-                            defaultMessage="Posting anonymously"
-                          />
+                          <FormattedMessage id="widget.home.form.submit" defaultMessage="Post" />
                         )}
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={collapseForm}
-                          className="px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <FormattedMessage id="widget.home.form.cancel" defaultMessage="Cancel" />
-                        </button>
-                        {!selectedReadOnly && (
-                          <button
-                            type="submit"
-                            disabled={!canSubmitForm || isSubmitting}
-                            className="px-3 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                          >
-                            {isSubmitting ? (
-                              <FormattedMessage
-                                id="widget.home.form.submitting"
-                                defaultMessage="Posting..."
-                              />
-                            ) : (
-                              <FormattedMessage
-                                id="widget.home.form.submit"
-                                defaultMessage="Post"
-                              />
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </m.div>
-                </m.div>
-              )}
-            </AnimatePresence>
-          </m.div>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </FadeInOnMount>
+            </HeightPresence>
+          </div>
 
           {/* Popular ideas */}
           <div className="mt-2">

@@ -47,6 +47,12 @@ export const widgetGetMessengerUnreadFn = createServerFn({ method: 'GET' }).hand
   return runGetMessengerUnread(await getOptionalWidgetAuth())
 })
 
+export const widgetGetReplyPreviewFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getOptionalWidgetAuth } = await import('../widget-auth')
+  const { runGetReplyPreview } = await import('../conversation')
+  return runGetReplyPreview(await getOptionalWidgetAuth())
+})
+
 export const widgetListConversationMessagesFn = createServerFn({ method: 'GET' })
   .validator(listMessagesSchema)
   .handler(async ({ data }) => {

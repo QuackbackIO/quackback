@@ -60,7 +60,9 @@ if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL environment variable is required')
   process.exit(1)
 }
-const client = postgres(process.env.DATABASE_URL)
+// No runtime type lookup: it runs on a second connection and hangs behind a
+// transaction pooler with few server connections (see packages/db client.ts).
+const client = postgres(process.env.DATABASE_URL, { fetch_types: false })
 const db = drizzle(client)
 // AI follows the app's central config (#206): one client, model per role.
 const openai = getOpenAI()

@@ -35,6 +35,10 @@ const LinkedPostIdsSchema = z
     example: ['post_01h455vb4pex5vsknk084sn02q'],
   })
 
+const ANNOUNCE_ON_LAUNCHER_DESCRIPTION =
+  "Whether the widget's \"What's new\" card above the launcher may announce this entry, when the workspace announces new entries there. Off still counts the entry as unread and lists it in the widget's changelog."
+const AnnounceOnLauncherSchema = z.boolean()
+
 // Changelog entry schema (API response)
 const ChangelogEntrySchema = z.object({
   id: TypeIdSchema.meta({ example: 'changelog_01h455vb4pex5vsknk084sn02q' }),
@@ -48,6 +52,10 @@ const ChangelogEntrySchema = z.object({
   }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  announceOnLauncher: AnnounceOnLauncherSchema.meta({
+    description: ANNOUNCE_ON_LAUNCHER_DESCRIPTION,
+    example: true,
+  }),
   linkedPosts: z.array(LinkedPostSchema).meta({
     description: 'Posts linked to this changelog entry',
   }),
@@ -68,6 +76,9 @@ const CreateChangelogEntrySchema = z
       .optional()
       .meta({ description: 'Publish date (omit to save as draft)' }),
     linkedPostIds: LinkedPostIdsSchema,
+    announceOnLauncher: AnnounceOnLauncherSchema.optional().meta({
+      description: `${ANNOUNCE_ON_LAUNCHER_DESCRIPTION} Defaults to true.`,
+    }),
   })
   .meta({ description: 'Create changelog entry request body' })
 
@@ -86,6 +97,9 @@ const UpdateChangelogEntrySchema = z
         'Portal display override for published entries. Null clears override. Must not be in the future.',
     }),
     linkedPostIds: LinkedPostIdsSchema,
+    announceOnLauncher: AnnounceOnLauncherSchema.optional().meta({
+      description: `${ANNOUNCE_ON_LAUNCHER_DESCRIPTION} Omit to leave it unchanged.`,
+    }),
   })
   .meta({ description: 'Update changelog entry request body' })
 

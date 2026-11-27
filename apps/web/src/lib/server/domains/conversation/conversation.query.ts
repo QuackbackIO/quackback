@@ -599,7 +599,6 @@ async function unreadCountFor(
   conversation: Conversation,
   side: MessageSenderType
 ): Promise<number> {
-  const otherSide: MessageSenderType = side === 'agent' ? 'visitor' : 'agent'
   const readAt = side === 'agent' ? conversation.agentLastReadAt : conversation.visitorLastReadAt
   const [row] = await db
     .select({ c: sql<number>`count(*)::int` })
@@ -607,10 +606,15 @@ async function unreadCountFor(
     .where(
       and(
         eq(conversationMessages.conversationId, conversation.id),
-        eq(conversationMessages.senderType, otherSide),
-        isNull(conversationMessages.deletedAt),
-        // Internal notes never count toward unread (esp. for the visitor side).
-        eq(conversationMessages.isInternal, false),
+        // The visitor's side counts replies by the one rule the badge and the
+        // reply preview use; the agent's counts the visitor's messages.
+        side === 'visitor'
+          ? visitorReplyMessageSql()
+          : and(
+              eq(conversationMessages.senderType, 'visitor'),
+              isNull(conversationMessages.deletedAt),
+              eq(conversationMessages.isInternal, false)
+            ),
         // Use the gt() operator (not a raw sql template) so the Date watermark
         // is bound through Drizzle's timestamp encoder — embedding a Date in a
         // raw sql fragment makes the driver reject it ("expected string, got
@@ -1028,16 +1032,55 @@ export async function listConversationsForCustomer(
  * participant watermark, summed in the same statement.
  */
 export async function countVisitorUnreadMessages(visitorPrincipalId: PrincipalId): Promise<number> {
-  const result = await db.execute(sql`
-    select (${ownedUnreadMessages(visitorPrincipalId)}) + (${sharedUnreadMessages(visitorPrincipalId)}) as unread
-  `)
-  const [row] = result as unknown as Array<{ unread: number }>
-  return row?.unread ?? 0
+  return (await summarizeVisitorUnreadReplies(visitorPrincipalId)).count
 }
 
-/** The shared ticket threads' part of the badge: agent messages newer than
- *  each participant row's own watermark. */
-function sharedUnreadMessages(principalId: PrincipalId) {
+/**
+ * The badge total and the newest unread reply's id, in one read: the widget
+ * reads the reply preview again only when either changes. The total also
+ * counts the shared ticket threads the customer was given, each from their
+ * own participant read mark; the newest id stays on their own conversations,
+ * which are what the reply preview shows.
+ */
+export async function summarizeVisitorUnreadReplies(
+  visitorPrincipalId: PrincipalId
+): Promise<{ count: number; newestId: ConversationMessageId | null }> {
+  const [row] = await db
+    .select({
+      c: sql<number>`count(*)::int + (${sharedUnreadReplies(visitorPrincipalId)})`,
+      // Decoded through the id column, so it reads as the TypeID every other
+      // message id does, not the stored UUID.
+      newest:
+        sql<ConversationMessageId | null>`(array_agg(${conversationMessages.id} order by ${conversationMessages.createdAt} desc, ${conversationMessages.id} desc))[1]`.mapWith(
+          conversationMessages.id
+        ),
+    })
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
+    .where(visitorUnreadReplySql(visitorPrincipalId))
+  return { count: row?.c ?? 0, newestId: row?.newest ?? null }
+}
+
+/**
+ * The visitor's unread replies, for the badge and the reply preview alike:
+ * public agent messages newer than the conversation's visitor read mark (all
+ * of them in a never-read conversation). Reply-time captions are left out:
+ * the thread shows them as a quiet caption, never as a reply.
+ */
+function visitorUnreadReplySql(visitorPrincipalId: PrincipalId) {
+  return and(
+    eq(conversations.visitorPrincipalId, visitorPrincipalId),
+    visitorReplyMessageSql(),
+    or(
+      isNull(conversations.visitorLastReadAt),
+      gt(conversationMessages.createdAt, conversations.visitorLastReadAt)
+    )
+  )
+}
+
+/** The shared ticket threads' part of the badge: replies newer than each
+ *  participant row's own read mark, by the same reply rule. */
+function sharedUnreadReplies(principalId: PrincipalId) {
   return db
     .select({ c: sql<number>`count(*)::int` })
     .from(conversationMessages)
@@ -1052,9 +1095,7 @@ function sharedUnreadMessages(principalId: PrincipalId) {
     .where(
       and(
         participantThreadAccessSql(principalId),
-        eq(conversationMessages.senderType, 'agent'),
-        eq(conversationMessages.isInternal, false),
-        isNull(conversationMessages.deletedAt),
+        visitorReplyMessageSql(),
         or(
           isNull(conversationParticipants.lastReadAt),
           gt(conversationMessages.createdAt, conversationParticipants.lastReadAt)
@@ -1063,23 +1104,87 @@ function sharedUnreadMessages(principalId: PrincipalId) {
     )
 }
 
-function ownedUnreadMessages(visitorPrincipalId: PrincipalId) {
-  return db
-    .select({ c: sql<number>`count(*)::int` })
+/**
+ * A message that counts as a reply to the visitor: a public, live agent
+ * message that is not a reply-time caption. Every visitor unread count (the
+ * badge, each conversation's count, the reply preview) uses this one rule.
+ */
+function visitorReplyMessageSql() {
+  return and(
+    eq(conversationMessages.senderType, 'agent'),
+    eq(conversationMessages.isInternal, false),
+    isNull(conversationMessages.deletedAt),
+    sql`coalesce(${conversationMessages.metadata} -> 'block' ->> 'kind', '') <> 'replyTime'`
+  )
+}
+
+/** Bound on the unread replies reported across all conversations. */
+const MAX_RECENT_UNREAD_REPLIES = 20
+
+interface UnreadReplyRow {
+  id: ConversationMessageId
+  content: string
+  createdAt: Date
+  principalId: PrincipalId | null
+  /** The reply grounds itself in sources, with inline [n] markers. */
+  cited: boolean
+}
+
+export interface VisitorUnreadReplies {
+  conversationId: ConversationId
+  /** Unread replies in that conversation; may exceed the messages returned. */
+  count: number
+  /** That conversation's newest unread replies, oldest first. */
+  messages: UnreadReplyRow[]
+  /** The newest unread replies across every conversation, at most 20,
+   *  oldest first: each new one is reported to the host once. */
+  recent: Array<UnreadReplyRow & { conversationId: ConversationId }>
+}
+
+/**
+ * The visitor's newest unread replies, from the conversation that holds the
+ * newest one: what the reply preview above the closed launcher shows. Same
+ * unread rule as `countVisitorUnreadMessages`, so the card and the badge
+ * agree. Reply-time captions are left out, as the thread never shows them as
+ * bubbles. Null when nothing is unread.
+ */
+export async function listVisitorUnreadReplies(
+  visitorPrincipalId: PrincipalId,
+  limit = 3
+): Promise<VisitorUnreadReplies | null> {
+  const unread = visitorUnreadReplySql(visitorPrincipalId)
+  const columns = {
+    id: conversationMessages.id,
+    content: conversationMessages.content,
+    createdAt: conversationMessages.createdAt,
+    principalId: conversationMessages.principalId,
+    cited: sql<boolean>`coalesce(jsonb_array_length(${conversationMessages.citations}), 0) > 0`,
+  }
+  const recent = await db
+    .select({ ...columns, conversationId: conversationMessages.conversationId })
     .from(conversationMessages)
     .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
-    .where(
-      and(
-        eq(conversations.visitorPrincipalId, visitorPrincipalId),
-        eq(conversationMessages.senderType, 'agent'),
-        eq(conversationMessages.isInternal, false),
-        isNull(conversationMessages.deletedAt),
-        or(
-          isNull(conversations.visitorLastReadAt),
-          gt(conversationMessages.createdAt, conversations.visitorLastReadAt)
-        )
-      )
-    )
+    .where(unread)
+    .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+    .limit(MAX_RECENT_UNREAD_REPLIES)
+  const conversationId = recent[0]?.conversationId
+  if (!conversationId) return null
+  const rows = await db
+    .select({ ...columns, total: sql<number>`(count(*) over ())::int` })
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
+    .where(and(unread, eq(conversationMessages.conversationId, conversationId)))
+    .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+    .limit(limit)
+  if (rows.length === 0) return null
+  return {
+    conversationId,
+    count: rows[0].total,
+    messages: rows.reverse().map(({ total: _total, ...m }) => m),
+    recent: recent
+      .reverse()
+      .flatMap((m) => (m.conversationId ? [{ ...m, conversationId: m.conversationId }] : [])),
+  }
 }
 
 export interface MessagePage {
