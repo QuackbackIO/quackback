@@ -192,6 +192,14 @@ const workspaceSenders: Record<string, Drive> = {
       workspaceName: w!,
       ...extra,
     }),
+  sendConversationAssignedEmail: (w) =>
+    email.sendConversationAssignedEmail({
+      to,
+      assignedToYou: true,
+      preview: 'Cannot log in',
+      conversationUrl: 'https://acme.test/admin/inbox',
+      workspaceName: w!,
+    }),
   sendNoteMentionEmail: (w) =>
     email.sendNoteMentionEmail({
       to,

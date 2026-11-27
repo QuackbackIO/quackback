@@ -41,6 +41,7 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   sendPostMentionEmail: 'contact',
   sendModerationDecisionEmail: 'contact',
   sendNoteMentionEmail: 'contact',
+  sendConversationAssignedEmail: 'contact',
   sendChangelogPublishedEmail: 'contact',
   sendStatusIncidentPublishedEmail: 'contact',
   sendStatusMaintenanceScheduledEmail: 'contact',

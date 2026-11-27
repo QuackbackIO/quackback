@@ -53,7 +53,12 @@ import {
   type Candidate,
 } from '@/lib/server/domains/notifications/recipient-scope'
 import type { ScopedRow } from '@/lib/server/policy/row-scope'
-import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-types'
+import type {
+  HookTarget,
+  EmailTarget,
+  NoteMentionEmailConfig,
+  ConversationAssignedEmailConfig,
+} from './hook-types'
 import { truncate } from './hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { type HookContext } from './hook-context'
@@ -1050,6 +1055,73 @@ export async function getConversationAssignedTargets(event: EventData): Promise<
         directAssignee && inScope.includes(directAssignee) ? directAssignee : null,
     },
   }
+}
+
+/**
+ * `conversation.assigned` → an email to the newly assigned teammate and, when
+ * the team changed, to that team's members. Same recipients as the
+ * bell ({@link getConversationAssignedTargets}): the actor is never mailed, nor
+ * an assignee who did not change. Filtered by each teammate's "Conversation
+ * assigned" email preference.
+ */
+export async function getConversationAssignedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'conversation.assigned') return []
+  const {
+    conversation,
+    assignedAgentPrincipalId,
+    previousAgentPrincipalId,
+    assignedTeamId,
+    previousTeamId,
+  } = event.data
+
+  const directAssignee: PrincipalId | null =
+    assignedAgentPrincipalId &&
+    assignedAgentPrincipalId !== previousAgentPrincipalId &&
+    assignedAgentPrincipalId !== event.actor.principalId
+      ? (assignedAgentPrincipalId as PrincipalId)
+      : null
+
+  const candidates = new Set<PrincipalId>()
+  if (directAssignee) candidates.add(directAssignee)
+  if (assignedTeamId && assignedTeamId !== previousTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    const memberIds = await listTeamMemberPrincipalIds(assignedTeamId as TeamId)
+    for (const id of memberIds) {
+      if (id !== event.actor.principalId) candidates.add(id)
+    }
+  }
+  if (candidates.size === 0) return []
+
+  const inScope = await conversationRecipients(conversation.id, [...candidates])
+  if (inScope.length === 0) return []
+  const { recipients, emailMap } = await resolveEligibleRecipients(inScope, 'conversation_assigned')
+  if (recipients.length === 0) return []
+
+  const [conv] = await db
+    .select({ subject: conversations.subject, customerName: principal.displayName })
+    .from(conversations)
+    .leftJoin(principal, eq(conversations.visitorPrincipalId, principal.id))
+    .where(eq(conversations.id, conversation.id as ConversationId))
+    .limit(1)
+
+  const base = {
+    workspaceName: context.workspaceName,
+    conversationId: conversation.id,
+    customerName: conv?.customerName ?? undefined,
+    preview: truncate(conv?.subject ?? '', 140),
+    ctaUrl: inboxUrl(context.portalBaseUrl, conversation.id),
+    logoUrl: context.logoUrl ?? undefined,
+    preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+  }
+  return recipients.map((id) =>
+    emailTarget({ principalId: id, email: emailMap.get(id)! }, '', {
+      ...base,
+      assignedToYou: id === directAssignee,
+    } satisfies ConversationAssignedEmailConfig)
+  )
 }
 
 /**
