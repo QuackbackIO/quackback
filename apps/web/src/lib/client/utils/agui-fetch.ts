@@ -9,6 +9,7 @@
  * on it (e.g. mapping 409 staleness to a silent skip).
  */
 import { extractHttpErrorMessage } from './http-error'
+import { frameRequestCredentials } from '@/lib/client/widget-frame'
 
 /** Serialize one AG-UI `data: <json>` SSE frame (the shape
  *  `toServerSentEventsResponse` emits and `fetchServerSentEvents` parses). */
@@ -25,7 +26,14 @@ export function aguiFetchClient(getHeaders?: () => HeadersInit | undefined): typ
         ;(headers as Headers).set(key, value)
       })
     }
-    const res = await fetch(input, extra ? { ...init, headers } : init)
+    // In a widget frame without the portal session, no cookies (widget-frame.ts).
+    const credentials = frameRequestCredentials()
+    const res = await fetch(
+      input,
+      extra || credentials
+        ? { ...init, ...(extra ? { headers } : {}), ...(credentials ? { credentials } : {}) }
+        : init
+    )
     if (res.ok) return res
     const message = await extractHttpErrorMessage(res)
     return new Response(aguiErrorFrame(`http_${res.status}`, message), {

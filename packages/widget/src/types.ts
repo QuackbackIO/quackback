@@ -50,6 +50,14 @@ export interface InitOptions {
    * only when the instance also enables visitor analytics.
    */
   tracking?: boolean
+  /**
+   * Set `whatsNew: false` to keep the "What's new" card above the launcher
+   * off on this page, for example on a checkout page, whatever the workspace
+   * setting. The unread badge is unchanged. Switch it at runtime with
+   * `Quackback.whatsNew(true | false)`. On by default; omitting the option
+   * keeps the last choice, so a `whatsNew` call made before `init` holds.
+   */
+  whatsNew?: boolean
 }
 
 /**
@@ -71,6 +79,7 @@ export type Identity =
 /**
  * Arguments to `Quackback.open(...)`. Discriminated on the target:
  * - omit the payload or `{ view: 'home' }` to open the home view
+ * - `{ view: 'feedback' }` opens the feedback list, when it is enabled
  * - `{ view: 'new-post', title?, body?, board? }` pre-fills the new-post form
  * - `{ view: 'changelog', entryId? }` opens the changelog, optionally to one entry
  * - `{ view: 'help', query? }` opens help, optionally with search prefilled
@@ -91,11 +100,12 @@ export type Identity =
 export type OpenOptions =
   | undefined
   | { view?: 'home' }
+  | { view: 'feedback' }
   | { view: 'new-post'; title?: string; body?: string; board?: string }
   | { view: 'changelog'; entryId?: string }
   | { view: 'help'; query?: string }
   | { view: 'chat' }
-  | { view: 'messages' }
+  | { view: 'messages'; conversationId?: string }
   | { view: 'tickets' }
   | { postId: string }
   | { articleId: string }
@@ -108,16 +118,23 @@ export interface WidgetUser {
 }
 
 /**
- * Events emitted by the widget iframe. `open` and `close` carry context about
- * which view is showing so subscribers can react to deep-link flows.
+ * Events emitted by the widget. Subscribers can use `open` and `close` to
+ * react to deep-link flows.
  */
 export interface EventMap {
   ready: Record<string, never>
+  /**
+   * The panel opened. The payload reports the view and deep-link the host
+   * requested, not the view that is showing: when that surface is turned
+   * off, the panel opens without switching to it and the event still names
+   * the requested view.
+   */
   open: {
-    view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
+    view?: 'home' | 'feedback' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
     postId?: string
     articleId?: string
     entryId?: string
+    conversationId?: string
   }
   close: Record<string, never>
   'post:created': {
@@ -139,7 +156,35 @@ export interface EventMap {
   /** Total unread across the visitor's conversations changed. Lets a host page
    *  mirror the count in its own UI (e.g. a nav badge), same value that drives
    *  the launcher badge. */
-  unread: { count: number }
+  unread: {
+    count: number
+    /** Unread replies across the visitor's conversations. */
+    messages: number
+    /** Unread changelog entries. */
+    changelog: number
+    /** Tickets whose stage moved since the visitor last looked. */
+    tickets: number
+  }
+  /** The "What's new" card appeared above the closed launcher for the newest
+   *  unread changelog entry it may announce. Fires once per entry for each
+   *  visitor: the host page remembers which entries it announced, per
+   *  instance. `count` is the number of unread entries the card announces.
+   *  Does not fire on a page with the card turned off, or for entries that
+   *  were already unread the first time a visitor loads the widget on a
+   *  device. */
+  'whats-new': { count: number; entryId: string }
+  /** A new unread reply from a teammate or the AI assistant, in any of the
+   *  visitor's conversations. Fires once per reply for each visitor,
+   *  whichever way the workspace shows replies (including the badge only),
+   *  for the 20 newest unread replies at each check: the host page remembers
+   *  which replies it reported, per instance. Replies already unread the
+   *  first time a visitor loads the widget on a device are not reported. */
+  message: {
+    conversationId: string
+    author: { name: string; avatarUrl: string | null }
+    /** The reply as plain text. */
+    preview: string
+  }
 }
 
 export type EventName = keyof EventMap

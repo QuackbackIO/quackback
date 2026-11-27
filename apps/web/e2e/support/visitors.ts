@@ -15,6 +15,7 @@ import {
   expect,
   type APIRequestContext,
   type Browser,
+  type Locator,
   type Page,
   type PlaywrightWorkerArgs,
 } from '@playwright/test'
@@ -246,4 +247,13 @@ export async function warmUpStream(
     }
   }
   throw new Error('the stream never delivered a warm-up typing frame')
+}
+
+/**
+ * The status line under the team name in the widget's conversation header:
+ * "Online now", or while away the reply promise ("We'll reply by email" /
+ * "We'll reply here") led by when the team is back or the usual reply time.
+ */
+export function teamStatusLine(widget: { locator(selector: string): Locator }): Locator {
+  return widget.locator('[data-slot="team-status"]')
 }

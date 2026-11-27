@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   memo,
   useRef,
@@ -117,6 +118,12 @@ export interface WidgetHomeProps {
   confirmedBoardSlugs?: string[] | null
   /** Programmatic `open({ view: 'new-post' })` — expand and prefill. */
   composeRequest?: WidgetComposeRequest | null
+  /**
+   * Programmatic `open({ view: 'feedback' })`: a nonce from the same counter
+   * as `composeRequest.nonce`. A new value collapses the composer so the panel
+   * lands on the list, unless a later compose request supersedes it.
+   */
+  collapseRequest?: number
   onPostSelect?: (postId: string) => void
   onPostCreated?: (post: {
     id: string
@@ -520,6 +527,7 @@ export function WidgetHomeAnimated({
   initialBoardSlug,
   confirmedBoardSlugs,
   composeRequest,
+  collapseRequest,
   onPostSelect,
   onPostCreated,
 }: WidgetHomeProps) {
@@ -823,6 +831,15 @@ export function WidgetHomeAnimated({
     setError(null)
     fieldAnswers.reset()
   }
+
+  // Host `open({ view: 'feedback' })` lands here: the list, not a composer
+  // left open by an earlier new-post command or by the visitor.
+  const collapseForHost = useEffectEvent(collapseForm)
+  useEffect(() => {
+    if (!collapseRequest) return
+    if (composeRequest && composeRequest.nonce > collapseRequest) return
+    collapseForHost()
+  }, [collapseRequest])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

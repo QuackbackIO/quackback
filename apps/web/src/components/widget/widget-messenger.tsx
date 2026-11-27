@@ -8,6 +8,7 @@ import { VisitorSurfaceRpcProvider } from '@/lib/client/visitor-surface-rpc'
 import { widgetVisitorRpc } from '@/lib/client/widget-visitor-rpc'
 import { useConversationPresence, markAgentPresentInCache } from './use-messenger-presence'
 import { useWidgetFileUpload } from './use-widget-file-upload'
+import { frameRequestCredentials } from '@/lib/client/widget-frame'
 
 interface WidgetMessengerProps {
   /** Whether the help center is available (gates in-conversation article suggestions). */
@@ -40,13 +41,17 @@ export function WidgetMessenger({
   onReplyByEmailChange,
 }: WidgetMessengerProps = {}) {
   const queryClient = useQueryClient()
-  const { user, ensureSession, sessionVersion } = useWidgetAuth()
+  const { user, ensureSession, sessionVersion, emitEvent } = useWidgetAuth()
   // Presence (online/offline + office hours) comes from the one shared query —
   // SSR-seeded, polled once, and shared with every other widget surface.
   const presence = useConversationPresence(true)
   const { upload } = useWidgetFileUpload()
 
   const onAgentActivity = useCallback(() => markAgentPresentInCache(queryClient), [queryClient])
+  const onEmailSubmitted = useCallback(
+    (email: string) => emitEvent('email-submitted', { email }),
+    [emitEvent]
+  )
 
   const helpSearch = useMemo(() => {
     if (!helpEnabled || !onArticleSelect) return undefined
@@ -55,6 +60,7 @@ export function WidgetMessenger({
         const res = await fetch(`/api/widget/kb-search?q=${encodeURIComponent(q)}&limit=3`, {
           signal,
           headers: getWidgetAuthHeaders(),
+          credentials: frameRequestCredentials(),
         })
         if (!res.ok) return []
         const json = (await res.json()) as {
@@ -86,6 +92,7 @@ export function WidgetMessenger({
         autofocusComposer={autofocusComposer}
         initialDraft={initialDraft}
         onReplyByEmailChange={onReplyByEmailChange}
+        onEmailSubmitted={onEmailSubmitted}
         compact
       />
     </VisitorSurfaceRpcProvider>
