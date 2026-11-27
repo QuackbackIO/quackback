@@ -11,14 +11,32 @@ export async function sendVerifyAddressCode(email: string, code: string): Promis
   const settings = await db.query.settings.findFirst({
     columns: { name: true, logoKey: true },
   })
-  // A request email: the account's own language, then the browser that asked.
+  // A request email: the asking person's own language, then the browser that asked.
   const { recipientEmailLocale, requestAcceptLanguage } =
     await import('@/lib/server/email/email-locale')
   await sendVerifyAddressEmail({
     to: email,
     code,
-    i18n: await recipientEmailLocale({ email }, { acceptLanguage: await requestAcceptLanguage() }),
+    i18n: await recipientEmailLocale(await addressCheckReader(email), {
+      acceptLanguage: await requestAcceptLanguage(),
+    }),
     workspaceName: settings?.name ?? undefined,
     logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
   })
+}
+
+/**
+ * Whose language an address check is in: the signed-in person asking for it
+ * (the address is being added to their own account), else whoever already
+ * holds the address.
+ */
+async function addressCheckReader(email: string): Promise<{ userId?: string; email?: string }> {
+  try {
+    const { getRequestSession } = await import('@/lib/server/auth/request-session')
+    const session = await getRequestSession()
+    if (session?.user?.id) return { userId: session.user.id }
+  } catch {
+    // Outside a request: fall back to the address.
+  }
+  return { email }
 }
