@@ -2,6 +2,8 @@
 
 ## 0.1.7 - 2026-11-27
 
+The reply preview, the What's new card, the `message` and `whats-new` events, the `unread` breakdown and the phone safe areas need Quackback 0.17.0 or later. With an older server they stay off and everything else works as in 0.1.6.
+
 - Screen readers hear the launcher as "Open help" (or your launcher label) with the unread count, for example "Open help, 2 unread", and "Close help" while the panel is open, in the visitor's language when `init` passes a `locale`. The panel is announced as a dialog named in the same language.
 - Opening the panel from the launcher or your own help button moves keyboard focus into it, and closing it returns focus to whatever opened it (or to the launcher if that is gone). An `open()` call while the visitor is typing in a field leaves their focus there, and in browsers that report user activation, so does an open on a timer or a route change.
 - The desktop panel is taller (up to 704px) and narrower windows shrink it to fit, with rounder corners and a softer shadow. The launcher keeps the same shadow after a hover.
@@ -19,6 +21,9 @@
 - The `unread` event payload adds `messages`, `changelog` and `tickets` beside the unchanged `count`.
 - The new `message` event (`{ conversationId, author: { name, avatarUrl }, preview }`) fires once for each new unread reply in any of the visitor's conversations (the 20 newest at each check) that arrives while the page is open or since the visitor's last visit on that device, whichever way the workspace shows replies, including the badge only, so you can build your own indicator.
 - The unread count refreshes as soon as the visitor comes back to the page, instead of on the next poll.
+- A reply that arrives while the widget is closed stays unread. Before, a conversation left open in the closed panel marked each new reply read, so the badge and the `unread` event never fired for it.
+- `Quackback.open({ view: 'feedback' })` opens the feedback list. The `open` event reports the view the host asked for, even when that surface is turned off.
+- On phones, the panel's header and bottom bar stay clear of the browser toolbars, the system navigation bar and the notch, including on pages that draw under them (`viewport-fit=cover`).
 - Script-tag installs can read state with `Quackback('isOpen')`, `Quackback('getUser')` and `Quackback('isIdentified')`.
 - The SDK only accepts messages from the panel iframe on the page now. Before, a message from another window on the same origin, such as a removed panel's last reply, could change `getUser()`, the unread count or open a link in a new tab.
 - `useQuackbackInit` calls `logout()` when `identity` goes back to `undefined`, so signing out of your app signs out of the widget. A visitor who was never identified keeps their anonymous session.
