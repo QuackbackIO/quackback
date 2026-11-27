@@ -1,7 +1,6 @@
 import {
   db,
   eq,
-  helpCenterArticles,
   settings,
   sql,
   ssoVerifiedDomain,
@@ -57,6 +56,7 @@ import {
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_FEATURE_FLAGS,
   DEFAULT_HELP_CENTER_CONFIG,
+  DEFAULT_HELP_CENTER_LOCALES_CONFIG,
   DEFAULT_LANGUAGE_CONFIG,
   resolveFeatureFlags,
 } from './settings.types'
@@ -856,10 +856,10 @@ export async function getMainLanguage(): Promise<string> {
 }
 
 /**
- * Change the main language or what visitors see. The help center's default
- * language follows the main language in the same write. A language the help
- * center already offers as an extra language cannot become the main language
- * here; that needs its translations moved first.
+ * Change the main language or what visitors see. The help center's content
+ * and settings move to the new main language in the same locked write (see
+ * help-center-main-language.service): relabelled, or swapped when the new
+ * main language is one of the help center's extra languages.
  */
 export async function updateLanguageConfig(
   input: Partial<LanguageConfig>,
@@ -870,40 +870,38 @@ export async function updateLanguageConfig(
   if (input.mainLanguage !== undefined && !mainLanguage) {
     throw new ValidationError('UNSUPPORTED_LANGUAGE', `"${input.mainLanguage}" is not supported`)
   }
+  const { helpCenterConfigForMainLanguage, moveHelpCenterMainLanguage, refreshArticleEmbeddings } =
+    await import('@/lib/server/domains/help-center/help-center-main-language.service')
   log.info({ main_language: mainLanguage }, 'update language config')
   try {
-    return await writeLockedSettings(options, async (tx, org) => {
+    const { next, swappedArticleIds } = await writeLockedSettings(options, async (tx, org) => {
       const helpCenter = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
       const existing = parseLanguageConfig(org.languageConfig, helpCenter.locales?.default)
       const next: LanguageConfig = {
         mainLanguage: mainLanguage ?? existing.mainLanguage,
         visitorLanguage: input.visitorLanguage ?? existing.visitorLanguage,
       }
-      const additional = helpCenter.locales?.additional ?? []
-      if (next.mainLanguage !== existing.mainLanguage && additional.includes(next.mainLanguage)) {
-        throw new ValidationError(
-          'MAIN_LANGUAGE_IS_EXTRA',
-          'Remove this language from the help center languages before making it the main language'
-        )
-      }
-      const nextHelpCenter: HelpCenterConfig = {
-        ...helpCenter,
-        locales: { ...helpCenter.locales, default: next.mainLanguage },
-      }
+      const locales = { ...DEFAULT_HELP_CENTER_LOCALES_CONFIG, ...helpCenter.locales }
+      const current = { ...helpCenter, locales: { ...locales, default: existing.mainLanguage } }
+      const moved = await moveHelpCenterMainLanguage(tx, {
+        from: existing.mainLanguage,
+        to: next.mainLanguage,
+        swap: locales.additional.includes(next.mainLanguage),
+      })
       await tx
         .update(settings)
         .set({
           languageConfig: JSON.stringify(next),
-          helpCenterConfig: JSON.stringify(nextHelpCenter),
+          helpCenterConfig: JSON.stringify(
+            helpCenterConfigForMainLanguage(current, next.mainLanguage)
+          ),
         })
         .where(eq(settings.id, org.id))
-      // Articles are relabelled, never rewritten: their text stays, and
-      // search stems it by the new language.
-      if (next.mainLanguage !== existing.mainLanguage) {
-        await tx.update(helpCenterArticles).set({ locale: next.mainLanguage })
-      }
-      return next
+      return { next, swappedArticleIds: moved.swappedArticleIds }
     })
+    // After the commit: the global pool cannot be used inside the locked write.
+    refreshArticleEmbeddings(swappedArticleIds)
+    return next
   } catch (error) {
     if (error instanceof ValidationError) throw error
     log.error({ err: error }, 'update language config failed')

@@ -1,8 +1,8 @@
 /**
  * The workspace's languages against the real settings row (rolled back): the
- * main language defaults to the help center's default, a change keeps the
- * help center's default language equal to it, and a language the help center
- * offers as an extra language cannot become the main language.
+ * main language defaults to the help center's default, and a change keeps the
+ * help center's default language equal to it and moves the help center's
+ * content with it (help-center-main-language.db.test.ts covers the move).
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
@@ -90,17 +90,18 @@ describe.skipIf(!fixture.available)('the workspace languages', () => {
     })
   })
 
-  it('refuses an extra help center language as the main language, and changes nothing', async () => {
-    await storeHelpCenterLocales({ default: 'en', additional: ['de'] })
+  it('swaps in an extra help center language, which then leaves the extra languages', async () => {
+    await storeHelpCenterLocales({ default: 'en', additional: ['de', 'fr'] })
 
-    await expect(updateLanguageConfig({ mainLanguage: 'de' })).rejects.toBeInstanceOf(
-      ValidationError
-    )
-    expect((await getLanguageConfig('fresh')).mainLanguage).toBe('en')
-    expect((await getHelpCenterConfig('fresh')).locales.default).toBe('en')
+    await updateLanguageConfig({ mainLanguage: 'de' })
+
+    expect((await getLanguageConfig('fresh')).mainLanguage).toBe('de')
+    const { locales } = await getHelpCenterConfig('fresh')
+    expect(locales.default).toBe('de')
+    expect(locales.additional).toEqual(['fr', 'en'])
   })
 
-  it('relabels every article, so search stems it by the new main language', async () => {
+  it('relabels the main-language articles, so search stems them by the new main language', async () => {
     await storeHelpCenterLocales({ default: 'en', additional: [] })
     const articleId = await seedArticle('Einstellungen öffnen', 'Öffne die Einstellungen.')
     // English rules leave the German word whole.

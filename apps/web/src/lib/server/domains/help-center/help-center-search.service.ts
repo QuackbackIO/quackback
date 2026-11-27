@@ -17,10 +17,12 @@ import {
   isNull,
   isNotNull,
   lte,
+  ne,
   sql,
   regconfigForLocale,
   localeRegconfigCaseSql,
 } from '@/lib/server/db'
+import type { SQL } from 'drizzle-orm'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { segmentGateFilter } from '@/lib/server/policy/segment-gate'
@@ -441,12 +443,14 @@ async function keywordOnlyQuery(
 // ============================================================================
 
 /**
- * Keyword-only search over kb_article_translations for an ADDITIONAL locale.
- * Embeddings stay default-locale only (a cost decision, not a correctness
- * one), so there is no semantic component here -- this is the per-locale
- * analogue of {@link keywordOnlyQuery}, not of the full hybrid query.
- * Only published translations of published, public, non-deleted articles
- * are eligible (the shared visibility predicate still gates the base row).
+ * Keyword-only search for an ADDITIONAL locale, over each article's version
+ * in it: its published translation, or its own text when that is in the
+ * locale (an article left in a former main language). Embeddings stay
+ * main-language only (a cost decision, not a correctness one), so there is
+ * no semantic component here -- this is the per-locale analogue of
+ * {@link keywordOnlyQuery}, not of the full hybrid query. Only published,
+ * public, non-deleted articles are eligible (the shared visibility predicate
+ * gates the base row).
  */
 async function keywordOnlyQueryForLocale(
   query: string,
@@ -455,62 +459,52 @@ async function keywordOnlyQueryForLocale(
   viewer: Actor
 ): Promise<HybridSearchResult[]> {
   const tsQuery = orTermsTsQueryForLocale(query, locale)
-
-  const results = await db
-    .select({
-      id: helpCenterArticles.id,
-      urlId: helpCenterArticles.urlId,
-      slug: helpCenterArticles.slug,
-      title: helpCenterArticleTranslations.title,
-      description: helpCenterArticleTranslations.description,
-      content: helpCenterArticleTranslations.content,
-      categoryId: helpCenterArticles.categoryId,
-      categorySlug: helpCenterCategories.slug,
-      categoryName: sql<string>`COALESCE(NULLIF(${helpCenterCategoryTranslations.name}, ''), ${helpCenterCategories.name})`,
-      score: sql<number>`ts_rank(${helpCenterArticleTranslations.searchVector}, ${tsQuery})`.as(
-        'score'
-      ),
-    })
-    .from(helpCenterArticleTranslations)
-    .innerJoin(
-      helpCenterArticles,
-      eq(helpCenterArticleTranslations.articleId, helpCenterArticles.id)
-    )
-    .innerJoin(
-      helpCenterCategories,
-      sql`${helpCenterArticles.categoryId} = ${helpCenterCategories.id}`
-    )
-    .leftJoin(
-      helpCenterCategoryTranslations,
-      and(
-        eq(helpCenterCategoryTranslations.categoryId, helpCenterCategories.id),
-        eq(helpCenterCategoryTranslations.locale, locale)
+  const t = helpCenterArticleTranslations
+  const a = helpCenterArticles
+  const search = (from: typeof a | typeof t, inLocale: SQL | undefined) =>
+    db
+      .select({
+        id: a.id,
+        urlId: a.urlId,
+        slug: a.slug,
+        title: sql<string>`${from.title}`,
+        description: sql<string | null>`${from.description}`,
+        content: sql<string>`${from.content}`,
+        categoryId: a.categoryId,
+        categorySlug: helpCenterCategories.slug,
+        categoryName: sql<string>`COALESCE(NULLIF(${helpCenterCategoryTranslations.name}, ''), ${helpCenterCategories.name})`,
+        score: sql<number>`ts_rank(${from.searchVector}, ${tsQuery})`.as('score'),
+      })
+      .from(a)
+      .leftJoin(t, and(eq(t.articleId, a.id), eq(t.locale, locale)))
+      .innerJoin(helpCenterCategories, sql`${a.categoryId} = ${helpCenterCategories.id}`)
+      .leftJoin(
+        helpCenterCategoryTranslations,
+        and(
+          eq(helpCenterCategoryTranslations.categoryId, helpCenterCategories.id),
+          eq(helpCenterCategoryTranslations.locale, locale)
+        )
       )
-    )
-    .where(
-      and(
-        eq(helpCenterArticleTranslations.locale, locale),
-        eq(helpCenterArticleTranslations.status, 'published'),
-        ...helpCenterVisibilityConditions('public', viewer),
-        sql`${helpCenterArticleTranslations.searchVector} @@ ${tsQuery}`,
-        sql`ts_rank(${helpCenterArticleTranslations.searchVector}, ${tsQuery}) > ${KEYWORD_RANK_FLOOR}`
+      .where(
+        and(
+          inLocale,
+          ...helpCenterVisibilityConditions('public', viewer),
+          sql`${from.searchVector} @@ ${tsQuery}`,
+          sql`ts_rank(${from.searchVector}, ${tsQuery}) > ${KEYWORD_RANK_FLOOR}`
+        )
       )
-    )
-    .orderBy(sql`score DESC`)
-    .limit(limit)
+      .orderBy(sql`score DESC`)
+      .limit(limit)
 
-  return results.map((r) => ({
-    id: r.id,
-    urlId: r.urlId,
-    slug: r.slug,
-    title: r.title,
-    description: r.description,
-    content: r.content,
-    categoryId: r.categoryId,
-    categorySlug: r.categorySlug,
-    categoryName: r.categoryName,
-    score: Number(r.score),
-  }))
+  const [ownText, translated] = await Promise.all([
+    // An article whose own text is in the locale is read in it, never in a translation.
+    search(a, eq(a.locale, locale)),
+    search(t, and(ne(a.locale, locale), eq(t.status, 'published'))),
+  ])
+  return [...ownText, ...translated]
+    .sort((x, y) => Number(y.score) - Number(x.score))
+    .slice(0, limit)
+    .map((r) => ({ ...r, score: Number(r.score) }))
 }
 
 /**

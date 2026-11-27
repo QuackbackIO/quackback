@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 772 surfaces
+### Server functions (`requireAuth`) — 773 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -490,6 +490,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/integrations.ts`::removeNotificationChannelFn | integration.manage |
 | `lib/server/functions/language-settings.ts`::getLanguageSettingsFn | settings.manage |
 | `lib/server/functions/language-settings.ts`::updateLanguageSettingsFn | settings.manage |
+| `lib/server/functions/language-settings.ts`::previewMainLanguageChangeFn | settings.manage |
 | `lib/server/functions/link-preview.ts`::unfurlLinkFn | END_USER (any authenticated) |
 | `lib/server/functions/macros.ts`::listMacrosFn | conversation.reply |
 | `lib/server/functions/macros.ts`::createMacroFn | conversation.manage |
@@ -1099,7 +1100,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-241 of 1120 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+241 of 1121 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
