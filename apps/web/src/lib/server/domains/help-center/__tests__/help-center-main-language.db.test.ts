@@ -1,9 +1,10 @@
 /**
  * Changing the main language moves the help center's content, against the
- * real database (rolled back). A language the help center does not offer
- * relabels the main-language content; an extra language swaps each article
- * and collection that has a version in it, and leaves the rest in their own
- * language. A published article never takes a draft as its text.
+ * real database (rolled back). Each article and collection with a version in
+ * the new language swaps to it, offered or not; the rest of the old main
+ * language is relabelled when the help center does not offer the new one, and
+ * otherwise stays in its own language. A published article never takes a
+ * draft as its text, and nothing is deleted.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -194,6 +195,90 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
       expect((await category(french)).locale).toBe('fr')
       expect(embedded.ids).toEqual([])
     })
+
+    it('swaps in the versions a removed extra language kept, instead of hiding them under relabelled text', async () => {
+      await storeHelpCenter(locales('en', []))
+      const cat = await seedCategory('Account')
+      await testDb
+        .insert(helpCenterCategoryTranslations)
+        .values({ categoryId: cat, locale: 'de', name: 'Konto' })
+      const translated = await seedArticle(cat, 'Change your password')
+      await translate(translated, 'de', 'Passwort ändern')
+      const untranslated = await seedArticle(cat, 'Billing')
+
+      await updateLanguageConfig({ mainLanguage: 'de' })
+
+      expect(await article(translated)).toMatchObject({ locale: 'de', title: 'Passwort ändern' })
+      const translations = await translationsOf(translated)
+      expect(Object.keys(translations)).toEqual(['en'])
+      expect(translations.en.title).toBe('Change your password')
+      expect(await article(untranslated)).toMatchObject({ locale: 'de', title: 'Billing' })
+      expect(await category(cat)).toMatchObject({ locale: 'de', name: 'Konto' })
+      await vi.waitFor(() => expect(embedded.ids).toEqual([translated]))
+    })
+
+    it('keeps a published article with only a draft in the new language as it is, and the draft stays a draft', async () => {
+      await storeHelpCenter(locales('en', []))
+      const cat = await seedCategory('Account')
+      const id = await seedArticle(cat, 'Change your password')
+      await translate(id, 'de', 'Passwort ändern', { status: 'draft' })
+
+      await updateLanguageConfig({ mainLanguage: 'de' })
+
+      expect(await article(id)).toMatchObject({ locale: 'en', title: 'Change your password' })
+      expect((await translationsOf(id)).de).toMatchObject({
+        title: 'Passwort ändern',
+        status: 'draft',
+      })
+    })
+
+    it('loses no text when a removed language becomes the main language and an extra one follows', async () => {
+      await storeHelpCenter(locales('en', ['fr']))
+      const cat = await seedCategory('Account')
+      const id = await seedArticle(cat, 'Change your password')
+      await translate(id, 'de', 'Passwort ändern')
+      await translate(id, 'fr', 'Changer le mot de passe')
+
+      await updateLanguageConfig({ mainLanguage: 'de' })
+      await updateLanguageConfig({ mainLanguage: 'fr' })
+
+      expect(await article(id)).toMatchObject({ locale: 'fr', title: 'Changer le mot de passe' })
+      const translations = await translationsOf(id)
+      expect(
+        Object.fromEntries(Object.entries(translations).map(([l, t]) => [l, t.title]))
+      ).toEqual({ de: 'Passwort ändern', en: 'Change your password' })
+    })
+
+    it("takes a removed language's homepage words as the main ones, keeping the old ones for its return", async () => {
+      await storeHelpCenter({
+        homepageTitle: 'How can we help?',
+        homepageDescription: 'Search the guides',
+        ...locales('en', [], {
+          de: {
+            homepageTitle: 'Wie können wir helfen?',
+            homepageDescription: 'Suche',
+            searchPlaceholder: 'Suche hier',
+          },
+        }),
+      })
+
+      await updateLanguageConfig({ mainLanguage: 'de' })
+
+      const config = await getHelpCenterConfig('fresh')
+      expect(config.homepageTitle).toBe('Wie können wir helfen?')
+      expect(config.locales).toEqual({
+        default: 'de',
+        additional: [],
+        chrome: {
+          de: { homepageTitle: '', homepageDescription: '', searchPlaceholder: 'Suche hier' },
+          en: {
+            homepageTitle: 'How can we help?',
+            homepageDescription: 'Search the guides',
+            searchPlaceholder: '',
+          },
+        },
+      })
+    })
   })
 
   describe('to an extra language (a swap)', () => {
@@ -368,6 +453,7 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
         additional: ['fr', 'en'],
         chrome: {
           fr: { homepageTitle: 'Comment aider ?', homepageDescription: '', searchPlaceholder: '' },
+          de: { homepageTitle: '', homepageDescription: '', searchPlaceholder: 'Suchen' },
           en: {
             homepageTitle: 'How can we help you?',
             homepageDescription: 'Search the guides',
@@ -378,7 +464,14 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
     })
 
     it('goes there and back to where it started', async () => {
-      await storeHelpCenter(locales('en', ['de']))
+      const chrome = {
+        de: {
+          homepageTitle: 'Wie können wir helfen?',
+          homepageDescription: 'Suche',
+          searchPlaceholder: 'Suche hier',
+        },
+      }
+      await storeHelpCenter(locales('en', ['de'], chrome))
       const cat = await seedCategory('Getting started')
       const id = await seedArticle(cat, 'Settings')
       await translate(id, 'de', 'Einstellungen')
@@ -405,12 +498,13 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
       expect((await getHelpCenterConfig('fresh')).locales).toMatchObject({
         default: 'en',
         additional: ['de'],
+        chrome,
       })
     })
 
-    it("replaces a translation in an article's own language, which its own text hides", async () => {
+    it('deletes nothing: an article with a translation in its own language, which its own text hides, stays as it is', async () => {
       // An article left in English after German became the main language,
-      // with a stale English translation; French becomes the main language.
+      // given an English translation by hand; French becomes the main language.
       await storeHelpCenter(locales('de', ['en', 'fr']))
       const cat = await seedCategory('Konto', 'de')
       const id = await seedArticle(cat, 'Invoices')
@@ -419,10 +513,11 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
 
       await updateLanguageConfig({ mainLanguage: 'fr' })
 
-      expect(await article(id)).toMatchObject({ locale: 'fr', title: 'Factures' })
+      expect(await article(id)).toMatchObject({ locale: 'en', title: 'Invoices' })
       const translations = await translationsOf(id)
-      expect(Object.keys(translations)).toEqual(['en'])
-      expect(translations.en.title).toBe('Invoices')
+      expect(
+        Object.fromEntries(Object.entries(translations).map(([l, t]) => [l, t.title]))
+      ).toEqual({ en: 'Old invoices', fr: 'Factures' })
     })
 
     it('counts beforehand exactly what it swaps and what it leaves', async () => {
@@ -443,12 +538,13 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
       const preview = await previewHelpCenterMainLanguage(testDb, {
         from: 'en',
         to: 'de',
-        swap: true,
+        toIsExtraLanguage: true,
       })
       expect(preview).toEqual({
-        swap: true,
-        articles: 1,
-        collections: 1,
+        swappedArticles: 1,
+        swappedCollections: 1,
+        relabelledArticles: 0,
+        relabelledCollections: 0,
         keptArticles: 2,
         keptCollections: 1,
       })
@@ -458,18 +554,39 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
         .select({ inGerman: sql<number>`count(*)::int` })
         .from(helpCenterArticles)
         .where(and(eq(helpCenterArticles.locale, 'de'), sql`deleted_at IS NULL`))
-      expect(inGerman).toBe(preview.articles)
+      expect(inGerman).toBe(preview.swappedArticles)
     })
 
-    it('counts the relabelled content when the language is not an extra one', async () => {
+    it('counts the relabelled, swapped and kept content when the language is not an extra one', async () => {
       await storeHelpCenter(locales('en', []))
       const cat = await seedCategory('Getting started')
       await seedArticle(cat, 'Settings')
       await seedArticle(cat, 'Factures', { locale: 'fr' })
+      const translated = await seedArticle(cat, 'Change your password')
+      await translate(translated, 'de', 'Passwort ändern')
+      const drafted = await seedArticle(cat, 'Refunds')
+      await translate(drafted, 'de', 'Erstattungen', { status: 'draft' })
 
-      expect(
-        await previewHelpCenterMainLanguage(testDb, { from: 'en', to: 'de', swap: false })
-      ).toEqual({ swap: false, articles: 1, collections: 1, keptArticles: 0, keptCollections: 0 })
+      const preview = await previewHelpCenterMainLanguage(testDb, {
+        from: 'en',
+        to: 'de',
+        toIsExtraLanguage: false,
+      })
+      expect(preview).toEqual({
+        swappedArticles: 1,
+        swappedCollections: 0,
+        relabelledArticles: 1,
+        relabelledCollections: 1,
+        keptArticles: 2,
+        keptCollections: 0,
+      })
+
+      await updateLanguageConfig({ mainLanguage: 'de' })
+      const [{ inGerman }] = await testDb
+        .select({ inGerman: sql<number>`count(*)::int` })
+        .from(helpCenterArticles)
+        .where(and(eq(helpCenterArticles.locale, 'de'), sql`deleted_at IS NULL`))
+      expect(inGerman).toBe(preview.swappedArticles + preview.relabelledArticles)
     })
   })
 })

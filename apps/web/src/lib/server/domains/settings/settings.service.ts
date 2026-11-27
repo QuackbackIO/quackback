@@ -858,8 +858,10 @@ export async function getMainLanguage(): Promise<string> {
 /**
  * Change the main language or what visitors see. The help center's content
  * and settings move to the new main language in the same locked write (see
- * help-center-main-language.service): relabelled, or swapped when the new
- * main language is one of the help center's extra languages.
+ * help-center-main-language.service): each item with a version in the new
+ * language swaps to it, and the rest is relabelled, or kept in its own
+ * language when the new main language is one of the help center's extra
+ * languages.
  */
 export async function updateLanguageConfig(
   input: Partial<LanguageConfig>,
@@ -886,7 +888,7 @@ export async function updateLanguageConfig(
       const moved = await moveHelpCenterMainLanguage(tx, {
         from: existing.mainLanguage,
         to: next.mainLanguage,
-        swap: locales.additional.includes(next.mainLanguage),
+        toIsExtraLanguage: locales.additional.includes(next.mainLanguage),
       })
       await tx
         .update(settings)

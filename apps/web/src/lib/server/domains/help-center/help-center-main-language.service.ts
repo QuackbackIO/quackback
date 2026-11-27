@@ -2,24 +2,34 @@
  * What a change of the workspace's main language does to the help center.
  *
  * The main language is where help center content lives: each article and
- * collection row holds its main-language text, and every other language is a
- * translation on top. A change of main language therefore moves content:
+ * collection row holds its text in one language (its `locale`, the main
+ * language unless a move left it in another), and every other language is a
+ * translation on top. A change of main language moves content, deciding for
+ * each article and collection on its own:
  *
- * - To a language the help center does not offer yet: every article and
- *   collection written in the old main language is relabelled. The text
- *   stays; it was written in the new language all along, in the wrong slot.
- * - To one of the help center's extra languages: a swap. Each article and
- *   collection with a version in the new language takes it as its own text,
- *   and its previous text becomes the translation in the language it was
- *   in. One with no version there keeps its text and its language, and
- *   readers get it with a notice until someone translates it. The old main
- *   language becomes an extra language, keeping its homepage words, and the
- *   new one's homepage words become the main ones.
+ * - One with a version in the new language takes it as its own text, and its
+ *   previous text becomes the translation in the language it was in. This
+ *   holds whether or not the help center offers the new language: a
+ *   language removed from the help center keeps its translations, and they
+ *   are real text in it.
+ * - One in the old main language with no version at all in the new one is
+ *   relabelled when the help center does not offer the new language: the
+ *   text stays, written in the new language all along, in the wrong slot.
+ * - Everything else keeps its text and its language, and readers get it with
+ *   a notice until someone translates it.
+ *
+ * Nothing is deleted, and no row ever ends up with a translation in its own
+ * language, which its own text would hide. A row that already has one (only
+ * a manual edit makes it) is left as it is.
  *
  * A published article never takes a draft translation as its text: that
  * would put unreviewed text live. It stays as it is, and the draft stays a
  * draft in the new language. The swapped-out text keeps the article's
  * publish state, so a published article keeps a published translation.
+ *
+ * When the new language is one of the help center's extra languages, the old
+ * main language becomes an extra language, keeping its homepage words, and
+ * the new one's homepage words become the main ones.
  *
  * Everything here runs on the caller's transaction, under the settings lock
  * that also writes the new main language.
@@ -38,9 +48,11 @@ import {
   helpCenterArticleTranslations,
   helpCenterCategories,
   helpCenterCategoryTranslations,
+  notExists,
   type Database,
   type Transaction,
 } from '@/lib/server/db'
+import { alias } from 'drizzle-orm/pg-core'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
 import { generateArticleEmbedding } from './help-center-embedding.service'
@@ -52,23 +64,63 @@ type Executor = Database | Transaction
 
 const log = logger.child({ component: 'help-center-main-language' })
 
-/** An article whose version in `to` takes the row: one with a title, and never a draft over a published article. */
-function articleSwapsInto(to: string) {
+const ownLanguageArticleTranslation = alias(
+  helpCenterArticleTranslations,
+  'own_language_translation'
+)
+const ownLanguageCategoryTranslation = alias(
+  helpCenterCategoryTranslations,
+  'own_language_category_translation'
+)
+
+/** The article already has a translation in its own language (see the module doc). */
+function articleHasOwnLanguageTranslation(executor: Executor) {
+  return executor
+    .select({ one: sql`1` })
+    .from(ownLanguageArticleTranslation)
+    .where(
+      and(
+        eq(ownLanguageArticleTranslation.articleId, helpCenterArticles.id),
+        eq(ownLanguageArticleTranslation.locale, helpCenterArticles.locale)
+      )
+    )
+}
+
+function categoryHasOwnLanguageTranslation(executor: Executor) {
+  return executor
+    .select({ one: sql`1` })
+    .from(ownLanguageCategoryTranslation)
+    .where(
+      and(
+        eq(ownLanguageCategoryTranslation.categoryId, helpCenterCategories.id),
+        eq(ownLanguageCategoryTranslation.locale, helpCenterCategories.locale)
+      )
+    )
+}
+
+/**
+ * An article whose version in `to` takes the row: one with a title, never a
+ * draft over a published article, and never where the row's own text would
+ * have no slot to go to.
+ */
+function articleSwapsInto(executor: Executor, to: string) {
   return and(
     ne(helpCenterArticles.locale, to),
     sql`btrim(${helpCenterArticleTranslations.title}) <> ''`,
     or(
       isNull(helpCenterArticles.publishedAt),
       eq(helpCenterArticleTranslations.status, 'published')
-    )
+    ),
+    notExists(articleHasOwnLanguageTranslation(executor))
   )
 }
 
-/** A collection whose version in `to` takes the row: one with a name. */
-function categorySwapsInto(to: string) {
+/** A collection whose version in `to` takes the row: one with a name (see {@link articleSwapsInto}). */
+function categorySwapsInto(executor: Executor, to: string) {
   return and(
     ne(helpCenterCategories.locale, to),
-    sql`btrim(${helpCenterCategoryTranslations.name}) <> ''`
+    sql`btrim(${helpCenterCategoryTranslations.name}) <> ''`,
+    notExists(categoryHasOwnLanguageTranslation(executor))
   )
 }
 
@@ -84,24 +136,49 @@ const categoryTranslationIn = (to: string) =>
     eq(helpCenterCategoryTranslations.locale, to)
   )
 
+/** An article in `from` with no version in `to` at all, which a relabel moves. */
+function articleRelabels(executor: Executor, from: string, to: string) {
+  return and(
+    eq(helpCenterArticles.locale, from),
+    notExists(
+      executor
+        .select({ one: sql`1` })
+        .from(helpCenterArticleTranslations)
+        .where(articleTranslationIn(to))
+    )
+  )
+}
+
+function categoryRelabels(executor: Executor, from: string, to: string) {
+  return and(
+    eq(helpCenterCategories.locale, from),
+    notExists(
+      executor
+        .select({ one: sql`1` })
+        .from(helpCenterCategoryTranslations)
+        .where(categoryTranslationIn(to))
+    )
+  )
+}
+
 export interface MainLanguageChange {
   from: string
   to: string
-  /** `to` is one of the help center's extra languages. */
-  swap: boolean
+  /** `to` is one of the help center's extra languages, so nothing is relabelled. */
+  toIsExtraLanguage: boolean
 }
 
 /**
  * What a change would do to the content people can see (deleted items left
- * out). `articles` and `collections` are the ones relabelled, or, in a swap,
- * the ones that take their version in the new language; `keptArticles` and
- * `keptCollections` are the ones a swap leaves in their own language. The
- * counts use the same rules as {@link moveHelpCenterMainLanguage}.
+ * out): the articles and collections that take their version in the new
+ * language, the ones relabelled, and the ones left in their own language.
+ * The counts use the same rules as {@link moveHelpCenterMainLanguage}.
  */
 export interface MainLanguageChangePreview {
-  swap: boolean
-  articles: number
-  collections: number
+  swappedArticles: number
+  swappedCollections: number
+  relabelledArticles: number
+  relabelledCollections: number
   keptArticles: number
   keptCollections: number
 }
@@ -110,57 +187,65 @@ export async function previewHelpCenterMainLanguage(
   executor: Executor,
   change: MainLanguageChange
 ): Promise<MainLanguageChangePreview> {
-  const { from, to, swap } = change
-  if (from === to) {
-    return { swap: false, articles: 0, collections: 0, keptArticles: 0, keptCollections: 0 }
-  }
+  const { from, to, toIsExtraLanguage } = change
+  const none = { swapped: 0, relabelled: 0, kept: 0 }
+  if (from === to) return previewOf(none, none)
   const liveArticle = isNull(helpCenterArticles.deletedAt)
   const liveCategory = isNull(helpCenterCategories.deletedAt)
-  if (!swap) {
-    const [[articles], [collections]] = await Promise.all([
+  const relabelling = !toIsExtraLanguage
+  const [[swapped], [relabelled], [notInTo], [swappedC], [relabelledC], [notInToC]] =
+    await Promise.all([
       executor
         .select({ n: count() })
         .from(helpCenterArticles)
-        .where(and(liveArticle, eq(helpCenterArticles.locale, from))),
+        .innerJoin(helpCenterArticleTranslations, articleTranslationIn(to))
+        .where(and(liveArticle, articleSwapsInto(executor, to))),
+      relabelling
+        ? executor
+            .select({ n: count() })
+            .from(helpCenterArticles)
+            .where(and(liveArticle, articleRelabels(executor, from, to)))
+        : [{ n: 0 }],
+      executor
+        .select({ n: count() })
+        .from(helpCenterArticles)
+        .where(and(liveArticle, ne(helpCenterArticles.locale, to))),
       executor
         .select({ n: count() })
         .from(helpCenterCategories)
-        .where(and(liveCategory, eq(helpCenterCategories.locale, from))),
+        .innerJoin(helpCenterCategoryTranslations, categoryTranslationIn(to))
+        .where(and(liveCategory, categorySwapsInto(executor, to))),
+      relabelling
+        ? executor
+            .select({ n: count() })
+            .from(helpCenterCategories)
+            .where(and(liveCategory, categoryRelabels(executor, from, to)))
+        : [{ n: 0 }],
+      executor
+        .select({ n: count() })
+        .from(helpCenterCategories)
+        .where(and(liveCategory, ne(helpCenterCategories.locale, to))),
     ])
-    return {
-      swap,
-      articles: articles.n,
-      collections: collections.n,
-      keptArticles: 0,
-      keptCollections: 0,
+  return previewOf(
+    { swapped: swapped.n, relabelled: relabelled.n, kept: notInTo.n - swapped.n - relabelled.n },
+    {
+      swapped: swappedC.n,
+      relabelled: relabelledC.n,
+      kept: notInToC.n - swappedC.n - relabelledC.n,
     }
-  }
-  const [[swapped], [notInTo], [swappedCollections], [collectionsNotInTo]] = await Promise.all([
-    executor
-      .select({ n: count() })
-      .from(helpCenterArticles)
-      .innerJoin(helpCenterArticleTranslations, articleTranslationIn(to))
-      .where(and(liveArticle, articleSwapsInto(to))),
-    executor
-      .select({ n: count() })
-      .from(helpCenterArticles)
-      .where(and(liveArticle, ne(helpCenterArticles.locale, to))),
-    executor
-      .select({ n: count() })
-      .from(helpCenterCategories)
-      .innerJoin(helpCenterCategoryTranslations, categoryTranslationIn(to))
-      .where(and(liveCategory, categorySwapsInto(to))),
-    executor
-      .select({ n: count() })
-      .from(helpCenterCategories)
-      .where(and(liveCategory, ne(helpCenterCategories.locale, to))),
-  ])
+  )
+}
+
+type Tally = { swapped: number; relabelled: number; kept: number }
+
+function previewOf(articles: Tally, collections: Tally): MainLanguageChangePreview {
   return {
-    swap,
-    articles: swapped.n,
-    collections: swappedCollections.n,
-    keptArticles: notInTo.n - swapped.n,
-    keptCollections: collectionsNotInTo.n - swappedCollections.n,
+    swappedArticles: articles.swapped,
+    swappedCollections: collections.swapped,
+    relabelledArticles: articles.relabelled,
+    relabelledCollections: collections.relabelled,
+    keptArticles: articles.kept,
+    keptCollections: collections.kept,
   }
 }
 
@@ -173,21 +258,21 @@ export async function moveHelpCenterMainLanguage(
   tx: Executor,
   change: MainLanguageChange
 ): Promise<{ swappedArticleIds: KbArticleId[] }> {
-  const { from, to, swap } = change
+  const { from, to, toIsExtraLanguage } = change
   if (from === to) return { swappedArticleIds: [] }
-  if (!swap) {
+  // Swaps first: a swapped row is in `to` afterwards, so the relabel never sees it.
+  const swappedArticleIds = await swapArticles(tx, to)
+  await swapCategories(tx, to)
+  if (!toIsExtraLanguage) {
     await tx
       .update(helpCenterArticles)
       .set({ locale: to })
-      .where(eq(helpCenterArticles.locale, from))
+      .where(articleRelabels(tx, from, to))
     await tx
       .update(helpCenterCategories)
       .set({ locale: to })
-      .where(eq(helpCenterCategories.locale, from))
-    return { swappedArticleIds: [] }
+      .where(categoryRelabels(tx, from, to))
   }
-  const swappedArticleIds = await swapArticles(tx, to)
-  await swapCategories(tx, to)
   return { swappedArticleIds }
 }
 
@@ -213,23 +298,11 @@ async function swapArticles(tx: Executor, to: string): Promise<KbArticleId[]> {
     })
     .from(helpCenterArticles)
     .innerJoin(helpCenterArticleTranslations, articleTranslationIn(to))
-    .where(articleSwapsInto(to))
+    .where(articleSwapsInto(tx, to))
     .for('update')
 
   for (const row of rows) {
     const t = row.translation
-    // A translation in the article's own language is shadowed by the
-    // article's text, which is what readers of that language see; the
-    // article's text takes its place.
-    await tx
-      .delete(helpCenterArticleTranslations)
-      .where(
-        and(
-          eq(helpCenterArticleTranslations.articleId, row.id),
-          eq(helpCenterArticleTranslations.locale, row.locale),
-          ne(helpCenterArticleTranslations.id, t.id)
-        )
-      )
     // Each text keeps the time it was last written.
     await tx
       .update(helpCenterArticleTranslations)
@@ -275,20 +348,11 @@ async function swapCategories(tx: Executor, to: string): Promise<void> {
     })
     .from(helpCenterCategories)
     .innerJoin(helpCenterCategoryTranslations, categoryTranslationIn(to))
-    .where(categorySwapsInto(to))
+    .where(categorySwapsInto(tx, to))
     .for('update')
 
   for (const row of rows) {
     const t = row.translation
-    await tx
-      .delete(helpCenterCategoryTranslations)
-      .where(
-        and(
-          eq(helpCenterCategoryTranslations.categoryId, row.id),
-          eq(helpCenterCategoryTranslations.locale, row.locale),
-          ne(helpCenterCategoryTranslations.id, t.id)
-        )
-      )
     await tx
       .update(helpCenterCategoryTranslations)
       .set({
@@ -306,11 +370,16 @@ async function swapCategories(tx: Executor, to: string): Promise<void> {
 }
 
 /**
- * The help center's settings with `to` as the main language. In a swap the
- * old main language becomes an extra language, taking the homepage words it
- * had as the main language, and `to` leaves the extra languages, its
- * homepage words becoming the main ones. Otherwise only the main language
- * changes.
+ * The help center's settings with `to` as the main language.
+ *
+ * When `to` is one of the extra languages, or a removed one that kept its
+ * homepage words, its homepage words become the main ones, and the old main
+ * language's words are kept under its own language, with the search
+ * placeholder it had there before. In a swap the old main language also
+ * becomes an extra language; otherwise its words wait, hidden, for it to
+ * come back. The new main language keeps its search placeholder in its own
+ * entry, as the main language has no placeholder of its own, so a round trip
+ * loses nothing. Otherwise only the main language changes.
  */
 export function helpCenterConfigForMainLanguage(
   config: HelpCenterConfig,
@@ -319,10 +388,11 @@ export function helpCenterConfigForMainLanguage(
   const locales = config.locales
   const from = locales.default
   if (from === to) return config
-  if (!locales.additional.includes(to)) {
+  const extra = locales.additional.includes(to)
+  const { [to]: incoming, ...chrome } = locales.chrome
+  if (!extra && !incoming?.homepageTitle.trim()) {
     return { ...config, locales: { ...locales, default: to } }
   }
-  const { [to]: incoming, ...chrome } = locales.chrome
   return {
     ...config,
     homepageTitle: incoming?.homepageTitle || DEFAULT_HELP_CENTER_CONFIG.homepageTitle,
@@ -330,14 +400,25 @@ export function helpCenterConfigForMainLanguage(
       incoming?.homepageDescription || DEFAULT_HELP_CENTER_CONFIG.homepageDescription,
     locales: {
       default: to,
-      additional: [...locales.additional.filter((l) => l !== to), from],
+      additional: extra
+        ? [...locales.additional.filter((l) => l !== to), from]
+        : locales.additional,
       chrome: {
         ...chrome,
+        ...(incoming?.searchPlaceholder
+          ? {
+              [to]: {
+                homepageTitle: '',
+                homepageDescription: '',
+                searchPlaceholder: incoming.searchPlaceholder,
+              },
+            }
+          : {}),
         // An extra language needs a homepage title.
         [from]: {
           homepageTitle: config.homepageTitle || DEFAULT_HELP_CENTER_CONFIG.homepageTitle,
           homepageDescription: config.homepageDescription,
-          searchPlaceholder: '',
+          searchPlaceholder: chrome[from]?.searchPlaceholder ?? '',
         },
       },
     },

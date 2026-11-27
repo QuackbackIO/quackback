@@ -53,6 +53,6 @@ export const previewMainLanguageChangeFn = createServerFn({ method: 'GET' })
     return previewHelpCenterMainLanguage(db, {
       from,
       to: data.mainLanguage,
-      swap: locales.additional.includes(data.mainLanguage),
+      toIsExtraLanguage: locales.additional.includes(data.mainLanguage),
     })
   })
