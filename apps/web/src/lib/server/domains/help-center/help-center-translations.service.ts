@@ -8,12 +8,14 @@ import {
   eq,
   and,
   sql,
+  helpCenterArticles,
   helpCenterArticleTranslations,
+  helpCenterCategories,
   helpCenterCategoryTranslations,
   type TiptapContent,
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
-import { NotFoundError } from '@/lib/shared/errors'
+import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
 import type {
@@ -22,6 +24,58 @@ import type {
   ArticleTranslationStatusEntry,
   CategoryTranslationStatusEntry,
 } from './help-center.types'
+
+// ============================================================================
+// Which languages an item can be translated into
+// ============================================================================
+
+/**
+ * The language an article's own text is in, or null when there is no such
+ * article. It is not always the main language: a change of main language
+ * leaves an article with no version in the new one in its own.
+ */
+export async function getArticleLocale(articleId: KbArticleId): Promise<string | null> {
+  const row = await db.query.helpCenterArticles.findFirst({
+    where: eq(helpCenterArticles.id, articleId),
+    columns: { locale: true },
+  })
+  return row?.locale ?? null
+}
+
+/** The language a collection's own name is in, or null when there is no such collection. */
+export async function getCategoryLocale(categoryId: KbCategoryId): Promise<string | null> {
+  const row = await db.query.helpCenterCategories.findFirst({
+    where: eq(helpCenterCategories.id, categoryId),
+    columns: { locale: true },
+  })
+  return row?.locale ?? null
+}
+
+/**
+ * The help center's languages an item whose own text is in `own` can be
+ * translated into: the main language and the extra ones, less its own. For an
+ * item in the main language that is the extra languages.
+ */
+export function translatableLocales(
+  languages: { default: string; additional: readonly string[] },
+  own: string | null
+): string[] {
+  return [languages.default, ...languages.additional].filter((l) => l !== own)
+}
+
+/**
+ * Refuses a translation in the item's own language. Its own text is what
+ * readers of that language get, so such a translation would never show, and
+ * a later change of main language could not swap the item.
+ */
+export function assertNotOwnLanguage(own: string | null, locale: string): void {
+  if (own === locale) {
+    throw new ValidationError(
+      'TRANSLATION_IN_OWN_LANGUAGE',
+      'This is already written in this language. Edit it directly instead of adding a translation.'
+    )
+  }
+}
 
 // ============================================================================
 // Article translations
@@ -190,7 +244,7 @@ export async function deleteArticleTranslation(
     )
 }
 
-/** One entry per enabled additional locale, for the admin editor's status pills. */
+/** One entry per language in `enabledLocales`, for the admin editor's status pills. */
 export async function getArticleTranslationStatuses(
   articleId: KbArticleId,
   enabledLocales: string[],

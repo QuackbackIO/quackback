@@ -36,7 +36,6 @@ import {
   getCategoryDepth,
   getSubtreeMaxDepth,
 } from '@/lib/shared/help-center-tree'
-import { settingsQueries } from '@/lib/client/queries/settings'
 import {
   getCategoryTranslationStatusesFn,
   listCategoryTranslationsFn,
@@ -65,8 +64,6 @@ const LOCALE_LABELS: Record<string, string> = {
 /** Compact per-locale name/description editor (domains/languages §2). No
  *  draft/published status for categories -- a non-empty name IS translated. */
 function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId }) {
-  const configQuery = useQuery(settingsQueries.helpCenterConfig())
-  const additionalLocales = configQuery.data?.locales?.additional ?? []
   const [locale, setLocale] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -77,10 +74,15 @@ function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId 
     queryKey: ['help-center', 'category-translation-statuses', categoryId],
     queryFn: () => getCategoryTranslationStatusesFn({ data: { categoryId } }),
   })
+  // The help center's languages, less the one the collection's own name is in.
+  const translatableLocales = useMemo(
+    () => statusesQuery.data?.map((s) => s.locale) ?? [],
+    [statusesQuery.data]
+  )
 
   useEffect(() => {
-    if (!locale && additionalLocales.length > 0) setLocale(additionalLocales[0])
-  }, [locale, additionalLocales])
+    if (!locale && translatableLocales.length > 0) setLocale(translatableLocales[0])
+  }, [locale, translatableLocales])
 
   useEffect(() => {
     if (!locale) return
@@ -99,7 +101,7 @@ function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId 
     }
   }, [categoryId, locale])
 
-  if (additionalLocales.length === 0) return null
+  if (translatableLocales.length === 0) return null
 
   async function handleSave() {
     if (!locale) return
@@ -143,7 +145,7 @@ function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId 
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {additionalLocales.map((l) => (
+            {translatableLocales.map((l) => (
               <SelectItem key={l} value={l}>
                 {LOCALE_LABELS[l] ?? l}
               </SelectItem>

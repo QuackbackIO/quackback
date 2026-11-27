@@ -23,6 +23,10 @@ import {
   getCategoryTranslationStatuses,
   upsertCategoryTranslation,
   deleteCategoryTranslation,
+  getArticleLocale,
+  getCategoryLocale,
+  translatableLocales,
+  assertNotOwnLanguage,
 } from '@/lib/server/domains/help-center/help-center-translations.service'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
 import { assertHelpCenterLocaleEditable } from '@/lib/server/domains/plan-limits/plan-limits.locales'
@@ -39,20 +43,24 @@ export const listArticleTranslationsFn = createServerFn({ method: 'GET' })
     return listArticleTranslations(data.articleId as KbArticleId)
   })
 
-/** Status pill per enabled additional locale, for the editor's locale switcher. */
+/**
+ * Status pill per language the article can be translated into (the help
+ * center's languages less its own), for the editor's locale switcher.
+ */
 export const getArticleTranslationStatusesFn = createServerFn({ method: 'GET' })
   .validator(z.object({ articleId: z.string().min(1) }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const { listPausedTranslationLocales } =
       await import('@/lib/server/domains/help-center/help-center-translate-queue')
-    const [config, pausedLocales] = await Promise.all([
+    const [config, pausedLocales, own] = await Promise.all([
       getHelpCenterConfig(),
       listPausedTranslationLocales(data.articleId),
+      getArticleLocale(data.articleId as KbArticleId),
     ])
     return getArticleTranslationStatuses(
       data.articleId as KbArticleId,
-      config.locales.additional,
+      translatableLocales(config.locales, own),
       pausedLocales
     )
   })
@@ -62,6 +70,7 @@ export const upsertArticleTranslationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     await assertHelpCenterLocaleEditable(data.locale)
+    assertNotOwnLanguage(await getArticleLocale(data.articleId as KbArticleId), data.locale)
     return upsertArticleTranslation({ ...data, articleId: data.articleId as KbArticleId })
   })
 
@@ -70,6 +79,7 @@ export const setArticleTranslationStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     await assertHelpCenterLocaleEditable(data.locale)
+    assertNotOwnLanguage(await getArticleLocale(data.articleId as KbArticleId), data.locale)
     return setArticleTranslationStatus(data.articleId as KbArticleId, data.locale, data.status)
   })
 
@@ -97,10 +107,13 @@ export const getCategoryTranslationStatusesFn = createServerFn({ method: 'GET' }
   .validator(z.object({ categoryId: z.string().min(1) }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const config = await getHelpCenterConfig()
+    const [config, own] = await Promise.all([
+      getHelpCenterConfig(),
+      getCategoryLocale(data.categoryId as KbCategoryId),
+    ])
     return getCategoryTranslationStatuses(
       data.categoryId as KbCategoryId,
-      config.locales.additional
+      translatableLocales(config.locales, own)
     )
   })
 
@@ -109,6 +122,7 @@ export const upsertCategoryTranslationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     await assertHelpCenterLocaleEditable(data.locale)
+    assertNotOwnLanguage(await getCategoryLocale(data.categoryId as KbCategoryId), data.locale)
     return upsertCategoryTranslation({ ...data, categoryId: data.categoryId as KbCategoryId })
   })
 
