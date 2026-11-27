@@ -272,7 +272,7 @@ test(
 )
 
 test(
-  'CHG-S-14 the email "View Update" button links to the entry itself',
+  'CHG-S-14 the email "View update" button links to the entry itself',
   { tag: '@nightly' },
   async ({ playwright, marker }) => {
     const admin = await personApi(playwright, 'admin')

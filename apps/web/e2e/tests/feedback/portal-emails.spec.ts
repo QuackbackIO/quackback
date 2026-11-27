@@ -76,7 +76,7 @@ test.describe('portal emails', () => {
       const text = mailText(mail)
       expect(text).toContain('Open')
       expect(text).toContain('In Progress')
-      expect(text).toContain('View Feedback')
+      expect(text).toContain('View feedback')
       expect(text).toContain('Unsubscribe from this post')
       expect(text).toContain('Manage notification preferences')
       expect(linksIn(mail).some((l) => l.endsWith(postPath(post)))).toBe(true)
@@ -114,7 +114,7 @@ test.describe('portal emails', () => {
       const text = mailText(mail)
       expect(text).toContain('Dana Commenter commented')
       expect(text).toContain('me too please')
-      expect(text).toContain('View Comment')
+      expect(text).toContain('View comment')
       expect(linksIn(mail).some((l) => l.endsWith(`${postPath(post)}#comment-${commentId}`))).toBe(
         true
       )
