@@ -75,6 +75,9 @@ const PATCHES: Record<SettingsArea, (current: Record<string, unknown>) => Record
     messenger: (current) => ({ welcomeMessage: `${current.welcomeMessage}Hello there` }),
     modules: (current) => ({ helpCenter: !current.helpCenter }),
     changelog: (current) => ({ emailsDisabled: !current.emailsDisabled }),
+    languages: (current) => ({
+      visitorLanguage: current.visitorLanguage === 'own' ? 'main' : 'own',
+    }),
   }
 
 /** The path a case reads back to see its change landed. */
@@ -85,6 +88,7 @@ const CHANGED: Record<SettingsArea, string> = {
   messenger: 'welcomeMessage',
   modules: 'helpCenter',
   changelog: 'emailsDisabled',
+  languages: 'visitorLanguage',
 }
 
 describe('every settings area keeps one contract', () => {

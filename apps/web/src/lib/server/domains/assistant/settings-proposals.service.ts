@@ -46,6 +46,8 @@ import { updateFeatureFlags } from '@/lib/server/domains/settings/settings.servi
 import { updateWidgetConfig } from '@/lib/server/domains/settings/settings.widget'
 import { updateOfficeHoursSchedule } from '@/lib/server/domains/settings/settings.office-hours'
 import { updateChangelogSettings } from '@/lib/server/domains/settings/settings.changelog'
+import { writeLanguagesArea } from '@/lib/server/domains/settings/settings.languages-area'
+import { LANGUAGES_HELP_CENTER_FIELDS } from '@/lib/shared/languages-settings'
 import {
   deepMerge,
   parseJsonOrNull,
@@ -101,6 +103,7 @@ export async function prepareSettingsChanges(
 }
 
 const MESSENGER_SWITCH = 'messenger.enabled'
+const MAIN_LANGUAGE = 'languages.mainLanguage'
 
 /**
  * Messenger is live when Support is on, the widget is on and its Messages tab
@@ -202,6 +205,9 @@ async function writeArea(
     case 'changelog':
       await updateChangelogSettings(settingsPatchSchemas.changelog.parse(patch), options)
       break
+    case 'languages':
+      await writeLanguagesArea(tx, settingsPatchSchemas.languages.parse(patch))
+      break
   }
 }
 export async function applySettingsChangesInTransaction(
@@ -224,6 +230,8 @@ export async function applySettingsChangesInTransaction(
         ? PERMISSIONS.SETTINGS_MANAGE
         : AREAS[change.area].permission
     )
+    if (change.area === 'languages' && LANGUAGES_HELP_CENTER_FIELDS.has(change.path[0]!))
+      await requireAreaPermission(actor, change.area, tx, PERMISSIONS.HELP_CENTER_MANAGE)
     if (change.area === 'portal') assertWorkspaceNameWritable(before)
     if (
       !equal(at(areaValues(before, change.area), change.path) ?? null, change.before) ||
@@ -260,7 +268,11 @@ export async function applySettingsChangesInTransaction(
     kind: 'settings',
     version: 1,
     changes: selected,
-    storageEffects: settingsStorageEffects(before, after),
+    // A new main language moves help center content, which restoring the
+    // settings columns cannot move back: that change is made again instead.
+    storageEffects: selected.some((change) => change.id === MAIN_LANGUAGE)
+      ? []
+      : settingsStorageEffects(before, after),
     appliedAt: new Date().toISOString(),
   }
 }

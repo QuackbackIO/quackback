@@ -16,6 +16,7 @@ import {
 import { featureFlagsWrite } from '@/lib/server/domains/settings/settings.service'
 import { parseWidgetConfig } from '@/lib/server/domains/settings/settings.helpers'
 import { ensureDefaultHelpCategory } from '@/lib/server/domains/help-center/help-center.default-category'
+import { mainLanguageOfRow } from '@/lib/server/domains/settings/main-language'
 import { LAUNCH_WINDOW_DAYS } from '@/lib/shared/launch-window'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
 import type { BoardAccess } from '@/lib/shared/db-types'
@@ -76,7 +77,15 @@ function changesStoredJson(stored: string | null, next: string): boolean {
 
 type GoalRow = Pick<
   typeof settings.$inferSelect,
-  'id' | 'name' | 'featureFlags' | 'createdAt' | 'metadata' | 'widgetConfig' | 'portalConfig'
+  | 'id'
+  | 'name'
+  | 'featureFlags'
+  | 'createdAt'
+  | 'metadata'
+  | 'widgetConfig'
+  | 'portalConfig'
+  | 'languageConfig'
+  | 'helpCenterConfig'
 >
 
 /**
@@ -151,7 +160,7 @@ export async function applyOnboardingGoals(
     )
   }
   await prepareOnboardingBoard(tx, { ...state, goals })
-  await seedGoalPages(tx, row.name, goals)
+  await seedGoalPages(tx, row.name, goals, mainLanguageOfRow(row))
   return { modulesChanged }
 }
 
@@ -189,14 +198,15 @@ function openToVisitors(portalConfig: string | null): string | null {
 async function seedGoalPages(
   tx: Transaction,
   workspaceName: string,
-  goals: NonNullable<SetupState['goals']>
+  goals: NonNullable<SetupState['goals']>,
+  mainLanguage: string
 ): Promise<void> {
   if (goals.includes('help_center')) {
     const anyCategory = await tx.query.helpCenterCategories.findFirst({
       where: (category, { isNull }) => isNull(category.deletedAt),
       columns: { id: true },
     })
-    if (!anyCategory) await ensureDefaultHelpCategory(tx)
+    if (!anyCategory) await ensureDefaultHelpCategory(tx, mainLanguage)
   }
   if (goals.includes('status_page')) {
     const anyService = await tx.query.statusComponents.findFirst({

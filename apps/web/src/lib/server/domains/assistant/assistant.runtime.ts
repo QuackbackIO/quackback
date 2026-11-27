@@ -143,6 +143,7 @@ export interface AssistantRuntimeConfig {
   config: AssistantConfig
   revision: number
   workspaceName: string
+  mainLanguage?: string
   configFallbackReason?: string
 }
 
@@ -1259,6 +1260,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       // turns set customerVoice:false and never read it).
       config: { identity: runtimeConfig.config.identity, voice: agentVoice },
       workspaceName: runtimeConfig.workspaceName,
+      mainLanguage: runtimeConfig.mainLanguage,
       tools: activeSpecs,
       trustedRuntimeContext: trustedContextParts.join('\n') || null,
       channel: promptChannel,

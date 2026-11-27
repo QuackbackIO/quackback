@@ -7,6 +7,7 @@ import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { settingsAreaSchema, type SettingsArea } from '@/lib/shared/assistant/settings-proposals'
 import { resolveOfficeHoursSchedule } from '@/lib/server/domains/settings/settings.office-hours'
 import { resolveChangelogSettings } from '@/lib/server/domains/settings/settings.changelog'
+import { languagesAreaValues } from '@/lib/server/domains/settings/settings.languages-area'
 import {
   parseJsonOrNull,
   parseWidgetConfig,
@@ -125,6 +126,8 @@ export function areaValues(row: SettingsRecord, area: SettingsArea): Record<stri
         emailsDisabled: config.emailsDisabled,
       }
     }
+    case 'languages':
+      return languagesAreaValues(row)
   }
 }
 export async function getSettingsForActor(

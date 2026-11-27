@@ -280,9 +280,20 @@ describe('V2 assistant configuration reads', () => {
       config: DEFAULT_ASSISTANT_CONFIG,
       revision: 23,
       workspaceName: 'Acme Support',
+      mainLanguage: 'en',
       configFallbackReason: 'invalid_assistant_config',
     })
     expect(result.config).not.toBe(DEFAULT_ASSISTANT_CONFIG)
+  })
+
+  it("carries the workspace's main language for a question whose language cannot be told", async () => {
+    hoisted.requireSettings.mockResolvedValue(
+      settingsRow({
+        assistantConfig: CONFIG,
+        languageConfig: JSON.stringify({ mainLanguage: 'de', visitorLanguage: 'own' }),
+      })
+    )
+    expect((await getAssistantRuntimeConfig()).mainLanguage).toBe('de')
   })
 
   it('uses internally managed workspace defaults at runtime and keeps the Slack toggle', async () => {

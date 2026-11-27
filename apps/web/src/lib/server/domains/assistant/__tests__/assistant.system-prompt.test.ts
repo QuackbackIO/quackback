@@ -443,6 +443,18 @@ describe('knowledge search guidance per role', () => {
   })
 })
 
+describe('the main language for a question whose language cannot be told', () => {
+  it("names the workspace's main language", () => {
+    expect(joined({ mainLanguage: 'pt-br' })).toContain(
+      "When you cannot tell the language of the latest message (it is only a name, an email address, a number, a link or a greeting used in many languages), reply in Brazilian Portuguese, the workspace's main language."
+    )
+  })
+
+  it('falls back to English without a main language', () => {
+    expect(joined()).toContain("reply in English, the workspace's main language")
+  })
+})
+
 describe('dash-free replies', () => {
   it('tells Quinn and Copilot never to write em dashes', () => {
     for (const overrides of [

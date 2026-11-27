@@ -134,6 +134,14 @@ describe('buildAskAiSystemPrompts', () => {
   })
 })
 
+describe('buildAskAiSystemPrompts main language', () => {
+  it("answers in the workspace's main language when the question's language cannot be told", () => {
+    const joined = buildAskAiSystemPrompts([article('article_1')], 'de').join('\n')
+    expect(joined).toContain('Reply in the same language as the question.')
+    expect(joined).toContain("reply in German, the workspace's main language")
+  })
+})
+
 describe('synthesizeAnswer', () => {
   it('throws AskAiNotConfiguredError when no chat model is set', async () => {
     mockConfig.aiChatModel = undefined

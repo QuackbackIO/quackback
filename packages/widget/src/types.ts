@@ -33,9 +33,13 @@ export interface InitOptions {
   /** Set `launcher: false` to hide the default floating button and open programmatically. */
   launcher?: boolean
   /**
-   * Override the auto-detected UI language. Accepts any BCP-47 tag — the host
-   * forwards it and the Quackback instance resolves the closest catalog it has.
-   * The literals are autocomplete hints for the languages Quackback ships today
+   * The current user's own language in your app, as a BCP-47 tag. It wins
+   * over every other language step (the person's choice in Quackback, the
+   * workspace's visitor setting, the browser) and is recorded as the
+   * person's language for emails, so pass each user's own language, or leave
+   * it out. A fixed value for everyone hides each visitor's own language.
+   * A tag Quackback has no catalog for falls through to the next step. The
+   * literals are autocomplete hints for the languages Quackback ships today
    * (see WIDGET_LOCALES).
    */
   locale?: (typeof WIDGET_LOCALES)[number] | (string & {})

@@ -271,9 +271,11 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
         } satisfies KbAskStateSnapshot)
       )
 
+      const { getMainLanguage } = await import('@/lib/server/domains/settings/settings.service')
       const result = await synthesizeAnswer({
         query,
         articles,
+        mainLanguage: await getMainLanguage(),
         signal: request.signal,
         wireSink,
       })

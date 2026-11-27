@@ -7,6 +7,7 @@ import {
 } from '@/lib/shared/schemas/settings'
 import { officeHoursScheduleSchema } from '@/lib/shared/office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
+import { languagesPatchSchema } from '@/lib/shared/languages-settings'
 
 export const SETTINGS_AREAS = [
   'branding',
@@ -15,6 +16,7 @@ export const SETTINGS_AREAS = [
   'modules',
   'office_hours',
   'changelog',
+  'languages',
 ] as const
 export const settingsAreaSchema = z.enum(SETTINGS_AREAS)
 export type SettingsArea = z.infer<typeof settingsAreaSchema>
@@ -35,6 +37,7 @@ export const settingsPatchSchemas = {
   modules: modulesSchema,
   office_hours: officeHoursPatchSchema,
   changelog: changelogSettingsSchema.strict(),
+  languages: languagesPatchSchema,
 } as const
 export const settingsChangeInputSchema = z.discriminatedUnion('area', [
   z.object({ area: z.literal('branding'), patch: settingsPatchSchemas.branding }).strict(),
@@ -43,6 +46,7 @@ export const settingsChangeInputSchema = z.discriminatedUnion('area', [
   z.object({ area: z.literal('modules'), patch: settingsPatchSchemas.modules }).strict(),
   z.object({ area: z.literal('office_hours'), patch: settingsPatchSchemas.office_hours }).strict(),
   z.object({ area: z.literal('changelog'), patch: settingsPatchSchemas.changelog }).strict(),
+  z.object({ area: z.literal('languages'), patch: settingsPatchSchemas.languages }).strict(),
 ])
 export type SettingsChangeInput = z.infer<typeof settingsChangeInputSchema>
 const jsonValue: z.ZodType<unknown> = z.lazy(() =>

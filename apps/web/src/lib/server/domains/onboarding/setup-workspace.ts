@@ -17,7 +17,10 @@ import {
   isSetupStateOpen,
 } from '@/lib/server/domains/principals/bootstrap-admin'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
-import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
+import {
+  invalidateSettingsCache,
+  parseJsonOrNull,
+} from '@/lib/server/domains/settings/settings.helpers'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_AUTH_CONFIG,
@@ -151,6 +154,26 @@ export async function ensureBootstrapAdmin(
   })
 }
 
+/**
+ * The main language a new workspace starts with: the language the owner's
+ * browser asked for during setup. Visitors still see their own language.
+ */
+function ownerLanguageConfig(locale: SupportedLocale): string {
+  return JSON.stringify({ mainLanguage: locale, visitorLanguage: 'own' })
+}
+
+/** No language stored and an untouched help center: nothing a main language would replace. */
+function hasNoLanguagesYet(row: {
+  languageConfig: string | null
+  helpCenterConfig: string | null
+}) {
+  if (row.languageConfig) return false
+  const help = parseJsonOrNull<{ locales?: { default?: string; additional?: string[] } }>(
+    row.helpCenterConfig
+  )
+  return (help?.locales?.default ?? 'en') === 'en' && (help?.locales?.additional ?? []).length === 0
+}
+
 export interface SaveWorkspaceAndGoalResult {
   id: string
   name: string
@@ -271,6 +294,7 @@ export async function setupWorkspaceForUser(input: {
             authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(initialState),
             featureFlags: JSON.stringify(baseFlags),
+            ...(locale ? { languageConfig: ownerLanguageConfig(locale) } : {}),
           })
           .returning()
         if (!row) throw new Error('Failed to create workspace settings')
@@ -326,6 +350,9 @@ export async function setupWorkspaceForUser(input: {
       }
       if (!nameManaged) updatePayload.name = workspaceName
       if (!slugManaged) updatePayload.slug = slug
+      // A workspace that has no languages of its own yet takes the owner's.
+      if (locale && hasNoLanguagesYet(row))
+        updatePayload.languageConfig = ownerLanguageConfig(locale)
       const [updated] = await tx
         .update(settings)
         .set(updatePayload)
