@@ -5,6 +5,7 @@ import {
   resolveHcLandingLocale,
   formatHcIdSlug,
   parseHcIdSlug,
+  hcPathLocale,
   hcArticlePath,
   hcCollectionPath,
 } from '../help-center-url'
@@ -165,5 +166,23 @@ describe('resolveHcLandingLocale', () => {
     expect(
       resolveHcLandingLocale({ ...base, cookieLocale: null, acceptLanguage: 'en-US' })
     ).toBeNull()
+  })
+})
+
+describe('hcPathLocale', () => {
+  it('reads the language a help center address names', () => {
+    expect(hcPathLocale('/hc/fr')).toBe('fr')
+    expect(hcPathLocale('/hc/fr/articles/12-set-up')).toBe('fr')
+    expect(hcPathLocale('/hc/pt-br/collections/3-billing')).toBe('pt-br')
+    expect(hcPathLocale('/hc/zh-TW/articles/1')).toBe('zh-tw')
+  })
+
+  it('returns null for an address without a supported language', () => {
+    expect(hcPathLocale('/hc')).toBeNull()
+    expect(hcPathLocale('/hc/categories/getting-started')).toBeNull()
+    expect(hcPathLocale('/hc/getting-started')).toBeNull()
+    expect(hcPathLocale('/hc/ja/articles/1')).toBeNull()
+    expect(hcPathLocale('/roadmap')).toBeNull()
+    expect(hcPathLocale('/hcx/fr')).toBeNull()
   })
 })

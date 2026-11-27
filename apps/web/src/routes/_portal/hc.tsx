@@ -1,6 +1,6 @@
 import { createFileRoute, notFound, Outlet, useRouterState } from '@tanstack/react-router'
 import { HelpCenterLocaleSwitcher } from '@/components/help-center/help-center-locale-switcher'
-import { parseHcLocalePath } from '@/lib/shared/help-center-url'
+import { hcPathLocale, parseHcLocalePath } from '@/lib/shared/help-center-url'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { DEFAULT_LOCALE, isRtlLocale, seedAreaMessages } from '@/lib/shared/i18n'
 import type { FeatureFlags, HelpCenterConfig } from '@/lib/shared/types/settings'
@@ -16,13 +16,16 @@ export const Route = createFileRoute('/_portal/hc')({
     // The primary domain's /hc pages move to the help center's own domain in
     // the section host middleware (lib/server/middleware/section-host.ts).
   },
-  loader: async ({ context }) => {
+  loader: async ({ context, location }) => {
     const { settings } = context
     const helpCenterConfig = (settings?.helpCenterConfig as HelpCenterConfig | null) ?? null
     // Help center strings stay out of the catalog every other page seeds;
     // these pages read them with the page.
     const [messages] = await Promise.all([
-      seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'helpCenter'),
+      seedAreaMessages(
+        hcPathLocale(location.pathname) ?? context.acceptLanguageLocale ?? DEFAULT_LOCALE,
+        'helpCenter'
+      ),
       typeof window === 'undefined' ? setPublicDocumentCacheHeaders() : undefined,
     ])
     return { helpCenterConfig, messages }

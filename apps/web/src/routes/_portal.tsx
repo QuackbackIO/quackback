@@ -26,6 +26,7 @@ import { readConfigFontHeading, readConfigFontSans } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { hcPathLocale } from '@/lib/shared/help-center-url'
 import {
   evaluateMyPortalAccessFn,
   recordPortalAccessDeniedFn,
@@ -137,7 +138,8 @@ export const Route = createFileRoute('/_portal')({
     const permissionKeysPromise = markHandled(
       isTeamMember(userRole) ? getMyPortalPermissionsFn() : Promise.resolve([] as PermissionKey[])
     )
-    const portalIntlPromise = markHandled(loadPortalIntl())
+    const pageLocale = hcPathLocale(location.pathname)
+    const portalIntlPromise = markHandled(loadPortalIntl(pageLocale))
     // The header's notification bell (signed-in visitors) shows the unread
     // count on every portal page. Loaded with the page, the count is there at
     // first paint rather than asked for once the page hydrates; unreadable
@@ -162,7 +164,7 @@ export const Route = createFileRoute('/_portal')({
       const brandingData = settings?.brandingData ?? null
       const brandingConfig = settings?.brandingConfig ?? {}
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
-      const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
+      const locale = pageLocale ?? (await getPortalLocaleFn().catch(() => DEFAULT_LOCALE))
       // Instant-SSO: when the workspace's only sign-in method is a single OIDC
       // provider, redirect anonymous visitors straight to the IdP. Skipped for
       // 'unauthorized' (signed-in non-member) — they already have a session and
