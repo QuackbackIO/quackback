@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { PostId, ChangelogId, PostStatusId, TicketId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy'
+import type { AuthContext } from './auth-helpers'
 import type {
   EmbedPreview,
   EmbedPostPreview,
@@ -263,6 +264,20 @@ export async function resolveEmbed(
   }
 }
 
+/**
+ * The viewer an embed preview is resolved for: the site session (portal or
+ * dashboard cookie) when there is one, otherwise the widget's Bearer session.
+ * Without the fallback a customer's own ticket card in the widget renders as
+ * unavailable, because site auth deliberately returns null for widget sessions.
+ * Widget sessions are always portal-tier, so this never grants team visibility.
+ */
+export async function resolveEmbedAuth(read: {
+  site: () => Promise<AuthContext | null>
+  widget: () => Promise<AuthContext | null>
+}): Promise<AuthContext | null> {
+  return (await read.site()) ?? (await read.widget())
+}
+
 // ---------------------------------------------------------------------------
 // Server function
 // ---------------------------------------------------------------------------
@@ -278,9 +293,14 @@ export const getEmbedPreviewFn = createServerFn({ method: 'GET' })
       if (!access.granted) return { unavailable: true }
 
       // Same actor-resolution path as the portal reads — drives the per-board
-      // audience check inside getPublicPostDetail.
+      // audience check inside getPublicPostDetail. The widget sends its Bearer
+      // session instead of a cookie (the card's getAuthHeaders), which site auth
+      // ignores, so fall back to it.
       const { getOptionalAuth, policyActorFromAuth } = await import('./auth-helpers')
-      const actor = await policyActorFromAuth(await getOptionalAuth())
+      const { getOptionalWidgetAuth } = await import('./widget-auth')
+      const actor = await policyActorFromAuth(
+        await resolveEmbedAuth({ site: getOptionalAuth, widget: getOptionalWidgetAuth })
+      )
 
       const [
         { getPublicPostDetail },
