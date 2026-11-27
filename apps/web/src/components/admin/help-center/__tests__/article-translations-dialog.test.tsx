@@ -33,11 +33,13 @@ import { ArticleTranslationsDialog } from '../article-translations-dialog'
 
 afterEach(cleanup)
 
-function renderDialog(locale: string, messages: Record<string, string>) {
+function renderDialog(
+  locale: string,
+  messages: Record<string, string>,
+  languages: { default: string; additional: string[] } = { default: 'en', additional: ['de'] }
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  queryClient.setQueryData(['settings', 'helpCenterConfig'], {
-    locales: { default: 'en', additional: ['de'] },
-  })
+  queryClient.setQueryData(['settings', 'helpCenterConfig'], { locales: languages })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale={locale} messages={messages}>
@@ -71,6 +73,20 @@ describe('ArticleTranslationsDialog auto-translate pause', () => {
     renderDialog('en', {})
     expect(await screen.findByText('Untranslated')).toBeTruthy()
     expect(screen.queryByText(/Paused/)).toBeNull()
+  })
+})
+
+describe('ArticleTranslationsDialog languages', () => {
+  it('offers the languages the server lists, so an article left in an old main language gets the main language and not its own', async () => {
+    // Main language German; the article is still in English, now an extra language.
+    statuses.rows = [
+      { locale: 'de', status: 'draft', updatedAt: null, autoTranslatePaused: false },
+      { locale: 'fr', status: 'untranslated', updatedAt: null, autoTranslatePaused: false },
+    ]
+    renderDialog('en', {}, { default: 'de', additional: ['en', 'fr'] })
+
+    expect(await screen.findByText('Deutsch')).toBeTruthy()
+    expect(screen.queryByText('English')).toBeNull()
   })
 })
 
