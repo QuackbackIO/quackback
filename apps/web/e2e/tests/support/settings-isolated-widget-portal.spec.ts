@@ -13,6 +13,7 @@ import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import type { APIRequestContext, Page } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { pollFor, supportDb } from '../../support/db'
+import { teamStatusLine } from '../../support/visitors'
 import { ISOLATED, ISOLATED_SKIP } from '../../support/automation'
 import { fakeAi } from '../../support/fake-ai-client'
 import {
@@ -572,16 +573,12 @@ test.describe('transport and availability', { tag: '@isolated' }, () => {
             const page = await context.newPage()
             try {
               const { widget } = await openThread(page, request, `${marker} hello`, customerEmail)
-              await expect(widget.getByText("We'll reply by email")).toBeVisible({
-                timeout: 15_000,
-              })
-              await expect(widget.getByText("We're online")).toHaveCount(0)
+              // The header: when the team is back, then the email promise.
+              await expect(teamStatusLine(widget)).toHaveText(
+                /^Back (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) .+ · We'll reply by email$/,
+                { timeout: 15_000 }
+              )
               await expect(widget.getByText(offlineMessage)).toBeVisible()
-              await expect(
-                widget.getByText(
-                  /^Back (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) /
-                )
-              ).toBeVisible()
             } finally {
               await context.close()
             }
@@ -592,7 +589,7 @@ test.describe('transport and availability', { tag: '@isolated' }, () => {
               const openPage = await open.newPage()
               try {
                 const { widget } = await openThread(openPage, request, `${marker} open hours`)
-                await expect(widget.getByText("We're online")).toBeVisible({ timeout: 15_000 })
+                await expect(teamStatusLine(widget)).toHaveText('Online now', { timeout: 15_000 })
                 await expect(
                   widget.getByText("We're away right now", { exact: false })
                 ).toHaveCount(0)
@@ -629,7 +626,7 @@ test.describe('transport and availability', { tag: '@isolated' }, () => {
     async ({ page, request, marker }) => {
       await anonymousVisitorOffline(page, request, marker, `${marker} offline`, async (widget) => {
         await expect(widget.getByText(/We're away right now/)).toBeVisible({ timeout: 15_000 })
-        await expect(widget.getByText("We'll reply here", { exact: true }).first()).toBeVisible()
+        await expect(teamStatusLine(widget)).toHaveText(/We'll reply here$/)
         await expect(widget.getByText(/by email/i)).toHaveCount(0)
       })
     }

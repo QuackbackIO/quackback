@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
+import { useWorkspaceAnnouncesOnLauncher } from './use-workspace-announces'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import { toPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
 import {
@@ -44,6 +45,9 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
   const [displayDateTouched, setDisplayDateTouched] = useState(false)
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
   const [featuredImageTouched, setFeaturedImageTouched] = useState(false)
+  const [announceOnLauncher, setAnnounceOnLauncher] = useState(true)
+  const [announceTouched, setAnnounceTouched] = useState(false)
+  const workspaceAnnounces = useWorkspaceAnnouncesOnLauncher()
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
 
@@ -80,6 +84,8 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
       setFeaturedImageTouched(false)
       setSegmentIds((entry.segmentIds ?? []) as SegmentId[])
       setSegmentIdsTouched(false)
+      setAnnounceOnLauncher(entry.announceOnLauncher)
+      setAnnounceTouched(false)
       setHasInitialized(true)
     }
   }, [entry, form, hasInitialized])
@@ -114,6 +120,11 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
     setSegmentIdsTouched(true)
   }
 
+  function handleAnnounceChange(announce: boolean) {
+    setAnnounceOnLauncher(announce)
+    setAnnounceTouched(true)
+  }
+
   const handleSubmit = form.handleSubmit((data) => {
     const displayDatePayload = displayDateTouched
       ? displayDateOverride === undefined
@@ -139,6 +150,9 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
         // isn't round-tripped; an edited one (including cleared to [])
         // replaces the stored list wholesale.
         ...(segmentIdsTouched && { segmentIds }),
+        // Same touched-gate: a value set through the API is never overwritten
+        // by an untouched editor.
+        ...(announceTouched && { announceOnLauncher }),
       },
       {
         onSuccess: () => {
@@ -216,6 +230,9 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
             onDisplayDateClear={handleDisplayDateClear}
             featuredImageUrl={featuredImageUrl}
             onFeaturedImageChange={handleFeaturedImageChange}
+            workspaceAnnounces={workspaceAnnounces}
+            announceOnLauncher={announceOnLauncher}
+            onAnnounceOnLauncherChange={handleAnnounceChange}
           />
         </div>
 
@@ -256,6 +273,9 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
                   onDisplayDateClear={handleDisplayDateClear}
                   featuredImageUrl={featuredImageUrl}
                   onFeaturedImageChange={handleFeaturedImageChange}
+                  workspaceAnnounces={workspaceAnnounces}
+                  announceOnLauncher={announceOnLauncher}
+                  onAnnounceOnLauncherChange={handleAnnounceChange}
                 />
               </div>
             </SheetContent>

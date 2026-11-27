@@ -51,33 +51,43 @@ describe('stage marker storage', () => {
   })
 
   it('round-trips the marker map through window.localStorage', () => {
-    expect(getTicketStagesSeen()).toBeNull()
-    markTicketStagesSeen([ticket('tkt_1', 'open'), ticket('tkt_2', null)])
-    expect(getTicketStagesSeen()).toEqual({ tkt_1: 'open', tkt_2: null })
+    expect(getTicketStagesSeen('u1')).toBeNull()
+    markTicketStagesSeen('u1', [ticket('tkt_1', 'open'), ticket('tkt_2', null)])
+    expect(getTicketStagesSeen('u1')).toEqual({ tkt_1: 'open', tkt_2: null })
   })
 
   it('merges into the existing map instead of dropping earlier tickets', () => {
-    markTicketStagesSeen([ticket('tkt_1', 'open')])
-    markTicketStagesSeen([ticket('tkt_2', 'resolved')])
-    expect(getTicketStagesSeen()).toEqual({ tkt_1: 'open', tkt_2: 'resolved' })
+    markTicketStagesSeen('u1', [ticket('tkt_1', 'open')])
+    markTicketStagesSeen('u1', [ticket('tkt_2', 'resolved')])
+    expect(getTicketStagesSeen('u1')).toEqual({ tkt_1: 'open', tkt_2: 'resolved' })
   })
 
   it('advances a ticket marker to its latest stage', () => {
-    markTicketStagesSeen([ticket('tkt_1', 'open')])
-    markTicketStagesSeen([ticket('tkt_1', 'resolved')])
-    expect(getTicketStagesSeen()).toEqual({ tkt_1: 'resolved' })
+    markTicketStagesSeen('u1', [ticket('tkt_1', 'open')])
+    markTicketStagesSeen('u1', [ticket('tkt_1', 'resolved')])
+    expect(getTicketStagesSeen('u1')).toEqual({ tkt_1: 'resolved' })
   })
 
   it('dispatches the seen event so open listeners re-read the map', () => {
     const listener = vi.fn()
     window.addEventListener(TICKET_STAGES_SEEN_EVENT, listener)
-    markTicketStagesSeen([ticket('tkt_1', 'open')])
+    markTicketStagesSeen('u1', [ticket('tkt_1', 'open')])
     expect(listener).toHaveBeenCalledTimes(1)
     window.removeEventListener(TICKET_STAGES_SEEN_EVENT, listener)
   })
 
+  it('ignores the map saved before maps were kept per person, and removes it', () => {
+    window.localStorage.setItem('quackback:ticket-stages-seen', JSON.stringify({ tkt_1: 'open' }))
+    // Nobody can tell whose it was: each person starts from their own baseline.
+    expect(getTicketStagesSeen('u1')).toBeNull()
+    markTicketStagesSeen('u1', [ticket('tkt_2', 'open')])
+    expect(getTicketStagesSeen('u1')).toEqual({ tkt_2: 'open' })
+    expect(window.localStorage.getItem('quackback:ticket-stages-seen')).toBeNull()
+    expect(getTicketStagesSeen('u2')).toBeNull()
+  })
+
   it('ignores a corrupted stored value instead of throwing', () => {
-    window.localStorage.setItem('quackback:ticket-stages-seen', '{not json')
-    expect(getTicketStagesSeen()).toBeNull()
+    window.localStorage.setItem('quackback:ticket-stages-seen:u1', '{not json')
+    expect(getTicketStagesSeen('u1')).toBeNull()
   })
 })

@@ -19,14 +19,16 @@ import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
 import { widgetGetUserStatsFn } from '@/lib/server/functions/widget/user'
-import { sendToHost } from '@/lib/client/widget-bridge'
+import { canDeliverUserData, sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
-import { useMessengerUnread } from './use-messenger-unread'
+import { useMessengerUnreadState, useRefreshSummaryOnUnreadChange } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
+import { useWhatsNewAnnouncement } from './whats-new'
+import { useReplyPreviewAnnouncement, useUnreadReplies, type ReplyAlerts } from './reply-preview'
 import { useTicketStageBadge } from './use-ticket-stage-badge'
 import { hasOpenSuggestionPopup } from '@/components/ui/suggestion-popup-marker'
 
-import { type WidgetTab, type EnabledTabs, visibleTabsForVisitor } from './widget-nav'
+import { type WidgetTab, type EnabledTabs, homeEnabled, visibleTabsForVisitor } from './widget-nav'
 export type { WidgetTab }
 
 const TAB_CONFIG: {
@@ -107,6 +109,13 @@ interface WidgetShellProps {
   /** Manual panel-size control beside the close button (expandable views on
    *  desktop hosts only). Collapsing is sticky — it turns auto-expansion off. */
   expandControl?: { expanded: boolean; onToggle: () => void }
+  /** The workspace announces unread changelog entries in a card above the
+   *  closed launcher. */
+  announceUpdates?: boolean
+  /** How an unread reply shows above the closed launcher. */
+  replyAlerts?: ReplyAlerts
+  /** Flash the reply in the host page's tab title while it is hidden. */
+  titleAlerts?: boolean
   /** Self-hosted always shows the badge. Cloud hides it only after purchase. */
   showPoweredBy?: boolean
   children: ReactNode
@@ -126,6 +135,9 @@ export function WidgetShell({
   hideTabBar = false,
   panelExpanded = false,
   expandControl,
+  announceUpdates = false,
+  replyAlerts = 'preview',
+  titleAlerts = false,
   showPoweredBy = true,
   children,
 }: WidgetShellProps) {
@@ -141,10 +153,38 @@ export function WidgetShell({
   const showTabBar = tabsToShow.length > 1 && !hideTabBar
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
-  const messengerUnread = useMessengerUnread(enabledTabs.messages ?? false)
+  const messagesOn = enabledTabs.messages ?? false
+  const { total: messengerUnreadTotal, newestReplyId: newestUnreadReplyId } = useMessengerUnreadState(
+    messagesOn,
+    { background: messagesOn && titleAlerts }
+  )
+  useRefreshSummaryOnUnreadChange(messengerUnreadTotal, homeEnabled(enabledTabs))
+  const messengerUnread = messengerUnreadTotal ?? 0
   // Newly published changelog entries badge the launcher until the visitor
   // opens the changelog surface (which advances their seen marker).
-  const { unread: changelogUnread } = useChangelogUnread(enabledTabs.changelog ?? false)
+  const {
+    unread: changelogUnread,
+    announced: announcedChangelog,
+    ready: changelogReady,
+  } = useChangelogUnread(enabledTabs.changelog ?? false)
+  // The newest unread entry the card may announce also reaches the host for
+  // the card above the closed launcher, when the workspace turns that on. An
+  // entry kept out of the card still counts towards the badge.
+  const { sessionVersion } = useWidgetAuth()
+  useWhatsNewAnnouncement(announceUpdates && (enabledTabs.changelog ?? false), {
+    ready: changelogReady,
+    count: announcedChangelog.count,
+    newest: announcedChangelog.newest,
+    more: announcedChangelog.more,
+    session: sessionVersion,
+  })
+  // The newest unread replies reach the host for its message event, and for
+  // the reply preview and the tab title as the workspace chooses.
+  const unreadReplies = useUnreadReplies(messagesOn, messengerUnread, newestUnreadReplyId)
+  useReplyPreviewAnnouncement(
+    { enabled: messagesOn, replyAlerts, titleAlerts },
+    { ...unreadReplies, session: sessionVersion }
+  )
   // Mirror the combined total to the host so the floating launcher shows the
   // same badge while the widget is closed (the iframe keeps polling even when
   // hidden).
@@ -152,6 +192,9 @@ export function WidgetShell({
     sendToHost({
       type: 'quackback:unread',
       count: messengerUnread + changelogUnread + ticketStageUnread,
+      messages: messengerUnread,
+      changelog: changelogUnread,
+      tickets: ticketStageUnread,
     })
   }, [messengerUnread, changelogUnread, ticketStageUnread])
   // When the bar was hidden for an EXPANDED view, its return waits for the
@@ -228,14 +271,21 @@ export function WidgetShell({
     setPortalCtaError(false)
     const origin = portalOrigin || window.location.origin
     // Teammates skip OTT mint entirely — a portal cookie would replace a
-    // dashboard login. Send them to the site unsigned.
-    if (!canPortalHandoff) {
+    // dashboard login. Send them to the site unsigned. So does a host the
+    // one-time sign-in link cannot reach right now (its origin not yet known,
+    // or opaque): the link is never sent to any origin.
+    if (!canPortalHandoff || !canDeliverUserData()) {
       sendToHost({ type: 'quackback:navigate', url: `${origin}/?auth=signin` })
       return
     }
     const ott = await generateOneTimeToken()
     if (!ott) {
       setPortalCtaError(true)
+      return
+    }
+    // The host may have become unreachable while the token was minted.
+    if (!canDeliverUserData()) {
+      sendToHost({ type: 'quackback:navigate', url: `${origin}/?auth=signin` })
       return
     }
     // Prefer the server-resolved portal origin so the handoff URL targets the
@@ -246,10 +296,21 @@ export function WidgetShell({
   }, [canPortalHandoff, portalOrigin])
 
   return (
-    <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden">
+    // A full-screen panel can meet a side cutout. A frame reads
+    // env(safe-area-inset-*) as zero; the host page's side insets arrive as
+    // --qb-safe-left and --qb-safe-right, so the header, content and tab bar
+    // stay clear of it. Loaded as the top page, env() applies directly.
+    <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden pl-[max(env(safe-area-inset-left,0px),var(--qb-safe-left,0px))] pr-[max(env(safe-area-inset-right,0px),var(--qb-safe-right,0px))]">
       {/* The Home hero backdrop fills the panel behind the header row and
           body; the header/content render transparently over it. */}
       {backdrop}
+      {/* Keep the header out from under the notch or status bar: the host
+          page's (see widget-host-safe-area), or the widget's own when it is
+          the top page, as in an app's web view. */}
+      <div
+        aria-hidden
+        className="relative z-10 shrink-0 h-[max(env(safe-area-inset-top,0px),var(--qb-safe-top,0px))]"
+      />
       <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
         {/* Left: back button on detail views; workspace logo on Home. min-w-0 so
             header content (presence copy) truncates instead of pushing the
@@ -364,7 +425,12 @@ export function WidgetShell({
       {/* Bottom tab bar + footer — solid so the hero backdrop never bleeds through. */}
       <div
         className="relative z-10 border-t border-border/40 shrink-0 bg-background"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        // A frame reads env(safe-area-inset-bottom) as zero; the host page's
+        // inset arrives as --qb-safe-bottom, so the tab bar and footer clear
+        // a home indicator or an edge-to-edge system bar.
+        style={{
+          paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--qb-safe-bottom, 0px))',
+        }}
       >
         {tabBar.mounted && (
           <div
@@ -436,8 +502,9 @@ export function WidgetShell({
                           className="absolute -top-1 -end-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold leading-none text-primary-foreground"
                           aria-label={intl.formatMessage(
                             {
-                              id: 'widget.shell.tab.messages.unread',
-                              defaultMessage: '{count} unread',
+                              id: 'widget.shell.tab.tickets.updated',
+                              defaultMessage:
+                                '{count, plural, one {# ticket updated} other {# tickets updated}}',
                             },
                             { count: ticketStageUnread }
                           )}

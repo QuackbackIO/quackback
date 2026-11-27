@@ -31,6 +31,9 @@ export interface WidgetEventMap {
     anonymous: boolean
     error?: string
   }
+  'email-submitted': {
+    email: string
+  }
 }
 
 export type WidgetEventName = keyof WidgetEventMap
@@ -41,9 +44,14 @@ export interface WidgetInboundMessages {
   'quackback:identify': { anonymous: true } | Record<string, unknown> | null
   'quackback:metadata': WidgetMetadata
   'quackback:locale': string
+  /** Whether the host shows the panel; a hidden panel leaves new replies unread. */
+  'quackback:shown': boolean
+  /** The host page's safe-area insets in CSS pixels, for the full-screen phone panel. */
+  'quackback:safe-area': { top: number; bottom: number; left: number; right: number }
   'quackback:open':
     | {
-        view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
+        view?:
+          'home' | 'feedback' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
         title?: string
         body?: string
         board?: string

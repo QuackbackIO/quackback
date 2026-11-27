@@ -39,11 +39,19 @@ vi.mock('../widget-auth', () => ({ getOptionalWidgetAuth: vi.fn().mockResolvedVa
 
 const reads = vi.hoisted(() => ({
   listPublicCategoriesForLocale: vi.fn(async () => [] as unknown[]),
+  listPublicCategoriesWithFallback: vi.fn(async () => [] as unknown[]),
   recordArticleFeedback: vi.fn(async () => 'feedback_1'),
   listPublicCategoryEditors: vi.fn(async () => []),
 }))
 vi.mock('@/lib/server/domains/help-center/help-center-locale.query', () => ({
   listPublicCategoriesForLocale: reads.listPublicCategoriesForLocale,
+  listPublicCategoriesWithFallback: reads.listPublicCategoriesWithFallback,
+}))
+vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()),
+  getHelpCenterConfig: vi.fn(async () => ({
+    locales: { default: 'en', additional: [], chrome: {} },
+  })),
 }))
 vi.mock('@/lib/server/domains/help-center/help-center.service', async (importOriginal) => ({
   ...(await importOriginal<

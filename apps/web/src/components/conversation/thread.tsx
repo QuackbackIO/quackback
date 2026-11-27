@@ -313,7 +313,6 @@ export function useMarkReadOnIncoming({
   readThrough,
   getHeaders,
   onMarked,
-  recheck = 0,
 }: {
   conversationId: ConversationId | null
   messages: ConversationMessageDTO[]
@@ -322,8 +321,6 @@ export function useMarkReadOnIncoming({
   readThrough?: string | null
   getHeaders?: () => Record<string, string>
   onMarked?: () => void
-  /** Bump to check again with no new message, e.g. when a hidden thread is shown. */
-  recheck?: number
 }) {
   const target = newestUnreadable(messages, whenLastFrom)
   const targetId = target?.id
@@ -353,7 +350,7 @@ export function useMarkReadOnIncoming({
     })
       .then(() => onMarkedRef.current?.())
       .catch(() => {})
-  }, [conversationId, targetId, enabled, recheck])
+  }, [conversationId, targetId, enabled])
 }
 
 /** Throttled-typing sender for the composer (wired into useConversationTyping). */

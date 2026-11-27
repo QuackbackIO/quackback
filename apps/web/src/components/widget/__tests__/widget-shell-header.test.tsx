@@ -21,11 +21,24 @@ vi.mock('../widget-auth-provider', () => ({
     canPortalHandoff: true,
     closeWidget: vi.fn(),
     sessionVersion: 1,
+    identityResolved: true,
   }),
 }))
-vi.mock('../use-messenger-unread', () => ({ useMessengerUnread: () => 0 }))
+vi.mock('../use-messenger-unread', () => ({
+  useMessengerUnread: () => 0,
+  useMessengerUnreadState: () => ({ total: 0, newestReplyId: null }),
+  useRefreshSummaryOnUnreadChange: () => {},
+}))
+vi.mock('../reply-preview', () => ({
+  useUnreadReplies: () => ({ ready: true, data: null }),
+  useReplyPreviewAnnouncement: () => {},
+}))
 vi.mock('../use-changelog-unread', () => ({
-  useChangelogUnread: () => ({ unread: 0, markSeen: vi.fn() }),
+  useChangelogUnread: () => ({
+    unread: 0,
+    announced: { count: 0, newest: null, more: false },
+    markSeen: vi.fn(),
+  }),
 }))
 vi.mock('../use-ticket-stage-badge', () => ({
   useTicketStageBadge: () => ({ unread: 0, hasTickets: false }),
@@ -88,5 +101,26 @@ describe('WidgetShell header', () => {
     expect(screen.queryByRole('button', { name: 'User menu' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Close feedback widget' })).toBeTruthy()
     expect(document.querySelectorAll('.size-7').length).toBe(0)
+  })
+})
+
+describe('WidgetShell edges', () => {
+  it('keeps the header clear of the status bar, from the host page or its own', () => {
+    const { container } = renderHome()
+    const spacer = (container.firstElementChild as HTMLElement).querySelector('[aria-hidden]')
+    expect(spacer?.classList).toContain(
+      'h-[max(env(safe-area-inset-top,0px),var(--qb-safe-top,0px))]'
+    )
+  })
+
+  it('keeps the header, content and tab bar clear of a side cutout', () => {
+    const { container } = renderHome()
+    const shell = container.firstElementChild as HTMLElement
+    expect(shell.classList).toContain(
+      'pl-[max(env(safe-area-inset-left,0px),var(--qb-safe-left,0px))]'
+    )
+    expect(shell.classList).toContain(
+      'pr-[max(env(safe-area-inset-right,0px),var(--qb-safe-right,0px))]'
+    )
   })
 })

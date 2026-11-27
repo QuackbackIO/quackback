@@ -1,6 +1,6 @@
 import { useRouter, useHydrated, Link, Outlet, useChildMatches } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import { useState, useTransition, useMemo } from 'react'
+import { lazy, Suspense, useState, useTransition, useMemo } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useTheme } from 'next-themes'
 import { SparklesIcon, TrashIcon, ArrowRightIcon, PhotoIcon } from '@heroicons/react/24/solid'
@@ -46,6 +46,14 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useAdminBoards } from '@/lib/client/hooks/use-admin-catalogues'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+
+// Its own chunk: the install page renders inside this module's gate and
+// never shows the card.
+const ReplyAlertsCard = lazy(() =>
+  import('@/components/admin/settings/widget/reply-alerts-card').then((m) => ({
+    default: m.ReplyAlertsCard,
+  }))
+)
 
 export function WidgetSettingsGate() {
   const childMatches = useChildMatches()
@@ -115,6 +123,12 @@ function WidgetSettingsPage() {
             launcherGreeting={launcherGreeting}
             onGreetingChange={setLauncherGreeting}
           />
+
+          {supportInboxFlagEnabled && (
+            <Suspense fallback={null}>
+              <ReplyAlertsCard config={config} />
+            </Suspense>
+          )}
 
           <VisitorTrackingCard config={config} />
 
@@ -283,6 +297,7 @@ export function TabsCard({
       tickets?: boolean
       home?: boolean
     }
+    changelog?: { announceOnLauncher?: boolean }
   }
   boards: { id: string; name: string; slug: string }[]
   helpCenterFlagEnabled: boolean
@@ -304,6 +319,9 @@ export function TabsCard({
     changelog: config.tabs?.changelog ?? true,
     help: config.tabs?.help ?? false,
   })
+  const [announceOnLauncher, setAnnounceOnLauncher] = useState(
+    config.changelog?.announceOnLauncher === true
+  )
 
   const showHelpToggle = helpCenterFlagEnabled
   const showMessagesToggle = supportInboxFlagEnabled
@@ -347,6 +365,20 @@ export function TabsCard({
       startTransition(() => router.invalidate())
     } catch {
       setTabs({ ...tabs, [key]: prev })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Persist the launcher announcement switch, reverting local state on error. */
+  async function saveAnnounce(checked: boolean) {
+    setAnnounceOnLauncher(checked)
+    setSaving(true)
+    try {
+      await updateWidgetConfig.mutateAsync({ changelog: { announceOnLauncher: checked } })
+      startTransition(() => router.invalidate())
+    } catch {
+      setAnnounceOnLauncher(!checked)
     } finally {
       setSaving(false)
     }
@@ -439,6 +471,23 @@ export function TabsCard({
               if (!checked && lockChangelogOff) return
               void saveTab('changelog', checked)
             }}
+          />
+        )}
+
+        {changelogFlagEnabled && (
+          <SettingRow
+            label="Announce new updates above the launcher"
+            description="Shows the newest update to visitors who have not seen it."
+            htmlFor="changelog-announce"
+            disabled={!tabs.changelog}
+            control={
+              <Switch
+                id="changelog-announce"
+                checked={announceOnLauncher}
+                onCheckedChange={(checked) => void saveAnnounce(checked)}
+                disabled={isBusy || !tabs.changelog}
+              />
+            }
           />
         )}
       </SettingRows>

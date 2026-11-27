@@ -398,11 +398,12 @@ describe('replayGateVerdict', () => {
       '0321_live_taxonomy_unique',
       '0322_session_two_factor_pending',
       '0323_clear_legacy_header_settings',
-      '0324_ticket_due_dates',
-      '0325_ticket_sharing',
-      '0326_integration_destinations',
-      '0327_integration_user_mappings',
-      '0328_message_external_links',
+      '0324_changelog_announce_on_launcher',
+      '0325_ticket_due_dates',
+      '0326_ticket_sharing',
+      '0327_integration_destinations',
+      '0328_integration_user_mappings',
+      '0329_message_external_links',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
