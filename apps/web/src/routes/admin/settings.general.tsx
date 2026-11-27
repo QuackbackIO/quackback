@@ -31,7 +31,6 @@ import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/u
 import { adminPageHead } from '@/lib/client/admin-head'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { LanguageCard } from '@/components/admin/settings/language/language-card'
-import { DEFAULT_LOCALE, seedAreaMessages } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   /** `logo` scrolls to the workspace logo and highlights it. */
@@ -44,12 +43,11 @@ export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/general')
     const ensure = readBatch(context.queryClient)
-    const [cloudIdentity, languageMessages] = await Promise.all([
+    const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),
-      seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'languageSettings'),
       ensure(settingsQueries.logo()),
     ])
-    return { cloudIdentity, languageMessages }
+    return { cloudIdentity }
   },
   component: GeneralSettingsPage,
 })
@@ -57,7 +55,7 @@ export const Route = createFileRoute('/admin/settings/general')({
 function GeneralSettingsPage() {
   const settings = useWorkspaceSettings()
   const managedFieldPaths = useManagedFieldPaths()
-  const { cloudIdentity, languageMessages } = Route.useLoaderData()
+  const { cloudIdentity } = Route.useLoaderData()
   const { focus } = Route.useSearch()
   const workspaceNameManaged = isPathManagedFromBootstrap(
     MANAGED_PATHS.WORKSPACE_NAME,
@@ -141,7 +139,7 @@ function GeneralSettingsPage() {
         focusLogo={focus === 'logo'}
       />
 
-      <AreaMessages area="languageSettings" messages={languageMessages}>
+      <AreaMessages area="languageSettings">
         <LanguageCard />
       </AreaMessages>
 

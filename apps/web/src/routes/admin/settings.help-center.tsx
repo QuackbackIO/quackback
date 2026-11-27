@@ -17,8 +17,6 @@ import { useUpdateHelpCenterConfig } from '@/lib/client/mutations/settings'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { isProductEnabled, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
-import { AreaMessages } from '@/components/shared/area-messages'
-import { DEFAULT_LOCALE, seedAreaMessages } from '@/lib/shared/i18n'
 
 /**
  * Split by concern, matching the Access & Security page's `?tab=` pattern:
@@ -42,11 +40,8 @@ export const Route = createFileRoute('/admin/settings/help-center')({
     assertSettingsPageAccess(context.permissions, '/admin/settings/help-center')
 
     const { queryClient } = context
-    const [languageMessages] = await Promise.all([
-      seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'languageSettings'),
-      queryClient.ensureQueryData(settingsQueries.helpCenterConfig()),
-    ])
-    return { languageMessages }
+    await queryClient.ensureQueryData(settingsQueries.helpCenterConfig())
+    return {}
   },
   component: HelpCenterSettingsRoute,
 })
@@ -59,7 +54,6 @@ function HelpCenterSettingsPage() {
   const router = useRouter()
   const navigate = useNavigate()
   const search = Route.useSearch()
-  const { languageMessages } = Route.useLoaderData()
   const tab = search.tab ?? 'general'
   const updateHelpCenterConfig = useUpdateHelpCenterConfig()
   const helpCenterConfigQuery = useSuspenseQuery(settingsQueries.helpCenterConfig())
@@ -152,9 +146,7 @@ function HelpCenterSettingsPage() {
         </TabsContent>
 
         <TabsContent value="domains-languages">
-          <AreaMessages area="languageSettings" messages={languageMessages}>
-            <DomainsLanguagesTab config={config} />
-          </AreaMessages>
+          <DomainsLanguagesTab config={config} />
         </TabsContent>
       </Tabs>
     </SettingsPage>

@@ -36,6 +36,7 @@ import type { HelpCenterConfig } from '@/lib/shared/types/settings'
 import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
 import { LOCALE_NATIVE_NAMES } from '@/lib/shared/locale-names'
 import { useLanguageNames } from '@/components/admin/settings/language/use-language-name'
+import { AreaMessages } from '@/components/shared/area-messages'
 
 const LOCALE_LABELS: Record<string, string> = LOCALE_NATIVE_NAMES
 
@@ -296,7 +297,9 @@ function LocalesCard({ locales }: { locales: HelpCenterConfig['locales'] }) {
     >
       <div className="space-y-4">
         <ul className="divide-y divide-border/50">
-          <MainLanguageRow locale={locales.default} />
+          <AreaMessages area="languageSettings">
+            <MainLanguageRow locale={locales.default} />
+          </AreaMessages>
           {locales.additional.map((locale) => (
             <LocaleRow
               key={locale}

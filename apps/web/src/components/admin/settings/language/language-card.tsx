@@ -4,14 +4,13 @@
  * happens to the help center (articles relabelled, or swapped with their
  * versions in that language), with counts from the workspace.
  */
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { VisibilityTiles } from '@/components/admin/settings/visibility-tiles'
-import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import {
   Select,
   SelectContent,
@@ -21,13 +20,13 @@ import {
 } from '@/components/ui/select'
 import { AUTOSAVE } from '@/lib/client/autosave'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import {
-  previewMainLanguageChangeFn,
-  updateLanguageSettingsFn,
-} from '@/lib/server/functions/language-settings'
+import { updateLanguageSettingsFn } from '@/lib/server/functions/language-settings'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { LanguageConfig, VisitorLanguage } from '@/lib/shared/types/settings'
 import { useLanguageNames } from './use-language-name'
+
+// The confirmation loads when a new main language is picked, not with the page.
+const MainLanguageConfirm = lazy(() => import('./main-language-confirm'))
 
 const DEFAULT_CONFIG: LanguageConfig = { mainLanguage: 'en', visitorLanguage: 'own' }
 
@@ -170,107 +169,18 @@ export function LanguageCard() {
         />
       </div>
 
-      <MainLanguageConfirm
-        to={pending}
-        onClose={() => setPending(null)}
-        onConfirm={async (mainLanguage) => {
-          await save.mutateAsync({ mainLanguage })
-          setPending(null)
-        }}
-      />
+      {pending && (
+        <Suspense fallback={null}>
+          <MainLanguageConfirm
+            to={pending}
+            onClose={() => setPending(null)}
+            onConfirm={async (mainLanguage) => {
+              await save.mutateAsync({ mainLanguage })
+              setPending(null)
+            }}
+          />
+        </Suspense>
+      )}
     </SettingsCard>
-  )
-}
-
-function MainLanguageConfirm({
-  to,
-  onClose,
-  onConfirm,
-}: {
-  to: SupportedLocale | null
-  onClose: () => void
-  onConfirm: (mainLanguage: SupportedLocale) => Promise<void>
-}) {
-  const intl = useIntl()
-  const { name } = useLanguageNames()
-  const preview = useQuery({
-    queryKey: ['settings', 'mainLanguagePreview', to],
-    queryFn: () => previewMainLanguageChangeFn({ data: { mainLanguage: to! } }),
-    enabled: to !== null,
-    staleTime: 0,
-    gcTime: 0,
-  })
-  const language = to ? name(to) : ''
-  const counts = preview.data
-
-  return (
-    <ConfirmDialog
-      open={to !== null}
-      onOpenChange={(open) => {
-        if (!open) onClose()
-      }}
-      title={intl.formatMessage(
-        {
-          id: 'admin.settings.language.confirm.title',
-          defaultMessage: 'Switch your main language to {language}?',
-        },
-        { language }
-      )}
-      description={
-        <div className="space-y-3" data-testid="main-language-confirm">
-          {counts?.swap ? (
-            <>
-              <p>
-                <FormattedMessage
-                  id="admin.settings.language.confirm.swap"
-                  defaultMessage="{articles, plural, one {# article} other {# articles}} and {collections, plural, one {# collection} other {# collections}} have a {language} version, which becomes their main text. Their current text becomes a translation, so nothing is lost."
-                  values={{ articles: counts.articles, collections: counts.collections, language }}
-                />
-              </p>
-              {counts.keptArticles > 0 && (
-                <p>
-                  <FormattedMessage
-                    id="admin.settings.language.confirm.kept"
-                    defaultMessage="{count, plural, one {# article has no published {language} version yet and stays as it is.} other {# articles have no published {language} version yet and stay as they are.}}"
-                    values={{ count: counts.keptArticles, language }}
-                  />
-                </p>
-              )}
-            </>
-          ) : counts && counts.articles + counts.collections > 0 ? (
-            <p>
-              <FormattedMessage
-                id="admin.settings.language.confirm.relabel"
-                defaultMessage="Your {articles, plural, one {# article} other {# articles}} and {collections, plural, one {# collection} other {# collections}} will be marked as {language}. Nothing is rewritten or translated."
-                values={{ articles: counts.articles, collections: counts.collections, language }}
-              />
-            </p>
-          ) : null}
-          <ul className="list-disc space-y-1 ps-5">
-            <li>
-              <FormattedMessage
-                id="admin.settings.language.confirm.visitors"
-                defaultMessage="Visitors whose language you have not added see your {language} articles."
-                values={{ language }}
-              />
-            </li>
-            <li>
-              <FormattedMessage
-                id="admin.settings.language.confirm.search"
-                defaultMessage="Help center search understands {language} words."
-                values={{ language }}
-              />
-            </li>
-          </ul>
-        </div>
-      }
-      cancelLabel={intl.formatMessage({ id: 'common.cancel', defaultMessage: 'Cancel' })}
-      confirmLabel={intl.formatMessage(
-        { id: 'admin.settings.language.confirm.action', defaultMessage: 'Switch to {language}' },
-        { language }
-      )}
-      confirmDisabled={!counts}
-      onConfirm={() => (to ? onConfirm(to) : undefined)}
-    />
   )
 }

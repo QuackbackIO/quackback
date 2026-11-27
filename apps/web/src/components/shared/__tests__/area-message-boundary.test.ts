@@ -58,8 +58,7 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
   },
   languageSettings: {
     users: /^components\/admin\/settings\/(language\/|help-center\/domains-languages-tab\.tsx$)/,
-    importers:
-      /^(components\/admin\/settings\/(language\/|help-center\/domains-languages-tab\.tsx$)|routes\/admin\/settings\.(general|help-center)\.tsx$)/,
+    importers: null,
   },
   statusPage: {
     users: /^(components\/portal\/status\/|routes\/_portal\/status\.(index|\$incidentId)\.tsx$)/,
@@ -72,6 +71,7 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
 const SHOWN_BY: { area: MessageArea; marker: RegExp }[] = [
   { area: 'twoFactor', marker: /<(ChallengeStep|EnrollSteps)\b/ },
   { area: 'notificationText', marker: /<NotificationItem\b/ },
+  { area: 'languageSettings', marker: /<(LanguageCard|MainLanguageRow)\b/ },
 ]
 
 /**

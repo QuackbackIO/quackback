@@ -64,7 +64,7 @@
     },
     "doc:admin-settings": {
       "dbQueries": 8,
-      "htmlKB": 78.6
+      "htmlKB": 87
     },
     "ui:portal-load": {
       "dbQueries": 7,
@@ -607,14 +607,14 @@
     },
     "sweep:doc:admin:/admin/settings/general": {
       "dbQueries": 8,
-      "htmlKB": 78.6
+      "htmlKB": 87
     },
     "sweep:ui:admin:/admin/settings/general": {
       "dbQueries": 8,
       "serverRequests": 1,
-      "requests": 118,
-      "jsRequests": 113,
-      "jsKB": 423.9,
+      "requests": 121,
+      "jsRequests": 114,
+      "jsKB": 445.6,
       "htmlTransferKB": 31.5,
       "componentRenders": 396
     },
