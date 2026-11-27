@@ -1,16 +1,17 @@
 /**
  * The widget on a customer's own page (area CUS-W): what the SDK shows above
  * the closed launcher, how the panel opens and closes, and what a visitor in
- * another language sees. Every test loads the real SDK on a host page and
+ * another language sees, in every widget language. Every test loads the real SDK on a host page and
  * leaves the panel closed unless the test opens it.
  *
  * Set E2E_GALLERY_DIR to also save a screenshot of each result there.
  */
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'
 import { generateId, toUuid } from '@quackback/ids'
-import type { Page } from '@playwright/test'
+import type { Browser, Page } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
 import { supportEnv } from '../../support/env'
@@ -199,8 +200,67 @@ test.describe('widget on a host page: opening and closing', () => {
   )
 })
 
+/** The widget's own words for one UI language, read from its catalogue. */
+function catalogue(locale: string): Record<string, string> {
+  const here = dirname(fileURLToPath(import.meta.url))
+  return JSON.parse(readFileSync(join(here, '../../../src/locales', `${locale}.json`), 'utf8'))
+}
+
+/**
+ * Browser languages a visitor might arrive with, and the widget language each
+ * one gets. None of them is a help center language here, so every one of them
+ * must still see the default-language collections.
+ */
+const BROWSER_LANGUAGES: { tag: string; ui: string }[] = [
+  { tag: 'de-DE', ui: 'de' },
+  { tag: 'fr-FR', ui: 'fr' },
+  { tag: 'es-ES', ui: 'es' },
+  { tag: 'nl-NL', ui: 'nl' },
+  { tag: 'pl-PL', ui: 'pl' },
+  { tag: 'ru-RU', ui: 'ru' },
+  { tag: 'uk-UA', ui: 'uk' },
+  { tag: 'ar-EG', ui: 'ar' },
+  { tag: 'th-TH', ui: 'th' },
+  { tag: 'zh-CN', ui: 'zh-cn' },
+  { tag: 'zh-TW', ui: 'zh-tw' },
+  { tag: 'pt-BR', ui: 'pt-br' },
+  // Regional tags that map onto a catalogue of a sibling region or script.
+  { tag: 'pt-PT', ui: 'pt-br' },
+  { tag: 'zh-HK', ui: 'zh-tw' },
+  { tag: 'fr-CA', ui: 'fr' },
+  // A language the widget has no words for: English menus, same articles.
+  { tag: 'sw-KE', ui: 'en' },
+]
+
+const RTL = new Set(['ar'])
+
+/** A host page in a browser set to one language, opened on the Help tab. */
+async function helpInLanguage(
+  browser: Browser,
+  tag: string,
+  run: (page: Page) => Promise<void>
+): Promise<void> {
+  const context = await browser.newContext({
+    locale: tag,
+    extraHTTPHeaders: { 'Accept-Language': `${tag},${tag.split('-')[0]};q=0.9` },
+  })
+  const page = await context.newPage()
+  try {
+    await openHost(page, { open: { view: 'help' } })
+    await run(page)
+  } finally {
+    await context.close()
+  }
+}
+
 /** A published article in a public collection, in the default language. */
-async function seedArticle(marker: string): Promise<{ title: string; collection: string }> {
+async function seedArticle(marker: string): Promise<{
+  title: string
+  collection: string
+  body: string
+  categoryUuid: string
+  articleUuid: string
+}> {
   const sql = supportDb()
   const categoryUuid = toUuid(generateId('kb_category'))
   const articleUuid = toUuid(generateId('article'))
@@ -209,57 +269,145 @@ async function seedArticle(marker: string): Promise<{ title: string; collection:
   const slug = `${marker}-${randomBytes(3).toString('hex')}`
   const collection = `Getting started ${marker}`
   const title = `Set up your account ${marker}`
+  const body = 'Open Settings, then Account.'
   await sql`INSERT INTO kb_categories (id, slug, name, is_public, position, created_at, updated_at)
     VALUES (${categoryUuid}, ${slug}, ${collection}, true, 0, NOW(), NOW())`
   await sql`INSERT INTO kb_articles (id, category_id, slug, title, content, principal_id,
       published_at, created_at, updated_at)
-    VALUES (${articleUuid}, ${categoryUuid}, ${slug}, ${title}, ${'Open Settings, then Account.'},
+    VALUES (${articleUuid}, ${categoryUuid}, ${slug}, ${title}, ${body},
       ${author.id}, NOW() - interval '1 minute', NOW(), NOW())`
-  return { title, collection }
+  return { title, collection, body, categoryUuid, articleUuid }
 }
 
-test.describe('widget on a host page: workspace switches', () => {
+/** A translation of a seeded collection and (optionally) its article. */
+async function translate(
+  seeded: { categoryUuid: string; articleUuid: string },
+  locale: string,
+  words: { collection: string; title?: string; body?: string; status?: 'draft' | 'published' }
+): Promise<void> {
+  const sql = supportDb()
+  await sql`INSERT INTO kb_category_translations (id, category_id, locale, name)
+    VALUES (${toUuid(generateId('kb_category_translation'))}, ${seeded.categoryUuid}, ${locale},
+      ${words.collection})`
+  if (words.title) {
+    await sql`INSERT INTO kb_article_translations (id, article_id, locale, title, content, status)
+      VALUES (${toUuid(generateId('kb_article_translation'))}, ${seeded.articleUuid}, ${locale},
+        ${words.title}, ${words.body ?? ''}, ${words.status ?? 'published'})`
+  }
+}
+
+test.describe('widget on a host page: help in every language', () => {
   test.skip(!ISOLATED, 'turns on workspace-wide widget settings; runs in support-isolated')
 
+  for (const { tag, ui } of BROWSER_LANGUAGES) {
+    test(
+      `CUS-W-H5 a visitor browsing in ${tag} sees the help articles, with ${ui} menus`,
+      { tag: ['@core', '@isolated'] },
+      async ({ browser, marker }) => {
+        const words = catalogue(ui)
+        const article = await seedArticle(marker)
+        await withSettings(
+          {
+            feature_flags: { helpCenter: true },
+            widget_config: { 'tabs.help': true },
+            help_center_config: { 'locales.additional': [] },
+          },
+          async () =>
+            helpInLanguage(browser, tag, async (page) => {
+              const widget = page.frameLocator(FRAME)
+              await expect(widget.getByText(words['widget.help.browseCollections'])).toBeVisible({
+                timeout: 20_000,
+              })
+              await expect(widget.locator('html')).toHaveAttribute(
+                'dir',
+                RTL.has(ui) ? 'rtl' : 'ltr'
+              )
+              // Not a help center language: the default-language collections
+              // show anyway, never the empty state.
+              await expect(widget.getByText(article.collection)).toBeVisible()
+              await expect(widget.getByText(words['widget.help.noCategories'])).toHaveCount(0)
+              await snap(page, `06-help-${tag}`)
+
+              await widget.getByText(article.collection).click()
+              await widget.getByText(article.title).click()
+              await expect(widget.getByText(article.body)).toBeVisible({ timeout: 15_000 })
+            })
+        )
+      }
+    )
+  }
+
   test(
-    'CUS-W-H5 a visitor browsing in German sees the help articles, in German menus',
+    'CUS-W-H5b translated help shows in each help center language, falls back where a translation is missing, and stays in the default language elsewhere',
     { tag: ['@core', '@isolated'] },
     async ({ browser, marker }) => {
       const article = await seedArticle(marker)
-      await withSettings(
-        { feature_flags: { helpCenter: true }, widget_config: { 'tabs.help': true } },
-        async () => {
-          // German is not a help center language: the default-language
-          // collections show anyway, never "Noch keine Artikel".
-          const context = await browser.newContext({
-            locale: 'de-DE',
-            extraHTTPHeaders: { 'Accept-Language': 'de-DE,de;q=0.9' },
-          })
-          const page = await context.newPage()
-          try {
-            await openHost(page, { open: { view: 'help' } })
-            const widget = page.frameLocator(FRAME)
-            await expect(widget.getByText('Sammlungen durchstöbern')).toBeVisible({
-              timeout: 20_000,
-            })
-            await expect(widget.getByText(article.collection)).toBeVisible()
-            await expect(widget.getByText('Noch keine Artikel')).toHaveCount(0)
-            await snap(page, '06-help-tab-german-visitor')
+      // French: collection and article translated and published.
+      const fr = {
+        collection: `Premiers pas ${marker}`,
+        title: `Configurer votre compte ${marker}`,
+        body: 'Ouvrez Paramètres, puis Compte.',
+      }
+      await translate(article, 'fr', fr)
+      // German: collection translated, article translation still a draft.
+      const deCollection = `Erste Schritte ${marker}`
+      await translate(article, 'de', {
+        collection: deCollection,
+        title: `Konto einrichten ${marker}`,
+        body: 'Öffnen Sie Einstellungen.',
+        status: 'draft',
+      })
+      // Spanish: fully translated, but Spanish is not a help center language.
+      const es = { collection: `Primeros pasos ${marker}`, title: `Configura tu cuenta ${marker}` }
+      await translate(article, 'es', { ...es, body: 'Abre Ajustes.' })
 
+      await withSettings(
+        {
+          feature_flags: { helpCenter: true },
+          widget_config: { 'tabs.help': true },
+          help_center_config: { 'locales.additional': ['fr', 'de'] },
+        },
+        async () => {
+          await helpInLanguage(browser, 'fr-FR', async (page) => {
+            const widget = page.frameLocator(FRAME)
+            await expect(widget.getByText(fr.collection)).toBeVisible({ timeout: 20_000 })
+            await expect(widget.getByText(article.collection)).toHaveCount(0)
+            await snap(page, '06c-help-translated-fr')
+            await widget.getByText(fr.collection).click()
+            await widget.getByText(fr.title).click()
+            await expect(widget.getByText(fr.body)).toBeVisible({ timeout: 15_000 })
+            await snap(page, '06d-help-translated-fr-article')
+          })
+
+          await helpInLanguage(browser, 'de-DE', async (page) => {
+            const widget = page.frameLocator(FRAME)
+            await expect(widget.getByText(deCollection)).toBeVisible({ timeout: 20_000 })
+            await widget.getByText(deCollection).click()
+            // The draft translation stays hidden; the default-language article shows.
+            await expect(widget.getByText(article.title)).toBeVisible({ timeout: 15_000 })
+            await expect(widget.getByText(`Konto einrichten ${marker}`)).toHaveCount(0)
+            await snap(page, '06e-help-partial-de')
+            await widget.getByText(article.title).click()
+            await expect(widget.getByText(article.body)).toBeVisible({ timeout: 15_000 })
+          })
+
+          await helpInLanguage(browser, 'es-ES', async (page) => {
+            const widget = page.frameLocator(FRAME)
+            await expect(widget.getByText(article.collection)).toBeVisible({ timeout: 20_000 })
+            await expect(widget.getByText(es.collection)).toHaveCount(0)
             await widget.getByText(article.collection).click()
             await expect(widget.getByText(article.title)).toBeVisible({ timeout: 15_000 })
-            await widget.getByText(article.title).click()
-            await expect(widget.getByText('Open Settings, then Account.')).toBeVisible({
-              timeout: 15_000,
-            })
-            await snap(page, '06b-help-article-german-visitor')
-          } finally {
-            await context.close()
-          }
+            await expect(widget.getByText(es.title)).toHaveCount(0)
+            await snap(page, '06f-help-not-enabled-es')
+          })
         }
       )
     }
   )
+})
+
+test.describe('widget on a host page: workspace switches', () => {
+  test.skip(!ISOLATED, 'turns on workspace-wide widget settings; runs in support-isolated')
 
   test(
     "CUS-W-H6 an update published after the visitor's first visit shows above the launcher, and an entry kept out of the card does not",
