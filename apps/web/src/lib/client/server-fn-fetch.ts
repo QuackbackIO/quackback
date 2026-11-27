@@ -1,5 +1,6 @@
 import { UNEXPECTED_ERROR_MESSAGE } from '@/lib/shared/error-reference'
 import { STALE_BUILD_HEADER, STALE_BUILD_MESSAGE } from '@/lib/shared/stale-build'
+import { frameRequestCredentials } from './widget-frame'
 
 /**
  * The fetch every server function call in the browser goes through
@@ -17,12 +18,16 @@ import { STALE_BUILD_HEADER, STALE_BUILD_MESSAGE } from '@/lib/shared/stale-buil
  * A call this page's build makes to a function the server no longer has is
  * answered as a stale build (see lib/shared/stale-build.ts): the page reloads
  * once to pick up the new build, and the call fails either way.
+ *
+ * A widget frame that does not hold the visitor's portal session calls
+ * without cookies (see widget-frame.ts).
  */
 export async function serverFnFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
-  const response = await fetch(input, init)
+  const credentials = frameRequestCredentials()
+  const response = await fetch(input, credentials ? { ...init, credentials } : init)
   if (response.headers.get(STALE_BUILD_HEADER)) {
     reloadForNewBuild()
     throw new Error(STALE_BUILD_MESSAGE)

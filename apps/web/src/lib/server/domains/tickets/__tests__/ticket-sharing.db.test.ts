@@ -395,6 +395,14 @@ describe.skipIf(!fixture.available)('sharing a customer ticket (real DB, rolled 
         senderType: 'agent',
         content: 'We are on it',
       })
+      // A reply-time caption is not a reply, here as on their own threads.
+      await testDb.insert(conversationMessages).values({
+        conversationId,
+        principalId: agent,
+        senderType: 'agent',
+        content: 'We usually reply in minutes',
+        metadata: { block: { kind: 'replyTime', status: 'online' } } as never,
+      })
       expect(await countVisitorUnreadMessages(colleague)).toBe(1)
       await markConversationRead(conversationId, customerActor(colleague))
       expect(await countVisitorUnreadMessages(colleague)).toBe(0)

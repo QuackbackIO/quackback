@@ -11,7 +11,7 @@ async function bustSettings(): Promise<void> {
 
 /**
  * Turn the widget assistant on or off. With it off the widget's thread header
- * shows the live presence badge ("We're online" / "We'll reply by email").
+ * shows the team and its status line ("Online now" / "We'll reply by email").
  */
 export async function setWidgetAssistant(
   enabled: boolean,
