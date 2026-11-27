@@ -26,6 +26,7 @@ import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
+import { outputBudgetOptions } from '@/lib/server/domains/ai/output-budget'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -115,7 +116,7 @@ export async function draftAttributeDescriptions(
     messages: [{ role: 'user', content: userContent }],
     outputSchema: DraftDescriptionsSchema,
     stream: false,
-    modelOptions: { max_tokens: 1500, ...structuredOutputProviderOptions() },
+    modelOptions: { ...outputBudgetOptions(1500), ...structuredOutputProviderOptions() },
     middleware: [
       createUsageLoggingMiddleware({
         pipelineStep: 'classification',

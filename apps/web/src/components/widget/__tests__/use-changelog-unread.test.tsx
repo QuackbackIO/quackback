@@ -1,0 +1,266 @@
+// @vitest-environment happy-dom
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const entry = (n: number) => ({
+  id: `changelog_${n}`,
+  title: `Entry ${n}`,
+  content: '',
+  publishedAt: `2026-11-${String(n).padStart(2, '0')}T10:00:00.000Z`,
+  categories: [],
+})
+let items = [entry(1)]
+let nextCursor: string | null = null
+let serverTime: string | undefined
+const auth: { user: { id: string } | null; identityResolved: boolean } = {
+  user: null,
+  identityResolved: true,
+}
+
+vi.mock('../widget-auth-provider', () => ({
+  useWidgetAuth: () => ({
+    sessionVersion: 0,
+    user: auth.user,
+    identityResolved: auth.identityResolved,
+  }),
+}))
+vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
+vi.mock('@/lib/server/functions/widget/changelog', () => ({
+  widgetListPublicChangelogsFn: () => Promise.resolve({ items, nextCursor, serverTime }),
+  widgetListChangelogCategoriesFn: () => Promise.resolve([]),
+}))
+
+import { useChangelogUnread } from '../use-changelog-unread'
+
+beforeEach(() => {
+  localStorage.clear()
+  items = [entry(1)]
+  nextCursor = null
+  serverTime = undefined
+  auth.user = null
+  auth.identityResolved = true
+})
+
+function setup() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  )
+  const loaded = () =>
+    qc
+      .getQueryCache()
+      .findAll()
+      .some((q) => q.state.data !== undefined)
+  return { qc, wrapper, loaded }
+}
+
+it('badges an entry published later for a visitor who never opened the Changelog tab', async () => {
+  const { qc, wrapper, loaded } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  // What was there at first contact is not news.
+  await waitFor(() => expect(loaded()).toBe(true))
+  expect(result.current.unread).toBe(0)
+
+  items = [entry(2), entry(1)]
+  await act(() => qc.invalidateQueries())
+  await waitFor(() => expect(result.current.unread).toBe(1))
+})
+
+it('reads and writes no marker until the identity round trip settles', async () => {
+  localStorage.setItem('quackback:changelog-seen-at:user_a', '2026-11-01T12:00:00.000Z')
+  items = [entry(2), entry(1)]
+  auth.user = { id: 'user_a' }
+  auth.identityResolved = false
+  const { wrapper, loaded } = setup()
+  const hook = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(loaded()).toBe(true))
+
+  // Not yet known who the visitor is: nothing counts and nothing moves, so
+  // nothing lands under the anonymous visitor either.
+  expect(hook.result.current.unread).toBe(0)
+  act(() => hook.result.current.markSeen(entry(2).publishedAt))
+  expect(localStorage.getItem('quackback:changelog-seen-at:anonymous')).toBeNull()
+  expect(localStorage.getItem('quackback:changelog-seen-at:user_a')).toBe(
+    '2026-11-01T12:00:00.000Z'
+  )
+
+  // Settled as person A: their marker applies, and the later entry badges.
+  auth.identityResolved = true
+  hook.rerender()
+  await waitFor(() => expect(hook.result.current.unread).toBe(1))
+})
+
+it('ignores the marker saved before markers were kept per person', async () => {
+  localStorage.setItem('quackback:changelog-seen-at', '2026-11-01T12:00:00.000Z')
+  items = [entry(2), entry(1)]
+  auth.user = { id: 'user_a' }
+  const { wrapper } = setup()
+  const hook = renderHook(() => useChangelogUnread(true), { wrapper })
+  // Person A starts from their own silent baseline; the shared key is gone.
+  await waitFor(() =>
+    expect(localStorage.getItem('quackback:changelog-seen-at:user_a')).toBe(entry(2).publishedAt)
+  )
+  expect(localStorage.getItem('quackback:changelog-seen-at')).toBeNull()
+  expect(hook.result.current.unread).toBe(0)
+})
+
+it("records everything published before the first load as seen, by the server's clock", async () => {
+  // Anonymous: every entry is gated, so the list is empty.
+  items = []
+  serverTime = '2026-11-15T08:00:00.000Z'
+  const { qc, wrapper, loaded } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(loaded()).toBe(true))
+  await waitFor(() =>
+    expect(localStorage.getItem('quackback:changelog-seen-at:anonymous')).toBe(serverTime)
+  )
+
+  // Entries that existed at the first load stay quiet when they appear later;
+  // one published afterwards badges.
+  items = [entry(20), entry(10)]
+  await act(() => qc.invalidateQueries())
+  await waitFor(() => expect(result.current.unread).toBe(1))
+  expect(result.current.newest?.id).toBe('changelog_20')
+})
+
+it('falls back to now for an empty list without a server time, never the epoch', async () => {
+  items = []
+  const before = Date.now()
+  const { wrapper, loaded } = setup()
+  renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(loaded()).toBe(true))
+  await waitFor(() =>
+    expect(localStorage.getItem('quackback:changelog-seen-at:anonymous')).not.toBeNull()
+  )
+  const stamped = new Date(localStorage.getItem('quackback:changelog-seen-at:anonymous')!)
+  expect(stamped.getTime()).toBeGreaterThanOrEqual(before)
+})
+
+it('reads the marker once, not on every render', async () => {
+  localStorage.setItem('quackback:changelog-seen-at:anonymous', entry(1).publishedAt)
+  const { wrapper, loaded } = setup()
+  const hook = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(loaded()).toBe(true))
+  const getItem = vi.spyOn(window.localStorage, 'getItem')
+  hook.rerender()
+  hook.rerender()
+  expect(getItem).not.toHaveBeenCalled()
+  getItem.mockRestore()
+})
+
+it('re-reads the marker when another tab advances it', async () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  localStorage.setItem(KEY, entry(1).publishedAt)
+  items = [entry(3), entry(2), entry(1)]
+  const { wrapper } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(result.current.unread).toBe(2))
+  expect(result.current.newest?.id).toBe('changelog_3')
+
+  // Another tab reads the changelog: only the native storage event fires here.
+  localStorage.setItem(KEY, entry(3).publishedAt)
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
+  })
+  expect(result.current.unread).toBe(0)
+  expect(result.current.newest).toBeNull()
+})
+
+it('ignores storage changes to unrelated keys', async () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  localStorage.setItem(KEY, entry(1).publishedAt)
+  items = [entry(3), entry(2), entry(1)]
+  const { wrapper } = setup()
+  const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+  await waitFor(() => expect(result.current.unread).toBe(2))
+
+  localStorage.setItem(KEY, entry(3).publishedAt)
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }))
+  })
+  expect(result.current.unread).toBe(2)
+})
+
+describe('the unread count as a lower bound', () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+
+  it('flags the count when every loaded entry is unread and more exist', async () => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+    items = [entry(3), entry(2)]
+    nextCursor = 'page_2'
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(2))
+    expect(result.current.more).toBe(true)
+  })
+
+  it('is exact when the loaded pages are the whole changelog', async () => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+    items = [entry(3), entry(2)]
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(2))
+    expect(result.current.more).toBe(false)
+  })
+
+  it('is exact when a loaded entry is already read', async () => {
+    localStorage.setItem(KEY, entry(2).publishedAt)
+    items = [entry(3), entry(2)]
+    nextCursor = 'page_2'
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(result.current.unread).toBe(1))
+    expect(result.current.more).toBe(false)
+  })
+})
+
+describe('entries the What\'s new card may announce', () => {
+  const KEY = 'quackback:changelog-seen-at:anonymous'
+  const announced = (n: number, announceOnLauncher?: boolean) =>
+    announceOnLauncher === undefined ? entry(n) : { ...entry(n), announceOnLauncher }
+
+  beforeEach(() => {
+    localStorage.setItem(KEY, entry(1).publishedAt)
+  })
+
+  async function render() {
+    const { wrapper } = setup()
+    const hook = renderHook(() => useChangelogUnread(true), { wrapper })
+    await waitFor(() => expect(hook.result.current.ready).toBe(true))
+    return hook.result
+  }
+
+  it('counts and picks only announced entries, while the badge counts them all', async () => {
+    items = [announced(3, false), announced(2, true)]
+    const result = await render()
+    expect(result.current.unread).toBe(2)
+    expect(result.current.newest?.id).toBe('changelog_3')
+    expect(result.current.announced.count).toBe(1)
+    expect(result.current.announced.newest?.id).toBe('changelog_2')
+  })
+
+  it('has nothing to announce when no unread entry is announced', async () => {
+    items = [announced(3, false), announced(2, false)]
+    const result = await render()
+    expect(result.current.unread).toBe(2)
+    expect(result.current.announced.count).toBe(0)
+    expect(result.current.announced.newest).toBeNull()
+  })
+
+  it('treats an entry without the field as announced', async () => {
+    items = [announced(3), announced(2, true)]
+    const result = await render()
+    expect(result.current.announced.count).toBe(2)
+    expect(result.current.announced.newest?.id).toBe('changelog_3')
+  })
+
+  it('is a lower bound when every loaded entry is unread and more exist', async () => {
+    items = [announced(3, false), announced(2, true)]
+    nextCursor = 'page_2'
+    const result = await render()
+    expect(result.current.announced.count).toBe(1)
+    expect(result.current.announced.more).toBe(true)
+  })
+})
