@@ -158,6 +158,7 @@ describe('widget-auth', () => {
       expect(result).toBe('ott-abc123')
       expect(mockFetch).toHaveBeenCalledWith('/api/auth/one-time-token/generate', {
         headers: { Authorization: 'Bearer bearer-token' },
+        credentials: 'omit',
       })
     })
 

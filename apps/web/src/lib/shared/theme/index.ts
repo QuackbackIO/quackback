@@ -72,6 +72,28 @@ export const SYSTEM_THEME_SCRIPT =
   'd.classList.add(t);d.style.colorScheme=t}catch(e){}})()'
 
 /**
+ * The theme provider's props for one document.
+ *
+ * Only `forcedTheme` changes when the visitor moves between a portal that
+ * forces a theme and a page that does not (the admin): `defaultTheme` and
+ * `enableSystem` stay the same for the life of the document. next-themes reads
+ * those two once, when it mounts, so a value that differed by route would
+ * outlive the route that set it. With system resolution off, a later `system`
+ * theme lands on <html> as a literal `system` class and the page shows light.
+ * The default is the visitor's own preference, never the forced theme, which
+ * would otherwise become their stored theme.
+ */
+export function documentThemeProviderProps({
+  forcedTheme,
+  themeCookie,
+}: {
+  forcedTheme: 'light' | 'dark' | undefined
+  themeCookie: Theme | undefined
+}): { defaultTheme: Theme; enableSystem: boolean; forcedTheme: 'light' | 'dark' | undefined } {
+  return { defaultTheme: themeCookie ?? 'system', enableSystem: true, forcedTheme }
+}
+
+/**
  * Resolve the `class` and `color-scheme` to put on the SSR-rendered <html> so
  * the first paint already matches the chosen theme. Skipping this leaves the
  * browser painting its default (light) canvas during load — a white flash

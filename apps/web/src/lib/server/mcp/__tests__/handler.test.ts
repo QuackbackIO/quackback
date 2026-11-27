@@ -1664,6 +1664,46 @@ describe('MCP HTTP Handler', () => {
       expect(text.status).toBe('published')
     })
 
+    it('passes announceOnLauncher through create_changelog and update_changelog', async () => {
+      const { createChangelog, updateChangelog } =
+        await import('@/lib/server/domains/changelog/changelog.service')
+      const handleMcpRequest = await initializeSession()
+
+      await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'create_changelog',
+            arguments: { title: 'v1.0', content: 'New features', announceOnLauncher: false },
+          })
+        )
+      )
+      expect(vi.mocked(createChangelog).mock.lastCall?.[0]).toMatchObject({
+        announceOnLauncher: false,
+      })
+
+      await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'update_changelog',
+            arguments: { changelogId: 'changelog_01test', announceOnLauncher: true },
+          })
+        )
+      )
+      expect(vi.mocked(updateChangelog).mock.lastCall?.[1]).toMatchObject({
+        announceOnLauncher: true,
+      })
+
+      await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'update_changelog',
+            arguments: { changelogId: 'changelog_01test', title: 'Renamed' },
+          })
+        )
+      )
+      expect(vi.mocked(updateChangelog).mock.lastCall?.[1]).not.toHaveProperty('announceOnLauncher')
+    })
+
     // ── delete_changelog tool ───────────────────────────────────────────
 
     it('should handle tools/call for delete_changelog', async () => {

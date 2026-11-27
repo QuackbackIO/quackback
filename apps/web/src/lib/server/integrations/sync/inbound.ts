@@ -152,9 +152,13 @@ export async function applyInboundStatus(
     )
   if (!link || link.externalId !== result.externalId)
     return { state: 'cancelled', errorCode: 'source_unavailable' }
+  const remoteState = result.externalStatus.slice(0, 64)
+  // Adapters that read the item back can be triggered by edits that leave its status
+  // unchanged. Applying it again would undo a status changed in Quackback since.
+  if (link.remoteState === remoteState) return
   await tx
     .update(links)
-    .set({ remoteState: result.externalStatus.slice(0, 64), remoteStateAt: new Date() })
+    .set({ remoteState, remoteStateAt: new Date() })
     .where(eq(links.id, link.id))
   const external = {
     integrationType: op.provider,

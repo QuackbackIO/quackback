@@ -46,42 +46,6 @@ vi.mock('../use-widget-image-upload', () => ({
   WidgetSessionError: class WidgetSessionError extends Error {},
 }))
 vi.mock('../widget-vote-button', () => ({ WidgetVoteButton: () => null }))
-vi.mock('framer-motion', async () => {
-  const { createElement, forwardRef } = await import('react')
-  const MOTION_PROPS = new Set([
-    'initial',
-    'animate',
-    'exit',
-    'transition',
-    'variants',
-    'layout',
-    'whileHover',
-    'whileTap',
-    'whileFocus',
-    'whileInView',
-  ])
-  const make = (tag: string) =>
-    forwardRef<HTMLElement, Record<string, unknown>>((props, ref) => {
-      const { children, ...rest } = props
-      const dom: Record<string, unknown> = { ref }
-      for (const [key, value] of Object.entries(rest)) {
-        if (!MOTION_PROPS.has(key)) dom[key] = value
-      }
-      return createElement(tag, dom, children as ReactNode)
-    })
-  const proxy = new Proxy(
-    {},
-    { get: (_target, prop) => (typeof prop === 'string' ? make(prop) : undefined) }
-  )
-  return {
-    AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    // m mirrors motion here: the fake components don't care which name reaches
-    // them, only the source's switch to LazyMotion's m does.
-    motion: proxy,
-    m: proxy,
-    useReducedMotion: () => true,
-  }
-})
 vi.mock('@/components/ui/rich-text-editor', () => ({
   RichTextEditor: () => <div data-testid="editor" />,
 }))
@@ -208,6 +172,8 @@ describe('widget compose board when the picker cannot load', () => {
     picker.fail = false
     const before = picker.imports
     typeTitle('')
+    // The row collapses out before it can mount again.
+    await waitFor(() => expect(screen.queryByText('Posting to')).toBeNull())
     typeTitle('Dark mode please')
     expect(await screen.findByRole('combobox')).toHaveValue(bugs.id)
     expect(picker.imports).toBeGreaterThan(before)

@@ -68,6 +68,11 @@ export const Quackback = {
   metadata(patch: Record<string, string | null>): void {
     sdk.dispatch('metadata', patch)
   },
+  /** Show or hide the "What's new" card above the launcher on this page. The
+   *  unread badge is unchanged either way. */
+  whatsNew(enabled: boolean): void {
+    sdk.dispatch('whatsNew', enabled)
+  },
   /** Allow or stop host-page visitor analytics; `false` also removes the stored device id. */
   tracking(enabled: boolean): void {
     sdk.dispatch('tracking', enabled)

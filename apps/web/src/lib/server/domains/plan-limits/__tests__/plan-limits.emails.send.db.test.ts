@@ -2,8 +2,10 @@
  * What the plan limits emails carry and who gets them, against a real
  * database: a plan drop from a billing projection names the workspace, both
  * plans and the links; billing rights decide the recipients, however they are
- * held; concurrent senders mail each person once; a workspace that fits or has
- * no tier limits sends nothing; and the emails never count on the email meter.
+ * held; a sender leaves recipients another sender holds; a workspace that fits
+ * or has no tier limits sends nothing; and the emails never count on the email
+ * meter. Two senders racing need a connection each, which this file's single
+ * transaction cannot give: plan-limits.emails.race.db.test.ts proves that.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId, type WorkspaceId } from '@quackback/ids'
@@ -287,17 +289,6 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
     expect(mailedOf(owner, custom, admin, member, anon).sort()).toEqual(
       [owner.email, custom.email].sort()
     )
-  })
-
-  it('mails each recipient once when two senders race on a fresh record', async () => {
-    const second = await addPerson({ roleKey: 'owner' })
-    await configure({ ...OSS_TIER_LIMITS, maxBoards: 1 })
-    const view = await getPlanLimits()
-    await settle(2)
-    await resetRecord()
-    const results = await Promise.all([sendPlanLimitsEmails(view), sendPlanLimitsEmails(view)])
-    expect(results.filter((r) => r === 'start').length).toBeGreaterThanOrEqual(1)
-    expect(mailedOf(owner, second).sort()).toEqual([owner.email, second.email].sort())
   })
 
   it('leaves a recipient another sender holds to that sender', async () => {

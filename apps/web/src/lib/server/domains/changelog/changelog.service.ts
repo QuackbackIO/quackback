@@ -131,6 +131,7 @@ export async function createChangelog(
         ...(displayDate != null && { displayDate }),
         ...(input.featuredImageUrl != null && { featuredImageUrl: input.featuredImageUrl }),
         ...(input.segmentIds != null && { segmentIds: input.segmentIds }),
+        ...(input.announceOnLauncher != null && { announceOnLauncher: input.announceOnLauncher }),
       })
       .returning()
 
@@ -255,6 +256,11 @@ export async function updateChangelog(
   // (including []) replaces it wholesale.
   if (input.segmentIds !== undefined) {
     updateData.segmentIds = input.segmentIds
+  }
+
+  // announceOnLauncher: undefined leaves the choice untouched.
+  if (input.announceOnLauncher !== undefined) {
+    updateData.announceOnLauncher = input.announceOnLauncher
   }
 
   // The entry, its links and its labels change together: replacing the links
@@ -443,6 +449,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
       ? resignStoredAssetUrl(entry.featuredImageUrl)
       : entry.featuredImageUrl,
     segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
+    announceOnLauncher: entry.announceOnLauncher,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     viewCount: entry.viewCount,

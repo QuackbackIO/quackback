@@ -14,6 +14,7 @@ import { NewButton } from '@/components/shared/new-button'
 import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
+import { useWorkspaceAnnouncesOnLauncher } from './use-workspace-announces'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { JSONContent } from '@tiptap/react'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
@@ -45,6 +46,8 @@ export function CreateChangelogDialog({
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
+  const [announceOnLauncher, setAnnounceOnLauncher] = useState(true)
+  const workspaceAnnounces = useWorkspaceAnnouncesOnLauncher()
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
   const createMutationRef = useRef(createChangelogMutation)
@@ -101,6 +104,7 @@ export function CreateChangelogDialog({
     setPublishState({ type: 'draft' })
     setDisplayDateOverride(undefined)
     setFeaturedImageUrl(null)
+    setAnnounceOnLauncher(true)
     createChangelogMutation.reset()
   }
 
@@ -118,6 +122,7 @@ export function CreateChangelogDialog({
         ...(publishState.type === 'published' &&
           displayDateOverride !== undefined && { displayDate: displayDateOverride }),
         ...(featuredImageUrl !== null && { featuredImageUrl }),
+        announceOnLauncher,
       },
       {
         onSuccess: () => {
@@ -205,6 +210,9 @@ export function CreateChangelogDialog({
                 onDisplayDateClear={handleDisplayDateClear}
                 featuredImageUrl={featuredImageUrl}
                 onFeaturedImageChange={setFeaturedImageUrl}
+                workspaceAnnounces={workspaceAnnounces}
+                announceOnLauncher={announceOnLauncher}
+                onAnnounceOnLauncherChange={setAnnounceOnLauncher}
               />
             </div>
 
@@ -243,6 +251,9 @@ export function CreateChangelogDialog({
                       onDisplayDateClear={handleDisplayDateClear}
                       featuredImageUrl={featuredImageUrl}
                       onFeaturedImageChange={setFeaturedImageUrl}
+                      workspaceAnnounces={workspaceAnnounces}
+                      announceOnLauncher={announceOnLauncher}
+                      onAnnounceOnLauncherChange={setAnnounceOnLauncher}
                     />
                   </div>
                 </SheetContent>

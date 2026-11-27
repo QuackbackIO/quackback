@@ -1,6 +1,7 @@
 import {
   pgTable,
   text,
+  boolean,
   timestamp,
   integer,
   index,
@@ -55,6 +56,10 @@ export const changelogEntries = pgTable(
     // of these segments. [] = broadcast to every subscriber. Same "segment
     // list, [] = everyone" convention as the segment-gate primitive.
     segmentIds: jsonb('segment_ids').$type<string[]>().notNull().default([]),
+    // Whether the widget's "What's new" card above the launcher may announce
+    // this entry (when the workspace turns that card on). Off still counts the
+    // entry as unread and lists it in the widget's changelog (0324).
+    announceOnLauncher: boolean('announce_on_launcher').notNull().default(true),
     // Semantic embedding for Quinn grounding (Quinn Phase 4). Embedded on
     // publish/edit; drafts stay null. Track the model version so a re-embed
     // can find rows without losing data (mirrors posts.embedding_model).

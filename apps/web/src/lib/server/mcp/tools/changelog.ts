@@ -27,6 +27,9 @@ import {
 // Schemas
 // ============================================================================
 
+const ANNOUNCE_ON_LAUNCHER_DESCRIBE =
+  "Whether the widget's \"What's new\" card above the launcher may announce this entry, when the workspace announces new entries there. Off still counts the entry as unread and lists it in the widget's changelog."
+
 const createChangelogSchema = {
   title: z.string().max(200).describe('Changelog entry title'),
   content: z
@@ -43,6 +46,10 @@ const createChangelogSchema = {
     .describe(
       'ISO 8601 datetime to publish at (e.g. "2025-03-15T12:00:00Z"). Overrides publish flag. Past dates backdate the entry, future dates schedule it.'
     ),
+  announceOnLauncher: z
+    .boolean()
+    .optional()
+    .describe(ANNOUNCE_ON_LAUNCHER_DESCRIBE + ' Defaults to true.'),
 }
 
 const updateChangelogSchema = {
@@ -71,6 +78,10 @@ const updateChangelogSchema = {
     .array(z.string())
     .optional()
     .describe('Replace linked posts with these post TypeIDs'),
+  announceOnLauncher: z
+    .boolean()
+    .optional()
+    .describe(ANNOUNCE_ON_LAUNCHER_DESCRIBE + ' Omit to leave it unchanged.'),
 }
 
 const deleteChangelogSchema = {
@@ -88,6 +99,7 @@ type CreateChangelogArgs = {
   content: string
   publish: boolean
   publishedAt?: string
+  announceOnLauncher?: boolean
 }
 
 type UpdateChangelogArgs = {
@@ -98,6 +110,7 @@ type UpdateChangelogArgs = {
   publishedAt?: string
   displayDate?: string | null
   linkedPostIds?: string[]
+  announceOnLauncher?: boolean
 }
 
 type DeleteChangelogArgs = { changelogId: string }
@@ -130,6 +143,9 @@ Examples:
           title: args.title,
           content: args.content,
           publishState,
+          ...(args.announceOnLauncher !== undefined && {
+            announceOnLauncher: args.announceOnLauncher,
+          }),
         },
         { principalId: auth.principalId, name: auth.name }
       )
@@ -155,7 +171,8 @@ Examples:
 - Publish: update_changelog({ changelogId: "changelog_01abc...", publish: true })
 - Backdate display: update_changelog({ changelogId: "changelog_01abc...", displayDate: "2025-03-15T12:00:00Z" })
 - Clear display override: update_changelog({ changelogId: "changelog_01abc...", displayDate: null })
-- Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })${CONTENT_FORMAT_BLOCK}`,
+- Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })
+- Keep it out of the widget's What's new card: update_changelog({ changelogId: "changelog_01abc...", announceOnLauncher: false })${CONTENT_FORMAT_BLOCK}`,
     schema: updateChangelogSchema,
     annotations: WRITE,
     scope: 'write:changelog',
@@ -179,6 +196,9 @@ Examples:
           publishState,
           ...(args.displayDate !== undefined && {
             displayDate: args.displayDate === null ? null : new Date(args.displayDate),
+          }),
+          ...(args.announceOnLauncher !== undefined && {
+            announceOnLauncher: args.announceOnLauncher,
           }),
         },
         { principalId: auth.principalId }
