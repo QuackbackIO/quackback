@@ -25,7 +25,7 @@ import { helpCenterHeadPortal } from '@/components/help-center/help-center-head'
 import {
   HelpCenterFallbackNotice,
   contentLangProps,
-} from '@/components/help-center/help-center-language'
+} from '@/components/help-center/help-center-category-grid'
 import type { JSONContent } from '@tiptap/react'
 import {
   useBaseUrl,

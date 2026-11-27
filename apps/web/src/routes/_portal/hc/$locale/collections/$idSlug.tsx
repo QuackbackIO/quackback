@@ -16,7 +16,7 @@ import {
   HelpCenterFallbackNotice,
   HelpCenterLanguageLabel,
   contentLangProps,
-} from '@/components/help-center/help-center-language'
+} from '@/components/help-center/help-center-category-grid'
 import { HelpCenterArticleRow as ArticleRow } from '@/components/help-center/help-center-article-row'
 import {
   useBaseUrl,

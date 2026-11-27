@@ -4,7 +4,7 @@ import { FormattedMessage } from 'react-intl'
 import {
   HelpCenterLanguageLabel,
   contentLangProps,
-} from '@/components/help-center/help-center-language'
+} from '@/components/help-center/help-center-category-grid'
 
 /** One article in a collection page's list, named in its language when that is not the page's. */
 export function HelpCenterArticleRow({

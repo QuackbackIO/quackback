@@ -3,7 +3,7 @@ import { FormattedMessage } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { useHelpCenterMainLanguage } from '@/lib/client/hooks/use-help-center-main-language'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
-import { HelpCenterLanguageLabel, contentLangProps } from './help-center-language'
+import { HelpCenterLanguageLabel, contentLangProps } from './help-center-category-grid'
 
 export interface RelatedArticleLink {
   id: string
