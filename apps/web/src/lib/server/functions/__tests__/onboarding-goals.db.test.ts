@@ -35,6 +35,12 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 
 const sessionState = vi.hoisted(() => ({ current: null as unknown }))
+const acceptLanguage = vi.hoisted(() => ({ current: null as string | null }))
+vi.mock('@tanstack/react-start/server', async (original) => ({
+  ...(await original<typeof import('@tanstack/react-start/server')>()),
+  getRequestHeaders: () =>
+    new Headers(acceptLanguage.current ? { 'accept-language': acceptLanguage.current } : {}),
+}))
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -351,6 +357,31 @@ describe('wizard goals read and write', () => {
     await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
     await ensureOnboardingHomeReadyFn()
     expect(scheduleOnboardingEmails).toHaveBeenCalledTimes(1)
+  })
+
+  // The emails follow the person's own language steps; the browser's step
+  // speaks only when it asked for a language the product has.
+  it("queues the emails in the browser's language, and leaves later steps to decide when it asked for none the product has", async () => {
+    scheduleOnboardingEmails.mockClear()
+    acceptLanguage.current = 'ja-JP,ja;q=0.9'
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    expect(scheduleOnboardingEmails).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.any(Date),
+      undefined,
+      expect.anything()
+    )
+
+    await testDb.delete(settings)
+    acceptLanguage.current = 'de-DE,de;q=0.9'
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    expect(scheduleOnboardingEmails).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.any(Date),
+      'de',
+      expect.anything()
+    )
+    acceptLanguage.current = null
   })
 
   // The jobs and the stamp commit together, or a failed enqueue would leave a
