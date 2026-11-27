@@ -2078,7 +2078,7 @@
   "email.mention.internal": "Interne notities zijn alleen zichtbaar voor je team.",
   "email.mention.openConversation": "Gesprek openen",
   "email.mention.reason": "Je ontvangt deze e-mail omdat je bent genoemd in {workspace}.",
-  "email.mention.postSubject": "{name} heeft je genoemd in '{post}'",
+  "email.mention.postSubject": "{name} heeft je genoemd in ‘{post}’",
   "email.mention.postHeading": "Je bent genoemd",
   "email.mention.postBody": "{name} heeft je genoemd in {post}.",
   "email.mention.turnOff": "Alle e-mail uitzetten",
