@@ -25,4 +25,9 @@ export interface TeamMember {
    * operators can spot stale accounts at a glance.
    */
   lastSignInAt: Date | null
+  /**
+   * The language the teammate chose, and the one their browser last asked
+   * for. Read by the team roster (listTeamMembers); absent on other reads.
+   */
+  language?: { chosen: string | null; detected: string | null }
 }

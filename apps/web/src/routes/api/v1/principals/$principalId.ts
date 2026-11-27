@@ -74,6 +74,7 @@ async function fetchTeamMemberWithUser(principalId: PrincipalId) {
     email: userDetails.email,
     image: userDetails.image,
     createdAt: member.createdAt.toISOString(),
+    language: { chosen: userDetails.preferredLanguage, detected: userDetails.detectedLocale },
   }
 }
 

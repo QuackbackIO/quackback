@@ -83,6 +83,7 @@ export const Route = createFileRoute('/api/v1/users/')({
               postCount: u.postCount,
               commentCount: u.commentCount,
               voteCount: u.voteCount,
+              language: u.language,
             })),
             {
               pagination: {

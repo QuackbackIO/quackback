@@ -17,6 +17,9 @@ const identifyUserSchema = z.object({
   emailVerified: z.boolean().optional(),
   externalId: z.string().max(255).optional(),
   attributes: z.record(z.string(), z.unknown()).optional(),
+  // The person's language in the caller's app: recorded as their detected
+  // language when Quackback has it. An API key never sets the chosen one.
+  language: z.string().max(64).optional(),
 })
 
 export const Route = createFileRoute('/api/v1/users/identify')({
@@ -83,6 +86,7 @@ export const Route = createFileRoute('/api/v1/users/identify')({
             externalId: result.externalId,
             attributes: result.attributes,
             createdAt: result.createdAt.toISOString(),
+            language: result.language,
             created: result.created,
           }
 

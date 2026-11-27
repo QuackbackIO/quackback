@@ -5,6 +5,7 @@ import 'zod-openapi'
 import { z } from 'zod'
 import { registerPath, TypeIdSchema, createItemResponseSchema, asSchema } from '../openapi'
 import {
+  PersonLanguageSchema,
   TimestampSchema,
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
@@ -20,6 +21,7 @@ const TeamMemberSchema = z.object({
   email: z.string().meta({ example: 'john@example.com' }),
   image: z.string().nullable().meta({ description: 'Profile image URL' }),
   createdAt: TimestampSchema,
+  language: PersonLanguageSchema,
 })
 
 // Request body schemas

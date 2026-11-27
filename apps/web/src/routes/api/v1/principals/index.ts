@@ -27,6 +27,7 @@ export const listPrincipalsHandlers = {
           image: m.image,
           role: m.role,
           createdAt: m.createdAt.toISOString(),
+          language: m.language,
         }))
       )
     } catch (error) {

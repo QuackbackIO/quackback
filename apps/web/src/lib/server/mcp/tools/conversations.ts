@@ -99,7 +99,7 @@ Examples:
     name: 'get_conversation',
     title: 'Get conversation',
     permissions: [PERMISSIONS.CONVERSATION_VIEW],
-    description: `Get a conversation and its most recent messages. Set includeInternal to also return agent-only internal notes and assignment notices, which customers never see.
+    description: `Get a conversation and its most recent messages. Set includeInternal to also return agent-only internal notes and assignment notices, which customers never see. visitorLanguage gives the language the visitor chose (chosen) and the one they were last detected in (detected); either may be null.
 
 Example: get_conversation({ conversationId: "conversation_01abc...", includeInternal: true })`,
     schema: {
@@ -122,7 +122,8 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
         await import('@/lib/server/domains/conversation/conversation.query')
       const conversationId = args.conversationId as ConversationId
       const conversation = await assertConversationVisible(conversationId, mcpAgentActor(auth))
-      const [dto, page] = await Promise.all([
+      const { readPersonLanguage } = await import('@/lib/server/domains/users/person-language')
+      const [dto, page, visitorLanguage] = await Promise.all([
         conversationToDTO(conversation, 'agent'),
         listMessages(conversationId, {
           before: args.cursor,
@@ -130,6 +131,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
           limit: 30,
           preferAccountName: true,
         }),
+        readPersonLanguage(conversation.visitorPrincipalId),
       ])
       const result = jsonResult({
         conversation: {
@@ -140,6 +142,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
           subject: dto.subject,
           visitorPrincipalId: dto.visitor.principalId,
           visitorEmail: realEmail(dto.visitorEmail),
+          visitorLanguage,
           assignedAgentPrincipalId: dto.assignedAgent?.principalId ?? null,
           lastMessageAt: dto.lastMessageAt,
           resolvedAt: dto.resolvedAt,

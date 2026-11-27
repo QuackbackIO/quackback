@@ -15,6 +15,22 @@ export const TimestampSchema = z.string().datetime().meta({
 })
 
 // Nullable timestamp
+/** A person's language: the one they chose, and the one they were detected in. */
+export const PersonLanguageSchema = z
+  .object({
+    chosen: z.string().nullable().meta({
+      description:
+        'The language the person chose in Preferences (one of the product languages), or null for Automatic. Only the person sets it.',
+      example: 'de',
+    }),
+    detected: z.string().nullable().meta({
+      description:
+        "The language the person's browser, the widget's host page or your app last reported, or null. Used for emails when the person chose none.",
+      example: 'fr',
+    }),
+  })
+  .meta({ description: "The person's language" })
+
 export const NullableTimestampSchema = z.string().datetime().nullable().meta({
   description: 'ISO 8601 timestamp or null',
   example: '2024-01-15T10:30:00.000Z',
