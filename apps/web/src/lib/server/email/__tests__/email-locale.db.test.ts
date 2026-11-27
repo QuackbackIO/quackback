@@ -14,6 +14,7 @@ import { principal, user } from '@/lib/server/db'
 
 const hoisted = vi.hoisted(() => ({
   language: { mainLanguage: 'de', visitorLanguage: 'own' as 'own' | 'main' },
+  settingsFail: false,
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -21,7 +22,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getLanguageConfig: async () => hoisted.language,
+  getLanguageConfig: async () => {
+    if (hoisted.settingsFail) throw new Error('settings unreadable')
+    return hoisted.language
+  },
 }))
 
 import { emailLocaleFor, recipientLocale } from '../email-locale'
@@ -107,6 +111,22 @@ describe.skipIf(!fixture.available)('an email reader language (real DB, rolled b
     expect(await recipientLocale({ email: 'nobody@example.com' }, { acceptLanguage: 'es' })).toBe(
       'fr'
     )
+  })
+
+  it('falls back to the main language when the person cannot be read', async () => {
+    // A malformed id makes the person's read throw.
+    const reader = { principalId: 'not a principal id' }
+    expect(await recipientLocale(reader)).toBe('de')
+  })
+
+  it("keeps the person's own language when the settings cannot be read", async () => {
+    const { principalId } = await person({ detected: 'fr' })
+    hoisted.settingsFail = true
+    try {
+      expect(await recipientLocale({ principalId })).toBe('fr')
+    } finally {
+      hoisted.settingsFail = false
+    }
   })
 
   it('writes the email in that language and keeps the words people wrote', async () => {

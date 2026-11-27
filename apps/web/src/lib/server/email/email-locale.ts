@@ -97,7 +97,8 @@ async function readerFacts(reader: EmailReader): Promise<ReaderFacts | null> {
 /**
  * The language for an email to `reader`. `acceptLanguage` is the browser
  * language of the request the email answers, when it answers one. Never
- * throws: an unreadable person or setting falls back to the main language,
+ * throws: a person who cannot be read gets the workspace's steps (the main
+ * language), and settings that cannot be read leave the person's own steps,
  * then English.
  */
 export async function recipientLocale(
@@ -106,15 +107,24 @@ export async function recipientLocale(
 ): Promise<SupportedLocale> {
   try {
     const { getLanguageConfig } = await import('@/lib/server/domains/settings/settings.service')
-    const [language, facts] = await Promise.all([getLanguageConfig(), readerFacts(reader)])
+    const [language, facts] = await Promise.all([
+      getLanguageConfig().catch((error: unknown) => {
+        log.warn({ err: error }, 'language settings unreadable for an email')
+        return null
+      }),
+      readerFacts(reader).catch((error: unknown) => {
+        log.warn({ err: error }, "email reader's language unreadable")
+        return null
+      }),
+    ])
     return resolvePersonLocale({
       chosen: facts?.chosen,
       // "For everyone" is the visitors' rule; a teammate is never a visitor.
-      everyone: facts?.teammate ? null : everyoneLocale(language),
+      everyone: facts?.teammate || !language ? null : everyoneLocale(language),
       acceptLanguage: opts.acceptLanguage,
       detected: facts?.detected,
       accountLocale: facts?.accountLocale,
-      mainLanguage: language.mainLanguage,
+      mainLanguage: language?.mainLanguage,
     })
   } catch (error) {
     log.warn({ err: error }, 'email language unreadable; using English')
