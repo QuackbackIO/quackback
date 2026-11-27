@@ -145,7 +145,7 @@ test.describe('help center in another language', () => {
             const page = await context.newPage()
             try {
               await page.goto('/hc')
-              await expect(page.getByText(collection)).toBeVisible({ timeout: 20_000 })
+              await expect(page.getByText(collection).first()).toBeVisible({ timeout: 20_000 })
               return {
                 lang: await page.locator('html').getAttribute('lang'),
                 searchPlaceholder: await page
