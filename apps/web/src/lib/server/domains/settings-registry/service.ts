@@ -22,6 +22,10 @@ import type {
 } from '@/lib/shared/settings-registry'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
 import {
+  dropAfterSettingsCommit,
+  runAfterSettingsCommit,
+} from '@/lib/server/domains/settings/settings.after-commit'
+import {
   requireSettings,
   invalidateSettingsCache,
 } from '@/lib/server/domains/settings/settings.helpers'
@@ -249,30 +253,38 @@ async function applyLocked(
   expected: string
 ): Promise<ChangeSettingsResult> {
   const { actor } = caller
-  const result = await db.transaction(async (tx) => {
-    const [locked] = await tx.select().from(settings).limit(1).for('update')
-    if (!locked) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-    assertNotLocked(entry, locked, patch)
-    assertRevision(entry, locked, expected)
-    const outcome = await entry.apply(tx, actor, patch)
-    if (!outcome.receipt) return { outcome, receiptId: null, revision: entry.revision(locked) }
-    const [after] = await tx.select().from(settings).limit(1)
-    const revision = entry.revision(after)
-    const receiptId = await recordAuditEventInTransaction(tx, {
-      event: 'settings.applied',
-      actor: await auditActor(tx, actor),
-      target: { type: 'settings_area', id: entry.id },
-      before: outcome.receipt.changes.map((change) => ({ id: change.id, value: change.before })),
-      after: outcome.receipt.changes.map((change) => ({ id: change.id, value: change.after })),
-      metadata: {
-        area: entry.id,
-        revision,
-        principalId: actor.principalId,
-        receipt: outcome.receipt,
-      },
+  let transaction: Transaction | null = null
+  const result = await db
+    .transaction(async (tx) => {
+      transaction = tx
+      const [locked] = await tx.select().from(settings).limit(1).for('update')
+      if (!locked) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+      assertNotLocked(entry, locked, patch)
+      assertRevision(entry, locked, expected)
+      const outcome = await entry.apply(tx, actor, patch)
+      if (!outcome.receipt) return { outcome, receiptId: null, revision: entry.revision(locked) }
+      const [after] = await tx.select().from(settings).limit(1)
+      const revision = entry.revision(after)
+      const receiptId = await recordAuditEventInTransaction(tx, {
+        event: 'settings.applied',
+        actor: await auditActor(tx, actor),
+        target: { type: 'settings_area', id: entry.id },
+        before: outcome.receipt.changes.map((change) => ({ id: change.id, value: change.before })),
+        after: outcome.receipt.changes.map((change) => ({ id: change.id, value: change.after })),
+        metadata: {
+          area: entry.id,
+          revision,
+          principalId: actor.principalId,
+          receipt: outcome.receipt,
+        },
+      })
+      return { outcome, receiptId, revision }
     })
-    return { outcome, receiptId, revision }
-  })
+    .catch((error: unknown) => {
+      if (transaction) dropAfterSettingsCommit(transaction)
+      throw error
+    })
+  if (transaction) runAfterSettingsCommit(transaction)
   if (!result.outcome.receipt || !result.receiptId)
     return { status: 'noop', revision: result.revision }
   await invalidateSettingsCache()

@@ -83,9 +83,16 @@ describe('setup sets the main language from the owner browser', () => {
     return row?.languageConfig ? JSON.parse(row.languageConfig).mainLanguage : undefined
   }
 
+  /** The help center's own record of its main language. */
+  async function helpCenterDefault(): Promise<string | undefined> {
+    const row = await testDb.query.settings.findFirst()
+    return row?.helpCenterConfig ? JSON.parse(row.helpCenterConfig).locales?.default : undefined
+  }
+
   it("stores the owner's browser language on a new workspace, and labels General with it", async () => {
     await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['help_center'] } })
     expect(await mainLanguage()).toBe('de')
+    expect(await helpCenterDefault()).toBe('de')
     const general = await testDb.query.helpCenterCategories.findFirst({
       where: isNull(helpCenterCategories.deletedAt),
     })
@@ -101,6 +108,7 @@ describe('setup sets the main language from the owner browser', () => {
     browser.acceptLanguage = 'fr-FR'
     await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
     expect(await mainLanguage()).toBe('fr')
+    expect(await helpCenterDefault()).toBe('fr')
   })
 
   it('keeps a provisioned workspace language that is already set', async () => {

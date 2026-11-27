@@ -19,11 +19,14 @@ import {
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import {
   invalidateSettingsCache,
+  parseJsonConfig,
   parseJsonOrNull,
 } from '@/lib/server/domains/settings/settings.helpers'
+import { helpCenterConfigForMainLanguage } from '@/lib/server/domains/help-center/help-center-main-language.service'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_AUTH_CONFIG,
+  DEFAULT_HELP_CENTER_CONFIG,
   newWorkspaceBaseFlags,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
@@ -158,8 +161,19 @@ export async function ensureBootstrapAdmin(
  * The main language a new workspace starts with: the language the owner's
  * browser asked for during setup. Visitors still see their own language.
  */
-function ownerLanguageConfig(locale: SupportedLocale): string {
-  return JSON.stringify({ mainLanguage: locale, visitorLanguage: 'own' })
+function ownerLanguageColumns(
+  locale: SupportedLocale,
+  helpCenterConfig: string | null
+): { languageConfig: string; helpCenterConfig?: string } {
+  const languageConfig = JSON.stringify({ mainLanguage: locale, visitorLanguage: 'own' })
+  if (locale === 'en') return { languageConfig }
+  // The help center's own record of its main language, as a change of main
+  // language writes it, so its languages page and checks agree.
+  const helpCenter = parseJsonConfig(helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+  return {
+    languageConfig,
+    helpCenterConfig: JSON.stringify(helpCenterConfigForMainLanguage(helpCenter, locale)),
+  }
 }
 
 /** No language stored and an untouched help center: nothing a main language would replace. */
@@ -294,7 +308,7 @@ export async function setupWorkspaceForUser(input: {
             authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(initialState),
             featureFlags: JSON.stringify(baseFlags),
-            ...(locale ? { languageConfig: ownerLanguageConfig(locale) } : {}),
+            ...(locale ? ownerLanguageColumns(locale, null) : {}),
           })
           .returning()
         if (!row) throw new Error('Failed to create workspace settings')
@@ -352,7 +366,7 @@ export async function setupWorkspaceForUser(input: {
       if (!slugManaged) updatePayload.slug = slug
       // A workspace that has no languages of its own yet takes the owner's.
       if (locale && hasNoLanguagesYet(row))
-        updatePayload.languageConfig = ownerLanguageConfig(locale)
+        Object.assign(updatePayload, ownerLanguageColumns(locale, row.helpCenterConfig))
       const [updated] = await tx
         .update(settings)
         .set(updatePayload)
