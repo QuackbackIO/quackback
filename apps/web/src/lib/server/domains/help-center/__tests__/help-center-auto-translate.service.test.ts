@@ -4,7 +4,8 @@ import type { KbArticleId } from '@quackback/ids'
 const mockGetChatModel = vi.fn()
 const mockGetHelpCenterConfig = vi.fn()
 const mockGetArticleById = vi.fn()
-const mockUpsertArticleTranslation = vi.fn()
+const mockWriteTranslation = vi.fn()
+const mockGetArticleTranslation = vi.fn()
 const mockEnqueueHelpCenterTranslateJob = vi.fn()
 
 const mockConfig = vi.hoisted(() => ({
@@ -41,7 +42,8 @@ vi.mock('../help-center.article.service', () => ({
   getArticleById: (...args: unknown[]) => mockGetArticleById(...args),
 }))
 vi.mock('../help-center-translations.service', () => ({
-  upsertArticleTranslation: (...args: unknown[]) => mockUpsertArticleTranslation(...args),
+  getArticleTranslation: (...args: unknown[]) => mockGetArticleTranslation(...args),
+  writeGuardedArticleTranslation: (...args: unknown[]) => mockWriteTranslation(...args),
 }))
 const budget = vi.hoisted(() => ({
   exhausted: false,
@@ -84,6 +86,8 @@ beforeEach(() => {
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   mockGetChatModel.mockReturnValue('gpt-test')
+  mockGetArticleTranslation.mockResolvedValue(null)
+  mockWriteTranslation.mockResolvedValue(true)
 })
 
 describe('buildTranslationPrompt', () => {
@@ -151,7 +155,7 @@ describe('translateArticleForLocale', () => {
 
     expect(result).toEqual({ pausedUntil: budget.windowEnd })
     expect(mockChat).not.toHaveBeenCalled()
-    expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+    expect(mockWriteTranslation).not.toHaveBeenCalled()
   })
 
   it('stops translating into a language the plan holds back, and only that one', async () => {
@@ -165,10 +169,10 @@ describe('translateArticleForLocale', () => {
     try {
       expect(await translateArticleForLocale('article_1' as KbArticleId, 'de')).toBeUndefined()
       expect(mockChat).not.toHaveBeenCalled()
-      expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+      expect(mockWriteTranslation).not.toHaveBeenCalled()
 
       await translateArticleForLocale('article_1' as KbArticleId, 'fr')
-      expect(mockUpsertArticleTranslation).toHaveBeenCalledOnce()
+      expect(mockWriteTranslation).toHaveBeenCalledOnce()
     } finally {
       heldCap.cap = null
     }
@@ -183,7 +187,7 @@ describe('translateArticleForLocale', () => {
 
     expect(result).toBeUndefined()
     expect(mockChat).toHaveBeenCalledOnce()
-    expect(mockUpsertArticleTranslation).toHaveBeenCalledOnce()
+    expect(mockWriteTranslation).toHaveBeenCalledOnce()
   })
 
   it('no-ops silently when AI is not configured', async () => {
@@ -193,7 +197,7 @@ describe('translateArticleForLocale', () => {
     await translateArticleForLocale('article_1' as KbArticleId, 'de')
 
     expect(mockGetArticleById).not.toHaveBeenCalled()
-    expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+    expect(mockWriteTranslation).not.toHaveBeenCalled()
     expect(mockChat).not.toHaveBeenCalled()
   })
 
@@ -213,7 +217,7 @@ describe('translateArticleForLocale', () => {
 
     await translateArticleForLocale('article_1' as KbArticleId, 'de')
 
-    expect(mockUpsertArticleTranslation).toHaveBeenCalledWith(
+    expect(mockWriteTranslation).toHaveBeenCalledWith(
       expect.objectContaining({
         articleId: 'article_1',
         locale: 'de',
@@ -221,8 +225,31 @@ describe('translateArticleForLocale', () => {
         description: 'Wie man eine bekommt',
         content: 'Kontaktieren Sie den Quackback-Support.',
       }),
-      { source: 'auto' }
+      null
     )
+  })
+
+  it('leaves a language that already has a version, without calling the AI', async () => {
+    mockGetHelpCenterConfig.mockResolvedValue({ autoTranslate: { protectedTerms: [] } })
+    mockGetArticleTranslation.mockResolvedValue({ status: 'published', title: 'Rückerstattungen' })
+
+    await translateArticleForLocale('article_1' as KbArticleId, 'de')
+
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockWriteTranslation).not.toHaveBeenCalled()
+  })
+
+  it('keeps a version a person saved while the AI call ran', async () => {
+    mockGetHelpCenterConfig.mockResolvedValue({ autoTranslate: { protectedTerms: [] } })
+    mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'Hi.' })
+    mockChat.mockResolvedValue({ title: 'Erstattung', description: '', content: 'Hallo.' })
+    mockWriteTranslation.mockResolvedValue(false)
+
+    await translateArticleForLocale('article_1' as KbArticleId, 'de')
+
+    // Insert-only: the write is told there was no version, so it never updates one.
+    expect(mockWriteTranslation).toHaveBeenCalledOnce()
+    expect(mockWriteTranslation.mock.calls[0][1]).toBeNull()
   })
 
   it('does not throw and does not write when the AI response is unparseable', async () => {
@@ -236,7 +263,7 @@ describe('translateArticleForLocale', () => {
     await expect(
       translateArticleForLocale('article_1' as KbArticleId, 'de')
     ).resolves.toBeUndefined()
-    expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+    expect(mockWriteTranslation).not.toHaveBeenCalled()
   })
 
   it('does not throw and does not write when the AI response is incomplete', async () => {
@@ -248,7 +275,7 @@ describe('translateArticleForLocale', () => {
     await expect(
       translateArticleForLocale('article_1' as KbArticleId, 'de')
     ).resolves.toBeUndefined()
-    expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+    expect(mockWriteTranslation).not.toHaveBeenCalled()
   })
 })
 
@@ -321,7 +348,7 @@ describe('AI article translation and the plan limits pause', () => {
       expect(mockChat).toHaveBeenCalled()
     } else {
       expect(mockChat).not.toHaveBeenCalled()
-      expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+      expect(mockWriteTranslation).not.toHaveBeenCalled()
     }
   })
 

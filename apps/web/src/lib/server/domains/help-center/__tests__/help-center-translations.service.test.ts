@@ -148,6 +148,20 @@ describe('article translations', () => {
     expect(result.title).toBe('Titel')
   })
 
+  it('stores a rich body built from Markdown when none is given', async () => {
+    await upsertArticleTranslation({
+      articleId: 'article_1' as KbArticleId,
+      locale: 'de',
+      title: 'Titel',
+      content: 'Öffne **Einstellungen**.',
+    })
+    const inserted = insertValuesCalls[0][0] as { contentJson: unknown }
+    expect(JSON.stringify(inserted.contentJson)).toContain('Einstellungen')
+    expect(JSON.stringify(inserted.contentJson)).toContain('"bold"')
+    const [{ set }] = onConflictCalls[0] as [{ set: { contentJson: unknown } }]
+    expect(set.contentJson).toEqual(inserted.contentJson)
+  })
+
   it('a person saving a draft takes a published translation back to draft', async () => {
     await upsertArticleTranslation({
       articleId: 'article_1' as KbArticleId,

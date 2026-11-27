@@ -4,6 +4,9 @@ import type { KbArticleId, PrincipalId } from '@quackback/ids'
 const insertValuesCalls: unknown[][] = []
 const updateSetCalls: unknown[][] = []
 const updateWhereCalls: unknown[][] = []
+/** Rows the next update returns; null returns the default draft article. */
+const updateReturning: { rows: unknown[] | null } = { rows: null }
+const mockQueueAutoTranslateOnPublish = vi.fn(async (..._args: unknown[]) => {})
 
 function createUpdateChain() {
   const chain: Record<string, unknown> = {}
@@ -15,26 +18,29 @@ function createUpdateChain() {
     updateWhereCalls.push(args)
     return chain
   })
-  chain.returning = vi.fn().mockResolvedValue([
-    {
-      id: 'article_1' as KbArticleId,
-      slug: 'test',
-      title: 'Test',
-      description: null,
-      position: null,
-      content: 'Content',
-      contentJson: null,
-      categoryId: 'kb_category_1',
-      principalId: 'principal_1',
-      publishedAt: null,
-      viewCount: 0,
-      helpfulCount: 0,
-      notHelpfulCount: 0,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-02'),
-      deletedAt: null,
-    },
-  ])
+  chain.returning = vi.fn(
+    async () =>
+      updateReturning.rows ?? [
+        {
+          id: 'article_1' as KbArticleId,
+          slug: 'test',
+          title: 'Test',
+          description: null,
+          position: null,
+          content: 'Content',
+          contentJson: null,
+          categoryId: 'kb_category_1',
+          principalId: 'principal_1',
+          publishedAt: null,
+          viewCount: 0,
+          helpfulCount: 0,
+          notHelpfulCount: 0,
+          createdAt: new Date('2024-01-01'),
+          updatedAt: new Date('2024-01-02'),
+          deletedAt: null,
+        },
+      ]
+  )
   return chain
 }
 
@@ -93,6 +99,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 const mockCancelPendingAutoTranslations = vi.fn(async (..._args: unknown[]) => {})
+vi.mock('../help-center-auto-translate.service', () => ({
+  queueAutoTranslateOnPublish: (...args: unknown[]) => mockQueueAutoTranslateOnPublish(...args),
+}))
 vi.mock('../help-center-translate-jobs', () => ({
   HELP_CENTER_TRANSLATE_QUEUE: 'help-center-translate',
   cancelPendingAutoTranslations: (...args: unknown[]) => mockCancelPendingAutoTranslations(...args),
@@ -117,6 +126,7 @@ beforeEach(async () => {
   insertValuesCalls.length = 0
   updateSetCalls.length = 0
   updateWhereCalls.length = 0
+  updateReturning.rows = null
 
   const mod = await import('../help-center.article.service')
   getArticleById = mod.getArticleById
@@ -404,6 +414,37 @@ describe('publishArticle', () => {
     const result = await publishArticle('article_1' as KbArticleId)
     expect(result).toBeDefined()
     expect(updateSetCalls.length).toBeGreaterThan(0)
+    await vi.waitFor(() => expect(mockQueueAutoTranslateOnPublish).toHaveBeenCalledOnce())
+  })
+
+  it('returns an article that is already published as it is, and runs nothing again', async () => {
+    const publishedAt = new Date('2024-03-01')
+    updateReturning.rows = [] // the update only matches an unpublished article
+    mockArticleFindFirst.mockResolvedValue({
+      id: 'article_1' as KbArticleId,
+      slug: 'test',
+      title: 'Test',
+      content: 'Content',
+      contentJson: null,
+      categoryId: 'kb_category_1',
+      principalId: 'principal_1',
+      publishedAt,
+      deletedAt: null,
+    })
+    mockCategoryFindFirst.mockResolvedValue({ id: 'kb_category_1', slug: 'test', name: 'Test' })
+    mockPrincipalFindFirst.mockResolvedValue(null)
+
+    const result = await publishArticle('article_1' as KbArticleId)
+
+    expect(result.publishedAt).toEqual(publishedAt)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(mockQueueAutoTranslateOnPublish).not.toHaveBeenCalled()
+  })
+
+  it('throws NotFoundError for a missing article', async () => {
+    updateReturning.rows = []
+    mockArticleFindFirst.mockResolvedValue(undefined)
+    await expect(publishArticle('article_x' as KbArticleId)).rejects.toThrow(/not found/i)
   })
 })
 

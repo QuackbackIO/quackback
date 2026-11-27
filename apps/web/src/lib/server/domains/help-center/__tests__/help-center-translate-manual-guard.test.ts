@@ -6,7 +6,8 @@
  * every manual translation change, and deleting the article, cancels pending
  * auto-translate rows for it; and a parked job that still runs re-checks the
  * translation it was parked against and skips if a person changed it since.
- * An ordinary (never parked) auto-translate keeps its existing behaviour.
+ * Auto-translate only fills a missing language: a version that exists is
+ * never replaced, parked or not.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type KbArticleId, type PrincipalId, type UserId } from '@quackback/ids'
@@ -276,12 +277,27 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
     expect((await translation(articleId, 'de'))?.content).toBe('AUTO body')
   })
 
-  it('an ordinary auto-translate keeps overwriting as before', async () => {
+  it('an ordinary auto-translate leaves a published translation as it is', async () => {
     state.exhausted = false
     const articleId = await seedArticle()
     await upsertArticleTranslation(manual(articleId))
+    await setArticleTranslationStatus(articleId, 'de', 'published')
     await runHelpCenterTranslate(job({ type: 'translate-article', articleId, locale: 'de' }))
-    expect((await translation(articleId, 'de'))?.content).toBe('AUTO body')
+
+    const row = await translation(articleId, 'de')
+    expect(row?.content).toBe('Von Hand geschrieben.')
+    expect(row?.status).toBe('published')
+    expect(state.modelCalls).toBe(0)
+  })
+
+  it('an ordinary auto-translate writes a missing language as a draft', async () => {
+    state.exhausted = false
+    const articleId = await seedArticle()
+    await runHelpCenterTranslate(job({ type: 'translate-article', articleId, locale: 'de' }))
+
+    const row = await translation(articleId, 'de')
+    expect(row?.content).toBe('AUTO body')
+    expect(row?.status).toBe('draft')
   })
 
   it('an edit saved between the allowance check and the park is not absorbed', async () => {
@@ -311,19 +327,17 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
     }
   }
 
-  it('an edit landing just before the write survives (existing translation)', async () => {
+  it('a released job leaves a translation that existed when it was parked', async () => {
     const articleId = await seedArticle()
     await upsertArticleTranslation({ ...manual(articleId), content: 'Erste Fassung.' })
+    await setArticleTranslationStatus(articleId, 'de', 'published')
     await park(articleId)
-    state.beforeAutoWrite = async () => {
-      await upsertArticleTranslation(manual(articleId))
-      await setArticleTranslationStatus(articleId, 'de', 'published')
-    }
     await releaseAndRun(articleId)
 
     const row = await translation(articleId, 'de')
-    expect(row?.content).toBe('Von Hand geschrieben.')
+    expect(row?.content).toBe('Erste Fassung.')
     expect(row?.status).toBe('published')
+    expect(state.modelCalls).toBe(0)
   })
 
   it('an edit landing just before the write survives (no translation when parked)', async () => {
@@ -336,11 +350,13 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
     expect((await translation(articleId, 'de'))?.content).toBe('Von Hand geschrieben.')
   })
 
-  it('a released job over an unchanged existing translation still writes', async () => {
+  it('a released job for a missing language still writes a draft', async () => {
     const articleId = await seedArticle()
-    await upsertArticleTranslation({ ...manual(articleId), content: 'Erste Fassung.' })
     await park(articleId)
     await releaseAndRun(articleId)
-    expect((await translation(articleId, 'de'))?.content).toBe('AUTO body')
+
+    const row = await translation(articleId, 'de')
+    expect(row?.content).toBe('AUTO body')
+    expect(row?.status).toBe('draft')
   })
 })

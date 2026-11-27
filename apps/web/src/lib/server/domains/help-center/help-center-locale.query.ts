@@ -53,11 +53,25 @@ import {
   getPublishedArticleTranslation,
   getCategoryTranslation,
 } from './help-center-translations.service'
+import type { TiptapContent } from '@/lib/server/db'
+import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import type { RelatedArticle } from './help-center-related.service'
 import type {
   HelpCenterCategoryWithCount,
   HelpCenterArticleWithCategory,
 } from './help-center.types'
+
+/**
+ * A translation's rich body. A translation written as Markdown only (no
+ * stored rich body) is converted, so a reader never sees the main-language
+ * body under a translated title.
+ */
+function translationBody(translation: {
+  content: string
+  contentJson: TiptapContent | null
+}): TiptapContent {
+  return translation.contentJson ?? markdownToTiptapJson(translation.content)
+}
 
 export async function listPublicCategoriesForLocale(
   locale: string,
@@ -313,7 +327,7 @@ export async function getPublicArticleByUrlIdForLocale(
     title: translation.title,
     description: translation.description,
     content: translation.content,
-    contentJson: translation.contentJson ?? article.contentJson,
+    contentJson: translationBody(translation),
   }
 }
 
@@ -336,7 +350,7 @@ export async function getPublicArticleByIdForLocale(
     title: translation.title,
     description: translation.description,
     content: translation.content,
-    contentJson: translation.contentJson ?? article.contentJson,
+    contentJson: translationBody(translation),
   }
 }
 
@@ -360,7 +374,7 @@ export async function getPublicArticleBySlugForLocale(
     title: translation.title,
     description: translation.description,
     content: translation.content,
-    contentJson: translation.contentJson ?? article.contentJson,
+    contentJson: translationBody(translation),
   }
 }
 
