@@ -1,9 +1,9 @@
 import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
-import { z } from 'zod'
 import { readConfigFontSans } from '@/lib/shared/theme'
-import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
+import { loadWidgetMessages } from '@/lib/shared/i18n'
+import { getWidgetLocaleFn } from '@/lib/server/functions/locale'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
@@ -20,19 +20,6 @@ const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
   setResponseHeader('X-Frame-Options', 'ALLOWALL')
 })
-
-/**
- * Resolve the widget locale on the server so SSR and hydration agree.
- * The `?locale=` search param wins over the Accept-Language header; both
- * are read server-side because navigator/URL access during render would
- * diverge from SSR and trigger React hydration error #418 (issue #133).
- */
-const getWidgetLocale = createServerFn({ method: 'GET' })
-  .validator(z.object({ explicitLocale: z.string().optional() }))
-  .handler(async ({ data }) => {
-    const acceptLanguage = getRequestHeaders().get('accept-language')
-    return resolveLocale(acceptLanguage, data.explicitLocale)
-  })
 
 /**
  * Extract the signed session cookie for direct widget session reuse. Returns
@@ -124,7 +111,7 @@ export const Route = createFileRoute('/widget')({
     })
     const [{ portalSessionToken, portalUser }, locale] = await Promise.all([
       portalSessionPromise,
-      getWidgetLocale({ data: { explicitLocale } }),
+      getWidgetLocaleFn({ data: { explicitLocale } }),
     ])
     // Serialize the widget's catalog slice into loader data so the first
     // client render is already translated (the route is ssr: 'data-only' —

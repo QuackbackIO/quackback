@@ -31,7 +31,7 @@ beforeEach(() => {
 })
 
 type Loader = (args: {
-  context: { acceptLanguageLocale?: string }
+  context: { visitorLocale?: string }
 }) => Promise<{ notificationPreferences: unknown; messages: Record<string, string> }>
 
 describe('settings/preferences loader', () => {
@@ -49,7 +49,7 @@ describe('settings/preferences loader', () => {
 
   it("reads the matrix's strings in the visitor's language", async () => {
     const data = await (Route as unknown as { loader: Loader }).loader({
-      context: { acceptLanguageLocale: 'pl' },
+      context: { visitorLocale: 'pl' },
     })
 
     expect(data.messages['portal.settings.notifications.pauseAll.label']).toBe(

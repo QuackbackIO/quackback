@@ -32,10 +32,7 @@ export const Route = createFileRoute('/_portal/status/')({
     if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
     // The status page's strings stay out of the catalog every other page
     // seeds; the page reads them with its data.
-    const messagesPromise = loadAreaMessages(
-      context.acceptLanguageLocale ?? DEFAULT_LOCALE,
-      'statusPage'
-    )
+    const messagesPromise = loadAreaMessages(context.visitorLocale ?? DEFAULT_LOCALE, 'statusPage')
     try {
       await context.queryClient.ensureQueryData(publicStatusPageQueries.get())
     } catch {

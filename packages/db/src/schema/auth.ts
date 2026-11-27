@@ -431,6 +431,12 @@ export const settings = pgTable('settings', {
    */
   developerConfig: text('developer_config'),
   /**
+   * Language settings (JSON)
+   * Structure: { mainLanguage: string, visitorLanguage: 'own' | 'main' }.
+   * NULL means the defaults (see DEFAULT_LANGUAGE_CONFIG).
+   */
+  languageConfig: text('language_config'),
+  /**
    * Header display mode - how the brand appears in portal navigation
    * - 'logo_and_name': Square logo + name (default)
    * - 'logo_only': Just the square logo

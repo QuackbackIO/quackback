@@ -78,6 +78,7 @@ export function makeWorkspace(overrides: Partial<WorkspaceSettings> = {}): Works
     brandingConfig: {} as WorkspaceSettings['brandingConfig'],
     developerConfig: {} as WorkspaceSettings['developerConfig'],
     helpCenterConfig: {} as WorkspaceSettings['helpCenterConfig'],
+    languageConfig: { mainLanguage: 'en', visitorLanguage: 'own' },
     statusConfig: {} as WorkspaceSettings['statusConfig'],
     customCss: '',
     publicAuthConfig: { oauth: {}, openSignup: false },

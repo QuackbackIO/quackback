@@ -19,6 +19,8 @@ export type {
   HeaderDisplayMode,
   WorkspaceSettings,
   HelpCenterConfig,
+  LanguageConfig,
+  VisitorLanguage,
   HelpCenterHeaderLink,
   HelpCenterDomainConfig,
   HelpCenterSeoConfig,

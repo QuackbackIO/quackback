@@ -34,6 +34,8 @@ export type {
   PublicWidgetConfig,
   UpdateWidgetConfigInput,
   HelpCenterConfig,
+  LanguageConfig,
+  VisitorLanguage,
   HelpCenterHeaderLink,
   HelpCenterSeoConfig,
   HelpCenterDomainConfig,

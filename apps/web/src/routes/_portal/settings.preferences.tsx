@@ -16,7 +16,7 @@ export const Route = createFileRoute('/_portal/settings/preferences')({
     // strings, which only this page shows, load with it.
     const [notificationPreferences, messages] = await Promise.all([
       getNotificationPreferencesFn(),
-      seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
+      seedAreaMessages(context.visitorLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
     ])
     return { notificationPreferences, messages }
   },

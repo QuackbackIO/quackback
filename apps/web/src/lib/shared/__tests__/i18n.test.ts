@@ -4,6 +4,8 @@ import { join, relative } from 'node:path'
 import {
   normalizeLocale,
   resolveLocale,
+  matchAcceptLanguage,
+  resolveRequestLocale,
   isRtlLocale,
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
@@ -498,5 +500,45 @@ describe('area strings', () => {
     expect(messageArea('common.errorPage.notFound.title')).toBe('errorPage')
     expect(messageArea('portal.auth.continue')).toBeNull()
     expect(messageArea('portal.header.nav.feedback')).toBeNull()
+  })
+})
+
+describe('matchAcceptLanguage', () => {
+  it('returns the first language the product has, or null', () => {
+    expect(matchAcceptLanguage('ja-JP,ja;q=0.9,de;q=0.5')).toBe('de')
+    expect(matchAcceptLanguage('en-GB,en;q=0.9')).toBe('en')
+    expect(matchAcceptLanguage('ja-JP,ko;q=0.8')).toBeNull()
+    expect(matchAcceptLanguage('de;q=0,ja')).toBeNull()
+    expect(matchAcceptLanguage('')).toBeNull()
+    expect(matchAcceptLanguage(null)).toBeNull()
+  })
+})
+
+describe('resolveRequestLocale', () => {
+  const german = { mainLanguage: 'de', visitorLanguage: 'own' as const }
+  const germanForAll = { mainLanguage: 'de', visitorLanguage: 'main' as const }
+
+  it('uses the browser language when the product has it', () => {
+    expect(resolveRequestLocale('fr-FR,fr;q=0.9', german)).toBe('fr')
+    expect(resolveRequestLocale('fr-FR', german, { forVisitor: true })).toBe('fr')
+  })
+
+  it('uses the main language, not English, when the product lacks the browser language', () => {
+    expect(resolveRequestLocale('ja-JP', german)).toBe('de')
+    expect(resolveRequestLocale(null, german)).toBe('de')
+    expect(resolveRequestLocale('ja-JP', { mainLanguage: 'en', visitorLanguage: 'own' })).toBe('en')
+  })
+
+  it('gives every visitor the main language when the workspace chose that', () => {
+    expect(resolveRequestLocale('fr-FR', germanForAll, { forVisitor: true })).toBe('de')
+    // Not a visitor's page (admin): the browser language still counts.
+    expect(resolveRequestLocale('fr-FR', germanForAll)).toBe('fr')
+  })
+
+  it("lets a host page's explicit language win", () => {
+    expect(resolveRequestLocale('fr-FR', germanForAll, { explicit: 'es', forVisitor: true })).toBe(
+      'es'
+    )
+    expect(resolveRequestLocale('fr-FR', german, { explicit: 'xx' })).toBe('fr')
   })
 })

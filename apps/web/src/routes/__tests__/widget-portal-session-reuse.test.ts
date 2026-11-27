@@ -34,9 +34,12 @@ vi.mock('@/lib/server/functions/portal', () => ({
 vi.mock('@/lib/shared/i18n', async (original) => ({
   ...(await original<typeof import('@/lib/shared/i18n')>()),
   loadWidgetMessages: vi.fn(async () => ({})),
-  resolveLocale: async () => {
+  resolveRequestLocale: () => 'en',
+}))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getLanguageConfig: async () => {
     if (localeGate.wait) await localeGate.wait
-    return 'en'
+    return { mainLanguage: 'en', visitorLanguage: 'own' }
   },
 }))
 

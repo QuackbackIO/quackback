@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_portal/settings/api-keys')({
     const { fetchMyApiKeysFn } = await import('@/lib/server/functions/personal-api-keys')
     const [{ keys, canCreate }, messages] = await Promise.all([
       fetchMyApiKeysFn(),
-      seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'personalApiKeys'),
+      seedAreaMessages(context.visitorLocale ?? DEFAULT_LOCALE, 'personalApiKeys'),
     ])
     return { keys, canCreate, messages }
   },
