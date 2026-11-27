@@ -121,6 +121,7 @@
   "widget.tickets.recent": "Нещодавні звернення",
   "widget.messages.emptyHint": "Маєте запитання чи відгук? Ми готові допомогти.",
   "widget.helpDetail.notFound": "Статтю не знайдено",
+  "widget.helpDetail.untranslated": "Цю статтю ще не перекладено вашою мовою, тому вона показана мовою оригіналу.",
   "widget.changelog.empty": "Оновлень ще немає",
   "widget.changelog.emptyHint": "Зазирніть згодом, щоб побачити останні оновлення продукту.",
   "widget.changelog.latest": "Найновіше",

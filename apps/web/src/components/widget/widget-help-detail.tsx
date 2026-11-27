@@ -100,6 +100,8 @@ export function WidgetHelpDetail({
   }
 
   const eyebrowClass = 'text-[11px] text-muted-foreground/60 uppercase tracking-wide'
+  // An article with no version in the visitor's language reads in its own.
+  const untranslated = article.locale !== article.resolvedLocale
 
   return (
     <div className="flex flex-col h-full">
@@ -126,7 +128,20 @@ export function WidgetHelpDetail({
           )}
           <WidgetPortalTitle title={article.title} onClick={handleViewOnPortal} />
 
-          <div className="mt-3">
+          {untranslated && (
+            <p
+              role="note"
+              data-testid="widget-help-untranslated"
+              className="mt-2 rounded-md bg-muted/60 px-2.5 py-1.5 text-[12px] text-muted-foreground"
+            >
+              <FormattedMessage
+                id="widget.helpDetail.untranslated"
+                defaultMessage="This article is not translated into your language yet, so it shows in its original language."
+              />
+            </p>
+          )}
+
+          <div className="mt-3" lang={untranslated ? article.locale : undefined}>
             {article.contentJson && isRichTextContent(article.contentJson) ? (
               <RichTextContent
                 content={article.contentJson as JSONContent}

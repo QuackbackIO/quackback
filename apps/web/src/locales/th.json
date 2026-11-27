@@ -125,6 +125,7 @@
   "widget.tickets.recent": "คำร้องล่าสุด",
   "widget.messages.emptyHint": "มีคำถามหรือความคิดเห็น? เราพร้อมช่วยเหลือ",
   "widget.helpDetail.notFound": "ไม่พบบทความ",
+  "widget.helpDetail.untranslated": "บทความนี้ยังไม่ได้แปลเป็นภาษาของคุณ จึงแสดงเป็นภาษาต้นฉบับ",
   "widget.changelog.empty": "ยังไม่มีอัปเดต",
   "widget.changelog.emptyHint": "กลับมาดูอัปเดตผลิตภัณฑ์ล่าสุดได้เร็ว ๆ นี้",
   "widget.changelog.latest": "ล่าสุด",

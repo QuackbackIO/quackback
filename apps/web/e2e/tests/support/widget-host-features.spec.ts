@@ -378,6 +378,7 @@ test.describe('widget on a host page: help in every language', () => {
             await widget.getByText(fr.collection).click()
             await widget.getByText(fr.title).click()
             await expect(widget.getByText(fr.body)).toBeVisible({ timeout: 15_000 })
+            await expect(widget.getByTestId('widget-help-untranslated')).toHaveCount(0)
             await snap(page, '06d-help-translated-fr-article')
           })
 
@@ -391,6 +392,11 @@ test.describe('widget on a host page: help in every language', () => {
             await snap(page, '06e-help-partial-de')
             await widget.getByText(article.title).click()
             await expect(widget.getByText(article.body)).toBeVisible({ timeout: 15_000 })
+            // It says the article is not in German yet.
+            await expect(widget.getByTestId('widget-help-untranslated')).toHaveText(
+              catalogue('de')['widget.helpDetail.untranslated']
+            )
+            await snap(page, '06e-help-partial-de-article')
           })
 
           await helpInLanguage(browser, 'es-ES', async (page) => {

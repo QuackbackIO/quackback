@@ -121,6 +121,7 @@
   "widget.tickets.recent": "Ostatnie sprawy",
   "widget.messages.emptyHint": "Masz pytania lub uwagi? Chętnie pomożemy.",
   "widget.helpDetail.notFound": "Nie znaleziono artykułu",
+  "widget.helpDetail.untranslated": "Ten artykuł nie jest jeszcze przetłumaczony na Twój język, więc wyświetla się w języku oryginału.",
   "widget.changelog.empty": "Nie ma jeszcze aktualizacji",
   "widget.changelog.emptyHint": "Zajrzyj tu wkrótce, aby poznać najnowsze zmiany w produkcie.",
   "widget.changelog.latest": "Najnowsze",

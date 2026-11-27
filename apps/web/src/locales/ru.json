@@ -121,6 +121,7 @@
   "widget.tickets.recent": "Недавние тикеты",
   "widget.messages.emptyHint": "Вопросы или отзывы? Мы готовы помочь.",
   "widget.helpDetail.notFound": "Статья не найдена",
+  "widget.helpDetail.untranslated": "Эта статья ещё не переведена на ваш язык, поэтому она показана на языке оригинала.",
   "widget.changelog.empty": "Пока нет обновлений",
   "widget.changelog.emptyHint": "Загляните позже, чтобы увидеть последние обновления продукта.",
   "widget.changelog.latest": "Последнее",

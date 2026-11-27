@@ -121,6 +121,7 @@
   "widget.tickets.recent": "最近的工單",
   "widget.messages.emptyHint": "有問題或意見回饋？我們隨時為您服務。",
   "widget.helpDetail.notFound": "找不到文章",
+  "widget.helpDetail.untranslated": "這篇文章尚未翻譯成你的語言，因此以原文語言顯示。",
   "widget.changelog.empty": "還沒有更新",
   "widget.changelog.emptyHint": "稍後再回來查看最新的產品更新。",
   "widget.changelog.latest": "最新消息",

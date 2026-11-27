@@ -121,6 +121,7 @@
   "widget.tickets.recent": "Recente tickets",
   "widget.messages.emptyHint": "Vragen of feedback? We helpen je graag.",
   "widget.helpDetail.notFound": "Artikel niet gevonden",
+  "widget.helpDetail.untranslated": "Dit artikel is nog niet in je taal vertaald en wordt daarom in de oorspronkelijke taal getoond.",
   "widget.changelog.empty": "Nog geen updates",
   "widget.changelog.emptyHint": "Kom binnenkort terug voor de nieuwste productupdates.",
   "widget.changelog.latest": "Nieuwste updates",
