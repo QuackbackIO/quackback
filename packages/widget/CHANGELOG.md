@@ -1,6 +1,6 @@
 # @quackback/widget
 
-## Unreleased
+## 0.1.7 - 2026-11-27
 
 - Screen readers hear the launcher as "Open help" (or your launcher label) with the unread count, for example "Open help, 2 unread", and "Close help" while the panel is open, in the visitor's language when `init` passes a `locale`. The panel is announced as a dialog named in the same language.
 - Opening the panel from the launcher or your own help button moves keyboard focus into it, and closing it returns focus to whatever opened it (or to the launcher if that is gone). An `open()` call while the visitor is typing in a field leaves their focus there, and in browsers that report user activation, so does an open on a timer or a route change.
