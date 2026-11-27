@@ -28,7 +28,11 @@ import {
   isExpandedView,
   visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
-import { resolveOpenCommand, type WidgetComposeRequest } from '@/components/widget/widget-compose'
+import {
+  autofocusesComposer,
+  resolveOpenCommand,
+  type WidgetComposeRequest,
+} from '@/components/widget/widget-compose'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
@@ -40,17 +44,24 @@ import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query
 import { widgetFetchBoardCapabilitiesFn } from '@/lib/server/functions/widget/posts'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { getWidgetPortalOriginFn } from '@/lib/server/functions/widget/portal-origin'
+import { widgetPortalSessionReusedFn } from '@/lib/server/functions/widget/portal-session'
 import { widgetListPublicArticlesFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
-import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
+import {
+  widgetQueryKeys,
+  INITIAL_SESSION_VERSION,
+  startingSessionVersion,
+} from '@/lib/client/hooks/use-widget-vote'
+import { frameHoldsPortalSession } from '@/lib/client/widget-frame'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import {
   CONVERSATION_PRESENCE_QUERY_KEY,
   useConversationPresence,
 } from '@/components/widget/use-messenger-presence'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
-import { ConversationPresenceBadge } from '@/components/shared/conversation/conversation-presence-badge'
+import { ConversationTeamHeader } from '@/components/shared/conversation/conversation-team-header'
+import { resolveReplyTime } from '@/lib/shared/widget/reply-time'
 import { Avatar } from '@/components/ui/avatar'
 import {
   WidgetArticleSkeleton,
@@ -65,6 +76,11 @@ import {
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
 import { useTicketStageBadge } from '@/components/widget/use-ticket-stage-badge'
 import { useWarmLazyViews } from '@/components/widget/use-warm-lazy-views'
+// Listen for the host's shown state from first load: the embed script sends
+// it on ready, before any lazy view that reads it has loaded.
+import '@/lib/client/hooks/use-host-shown'
+// Listens for the host page's safe-area insets from first load.
+import '@/lib/client/widget-host-safe-area'
 
 // Secondary views load behind lazy() boundaries so the iframe's first paint
 // only needs the shell + Home/feedback — the detail views carry the
@@ -142,6 +158,19 @@ export const Route = createFileRoute('/widget/')({
     const changelogTabEnabled =
       changelogProductEnabled && (settings?.publicWidgetConfig?.tabs?.changelog ?? false)
 
+    // The visitor's portal session counts here only when the frame holds it
+    // (an embedding page on the instance's own origin). Otherwise the frame is
+    // anonymous and the seed is too. On the server the document request
+    // decides, and the call also serves the rest of the request as anonymous
+    // so the reads below never act as the cookie session; it settles before
+    // any of them starts. In the browser (a re-run) the frame already knows
+    // whether it adopted the session, and its calls then carry no cookies.
+    const portalSessionReused =
+      typeof window === 'undefined'
+        ? await widgetPortalSessionReusedFn()
+        : frameHoldsPortalSession()
+    const viewerId = portalSessionReused ? session?.user?.id : undefined
+
     // Every branch below is independent, so the whole SSR seed runs as ONE
     // parallel batch — document TTFB is the slowest branch, not the sum.
     //
@@ -167,7 +196,7 @@ export const Route = createFileRoute('/widget/')({
             portalQueries.portalData({
               boardSlug: search.board,
               sort: 'top',
-              userId: session?.user?.id,
+              userId: viewerId,
             })
           )
         : Promise.resolve(emptyPortalData),
@@ -235,8 +264,10 @@ export const Route = createFileRoute('/widget/')({
     ])
 
     queryClient.setQueryData(
-      widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
-      new Set(portalData.votedPostIds)
+      // Under the version the widget starts on with this session, so the
+      // first render reads the seed instead of refetching it.
+      widgetQueryKeys.votedPosts.bySession(startingSessionVersion(portalSessionReused)),
+      new Set(portalSessionReused ? portalData.votedPostIds : [])
     )
 
     return {
@@ -286,6 +317,13 @@ export const Route = createFileRoute('/widget/')({
         // Admin opt-out for the aggregated Home tab (defaults to shown).
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
       },
+      // Card above the closed launcher for unread changelog entries.
+      announceUpdates:
+        changelogTabEnabled &&
+        (settings?.publicWidgetConfig?.changelog?.announceOnLauncher ?? false),
+      // How an unread reply shows above the closed launcher, and the tab title.
+      replyAlerts: settings?.publicWidgetConfig?.messenger?.replyAlerts ?? 'preview',
+      titleAlerts: settings?.publicWidgetConfig?.messenger?.titleAlerts === true,
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
       // Workspace logo for the Home header (branding config).
@@ -295,6 +333,8 @@ export const Route = createFileRoute('/widget/')({
       // Team label for widget surfaces (changelog header, messages fallback):
       // the configured messenger team name, else the workspace name.
       teamName: settings?.publicWidgetConfig?.messenger?.teamName || settings?.name || null,
+      // How quickly the team usually replies (the messenger header's away line).
+      replyTime: resolveReplyTime(settings?.publicWidgetConfig?.messenger?.replyTime),
       // Teammate avatars for the Home header cluster (empty when disabled).
       team,
       // AI-assistant display identity — fronts unassigned conversations in the
@@ -412,6 +452,9 @@ function WidgetPage() {
     orgSlug,
     boardPermissions,
     tabs,
+    announceUpdates,
+    replyAlerts,
+    titleAlerts,
     defaultBoard,
     portalAccess,
     portalOrigin,
@@ -419,6 +462,7 @@ function WidgetPage() {
     logoUrl,
     topArticles,
     teamName,
+    replyTime,
     assistant,
     team,
     messengerEnabled,
@@ -478,9 +522,22 @@ function WidgetPage() {
   // Whether a reply can reach this visitor by email, as the open thread
   // reports it. The header's away badge promises email only then.
   const [canReplyByEmail, setCanReplyByEmail] = useState(false)
-  // A host's `open({ view: 'chat', body })`. The nonce remounts the messenger
-  // so a draft sent while it is already open still lands in the composer.
-  const [messengerDraft, setMessengerDraft] = useState<{ nonce: number; body: string } | null>(null)
+  // A host's `open({ view: 'chat', body })`, or an open on one conversation
+  // that puts the cursor in that thread's composer. The nonce remounts the
+  // messenger so a draft or focus sent while it is already open still lands.
+  const [messengerDraft, setMessengerDraft] = useState<{
+    nonce: number
+    body?: string
+    focusConversationId?: string
+  } | null>(null)
+  // A focus asked for by an open on one conversation is used once: leaving
+  // the thread drops it, so a later open from the list does not focus.
+  useEffect(() => {
+    if (view === 'messenger') return
+    setMessengerDraft((prev) =>
+      prev?.focusConversationId ? { ...prev, focusConversationId: undefined } : prev
+    )
+  }, [view])
   // Manual size preference: the header's expand/collapse button flips this,
   // and it is STICKY — collapsing turns auto-expansion off for every later
   // item view until the visitor expands again. Persisted per browser.
@@ -538,6 +595,7 @@ function WidgetPage() {
   } | null>(null)
   const [composeRequest, setComposeRequest] = useState<WidgetComposeRequest | null>(null)
   const composeNonceRef = useRef(0)
+  const [collapseRequest, setCollapseRequest] = useState(0)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
 
   const allPosts = useMemo(() => {
@@ -615,6 +673,7 @@ function WidgetPage() {
         entryId?: string
         postId?: string
         articleId?: string
+        conversationId?: string
       }
       const command = resolveOpenCommand(opts, tabs)
       if (!command) return
@@ -631,6 +690,13 @@ function WidgetPage() {
             body: command.body,
             boardSlug: command.boardSlug,
           })
+          setSelectedPostId(null)
+          setActiveTab('feedback')
+          setView('feedback')
+          break
+        case 'feedback':
+          composeNonceRef.current += 1
+          setCollapseRequest(composeNonceRef.current)
           setSelectedPostId(null)
           setActiveTab('feedback')
           setView('feedback')
@@ -668,11 +734,18 @@ function WidgetPage() {
           setView('help')
           break
         case 'messenger':
-          if (command.body) {
-            const body = command.body
-            setMessengerDraft((prev) => ({ nonce: (prev?.nonce ?? 0) + 1, body }))
+          if (command.body || command.conversationId) {
+            const { body, conversationId } = command
+            setMessengerDraft((prev) => ({
+              nonce: (prev?.nonce ?? 0) + 1,
+              body,
+              focusConversationId: conversationId,
+            }))
           }
-          openMessenger()
+          openMessenger(
+            command.conversationId as ConversationId | undefined,
+            command.from ?? 'messages'
+          )
           break
         case 'tickets':
           setActiveTab('tickets')
@@ -872,7 +945,7 @@ function WidgetPage() {
 
   // Messenger thread header lives in the SHELL's top bar (single header row):
   // the assistant identity when enabled — always available, no presence — or
-  // the live presence badge for assistant-less workspaces.
+  // the team (faces, name, live status line) for assistant-less workspaces.
   const presence = useConversationPresence(messengerEnabled && !assistant)
   const messengerHeader =
     view === 'messenger' ? (
@@ -892,16 +965,18 @@ function WidgetPage() {
           </div>
         </div>
       ) : (
-        <div className="min-w-0 ps-1">
-          <ConversationPresenceBadge
-            available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
-            canReplyByEmail={canReplyByEmail}
-            // When office hours are configured, the badge tells the visitor up
-            // front when the team is back; the thread body only says so once
-            // they have typed.
-            nextOpenAt={presence.nextOpenAt}
-          />
-        </div>
+        <ConversationTeamHeader
+          className="ps-1"
+          team={team}
+          teamName={teamName}
+          available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
+          replyTime={replyTime}
+          canReplyByEmail={canReplyByEmail}
+          // When office hours are configured, the header tells the visitor up
+          // front when the team is back; the thread body only says so once
+          // they have typed.
+          nextOpenAt={presence.nextOpenAt}
+        />
       )
     ) : undefined
 
@@ -912,6 +987,9 @@ function WidgetPage() {
       onTabChange={handleTabChange}
       onBack={shellOnBack}
       enabledTabs={tabs}
+      announceUpdates={announceUpdates}
+      replyAlerts={replyAlerts}
+      titleAlerts={titleAlerts}
       portalAccess={portalAccess}
       portalOrigin={portalOrigin}
       showPoweredBy={showPoweredBy}
@@ -994,7 +1072,11 @@ function WidgetPage() {
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}
             // A fresh thread exists to be typed into; a resumed one to be read.
             // Mobile hosts skip it — the software keyboard would cover the thread.
-            autofocusComposer={conversationTarget === 'new' && !hostIsMobile}
+            autofocusComposer={autofocusesComposer(
+              conversationTarget,
+              hostIsMobile,
+              messengerDraft?.focusConversationId
+            )}
             onReplyByEmailChange={setCanReplyByEmail}
           />
         </ViewTransition>
@@ -1131,6 +1213,7 @@ function WidgetPage() {
             initialBoardSlug={initialBoardSlug}
             confirmedBoardSlugs={liveCapabilities?.boards.map((b) => b.slug) ?? null}
             composeRequest={composeRequest}
+            collapseRequest={collapseRequest}
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}
           />

@@ -26,4 +26,13 @@ describe('database factories', () => {
     await Promise.all([client.end({ timeout: 0 }), urlClient.end({ timeout: 0 })])
     expect(seen).toEqual(['select 1', 'select 2'])
   })
+
+  it('never look custom types up at runtime', async () => {
+    // The driver's lookup runs on a second connection while the first keeps
+    // its own, which hangs behind a pooler with fewer server connections.
+    const db = createDb(NOWHERE)
+    const client = (db as unknown as { $client: postgres.Sql }).$client
+    expect(client.options.fetch_types).toBe(false)
+    await client.end({ timeout: 0 })
+  })
 })

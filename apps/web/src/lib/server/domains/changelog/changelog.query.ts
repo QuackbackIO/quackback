@@ -180,6 +180,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
         ? resignStoredAssetUrl(entry.featuredImageUrl)
         : entry.featuredImageUrl,
       segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
+      announceOnLauncher: entry.announceOnLauncher,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       viewCount: entry.viewCount,

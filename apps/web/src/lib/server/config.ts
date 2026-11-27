@@ -311,6 +311,7 @@ const configSchema = z
     aiRequireParameters: envBoolean,
     aiReasoningExclude: envBoolean,
     aiReasoningEffort: z.string().optional(),
+    aiMaxTokensParam: z.string().optional(),
     aiCombinedToolsAndSchema: envBoolean,
 
     // Telemetry (optional)
@@ -499,6 +500,7 @@ function buildConfigFromEnv(): unknown {
     aiRequireParameters: env('AI_REQUIRE_PARAMETERS'),
     aiReasoningExclude: env('AI_REASONING_EXCLUDE'),
     aiReasoningEffort: env('AI_REASONING_EFFORT'),
+    aiMaxTokensParam: env('AI_MAX_TOKENS_PARAM'),
     aiCombinedToolsAndSchema: env('AI_COMBINED_TOOLS_AND_SCHEMA'),
 
     // Telemetry
@@ -814,6 +816,9 @@ export const config = {
   },
   get aiReasoningEffort() {
     return loadConfig().aiReasoningEffort
+  },
+  get aiMaxTokensParam() {
+    return loadConfig().aiMaxTokensParam
   },
   get aiCombinedToolsAndSchema() {
     return loadConfig().aiCombinedToolsAndSchema

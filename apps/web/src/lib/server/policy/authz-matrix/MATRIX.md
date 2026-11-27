@@ -1154,7 +1154,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-239 of 1161 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+241 of 1163 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1275,6 +1275,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/widget/conversation.ts`::widgetGetMessengerUnreadFn | server-fn |
 | `lib/server/functions/widget/conversation.ts`::widgetGetMyConversationFn | server-fn |
 | `lib/server/functions/widget/conversation.ts`::widgetGetMyConversationsFn | server-fn |
+| `lib/server/functions/widget/conversation.ts`::widgetGetReplyPreviewFn | server-fn |
 | `lib/server/functions/widget/conversation.ts`::widgetGetTeamAvatarsFn | server-fn |
 | `lib/server/functions/widget/help.ts`::widgetListPublicArticlesFn | server-fn |
 | `lib/server/functions/widget/help.ts`::widgetListPublicArticlesForCategoryFn | server-fn |
@@ -1283,6 +1284,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/widget/help.ts`::widgetRecordArticleViewFn | server-fn |
 | `lib/server/functions/widget/help.ts`::widgetResolvePublicArticleRefFn | server-fn |
 | `lib/server/functions/widget/portal-origin.ts`::getWidgetPortalOriginFn | server-fn |
+| `lib/server/functions/widget/portal-session.ts`::widgetPortalSessionReusedFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetFetchBoardCapabilitiesFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetFetchPublicPostDetailFn | server-fn |
 | `lib/server/functions/widget/posts.ts`::widgetGetVotedPostsFn | server-fn |

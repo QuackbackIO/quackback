@@ -4,6 +4,7 @@
  * Help tab and the /hc hero search.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { frameRequestCredentials } from '@/lib/client/widget-frame'
 
 export interface KbSearchArticle {
   id: string
@@ -82,6 +83,8 @@ export function useKbSearch({
         const res = await fetch(`/api/widget/kb-search?${params.toString()}`, {
           signal: controller.signal,
           headers: getHeadersRef.current?.(),
+          // In a widget frame without the portal session, no cookies.
+          credentials: frameRequestCredentials(),
         })
         if (!res.ok) return
         if (version !== sessionVersionRef.current) return

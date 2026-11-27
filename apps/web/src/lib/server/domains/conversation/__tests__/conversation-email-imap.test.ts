@@ -84,12 +84,10 @@ describe('pollOnce', () => {
       { uid: 1, raw: rawWithBody('one') },
       { uid: 2, raw: rawWithBody('two') },
     ])
-    const ingest = vi.fn(
-      async (): Promise<IngestInboundResult> => ({
-        status: 'ingested',
-        conversationId: 'conversation_x' as never,
-      })
-    )
+    const ingest = vi.fn(async (): Promise<IngestInboundResult> => ({
+      status: 'ingested',
+      conversationId: 'conversation_x' as never,
+    }))
 
     const result = await pollOnce(client, ingest)
 

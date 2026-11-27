@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { updatePortalConfigSchema } from '@/lib/shared/schemas/portal-config'
+import { REPLY_TIMES } from '@/lib/shared/widget/reply-time'
 // Import types from barrel export (client-safe)
 import {
   DEFAULT_PORTAL_CONFIG,
@@ -662,8 +663,12 @@ const messengerConfigInputSchema = z.object({
   welcomeMessage: z.string().max(500).optional(),
   offlineMessage: z.string().max(500).optional(),
   teamName: z.string().max(80).optional(),
+  replyTime: z.enum(REPLY_TIMES).optional(),
   // Refuse visitor replies to closed conversations (Messenger only; §4.3).
   preventRepliesWhenClosed: z.boolean().optional(),
+  // How an unread reply shows above the closed launcher, and the tab title flash.
+  replyAlerts: z.enum(['badge', 'preview', 'full']).optional(),
+  titleAlerts: z.boolean().optional(),
   assistant: z
     .object({
       enabled: z.boolean().optional(),
@@ -753,6 +758,7 @@ const updateWidgetConfigSchema = z.object({
       home: z.boolean().optional(),
     })
     .optional(),
+  changelog: z.object({ announceOnLauncher: z.boolean().optional() }).optional(),
   messenger: messengerConfigInputSchema.optional(),
   home: widgetHomeConfigSchema.optional(),
   translations: z

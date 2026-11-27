@@ -155,6 +155,12 @@ export function publicMessengerConfig(
     welcomeMessage: messenger.welcomeMessage,
     offlineMessage: messenger.offlineMessage,
     teamName: messenger.teamName,
+    replyTime: messenger.replyTime,
+    // Absent or unknown reads as a preview.
+    replyAlerts: ['badge', 'full'].includes(messenger.replyAlerts ?? '')
+      ? messenger.replyAlerts
+      : 'preview',
+    titleAlerts: messenger.titleAlerts === true,
     assistant: messenger.assistant
       ? {
           enabled: messenger.assistant.enabled,
@@ -325,6 +331,11 @@ export function projectPublicWidgetConfig(
     launcherGreeting: config.launcherGreeting,
     launcherLabel: config.launcherLabel,
     tabs,
+    // The card above the launcher announces changelog entries, so it never
+    // shows without the changelog tab it opens.
+    changelog: {
+      announceOnLauncher: config.changelog?.announceOnLauncher === true && tabs.changelog,
+    },
     // Identify is verified-only (backend-signed ssoToken; GH issue #300).
     hmacRequired: true,
     // Home customisation is client-safe (greeting, hero style, quick links);

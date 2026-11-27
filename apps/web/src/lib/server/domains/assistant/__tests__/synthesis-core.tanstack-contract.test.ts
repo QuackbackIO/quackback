@@ -17,10 +17,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { maxIterations, toolDefinition, type StreamChunk } from '@tanstack/ai'
 
+const OPENROUTER = 'https://openrouter.ai/api/v1'
 const mockConfig = vi.hoisted(() => ({
   openaiApiKey: 'test-key',
   openaiBaseUrl: 'https://openrouter.ai/api/v1',
   aiRequireParameters: undefined,
+  aiReasoningEffort: undefined as string | undefined,
 }))
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
@@ -46,6 +48,7 @@ vi.mock('@/lib/server/logger', () => {
 import { runSynthesis, type RunSynthesisOptions } from '../synthesis-core'
 import { resetStructuredFallbackMemory, structuredChat } from '../../ai/structured-chat'
 import { createUsageLoggingMiddleware } from '../../ai/usage-middleware'
+import { REASONING_HEADROOM_TOKENS } from '../../ai/output-budget'
 
 const STUB_USAGE = { promptTokens: 10, completionTokens: 5, totalTokens: 15 }
 
@@ -125,6 +128,8 @@ function options(
 }
 
 beforeEach(() => {
+  mockConfig.openaiBaseUrl = OPENROUTER
+  mockConfig.aiReasoningEffort = undefined
   resetStructuredFallbackMemory()
   mockLogAiUsage.mockClear()
 })
@@ -295,5 +300,59 @@ describe('structuredChat on the real TanStack AI engine', () => {
     expect(result).toEqual({ text: 'ok' })
     expect(bodies).toHaveLength(2)
     expect(bodies[1].response_format).toEqual({ type: 'json_object' })
+  })
+})
+
+// OpenAI's reasoning models 400 on `max_tokens` (#1294). Directly against
+// api.openai.com the cap must go out as `max_completion_tokens`, with no
+// OpenRouter-only `provider` field.
+describe('requests to api.openai.com', () => {
+  beforeEach(() => {
+    mockConfig.openaiBaseUrl = 'https://api.openai.com/v1'
+  })
+
+  it('caps a synthesis turn with max_completion_tokens', async () => {
+    stubProvider([
+      () => sse([delta({ role: 'assistant', content: '{"text":"hi"}' }), delta({}, 'stop'), USAGE]),
+    ])
+
+    const outcome = await runSynthesis(options({ maxOutputTokens: 300 }))
+
+    expect(outcome).toMatchObject({ outcome: 'success', final: { text: 'hi' } })
+    expect(bodies).toHaveLength(1)
+    expect(Object.keys(bodies[0]).sort()).toEqual([
+      'max_completion_tokens',
+      'messages',
+      'model',
+      'response_format',
+      'stream',
+      'stream_options',
+    ])
+    expect(bodies[0].max_completion_tokens).toBe(300 + REASONING_HEADROOM_TOKENS)
+  })
+
+  it('caps a structuredChat request with max_completion_tokens and no reasoning_effort', async () => {
+    mockConfig.aiReasoningEffort = 'low'
+    stubProvider([
+      (body) =>
+        body.stream
+          ? sse([delta({ role: 'assistant', content: '{"text":"ok"}' }), delta({}, 'stop'), USAGE])
+          : completion('{"text":"ok"}'),
+    ])
+
+    const result = await structuredChat({
+      model: 'm-openai',
+      systemPrompts: ['sys'],
+      messages: [{ role: 'user', content: 'hi' }],
+      schema: OutputSchema,
+      maxTokens: 100,
+    })
+
+    expect(result).toEqual({ text: 'ok' })
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].max_completion_tokens).toBe(100 + REASONING_HEADROOM_TOKENS)
+    expect(bodies[0]).not.toHaveProperty('reasoning_effort')
+    expect(bodies[0]).not.toHaveProperty('max_tokens')
+    expect(bodies[0]).not.toHaveProperty('provider')
   })
 })
