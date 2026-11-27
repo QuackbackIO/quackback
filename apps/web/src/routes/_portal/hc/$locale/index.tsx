@@ -43,8 +43,9 @@ function landingCopy(
 
 /**
  * Locale-prefixed help-center homepage (domains/languages §2). Mirrors
- * `/hc/index.tsx` for an additional locale: translated chrome strings,
- * translated+gated category grid. "Popular articles" is intentionally
+ * `/hc/index.tsx` for an additional locale: translated chrome strings, and
+ * every collection, each in its version in the language or named in its own.
+ * "Popular articles" is intentionally
  * omitted here -- view-count ranking has no per-locale notion yet, and
  * showing default-locale titles on a translated homepage would be
  * confusing. Ask AI is also off here (retrieval isn't locale-aware).

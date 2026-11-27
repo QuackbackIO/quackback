@@ -37,6 +37,8 @@ export interface HelpCenterCategory {
   position: number
   /** Public numeric id used in help-center URLs. */
   urlId: number
+  /** The language the name and description are in. */
+  locale: string
   createdAt: Date
   updatedAt: Date
   deletedAt?: Date | null
@@ -75,6 +77,8 @@ export interface HelpCenterArticle {
   notHelpfulCount: number
   /** Public numeric id used in help-center URLs. */
   urlId: number
+  /** The language the title, description and body are in. */
+  locale: string
   createdAt: Date
   updatedAt: Date
   deletedAt?: Date | null

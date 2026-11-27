@@ -126,6 +126,7 @@ describe('GET /api/v1/help-center/categories', () => {
     const mockCategory: HelpCenterCategoryWithCount = {
       id: 'kb_category_01jk0000000000000000000001' as KbCategoryId,
       slug: 'getting-started',
+      locale: 'en',
       name: 'Getting Started',
       description: 'Intro guides',
       icon: '\u{1F4DA}',
@@ -164,6 +165,7 @@ describe('GET /api/v1/help-center/categories', () => {
     const mockCategory: HelpCenterCategoryWithCount = {
       id: 'kb_category_01jk0000000000000000000002' as KbCategoryId,
       slug: 'faq',
+      locale: 'en',
       name: 'FAQ',
       description: null,
       icon: null,
@@ -205,6 +207,7 @@ describe('POST /api/v1/help-center/categories', () => {
     const newCategory: HelpCenterCategory = {
       id: 'kb_category_01jk0000000000000000000003' as KbCategoryId,
       slug: 'billing',
+      locale: 'en',
       name: 'Billing',
       description: null,
       icon: '\u{1F4B0}',
@@ -245,6 +248,7 @@ describe('POST /api/v1/help-center/categories', () => {
     const newCategory: HelpCenterCategory = {
       id: 'kb_category_01jk0000000000000000000004' as KbCategoryId,
       slug: 'general',
+      locale: 'en',
       name: 'General',
       description: null,
       icon: null,
@@ -302,6 +306,7 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
     const mockCategory: HelpCenterCategory = {
       id: 'kb_category_01jk0000000000000000000001' as KbCategoryId,
       slug: 'getting-started',
+      locale: 'en',
       name: 'Getting Started',
       description: 'Intro guides',
       icon: '\u{1F680}',
@@ -374,6 +379,7 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
     const updatedCategory: HelpCenterCategory = {
       id: 'kb_category_01jk0000000000000000000001' as KbCategoryId,
       slug: 'getting-started',
+      locale: 'en',
       name: 'Getting Started',
       description: 'Intro guides',
       icon: '\u{2728}',
@@ -413,6 +419,7 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
     const updatedCategory: HelpCenterCategory = {
       id: 'kb_category_01jk0000000000000000000001' as KbCategoryId,
       slug: 'getting-started',
+      locale: 'en',
       name: 'Getting Started',
       description: null,
       icon: null,
@@ -454,6 +461,7 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
     const updatedCategory: HelpCenterCategory = {
       id: 'kb_category_01jk0000000000000000000001' as KbCategoryId,
       slug: 'getting-started',
+      locale: 'en',
       name: 'Getting Started',
       description: null,
       icon: null,

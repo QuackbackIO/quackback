@@ -288,6 +288,8 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'via {workflowName}',
     '{count, plural, one {# post} other {# posts}}',
     '{pct}% uptime',
+    // The language's own name in Dutch.
+    'Thai',
   ],
   pl: [
     'Agent',

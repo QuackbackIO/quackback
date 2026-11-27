@@ -56,6 +56,8 @@ export interface RelatedArticle {
   title: string
   description: string | null
   categorySlug: string
+  /** The language the title and description are in. */
+  locale: string
 }
 
 const relatedArticleColumns = {
@@ -64,6 +66,7 @@ const relatedArticleColumns = {
   slug: helpCenterArticles.slug,
   title: helpCenterArticles.title,
   description: helpCenterArticles.description,
+  locale: helpCenterArticles.locale,
   categorySlug: helpCenterCategories.slug,
 }
 
@@ -143,6 +146,7 @@ export async function getRelatedArticles(
     slug: r.slug,
     title: r.title,
     description: r.description,
+    locale: r.locale,
     categorySlug: r.categorySlug,
   }))
 
@@ -175,6 +179,7 @@ export async function getRelatedArticles(
         slug: row.slug,
         title: row.title,
         description: row.description,
+        locale: row.locale,
         categorySlug: row.categorySlug,
       })
     }

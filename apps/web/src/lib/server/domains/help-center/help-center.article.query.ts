@@ -63,6 +63,7 @@ const LIST_COLUMNS = {
   slug: true,
   title: true,
   description: true,
+  locale: true,
   position: true,
   content: true,
   principalId: true,
@@ -308,6 +309,32 @@ export async function listPublicArticles(
   return listArticles({ ...params, status: 'published' }, { audience: 'public', viewer })
 }
 
+/**
+ * What a collection page shows of each article. One shape for the single and
+ * the batched read, aliased so it also works as a subquery's columns.
+ */
+const publicCategoryArticleColumns = {
+  id: helpCenterArticles.id,
+  urlId: helpCenterArticles.urlId,
+  slug: helpCenterArticles.slug,
+  title: helpCenterArticles.title,
+  description: helpCenterArticles.description,
+  locale: helpCenterArticles.locale,
+  position: helpCenterArticles.position,
+  publishedAt: helpCenterArticles.publishedAt,
+  readingTimeMinutes:
+    sql<number>`GREATEST(1, ROUND(length(${helpCenterArticles.content}) / 1200.0))`.as(
+      'reading_time_minutes'
+    ),
+  authorName: principal.displayName,
+  authorAvatarUrl: principal.avatarUrl,
+  authorAvatarKey: principal.avatarKey,
+  authorUserImage: user.image,
+  authorUserImageKey: user.imageKey,
+  authorPrincipalId: helpCenterArticles.principalId,
+  authorIsApiKey: AUTHOR_IS_API_KEY.as('author_is_api_key'),
+}
+
 export async function listPublicArticlesForCategory(
   categoryId: string,
   viewer: Actor = ANONYMOUS_ACTOR
@@ -317,23 +344,7 @@ export async function listPublicArticlesForCategory(
   // marking a category private only hid it from the public nav; direct
   // category-id article lookups still returned the children.
   const rows = await db
-    .select({
-      id: helpCenterArticles.id,
-      urlId: helpCenterArticles.urlId,
-      slug: helpCenterArticles.slug,
-      title: helpCenterArticles.title,
-      description: helpCenterArticles.description,
-      position: helpCenterArticles.position,
-      publishedAt: helpCenterArticles.publishedAt,
-      readingTimeMinutes: sql<number>`GREATEST(1, ROUND(length(${helpCenterArticles.content}) / 1200.0))`,
-      authorName: principal.displayName,
-      authorAvatarUrl: principal.avatarUrl,
-      authorAvatarKey: principal.avatarKey,
-      authorUserImage: user.image,
-      authorUserImageKey: user.imageKey,
-      authorPrincipalId: helpCenterArticles.principalId,
-      authorIsApiKey: AUTHOR_IS_API_KEY,
-    })
+    .select(publicCategoryArticleColumns)
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
     .leftJoin(principal, eq(principal.id, helpCenterArticles.principalId))
@@ -392,24 +403,7 @@ export async function listPublicArticlesForCategories(
   const ranked = db
     .select({
       categoryId: helpCenterArticles.categoryId,
-      id: helpCenterArticles.id,
-      urlId: helpCenterArticles.urlId,
-      slug: helpCenterArticles.slug,
-      title: helpCenterArticles.title,
-      description: helpCenterArticles.description,
-      position: helpCenterArticles.position,
-      publishedAt: helpCenterArticles.publishedAt,
-      readingTimeMinutes:
-        sql<number>`GREATEST(1, ROUND(length(${helpCenterArticles.content}) / 1200.0))`.as(
-          'reading_time_minutes'
-        ),
-      authorName: principal.displayName,
-      authorAvatarUrl: principal.avatarUrl,
-      authorAvatarKey: principal.avatarKey,
-      authorUserImage: user.image,
-      authorUserImageKey: user.imageKey,
-      authorPrincipalId: helpCenterArticles.principalId,
-      authorIsApiKey: AUTHOR_IS_API_KEY.as('author_is_api_key'),
+      ...publicCategoryArticleColumns,
       rn: sql<number>`ROW_NUMBER() OVER (
         PARTITION BY ${helpCenterArticles.categoryId}
         ORDER BY ${helpCenterArticles.position} ASC, ${helpCenterArticles.publishedAt} ASC
@@ -435,6 +429,7 @@ export async function listPublicArticlesForCategories(
       slug: ranked.slug,
       title: ranked.title,
       description: ranked.description,
+      locale: ranked.locale,
       position: ranked.position,
       publishedAt: ranked.publishedAt,
       readingTimeMinutes: ranked.readingTimeMinutes,

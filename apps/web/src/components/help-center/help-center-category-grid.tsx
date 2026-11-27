@@ -4,6 +4,7 @@ import { getTopLevelCategories } from './help-center-utils'
 import { CategoryIcon } from './category-icon'
 import { useHelpCenterMainLanguage } from '@/lib/client/hooks/use-help-center-main-language'
 import { hcCollectionPath } from '@/lib/shared/help-center-url'
+import { HelpCenterLanguageLabel, contentLangProps } from './help-center-language'
 
 interface SerializedCategory {
   id: string
@@ -14,6 +15,8 @@ interface SerializedCategory {
   icon: string | null
   description: string | null
   articleCount: number
+  /** The language the name and description are in. */
+  locale?: string
 }
 
 interface HelpCenterCategoryGridProps {
@@ -24,6 +27,7 @@ interface HelpCenterCategoryGridProps {
 
 export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategoryGridProps) {
   const mainLanguage = useHelpCenterMainLanguage()
+  const pageLocale = locale ?? mainLanguage
   const topLevel = getTopLevelCategories(categories)
 
   if (topLevel.length === 0) {
@@ -44,7 +48,7 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
           key={cat.id}
           to={
             hcCollectionPath({
-              locale: locale ?? mainLanguage,
+              locale: pageLocale,
               urlId: cat.urlId,
               slug: cat.slug,
             }) as '/hc'
@@ -56,9 +60,20 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
             <CategoryIcon icon={cat.icon} className="size-6 text-primary" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-foreground">{cat.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3
+                {...contentLangProps(cat.locale, pageLocale)}
+                className="text-base font-semibold text-foreground"
+              >
+                {cat.name}
+              </h3>
+              <HelpCenterLanguageLabel locale={cat.locale} pageLocale={pageLocale} />
+            </div>
             {cat.description && (
-              <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+              <p
+                {...contentLangProps(cat.locale, pageLocale)}
+                className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground"
+              >
                 {cat.description}
               </p>
             )}

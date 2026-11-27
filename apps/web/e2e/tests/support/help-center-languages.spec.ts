@@ -1,7 +1,8 @@
 /**
  * Help center pages in another language (area CUS-HC-L): a translated article
- * shows its own body, and a page whose address names a language reads in that
- * language, whatever the browser asks for.
+ * shows its own body, a page whose address names a language reads in that
+ * language, whatever the browser asks for, and an article or collection with
+ * no version in the language still shows, in its own language, named.
  *
  * Set E2E_GALLERY_DIR to also save a screenshot of each result there.
  */
@@ -121,8 +122,9 @@ test.describe('help center in another language', () => {
       const slug = `${marker}-${randomBytes(3).toString('hex')}`
       const collection = `Erste Schritte ${marker}`
       const title = `Einstellungen ändern ${marker}`
-      await sql`INSERT INTO kb_categories (id, slug, name, is_public, position, created_at, updated_at)
-        VALUES (${categoryUuid}, ${slug}, ${collection}, true, 0, NOW(), NOW())`
+      await sql`INSERT INTO kb_categories (id, slug, name, locale, is_public, position, created_at,
+          updated_at)
+        VALUES (${categoryUuid}, ${slug}, ${collection}, 'de', true, 0, NOW(), NOW())`
       // An article the workspace wrote in German, labelled as its main language.
       await sql`INSERT INTO kb_articles (id, category_id, slug, title, content, locale,
           principal_id, published_at, created_at, updated_at)
@@ -183,6 +185,88 @@ test.describe('help center in another language', () => {
           expect(res.ok()).toBe(true)
           const { data } = (await res.json()) as { data: { articles: { title: string }[] } }
           expect(data.articles.map((a) => a.title)).toContain(title)
+        }
+      )
+    }
+  )
+
+  test(
+    'CUS-HC-L3 a French reader gets an untranslated collection and article in English, named, with a notice',
+    { tag: ['@core', '@isolated'] },
+    async ({ browser, marker }) => {
+      const sql = supportDb()
+      const [author] = await sql`SELECT id FROM principal WHERE role = 'admin' AND type = 'user'
+        ORDER BY created_at LIMIT 1`
+      const categoryUuid = toUuid(generateId('kb_category'))
+      const articleUuid = toUuid(generateId('article'))
+      const slug = `${marker}-${randomBytes(3).toString('hex')}`
+      const collection = `Billing ${marker}`
+      const title = `Download an invoice ${marker}`
+      await sql`INSERT INTO kb_categories (id, slug, name, is_public, position, created_at, updated_at)
+        VALUES (${categoryUuid}, ${slug}, ${collection}, true, 0, NOW(), NOW())`
+      await sql`INSERT INTO kb_articles (id, category_id, slug, title, content, principal_id,
+          published_at, created_at, updated_at)
+        VALUES (${articleUuid}, ${categoryUuid}, ${slug}, ${title}, ${'Open Billing, then Invoices.'},
+          ${author.id}, NOW() - interval '1 minute', NOW(), NOW())`
+      const [{ url_id: articleUrlId }] =
+        await sql`SELECT url_id FROM kb_articles WHERE id = ${articleUuid}`
+      const [{ url_id: collectionUrlId }] =
+        await sql`SELECT url_id FROM kb_categories WHERE id = ${categoryUuid}`
+      const fr = catalogue('fr')
+      const english = fr['portal.hc.language.en']
+
+      await withSettings(
+        {
+          feature_flags: { helpCenter: true },
+          help_center_config: { 'locales.additional': ['fr'] },
+        },
+        async () => {
+          const context = await browser.newContext({
+            locale: 'fr-FR',
+            extraHTTPHeaders: { 'Accept-Language': 'fr-FR,fr;q=0.9' },
+          })
+          const page = await context.newPage()
+          try {
+            // The French home lists the untranslated collection, named in English.
+            await page.goto('/hc/fr')
+            const card = page.getByRole('link', { name: new RegExp(collection) })
+            await expect(card).toBeVisible({ timeout: 20_000 })
+            await expect(card.getByTestId('hc-language-label')).toHaveText(english)
+            await expect(card.getByRole('heading', { name: collection })).toHaveAttribute(
+              'lang',
+              'en'
+            )
+            await snap(page, 'hc-fr-home-untranslated-collection')
+
+            // Its page says it is not translated, and lists the article, named.
+            await card.click()
+            await expect(page).toHaveURL(new RegExp(`/hc/fr/collections/${collectionUrlId}-`))
+            await expect(page.getByTestId('hc-fallback-notice')).toHaveText(
+              fr['portal.hc.fallback.collection'].replace('{language}', english)
+            )
+            const row = page.getByRole('link', { name: new RegExp(title) })
+            await expect(row.getByTestId('hc-language-label')).toHaveText(english)
+
+            // The article opens in English with a French notice, instead of not being found.
+            const response = await page.goto(`/hc/fr/articles/${articleUrlId}-${slug}`)
+            expect(response?.status()).toBe(200)
+            await expect(page.getByRole('heading', { level: 1, name: title })).toHaveAttribute(
+              'lang',
+              'en'
+            )
+            await expect(page.getByTestId('hc-fallback-notice')).toHaveText(
+              fr['portal.hc.fallback.article'].replace('{language}', english)
+            )
+            await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+            // Search engines are pointed at the English page, the real version.
+            await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+              'href',
+              new RegExp(`/hc/en/articles/${articleUrlId}-${slug}$`)
+            )
+            await snap(page, 'hc-fr-untranslated-article')
+          } finally {
+            await context.close()
+          }
         }
       )
     }

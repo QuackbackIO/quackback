@@ -22,6 +22,10 @@ import { stripMarkdownPreview } from '@/lib/shared/utils'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
 import { helpCenterHeadPortal } from '@/components/help-center/help-center-head'
+import {
+  HelpCenterFallbackNotice,
+  contentLangProps,
+} from '@/components/help-center/help-center-language'
 import type { JSONContent } from '@tiptap/react'
 import {
   useBaseUrl,
@@ -53,7 +57,7 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug/')({
     }
     return data
   },
-  head: ({ loaderData, params, matches }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
     const { article } = loaderData
     const { workspaceName, helpUrl } = helpCenterHeadPortal(matches)
@@ -61,9 +65,11 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug/')({
       article.description ||
       (article.content ? stripMarkdownPreview(article.content, 160) : undefined)
     const pageTitle = `${article.title} - ${workspaceName}`
+    // An article shown in another language than the page's is canonical on
+    // its own language's page.
     const canonicalUrl = helpUrl(
       hcArticlePath({
-        locale: params.locale,
+        locale: loaderData.canonicalLocale,
         urlId: article.urlId,
         slug: article.slug,
       })
@@ -125,6 +131,7 @@ function ArticleDetailPage() {
     slug: category.slug,
   })
   const articleHref = hcArticlePath({ locale, urlId: article.urlId, slug: article.slug })
+  const textLang = contentLangProps(article.locale, locale)
 
   return (
     <>
@@ -165,12 +172,17 @@ function ArticleDetailPage() {
           <article className="min-w-0 max-w-2xl flex-1 py-10">
             <HelpCenterBreadcrumbs items={breadcrumbs.slice(0, -1)} />
 
-            <h1 className="mt-6 text-3xl sm:text-4xl font-bold leading-tight tracking-tight">
+            <HelpCenterFallbackNotice kind="article" locale={article.locale} pageLocale={locale} />
+
+            <h1
+              {...textLang}
+              className="mt-6 text-3xl sm:text-4xl font-bold leading-tight tracking-tight"
+            >
               {article.title}
             </h1>
 
             {article.description && (
-              <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
+              <p {...textLang} className="mt-4 text-lg text-muted-foreground leading-relaxed">
                 {article.description}
               </p>
             )}
@@ -220,7 +232,7 @@ function ArticleDetailPage() {
               </div>
             )}
 
-            <div className="prose prose-neutral dark:prose-invert max-w-none">
+            <div {...textLang} className="prose prose-neutral dark:prose-invert max-w-none">
               {article.contentJson && isRichTextContent(article.contentJson) ? (
                 <EmbedHydration>
                   <RichTextContent content={article.contentJson as JSONContent} />

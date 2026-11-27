@@ -1,5 +1,4 @@
 import { createFileRoute, getRouteApi, Link, notFound, redirect } from '@tanstack/react-router'
-import { DocumentTextIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { useMemo } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { getPublicCollectionPageFn } from '@/lib/server/functions/help-center'
@@ -13,6 +12,12 @@ import { CategoryIcon } from '@/components/help-center/category-icon'
 import { Avatar } from '@/components/ui/avatar'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
 import { helpCenterHeadPortal } from '@/components/help-center/help-center-head'
+import {
+  HelpCenterFallbackNotice,
+  HelpCenterLanguageLabel,
+  contentLangProps,
+} from '@/components/help-center/help-center-language'
+import { HelpCenterArticleRow as ArticleRow } from '@/components/help-center/help-center-article-row'
 import {
   useBaseUrl,
   useSectionLinks,
@@ -52,15 +57,17 @@ export const Route = createFileRoute('/_portal/hc/$locale/collections/$idSlug')(
     }
     return data
   },
-  head: ({ loaderData, params, matches }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
     const { category } = loaderData
     const { workspaceName, helpUrl } = helpCenterHeadPortal(matches)
     const pageTitle = `${category.name} - ${workspaceName}`
     const description = category.description || undefined
+    // A collection shown in another language than the page's is canonical on
+    // its own language's page.
     const canonicalUrl = helpUrl(
       hcCollectionPath({
-        locale: params.locale,
+        locale: loaderData.canonicalLocale,
         urlId: category.urlId,
         slug: category.slug,
       })
@@ -100,47 +107,6 @@ function AuthorAvatar({ author, index }: { author: Author; index: number }) {
       style={{ marginLeft: index === 0 ? 0 : -8 }}
       title={author.name}
     />
-  )
-}
-
-function ArticleRow({
-  href,
-  title,
-  description,
-  readingTimeMinutes,
-}: {
-  href: string
-  title: string
-  description?: string | null
-  readingTimeMinutes?: number
-}) {
-  return (
-    <Link
-      to={href as '/hc'}
-      className="group flex items-start gap-3 px-5 py-3.5 hover:bg-accent/40 transition-colors"
-    >
-      <DocumentTextIcon className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <span className="block text-sm text-foreground group-hover:text-primary-ink transition-colors font-medium">
-          {title}
-        </span>
-        {description && (
-          <span className="block text-xs text-muted-foreground/60 mt-0.5 line-clamp-1">
-            {description}
-          </span>
-        )}
-      </div>
-      {readingTimeMinutes != null && (
-        <span className="text-xs text-muted-foreground/50 shrink-0 tabular-nums mt-0.5">
-          <FormattedMessage
-            id="portal.hc.collection.readingTime"
-            defaultMessage="{minutes} min read"
-            values={{ minutes: readingTimeMinutes }}
-          />
-        </span>
-      )}
-      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary-ink transition-colors mt-0.5" />
-    </Link>
   )
 }
 
@@ -224,10 +190,25 @@ function CollectionPage() {
             <div className="w-14 h-14 rounded-xl bg-primary flex items-center justify-center mb-5">
               <CategoryIcon icon={category.icon} className="w-8 h-8 text-primary-foreground" />
             </div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">{category.name}</h1>
+            <h1
+              {...contentLangProps(category.locale, locale)}
+              className="text-3xl font-bold text-foreground tracking-tight"
+            >
+              {category.name}
+            </h1>
             {category.description && (
-              <p className="mt-2 text-muted-foreground leading-relaxed">{category.description}</p>
+              <p
+                {...contentLangProps(category.locale, locale)}
+                className="mt-2 text-muted-foreground leading-relaxed"
+              >
+                {category.description}
+              </p>
             )}
+            <HelpCenterFallbackNotice
+              kind="collection"
+              locale={category.locale}
+              pageLocale={locale}
+            />
 
             {editors.length > 0 && (
               <div className="mt-4 flex items-center gap-2.5 text-sm text-muted-foreground">
@@ -282,7 +263,13 @@ function CollectionPage() {
                     <div className="border-y border-t-transparent border-border/50 overflow-hidden divide-y divide-border/50">
                       <div className="flex items-center gap-2.5 px-5 py-3 bg-muted/40">
                         <CategoryIcon icon={sub.icon} className="w-5 h-5 shrink-0" />
-                        <h2 className="text-sm font-semibold text-foreground">{sub.name}</h2>
+                        <h2
+                          {...contentLangProps(sub.locale, locale)}
+                          className="text-sm font-semibold text-foreground"
+                        >
+                          {sub.name}
+                        </h2>
+                        <HelpCenterLanguageLabel locale={sub.locale} pageLocale={locale} />
                       </div>
                       {shown.length > 0 ? (
                         <>
@@ -297,6 +284,8 @@ function CollectionPage() {
                               title={article.title}
                               description={article.description}
                               readingTimeMinutes={article.readingTimeMinutes}
+                              textLocale={article.locale}
+                              pageLocale={locale}
                             />
                           ))}
                           {remaining > 0 && (
@@ -349,6 +338,8 @@ function CollectionPage() {
                   title={article.title}
                   description={article.description}
                   readingTimeMinutes={article.readingTimeMinutes}
+                  textLocale={article.locale}
+                  pageLocale={locale}
                 />
               ))}
             </div>

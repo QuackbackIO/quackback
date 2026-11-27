@@ -2129,6 +2129,13 @@
       "when": 1791006600000,
       "tag": "0326_kb_articles_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "7",
+      "when": 1791006700000,
+      "tag": "0327_kb_categories_locale",
+      "breakpoints": true
     }
   ]
 }
