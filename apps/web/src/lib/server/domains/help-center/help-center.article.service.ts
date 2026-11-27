@@ -403,24 +403,13 @@ export async function updateArticle(
   return resolved
 }
 
-/**
- * Publishes a draft article. A published article is returned as it is, so
- * nothing that runs on publish (such as auto-translate) runs twice.
- */
 export async function publishArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
   const [updated] = await db
     .update(helpCenterArticles)
     .set({ publishedAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(helpCenterArticles.id, id),
-        isNull(helpCenterArticles.deletedAt),
-        isNull(helpCenterArticles.publishedAt)
-      )
-    )
+    .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
     .returning()
-  // Already published (or missing, which throws).
-  if (!updated) return getArticleById(id)
+  if (!updated) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
   const resolved = await resolveArticleWithCategory(updated)
 
   // Auto-translate (domains/languages §H3): fire-and-forget, off by default.
