@@ -19,6 +19,7 @@ import {
 import { getTierLimits } from './tier-limits.service'
 import { resolveCloudConfig } from './cloud/cloud.service'
 import { buildRefusal, isEntitled } from './cloud/entitlements'
+import { heldHelpCenterLocalesIn } from '@/lib/server/domains/plan-limits/plan-limits.locales'
 
 type LanguagesPatch = z.infer<typeof languagesPatchSchema>
 type PageLabels = z.infer<typeof languagePageLabelsSchema>
@@ -117,18 +118,36 @@ export async function writeLanguagesArea(tx: Transaction, input: LanguagesPatch)
         max: cap,
         message: `You've reached your plan's help center languages limit (${cap}). Upgrade to add more.`,
       })
-    // Words of a language past the plan's cap stay as they are.
-    const past = extra.slice(Math.max(0, cap - 1))
-    const edited = (patch.pageLabels ?? []).find(
-      (labels) =>
-        past.includes(labels.language) &&
-        JSON.stringify(helpCenter.locales.chrome[labels.language] ?? null) !==
-          JSON.stringify(chromeOf(labels))
+  }
+  // After the grace, the languages the plan holds keep their words. The order
+  // they were added in decides which are held, so that order stays put while
+  // any are.
+  const held = heldHelpCenterLocalesIn({
+    planLimitsState: row.planLimitsState,
+    additional: helpCenter.locales.additional,
+    cap,
+    now: new Date(),
+  })
+  const edited = (patch.pageLabels ?? []).find(
+    (labels) =>
+      held.includes(labels.language) &&
+      JSON.stringify(helpCenter.locales.chrome[labels.language] ?? null) !==
+        JSON.stringify(chromeOf(labels))
+  )
+  if (edited)
+    throw new ValidationError(
+      'HC_LOCALE_HELD',
+      `${edited.language} is past the plan's language limit; its page labels cannot change`
     )
-    if (edited)
+  if (held.length > 0) {
+    const kept = helpCenter.locales.additional.filter((locale) => extra.includes(locale))
+    const reordered = extra
+      .filter((locale) => helpCenter.locales.additional.includes(locale))
+      .some((locale, index) => locale !== kept[index])
+    if (reordered)
       throw new ValidationError(
         'HC_LOCALE_HELD',
-        `${edited.language} is past the plan's language limit; its page labels cannot change`
+        'While the plan holds languages, the extra languages keep the order they were added in'
       )
   }
 
