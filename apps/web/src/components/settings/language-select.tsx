@@ -16,7 +16,6 @@ import { setMyLanguageFn, type MyLanguage } from '@/lib/server/functions/person-
 
 const AUTOMATIC = 'auto'
 
-/** Each language the product has, named in English, shown beside its own name. */
 /**
  * The picker's languages, in the order a person picks one (Latin script
  * first, then the others), each in its own name and in English. Kept here
@@ -107,7 +106,7 @@ export function LanguageSelect({ initial }: { initial: MyLanguage }) {
         <span className="truncate">{labelOf(value)}</span>
         <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-(--anchor-width) min-w-64">
+      <DropdownMenuContent className="min-w-(--anchor-width) max-w-(--available-width)">
         <DropdownMenuRadioGroup value={value} onValueChange={(next) => void choose(String(next))}>
           <DropdownMenuRadioItem value={AUTOMATIC}>
             <span className="flex w-full items-center justify-between gap-4">
@@ -117,7 +116,7 @@ export function LanguageSelect({ initial }: { initial: MyLanguage }) {
                   defaultMessage: 'Automatic',
                 })}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
                 {initial.automaticFromBrowser
                   ? intl.formatMessage(
                       {

@@ -34,7 +34,12 @@ function areaMessagesFor(
  * Supplies `area`'s strings to `children`. `messages` are the strings a route
  * loader read for it; without them they load here, suspending to `fallback`
  * meanwhile. A page whose catalog already holds the area (one loaded whole,
- * say) passes straight through.
+ * say) gets nothing added.
+ *
+ * Whenever the strings are at hand (English, a seeded area, or a catalog that
+ * holds it), the tree around `children` has the same shape, so a change of
+ * language re-renders the page in place rather than mounting it again and
+ * replaying its entrance.
  */
 export function AreaMessages({
   area,
@@ -49,15 +54,19 @@ export function AreaMessages({
 }) {
   const intl = useIntl()
   // A message's defaultMessage is its English, so English needs nothing loaded.
-  if (normalizeLocale(intl.locale) === DEFAULT_LOCALE) return children
-  if (Object.keys(intl.messages).some((key) => messageArea(key) === area)) return children
-  if (messages) return <WithMessages extra={messages}>{children}</WithMessages>
+  const inCatalog =
+    normalizeLocale(intl.locale) === DEFAULT_LOCALE ||
+    Object.keys(intl.messages).some((key) => messageArea(key) === area)
+  const extra = inCatalog ? NOTHING_TO_ADD : messages
+  if (extra) return <WithMessages extra={extra}>{children}</WithMessages>
   return (
     <Suspense fallback={fallback}>
       <LoadedAreaMessages area={area}>{children}</LoadedAreaMessages>
     </Suspense>
   )
 }
+
+const NOTHING_TO_ADD: Record<string, string> = {}
 
 function LoadedAreaMessages({ area, children }: { area: MessageArea; children: ReactNode }) {
   const intl = useIntl()
@@ -70,7 +79,10 @@ function WithMessages({ extra, children }: { extra: Record<string, string>; chil
   const intl = useIntl()
   // The app's catalogs are plain strings, never precompiled messages.
   const pageMessages = intl.messages as Record<string, string>
-  const messages = useMemo(() => ({ ...pageMessages, ...extra }), [pageMessages, extra])
+  const messages = useMemo(
+    () => (extra === NOTHING_TO_ADD ? pageMessages : { ...pageMessages, ...extra }),
+    [pageMessages, extra]
+  )
   return (
     <IntlProvider
       locale={intl.locale}
