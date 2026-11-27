@@ -29,7 +29,7 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
   },
   settings: {
     users:
-      /^(components\/settings\/(email-field|password-form|profile-form|settings-nav|two-factor-section)\.tsx|routes\/_portal\/settings\.[a-z-]+\.tsx)$/,
+      /^(components\/settings\/(email-field|language-select|password-form|profile-form|settings-nav|two-factor-section)\.tsx|routes\/_portal\/settings\.[a-z-]+\.tsx)$/,
     importers: /^(components\/settings\/|routes\/_portal\/settings(\.[a-z-]+)?\.tsx$)/,
   },
   helpCenter: {

@@ -37,6 +37,18 @@ vi.mock('@tanstack/react-start/server', () => ({
 vi.mock('../auth-helpers', () => ({
   requireAuth: async () => ({ user: { id: hoisted.userId } }),
 }))
+// The session's user, as Better Auth reads it from the row for each request.
+vi.mock('@/lib/server/auth/request-session', () => ({
+  getRequestSession: async () => {
+    const { testDb: tx } = await import('@/lib/server/__tests__/db-test-fixture')
+    const { user: table, eq: same } = await import('@/lib/server/db')
+    const [row] = await tx
+      .select()
+      .from(table)
+      .where(same(table.id, hoisted.userId as UserId))
+    return { user: row }
+  },
+}))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getLanguageConfig: async () => hoisted.language,
 }))
@@ -123,7 +135,7 @@ describe.skipIf(!fixture.available)('a person language (real DB, rolled back)', 
     const signIn = (acceptLanguage: string) =>
       handleDetectedLocaleCapture(
         { context: { newSession: { user: { id } } } },
-        new Headers({ 'accept-language': acceptLanguage })
+        () => new Headers({ 'accept-language': acceptLanguage })
       )
 
     await signIn('uk-UA,uk;q=0.9')
@@ -145,9 +157,13 @@ describe.skipIf(!fixture.available)('a person language (real DB, rolled back)', 
     const id = await seedUser()
     await handleDetectedLocaleCapture(
       { context: { newSession: null } },
-      new Headers({ 'accept-language': 'de' })
+      () => new Headers({ 'accept-language': 'de' })
     )
     await recordDetectedLocale(id, null)
+    // An in-process sign-in, outside any request, records nothing and never throws.
+    await handleDetectedLocaleCapture({ context: { newSession: { user: { id } } } }, () => {
+      throw new Error('No StartEvent found in AsyncLocalStorage')
+    })
     expect((await row(id)).detectedLocale).toBeNull()
   })
 })

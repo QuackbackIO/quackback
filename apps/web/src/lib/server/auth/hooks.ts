@@ -2148,7 +2148,7 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   // request without a geo header still records it.
   await handleDetectedLocaleCapture(
     ctx as Parameters<typeof handleDetectedLocaleCapture>[0],
-    getRequestHeaders()
+    getRequestHeaders
   )
   // Fires only on a real sign-in path when an additional device is unseen.
   await handleNewDeviceNotification(

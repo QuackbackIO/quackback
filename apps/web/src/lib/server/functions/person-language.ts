@@ -34,23 +34,22 @@ export const setMyLanguageSchema = z.object({
 /** The caller's chosen language, and what "Automatic" gives them on this request. */
 export const getMyLanguageFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<MyLanguage> => {
-    const auth = await requireAuth()
-    const [{ getRequestHeaders }, { getLanguageConfig }, { db, user, eq }] = await Promise.all([
-      import('@tanstack/react-start/server'),
-      import('@/lib/server/domains/settings/settings.service'),
-      import('@/lib/server/db'),
-    ])
-    const [language, row] = await Promise.all([
-      getLanguageConfig(),
-      db.query.user.findFirst({
-        where: eq(user.id, auth.user.id),
-        columns: { preferredLanguage: true },
-      }),
-    ])
+    await requireAuth()
+    const [{ getRequestHeaders }, { getLanguageConfig }, { getRequestSession }] = await Promise.all(
+      [
+        import('@tanstack/react-start/server'),
+        import('@/lib/server/domains/settings/settings.service'),
+        import('@/lib/server/auth/request-session'),
+      ]
+    )
+    // The choice rides the session's user, which requireAuth already read.
+    const [language, session] = await Promise.all([getLanguageConfig(), getRequestSession()])
+    const stored = (session?.user as { preferredLanguage?: string | null } | undefined)
+      ?.preferredLanguage
     const acceptLanguage = getRequestHeaders().get('accept-language')
     const everyone = everyoneLocale(language)
     return {
-      chosen: row?.preferredLanguage ? normalizeLocale(row.preferredLanguage) : null,
+      chosen: stored ? normalizeLocale(stored) : null,
       automatic: resolvePersonLocale({
         everyone,
         acceptLanguage,

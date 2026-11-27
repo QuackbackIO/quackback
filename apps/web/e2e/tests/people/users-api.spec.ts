@@ -718,7 +718,7 @@ test.describe('CSV export', () => {
       )
       const lines = (await res.text()).trim().split('\n')
       expect(lines[0]).toBe(
-        'name,email,verified,lifecycle,segments,joined_at,last_seen_at,post_count,comment_count,vote_count'
+        'name,email,verified,lifecycle,segments,joined_at,last_seen_at,post_count,comment_count,vote_count,language,detected_language'
       )
       expect(lines).toHaveLength(2)
       expect(lines[1]).toContain(person.email)

@@ -62,16 +62,16 @@ test.describe('a person chooses their own language', () => {
           page.getByRole('heading', { name: en['portal.settings.preferences.title'] })
         ).toBeVisible({ timeout: 20_000 })
         await expect(page.getByText('Theme and language')).toBeVisible()
-        const select = page.getByRole('combobox', { name: 'Language' })
+        const select = page.getByRole('button', { name: 'Language' })
         await expect(select).toHaveText(/Automatic \(English\)/)
 
         await select.click()
         await expect(
-          page.getByRole('option', { name: /Automatic.*English, from your browser/ })
+          page.getByRole('menuitemradio', { name: /Automatic.*English, from your browser/ })
         ).toBeVisible()
-        await expect(page.getByRole('option', { name: /Deutsch\s*German/ })).toBeVisible()
+        await expect(page.getByRole('menuitemradio', { name: /Deutsch\s*German/ })).toBeVisible()
         await snap(page, '01-language-list')
-        await page.getByRole('option', { name: /Deutsch/ }).click()
+        await page.getByRole('menuitemradio', { name: /Deutsch/ }).click()
 
         // The toast reads in the new language, and the page follows at once.
         await expect(
@@ -89,13 +89,13 @@ test.describe('a person chooses their own language', () => {
         await expect(page.locator('html')).toHaveAttribute('lang', 'de')
 
         await page.goto('/settings/preferences')
-        const german = page.getByRole('combobox', {
+        const german = page.getByRole('button', {
           name: de['portal.settings.preferences.appearance.languageLabel'],
         })
         await expect(german).toHaveText('Deutsch')
         await german.click()
         await page
-          .getByRole('option', {
+          .getByRole('menuitemradio', {
             name: new RegExp(de['portal.settings.preferences.appearance.languageAutomatic']),
           })
           .click()

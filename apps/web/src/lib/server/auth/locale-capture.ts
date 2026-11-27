@@ -40,12 +40,22 @@ export async function recordDetectedLocale(
   }
 }
 
-/** At a sign-in that mints a session, record the browser's language. */
+/**
+ * At a sign-in that mints a session, record the browser's language. The
+ * headers are read only then, and only inside a request: an in-process
+ * sign-in (a script, a test) has none and records nothing.
+ */
 export async function handleDetectedLocaleCapture(
   ctx: { context?: { newSession?: { user?: { id?: string } } | null } },
-  headers: Headers
+  readHeaders: () => Headers
 ): Promise<void> {
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string') return
-  await recordDetectedLocale(userId as UserId, detectLocale(headers.get('accept-language')))
+  let acceptLanguage: string | null
+  try {
+    acceptLanguage = readHeaders().get('accept-language')
+  } catch {
+    return
+  }
+  await recordDetectedLocale(userId as UserId, detectLocale(acceptLanguage))
 }
