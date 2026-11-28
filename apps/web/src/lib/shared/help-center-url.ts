@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, resolveLocale } from './i18n'
+import { DEFAULT_LOCALE, normalizeLocale, resolveLocale, type SupportedLocale } from './i18n'
 
 /** Sticky manual override so browser-detect doesn't fight an explicit choice. */
 export const HC_LOCALE_COOKIE = 'hc_locale'
@@ -22,6 +22,17 @@ export function parseHcIdSlug(param: string): { urlId: number; slug: string } | 
   const urlId = Number(key)
   if (!Number.isSafeInteger(urlId)) return null
   return { urlId, slug: hyphen === -1 ? '' : param.slice(hyphen + 1) }
+}
+
+/**
+ * The language a `/hc/{locale}/...` address names, or null for any other path.
+ * A help center page in a language reads in that language, whatever the
+ * browser asks for. The route itself rejects a language the help center does
+ * not offer.
+ */
+export function hcPathLocale(pathname: string): SupportedLocale | null {
+  const match = /^\/hc\/([A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?)(?:\/|$)/.exec(pathname)
+  return match ? normalizeLocale(match[1]) : null
 }
 
 /** Public article URL: `/hc/{locale}/articles/{urlId}-{slug}`. */

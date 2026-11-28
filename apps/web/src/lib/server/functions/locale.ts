@@ -30,11 +30,12 @@ export const getPortalLocaleFn = createServerFn({ method: 'GET' }).handler(async
  * catalog (see PORTAL_MESSAGE_PREFIXES), so the SSR HTML doesn't carry the
  * admin/inbox strings the portal never renders.
  */
-export async function loadPortalIntl(): Promise<{
+export async function loadPortalIntl(pageLocale?: SupportedLocale | null): Promise<{
   locale: SupportedLocale
   messages: Record<string, string>
 }> {
-  const locale = await getPortalLocaleFn()
+  // A page whose address names its language (a help center page) reads in it.
+  const locale = pageLocale ?? (await getPortalLocaleFn())
   const messages = await loadPortalMessages(locale)
   return { locale, messages }
 }

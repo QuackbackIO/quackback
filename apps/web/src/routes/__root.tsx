@@ -31,6 +31,7 @@ import { ProductAnalytics } from '@/components/shared/product-analytics'
 import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
 import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
+import { hcPathLocale } from '@/lib/shared/help-center-url'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { rssAlternateLink } from '@/lib/shared/rss-alternate'
 import { isStatusFeedReadable } from '@/lib/shared/status-settings'
@@ -290,7 +291,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // valid `?locale=` override wins, matching what the widget itself renders.
   const widgetOverride =
     isWidgetRoute && widgetLocaleParam ? normalizeLocale(widgetLocaleParam) : null
-  const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
+  // A help center page in a language advertises that language.
+  const hcLocale = useRouterState({ select: (s) => hcPathLocale(s.location.pathname) })
+  const resolvedLocale = widgetOverride ?? hcLocale ?? acceptLanguageLocale ?? DEFAULT_LOCALE
   const locale = useRouterState({
     select: (s) =>
       documentLocale(
