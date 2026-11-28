@@ -33,7 +33,7 @@ import { Link } from '@tanstack/react-router'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { NewButton } from '@/components/shared/new-button'
-import { useLocalDateFormatter } from '@/components/ui/local-date'
+import { usePageLocale } from '@/components/ui/local-date'
 import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
 
 /**
@@ -41,6 +41,15 @@ import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
  * when its roadmaps arrive with the page, and there is no body to portal into
  * there; the drag overlay only matters once someone drags.
  */
+/** A roadmap bucket's month in `locale`, e.g. "Oct 2026" in English. */
+function formatEtaMonth(month: string | Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(month))
+}
+
 function BodyPortal({ children }: { children: ReactNode }) {
   const [body, setBody] = useState<HTMLElement | null>(null)
   useEffect(() => setBody(document.body), [])
@@ -48,7 +57,10 @@ function BodyPortal({ children }: { children: ReactNode }) {
 }
 
 export function RoadmapAdmin() {
-  const formatDate = useLocalDateFormatter()
+  // The page's language, not the hydration-aware formatter: an ETA month is
+  // a UTC calendar month, the same on the server and in the browser, so the
+  // board needs no second render after hydration.
+  const locale = usePageLocale()
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
 
@@ -264,11 +276,7 @@ export function RoadmapAdmin() {
                         title={bucket.label}
                         subtitle={
                           bucket.targetMonth
-                            ? `Sets ETA to ${formatDate(bucket.targetMonth, {
-                                month: 'short',
-                                year: 'numeric',
-                                timeZone: 'UTC',
-                              })}`
+                            ? `Sets ETA to ${formatEtaMonth(bucket.targetMonth, locale)}`
                             : 'Clears ETA'
                         }
                         color={bucket.noEta ? '#6b7280' : '#3b82f6'}
