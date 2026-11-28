@@ -2,12 +2,14 @@ import { lazy, Suspense } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/developers_/workspace-keys/new')({
   head: adminPageHead('New workspace key'),
   beforeLoad: ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/developers/workspace-keys/new')
   },
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminIntegrationSettings'),
   component: NewWorkspaceKeyPage,
 })
 

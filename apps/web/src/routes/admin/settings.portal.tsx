@@ -29,6 +29,7 @@ import {
   resolvePortalTab,
   type PortalTab,
 } from '@/lib/shared/portal-settings-tabs'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 /**
  * Two tabs, in the `?tab=` pattern of the other settings pages:
@@ -95,7 +96,7 @@ export const Route = createFileRoute('/admin/settings/portal')({
         : null,
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
-    return { tabs }
+    return { tabs, ...(await seedAdminAreas(context.personLocale, 'adminChannelSettings')) }
   },
   component: PortalSettingsRoute,
 })

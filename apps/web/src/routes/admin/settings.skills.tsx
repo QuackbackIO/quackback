@@ -34,6 +34,7 @@ import { skillInputSchema, type SkillDTO } from '@/lib/shared/assistant/skills'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { errorText } from '@/lib/client/error-text'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/skills')({
   head: adminPageHead('Skills settings'),
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/admin/settings/skills')({
   },
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(skillQueries.list())
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

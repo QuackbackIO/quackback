@@ -5,6 +5,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { ProviderDetailPage } from '@/components/admin/settings/security/identity-providers/provider-detail-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 // The trailing underscore on "sso_" escapes nesting under
 // /admin/settings/security/sso, which is a redirect-only route for stale
@@ -32,7 +33,7 @@ export const Route = createFileRoute('/admin/settings/security/sso_/$providerId'
       ensure(adminQueries.authProviderStatus()),
       context.queryClient.ensureQueryData(settingsQueries.providerAccountCount(providerId)),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: ProviderDetailRoute,
 })

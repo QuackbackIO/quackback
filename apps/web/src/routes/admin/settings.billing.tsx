@@ -11,6 +11,7 @@ import { checkoutSuccessCopy } from '@/lib/shared/billing/checkout-flash'
 import { cn } from '@/lib/shared/utils'
 import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const BILLING_ERROR_COPY: Record<string, string> = {
   seats_below_usage: 'Pick at least as many seats as people you already have.',
@@ -59,7 +60,7 @@ export const Route = createFileRoute('/admin/settings/billing')({
       context.queryClient.ensureQueryData(billingQueries.invoices()).catch(() => null),
       context.queryClient.ensureQueryData(billingQueries.usage()).catch(() => []),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: BillingPage,
 })

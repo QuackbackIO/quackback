@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { StatusAdmin } from '@/components/admin/status'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   view: z
@@ -17,6 +18,7 @@ export const Route = createFileRoute('/admin/status')({
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminHelpCenter'),
   component: StatusPage,
 })
 

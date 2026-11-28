@@ -4,6 +4,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { MessengerChannelPage } from '@/components/admin/settings/messenger-channel-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/channels_/messenger')({
   head: adminPageHead('Messenger channel settings'),
@@ -19,7 +20,7 @@ export const Route = createFileRoute('/admin/settings/channels_/messenger')({
       ensure(settingsQueries.widgetConfig()),
       ensure(settingsQueries.portalConfig()),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: MessengerChannelPage,
 })

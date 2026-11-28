@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -56,7 +57,7 @@ export const Route = createFileRoute('/admin/settings/office-hours')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/office-hours')
     await context.queryClient.ensureQueryData(officeHoursQuery)
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: OfficeHoursPage,
 })

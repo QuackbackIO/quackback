@@ -15,6 +15,7 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/changelog')({
   head: adminPageHead('Changelog settings'),
@@ -41,7 +42,7 @@ export const Route = createFileRoute('/admin/settings/changelog')({
         ? warmQuery(ensure, changelogCategoryQueries.segments())
         : undefined,
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: ChangelogSettingsPage,
 })

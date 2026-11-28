@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConversationAttributesList } from '@/components/admin/settings/conversation-data/conversation-attributes-list'
 import { ConversationTagsManager } from '@/components/admin/settings/conversation-data/conversation-tags-manager'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   tab: z.enum(['attributes', 'tags']).optional(),
@@ -25,7 +26,7 @@ export const Route = createFileRoute('/admin/settings/conversation-data')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/conversation-data')
     await context.queryClient.ensureQueryData(conversationAttributeQueries.registry())
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminIntegrationSettings')
   },
   component: ConversationDataPage,
 })

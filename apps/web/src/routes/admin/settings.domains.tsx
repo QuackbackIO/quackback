@@ -8,6 +8,7 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { VerifiedDomainsCard, domainRows } from '@/components/admin/settings/domains-overview'
 import { loadDomainSummaries } from '@/lib/client/domain-summaries'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 /**
  * Settings > Domains: the domains the workspace verified, each with its own
@@ -22,6 +23,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
     // The list rows only the domains the workspace owns, so it reads no section map.
     const summaries = await loadDomainSummaries({ ...context, sectionDomains: false })
     return {
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
       ...summaries,
       links: domainUseLinks({ permissions: context.permissions ?? [] }),
     }

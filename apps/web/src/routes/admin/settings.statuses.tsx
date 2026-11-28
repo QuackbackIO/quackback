@@ -5,6 +5,7 @@ import { StatusesSettingsPage } from '@/components/admin/settings/statuses/statu
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
   head: adminPageHead('Statuses settings'),
@@ -20,7 +21,7 @@ export const Route = createFileRoute('/admin/settings/statuses')({
     // Pre-fetch statuses using React Query
     await queryClient.ensureQueryData(adminQueries.statuses())
 
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: StatusesPage,
 })

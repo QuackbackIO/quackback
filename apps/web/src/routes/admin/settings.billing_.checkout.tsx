@@ -8,6 +8,7 @@ import { parseCheckoutSearch, type CheckoutSearch } from '@/lib/shared/billing/c
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 // The trailing underscore on "billing_" keeps this a sibling of Plans &
 // billing rather than a child rendered inside it. The URL is still
@@ -21,7 +22,7 @@ export const Route = createFileRoute('/admin/settings/billing_/checkout')({
       context.queryClient.ensureQueryData(billingQueries.overview()),
       context.queryClient.ensureQueryData(billingQueries.catalogue()).catch(() => null),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: CheckoutPage,
 })

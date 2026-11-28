@@ -31,6 +31,7 @@ import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/u
 import { adminPageHead } from '@/lib/client/admin-head'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { LanguageCard } from '@/components/admin/settings/language/language-card'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   /** `logo` scrolls to the workspace logo and highlights it. */
@@ -47,7 +48,10 @@ export const Route = createFileRoute('/admin/settings/general')({
       getCloudIdentityFn(),
       ensure(settingsQueries.logo()),
     ])
-    return { cloudIdentity }
+    return {
+      cloudIdentity,
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
+    }
   },
   component: GeneralSettingsPage,
 })

@@ -4,6 +4,7 @@ import { ChangelogList } from '@/components/admin/changelog/changelog-list'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   status: z.enum(['draft', 'scheduled', 'published']).optional().catch(undefined),
@@ -20,6 +21,7 @@ export const Route = createFileRoute('/admin/changelog')({
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminProduct'),
   component: ChangelogPage,
 })
 

@@ -4,6 +4,7 @@ import { IntlProvider } from 'react-intl'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
 import { isFullPageAdminPath } from '@/components/admin/admin-full-page'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
+import { AdminAreaMessages } from '@/components/admin/admin-area-messages'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadAdminMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
@@ -403,7 +404,9 @@ function AdminContent({
         }
       >
         <FileViewerProvider onJumpToMessage={scrollToMessage}>
-          <Outlet />
+          <AdminAreaMessages>
+            <Outlet />
+          </AdminAreaMessages>
         </FileViewerProvider>
       </AdminWorkspaceFrame>
       <EntityModals currentUser={currentUser} />

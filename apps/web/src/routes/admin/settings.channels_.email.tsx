@@ -8,6 +8,7 @@ import { EmailChannelPage } from '@/components/admin/settings/email-channel-page
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/channels_/email')({
   head: adminPageHead('Email channel settings'),
@@ -41,7 +42,7 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
       warmQuery(ensure, channels.emailAutoAck()),
       warmQuery(ensure, channels.emailActivity()),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: EmailChannelPage,
 })

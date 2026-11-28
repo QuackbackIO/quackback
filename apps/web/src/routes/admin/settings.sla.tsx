@@ -56,6 +56,7 @@ import { warmQuery } from '@/lib/client/queries/warm-query'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { errorText } from '@/lib/client/error-text'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const slaPoliciesQuery = queryOptions({
   queryKey: ['settings', 'slaPolicies'],
@@ -84,7 +85,7 @@ export const Route = createFileRoute('/admin/settings/sla')({
       // The policies' office-hours note reads these on first paint.
       warmQuery(context.queryClient, slaOfficeHoursQuery),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: SlaSettingsPage,
 })

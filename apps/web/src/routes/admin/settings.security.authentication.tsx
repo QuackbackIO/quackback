@@ -17,6 +17,7 @@ import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { getSsoLiveFn } from '@/lib/server/functions/sso'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   // The Access & Security page splits by CONCERN, not by surface:
@@ -72,6 +73,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     ])
 
     return {
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
       tabs,
       ssoEntitled: entitlements.sso,
       ssoLive,

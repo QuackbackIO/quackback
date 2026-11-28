@@ -4,10 +4,12 @@ import { BeakerIcon } from '@heroicons/react/24/solid'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { EmptyState } from '@/components/shared/empty-state'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/labs')({
-  loader: ({ context }) => {
+  loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/labs')
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: LabsSettingsPage,
 })

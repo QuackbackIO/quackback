@@ -4,12 +4,14 @@ import { sectionSearchValue } from '@/components/admin/analytics/analytics-secti
 import { AnalyticsPage } from '@/components/admin/analytics/analytics-page'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/analytics')({
   head: adminPageHead('Analytics'),
   // The open section lives in the URL so a section can be linked to. An
   // unknown value is dropped and the page opens on the overview.
   validateSearch: (raw: Record<string, unknown>) => ({ section: sectionSearchValue(raw.section) }),
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminProduct'),
   component: AnalyticsRoute,
 })
 

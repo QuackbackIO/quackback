@@ -8,6 +8,7 @@ import { planLimitsQueries } from '@/lib/client/queries/plan-limits'
 import { billingQueries } from '@/lib/client/queries/billing'
 import { usePermissions } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 // The trailing underscore on "billing_" keeps this a sibling of Plan &
 // billing, like checkout. The URL is /admin/settings/billing/limits.
@@ -22,7 +23,7 @@ export const Route = createFileRoute('/admin/settings/billing_/limits')({
     // the entry chunk every admin page downloads.
     const { planLimitsQueries: queries } = await import('@/lib/client/queries/plan-limits')
     await context.queryClient.ensureQueryData(queries.page())
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: PlanLimitsPage,
 })

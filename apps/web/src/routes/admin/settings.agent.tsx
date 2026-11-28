@@ -30,6 +30,7 @@ import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import type { FeatureFlags } from '@/lib/shared/types'
 import { useCloudEnabled, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const AGENT_TABS = ['basics', 'knowledge', 'guidance'] as const
 type AgentTab = (typeof AGENT_TABS)[number]
@@ -57,6 +58,7 @@ export const Route = createFileRoute('/admin/settings/agent')({
       warmQuery(queryClient, assistantQueries.guidanceRules()),
       warmQuery(queryClient, assistantQueries.guidanceRuleStats()),
     ])
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

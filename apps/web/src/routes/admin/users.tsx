@@ -8,6 +8,7 @@ import { errorMessage } from '@/components/shared/error-page'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { AdminPageGate } from '@/components/admin/admin-page-gate'
 import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   search: z.string().optional(),
@@ -78,6 +79,7 @@ export const Route = createFileRoute('/admin/users')({
     await warmUsersPage(queryClient, permissions)
 
     return {
+      ...(await seedAdminAreas(context.personLocale, 'adminPeople')),
       currentMemberRole: principal.role,
     }
   },

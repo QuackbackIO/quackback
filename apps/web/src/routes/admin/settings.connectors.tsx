@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/connectors')({
   head: adminPageHead('Connectors settings'),
@@ -39,6 +40,7 @@ export const Route = createFileRoute('/admin/settings/connectors')({
       warmQuery(queryClient, assistantQueries.settings()),
       warmQuery(queryClient, assistantQueries.tools()),
     ])
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

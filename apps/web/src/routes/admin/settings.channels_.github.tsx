@@ -4,6 +4,7 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { GitHubChannelPage } from '@/components/admin/settings/github-channel-page'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/channels_/github')({
   head: adminPageHead('GitHub channel settings'),
@@ -20,7 +21,7 @@ export const Route = createFileRoute('/admin/settings/channels_/github')({
     const { githubChannelStatusQuery: githubStatus } =
       await import('@/integrations/github/ui/github-channel-status-query')
     await warmQuery(queryClient, githubStatus())
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: GitHubChannelPage,
 })

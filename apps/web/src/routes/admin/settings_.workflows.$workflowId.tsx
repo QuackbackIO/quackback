@@ -6,6 +6,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const WorkflowBuilder = lazy(() =>
   import('@/components/admin/automation/workflow-builder/workflow-builder').then((m) => ({
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/admin/settings_/workflows/$workflowId')({
       context.queryClient.ensureQueryData(workflowDetailQuery(params.workflowId)),
       context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   component: WorkflowBuilderPage,
 })

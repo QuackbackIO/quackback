@@ -6,6 +6,7 @@ import { NewButton } from '@/components/shared/new-button'
 import { TicketTypesManager } from '@/components/admin/settings/tickets/ticket-types-manager'
 import { ticketTypesQuery } from '@/components/admin/settings/tickets/queries'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/ticket-types')({
   head: adminPageHead('Ticket types settings'),
@@ -17,7 +18,7 @@ export const Route = createFileRoute('/admin/settings/ticket-types')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/ticket-types')
     await context.queryClient.ensureQueryData(ticketTypesQuery)
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: TicketTypesPage,
 })

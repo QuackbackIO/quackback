@@ -141,6 +141,7 @@ import {
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
 import { TestViewHeader } from '@/components/admin/conversation/test-view-header'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 // URL is the source of truth for open item + filters (refresh-safe, shareable).
 // `?c=` is the legacy alias for `?i=`, accepted forever.
@@ -344,7 +345,7 @@ export const Route = createFileRoute('/admin/inbox')({
         ? warm(queryClient.ensureQueryData(conversationInboxQueries.thread(ref.id)))
         : undefined,
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminInbox')
   },
   component: InboxRoute,
 })

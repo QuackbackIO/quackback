@@ -5,6 +5,7 @@ import { domainUseLinks } from '@/lib/shared/domains-permissions'
 import { visibleDomainUses } from '@/lib/shared/domain-uses'
 import { portalSectionsEnabled } from '@/lib/shared/section-domains'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { DomainView } from '@/components/admin/settings/domain-view'
 import { domainRows } from '@/components/admin/settings/domains-overview'
@@ -17,7 +18,11 @@ export const Route = createFileRoute('/admin/settings/domains_/$domain')({
   loader: async ({ context, params }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/domains/$domain')
     const { loadDomainPage } = await import('@/lib/client/domain-page-loader')
-    return loadDomainPage(context, params.domain)
+    const [page, areaMessages] = await Promise.all([
+      loadDomainPage(context, params.domain),
+      seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
+    ])
+    return { ...page, ...areaMessages }
   },
   component: DomainPage,
 })

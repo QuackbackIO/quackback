@@ -5,6 +5,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { CompanyAttributesList } from '@/components/admin/settings/company-attributes/company-attributes-list'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/companies')({
   head: adminPageHead('Companies settings'),
@@ -12,7 +13,7 @@ export const Route = createFileRoute('/admin/settings/companies')({
     assertSettingsPageAccess(context.permissions, '/admin/settings/companies')
     const { queryClient } = context
     await queryClient.ensureQueryData(adminQueries.companyAttributes())
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminIntegrationSettings')
   },
   component: CompaniesPage,
 })

@@ -24,6 +24,7 @@ import type { PortalBuiltInNavType } from '@/components/public/portal-header-nav
 import { CustomiseEditor } from '@/components/admin/settings/portal-customise/customise-editor'
 import { customisePages } from '@/components/admin/settings/portal-customise/pages'
 import { useImportDeepLink } from '@/components/admin/settings/portal-customise/import-deep-link'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings_/portal/customise')({
   head: adminPageHead('Customise portal'),
@@ -48,6 +49,7 @@ export const Route = createFileRoute('/admin/settings_/portal/customise')({
       ensure(settingsQueries.headerLogo()),
       ...(helpCenter ? [ensure(settingsQueries.helpCenterConfig())] : []),
     ])
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: PortalCustomisePage,
 })

@@ -8,6 +8,7 @@ import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { ModalFooter } from '@/components/shared/modal-footer'
+import { AreaMessages } from '@/components/shared/area-messages'
 import { Form } from '@/components/ui/form'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -43,7 +44,19 @@ interface ArticleModalContentProps {
   onClose: () => void
 }
 
-export function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
+/**
+ * The article editor. Any admin page opens it from the URL, so it loads the
+ * help center's strings as it opens.
+ */
+export function ArticleModalContent(props: ArticleModalContentProps) {
+  return (
+    <AreaMessages area="adminHelpCenter">
+      <ArticleEditor {...props} />
+    </AreaMessages>
+  )
+}
+
+function ArticleEditor({ articleId, onClose }: ArticleModalContentProps) {
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [activeLocale, setActiveLocale] = useState<string | null>(null)
   const [visited, setVisited] = useState<string[]>([])

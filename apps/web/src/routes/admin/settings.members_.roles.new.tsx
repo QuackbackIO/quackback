@@ -4,6 +4,7 @@ import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { RoleEditor } from '@/components/admin/settings/team/role-editor'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/members_/roles/new')({
   head: adminPageHead('New role'),
@@ -15,6 +16,7 @@ export const Route = createFileRoute('/admin/settings/members_/roles/new')({
   // The editor starts from the roles list (permission presets, a duplicate's source).
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(settingsQueries.roles())
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: NewRolePage,
 })

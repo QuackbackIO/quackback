@@ -288,7 +288,21 @@ export const AREA_MESSAGE_PREFIXES = {
   helpCenter: ['portal.hc.'],
   // The workspace's language settings: the Language card on Settings >
   // General and the main-language row on the help center's languages.
+  // Ahead of the admin settings areas, so its keys stay its own.
   languageSettings: ['admin.settings.language.'],
+  // The admin areas. Each admin route seeds its area's strings in its loader
+  // (see `seedAdminAreas`); the shell (rail, menus, search, notifications,
+  // shared dialogs) has no area and rides the admin layout's seed. Keys are
+  // `admin.<area>.<component>.<name>`.
+  adminInbox: ['admin.inbox.'],
+  adminProduct: ['admin.feedback.', 'admin.roadmap.', 'admin.changelog.', 'admin.analytics.'],
+  adminPeople: ['admin.people.'],
+  adminHelpCenter: ['admin.helpCenter.', 'admin.status.'],
+  adminAutomation: ['admin.automation.'],
+  adminWorkspaceSettings: ['admin.settings.workspace.'],
+  adminChannelSettings: ['admin.settings.channels.'],
+  adminIntegrationSettings: ['admin.settings.integrations.'],
+  adminIntegrationCatalog: ['admin.integrationCatalog.'],
   twoFactor: ['portal.auth.twoFactor.'],
   notificationText: ['portal.notifications.text.'],
   accessGate: ['portal.accessGate.'],
@@ -400,6 +414,21 @@ export async function seedAreaMessages(
   area: MessageArea
 ): Promise<Record<string, string>> {
   return locale === DEFAULT_LOCALE ? {} : loadAreaMessages(locale, area)
+}
+
+/**
+ * What an admin route's loader returns for its areas, spread into its data:
+ * the areas' strings in the admin's language (the route context's
+ * `personLocale`) as `areaMessages`, which the admin layout hands to
+ * everything the route renders (`AdminAreaMessages`). Nothing in English,
+ * which renders from the code, so an English page's data is unchanged.
+ */
+export async function seedAdminAreas(
+  locale: SupportedLocale | undefined,
+  ...areas: MessageArea[]
+): Promise<{ areaMessages?: Record<string, string> }> {
+  if (!locale || locale === DEFAULT_LOCALE) return {}
+  return { areaMessages: await loadAreaMessages(locale, ...areas) }
 }
 
 /** The file viewer's strings in a locale. */

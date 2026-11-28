@@ -7,6 +7,7 @@ import { NewButton } from '@/components/shared/new-button'
 import { MacrosSettingsBody } from '@/components/admin/settings/macros-settings-body'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/macros')({
   head: adminPageHead('Macros settings'),
@@ -31,7 +32,10 @@ export const Route = createFileRoute('/admin/settings/macros')({
       }),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
-    return { macrosEntitled }
+    return {
+      macrosEntitled,
+      ...(await seedAdminAreas(context.personLocale, 'adminChannelSettings')),
+    }
   },
   component: MacrosSettingsPage,
 })

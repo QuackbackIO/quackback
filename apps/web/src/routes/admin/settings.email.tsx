@@ -7,6 +7,7 @@ import { WorkspaceEmailPage } from '@/components/admin/settings/workspace-email-
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 /**
  * Settings → Email: how this workspace sends. Not behind any product, since
@@ -39,7 +40,7 @@ export const Route = createFileRoute('/admin/settings/email')({
       warmQuery(ensure, emailChannelConfigQuery()),
       warmQuery(ensure, channels.emailStatus()),
     ])
-    return {}
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: WorkspaceEmailPage,
 })
