@@ -12,12 +12,8 @@ import de from '@/locales/de.json'
 import ar from '@/locales/ar.json'
 import en from '@/locales/en.json'
 import { adminSeedMessages, loadPortalMessages, messageArea } from '@/lib/shared/i18n'
-import {
-  describeError,
-  noticeText,
-  setErrorNoticeWords,
-  ERROR_NOTICE_MESSAGES,
-} from '@/lib/shared/describe-error'
+import { describeError, noticeText, ERROR_NOTICE_MESSAGES } from '@/lib/shared/describe-error'
+import { errorNoticeWords, setErrorNoticeWords } from '@/lib/client/error-notice-words'
 import { StateBadge } from '@/components/shared/state-badge'
 import { ErrorNoticeLanguage } from '@/components/shared/error-notice-language'
 import { Calendar } from '@/components/ui/calendar'
@@ -90,19 +86,23 @@ describe('in German', () => {
 
   it("words error notices raised outside React while it's mounted", () => {
     const view = render(wrap(<ErrorNoticeLanguage />))
-    const offline = describeError(new TypeError('Failed to fetch'), 'x', team)
+    const offline = describeError(new TypeError('Failed to fetch'), 'x', team, errorNoticeWords())
     expect(offline.title).toBe('Du bist offline')
     expect(
       noticeText(
         describeError(
           new Error('Something went wrong on our side. Try again in a moment. (Ref ABCD-1234)'),
           'Speichern fehlgeschlagen',
-          team
-        )
+          team,
+          errorNoticeWords()
+        ),
+        errorNoticeWords()
       )
     ).toContain('Ref. ABCD-1234')
     view.unmount()
-    expect(describeError(new TypeError('Failed to fetch'), 'x', team).title).toBe("You're offline")
+    expect(
+      describeError(new TypeError('Failed to fetch'), 'x', team, errorNoticeWords()).title
+    ).toBe("You're offline")
   })
 
   it('keeps every notice word in the catalogue', () => {
@@ -118,9 +118,13 @@ describe('in German', () => {
       ),
       offline: 'offline-x',
     } as never)
-    expect(describeError(new TypeError('Failed to fetch'), 'x', team).title).toBe('offline-x')
+    expect(
+      describeError(new TypeError('Failed to fetch'), 'x', team, errorNoticeWords()).title
+    ).toBe('offline-x')
     release()
-    expect(describeError(new TypeError('Failed to fetch'), 'x', team).title).toBe("You're offline")
+    expect(
+      describeError(new TypeError('Failed to fetch'), 'x', team, errorNoticeWords()).title
+    ).toBe("You're offline")
   })
 
   it('names settings pages, automation pages included, in the page language', () => {

@@ -33,10 +33,10 @@ export interface ErrorAudience {
 }
 
 /**
- * The words this module adds, in English. A team surface swaps in its own
- * language with {@link setErrorNoticeWords} (see `ErrorNoticeLanguage`), so the
- * notices raised from code with no React context around it read in that
- * language too. Visitors only ever see the caller's fallback, which is theirs.
+ * The words this module adds. Callers pass them in the page's language (the
+ * browser keeps the current set in `lib/client/error-notice-words.ts`); they
+ * default to the English. Visitors only ever see the caller's fallback, which
+ * is already theirs.
  */
 export const ERROR_NOTICE_MESSAGES = {
   unexpected: { id: 'common.errorNotice.unexpected', defaultMessage: UNEXPECTED_ERROR_MESSAGE },
@@ -79,27 +79,15 @@ export const ERROR_NOTICE_MESSAGES = {
 export type ErrorNoticeWord = keyof typeof ERROR_NOTICE_MESSAGES
 export type ErrorNoticeWords = Record<ErrorNoticeWord, string>
 
-const ENGLISH_WORDS = Object.fromEntries(
+export const ENGLISH_NOTICE_WORDS = Object.fromEntries(
   Object.entries(ERROR_NOTICE_MESSAGES).map(([word, message]) => [word, message.defaultMessage])
 ) as ErrorNoticeWords
 
-let words: ErrorNoticeWords = ENGLISH_WORDS
-
-/** The words in use; `Ref {reference}` keeps its placeholder. */
-export function errorNoticeWords(): ErrorNoticeWords {
-  return words
-}
-
-/** Words the notices in a language; returns the call that puts the English back. */
-export function setErrorNoticeWords(next: ErrorNoticeWords): () => void {
-  words = next
-  return () => {
-    if (words === next) words = ENGLISH_WORDS
-  }
-}
-
-/** "Ref ABC123" in the words in use. */
-export function referenceLabel(reference: string): string {
+/** "Ref ABC123" in the given words. */
+export function referenceLabel(
+  reference: string,
+  words: ErrorNoticeWords = ENGLISH_NOTICE_WORDS
+): string {
   return words.reference.replace('{reference}', reference)
 }
 
@@ -151,7 +139,8 @@ function isIssueList(message: string): boolean {
 export function describeError(
   error: unknown,
   fallback: string,
-  audience: ErrorAudience
+  audience: ErrorAudience,
+  words: ErrorNoticeWords = ENGLISH_NOTICE_WORDS
 ): ErrorNotice {
   const reference = errorReferenceOf(error)
   const message = splitErrorReference(messageOf(error)).message.trim()
@@ -212,9 +201,12 @@ export function describeError(
 }
 
 /** The notice as one line, for an inline error under a form. */
-export function noticeText(notice: ErrorNotice): string {
+export function noticeText(
+  notice: ErrorNotice,
+  words: ErrorNoticeWords = ENGLISH_NOTICE_WORDS
+): string {
   if (!notice.description) return notice.title
   const title = /[.!?]$/.test(notice.title) ? notice.title : `${notice.title}.`
-  const reference = notice.reference ? ` (${referenceLabel(notice.reference)})` : ''
+  const reference = notice.reference ? ` (${referenceLabel(notice.reference, words)})` : ''
   return `${title} ${notice.description}${reference}`
 }

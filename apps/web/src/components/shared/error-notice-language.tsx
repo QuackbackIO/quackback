@@ -2,10 +2,10 @@ import { useEffect } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ERROR_NOTICE_MESSAGES,
-  setErrorNoticeWords,
   type ErrorNoticeWord,
   type ErrorNoticeWords,
 } from '@/lib/shared/describe-error'
+import { setErrorNoticeWords } from '@/lib/client/error-notice-words'
 
 /**
  * Words the error notices (`toastError`, `errorText`) in the surrounding

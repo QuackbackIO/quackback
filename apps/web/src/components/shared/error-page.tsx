@@ -1,6 +1,7 @@
 import { lazy, Suspense, useContext, useState } from 'react'
 import { IntlContext, useIntl, type MessageDescriptor } from 'react-intl'
 import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
+import { ENGLISH_INTL } from '@/components/ui/use-optional-intl'
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
@@ -25,9 +26,8 @@ type Copy = (
   values?: Record<string, string>
 ) => string
 
-/** The English with each `{name}` filled in (these messages have no plurals). */
-const english: Copy = (message, values = {}) =>
-  message.defaultMessage.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match)
+/** The English, formatted the way a provider would format it. */
+const english: Copy = (message, values) => ENGLISH_INTL.formatMessage(message, values)
 
 // Error pages render under every route, so the module that loads their strings
 // is fetched when one shows rather than shipped in the chunk every page loads
