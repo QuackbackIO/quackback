@@ -53,6 +53,10 @@ test.describe('Widget visitor surfaces', { tag: '@smoke' }, () => {
     await expect(page.getByRole('button', { name: 'Home', exact: true })).toBeVisible({
       timeout: 10000,
     })
-    await expect(page.getByRole('button', { name: /^(?:\d+ unread )?Tickets$/ })).toHaveCount(0)
+    await expect(
+      page.getByRole('button', {
+        name: /^(?:\d+ (?:unread|tickets? updated|new updates?) )?Tickets$/,
+      })
+    ).toHaveCount(0)
   })
 })

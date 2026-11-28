@@ -7,7 +7,9 @@ function widgetFrame(page: Page): FrameLocator {
 
 /** Tab labels include an unread prefix (`1 unread Messages`) when badged. */
 function tabButton(widget: FrameLocator, label: 'Messages' | 'Tickets') {
-  return widget.getByRole('button', { name: new RegExp(`^(?:\\d+ unread )?${label}$`) })
+  return widget.getByRole('button', {
+    name: new RegExp(`^(?:\\d+ (?:unread|tickets? updated|new updates?) )?${label}$`),
+  })
 }
 
 async function openIdentified(page: Page, persona: 'customer' | 'teammate' | 'anon') {
