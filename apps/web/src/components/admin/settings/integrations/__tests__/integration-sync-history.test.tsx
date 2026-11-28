@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import { IntegrationSyncHistory } from '../integration-sync-history'
 import type { SyncHistoryItem } from '@/lib/shared/integration-sync'
 const api = vi.hoisted(() => ({
@@ -9,6 +10,7 @@ const api = vi.hoisted(() => ({
   inspect: vi.fn(),
   recover: vi.fn(),
   verify: vi.fn(),
+  destinations: vi.fn(),
 }))
 vi.mock('@/lib/server/functions/integration-sync', () => ({
   listIntegrationSyncHistoryFn: api.list,
@@ -17,6 +19,14 @@ vi.mock('@/lib/server/functions/integration-sync', () => ({
   verifyIntegrationSyncReferenceFn: api.verify,
 }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock('@/lib/client/queries/admin', () => ({
+  adminQueries: {
+    integrationDestinations: (type: string) => ({
+      queryKey: ['admin', 'integrations', type, 'destinations'],
+      queryFn: api.destinations,
+    }),
+  },
+}))
 const item: SyncHistoryItem = {
   id: 'sync-1',
   provider: 'github',
@@ -44,7 +54,9 @@ function mount() {
   clients.push(client)
   return render(
     <QueryClientProvider client={client}>
-      <IntegrationSyncHistory provider="github" />
+      <IntlProvider locale="en" messages={{}}>
+        <IntegrationSyncHistory provider="github" />
+      </IntlProvider>
     </QueryClientProvider>
   )
 }
@@ -52,6 +64,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   api.list.mockResolvedValue({ items: [item], nextCursor: null })
   api.inspect.mockResolvedValue({ preview: null, remote: null, attempts: [] })
+  api.destinations.mockResolvedValue([])
 })
 afterEach(() => {
   cleanup()
@@ -166,5 +179,18 @@ describe('integration sync recovery', () => {
       })
     )
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
+  })
+
+  it('offers a repository filter only for a connection syncing several', async () => {
+    const repo = (id: string, externalId: string) => ({ id, externalId, kind: 'repo' })
+    api.destinations.mockResolvedValue([repo('d1', 'acme/app')])
+    mount()
+    await screen.findByText('Search feedback')
+    expect(screen.queryByRole('combobox', { name: 'Repository' })).toBeNull()
+    cleanup()
+
+    api.destinations.mockResolvedValue([repo('d1', 'acme/app'), repo('d2', 'acme/api')])
+    mount()
+    expect(await screen.findByRole('combobox', { name: 'Repository' })).toBeTruthy()
   })
 })

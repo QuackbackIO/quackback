@@ -17,6 +17,12 @@ export interface InboundWebhookResult {
   externalId: string
   /** The new status name from the external platform */
   externalStatus: string
+  /**
+   * A broader status name to map when `externalStatus` has no mapping of its
+   * own (GitHub's `Closed (not planned)` falls back to `Closed`), so a
+   * mapping made before the finer status existed keeps applying.
+   */
+  fallbackStatus?: string
   /** Event type for logging (e.g. 'issue.updated', 'taskStatusUpdated') */
   eventType: string
   /**
@@ -37,6 +43,17 @@ export interface InboundWebhookHandler {
   statusMode: 'automatic' | 'review'
   /** Acknowledge setup challenges without accepting events or storing untrusted secrets. */
   handshake?(request: Request): Response | null
+
+  /**
+   * For a provider with `destination.multiple`: which destination an incoming
+   * delivery claims to come from, read from the unverified body only to pick
+   * the secret to verify it with. Null when the body names none. Nothing is
+   * trusted or written until the signature checks out with that secret.
+   */
+  destinationOf?(
+    body: string,
+    headers: Headers
+  ): { externalId: string; externalKey?: string } | null
 
   /**
    * Verify the webhook signature/authenticity.

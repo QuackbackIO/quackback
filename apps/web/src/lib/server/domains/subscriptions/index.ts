@@ -13,6 +13,5 @@
 export type {
   SubscriptionReason,
   Subscriber,
-  Subscription,
   NotificationPreferencesData,
 } from './subscription.types'
