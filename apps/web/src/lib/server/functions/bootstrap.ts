@@ -8,7 +8,8 @@ import {
   type Theme,
 } from '@/lib/shared/theme'
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
-import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
+import { resolveRequestLocale, type SupportedLocale } from '@/lib/shared/i18n'
+import { DEFAULT_LANGUAGE_CONFIG } from '@/lib/server/domains/settings/settings.types'
 import { starPromptAllowedHere } from '@/lib/server/github-star-prompt'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import {
@@ -86,6 +87,10 @@ export interface BootstrapData {
    *  root document to set `<html lang>`/`dir` during SSR. Resolved here so it
    *  rides the bootstrap request without a separate round-trip. */
   acceptLanguageLocale: SupportedLocale
+  /** The language for a visitor's page (portal, help center, status page):
+   *  as `acceptLanguageLocale`, except that a workspace showing its main
+   *  language to every visitor gets the main language. */
+  visitorLocale: SupportedLocale
   /** Version string the admin update banner was dismissed for, read from the
    *  `update_banner_dismissed_version` cookie, or null if never dismissed.
    *  Threaded into the admin route the same way `themeCookie` is, so the
@@ -371,7 +376,11 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const updateBannerDismissedVersion = getUpdateBannerDismissedVersionCookie(
     headers.get('cookie') ?? null
   )
-  const acceptLanguageLocale = resolveLocale(headers.get('accept-language'))
+  // The browser language when the product has it, else the main language.
+  const languageConfig = settings?.languageConfig ?? DEFAULT_LANGUAGE_CONFIG
+  const acceptLanguage = headers.get('accept-language')
+  const acceptLanguageLocale = resolveRequestLocale(acceptLanguage, languageConfig)
+  const visitorLocale = resolveRequestLocale(acceptLanguage, languageConfig, { forVisitor: true })
 
   // Ask for the prefers-color-scheme client hint, so Chromium sends the OS
   // preference with later requests and a `system` theme is rendered here. A
@@ -448,6 +457,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     managedFieldPaths: settings?.managedFieldPaths ?? [],
     registeredAuthProviders,
     acceptLanguageLocale,
+    visitorLocale,
     updateBannerDismissedVersion,
     billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
     cloudEnabled: cloud.enabled,

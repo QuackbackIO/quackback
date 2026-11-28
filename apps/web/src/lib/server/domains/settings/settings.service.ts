@@ -17,6 +17,7 @@ import {
 } from '@/lib/server/local-cache'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
+import { normalizeLocale } from '@/lib/shared/i18n'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import {
   assistantConfigSchema,
@@ -44,6 +45,7 @@ import type {
   WorkspaceSettings,
   SettingsBrandingData,
   HelpCenterConfig,
+  LanguageConfig,
   HelpCenterLocalesConfig,
   HelpCenterLocaleChromeStrings,
   VerifiedDomain,
@@ -54,6 +56,7 @@ import {
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_FEATURE_FLAGS,
   DEFAULT_HELP_CENTER_CONFIG,
+  DEFAULT_LANGUAGE_CONFIG,
   resolveFeatureFlags,
 } from './settings.types'
 import { signupOpenFor } from '@/lib/shared/signup-open'
@@ -806,6 +809,89 @@ export async function getHelpCenterConfig(
 }
 
 /**
+ * The workspace's languages from the stored value. Without one, the main
+ * language is the help center's default language, so a workspace that never
+ * set it keeps what it has.
+ */
+export function parseLanguageConfig(
+  raw: string | null,
+  helpCenterDefault?: string | null
+): LanguageConfig {
+  const stored = parseJsonOrNull<Partial<LanguageConfig>>(raw) ?? {}
+  return {
+    mainLanguage:
+      normalizeLocale(stored.mainLanguage ?? '') ??
+      normalizeLocale(helpCenterDefault ?? '') ??
+      DEFAULT_LANGUAGE_CONFIG.mainLanguage,
+    visitorLanguage: stored.visitorLanguage === 'main' ? 'main' : 'own',
+  }
+}
+
+export async function getLanguageConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<LanguageConfig> {
+  try {
+    const org = await readSettingsRow(freshness)
+    const helpCenter = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+    return parseLanguageConfig(org.languageConfig, helpCenter.locales?.default)
+  } catch (error) {
+    log.error({ err: error }, 'get language config failed')
+    wrapDbError('fetch language config', error)
+  }
+}
+
+/**
+ * Change the main language or what visitors see. The help center's default
+ * language follows the main language in the same write. A language the help
+ * center already offers as an extra language cannot become the main language
+ * here; that needs its translations moved first.
+ */
+export async function updateLanguageConfig(
+  input: Partial<LanguageConfig>,
+  options: SettingsWriteOptions = {}
+): Promise<LanguageConfig> {
+  const mainLanguage =
+    input.mainLanguage === undefined ? undefined : normalizeLocale(input.mainLanguage)
+  if (input.mainLanguage !== undefined && !mainLanguage) {
+    throw new ValidationError('UNSUPPORTED_LANGUAGE', `"${input.mainLanguage}" is not supported`)
+  }
+  log.info({ main_language: mainLanguage }, 'update language config')
+  try {
+    return await writeLockedSettings(options, async (tx, org) => {
+      const helpCenter = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+      const existing = parseLanguageConfig(org.languageConfig, helpCenter.locales?.default)
+      const next: LanguageConfig = {
+        mainLanguage: mainLanguage ?? existing.mainLanguage,
+        visitorLanguage: input.visitorLanguage ?? existing.visitorLanguage,
+      }
+      const additional = helpCenter.locales?.additional ?? []
+      if (next.mainLanguage !== existing.mainLanguage && additional.includes(next.mainLanguage)) {
+        throw new ValidationError(
+          'MAIN_LANGUAGE_IS_EXTRA',
+          'Remove this language from the help center languages before making it the main language'
+        )
+      }
+      const nextHelpCenter: HelpCenterConfig = {
+        ...helpCenter,
+        locales: { ...helpCenter.locales, default: next.mainLanguage },
+      }
+      await tx
+        .update(settings)
+        .set({
+          languageConfig: JSON.stringify(next),
+          helpCenterConfig: JSON.stringify(nextHelpCenter),
+        })
+        .where(eq(settings.id, org.id))
+      return next
+    })
+  } catch (error) {
+    if (error instanceof ValidationError) throw error
+    log.error({ err: error }, 'update language config failed')
+    wrapDbError('update language config', error)
+  }
+}
+
+/**
  * A help-center update. `seo` and `autoTranslate` may be partial: they are
  * merged over the stored section, so a caller never sends back a copy it read.
  */
@@ -1176,6 +1262,10 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
       ? assistantConfig.data.identity
       : DEFAULT_ASSISTANT_CONFIG.identity
     const helpCenterConfig = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+    const languageConfig = parseLanguageConfig(
+      org.languageConfig,
+      helpCenterConfig.locales?.default
+    )
     const statusConfig = resolveStatusSettings(org.metadata)
 
     const featureFlags = resolveFeatureFlags(org.featureFlags)
@@ -1222,6 +1312,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
       brandingConfig,
       developerConfig,
       helpCenterConfig,
+      languageConfig,
       statusConfig,
       customCss: org.customCss ?? '',
       publicAuthConfig: {

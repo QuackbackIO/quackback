@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 770 surfaces
+### Server functions (`requireAuth`) — 772 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -488,6 +488,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/integrations.ts`::addNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::updateNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::removeNotificationChannelFn | integration.manage |
+| `lib/server/functions/language-settings.ts`::getLanguageSettingsFn | settings.manage |
+| `lib/server/functions/language-settings.ts`::updateLanguageSettingsFn | settings.manage |
 | `lib/server/functions/link-preview.ts`::unfurlLinkFn | END_USER (any authenticated) |
 | `lib/server/functions/macros.ts`::listMacrosFn | conversation.reply |
 | `lib/server/functions/macros.ts`::createMacroFn | conversation.manage |
@@ -1097,7 +1099,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-241 of 1118 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+241 of 1120 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1148,6 +1150,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/invitations.ts`::getInviteBrandingFn | server-fn |
 | `lib/server/functions/invitations.ts`::setPasswordFn | server-fn |
 | `lib/server/functions/locale.ts`::getPortalLocaleFn | server-fn |
+| `lib/server/functions/locale.ts`::getWidgetLocaleFn | server-fn |
 | `lib/server/functions/onboarding.ts`::ensureOnboardingHomeReadyFn | server-fn |
 | `lib/server/functions/onboarding.ts`::getWorkspaceClaimFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveUserNameFn | server-fn |
@@ -1342,5 +1345,4 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/status/feed.ts`::GET | route |
 | `routes/unsubscribe.tsx`::POST | route |
 | `routes/widget.tsx`::getPortalSessionToken | server-fn |
-| `routes/widget.tsx`::getWidgetLocale | server-fn |
 | `routes/widget.tsx`::setIframeHeaders | server-fn |

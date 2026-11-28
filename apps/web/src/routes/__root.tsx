@@ -54,6 +54,7 @@ export interface RouterContext {
   managedFieldPaths?: string[]
   registeredAuthProviders?: string[]
   acceptLanguageLocale?: SupportedLocale
+  visitorLocale?: SupportedLocale
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
   cloudEnabled?: boolean
@@ -234,6 +235,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const acceptLanguageLocale = Route.useRouteContext({
     select: (context) => context.acceptLanguageLocale,
   })
+  const visitorLocale = Route.useRouteContext({ select: (context) => context.visitorLocale })
   // On a portal section's own hostname, the page `/` shows there; the
   // browser router reads it off the document (section-home-rewrite.ts).
   const sectionHome = Route.useRouteContext({
@@ -293,7 +295,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     isWidgetRoute && widgetLocaleParam ? normalizeLocale(widgetLocaleParam) : null
   // A help center page in a language advertises that language.
   const hcLocale = useRouterState({ select: (s) => hcPathLocale(s.location.pathname) })
-  const resolvedLocale = widgetOverride ?? hcLocale ?? acceptLanguageLocale ?? DEFAULT_LOCALE
+  const requestLocale = isPortalRoute
+    ? (visitorLocale ?? acceptLanguageLocale)
+    : acceptLanguageLocale
+  const resolvedLocale = widgetOverride ?? hcLocale ?? requestLocale ?? DEFAULT_LOCALE
   const locale = useRouterState({
     select: (s) =>
       documentLocale(

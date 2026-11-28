@@ -1005,12 +1005,36 @@ export const DEFAULT_HELP_CENTER_LOCALE_CHROME: HelpCenterLocaleChromeStrings = 
  * nothing to show on its own homepage.
  */
 export interface HelpCenterLocalesConfig {
-  /** Always the app's DEFAULT_LOCALE; not independently configurable in v1. */
+  /** The workspace's main language (LanguageConfig.mainLanguage). */
   default: string
   /** Enabled additional locale codes, each a SupportedLocale. */
   additional: string[]
   /** Chrome strings for additional locales, keyed by locale code. */
   chrome: Record<string, HelpCenterLocaleChromeStrings>
+}
+
+/**
+ * What language visitors see. `own`: each visitor's own language (the browser
+ * language, when the product has it). `main`: the main language for every
+ * visitor. A language a person sets for themselves, or a host page sets for
+ * the widget, wins over both.
+ */
+export type VisitorLanguage = 'own' | 'main'
+
+/**
+ * The workspace's languages. `mainLanguage` is the language the team writes
+ * in: help center articles and collections are in it, and a visitor whose
+ * language the product does not have gets it. The help center's
+ * `locales.default` is kept equal to it.
+ */
+export interface LanguageConfig {
+  mainLanguage: string
+  visitorLanguage: VisitorLanguage
+}
+
+export const DEFAULT_LANGUAGE_CONFIG: LanguageConfig = {
+  mainLanguage: 'en',
+  visitorLanguage: 'own',
 }
 
 export const DEFAULT_HELP_CENTER_LOCALES_CONFIG: HelpCenterLocalesConfig = {
@@ -1200,6 +1224,7 @@ export interface WorkspaceSettings {
   publicPortalConfig: PublicPortalConfig
   /** Help center configuration */
   helpCenterConfig: HelpCenterConfig
+  languageConfig: LanguageConfig
   /** Status page enablement/visibility/email settings */
   statusConfig: StatusSettings
   /** Public widget config (no secret, safe for client) */

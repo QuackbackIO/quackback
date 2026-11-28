@@ -84,9 +84,17 @@ export function resolveLocale(
     if (normalized !== null) return normalized
   }
 
-  // Parse Accept-Language header
-  if (!acceptLanguage) return DEFAULT_LOCALE
+  return matchAcceptLanguage(acceptLanguage) ?? DEFAULT_LOCALE
+}
 
+/**
+ * The first language in an Accept-Language header that the product has, or
+ * null when it has none of them.
+ */
+export function matchAcceptLanguage(
+  acceptLanguage: string | null | undefined
+): SupportedLocale | null {
+  if (!acceptLanguage) return null
   const entries = acceptLanguage
     .split(',')
     .map((entry) => {
@@ -97,13 +105,29 @@ export function resolveLocale(
     // q=0 means "not acceptable" (RFC 7231), so drop those entries entirely.
     .filter((entry) => entry.q > 0)
     .sort((a, b) => b.q - a.q)
-
   for (const { tag } of entries) {
     const normalized = normalizeLocale(tag)
     if (normalized !== null) return normalized
   }
+  return null
+}
 
-  return DEFAULT_LOCALE
+/**
+ * The language for a request, by the workspace's language settings:
+ * `explicit` (a host page's widget locale) when the product has it; then the
+ * main language when the workspace shows it to every visitor (`forVisitor`);
+ * then the browser language; then the main language.
+ */
+export function resolveRequestLocale(
+  acceptLanguage: string | null | undefined,
+  language: { mainLanguage: string; visitorLanguage: 'own' | 'main' },
+  opts: { explicit?: string | null; forVisitor?: boolean } = {}
+): SupportedLocale {
+  const explicit = opts.explicit ? normalizeLocale(opts.explicit) : null
+  if (explicit) return explicit
+  const main = normalizeLocale(language.mainLanguage) ?? DEFAULT_LOCALE
+  if (opts.forVisitor && language.visitorLanguage === 'main') return main
+  return matchAcceptLanguage(acceptLanguage) ?? main
 }
 
 /**
