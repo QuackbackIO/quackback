@@ -20,3 +20,34 @@ export const tagDeleted = decl('tag.deleted', 'post_tag', { audit: true }, B)
 export const articlePublished = decl('article.published', 'kb_article', { audit: true }, K)
 export const articleUpdated = decl('article.updated', 'kb_article', { audit: true }, K)
 export const articleDeleted = decl('article.deleted', 'kb_article', { audit: true }, K)
+
+/**
+ * Help center translation events: one language of an article. Webhook events
+ * (also audited), so an integration can follow each language the way a
+ * person does in the editor.
+ */
+const translationExposure = { audit: true, webhook: true } as const
+export const articleTranslationPublished = decl(
+  'article.translation_published',
+  'kb_article',
+  translationExposure,
+  K
+)
+export const articleTranslationUpdated = decl(
+  'article.translation_updated',
+  'kb_article',
+  translationExposure,
+  K
+)
+export const articleTranslationNeedsUpdate = decl(
+  'article.translation_needs_update',
+  'kb_article',
+  translationExposure,
+  K
+)
+export const articleTranslationUpdateReady = decl(
+  'article.translation_update_ready',
+  'kb_article',
+  translationExposure,
+  K
+)

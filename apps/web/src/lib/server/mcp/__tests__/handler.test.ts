@@ -859,7 +859,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('navigate_workspace')
       // Settings change directly through update_settings; no tool files a settings card.
       expect(toolNames).not.toContain('propose_settings_change')
-      expect(toolNames).toHaveLength(43)
+      expect(toolNames).toHaveLength(44)
     })
 
     it('should handle resources/list request', async () => {

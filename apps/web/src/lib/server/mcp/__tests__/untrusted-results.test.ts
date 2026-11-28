@@ -35,6 +35,12 @@ const mocks = vi.hoisted(() => ({
   principalIdsOnTeam: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/help-center/help-center-translation-api', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/help-center/help-center-translation-api')
+  >()),
+  listArticleTranslationSummaries: async () => [],
+}))
 vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://example.com' },
   getBaseUrl: () => 'https://example.com',
@@ -966,6 +972,7 @@ describe('author names of teammates who have left the team', () => {
       notHelpfulCount: 0,
       createdAt: ISO1,
       updatedAt: ISO2,
+      translations: [],
     })
   }
 

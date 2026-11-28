@@ -33,6 +33,11 @@ import {
   CONTENT_FORMAT_BLOCK,
   CONTENT_FIELD_DESCRIBE,
 } from './helpers'
+import {
+  LOCALE_DESCRIBE,
+  manageCategoryLanguage,
+  updateArticleLanguage,
+} from './help-center-translations'
 
 // ============================================================================
 // Schemas
@@ -79,6 +84,16 @@ const updateHelpCenterArticleSchema = {
       'Any ISO 8601 datetime string to publish immediately (e.g. "2026-04-08T00:00:00Z"), or null to unpublish. The exact timestamp is not used — articles are always published at the current time.'
     ),
   authorId: z.string().optional().describe('Principal TypeID to reassign as the article author'),
+  locale: z
+    .string()
+    .optional()
+    .describe(
+      `Write the article in another language instead of its own: title, description and content apply to that language, and publishedAt publishes (or, null, unpublishes) that language only. ${LOCALE_DESCRIBE}`
+    ),
+  removeLocale: z
+    .string()
+    .optional()
+    .describe(`Delete the article's version in this language. ${LOCALE_DESCRIBE}`),
 }
 
 const deleteHelpCenterArticleSchema = {
@@ -107,6 +122,12 @@ const manageCategorySchema = {
     .optional()
     .describe('Parent category TypeID, or null for top-level'),
   isPublic: z.boolean().optional().describe('Whether category is publicly visible'),
+  locale: z
+    .string()
+    .optional()
+    .describe(
+      `With update: set the category's name and description in this language. With delete: remove that language's name. ${LOCALE_DESCRIBE}`
+    ),
 }
 
 // ============================================================================
@@ -133,6 +154,8 @@ type UpdateHelpCenterArticleArgs = {
   categoryId?: string
   publishedAt?: string | null
   authorId?: string
+  locale?: string
+  removeLocale?: string
 }
 
 type DeleteHelpCenterArticleArgs = { articleId: string }
@@ -146,6 +169,7 @@ type ManageCategoryArgs = {
   icon?: string | null
   parentId?: string | null
   isPublic?: boolean
+  locale?: string
 }
 
 // ============================================================================
@@ -198,13 +222,17 @@ Examples:
 Examples:
 - Update title: update_article({ articleId: "article_01abc...", title: "New Title" })
 - Publish: update_article({ articleId: "article_01abc...", publishedAt: "2026-04-08T00:00:00Z" })
-- Unpublish: update_article({ articleId: "article_01abc...", publishedAt: null })${CONTENT_FORMAT_BLOCK}`,
+- Unpublish: update_article({ articleId: "article_01abc...", publishedAt: null })
+- Write the German version (a draft until published): update_article({ articleId: "article_01abc...", locale: "de", title: "Erste Schritte", content: "..." })
+- Publish the German version: update_article({ articleId: "article_01abc...", locale: "de", publishedAt: "2026-04-08T00:00:00Z" })
+- Remove the German version: update_article({ articleId: "article_01abc...", removeLocale: "de" })${CONTENT_FORMAT_BLOCK}`,
     schema: updateHelpCenterArticleSchema,
     annotations: WRITE,
     feature: 'helpCenter',
     scope: 'write:article',
     teamOnly: true,
     handler: async (args) => {
+      if (args.locale || args.removeLocale) return updateArticleLanguage(args)
       const articleId = parseTypeId<KbArticleId>(args.articleId, 'article', 'article ID')
       const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
         args.authorId,
@@ -212,7 +240,14 @@ Examples:
         'author ID'
       )
 
-      const { articleId: _, publishedAt: __, authorId: ___, ...updateData } = args
+      const {
+        articleId: _,
+        publishedAt: __,
+        authorId: ___,
+        locale: ____,
+        removeLocale: _____,
+        ...updateData
+      } = args
       const hasUpdates =
         Object.values(updateData).some((v) => v !== undefined) || authorPrincipalId !== undefined
 
@@ -267,13 +302,15 @@ Example:
 Examples:
 - Create: manage_category({ action: "create", name: "Getting Started", icon: "RocketLaunchIcon" })
 - Update: manage_category({ action: "update", categoryId: "kb_category_01abc...", name: "New Name" })
-- Delete: manage_category({ action: "delete", categoryId: "kb_category_01abc..." })`,
+- Delete: manage_category({ action: "delete", categoryId: "kb_category_01abc..." })
+- Name in German: manage_category({ action: "update", categoryId: "kb_category_01abc...", locale: "de", name: "Erste Schritte" })`,
     schema: manageCategorySchema,
     annotations: DESTRUCTIVE,
     feature: 'helpCenter',
     scope: 'write:article',
     teamOnly: true,
     handler: async (args) => {
+      if (args.locale) return manageCategoryLanguage({ ...args, locale: args.locale })
       switch (args.action) {
         case 'create': {
           if (!args.name) {
@@ -293,7 +330,7 @@ Examples:
           if (!args.categoryId) {
             return errorResult(new Error('categoryId is required when action is "update"'))
           }
-          const { action: _, categoryId: __, ...updateData } = args
+          const { action: _, categoryId: __, locale: ___, ...updateData } = args
           const category = await updateCategory(args.categoryId as KbCategoryId, updateData)
           return categoryResult(category)
         }

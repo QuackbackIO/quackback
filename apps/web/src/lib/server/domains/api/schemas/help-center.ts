@@ -35,6 +35,11 @@ const CategoryWithCountSchema = CategorySchema.extend({
 
 const ArticleSchema = z.object({
   id: TypeIdSchema.meta({ example: 'article_01h455vb4pex5vsknk084sn02q' }),
+  locale: z.string().meta({
+    description:
+      "The language the title, description and content are in: the article's own language, or the requested one when it has a version in it",
+    example: 'en',
+  }),
   slug: z.string(),
   title: z.string(),
   description: z.string().nullable(),
@@ -49,6 +54,33 @@ const ArticleSchema = z.object({
   author: z
     .object({ id: TypeIdSchema, name: z.string(), avatarUrl: z.string().nullable() })
     .nullable(),
+})
+
+/** One translation of an article (see the translations endpoints). */
+export const ArticleTranslationSummarySchema = z.object({
+  locale: z.string().meta({ example: 'de' }),
+  status: z.enum(['draft', 'published']),
+  title: z.string(),
+  updatedAt: TimestampSchema,
+  needsUpdate: z
+    .boolean()
+    .meta({ description: 'The article changed after this translation was made' }),
+  updateReady: z.boolean().meta({
+    description:
+      'An AI update is waiting for review beside the live text (publish-update or discard-update)',
+  }),
+})
+
+const ArticleWithLanguagesSchema = ArticleSchema.extend({
+  requestedLocale: z
+    .string()
+    .optional()
+    .meta({ description: 'The locale asked for, when one was' }),
+  fallback: z.boolean().optional().meta({
+    description:
+      'True when the article has no version in the requested language and its own text is returned',
+  }),
+  translations: z.array(ArticleTranslationSummarySchema),
 })
 
 const CreateCategoryBodySchema = createRequestBodySchema({
@@ -303,13 +335,25 @@ registerPath('/help-center/articles/{articleId}', {
   get: {
     tags: ['Help Center'],
     summary: 'Get a help center article',
-    description: PUBLIC_READ,
-    parameters: [articleIdParam],
+    description: `${PUBLIC_READ} With locale, the title, description and content are the article's version in that language; when it has none a reader would get (a published one, or any for a key with help_center.manage), they are the article's own and fallback is true. The translations list each version the article has; a key without help_center.manage sees the published ones.`,
+    parameters: [
+      articleIdParam,
+      {
+        name: 'locale',
+        in: 'query',
+        required: false,
+        schema: { type: 'string' },
+        description:
+          'Read the article in this language (en, de, fr, es, ar, ru, pt-br, zh-cn, zh-tw, nl, pl, th, uk)',
+      },
+    ],
     responses: {
       200: {
         description: 'Article details',
         content: {
-          'application/json': { schema: createItemResponseSchema(ArticleSchema, 'Article') },
+          'application/json': {
+            schema: createItemResponseSchema(ArticleWithLanguagesSchema, 'ArticleWithLanguages'),
+          },
         },
       },
       ...errorResponses(400, 403),

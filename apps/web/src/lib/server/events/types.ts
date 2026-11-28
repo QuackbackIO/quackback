@@ -81,6 +81,11 @@ export const EVENT_TYPES = [
   'ticket.external_status_changed',
   'assistant.handed_off',
   'assistant.resolved',
+  // Help center translations: one language of an article.
+  'article.translation_published',
+  'article.translation_updated',
+  'article.translation_needs_update',
+  'article.translation_update_ready',
   // Timer-driven triggers (see TIMER_DRIVEN_EVENT_TYPES above for the rationale).
   ...TIMER_DRIVEN_EVENT_TYPES,
 ] as const

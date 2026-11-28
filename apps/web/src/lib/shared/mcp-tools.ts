@@ -30,6 +30,7 @@ export const MCP_TOOL_NAMES = [
   'update_article',
   'delete_article',
   'manage_category',
+  'translate_article',
   'list_conversations',
   'get_conversation',
   'reply_to_conversation',

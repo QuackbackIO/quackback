@@ -182,6 +182,26 @@ export const WEBHOOK_EVENT_CONFIG = [
     description: 'When the AI assistant settles a conversation without handing off',
   },
   {
+    id: 'article.translation_published',
+    label: 'Article Translation Published',
+    description: 'When a help center article is published in one of its other languages',
+  },
+  {
+    id: 'article.translation_updated',
+    label: 'Article Translation Updated',
+    description: 'When the text of one language of a help center article is saved or replaced',
+  },
+  {
+    id: 'article.translation_needs_update',
+    label: 'Article Translation Needs Update',
+    description: 'When a help center article changes after one of its translations was made',
+  },
+  {
+    id: 'article.translation_update_ready',
+    label: 'Article Translation Update Ready',
+    description: 'When an AI update of one language of an article is waiting for review',
+  },
+  {
     id: 'conversation.note_mentioned',
     label: 'Note Mention',
     description: 'When an internal note @-mentions a teammate (private content — opt-in)',

@@ -7,6 +7,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('@/lib/server/domains/help-center/help-center-translation-api', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/help-center/help-center-translation-api')
+  >()),
+  listArticleTranslationSummaries: async () => [],
+}))
 vi.mock('@/lib/server/domains/api/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/api/auth')>()),
   withApiKeyAuth: vi.fn(),

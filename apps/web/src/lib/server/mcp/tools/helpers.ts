@@ -475,10 +475,19 @@ export async function articleResult(article: {
   notHelpfulCount: number
   createdAt: Date
   updatedAt: Date
+  /** The language the text is in, and, for a read in one language, what was asked. */
+  locale?: string
+  requestedLocale?: string
+  fallback?: boolean
+  translations?: unknown[]
 }): Promise<CallToolResult> {
   return withAuthorFacts(
     jsonResult({
       id: article.id,
+      ...(article.locale !== undefined ? { locale: article.locale } : {}),
+      ...(article.requestedLocale !== undefined
+        ? { requestedLocale: article.requestedLocale, fallback: article.fallback ?? false }
+        : {}),
       slug: article.slug,
       title: article.title,
       content: contentJsonToMarkdown(article.contentJson, article.content),
@@ -492,6 +501,7 @@ export async function articleResult(article: {
       notHelpfulCount: article.notHelpfulCount,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
+      ...(article.translations !== undefined ? { translations: article.translations } : {}),
     }),
     [['author', article.author?.id]]
   )
