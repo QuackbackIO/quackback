@@ -35,7 +35,7 @@ import {
   useHasPermission,
 } from '@/lib/client/hooks/use-root-context'
 import { useToasterLocale } from '@/components/ui/use-toaster-locale'
-import { ErrorNoticeLanguage } from '@/components/shared/error-notice-language'
+import { ErrorNoticeLanguage } from '@/lib/client/error-notice-words'
 import adminThemeCss from '@/styles/admin-theme.css?url'
 
 /** What the admin pages read from the role guard's answer. */

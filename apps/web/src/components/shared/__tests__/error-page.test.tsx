@@ -138,7 +138,7 @@ describe('DefaultErrorPage', () => {
     expect(screen.getByText(/custom exploded/)).toBeInTheDocument()
   })
 
-  it('does not treat a plan refusal as an unexpected crash', () => {
+  it('does not treat a plan refusal as an unexpected crash', async () => {
     render(
       <DefaultErrorPage
         error={
@@ -149,15 +149,17 @@ describe('DefaultErrorPage', () => {
       />
     )
 
+    expect(
+      await screen.findByRole('heading', {
+        name: 'The audit log is available from the Enterprise plan',
+      })
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Something went wrong/i)).toBeNull()
     expect(screen.queryByText(/Technical details/i)).toBeNull()
-    expect(
-      screen.getByRole('heading', { name: 'The audit log is available from the Enterprise plan' })
-    ).toBeInTheDocument()
     expect(screen.getByText('Upgrade to Enterprise to enable it.')).toBeInTheDocument()
   })
 
-  it('keeps the generic plan headline when the refusal names no plan', () => {
+  it('keeps the generic plan headline when the refusal names no plan', async () => {
     render(
       <DefaultErrorPage
         error={new Error('Workflows are not included in your plan. Contact us to enable it.')}
@@ -165,26 +167,28 @@ describe('DefaultErrorPage', () => {
     )
 
     expect(
-      screen.getByRole('heading', { name: 'Workflows are not included in your plan' })
+      await screen.findByRole('heading', { name: 'Workflows are not included in your plan' })
     ).toBeInTheDocument()
     expect(screen.getByText('Contact us to add them to your plan.')).toBeInTheDocument()
   })
 
-  it('keeps the generic plan headline for a feature it cannot name', () => {
+  it('keeps the generic plan headline for a feature it cannot name', async () => {
     render(
       <DefaultErrorPage
         error={new Error('Custom CSS is not included in your plan. Contact us to enable it.')}
       />
     )
 
-    expect(screen.getByRole('heading', { name: 'This is a plan feature' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'This is a plan feature' })
+    ).toBeInTheDocument()
   })
 })
 
 describe('error pages in the reader’s language', () => {
   afterEach(cleanup)
 
-  it('words a plan refusal in the page language, not the server sentence', () => {
+  it('words a plan refusal in the page language, not the server sentence', async () => {
     render(
       <IntlProvider locale="pl" defaultLocale="en" messages={pl}>
         <DefaultErrorPage
@@ -197,7 +201,9 @@ describe('error pages in the reader’s language', () => {
       </IntlProvider>
     )
     expect(
-      screen.getByRole('heading', { name: 'Dziennik audytu wchodzi w zakres planu Enterprise' })
+      await screen.findByRole('heading', {
+        name: 'Dziennik audytu wchodzi w zakres planu Enterprise',
+      })
     ).toBeTruthy()
     expect(screen.getByText('Przejdź na Enterprise, aby włączyć tę funkcję.')).toBeTruthy()
     expect(screen.queryByText(/Enterprise feature/)).toBeNull()

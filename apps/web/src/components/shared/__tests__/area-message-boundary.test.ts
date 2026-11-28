@@ -51,7 +51,8 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     importers: null,
   },
   errorPage: {
-    users: /^components\/shared\/(error-page\.tsx|seat-paused-page\.tsx|plan-refusal-copy\.ts)$/,
+    users:
+      /^components\/shared\/(error-page\.tsx|seat-paused-page\.tsx|plan-refusal-(copy\.ts|page\.tsx))$/,
     importers: null,
   },
   deviceSignIn: {

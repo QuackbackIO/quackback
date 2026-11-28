@@ -20,7 +20,7 @@ import {
 } from '@/lib/shared/describe-error'
 import { errorNoticeWords, setErrorNoticeWords } from '@/lib/client/error-notice-words'
 import { StateBadge } from '@/components/shared/state-badge'
-import { ErrorNoticeLanguage } from '@/components/shared/error-notice-language'
+import { ErrorNoticeLanguage } from '@/lib/client/error-notice-words'
 import { Calendar } from '@/components/ui/calendar'
 import { slashMenuItems } from '@/components/ui/rich-text-editor'
 import { SETTINGS_PAGES, settingsPageTitle } from '@/lib/shared/settings-pages'

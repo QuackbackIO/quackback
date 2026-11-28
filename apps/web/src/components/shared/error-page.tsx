@@ -4,7 +4,7 @@ import { DocumentLocaleContext } from '@/components/shared/document-locale-conte
 import { ENGLISH_INTL } from '@/components/ui/use-optional-intl'
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { planRefusalCopy } from '@/components/shared/plan-refusal-copy'
+import { isEntitlementRefusal } from '@/lib/shared/describe-upgrade'
 import { isSeatPausedError } from '@/lib/shared/billing/seat-paused'
 import { errorReferenceOf } from '@/lib/shared/error-reference'
 import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
@@ -124,8 +124,7 @@ export function isAuthorizationError(error: unknown): boolean {
  * boundary. Those sentences are commercial outcomes, not crashes.
  */
 export function isEntitlementError(error: unknown): boolean {
-  const message = errorMessage(error)
-  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
+  return isEntitlementRefusal(errorMessage(error))
 }
 
 export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
@@ -191,57 +190,8 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
 }
 
 const SeatPausedPage = lazy(() => import('./seat-paused-page'))
-
-export function EntitlementRequiredPage({
-  error,
-  fullPage = true,
-}: {
-  error: unknown
-  fullPage?: boolean
-}) {
-  const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
-
-  return (
-    <FriendlyShell fullPage={fullPage}>
-      <ErrorPageCopy>
-        {(copy) => {
-          const refusal = planRefusalCopy(error, copy)
-          return (
-            <>
-              <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
-              <p className="mt-2 text-sm text-muted-foreground">{refusal.body}</p>
-              <div className="mt-6 flex items-center justify-center gap-3">
-                {isAdminArea ? (
-                  <Button asChild>
-                    <a href="/admin/settings/billing">
-                      {refusal.requiredPlanName
-                        ? copy(
-                            {
-                              id: 'common.errorPage.plan.upgradeTo',
-                              defaultMessage: 'Upgrade to {plan}',
-                            },
-                            { plan: refusal.requiredPlanName }
-                          )
-                        : copy({
-                            id: 'common.errorPage.plan.seePlans',
-                            defaultMessage: 'See plans',
-                          })}
-                    </a>
-                  </Button>
-                ) : null}
-                <Button variant="outline" asChild>
-                  <a href={isAdminArea ? '/admin/settings' : '/'}>
-                    {copy({ id: 'common.errorPage.plan.goBack', defaultMessage: 'Go back' })}
-                  </a>
-                </Button>
-              </div>
-            </>
-          )
-        }}
-      </ErrorPageCopy>
-    </FriendlyShell>
-  )
-}
+// The plan refusal page's words load when it shows, not with every page.
+const EntitlementRequiredPage = lazy(() => import('./plan-refusal-page'))
 
 export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
   if (isSeatPausedError(error)) {
@@ -255,7 +205,11 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
     return <PermissionDeniedPage fullPage={fullPage} />
   }
   if (isEntitlementError(error)) {
-    return <EntitlementRequiredPage error={error} fullPage={fullPage} />
+    return (
+      <Suspense fallback={null}>
+        <EntitlementRequiredPage error={error} fullPage={fullPage} />
+      </Suspense>
+    )
   }
 
   // A failure the server hid behind a plain sentence carries a reference code

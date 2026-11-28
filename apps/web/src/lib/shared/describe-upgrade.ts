@@ -168,6 +168,14 @@ export function describePlanRefusal(
   return fallback
 }
 
+/**
+ * True for the sentence an entitlement refusal carries ("Upgrade to Pro to
+ * enable it.", "... not included in your plan.").
+ */
+export function isEntitlementRefusal(message: string): boolean {
+  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
+}
+
 export interface PlanRefusalFacts {
   /** The feature the refusal names, in the server's English, when it names one. */
   feature: string | null
