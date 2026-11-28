@@ -440,7 +440,7 @@ export default function FileViewer({
         className={cn(
           'flex flex-col gap-0 overflow-hidden bg-background p-0 text-foreground',
           compact
-            ? 'top-0 start-0 h-full w-full max-w-none translate-x-0 translate-y-0 border-0 shadow-none [border-radius:0]'
+            ? 'top-0 left-0 h-full w-full max-w-none translate-x-0 translate-y-0 border-0 shadow-none [border-radius:0]'
             : 'h-[min(88vh,860px)] w-[92vw] max-w-[1240px] [border-radius:12px] max-sm:h-dvh max-sm:w-full max-sm:max-w-none max-sm:border-0 max-sm:[border-radius:0]'
         )}
       >

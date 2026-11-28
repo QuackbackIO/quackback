@@ -1,0 +1,10 @@
+{
+  "components/admin/admin-sidebar.tsx": 1,
+  "components/admin/settings/portal-customise/compare-switch.tsx": 1,
+  "components/conversation/agent-conversation-thread.tsx": 1,
+  "components/shared/files/file-viewer.tsx": 1,
+  "components/shared/files/viewers/sheet-view.tsx": 1,
+  "components/ui/alert-dialog.tsx": 1,
+  "components/ui/dialog.tsx": 1,
+  "components/ui/sheet.tsx": 4
+}

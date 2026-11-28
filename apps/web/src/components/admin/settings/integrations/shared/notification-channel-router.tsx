@@ -537,8 +537,8 @@ function ChannelRow<TChannel extends Channel>({
         >
           <div className="flex items-center gap-2 px-4 py-3">
             <ChevronRightIcon
-              className={`h-3 w-3 text-muted-foreground shrink-0 transition-transform duration-150 ${
-                expanded ? 'rtl:-scale-x-100 rotate-90 rtl:-rotate-90' : ''
+              className={`rtl:-scale-x-100 h-3 w-3 text-muted-foreground shrink-0 transition-transform duration-150 ${
+                expanded ? 'rotate-90 rtl:-rotate-90' : ''
               }`}
             />
             {renderChannelIcon(channelInfo)}
