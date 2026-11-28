@@ -40,6 +40,8 @@ vi.mock('@/lib/server/db', () => ({
     categoryId: 'category_id',
     deletedAt: 'deleted_at',
     publishedAt: 'published_at',
+    locale: 'article_locale',
+    searchVector: 'article_search_vector',
   },
   helpCenterArticleTranslations: {
     articleId: 'article_id',
@@ -56,6 +58,7 @@ vi.mock('@/lib/server/db', () => ({
   isNull: vi.fn((...args: unknown[]) => ({ op: 'isNull', args })),
   isNotNull: vi.fn((...args: unknown[]) => ({ op: 'isNotNull', args })),
   lte: vi.fn((...args: unknown[]) => ({ op: 'lte', args })),
+  ne: vi.fn((...args: unknown[]) => ({ op: 'ne', args })),
   regconfigForLocale: (locale: string) =>
     ({ de: 'german', fr: 'french', 'zh-cn': 'simple' })[locale] ?? 'english',
   sql: Object.assign(

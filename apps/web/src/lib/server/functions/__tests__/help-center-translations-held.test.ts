@@ -45,6 +45,10 @@ vi.mock('@/lib/server/domains/help-center/help-center-translations.service', () 
       return {}
     }
   return {
+    getArticleLocale: async () => 'en',
+    getCategoryLocale: async () => 'en',
+    translatableLocales: () => [],
+    assertNotOwnLanguage: () => {},
     listArticleTranslations: async () => [],
     getArticleTranslationStatuses: async () => ({}),
     upsertArticleTranslation: write('upsertArticle'),

@@ -237,12 +237,19 @@ export async function queueAutoTranslateOnPublish(
     const helpCenterConfig = await getHelpCenterConfig()
     if (!helpCenterConfig.autoTranslate?.enabled) return
     if (!(await isFeatureLive('aiArticleTranslation'))) return
-    const additionalLocales = helpCenterConfig.locales?.additional ?? []
-    if (additionalLocales.length === 0) return
+    // Every language the help center offers but the one the article is
+    // written in: an article left in a former main language gets a draft in
+    // the main language, and none in its own.
+    const main = helpCenterConfig.locales?.default
+    const own = article.locale ?? main
+    const targets = [main, ...(helpCenterConfig.locales?.additional ?? [])].filter(
+      (locale): locale is string => !!locale && locale !== own
+    )
+    if (targets.length === 0) return
 
     const { enqueueHelpCenterTranslateJob } = await import('./help-center-translate-queue')
     await Promise.all(
-      additionalLocales.map((locale) =>
+      targets.map((locale) =>
         enqueueHelpCenterTranslateJob({
           type: 'translate-article',
           articleId: article.id,

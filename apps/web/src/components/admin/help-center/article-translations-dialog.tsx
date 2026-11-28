@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import {
@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
-import { settingsQueries } from '@/lib/client/queries/settings'
 import {
   getArticleTranslationStatusesFn,
   upsertArticleTranslationFn,
@@ -70,21 +69,24 @@ export function ArticleTranslationsDialog({
   open,
   onOpenChange,
 }: ArticleTranslationsDialogProps) {
-  const configQuery = useQuery({ ...settingsQueries.helpCenterConfig(), enabled: open })
-  const additionalLocales = configQuery.data?.locales?.additional ?? []
-
-  const [locale, setLocale] = useState<string | null>(null)
-  useEffect(() => {
-    if (open && !locale && additionalLocales.length > 0) setLocale(additionalLocales[0])
-  }, [open, locale, additionalLocales])
-
+  // The languages the article can be translated into: the help center's,
+  // less the one its own text is in.
   const statusesQuery = useQuery({
     queryKey: ['help-center', 'article-translation-statuses', articleId],
     queryFn: () => getArticleTranslationStatusesFn({ data: { articleId } }),
     enabled: open,
   })
+  const translatableLocales = useMemo(
+    () => statusesQuery.data?.map((s) => s.locale) ?? [],
+    [statusesQuery.data]
+  )
 
-  if (additionalLocales.length === 0) {
+  const [locale, setLocale] = useState<string | null>(null)
+  useEffect(() => {
+    if (open && !locale && translatableLocales.length > 0) setLocale(translatableLocales[0])
+  }, [open, locale, translatableLocales])
+
+  if (statusesQuery.isSuccess && translatableLocales.length === 0) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
@@ -113,7 +115,7 @@ export function ArticleTranslationsDialog({
               <SelectValue placeholder="Choose a locale…" />
             </SelectTrigger>
             <SelectContent>
-              {additionalLocales.map((l) => (
+              {translatableLocales.map((l) => (
                 <SelectItem key={l} value={l}>
                   {LOCALE_LABELS[l] ?? l}
                 </SelectItem>
