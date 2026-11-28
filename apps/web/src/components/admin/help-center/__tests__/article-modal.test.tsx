@@ -46,8 +46,19 @@ vi.mock('@/lib/server/functions/help-center-article-languages', () => ({
 }))
 vi.mock('../article-translation-pane', () => ({
   articleLanguagesKey: (id: string) => ['help-center', 'article-languages', id],
-  ArticleTranslationPane: ({ entry }: { entry: { locale: string } }) => (
-    <div>Editing {entry.locale}</div>
+  ArticleTranslationPane: ({
+    entry,
+    onDirtyChange,
+  }: {
+    entry: { locale: string }
+    onDirtyChange?: (dirty: boolean) => void
+  }) => (
+    <div>
+      Editing {entry.locale}
+      <button type="button" onClick={() => onDirtyChange?.(true)}>
+        Type in {entry.locale}
+      </button>
+    </div>
   ),
 }))
 vi.mock('../article-feedback-reasons-dialog', () => ({
@@ -58,11 +69,11 @@ import { ArticleModalContent } from '../article-modal'
 
 const ARTICLE_ID = 'article_01h455vb4pex5vsknk084sn02q' as ArticleId
 
-function renderModal() {
+function renderModal(onClose: () => void = () => {}) {
   const queryClient = new QueryClient()
   return render(
     <QueryClientProvider client={queryClient}>
-      <ArticleModalContent articleId={ARTICLE_ID} onClose={() => {}} />
+      <ArticleModalContent articleId={ARTICLE_ID} onClose={onClose} />
     </QueryClientProvider>
   )
 }
@@ -162,6 +173,46 @@ describe('ArticleModalContent', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Deutsch/ }))
     expect(await screen.findByText('Editing de')).toBeTruthy()
     expect(screen.getByRole('tab', { name: /Deutsch/ }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('saving the article stays open on a language whose edits are not saved yet', async () => {
+    mocks.getArticleFn.mockResolvedValue(ARTICLE)
+    mocks.getArticleLanguagesFn.mockResolvedValue({
+      ownLocale: 'en',
+      mainLocale: 'en',
+      aiAvailable: false,
+      autoTranslate: false,
+      languages: [entry('de', { status: 'published' }), entry('fr', { status: 'published' })],
+    })
+    mocks.updateMutate.mockImplementation((_input, opts: { onSuccess: () => void }) =>
+      opts.onSuccess()
+    )
+    const onClose = vi.fn()
+    renderModal(onClose)
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Deutsch/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Type in de' }))
+    fireEvent.click(screen.getByRole('tab', { name: /English/ }))
+    fireEvent.change(screen.getByLabelText('Page description'), { target: { value: 'New' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mocks.updateMutate).toHaveBeenCalled())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: /Deutsch/ }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('saving the article closes the editor when no other language has unsaved edits', async () => {
+    mocks.getArticleFn.mockResolvedValue(ARTICLE)
+    mocks.updateMutate.mockImplementation((_input, opts: { onSuccess: () => void }) =>
+      opts.onSuccess()
+    )
+    const onClose = vi.fn()
+    renderModal(onClose)
+    fireEvent.change(await screen.findByLabelText('Page description'), {
+      target: { value: 'New' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
   it('shows no language bar when the help center has one language', async () => {

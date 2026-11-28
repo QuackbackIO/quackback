@@ -39,40 +39,71 @@ export function TranslationStrip({
   const failedUpdate = pending?.check && !pending.check.ok ? pending.check : null
   const failedDraft = !pending && entry.draftCheck && !entry.draftCheck.ok ? entry.draftCheck : null
   const busy = !!actions.busy
+
+  const showChanges = <StripButton onClick={() => onShowChanges()}>Show changes</StripButton>
+  const updateWithAi = aiAvailable ? (
+    <StripButton disabled={busy} onClick={actions.askAi}>
+      Update with AI
+    </StripButton>
+  ) : null
+  const discard = (
+    <StripButton
+      disabled={busy}
+      onClick={() =>
+        actions.run(
+          'discard',
+          () => discardArticleTranslationUpdateFn({ data: { articleId, locale } }),
+          'Could not discard the update'
+        )
+      }
+    >
+      Discard
+    </StripButton>
+  )
+  // Saves the edits on screen first; the server also drops a waiting update.
+  const markCurrent = (
+    <StripButton
+      disabled={busy}
+      onClick={() =>
+        actions.run(
+          'mark-current',
+          async () => {
+            if (!(await saveEdits())) return
+            await markArticleTranslationCurrentFn({ data: { articleId, locale } })
+          },
+          'Could not mark the translation as up to date'
+        )
+      }
+    >
+      Mark as up to date
+    </StripButton>
+  )
+
   if (pending && failedUpdate) {
     return (
       <Strip
         tone="warning"
         text={`The AI update needs a person: ${failedUpdate.problems.map(checkProblemText).join('; ')}.`}
       >
-        <StripButton onClick={() => onShowChanges()}>Show changes</StripButton>
-        {aiAvailable ? (
-          <StripButton disabled={busy} onClick={actions.askAi}>
-            Update with AI
-          </StripButton>
-        ) : null}
-        <StripButton
-          disabled={busy}
-          onClick={() =>
-            actions.run(
-              'discard',
-              () => discardArticleTranslationUpdateFn({ data: { articleId, locale } }),
-              'Could not discard the update'
-            )
-          }
-        >
-          Discard
-        </StripButton>
+        {showChanges}
+        {updateWithAi}
+        {entry.needsUpdate ? markCurrent : null}
+        {discard}
       </Strip>
     )
   }
   if (pending) {
     return (
       <Strip
-        tone="info"
-        text="An AI update is ready. Readers see the current text until you publish it."
+        tone={pending.current ? 'info' : 'warning'}
+        text={
+          pending.current
+            ? 'An AI update is ready. Readers see the current text until you publish it.'
+            : `An AI update is ready, but the ${own} article changed again after it was made.`
+        }
       >
-        <StripButton onClick={() => onShowChanges()}>Show changes</StripButton>
+        {showChanges}
+        {pending.current ? null : updateWithAi}
         {/* Publishing the update replaces the text, edits on screen included. */}
         <StripButton
           disabled={busy || dirty}
@@ -87,45 +118,16 @@ export function TranslationStrip({
         >
           Publish update
         </StripButton>
-        <StripButton
-          disabled={busy}
-          onClick={() =>
-            actions.run(
-              'discard',
-              () => discardArticleTranslationUpdateFn({ data: { articleId, locale } }),
-              'Could not discard the update'
-            )
-          }
-        >
-          Discard
-        </StripButton>
+        {discard}
       </Strip>
     )
   }
   if (entry.needsUpdate) {
     return (
       <Strip tone="warning" text={`The ${own} article changed after this translation was made.`}>
-        <StripButton onClick={() => onShowChanges()}>Show changes</StripButton>
-        {aiAvailable ? (
-          <StripButton disabled={busy} onClick={actions.askAi}>
-            Update with AI
-          </StripButton>
-        ) : null}
-        <StripButton
-          disabled={busy}
-          onClick={() =>
-            actions.run(
-              'mark-current',
-              async () => {
-                if (!(await saveEdits())) return
-                await markArticleTranslationCurrentFn({ data: { articleId, locale } })
-              },
-              'Could not mark the translation as up to date'
-            )
-          }
-        >
-          Mark as up to date
-        </StripButton>
+        {showChanges}
+        {updateWithAi}
+        {markCurrent}
       </Strip>
     )
   }

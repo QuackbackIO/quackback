@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
@@ -46,6 +46,8 @@ export interface ArticleTranslationPaneProps {
   shared: { categoryName?: string; authorName?: string | null; audience: string }
   header: React.ReactNode
   onClose: () => void
+  /** Told whether this language has edits that are not saved yet. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /**
@@ -126,6 +128,7 @@ function TranslationForm({
   shared,
   header,
   onClose,
+  onDirtyChange,
   status,
   updatedAt,
   initial,
@@ -150,6 +153,10 @@ function TranslationForm({
   })
   // Text copied from the main language is a change until it is saved.
   const dirty = form.formState.isDirty || startedFromSource
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+    return () => onDirtyChange?.(false)
+  }, [dirty, onDirtyChange])
 
   const handleContentChange = useCallback(
     (document: EditorDocument) => {

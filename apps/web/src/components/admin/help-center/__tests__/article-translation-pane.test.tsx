@@ -207,6 +207,53 @@ describe('an existing translation', () => {
     await waitFor(() => expect(fns.discardArticleTranslationUpdateFn).toHaveBeenCalled())
   })
 
+  it('with an AI update that failed its checks can still be marked as up to date', async () => {
+    renderPane(
+      entry({
+        needsUpdate: true,
+        pendingUpdate: {
+          sourceRevision: 2,
+          createdAt: null,
+          current: true,
+          check: { ok: false, problems: [{ code: 'link_missing', detail: '/settings' }] },
+        },
+      })
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark as up to date' }))
+    await waitFor(() =>
+      expect(fns.markArticleTranslationCurrentFn).toHaveBeenCalledWith({
+        data: { articleId: 'article_1', locale: 'de' },
+      })
+    )
+    expect(fns.discardArticleTranslationUpdateFn).not.toHaveBeenCalled()
+  })
+
+  it('with an AI update made before the article changed again says so and offers a new one', async () => {
+    renderPane(
+      entry({
+        needsUpdate: true,
+        pendingUpdate: {
+          sourceRevision: 2,
+          createdAt: null,
+          current: false,
+          check: { ok: true, problems: [] },
+        },
+      })
+    )
+    expect(
+      await screen.findByText(
+        'An AI update is ready, but the English article changed again after it was made.'
+      )
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Publish update' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Update with AI' }))
+    await waitFor(() =>
+      expect(fns.requestArticleAiTranslationFn).toHaveBeenCalledWith({
+        data: { articleId: 'article_1', locale: 'de' },
+      })
+    )
+  })
+
   it('that is current shows no strip, and its status toggles its own publish state', async () => {
     renderPane(entry())
     await screen.findByLabelText('Article title')

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
+import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
@@ -15,7 +16,7 @@ import {
   HelpCenterMetadataSidebar,
   HelpCenterMetadataSidebarContent,
 } from './help-center-metadata-sidebar'
-import { ArticleLanguageBar } from './article-language-bar'
+import { ArticleLanguageBar, languageName } from './article-language-bar'
 import { ArticleTranslationPane } from './article-translation-pane'
 import { articleLanguagesKey } from './article-language-actions'
 import { languageDotState } from './article-languages'
@@ -49,6 +50,12 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const hasInitialized = useRef(false)
+  // Languages whose tab holds edits that are not saved yet.
+  const unsavedLocales = useRef(new Set<string>())
+  const setTranslationDirty = useCallback((locale: string, dirty: boolean) => {
+    if (dirty) unsavedLocales.current.add(locale)
+    else unsavedLocales.current.delete(locale)
+  }, [])
 
   const updateArticleMutation = useUpdateArticle()
   const publishArticleMutation = usePublishArticle()
@@ -154,7 +161,12 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
       },
       {
         onSuccess: () => {
-          onClose()
+          const unsaved = [...unsavedLocales.current][0]
+          if (!unsaved) return onClose()
+          // Closing would drop another language's edits: stay open on it.
+          form.reset(form.getValues())
+          selectLanguage(unsaved)
+          toast.info(`Saved. ${languageName(unsaved)} still has changes that are not saved.`)
         },
       }
     )
@@ -323,6 +335,7 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
                     }}
                     header={header}
                     onClose={onClose}
+                    onDirtyChange={(dirty) => setTranslationDirty(locale, dirty)}
                   />
                 </div>
               )
