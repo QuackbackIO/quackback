@@ -273,6 +273,19 @@ function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
       return [{ label: action.body.trim() ? truncate(action.body.trim(), 40) : 'Write a note…' }]
     case 'set_ticket_status':
       return [{ label: named(action.statusId, labels.ticketStatuses, 'Choose a status…') }]
+    case 'set_ticket_due_date':
+      return [
+        {
+          label:
+            'seconds' in action
+              ? `In ${durationPhrase(action.seconds)}`
+              : action.dueAtIso
+                ? snoozeUntilLabel(action.dueAtIso, labels)
+                : 'Clear the due date',
+        },
+      ]
+    case 'add_ticket_watcher':
+      return [{ label: named(action.principalId, labels.members, 'Choose a teammate…') }]
     case 'send_webhook':
       return [{ label: action.url ? truncate(action.url, 40) : 'Set a URL…' }]
     case 'close':

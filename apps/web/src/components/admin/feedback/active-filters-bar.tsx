@@ -12,6 +12,7 @@ import {
   Square2StackIcon,
   TrashIcon,
   ChevronRightIcon,
+  BellIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { formatCalendarDate } from '@/lib/shared/utils/date'
@@ -41,6 +42,7 @@ interface ActiveFilter {
     | 'minComments'
     | 'responded'
     | 'hasDuplicates'
+    | 'following'
     | 'deleted'
   label: string
   value: string
@@ -73,6 +75,7 @@ type FilterCategory =
   | 'comments'
   | 'response'
   | 'duplicates'
+  | 'following'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
@@ -87,6 +90,7 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconCompone
   { key: 'comments', label: 'Comment count', icon: ChatBubbleOvalLeftIcon },
   { key: 'response', label: 'Team response', icon: ChatBubbleLeftRightIcon },
   { key: 'duplicates', label: 'Has duplicates', icon: Square2StackIcon },
+  { key: 'following', label: 'Following', icon: BellIcon },
 ]
 
 const COMMENT_THRESHOLDS = [
@@ -171,11 +175,12 @@ export function AddFilterButton({
 
   const handleDirectToggle = (key: FilterCategory) => {
     if (key === 'duplicates') onFiltersChange({ hasDuplicates: true })
+    if (key === 'following') onFiltersChange({ following: true })
     closePopover()
   }
 
   // Categories that act as direct toggles (no submenu)
-  const directToggleCategories = new Set<FilterCategory>(['duplicates'])
+  const directToggleCategories = new Set<FilterCategory>(['duplicates', 'following'])
 
   return (
     <Popover
@@ -194,6 +199,7 @@ export function AddFilterButton({
             {FILTER_CATEGORIES.filter((c) => {
               // Hide direct toggles that are already active
               if (c.key === 'duplicates' && filters.hasDuplicates) return false
+              if (c.key === 'following' && filters.following) return false
               return true
             }).map((category) => {
               const Icon = category.icon
@@ -344,6 +350,7 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
     minComments: ChatBubbleOvalLeftIcon,
     responded: ChatBubbleLeftRightIcon,
     hasDuplicates: Square2StackIcon,
+    following: BellIcon,
     deleted: TrashIcon,
   }
   return icons[type]
@@ -626,6 +633,18 @@ function computeActiveFilters(
       value: 'Has duplicates',
       valueId: 'hasDuplicates',
       onRemove: () => onFiltersChange({ hasDuplicates: undefined }),
+    })
+  }
+
+  // Posts the teammate follows
+  if (filters.following) {
+    result.push({
+      key: 'following',
+      type: 'following',
+      label: '',
+      value: 'Posts I follow',
+      valueId: 'following',
+      onRemove: () => onFiltersChange({ following: undefined }),
     })
   }
 

@@ -49,6 +49,7 @@ export function inboxFiltersFromSearch(search: Partial<FeedbackSearch>): InboxFi
     responded: search.responded,
     updatedBefore: search.updatedBefore,
     hasDuplicates: search.hasDuplicates,
+    following: search.following,
     sort: search.sort ?? DEFAULT_INBOX_SORT,
     showDeleted: search.deleted,
   }
@@ -86,6 +87,7 @@ export function useInboxFilters() {
           ...('responded' in updates && { responded: updates.responded }),
           ...('updatedBefore' in updates && { updatedBefore: updates.updatedBefore }),
           ...('hasDuplicates' in updates && { hasDuplicates: updates.hasDuplicates || undefined }),
+          ...('following' in updates && { following: updates.following || undefined }),
           ...('sort' in updates && { sort: updates.sort }),
           // A new search switches the default order to best match, and
           // clearing it switches back; see sortForSearch.
@@ -128,6 +130,7 @@ export function useInboxFilters() {
       (filters.responded && filters.responded !== 'all') ||
       filters.updatedBefore ||
       filters.hasDuplicates ||
+      filters.following ||
       filters.showDeleted
     )
   }, [filters])

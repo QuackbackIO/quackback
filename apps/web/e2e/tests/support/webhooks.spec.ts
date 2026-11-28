@@ -29,6 +29,7 @@ const CONVERSATION_REF_KEYS = ['assignedTeamId', 'channel', 'id', 'priority', 's
 const TICKET_REF_KEYS = [
   'assignedPrincipalId',
   'assignedTeamId',
+  'dueAt',
   'id',
   'number',
   'priority',

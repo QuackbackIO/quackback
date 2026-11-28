@@ -705,7 +705,17 @@ test.describe('MCP tickets', () => {
       })
       expect(res.isError, res.text).toBe(false)
       expect(Object.keys(res.json).sort()).toEqual(
-        ['id', 'number', 'priority', 'reference', 'stage', 'status', 'title', 'type'].sort()
+        [
+          'dueAt',
+          'id',
+          'number',
+          'priority',
+          'reference',
+          'stage',
+          'status',
+          'title',
+          'type',
+        ].sort()
       )
       expect(res.json).toMatchObject({ type: 'customer', title: `MCP ${marker}` })
       const conversationId = await backingConversationOf(res.json.id)
