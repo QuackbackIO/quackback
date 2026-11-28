@@ -91,10 +91,16 @@ describe('event catalogue coverage', () => {
     'approved',
     'rejected',
     'external_status_changed',
+    'subscriber_added',
+    'subscriber_removed',
     'customer_unresponsive',
     'teammate_unresponsive',
     'approaching_breach',
     'breached',
+    // ticket due dates: the date moved, is close, or has passed
+    'due_changed',
+    'due_soon',
+    'overdue',
     // status-page legacy compound verbs (entity is status_incident/status_component)
     'incident_created',
     'incident_updated',

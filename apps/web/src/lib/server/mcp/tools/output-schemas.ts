@@ -71,6 +71,20 @@ export const TOOL_OUTPUT_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     nextCursor: cursor,
     untrusted,
   }),
+  list_ticket_watchers: z.looseObject({
+    ticketId: z.string(),
+    watchers: z
+      .array(z.looseObject({ principalId: z.string() }))
+      .describe('Who watches the ticket: names and avatars, never an email'),
+    untrusted,
+  }),
+  list_ticket_participants: z.looseObject({
+    ticketId: z.string(),
+    participants: z
+      .array(z.looseObject({ principalId: z.string() }))
+      .describe('The customers the ticket is shared with'),
+    untrusted,
+  }),
   get_settings: z
     .looseObject({
       areas: z

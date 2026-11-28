@@ -760,8 +760,10 @@ test.describe('replies to an existing conversation', () => {
         .toEqual([true, false])
 
       // A tampered tag does not resolve: the mail goes cold and opens a new thread.
+      // The tag is compared with ASCII case folded, so the swap must change the
+      // letter itself, not only its case ("a" to "A" would still verify).
       const tampered = replyTo!.replace(/\.([A-Za-z0-9_-])/, (_m, c: string) =>
-        c === 'A' ? '.B' : '.A'
+        c.toLowerCase() === 'a' ? '.B' : '.A'
       )
       const forged = await deliver(request, {
         from: customerEmail,
@@ -1291,7 +1293,10 @@ test.describe('ticket replies by email', () => {
       await api.dispose()
 
       const good = ticketReplyAddress(ticket.id)
-      const badTag = good.replace(/\.([A-Za-z0-9_-])/, (_m, c: string) => (c === 'A' ? '.B' : '.A'))
+      // Tags compare with ASCII case folded: change the letter, not its case.
+      const badTag = good.replace(/\.([A-Za-z0-9_-])/, (_m, c: string) =>
+        c.toLowerCase() === 'a' ? '.B' : '.A'
+      )
       const unknown = ticketReplyAddress(generateId('ticket'))
       const cases: Array<[string, string, string, string]> = [
         ['bad tag', customer.email, badTag, 'no_ticket'],

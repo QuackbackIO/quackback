@@ -43,6 +43,12 @@
  * staleness: the cron expressions are unchanged, and the gate can only suppress
  * a tick that would have found nothing to do.
  *
+ * Every per-minute schedule added since follows the same shape, so there are
+ * now four providers: `sla-breach-sweep`, `snooze-sweep`,
+ * `integration-sync-sweep` (expired sync leases) and `ticket-due-sweep` (ticket
+ * due-soon and overdue alerts). `__tests__/per-minute-gates.test.ts` keeps an
+ * ungated per-minute schedule from landing.
+ *
  * ## Two consumers, one query
  *
  * The same provider answers both questions the job worker asks, which is the reason
