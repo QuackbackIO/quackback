@@ -114,6 +114,30 @@ const snoozeActionSchema = z.union([
     .strict(),
 ])
 
+/** A relative `set_ticket_due_date` further out than this is almost
+ *  certainly a unit mixup, same rationale as MAX_WAIT_SECONDS. A year sits
+ *  well inside the team window `setTicketDueAt` enforces (ticket-due.ts). */
+export const MAX_DUE_OFFSET_SECONDS = 365 * 24 * 60 * 60 // 365 days
+
+// Same two-shape strict union as snoozeActionSchema above: an absolute
+// instant (dueAtIso, or null to clear the due date) or a relative offset
+// (seconds, resolved to now + seconds when the step runs, see
+// action.executor.ts). A payload carrying both keys matches neither branch.
+const setTicketDueDateActionSchema = z.union([
+  z
+    .object({
+      type: z.literal('set_ticket_due_date'),
+      dueAtIso: z.string().datetime().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('set_ticket_due_date'),
+      seconds: z.number().int().min(60).max(MAX_DUE_OFFSET_SECONDS),
+    })
+    .strict(),
+])
+
 export const actionSchema = z.union([
   z.object({ type: z.literal('assign_agent'), principalId: z.string().min(1) }),
   z.object({ type: z.literal('assign_team'), teamId: z.string().min(1) }),
@@ -160,6 +184,7 @@ export const actionSchema = z.union([
   // action.executor.ts's WorkflowAction doc for the resolve-the-linked-ticket
   // + throw-if-none policy both share.
   z.object({ type: z.literal('set_ticket_status'), statusId: z.string().min(1) }),
+  setTicketDueDateActionSchema,
   // Optional ticketTypeId (convergence Phase 4): absent = the customer-category
   // default type. A no-op when the conversation already has a linked customer
   // ticket, else creates one and links it.
@@ -233,8 +258,15 @@ const nodeSchema = z.discriminatedUnion('type', [
   z.object({ id: z.string().min(1), type: z.literal('message'), body: blockBodySchema }),
   // The ticket intake form as an in-thread block — a SEND kind like `message`
   // (posts and continues; the visitor files the ticket in-thread from the
-  // rendered form, no structured block reply, no park).
-  z.object({ id: z.string().min(1), type: z.literal('send_ticket_form'), body: blockBodySchema }),
+  // rendered form, no structured block reply, no park). `askDueDate` adds the
+  // optional "Needed by" field to that form; absent means off. Declared here
+  // so zod keeps the key on save instead of stripping it.
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('send_ticket_form'),
+    body: blockBodySchema,
+    askDueDate: z.boolean().optional(),
+  }),
   z.object({ id: z.string().min(1), type: z.literal('show_reply_time') }),
   z.object({
     id: z.string().min(1),

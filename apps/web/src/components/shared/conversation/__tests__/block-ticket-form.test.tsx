@@ -5,12 +5,14 @@
  * createMyTicketFn payload shape (title/details/email, auth headers
  * threaded through), the filed confirmation on success, and the intake
  * default type's customer-visible fields (shown, validated, and sent with
- * that type's id so the server's required-field check passes).
+ * that type's id so the server's required-field check passes), and the
+ * optional "Needed by" date the askDueDate toggle adds.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { endOfLocalDay, toLocalDateInputValue } from '@/lib/shared/ticket-due'
 import { BlockTicketForm } from '../block-ticket-form'
 
 vi.mock('@/lib/server/functions/tickets', () => ({
@@ -87,7 +89,8 @@ function inputUnder(label: string): HTMLInputElement {
 function renderCard(
   headers: Record<string, string> = { 'x-widget-session': 'sess_1' },
   askEmail?: boolean,
-  onEmailSubmitted?: (email: string) => void
+  onEmailSubmitted?: (email: string) => void,
+  props: { askDueDate?: boolean } = {}
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -97,10 +100,18 @@ function renderCard(
           getAuthHeaders={() => headers}
           askEmail={askEmail}
           onEmailSubmitted={onEmailSubmitted}
+          {...props}
         />
       </IntlProvider>
     </QueryClientProvider>
   )
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** The local calendar day `days` from now, as the date input reports it. */
+function dayFromNow(days: number): string {
+  return toLocalDateInputValue(new Date(Date.now() + days * DAY_MS))
 }
 
 describe('BlockTicketForm (send_ticket_form block card)', () => {
@@ -341,6 +352,84 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
     expect(vi.mocked(createMyTicketFn).mock.calls[0][0]).toMatchObject({
       data: { ticketTypeId: 'ticket_type_bug', fieldValues: { order_number: 'A-1001' } },
+    })
+  })
+
+  describe('Needed by (askDueDate)', () => {
+    /** Types a subject and waits for Create to enable (the type list is in). */
+    async function fillSubject(value: string): Promise<HTMLElement> {
+      fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
+        target: { value },
+      })
+      const submit = screen.getByRole('button', { name: /create ticket/i })
+      await waitFor(() => expect(submit).toBeEnabled())
+      return submit
+    }
+
+    it('offers no date field without the toggle', () => {
+      renderCard()
+      expect(screen.queryByLabelText(/needed by/i)).toBeNull()
+      expect(screen.queryByText(/our team may adjust this date/i)).toBeNull()
+    })
+
+    it('shows the optional field and its hint, bounded to the customer window after mount', async () => {
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
+      const input = screen.getByLabelText(/needed by/i)
+      expect(input).toHaveAttribute('type', 'date')
+      expect(screen.getByText('(optional)')).toBeTruthy()
+      expect(screen.getByText('Our team may adjust this date.')).toBeTruthy()
+      await waitFor(() => expect(input).toHaveAttribute('min'))
+      expect(input.getAttribute('min')! <= dayFromNow(0)).toBe(true)
+      expect(input.getAttribute('max')! >= dayFromNow(729)).toBe(true)
+      expect(input.getAttribute('max')! <= dayFromNow(731)).toBe(true)
+    })
+
+    it('sends the end of the picked local day as dueAt', async () => {
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
+      const day = dayFromNow(10)
+      const submit = await fillSubject('Renewal paperwork')
+      fireEvent.change(screen.getByLabelText(/needed by/i), { target: { value: day } })
+      fireEvent.click(submit)
+
+      await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
+      expect(createMyTicketFn).toHaveBeenCalledWith({
+        data: { title: 'Renewal paperwork', dueAt: endOfLocalDay(day)!.toISOString() },
+        headers: { 'x-widget-session': 'sess_1' },
+      })
+    })
+
+    it('leaves dueAt out when no day is picked', async () => {
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
+      fireEvent.click(await fillSubject('Refund request'))
+
+      await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
+      expect(createMyTicketFn).toHaveBeenCalledWith({
+        data: { title: 'Refund request' },
+        headers: { 'x-widget-session': 'sess_1' },
+      })
+    })
+
+    it.each([
+      ['more than two years out', 3 * 365],
+      ['in the past', -3],
+    ])('blocks a day %s with the inline error until it is fixed', async (_label, days) => {
+      renderCard(undefined, undefined, undefined, { askDueDate: true })
+      const submit = await fillSubject('Renewal paperwork')
+      const input = screen.getByLabelText(/needed by/i)
+      fireEvent.change(input, { target: { value: dayFromNow(days) } })
+      fireEvent.click(submit)
+
+      expect(
+        await screen.findByText('Pick a date between today and two years from now.')
+      ).toBeTruthy()
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+      expect(createMyTicketFn).not.toHaveBeenCalled()
+
+      // Picking an acceptable day clears the error and submits.
+      fireEvent.change(input, { target: { value: dayFromNow(5) } })
+      expect(screen.queryByText(/pick a date between/i)).toBeNull()
+      fireEvent.click(submit)
+      await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
     })
   })
 })

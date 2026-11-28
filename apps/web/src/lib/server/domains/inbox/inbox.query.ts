@@ -45,6 +45,7 @@ import type {
 } from '@quackback/ids'
 import type { ConversationPriority, TicketStage } from '@/lib/shared/db-types'
 import type { Channel } from '@/lib/shared/channels'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import { can } from '@/lib/server/policy/authorize'
@@ -99,6 +100,11 @@ export interface InboxListFilter {
   assignee?: TicketAssigneeFilter
   teamId?: TeamId
   companyId?: CompanyId
+  /** The Due date filter (overdue / due within 24 hours / no due date). The
+   *  ticket branch filters its own rows; the conversation branch filters
+   *  through the linked customer ticket, since that is the row a linked
+   *  ticket lists as. */
+  due?: TicketDueFilter
   sort?: InboxSort
   limit?: number
   cursor?: string
@@ -198,6 +204,13 @@ function itemActivityAt(item: InboxItemDTO): string {
   return item.ticket.updatedAt
 }
 
+/** The due date an item sorts by under 'due': a ticket row's own, or a
+ *  conversation row's linked customer ticket's (the one-row rule). */
+function itemDueAt(item: InboxItemDTO): string | null {
+  if (item.kind === 'ticket') return item.ticket.dueAt
+  return item.linkedTicket?.dueAt ?? null
+}
+
 /**
  * The 'sla' merge key: the item's nearest unmet SLA deadline (ms), read off
  * the same DTO fields each branch's SQL due expression orders by, or
@@ -217,12 +230,17 @@ function itemSlaDueMs(item: InboxItemDTO): number {
 /**
  * The numeric sort value for one item under one sort. 'created' reads each
  * branch's own `createdAt` (NOT the activity key — "recently created" must
- * not fold in later message activity, unlike 'recent'/'oldest').
+ * not fold in later message activity, unlike 'recent'/'oldest'). 'due'
+ * ascends with undated rows last, matching both branches' NULLS LAST order.
  */
 function sortValue(item: InboxItemDTO, sort: InboxSort): number {
   if (sort === 'priority') return PRIORITY_RANK[itemPriority(item)] ?? 1
   if (sort === 'sla') return itemSlaDueMs(item)
   if (sort === 'created') return new Date(itemCreatedAt(item)).getTime()
+  if (sort === 'due') {
+    const dueAt = itemDueAt(item)
+    return dueAt ? new Date(dueAt).getTime() : Number.MAX_SAFE_INTEGER
+  }
   return new Date(itemActivityAt(item)).getTime()
 }
 
@@ -237,7 +255,7 @@ interface KeyedInboxItem {
 
 /**
  * Total ordering across both branches: primary value in the given direction
- * (desc for recent/created/priority, asc for oldest and for rank fusion),
+ * (desc for recent/created/priority, asc for oldest, due and rank fusion),
  * tie-broken by kind then id so the comparator is deterministic (required for
  * a stable merge + reproducible cursor derivation). Takes each side's
  * precomputed `key` rather than the raw item, so no date parsing happens
@@ -293,12 +311,16 @@ export function mergeInboxBranches(input: MergeInboxBranchesInput): MergeInboxBr
           key: sortValue(item, sort),
         }))
   // Rank fusion ascends (position 0 = best match), as do the oldest,
-  // soonest-deadline and waiting-longest sorts.
+  // soonest-deadline, waiting-longest and soonest-due sorts.
   keyed.sort((a, b) =>
     compareKeyedInboxItems(
       a,
       b,
-      relevanceOrdered || sort === 'oldest' || sort === 'sla' || sort === 'waiting'
+      relevanceOrdered ||
+        sort === 'oldest' ||
+        sort === 'sla' ||
+        sort === 'waiting' ||
+        sort === 'due'
     )
   )
   const combined = keyed.map((k) => k.item)
@@ -358,6 +380,11 @@ export async function loadLinkedCustomerTicketSummaries(
       title: tickets.title,
       statusName: ticketStatuses.name,
       statusCategory: ticketStatuses.category,
+      // Deleted-safe, so the merge key agrees with the conversation list's
+      // 'due' sort expression (linkedCustomerTicketDueAtSql), which skips
+      // soft-deleted tickets.
+      dueAt: tickets.dueAt,
+      deletedAt: tickets.deletedAt,
     })
     .from(ticketConversations)
     .innerJoin(tickets, eq(tickets.id, ticketConversations.ticketId))
@@ -376,6 +403,7 @@ export async function loadLinkedCustomerTicketSummaries(
       title: row.title,
       statusName: row.statusName,
       statusCategory: row.statusCategory,
+      dueAt: row.dueAt && !row.deletedAt ? row.dueAt.toISOString() : null,
     })
   }
   return map
@@ -411,6 +439,7 @@ async function fetchConversationBranch(
       // pair as its ONE item — this branch's conversation row (the ticket
       // branch's exclusion keeps the pair off a second row).
       hasLinkedCustomerTicket: filter.linkedPairsOnly || undefined,
+      linkedTicketDue: filter.due,
       sort,
       before: cursor ?? undefined,
       limit,
@@ -457,6 +486,7 @@ async function fetchTicketBranch(
       teamId: filter.teamId,
       companyId: filter.companyId,
       search: filter.search,
+      due: filter.due,
       // Ticket rows carry no relevance score, so this branch runs its own
       // default order and the merge fuses the two by within-branch rank.
       sort: sort === 'relevance' ? 'recent' : sort,
