@@ -24,7 +24,6 @@ import { isFeatureLive } from '@/lib/server/domains/plan-limits/plan-limits.serv
 import { getArticleById } from './help-center.article.service'
 import {
   getArticleTranslation,
-  upsertArticleTranslation,
   writeGuardedArticleTranslation,
 } from './help-center-translations.service'
 import { logger } from '@/lib/server/logger'
@@ -146,6 +145,13 @@ export async function translateArticleForLocale(
     return
   }
 
+  // AI only fills a missing language. A version that exists, written by a
+  // person or by an earlier run, is never replaced here.
+  if (await getArticleTranslation(articleId, locale)) {
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: a version exists')
+    return
+  }
+
   const helpCenterConfig = await getHelpCenterConfig()
   // A language the plan holds back is not translated into.
   const { heldHelpCenterLocales } =
@@ -211,8 +217,10 @@ export async function translateArticleForLocale(
       log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
       return
     }
-  } else {
-    await upsertArticleTranslation(result, { source: 'auto' })
+  } else if (!(await writeGuardedArticleTranslation(result, null))) {
+    // A person saved a version while the AI call ran; theirs stays.
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: a version exists')
+    return
   }
   log.info({ article_id: articleId, locale }, 'auto-translate: draft translation written')
 }

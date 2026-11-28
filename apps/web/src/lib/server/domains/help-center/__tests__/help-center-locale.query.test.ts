@@ -199,25 +199,53 @@ describe('getPublicArticleBySlugForLocale', () => {
     await expect(getPublicArticleBySlugForLocale('invoices', 'de')).rejects.toThrow(/translation/i)
   })
 
-  it('overlays translated content, falling back to base contentJson when the translation has none', async () => {
+  it('builds the body from the translation, never from the main-language article', async () => {
     mockGetPublicArticleBySlug.mockResolvedValue({
       id: 'article_1' as KbArticleId,
       title: 'Invoices',
       description: 'EN',
-      content: 'en content',
-      contentJson: { type: 'doc', content: [] },
+      content: 'Open **Billing**.',
+      contentJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Open Billing.' }] }],
+      },
     })
+    // A translation saved as Markdown only, as the translation dialog saves it.
     mockGetPublishedArticleTranslation.mockResolvedValue({
       title: 'Rechnungen',
       description: 'DE',
-      content: 'de content',
+      content: 'Öffne **Abrechnung**.',
       contentJson: null,
     })
 
     const result = await getPublicArticleBySlugForLocale('invoices', 'de')
     expect(result.title).toBe('Rechnungen')
-    expect(result.content).toBe('de content')
-    expect(result.contentJson).toEqual({ type: 'doc', content: [] })
+    expect(result.content).toBe('Öffne **Abrechnung**.')
+    const body = JSON.stringify(result.contentJson)
+    expect(body).toContain('Abrechnung')
+    expect(body).toContain('"bold"')
+    expect(body).not.toContain('Open Billing')
+  })
+
+  it('keeps the rich body a translation already has', async () => {
+    const translated = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Öffne Abrechnung.' }] }],
+    }
+    mockGetPublicArticleBySlug.mockResolvedValue({
+      id: 'article_1' as KbArticleId,
+      title: 'Invoices',
+      content: 'Open Billing.',
+      contentJson: { type: 'doc', content: [] },
+    })
+    mockGetPublishedArticleTranslation.mockResolvedValue({
+      title: 'Rechnungen',
+      description: null,
+      content: 'Öffne Abrechnung.',
+      contentJson: translated,
+    })
+
+    expect((await getPublicArticleBySlugForLocale('invoices', 'de')).contentJson).toBe(translated)
   })
 })
 

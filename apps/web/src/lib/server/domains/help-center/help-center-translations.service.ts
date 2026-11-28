@@ -14,6 +14,7 @@ import {
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
+import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
 import type {
   HelpCenterArticleTranslation,
@@ -79,6 +80,8 @@ export async function upsertArticleTranslation(
 ): Promise<HelpCenterArticleTranslation> {
   const manual = opts.source !== 'auto'
   if (manual) await cancelPendingAutoTranslations(input.articleId, input.locale)
+  // The public pages render the rich body, so a Markdown-only write stores one too.
+  const contentJson = input.contentJson ?? markdownToTiptapJson(input.content)
   const [row] = await db
     .insert(helpCenterArticleTranslations)
     .values({
@@ -87,7 +90,7 @@ export async function upsertArticleTranslation(
       title: input.title,
       description: input.description ?? null,
       content: input.content,
-      contentJson: input.contentJson ?? null,
+      contentJson,
     })
     .onConflictDoUpdate({
       target: [helpCenterArticleTranslations.articleId, helpCenterArticleTranslations.locale],
@@ -95,7 +98,7 @@ export async function upsertArticleTranslation(
         title: input.title,
         description: input.description ?? null,
         content: input.content,
-        contentJson: input.contentJson ?? null,
+        contentJson,
         ...(manual ? { status: 'draft' as const } : {}),
         updatedAt: new Date(),
       },
