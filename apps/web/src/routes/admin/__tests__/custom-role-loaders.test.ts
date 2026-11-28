@@ -218,7 +218,7 @@ describe('admin page loaders for a custom role', () => {
 
     await expect(
       loader({ context: context([PERMISSIONS.SETTINGS_MANAGE], client) })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ seededAreas: { areas: ['adminChannelSettings'], messages: {} } })
     expect(client.warmed).not.toContain(key('admin', 'onboarding'))
   })
 

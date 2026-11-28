@@ -4,6 +4,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { ModerationPage } from '@/components/admin/settings/moderation-settings-page'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/moderation')({
   head: adminPageHead('Moderation settings'),
@@ -17,7 +18,7 @@ export const Route = createFileRoute('/admin/settings/moderation')({
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.portalPageConfig())
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: ModerationPage,
 })

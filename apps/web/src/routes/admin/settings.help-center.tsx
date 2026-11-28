@@ -17,6 +17,7 @@ import { useUpdateHelpCenterConfig } from '@/lib/client/mutations/settings'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { isProductEnabled, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 /**
  * Split by concern, matching the Access & Security page's `?tab=` pattern:
@@ -41,7 +42,7 @@ export const Route = createFileRoute('/admin/settings/help-center')({
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.helpCenterConfig())
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: HelpCenterSettingsRoute,
 })

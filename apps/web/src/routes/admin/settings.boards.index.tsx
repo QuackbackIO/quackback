@@ -15,6 +15,7 @@ import { warmQuery } from '@/lib/client/queries/warm-query'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -45,7 +46,7 @@ export const Route = createFileRoute('/admin/settings/boards/')({
       // The Email card's "Sent from" line, so it renders from the document.
       warmQuery(context.queryClient, surfaceSenderQuery('feedback')),
     ])
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: BoardsSettingsPage,
 })

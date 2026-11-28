@@ -5,6 +5,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { IntegrationDetail } from '@/components/admin/settings/integrations/integration-detail'
 import { getIntegrationSettingsEntry } from '@/components/admin/settings/integrations/integration-settings-registry'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 /** URL segments use hyphens (e.g. `azure-devops`); registry keys use the
  * underscore integration type (`azure_devops`). Every other provider is a
@@ -51,7 +52,13 @@ export const Route = createFileRoute('/admin/settings/integrations/$type')({
       await import('@/components/admin/settings/integrations/integration-settings-registry')
     if (!getIntegrationSettingsEntry(type)) throw notFound()
     await context.queryClient.ensureQueryData(adminQueries.integrationByType(type))
-    return {}
+    return {
+      seededAreas: await seedAdminAreas(
+        context.personLocale,
+        'adminIntegrationSettings',
+        'adminIntegrationCatalog'
+      ),
+    }
   },
   component: IntegrationSettingsPage,
 })

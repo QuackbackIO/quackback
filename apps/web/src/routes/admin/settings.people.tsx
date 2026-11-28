@@ -5,6 +5,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { UserAttributesList } from '@/components/admin/settings/user-attributes/user-attributes-list'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/people')({
   head: adminPageHead('People settings'),
@@ -12,7 +13,7 @@ export const Route = createFileRoute('/admin/settings/people')({
     assertSettingsPageAccess(context.permissions, '/admin/settings/people')
     const { queryClient } = context
     await queryClient.ensureQueryData(adminQueries.userAttributes())
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings') }
   },
   component: PeoplePage,
 })

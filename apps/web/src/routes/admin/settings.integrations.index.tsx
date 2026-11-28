@@ -9,6 +9,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationsSettingsBody } from '@/components/admin/settings/integrations/integrations-settings-body'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
   head: adminPageHead('Integrations settings'),
@@ -24,7 +25,14 @@ export const Route = createFileRoute('/admin/settings/integrations/')({
       ensure(adminQueries.integrations()),
       ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
-    return { integrationsEnabled }
+    return {
+      integrationsEnabled,
+      seededAreas: await seedAdminAreas(
+        context.personLocale,
+        'adminIntegrationSettings',
+        'adminIntegrationCatalog'
+      ),
+    }
   },
   component: IntegrationsPage,
 })

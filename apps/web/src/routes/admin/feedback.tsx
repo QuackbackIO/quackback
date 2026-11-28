@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { INBOX_POST_SORTS } from '@/lib/shared/types/filters'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   board: z.array(z.string()).optional().catch(undefined),
@@ -39,6 +40,9 @@ export const Route = createFileRoute('/admin/feedback')({
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
+  loader: async ({ context }) => ({
+    seededAreas: await seedAdminAreas(context.personLocale, 'adminProduct'),
+  }),
   component: FeedbackLayout,
 })
 

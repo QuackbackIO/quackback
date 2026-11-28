@@ -8,6 +8,7 @@ import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/tags')({
   head: adminPageHead('Tags settings'),
@@ -28,7 +29,7 @@ export const Route = createFileRoute('/admin/settings/tags')({
         ? ensure(adminQueries.boards())
         : undefined,
     ])
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: TagsPage,
 })

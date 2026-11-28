@@ -19,6 +19,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const searchSchema = z.object({
   tab: boardTabSearch,
@@ -54,7 +55,7 @@ export const Route = createFileRoute('/admin/settings/boards/$slug')({
     if (!boards.some((b) => b.slug === params.slug)) {
       throw redirect({ to: '/admin/settings/boards' })
     }
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: BoardSettingsPage,
 })

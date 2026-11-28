@@ -10,6 +10,7 @@ import {
   ticketStageLabelsQuery,
 } from '@/components/admin/settings/tickets/queries'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/ticket-statuses')({
   head: adminPageHead('Ticket statuses settings'),
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/admin/settings/ticket-statuses')({
       context.queryClient.ensureQueryData(ticketStatusesQuery),
       context.queryClient.ensureQueryData(ticketStageLabelsQuery),
     ])
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: TicketStatusesPage,
 })

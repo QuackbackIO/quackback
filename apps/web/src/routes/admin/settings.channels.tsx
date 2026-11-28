@@ -5,6 +5,7 @@ import { ChannelsHubPage } from '@/components/admin/settings/channels-hub-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/channels')({
   head: adminPageHead('Channels settings'),
@@ -31,7 +32,7 @@ export const Route = createFileRoute('/admin/settings/channels')({
       warmQuery(ensure, channels.emailStatus()),
       warmQuery(ensure, githubStatus()),
     ])
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: ChannelsHubPage,
 })

@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const COPILOT_TABS = ['knowledge', 'guidance'] as const
 type CopilotTab = (typeof COPILOT_TABS)[number]
@@ -40,6 +41,7 @@ export const Route = createFileRoute('/admin/settings/copilot')({
   },
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(assistantQueries.settings())
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation') }
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

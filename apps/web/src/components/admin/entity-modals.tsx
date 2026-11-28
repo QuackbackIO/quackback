@@ -8,6 +8,7 @@ import { lazy } from 'react'
 import type { ArticleId, ChangelogId, PostId } from '@quackback/ids'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
+import { AreaMessages } from '@/components/shared/area-messages'
 import type { CurrentUser } from '@/lib/shared/types'
 
 const PostModalContent = lazy(() =>
@@ -89,7 +90,13 @@ export function ArticleModal({ articleId: urlArticleId }: { articleId: string | 
       srTitle="Edit article"
       hasValidId={!!validatedId}
     >
-      {validatedId && <ArticleModalContent articleId={validatedId} onClose={close} />}
+      {validatedId && (
+        // The article editor opens on any admin page, so it loads the help
+        // center's strings as it opens.
+        <AreaMessages area="adminHelpCenter">
+          <ArticleModalContent articleId={validatedId} onClose={close} />
+        </AreaMessages>
+      )}
     </UrlModalShell>
   )
 }

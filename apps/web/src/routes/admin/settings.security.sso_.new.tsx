@@ -5,6 +5,7 @@ import { ProviderCreatePage } from '@/components/admin/settings/security/identit
 import { UpgradeScreen } from '@/components/admin/upgrade'
 import { SSO_CRUMBS } from '@/components/admin/settings/security/identity-providers/provider-shared'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 // The trailing underscore on "sso_" escapes nesting under
 // /admin/settings/security/sso, which is a redirect-only route for stale
@@ -26,7 +27,11 @@ export const Route = createFileRoute('/admin/settings/security/sso_/new')({
     // hydration and may be copied into the IdP straight away.
     const { newRegistrationId } =
       await import('@/components/admin/settings/security/identity-providers/provider-shared')
-    return { ssoEntitled, registrationId: newRegistrationId() }
+    return {
+      ssoEntitled,
+      registrationId: newRegistrationId(),
+      seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
+    }
   },
   component: SsoCreateRoute,
 })

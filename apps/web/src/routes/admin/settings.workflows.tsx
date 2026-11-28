@@ -13,6 +13,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { adminPageHead } from '@/lib/client/admin-head'
 import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/workflows')({
   head: adminPageHead('Workflows settings'),
@@ -47,7 +48,10 @@ export const Route = createFileRoute('/admin/settings/workflows')({
       hasEntitlementFn({ data: { key: 'workflows' } }),
       ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
-    return { workflowsEntitled }
+    return {
+      workflowsEntitled,
+      seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation'),
+    }
   },
   component: WorkflowsPageRoute,
 })

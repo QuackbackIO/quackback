@@ -16,6 +16,7 @@ import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { DEFAULT_STATUS_SETTINGS, type StatusSettings } from '@/lib/shared/status-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/status')({
   head: adminPageHead('Status settings'),
@@ -33,7 +34,7 @@ export const Route = createFileRoute('/admin/settings/status')({
       // The Notifications card's "Sent from" line, so it renders from the document.
       warmQuery(context.queryClient, surfaceSenderQuery('status')),
     ])
-    return {}
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: StatusSettingsPage,
 })

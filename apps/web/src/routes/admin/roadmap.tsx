@@ -11,6 +11,7 @@ import { AdminPageGate } from '@/components/admin/admin-page-gate'
 import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 /** The URL params that filter the board's columns. */
 const COLUMN_FILTER_PARAMS = ['search', 'board', 'tags', 'segments', 'sort'] as const
@@ -81,6 +82,7 @@ export const Route = createFileRoute('/admin/roadmap')({
     }
 
     return {
+      seededAreas: await seedAdminAreas(context.personLocale, 'adminProduct'),
       currentUser: {
         name: user.name,
         email: user.email,

@@ -7,6 +7,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 /**
  * Data > Imports & exports (§I1). Admin-only, no feature flag — importing
@@ -30,6 +31,7 @@ export const Route = createFileRoute('/admin/settings/imports')({
         ? warmQuery(ensure, settingsQueries.importRuns())
         : undefined,
     ])
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings') }
   },
   component: ImportsHubPage,
 })

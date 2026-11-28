@@ -4,6 +4,7 @@ import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/
 import { helpCenterSearchSchema } from '@/components/admin/help-center/help-center-search'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/help-center')({
   head: adminPageHead('Help center'),
@@ -14,6 +15,9 @@ export const Route = createFileRoute('/admin/help-center')({
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
+  loader: async ({ context }) => ({
+    seededAreas: await seedAdminAreas(context.personLocale, 'adminHelpCenter'),
+  }),
   component: HelpCenterLayout,
 })
 

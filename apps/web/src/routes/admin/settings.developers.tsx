@@ -19,6 +19,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useBaseUrl, useCloudEnabled } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 // The two guides are long and sit on the Webhooks and MCP tabs, so they load
 // with their tab rather than with the Keys tab every visit opens on.
@@ -72,7 +73,11 @@ export const Route = createFileRoute('/admin/settings/developers')({
       ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
 
-    return { webhooksEntitled: entitlements.webhooks, mcpEntitled: entitlements.mcpServer }
+    return {
+      webhooksEntitled: entitlements.webhooks,
+      mcpEntitled: entitlements.mcpServer,
+      seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings'),
+    }
   },
   component: ApiPage,
 })

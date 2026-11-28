@@ -11,6 +11,7 @@ import { MembersTab } from '@/components/admin/settings/team/members-tab'
 import { TeamsTab } from '@/components/admin/settings/teams/teams-tab'
 import { RolesTab } from '@/components/admin/settings/team/roles-tab'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 const TABS = ['members', 'teams', 'roles'] as const
 type MembersPageTab = (typeof TABS)[number]
@@ -41,6 +42,7 @@ export const Route = createFileRoute('/admin/settings/members')({
     ])
 
     return {
+      seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
       settings,
       currentMember: principal as { id: PrincipalId; role: 'admin' | 'member'; userId: UserId },
       canManageTeams,

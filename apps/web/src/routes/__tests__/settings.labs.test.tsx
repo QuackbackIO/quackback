@@ -45,10 +45,10 @@ describe('settings labs route', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('needs the manage settings permission', () => {
-    expect(() => options.loader({ context: { permissions: [] } })).toThrow()
-    expect(() =>
+  it('needs the manage settings permission', async () => {
+    await expect(options.loader({ context: { permissions: [] } })).rejects.toBeDefined()
+    await expect(
       options.loader({ context: { permissions: [PERMISSIONS.SETTINGS_MANAGE] } })
-    ).not.toThrow()
+    ).resolves.toEqual({ seededAreas: { areas: ['adminWorkspaceSettings'], messages: {} } })
   })
 })

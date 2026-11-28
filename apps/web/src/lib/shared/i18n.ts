@@ -288,7 +288,21 @@ export const AREA_MESSAGE_PREFIXES = {
   helpCenter: ['portal.hc.'],
   // The workspace's language settings: the Language card on Settings >
   // General and the main-language row on the help center's languages.
+  // Ahead of the admin settings areas, so its keys stay its own.
   languageSettings: ['admin.settings.language.'],
+  // The admin areas. Each admin route seeds its area's strings in its loader
+  // (see `seedAdminAreas`); the shell (rail, menus, search, notifications,
+  // shared dialogs) has no area and rides the admin layout's seed. Keys are
+  // `admin.<area>.<component>.<name>`.
+  adminInbox: ['admin.inbox.'],
+  adminProduct: ['admin.feedback.', 'admin.roadmap.', 'admin.changelog.', 'admin.analytics.'],
+  adminPeople: ['admin.people.'],
+  adminHelpCenter: ['admin.helpCenter.', 'admin.status.'],
+  adminAutomation: ['admin.automation.'],
+  adminWorkspaceSettings: ['admin.settings.workspace.'],
+  adminChannelSettings: ['admin.settings.channels.'],
+  adminIntegrationSettings: ['admin.settings.integrations.'],
+  adminIntegrationCatalog: ['admin.integrationCatalog.'],
   twoFactor: ['portal.auth.twoFactor.'],
   notificationText: ['portal.notifications.text.'],
   accessGate: ['portal.accessGate.'],
@@ -400,6 +414,29 @@ export async function seedAreaMessages(
   area: MessageArea
 ): Promise<Record<string, string>> {
   return locale === DEFAULT_LOCALE ? {} : loadAreaMessages(locale, area)
+}
+
+/** The strings an admin route's loader seeds for its areas (`AdminAreaMessages`). */
+export interface SeededAdminAreas {
+  areas: MessageArea[]
+  messages: Record<string, string>
+}
+
+/**
+ * The strings of an admin route's areas in the admin's language (the route
+ * context's `personLocale`, English without one), for its loader to return as
+ * `seededAreas`. The admin layout hands them to everything the route renders.
+ * None in English, which renders from the code.
+ */
+export async function seedAdminAreas(
+  locale: SupportedLocale | undefined,
+  ...areas: MessageArea[]
+): Promise<SeededAdminAreas> {
+  const resolved = locale ?? DEFAULT_LOCALE
+  return {
+    areas,
+    messages: resolved === DEFAULT_LOCALE ? {} : await loadAreaMessages(resolved, ...areas),
+  }
 }
 
 /** The file viewer's strings in a locale. */

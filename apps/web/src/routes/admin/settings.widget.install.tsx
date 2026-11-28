@@ -6,6 +6,7 @@ import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import { WidgetInstallPage } from '@/components/admin/settings/widget/widget-install-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/admin/settings/widget/install')({
   head: adminPageHead('Install the widget'),
@@ -20,6 +21,7 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
         ? ensure(adminQueries.onboardingStatus())
         : undefined,
     ])
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
   },
   component: WidgetInstallPage,
 })

@@ -26,6 +26,7 @@ import {
 import { assertSettingsPageAccess } from '@/lib/shared/settings-page-access'
 import type { ConnectorToolDTO, ConnectorToolPolicy } from '@/lib/shared/assistant/connectors'
 import { useState } from 'react'
+import { seedAdminAreas } from '@/lib/shared/i18n'
 
 // Trailing underscore on "connectors_" escapes nesting under the list route,
 // which has no Outlet. URL stays /admin/settings/connectors/:connectorId.
@@ -35,6 +36,7 @@ export const Route = createFileRoute('/admin/settings/connectors_/$connectorId')
   },
   loader: async ({ context, params }) => {
     await context.queryClient.ensureQueryData(connectorQueries.detail(params.connectorId))
+    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation') }
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />
