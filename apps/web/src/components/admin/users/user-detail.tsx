@@ -124,7 +124,7 @@ const PROFILE_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric
 
 /** A profile date, e.g. "Oct 1, 2026", in the viewer's zone once hydrated. */
 function ProfileDate({ date }: { date: Date | string }) {
-  return <LocalDate date={date} options={PROFILE_DATE} locale="en-US" />
+  return <LocalDate date={date} options={PROFILE_DATE} />
 }
 
 function DetailSkeleton() {

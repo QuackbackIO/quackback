@@ -44,12 +44,12 @@ const PICKED_TIME: Intl.DateTimeFormatOptions = {
  */
 function PickedValue({ value, dateOnly }: { value: Date; dateOnly: boolean }) {
   if (dateOnly) {
-    return <LocalDate date={value} options={{ ...PICKED_DAY, timeZone: 'UTC' }} locale="en-US" />
+    return <LocalDate date={value} options={{ ...PICKED_DAY, timeZone: 'UTC' }} />
   }
   return (
     <>
-      <LocalDate date={value} options={PICKED_DAY} locale="en-US" /> ·{' '}
-      <LocalDate date={value} options={PICKED_TIME} locale="en-US" />
+      <LocalDate date={value} options={PICKED_DAY} /> ·{' '}
+      <LocalDate date={value} options={PICKED_TIME} />
     </>
   )
 }

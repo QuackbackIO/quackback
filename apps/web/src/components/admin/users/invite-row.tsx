@@ -133,7 +133,7 @@ export function InviteRow({ invite, onRevoke, onResend, revoking, resending }: I
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm">{invite.email}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Sent <LocalDate date={sentDate} options={INVITE_DATE} locale="en-US" />
+            Sent <LocalDate date={sentDate} options={INVITE_DATE} />
           </p>
         </div>
         <InviteStatusBadge status={invite.status} />

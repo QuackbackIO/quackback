@@ -6,6 +6,7 @@
  * support replies come from. An address on a domain that is not live yet
  * carries that domain's setup panel under it.
  */
+import { usePageLocale } from '@/components/ui/local-date'
 import { useCallback, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useRouter } from '@tanstack/react-router'
@@ -346,10 +347,11 @@ function pendingMeta(
   domain: SendingDomainDTO,
   phase: DomainPhase,
   first: boolean,
-  fallback: string
+  fallback: string,
+  locale: string
 ): string | null {
   if (phase === 'live') {
-    const warning = first ? ownershipWarning(domain) : null
+    const warning = first ? ownershipWarning(domain, locale) : null
     return warning ? `The verification record is missing. ${warning}` : null
   }
   if (!first) return `Waiting for ${domain.domain} to be verified`
@@ -403,6 +405,7 @@ function SendingAddressesSection({
   /** Where Verify domain goes for an address whose domain is not Verified. */
   verifyLinkFor: (address: string | null | undefined) => VerifyDomainTarget | null
 }) {
+  const locale = usePageLocale()
   const available = addressMode !== 'unavailable'
   const guardPermitsAny = addressMode === 'any'
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
@@ -499,7 +502,7 @@ function SendingAddressesSection({
         {rows.map(({ a, domain, phase }) => {
           const first = firstOnDomain.has(a.id)
           // A live domain whose ownership record went missing still needs a record.
-          const warned = !!domain && first && ownershipWarning(domain) !== null
+          const warned = !!domain && first && ownershipWarning(domain, locale) !== null
           // Always open while the domain needs its records; opened from the menu once live.
           const open = domain ? phase !== 'live' || (expanded[domain.id] ?? warned) : false
           const address = a.address ?? ''
@@ -545,7 +548,9 @@ function SendingAddressesSection({
               <SettingsListRow
                 leading={<PhoneHiddenIcon icon={EnvelopeIcon} />}
                 title={title}
-                meta={(domain && pendingMeta(domain, phase, first, fallbackNote)) || undefined}
+                meta={
+                  (domain && pendingMeta(domain, phase, first, fallbackNote, locale)) || undefined
+                }
                 wrapMeta={phase !== 'live' || warned}
                 badges={<PhaseBadge phase={phase} />}
                 trailing={

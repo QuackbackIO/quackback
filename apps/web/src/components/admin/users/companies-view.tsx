@@ -40,11 +40,15 @@ import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-
 import { buildCompaniesExportUrl } from '@/lib/shared/company-filters'
 import { createCompanyFn, type CompanyWithMemberCountDTO } from '@/lib/server/functions/companies'
 import { toastError } from '@/lib/client/error-notice'
+import { useFormatNumber, type NumberFormatter } from '@/components/ui/format-number'
 
-/** Render mrrCents as a whole-dollar currency amount, or a dash when unset. */
-export function formatMonthlySpend(mrrCents: number | null): string {
+/**
+ * Render mrrCents as a whole-dollar currency amount in the page's language
+ * (`useFormatNumber`), or a dash when unset.
+ */
+export function formatMonthlySpend(mrrCents: number | null, formatNumber: NumberFormatter): string {
   if (mrrCents == null) return '-'
-  return (mrrCents / 100).toLocaleString('en-US', {
+  return formatNumber(mrrCents / 100, {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
@@ -489,6 +493,7 @@ export function CompaniesView({
   onSelectCompany,
   canManage,
 }: CompaniesViewProps) {
+  const formatNumber = useFormatNumber()
   const [createOpen, setCreateOpen] = useState(false)
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: search,
@@ -621,7 +626,7 @@ export function CompaniesView({
                     company.mrrCents == null ? 'text-muted-foreground/60' : 'text-foreground'
                   )}
                 >
-                  {formatMonthlySpend(company.mrrCents)}
+                  {formatMonthlySpend(company.mrrCents, formatNumber)}
                 </span>
                 <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                   {company.memberCount}

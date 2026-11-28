@@ -1,3 +1,4 @@
+import { usePageLocale } from '@/components/ui/local-date'
 import {
   ChartContainer,
   ChartTooltip,
@@ -28,6 +29,7 @@ const chartConfig: ChartConfig = {
  *  null, so the line gaps instead of dipping to zero — a gap day means "nobody
  *  was answered", not "instant replies". */
 export function AnalyticsFirstResponseChart({ days }: AnalyticsFirstResponseChartProps) {
+  const locale = usePageLocale()
   if (days.every((d) => d.medianMinutes == null)) {
     return (
       <div
@@ -51,7 +53,7 @@ export function AnalyticsFirstResponseChart({ days }: AnalyticsFirstResponseChar
           axisLine={false}
           tickMargin={10}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-          tickFormatter={formatBucketDay}
+          tickFormatter={(day: string) => formatBucketDay(day, locale)}
         />
         <YAxis
           tickLine={false}
@@ -64,7 +66,7 @@ export function AnalyticsFirstResponseChart({ days }: AnalyticsFirstResponseChar
         <ChartTooltip
           content={
             <ChartTooltipContent
-              labelFormatter={(label) => formatBucketDay(String(label))}
+              labelFormatter={(label) => formatBucketDay(String(label), locale)}
               formatter={(value) => formatResponseTime(Number(value))}
             />
           }

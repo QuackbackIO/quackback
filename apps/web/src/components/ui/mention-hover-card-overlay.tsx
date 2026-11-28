@@ -24,6 +24,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Avatar } from '@/components/ui/avatar'
+import { LocalDate } from '@/components/ui/local-date'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
@@ -280,10 +281,7 @@ export function MentionHoverCardOverlay({ children, className }: MentionHoverCar
                 </div>
                 <div className="text-xs text-muted-foreground/70 mt-1">
                   Joined{' '}
-                  {new Date(card.joinedAt).toLocaleDateString(undefined, {
-                    month: 'short',
-                    year: 'numeric',
-                  })}
+                  <LocalDate date={card.joinedAt} options={{ month: 'short', year: 'numeric' }} />
                 </div>
               </div>
             </div>

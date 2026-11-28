@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { LocalDate } from '@/components/ui/local-date'
 import { parseSnoozeTime } from '@/lib/shared/snooze-parse'
 
 interface SnoozeNaturalInputProps {
@@ -59,13 +60,16 @@ export function SnoozeNaturalInput({ onResolve, disabled }: SnoozeNaturalInputPr
       {resolved && (
         <p className="text-xs text-muted-foreground">
           Snoozes until{' '}
-          {resolved.toLocaleString(undefined, {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          })}
+          <LocalDate
+            date={resolved}
+            options={{
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            }}
+          />
         </p>
       )}
     </div>

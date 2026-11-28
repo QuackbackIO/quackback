@@ -9,6 +9,7 @@
  */
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import {
   LIFECYCLE_COLORS,
   LIFECYCLE_LABELS,
@@ -33,12 +34,18 @@ interface StatusLifecycleStepperProps {
   canReopen?: boolean
 }
 
-function shortTime(iso: string): string {
+/** When a stage was reached: the time on the same day, else the date, in the page's language. */
+function ShortTime({ iso }: { iso: string }) {
+  const format = useLocalDateFormatter()
   const d = new Date(iso)
   const sameDay = d.toDateString() === new Date().toDateString()
-  return sameDay
-    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return (
+    <>
+      {sameDay
+        ? format(d, { hour: '2-digit', minute: '2-digit' })
+        : format(d, { month: 'short', day: 'numeric' })}
+    </>
+  )
 }
 
 export function StatusLifecycleStepper({
@@ -126,7 +133,7 @@ export function StatusLifecycleStepper({
                   ? reopening
                     ? 'reopens here'
                     : 'next update posts here'
-                  : (isDone && reachedAt?.[stage] && shortTime(reachedAt[stage])) || ' '}
+                  : (isDone && reachedAt?.[stage] && <ShortTime iso={reachedAt[stage]} />) || ' '}
             </span>
           </button>
         )

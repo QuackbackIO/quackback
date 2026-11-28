@@ -48,7 +48,7 @@ const INVITE_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric'
 
 /** When an invitation was sent, e.g. "Oct 1", in the viewer's zone once hydrated. */
 export function InviteDate({ date }: { date: string }) {
-  return <LocalDate date={date} options={INVITE_DATE} locale="en-US" />
+  return <LocalDate date={date} options={INVITE_DATE} />
 }
 
 interface InvitationActionsProps {

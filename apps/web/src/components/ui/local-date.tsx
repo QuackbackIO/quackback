@@ -100,6 +100,16 @@ export const formatViewerDate: LocalDateFormatter = (date, options = {}, locale)
   return new Intl.DateTimeFormat(locale, options).format(parsed)
 }
 
+/**
+ * The page's language: the surrounding IntlProvider's locale, which the
+ * server resolves and sends with the document, or the first-render locale
+ * outside a provider. For formats that have no time zone to switch (a date
+ * in UTC, a number), so both renders agree.
+ */
+export function usePageLocale(): string {
+  return useContext(IntlContext)?.locale ?? FIRST_RENDER_LOCALE
+}
+
 const subscribe = () => () => {}
 
 /**

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { qualifyCompanyFn } from '@/lib/server/functions/companies'
 import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 import { toastError } from '@/lib/client/error-notice'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
@@ -29,6 +30,7 @@ export const CompanyCard = memo(function CompanyCard({
 }) {
   const [editing, setEditing] = useState(false)
   const queryClient = useQueryClient()
+  const formatNumber = useFormatNumber()
   // A viewer without company.view gets no card: the read would be refused.
   const canView = usePermission(PERMISSIONS.COMPANY_VIEW)
   const { data: company, isPending } = useQuery({
@@ -75,7 +77,7 @@ export const CompanyCard = memo(function CompanyCard({
 
   const mrr =
     company.mrrCents != null
-      ? (company.mrrCents / 100).toLocaleString('en-US', {
+      ? formatNumber(company.mrrCents / 100, {
           style: 'currency',
           currency: 'USD',
           maximumFractionDigits: 0,

@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { seedAdminAreas } from '@/lib/shared/i18n'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -437,6 +438,7 @@ function OfficeHoursPage() {
 
 /** "Open now" / "Opens <when>" line, computed with the shared resolver. */
 function OfficeHoursPreview({ schedule }: { schedule: OfficeHoursSchedule }) {
+  const formatDate = useLocalDateFormatter()
   // Compute after mount only, so the SSR pass and the first client render match.
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
@@ -454,12 +456,12 @@ function OfficeHoursPreview({ schedule }: { schedule: OfficeHoursSchedule }) {
 
   const opensLabel =
     opensAt &&
-    new Intl.DateTimeFormat(undefined, {
+    formatDate(opensAt, {
       weekday: 'short',
       hour: 'numeric',
       minute: '2-digit',
       timeZone: isValidTimeZone(schedule.timezone) ? schedule.timezone : undefined,
-    }).format(opensAt)
+    })
 
   return (
     <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">

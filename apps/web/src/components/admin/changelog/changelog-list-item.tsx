@@ -107,7 +107,6 @@ export function ChangelogListItem({
                 <LocalDate
                   date={publishedAt}
                   options={{ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }}
-                  locale="en-US"
                 />
               </>
             ) : (
@@ -124,7 +123,6 @@ export function ChangelogListItem({
                 <LocalDate
                   date={portalDisplayDate}
                   options={{ month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }}
-                  locale="en-US"
                 />
               </span>
             </>

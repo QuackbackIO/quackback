@@ -143,11 +143,7 @@ export function ChangelogMetadataSidebarContent({
     publishedAt ??
     (publishState.type === 'published' ? (publishState.publishAt ?? new Date()) : null)
   const displayPlaceholder =
-    publishDay != null ? (
-      <LocalDate date={publishDay} options={PUBLISH_DAY} locale="en-US" />
-    ) : (
-      'Pick a date'
-    )
+    publishDay != null ? <LocalDate date={publishDay} options={PUBLISH_DAY} /> : 'Pick a date'
 
   // Search shipped posts
   const { data: posts = [], isLoading: postsLoading } = useQuery({

@@ -1,3 +1,4 @@
+import { usePageLocale } from '@/components/ui/local-date'
 import {
   ChartContainer,
   ChartTooltip,
@@ -28,6 +29,7 @@ interface AnalyticsConversationVolumeChartProps {
 export function AnalyticsConversationVolumeChart({
   volume,
 }: AnalyticsConversationVolumeChartProps) {
+  const locale = usePageLocale()
   const chartConfig: ChartConfig = Object.fromEntries(
     volume.channels.map((channel, i) => [
       channel,
@@ -58,7 +60,7 @@ export function AnalyticsConversationVolumeChart({
           axisLine={false}
           tickMargin={10}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-          tickFormatter={formatBucketDay}
+          tickFormatter={(day: string) => formatBucketDay(day, locale)}
         />
         <YAxis
           tickLine={false}
@@ -71,7 +73,9 @@ export function AnalyticsConversationVolumeChart({
         />
         <ChartTooltip
           content={
-            <ChartTooltipContent labelFormatter={(label) => formatBucketDay(String(label))} />
+            <ChartTooltipContent
+              labelFormatter={(label) => formatBucketDay(String(label), locale)}
+            />
           }
         />
         <ChartLegend content={<ChartLegendContent />} />

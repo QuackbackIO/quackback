@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { EmptyState } from '@/components/shared/empty-state'
 import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-row'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
@@ -34,8 +35,6 @@ function helpfulRate(helpful: number, notHelpful: number): number | null {
   if (total === 0) return null
   return Math.round((helpful / total) * 100)
 }
-
-const numberFormatter = new Intl.NumberFormat('en-US')
 
 /**
  * Fleet-wide totals plus the single worst-received article, derived from the
@@ -66,6 +65,7 @@ function summarizePerformance(rows: ArticlePerformanceRow[]) {
 }
 
 export function ArticlePerformanceTable() {
+  const formatNumber = useFormatNumber()
   const navigate = useNavigate({ from: Route.fullPath })
   const { data: rows, isLoading } = useQuery(helpCenterQueries.articlePerformance())
   const summary = rows && rows.length > 0 ? summarizePerformance(rows) : null
@@ -96,11 +96,11 @@ export function ArticlePerformanceTable() {
           <div className="rounded-xl border border-border/50 bg-card overflow-hidden mb-4">
             <AnalyticsStatRow
               stats={[
-                { label: 'Total views', value: numberFormatter.format(summary.totalViews) },
-                { label: 'Helpful votes', value: numberFormatter.format(summary.totalHelpful) },
+                { label: 'Total views', value: formatNumber(summary.totalViews) },
+                { label: 'Helpful votes', value: formatNumber(summary.totalHelpful) },
                 {
                   label: 'Not helpful votes',
-                  value: numberFormatter.format(summary.totalNotHelpful),
+                  value: formatNumber(summary.totalNotHelpful),
                 },
                 {
                   label: 'Overall helpful rate',
@@ -203,19 +203,19 @@ export function ArticlePerformanceTable() {
                     <TableCell className="text-right tabular-nums">
                       <span className="inline-flex items-center justify-end gap-1 text-foreground">
                         <EyeIcon className="size-3.5 text-muted-foreground/70" />
-                        {numberFormatter.format(article.viewCount)}
+                        {formatNumber(article.viewCount)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <span className="inline-flex items-center justify-end gap-1 text-foreground">
                         <HandThumbUpIcon className="size-3.5 text-muted-foreground/70" />
-                        {numberFormatter.format(article.helpfulCount)}
+                        {formatNumber(article.helpfulCount)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <span className="inline-flex items-center justify-end gap-1 text-foreground">
                         <HandThumbDownIcon className="size-3.5 text-muted-foreground/70" />
-                        {numberFormatter.format(article.notHelpfulCount)}
+                        {formatNumber(article.notHelpfulCount)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
