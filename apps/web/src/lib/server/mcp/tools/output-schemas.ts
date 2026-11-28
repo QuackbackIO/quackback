@@ -55,6 +55,13 @@ export const TOOL_OUTPUT_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     activities: z.array(item).describe('The post’s activity, newest first'),
     untrusted,
   }),
+  list_post_subscribers: z.looseObject({
+    postId: z.string(),
+    subscribers: z
+      .array(z.looseObject({ principalId: z.string() }))
+      .describe('Who follows the post, why, and at what level'),
+    untrusted,
+  }),
   list_conversations: page('conversations', 'Support conversations, most recent first'),
   get_conversation: z.looseObject({
     conversation: item,
@@ -69,6 +76,20 @@ export const TOOL_OUTPUT_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     messages: z.array(item),
     hasMore: z.boolean(),
     nextCursor: cursor,
+    untrusted,
+  }),
+  list_ticket_watchers: z.looseObject({
+    ticketId: z.string(),
+    watchers: z
+      .array(z.looseObject({ principalId: z.string() }))
+      .describe('Who watches the ticket: names and avatars, never an email'),
+    untrusted,
+  }),
+  list_ticket_participants: z.looseObject({
+    ticketId: z.string(),
+    participants: z
+      .array(z.looseObject({ principalId: z.string() }))
+      .describe('The customers the ticket is shared with'),
     untrusted,
   }),
   get_settings: z

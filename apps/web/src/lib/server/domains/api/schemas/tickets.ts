@@ -18,12 +18,13 @@ import {
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
 } from './common'
+import { TICKET_SORTS } from '@/lib/shared/tickets'
+import { TICKET_DUE_FILTERS } from '@/lib/shared/ticket-due'
 
 export const TICKET_TYPES = ['customer', 'back_office', 'tracker'] as const
 export const TICKET_CATEGORIES = ['open', 'pending', 'closed'] as const
 export const TICKET_STAGES = ['received', 'in_progress', 'awaiting_requester', 'resolved'] as const
 export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
-const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority'] as const
 
 // A ticket's time-to-resolve SLA (TicketSlaRef).
 const TicketSlaSchema = z.object({
@@ -96,7 +97,11 @@ export const TicketSchema = z.object({
     description:
       "When a teammate first replied to the customer: the first public reply after the customer's first message, on the ticket or its conversation. Replies from the AI agent, workflows, workspace API keys and personal API keys made before the workspace upgraded to this rule do not count; a reply sent with a newer personal API key counts as its creator's. Null until then, and always null on back-office and tracker tickets.",
   }),
-  dueAt: NullableTimestampSchema.meta({ description: 'SLA due time, null if no policy applies' }),
+  dueAt: NullableTimestampSchema.meta({
+    description:
+      'The shared due date: proposed by the customer when filing or set by a teammate, ' +
+      'null when unset. Independent of SLA targets.',
+  }),
   resolvedAt: NullableTimestampSchema.meta({
     description: 'When the ticket entered a closed status, null while open',
   }),
@@ -243,10 +248,25 @@ registerPath('/tickets', {
         description: 'Filter by company ID',
       },
       {
+        name: 'due',
+        in: 'query',
+        schema: { type: 'string', enum: [...TICKET_DUE_FILTERS] },
+        description:
+          'Filter by due date: overdue (past due and still open), due_soon (due within the next ' +
+          '24 hours and still open), or none (no due date). Any other value returns 400.',
+      },
+      {
+        name: 'watcherPrincipalId',
+        in: 'query',
+        schema: { type: 'string' },
+        description: 'Only tickets this teammate watches',
+      },
+      {
         name: 'sort',
         in: 'query',
         schema: { type: 'string', enum: [...TICKET_SORTS], default: 'recent' },
-        description: 'Sort order',
+        description:
+          'Sort order. `due` puts the soonest due date first and tickets without one last.',
       },
       {
         name: 'limit',
