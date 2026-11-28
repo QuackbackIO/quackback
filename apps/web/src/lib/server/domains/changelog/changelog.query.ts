@@ -22,7 +22,7 @@ import {
 } from '@/lib/server/db'
 import type { BoardId, ChangelogId, PrincipalId, PostId, PostStatusId } from '@quackback/ids'
 import { computeStatus } from './changelog.service'
-import { getCategoriesForEntries } from './changelog-category.service'
+import { getCategoriesForEntries, categoryFilterCondition } from './changelog-category.service'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
 import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 import type {
@@ -40,7 +40,7 @@ import type {
  * @returns Paginated list of changelog entries
  */
 export async function listChangelogs(params: ListChangelogParams): Promise<ChangelogListResult> {
-  const { status = 'all', cursor, limit = 20, sort = 'newest' } = params
+  const { status = 'all', categoryIds, categories, cursor, limit = 20, sort = 'newest' } = params
   const oldestFirst = sort === 'oldest'
   const now = new Date()
 
@@ -54,6 +54,12 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     conditions.push(
       sql`to_tsvector('english', coalesce(${changelogEntries.title}, '') || ' ' || coalesce(${changelogEntries.content}, '')) @@ websearch_to_tsquery('english', ${params.search.trim()})`
     )
+  }
+
+  // Filter by category (label), by id and/or case-insensitive name
+  const categoryCondition = categoryFilterCondition({ categoryIds, categories })
+  if (categoryCondition) {
+    conditions.push(categoryCondition)
   }
 
   // Filter by status

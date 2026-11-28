@@ -13,7 +13,8 @@ import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
 import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { db, principal, eq } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { PostId } from '@quackback/ids'
+import { isValidTypeId } from '@quackback/ids'
+import type { PostId, ChangelogCategoryId } from '@quackback/ids'
 import { formatChangelogResponse } from './-serialize'
 import { parseCursor, parseLimit, readJsonBody } from '@/lib/server/domains/api/request'
 
@@ -25,6 +26,21 @@ const createChangelogSchema = z.object({
   linkedPostIds: z.array(z.string()).optional(),
   announceOnLauncher: z.boolean().optional(),
 })
+
+/**
+ * Split a comma-separated query param into trimmed, non-empty values.
+ * Returns undefined when the param is absent OR contains nothing usable, so
+ * `?labels=` and `?labels=,,` both read as "no filter" rather than "match
+ * the empty label".
+ */
+function parseCsvParam(raw: string | null): string[] | undefined {
+  if (raw === null) return undefined
+  const values = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+  return values.length > 0 ? values : undefined
+}
 
 export const Route = createFileRoute('/api/v1/changelog/')({
   server: {
@@ -51,7 +67,15 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             status = 'draft'
           }
 
-          const result = await listChangelogs({ status, cursor, limit })
+          // Label filters: `labels` (comma-separated names, case-insensitive)
+          // and `labelIds` (comma-separated typeids; malformed ones are
+          // dropped rather than 400-ing, mirroring /api/v1/posts' tagIds).
+          const categories = parseCsvParam(url.searchParams.get('labels'))
+          const categoryIds = parseCsvParam(url.searchParams.get('labelIds'))?.filter((id) =>
+            isValidTypeId(id, 'changelog_category')
+          ) as ChangelogCategoryId[] | undefined
+
+          const result = await listChangelogs({ status, categories, categoryIds, cursor, limit })
 
           return successResponse(
             result.items.map((entry) => formatChangelogResponse(entry)),

@@ -88,6 +88,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 
 vi.mock('@/lib/server/domains/changelog/changelog-category.service', () => ({
   categoryGateCondition: (...args: unknown[]) => mockCategoryGateCondition(...args),
+  categoryFilterCondition: () => undefined,
+  getCategoriesForEntries: async () => new Map(),
 }))
 
 import { changelogEntries } from '@/lib/server/db'

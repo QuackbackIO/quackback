@@ -16,13 +16,14 @@ import {
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { ChangelogId, PostStatusId } from '@quackback/ids'
+import type { ChangelogId, ChangelogCategoryId, PostStatusId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
 import {
   getCategoriesForEntries,
   categoryGateAllows,
   categoryGateCondition,
+  categoryFilterCondition,
 } from './changelog-category.service'
 import { isChangelogOpenTo } from './changelog.audience'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
@@ -217,10 +218,14 @@ export async function listPublicChangelogs(
   params: {
     cursor?: string
     limit?: number
+    /** Filter to entries carrying any of these category (label) ids */
+    categoryIds?: ChangelogCategoryId[]
+    /** Filter to entries carrying any of these category names (case-insensitive) */
+    categories?: string[]
   },
   actor: Actor = ANONYMOUS_ACTOR
 ): Promise<PublicChangelogListResult> {
-  const { cursor, limit = 20 } = params
+  const { cursor, limit = 20, categoryIds, categories } = params
   const now = new Date()
 
   // The category segment gate is part of the paged query, so a page is never
@@ -229,6 +234,14 @@ export async function listPublicChangelogs(
     ...publicChangelogConditions(now),
     categoryGateCondition(actor, changelogEntries.id),
   ]
+
+  // Filter by category (label). Distinct from the segment gate above: this is
+  // the caller asking for a subset, that one is the workspace restricting what
+  // this viewer may see. Both apply.
+  const categoryCondition = categoryFilterCondition({ categoryIds, categories })
+  if (categoryCondition) {
+    conditions.push(categoryCondition)
+  }
 
   // Cursor-based pagination. The lookup does NOT filter on deletedAt:
   // if an admin deleted the cursor row between page load and "Load
