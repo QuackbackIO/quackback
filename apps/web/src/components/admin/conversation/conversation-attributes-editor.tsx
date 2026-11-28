@@ -6,6 +6,8 @@
  * envelope. Renders nothing while no definitions exist so the panel stays
  * clean for workspaces that haven't adopted attributes.
  */
+import type { IntlShape } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -45,9 +47,18 @@ import { toastError } from '@/lib/client/error-notice'
 const NONE = '__none__'
 
 /** Human hint for where the current value came from. */
-function provenanceTitle(raw: unknown): string | undefined {
+function provenanceTitle(intl: IntlShape, raw: unknown): string | undefined {
   const src = readAttributeValue(raw)?.src
-  return src ? `Set by ${src}` : undefined
+  return src
+    ? intl.formatMessage(
+        {
+          id: 'admin.inbox.conversationAttributesEditor.setBy',
+          defaultMessage:
+            'Set by {src, select, teammate {teammate} workflow {workflow} ai {ai} customer {customer} other {{src}}}',
+        },
+        { src }
+      )
+    : undefined
 }
 
 /** Commit-on-blur/Enter text or number input (avoids a write per keystroke). */
@@ -90,6 +101,7 @@ function AttributeEditor({
   raw: unknown
   onSet: (value: unknown) => void
 }) {
+  const intl = useOptionalIntl()
   const value = readAttributeValue(raw)?.v
   switch (definition.fieldType) {
     case 'text':
@@ -127,10 +139,20 @@ function AttributeEditor({
           onValueChange={(next) => onSet(next === NONE ? null : next)}
         >
           <SelectTrigger size="sm" className="w-36">
-            <SelectValue placeholder="None" />
+            <SelectValue
+              placeholder={intl.formatMessage({
+                id: 'admin.inbox.conversationAttributesEditor.none',
+                defaultMessage: 'None',
+              })}
+            />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NONE}>None</SelectItem>
+            <SelectItem value={NONE}>
+              {intl.formatMessage({
+                id: 'admin.inbox.conversationAttributesEditor.none',
+                defaultMessage: 'None',
+              })}
+            </SelectItem>
             {options.map((o) => (
               <SelectItem key={o.id} value={o.id} title={o.description ?? undefined}>
                 {o.label}
@@ -151,7 +173,14 @@ function AttributeEditor({
               type="button"
               className="inline-flex h-7 max-w-40 items-center gap-1 rounded-md px-2 text-sm hover:bg-muted"
             >
-              <span className="truncate">{labels.length > 0 ? labels.join(', ') : 'None'}</span>
+              <span className="truncate">
+                {labels.length > 0
+                  ? labels.join(', ')
+                  : intl.formatMessage({
+                      id: 'admin.inbox.conversationAttributesEditor.none',
+                      defaultMessage: 'None',
+                    })}
+              </span>
               <ChevronDownIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
@@ -186,6 +215,7 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
   /** Skip fetching while the panel is hidden (mirrors the sibling queries). */
   enabled?: boolean
 }) {
+  const intl = useOptionalIntl()
   const queryClient = useQueryClient()
   const { data: definitions } = useQuery({
     ...conversationAttributeQueries.live(),
@@ -204,24 +234,46 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
       })
       onChanged()
     },
-    onError: (e) => toastError(e, 'Failed to update attribute'),
+    onError: (e) =>
+      toastError(
+        e,
+        intl.formatMessage({
+          id: 'admin.inbox.conversationAttributesEditor.updateFailed',
+          defaultMessage: 'Failed to update attribute',
+        })
+      ),
   })
 
   if (!definitions || definitions.length === 0) return null
 
   return (
     <div className="space-y-4 border-t border-border/30 pt-4">
-      <span className={MENU_LABEL}>Attributes</span>
+      <span className={MENU_LABEL}>
+        {intl.formatMessage({
+          id: 'admin.inbox.conversationAttributesEditor.attributes',
+          defaultMessage: 'Attributes',
+        })}
+      </span>
       {definitions.map((def) => {
         const raw = customAttributes[def.key]
         const isAiSet = readAttributeValue(raw)?.src === 'ai'
         return (
-          <div key={def.id} title={isAiSet ? undefined : provenanceTitle(raw)}>
+          <div key={def.id} title={isAiSet ? undefined : provenanceTitle(intl, raw)}>
             <Row label={def.label} align="center">
               <div className="flex items-center gap-1.5">
                 {isAiSet && (
-                  <Badge variant="secondary" className="h-5 px-1.5 text-xs" title="Set by AI">
-                    AI
+                  <Badge
+                    variant="secondary"
+                    className="h-5 px-1.5 text-xs"
+                    title={intl.formatMessage({
+                      id: 'admin.inbox.conversationAttributesEditor.setByAi',
+                      defaultMessage: 'Set by AI',
+                    })}
+                  >
+                    {intl.formatMessage({
+                      id: 'admin.inbox.conversationAttributesEditor.aiBadge',
+                      defaultMessage: 'AI',
+                    })}
                   </Badge>
                 )}
                 <AttributeEditor

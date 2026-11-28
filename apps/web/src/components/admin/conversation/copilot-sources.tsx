@@ -5,6 +5,8 @@
  * filter popover (copilot-panel.tsx's `CopilotAskInput`) and the per-citation
  * hovercard row below, plus the citation list + row themselves.
  */
+import { type MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
   BookOpenIcon,
@@ -25,10 +27,10 @@ export type SourceType = CopilotCitation['type']
 export interface SourceOption {
   type: SourceType
   /** Plural — the Answer-sources popover's filter row. */
-  label: string
+  label: MessageDescriptor
   /** Singular — the per-citation source row's hovercard meta line. */
-  rowLabel: string
-  subtitle?: string
+  rowLabel: MessageDescriptor
+  subtitle?: MessageDescriptor
   icon: typeof BookOpenIcon
 }
 
@@ -38,48 +40,71 @@ export interface SourceOption {
 export const SOURCE_OPTIONS: SourceOption[] = [
   {
     type: 'article',
-    label: 'Help center articles',
-    rowLabel: 'Help center article',
+    label: {
+      id: 'admin.inbox.copilotSources.helpCenterArticles',
+      defaultMessage: 'Help center articles',
+    },
+    rowLabel: {
+      id: 'admin.inbox.copilotSources.row.helpCenterArticle',
+      defaultMessage: 'Help center article',
+    },
     icon: BookOpenIcon,
   },
   {
     type: 'snippet',
-    label: 'Snippets',
-    rowLabel: 'Snippet',
+    label: { id: 'admin.inbox.copilotSources.snippets', defaultMessage: 'Snippets' },
+    rowLabel: { id: 'admin.inbox.copilotSources.row.snippet', defaultMessage: 'Snippet' },
     icon: DocumentTextIcon,
   },
   {
     type: 'post',
-    label: 'Roadmap posts',
-    rowLabel: 'Roadmap post',
+    label: { id: 'admin.inbox.copilotSources.roadmapPosts', defaultMessage: 'Roadmap posts' },
+    rowLabel: { id: 'admin.inbox.copilotSources.row.roadmapPost', defaultMessage: 'Roadmap post' },
     icon: MapIcon,
   },
   {
     type: 'summary',
-    label: 'Past conversations',
-    rowLabel: 'Past conversation',
-    subtitle: "This customer's closed conversations",
+    label: {
+      id: 'admin.inbox.copilotSources.pastConversations',
+      defaultMessage: 'Past conversations',
+    },
+    rowLabel: {
+      id: 'admin.inbox.copilotSources.row.pastConversation',
+      defaultMessage: 'Past conversation',
+    },
+    subtitle: {
+      id: 'admin.inbox.copilotSources.thisCustomersClosedConversations',
+      defaultMessage: "This customer's closed conversations",
+    },
     icon: ChatBubbleLeftRightIcon,
   },
   {
     type: 'ticket',
-    label: 'Tickets',
-    rowLabel: 'Ticket',
-    subtitle: 'Closed-ticket resolution summaries',
+    label: { id: 'admin.inbox.copilotSources.tickets', defaultMessage: 'Tickets' },
+    rowLabel: { id: 'admin.inbox.copilotSources.row.ticket', defaultMessage: 'Ticket' },
+    subtitle: {
+      id: 'admin.inbox.copilotSources.closedTicketResolutionSummaries',
+      defaultMessage: 'Closed-ticket resolution summaries',
+    },
     icon: LifebuoyIcon,
   },
   {
     type: 'changelog',
-    label: 'Changelog',
-    rowLabel: 'Changelog entry',
+    label: { id: 'admin.inbox.copilotSources.changelog', defaultMessage: 'Changelog' },
+    rowLabel: {
+      id: 'admin.inbox.copilotSources.row.changelogEntry',
+      defaultMessage: 'Changelog entry',
+    },
     icon: MegaphoneIcon,
   },
 ]
 
-const SOURCE_TYPE_META: Record<SourceType, { icon: typeof BookOpenIcon; label: string }> =
-  Object.fromEntries(
-    SOURCE_OPTIONS.map((opt) => [opt.type, { icon: opt.icon, label: opt.rowLabel }])
-  ) as Record<SourceType, { icon: typeof BookOpenIcon; label: string }>
+const SOURCE_TYPE_META: Record<
+  SourceType,
+  { icon: typeof BookOpenIcon; label: MessageDescriptor }
+> = Object.fromEntries(
+  SOURCE_OPTIONS.map((opt) => [opt.type, { icon: opt.icon, label: opt.rowLabel }])
+) as Record<SourceType, { icon: typeof BookOpenIcon; label: MessageDescriptor }>
 
 /**
  * The Answer-sources the Copilot picker offers — every citation source type.
@@ -96,10 +121,17 @@ export function visibleSourceOptions(): SourceOption[] {
 }
 
 export function CopilotSourcesList({ citations }: { citations: CopilotCitation[] }) {
+  const intl = useOptionalIntl()
   return (
     <div className="ps-1">
       <p className="mb-1 text-[11px] text-muted-foreground/70">
-        {citations.length} relevant {citations.length === 1 ? 'source' : 'sources'}
+        {intl.formatMessage(
+          {
+            id: 'admin.inbox.copilotSources.relevantSources',
+            defaultMessage: '{count, plural, one {# relevant source} other {# relevant sources}}',
+          },
+          { count: citations.length }
+        )}
       </p>
       <div className="flex flex-col gap-0.5">
         {citations.map((c) => (
@@ -111,6 +143,7 @@ export function CopilotSourcesList({ citations }: { citations: CopilotCitation[]
 }
 
 function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
+  const intl = useOptionalIntl()
   const meta = SOURCE_TYPE_META[citation.type]
   const Icon = meta.icon
   const isInternal = citation.internal === true
@@ -134,8 +167,15 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
           {citation.title}
         </span>
         <span className="mb-1 block text-[11px] text-muted-foreground">
-          {meta.label}
-          {isInternal ? ' · Internal' : ''}
+          {isInternal
+            ? intl.formatMessage(
+                {
+                  id: 'admin.inbox.copilotSources.internalSource',
+                  defaultMessage: '{source} · Internal',
+                },
+                { source: intl.formatMessage(meta.label) }
+              )
+            : intl.formatMessage(meta.label)}
         </span>
         <CitationFreshness updatedAt={citation.updatedAt} className="mb-1" />
         {hasUrl ? (
@@ -146,11 +186,24 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
               onClick={copyLink}
               className="pointer-events-auto shrink-0 text-[11px] text-primary hover:underline"
             >
-              {copied ? 'Copied' : 'Copy link'}
+              {copied
+                ? intl.formatMessage({
+                    id: 'admin.inbox.copilotSources.copied',
+                    defaultMessage: 'Copied',
+                  })
+                : intl.formatMessage({
+                    id: 'admin.inbox.copilotSources.copyLink',
+                    defaultMessage: 'Copy link',
+                  })}
             </button>
           </span>
         ) : (
-          <span className="text-[11px] text-warning">Internal · not linkable</span>
+          <span className="text-[11px] text-warning">
+            {intl.formatMessage({
+              id: 'admin.inbox.copilotSources.internalNotLinkable',
+              defaultMessage: 'Internal · not linkable',
+            })}
+          </span>
         )}
       </span>
     </span>

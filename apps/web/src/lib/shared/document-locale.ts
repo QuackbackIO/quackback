@@ -19,6 +19,10 @@ const LOCALIZED_ROUTE_IDS = new Set([
   '/admin/notifications',
   '/admin/search',
   '/admin/settings/notifications',
+  // The inbox (conversations and tickets). Text people wrote, and the few
+  // server words it cannot word by value (a snooze notice's time, an external
+  // issue's provider, older notices with no structured event), stay as stored.
+  '/admin/inbox',
   // The AI & Automation pages under settings. The settings layout and the other
   // settings pages stay English.
   '/admin/settings/agent',

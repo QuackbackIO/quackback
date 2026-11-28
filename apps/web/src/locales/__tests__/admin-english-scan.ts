@@ -2,7 +2,8 @@
  * Finds English written in admin code rather than in the catalog: text
  * between tags, the props people read (labels, placeholders, titles,
  * descriptions, aria-labels and the like), the same fields on plain objects,
- * and toast messages. A message's English beside its id (`defaultMessage`,
+ * and toast messages, including each text a choice or a fallback can show
+ * (`busy ? 'Saving…' : 'Save'`, `name ?? 'Unnamed'`). A message's English beside its id (`defaultMessage`,
  * `<FormattedMessage>`) is the catalog's own and is not counted.
  */
 import { parseSource, walk, type Finding, type Node } from './admin-ratchet'
@@ -61,6 +62,31 @@ function literal(node: Node | null | undefined): string | null {
   return null
 }
 
+/**
+ * The texts a choice or a fallback shows (`a ? 'Save' : 'Saving…'`,
+ * `name ?? 'Unnamed'`, `label || 'Remove'`): the literal at each branch, never
+ * the condition or the left side of an `&&`.
+ */
+function branchLiterals(node: Node | null | undefined): string[] {
+  if (!node) return []
+  if (node.type === 'JSXExpressionContainer') return branchLiterals(node.expression as Node)
+  if (node.type === 'ConditionalExpression') {
+    return [...branchLiterals(node.consequent as Node), ...branchLiterals(node.alternate as Node)]
+  }
+  if (node.type === 'LogicalExpression') {
+    const right = branchLiterals(node.right as Node)
+    return node.operator === '&&' ? right : [...branchLiterals(node.left as Node), ...right]
+  }
+  const text = literal(node)
+  return text === null ? [] : [text]
+}
+
+/** A choice or a fallback, whose branches `branchLiterals` reads. */
+function isBranching(node: Node | null | undefined): boolean {
+  const inner = node?.type === 'JSXExpressionContainer' ? (node.expression as Node) : node
+  return inner?.type === 'ConditionalExpression' || inner?.type === 'LogicalExpression'
+}
+
 function calleeName(node: Node): string {
   if (node.type === 'Identifier') return node.name as string
   if (node.type === 'MemberExpression' && !node.computed) {
@@ -108,11 +134,19 @@ export function scanEnglish(source: string, file: string): Finding[] {
     findings.push({ line: node.loc?.start.line ?? 0, text: show(collapsed) })
   }
 
-  walk(program, (node) => {
+  walk(program, (node, parent) => {
     switch (node.type) {
       case 'JSXText':
         add(node, node.value as string, undefined, true)
         return
+      case 'JSXExpressionContainer': {
+        // `{busy ? 'Saving…' : 'Save'}` between tags shows one of its texts.
+        const child = parent?.type === 'JSXElement' || parent?.type === 'JSXFragment'
+        if (child && isBranching(node)) {
+          for (const text of branchLiterals(node)) add(node, text, undefined, true)
+        }
+        return
+      }
       case 'JSXOpeningElement': {
         // A <FormattedMessage>'s attributes are its catalog entry.
         if (jsxName(node.name as Node) === 'FormattedMessage') return false
@@ -121,16 +155,18 @@ export function scanEnglish(source: string, file: string): Finding[] {
       case 'JSXAttribute': {
         const name = jsxName(node.name as Node)
         if (!READ_PROPS.has(name)) return
-        const text = literal(node.value as Node)
-        if (text !== null) add(node, text, (t) => `${name}="${t}"`, true)
+        const value = node.value as Node
+        const texts = isBranching(value) ? branchLiterals(value) : [literal(value)]
+        for (const text of texts) if (text !== null) add(node, text, (t) => `${name}="${t}"`, true)
         return
       }
       case 'CallExpression': {
         const callee = calleeName(node.callee as Node)
         if (/(^|\.)(formatMessage|defineMessages?)$/.test(callee)) return false
         if (!READ_CALLS.test(callee)) return
-        const text = literal((node.arguments as Node[])[0])
-        if (text !== null) add(node, text, (t) => `${callee}("${t}")`)
+        const first = (node.arguments as Node[])[0]
+        const texts = isBranching(first) ? branchLiterals(first) : [literal(first)]
+        for (const text of texts) if (text !== null) add(node, text, (t) => `${callee}("${t}")`)
         return
       }
       case 'ObjectExpression':
@@ -139,10 +175,13 @@ export function scanEnglish(source: string, file: string): Finding[] {
       case 'ObjectProperty': {
         const name = keyName(node)
         if (!name || !READ_PROPS.has(name)) return
-        const text = literal(node.value as Node)
+        const value = node.value as Node
+        const texts = isBranching(value) ? branchLiterals(value) : [literal(value)]
         // A field that starts with a capital reads as copy; a lowercase one
         // is usually a value (an icon name, a key).
-        if (text !== null && /^[A-Z]/.test(text)) add(node, text, (t) => `${name}: "${t}"`)
+        for (const text of texts) {
+          if (text !== null && /^[A-Z]/.test(text)) add(node, text, (t) => `${name}: "${t}"`)
+        }
         return
       }
       default:

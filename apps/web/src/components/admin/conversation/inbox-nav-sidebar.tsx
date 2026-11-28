@@ -1,5 +1,7 @@
+import type { MessageDescriptor } from 'react-intl'
+import { SCOPE_LABELS } from './inbox-labels'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo } from 'react'
-import { FormattedMessage } from 'react-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   InboxIcon,
@@ -75,18 +77,53 @@ import { useFeatureFlag } from '@/lib/client/hooks/use-root-context'
 // Status is no longer a view; it's a list filter. Quinn AI and the Tickets
 // section (below) render as their own nav groups, in that order (§2.3).
 export const CONVERSATION_VIEWS = [
-  { view: 'all', label: 'All conversations', Icon: InboxIcon },
-  { view: 'mine', label: 'Assigned to me', Icon: UserIcon },
-  { view: 'unassigned', label: 'Unassigned', Icon: InboxArrowDownIcon },
-  { view: 'mentions', label: 'Mentions', Icon: AtSymbolIcon },
-  { view: 'created_by_me', label: 'Created by me', Icon: PencilSquareIcon },
-  { view: 'saved', label: 'Saved messages', Icon: BookmarkIcon },
+  {
+    view: 'all',
+    label: {
+      id: 'admin.inbox.inboxNavSidebar.allConversations',
+      defaultMessage: 'All conversations',
+    },
+    Icon: InboxIcon,
+  },
+  {
+    view: 'mine',
+    label: { id: 'admin.inbox.inboxNavSidebar.assignedToMe', defaultMessage: 'Assigned to me' },
+    Icon: UserIcon,
+  },
+  {
+    view: 'unassigned',
+    label: { id: 'admin.inbox.inboxNavSidebar.unassigned', defaultMessage: 'Unassigned' },
+    Icon: InboxArrowDownIcon,
+  },
+  {
+    view: 'mentions',
+    label: { id: 'admin.inbox.inboxNavSidebar.mentions', defaultMessage: 'Mentions' },
+    Icon: AtSymbolIcon,
+  },
+  {
+    view: 'created_by_me',
+    label: { id: 'admin.inbox.inboxNavSidebar.createdByMe', defaultMessage: 'Created by me' },
+    Icon: PencilSquareIcon,
+  },
+  {
+    view: 'saved',
+    label: { id: 'admin.inbox.inboxNavSidebar.savedMessages', defaultMessage: 'Saved messages' },
+    Icon: BookmarkIcon,
+  },
   // The spam lifecycle's holding pen: spam-ended threads leave every triage
   // scope above and land here, restorable from the thread.
-  { view: 'spam', label: 'Spam', Icon: NoSymbolIcon },
+  {
+    view: 'spam',
+    label: { id: 'admin.inbox.inboxNavSidebar.spam', defaultMessage: 'Spam' },
+    Icon: NoSymbolIcon,
+  },
 ] as const
 
-const QUINN_VIEW = { view: 'quinn', label: 'AI agent activity', Icon: SparklesIcon } as const
+const QUINN_VIEW = {
+  view: 'quinn',
+  label: { id: 'admin.inbox.inboxNavSidebar.aiAgentActivity', defaultMessage: 'AI agent activity' },
+  Icon: SparklesIcon,
+} as const
 
 /**
  * The solid beaker, drawn here rather than imported: the settings menu's icon
@@ -120,16 +157,33 @@ export function showsTestView(counts: { test: number } | undefined, active: bool
 }
 
 function TestViewLabel() {
-  return <FormattedMessage id="inbox.view.test" defaultMessage="Test conversations" />
+  const intl = useOptionalIntl()
+  return intl.formatMessage({ id: 'inbox.view.test', defaultMessage: 'Test conversations' })
 }
 
 /** The Tickets nav section (UNIFIED-INBOX-SPEC.md §2.3), visible only when
  *  `supportTickets` is enabled — see `useSupportTicketsEnabled`. */
 export const TICKET_INBOX_VIEWS = [
-  { view: 'tickets_all', label: 'All tickets', Icon: InboxIcon },
-  { view: 'tickets_customer', label: 'Customer', Icon: TicketIcon },
-  { view: 'tickets_back_office', label: 'Back office', Icon: BuildingOffice2Icon },
-  { view: 'tickets_tracker', label: 'Trackers', Icon: RectangleStackIcon },
+  {
+    view: 'tickets_all',
+    label: { id: 'admin.inbox.inboxNavSidebar.allTickets', defaultMessage: 'All tickets' },
+    Icon: InboxIcon,
+  },
+  {
+    view: 'tickets_customer',
+    label: { id: 'admin.inbox.inboxNavSidebar.customer', defaultMessage: 'Customer' },
+    Icon: TicketIcon,
+  },
+  {
+    view: 'tickets_back_office',
+    label: { id: 'admin.inbox.inboxNavSidebar.backOffice', defaultMessage: 'Back office' },
+    Icon: BuildingOffice2Icon,
+  },
+  {
+    view: 'tickets_tracker',
+    label: { id: 'admin.inbox.inboxNavSidebar.trackers', defaultMessage: 'Trackers' },
+    Icon: RectangleStackIcon,
+  },
 ] as const
 
 /** Shared (deduped) source of `supportTickets` — gates the Tickets nav section. */
@@ -193,45 +247,36 @@ export { inboxTeamsQueryOptions, useInboxTeams, type InboxTeam }
 
 /** Human label for the active scope, resolving a tag/segment/team/view id. */
 export function scopeLabelFor(
+  format: (message: MessageDescriptor) => string,
   nav: InboxNavItem,
   tags?: ConversationTagWithCount[],
   segments?: InboxSegmentWithCount[],
   teams?: InboxTeam[],
   views?: ConversationViewDTO[]
 ): string {
-  if (nav.kind === 'tag') return tags?.find((t) => t.id === nav.tagId)?.name ?? 'Label'
+  if (nav.kind === 'tag')
+    return tags?.find((t) => t.id === nav.tagId)?.name ?? format(SCOPE_LABELS.tag)
   if (nav.kind === 'segment')
-    return segments?.find((s) => s.id === nav.segmentId)?.name ?? 'Segment'
-  if (nav.kind === 'team') return teams?.find((t) => t.id === nav.teamId)?.name ?? 'Team'
-  if (nav.kind === 'custom') return views?.find((v) => v.id === nav.viewId)?.name ?? 'View'
-  switch (nav.view) {
-    case 'mentions':
-      return 'Mentions'
-    case 'created_by_me':
-      return 'Created by me'
-    case 'spam':
-      return 'Spam'
-    case 'test':
-      return 'Test conversations'
-    case 'quinn':
-      return 'AI agent activity'
-    case 'saved':
-      return 'Saved messages'
-    case 'mine':
-      return 'Assigned to me'
-    case 'unassigned':
-      return 'Unassigned'
-    case 'tickets_all':
-      return 'All tickets'
-    case 'tickets_customer':
-      return 'Customer tickets'
-    case 'tickets_back_office':
-      return 'Back office tickets'
-    case 'tickets_tracker':
-      return 'Trackers'
-    default:
-      return 'All conversations'
+    return segments?.find((s) => s.id === nav.segmentId)?.name ?? format(SCOPE_LABELS.segment)
+  if (nav.kind === 'team')
+    return teams?.find((t) => t.id === nav.teamId)?.name ?? format(SCOPE_LABELS.team)
+  if (nav.kind === 'custom')
+    return views?.find((v) => v.id === nav.viewId)?.name ?? format(SCOPE_LABELS.view)
+  const byView: Record<string, MessageDescriptor> = {
+    mentions: SCOPE_LABELS.mentions,
+    created_by_me: SCOPE_LABELS.createdByMe,
+    spam: SCOPE_LABELS.spam,
+    test: SCOPE_LABELS.test,
+    quinn: SCOPE_LABELS.quinn,
+    saved: SCOPE_LABELS.saved,
+    mine: SCOPE_LABELS.mine,
+    unassigned: SCOPE_LABELS.unassigned,
+    tickets_all: SCOPE_LABELS.ticketsAll,
+    tickets_customer: SCOPE_LABELS.ticketsCustomer,
+    tickets_back_office: SCOPE_LABELS.ticketsBackOffice,
+    tickets_tracker: SCOPE_LABELS.ticketsTracker,
   }
+  return format(byView[nav.view] ?? SCOPE_LABELS.all)
 }
 
 // Mirrors the settings secondary-nav item aesthetic (settings-nav.tsx) so the
@@ -287,7 +332,9 @@ function ScopeFilterSection({
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: r.color }}
               />
-              <span className="min-w-0 flex-1 truncate text-start">{r.name}</span>
+              <span dir="auto" className="min-w-0 flex-1 truncate text-start">
+                {r.name}
+              </span>
               {showCounts && (
                 <span className="shrink-0 text-[11px] text-muted-foreground">{r.count}</span>
               )}
@@ -332,7 +379,9 @@ function ScopeMenuSection({
               className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: r.color }}
             />
-            <span className="min-w-0 flex-1 truncate">{r.name}</span>
+            <span dir="auto" className="min-w-0 flex-1 truncate">
+              {r.name}
+            </span>
             {showCounts && (
               <span className="shrink-0 text-xs text-muted-foreground">{r.count}</span>
             )}
@@ -407,13 +456,27 @@ function ViewsFilterSection({
   onCreateView?: () => void
   onEditView?: (view: ConversationViewDTO) => void
 }) {
+  const intl = useOptionalIntl()
   const { pin, unpin, remove } = useViewMutations()
   // The section is always shown (with its + button) so views can be created
   // from an empty inbox; when there are none it renders just the create action.
   return (
     <FilterSection
-      title="Saved views"
-      action={onCreateView ? <PaneAddButton label="New view" onClick={onCreateView} /> : undefined}
+      title={intl.formatMessage({
+        id: 'admin.inbox.inboxNavSidebar.savedViews',
+        defaultMessage: 'Saved views',
+      })}
+      action={
+        onCreateView ? (
+          <PaneAddButton
+            label={intl.formatMessage({
+              id: 'admin.inbox.inboxNavSidebar.newView',
+              defaultMessage: 'New view',
+            })}
+            onClick={onCreateView}
+          />
+        ) : undefined
+      }
     >
       {views.length > 0 && (
         <div className="space-y-1">
@@ -436,13 +499,21 @@ function ViewsFilterSection({
                   ) : (
                     <FunnelIcon className={cn('size-4 shrink-0', active && 'text-primary')} />
                   )}
-                  <span className="min-w-0 flex-1 truncate">{v.name}</span>
+                  <span dir="auto" className="min-w-0 flex-1 truncate">
+                    {v.name}
+                  </span>
                 </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      aria-label={`Manage view ${v.name}`}
+                      aria-label={intl.formatMessage(
+                        {
+                          id: 'admin.inbox.inboxNavSidebar.manageView',
+                          defaultMessage: 'Manage view {name}',
+                        },
+                        { name: v.name }
+                      )}
                       className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
                     >
                       <EllipsisHorizontalIcon className="h-4 w-4" />
@@ -458,16 +529,32 @@ function ViewsFilterSection({
                       ) : (
                         <StarIcon className="h-4 w-4" />
                       )}
-                      {v.isPinned ? 'Unpin' : 'Pin'}
+                      {v.isPinned
+                        ? intl.formatMessage({
+                            id: 'admin.inbox.inboxNavSidebar.unpin',
+                            defaultMessage: 'Unpin',
+                          })
+                        : intl.formatMessage({
+                            id: 'admin.inbox.inboxNavSidebar.pin',
+                            defaultMessage: 'Pin',
+                          })}
                     </DropdownMenuItem>
                     {onEditView && (
-                      <DropdownMenuItem onClick={() => onEditView(v)}>Edit</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEditView(v)}>
+                        {intl.formatMessage({
+                          id: 'admin.inbox.inboxNavSidebar.editView',
+                          defaultMessage: 'Edit',
+                        })}
+                      </DropdownMenuItem>
                     )}
                     <DropdownMenuItem
                       className="text-destructive"
                       onClick={() => remove.mutate(v.id)}
                     >
-                      Delete
+                      {intl.formatMessage({
+                        id: 'admin.inbox.inboxNavSidebar.delete',
+                        defaultMessage: 'Delete',
+                      })}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -527,6 +614,7 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
   onCreateView?: () => void
   onEditView?: (view: ConversationViewDTO) => void
 }) {
+  const intl = useOptionalIntl()
   const { data: tags } = useConversationTagsWithCounts()
   const { data: segments } = useInboxSegmentsWithCounts()
   const { data: teams } = useInboxTeams()
@@ -546,12 +634,23 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
       className="hidden w-64 shrink-0 flex-col overflow-hidden border-e border-chrome-hairline bg-background lg:flex xl:w-72"
     >
       <div className="px-5 py-3.5">
-        <PageHeader as="h2" title="Support" />
+        <PageHeader
+          as="h2"
+          title={intl.formatMessage({
+            id: 'admin.inbox.inboxNavSidebar.support',
+            defaultMessage: 'Support',
+          })}
+        />
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-2.5 pb-5">
           {showConversations && (
-            <FilterSection title="Conversations">
+            <FilterSection
+              title={intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.conversations',
+                defaultMessage: 'Conversations',
+              })}
+            >
               <div className="space-y-1">
                 {CONVERSATION_VIEWS.map(({ view, label, Icon }) => {
                   const item: InboxNavItem = { kind: 'view', view }
@@ -565,7 +664,9 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                       className={itemClass(active)}
                     >
                       <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
-                      <span className="min-w-0 flex-1 truncate text-start">{label}</span>
+                      <span className="min-w-0 flex-1 truncate text-start">
+                        {intl.formatMessage(label)}
+                      </span>
                       <NavRowCount count={countForConversationView(view, counts)} />
                     </button>
                   )
@@ -579,7 +680,9 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                   <QUINN_VIEW.Icon
                     className={cn('size-4 shrink-0', quinnActive && 'text-primary')}
                   />
-                  <span className="min-w-0 flex-1 truncate text-start">{QUINN_VIEW.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-start">
+                    {intl.formatMessage(QUINN_VIEW.label)}
+                  </span>
                 </button>
                 {showsTestView(counts, testActive) && (
                   <button
@@ -600,7 +703,12 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
           )}
 
           {showTickets && (
-            <FilterSection title="Tickets">
+            <FilterSection
+              title={intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.tickets',
+                defaultMessage: 'Tickets',
+              })}
+            >
               <div className="space-y-1">
                 {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
                   const item: InboxNavItem = { kind: 'view', view }
@@ -615,7 +723,9 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                       className={itemClass(active)}
                     >
                       <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
-                      <span className="min-w-0 flex-1 truncate text-start">{label}</span>
+                      <span className="min-w-0 flex-1 truncate text-start">
+                        {intl.formatMessage(label)}
+                      </span>
                       <NavRowCount count={count} />
                     </button>
                   )
@@ -627,7 +737,10 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
           {/* Teams, tags and segments only ever list conversations. */}
           {showConversations && (
             <ScopeFilterSection
-              title="Teams"
+              title={intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.teams',
+                defaultMessage: 'Teams',
+              })}
               rows={teamRows}
               activeKey={activeKey}
               onSelect={onSelect}
@@ -645,14 +758,20 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
           {showConversations && (
             <>
               <ScopeFilterSection
-                title="Tags"
+                title={intl.formatMessage({
+                  id: 'admin.inbox.inboxNavSidebar.tags',
+                  defaultMessage: 'Tags',
+                })}
                 rows={tags ?? []}
                 activeKey={activeKey}
                 onSelect={onSelect}
                 makeItem={tagNavItem}
               />
               <ScopeFilterSection
-                title="Segments"
+                title={intl.formatMessage({
+                  id: 'admin.inbox.inboxNavSidebar.segments',
+                  defaultMessage: 'Segments',
+                })}
                 rows={segments ?? []}
                 activeKey={activeKey}
                 onSelect={onSelect}
@@ -678,6 +797,7 @@ export function InboxScopeMenu({
   nav: InboxNavItem
   onSelect: (item: InboxNavItem) => void
 }) {
+  const intl = useOptionalIntl()
   const { data: tags } = useConversationTagsWithCounts()
   const { data: segments } = useInboxSegmentsWithCounts()
   const { data: teams } = useInboxTeams()
@@ -696,14 +816,21 @@ export function InboxScopeMenu({
           type="button"
           className="flex items-center gap-1 text-sm font-semibold leading-tight"
         >
-          <span className="truncate">{scopeLabelFor(nav, tags, segments, teams, views)}</span>
+          <span className="truncate">
+            {scopeLabelFor((m) => intl.formatMessage(m), nav, tags, segments, teams, views)}
+          </span>
           <ChevronDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         {showConversations && (
           <>
-            <DropdownMenuLabel className="text-muted-foreground">Conversations</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.conversations',
+                defaultMessage: 'Conversations',
+              })}
+            </DropdownMenuLabel>
             {CONVERSATION_VIEWS.map(({ view, label, Icon }) => {
               const item: InboxNavItem = { kind: 'view', view }
               const count = countForConversationView(view, counts)
@@ -714,7 +841,7 @@ export function InboxScopeMenu({
                   className={cn('gap-2', activeKey === inboxNavKey(item) && 'text-primary')}
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <span className="min-w-0 flex-1 truncate">{intl.formatMessage(label)}</span>
                   <NavRowCount count={count} />
                 </DropdownMenuItem>
               )
@@ -736,7 +863,12 @@ export function InboxScopeMenu({
         {showTickets && (
           <>
             {showConversations && <DropdownMenuSeparator />}
-            <DropdownMenuLabel className="text-muted-foreground">Tickets</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.tickets',
+                defaultMessage: 'Tickets',
+              })}
+            </DropdownMenuLabel>
             {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
               const item: InboxNavItem = { kind: 'view', view }
               const count = countForTicketView(view, counts)
@@ -747,7 +879,7 @@ export function InboxScopeMenu({
                   className={cn('gap-2', activeKey === inboxNavKey(item) && 'text-primary')}
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <span className="min-w-0 flex-1 truncate">{intl.formatMessage(label)}</span>
                   <NavRowCount count={count} />
                 </DropdownMenuItem>
               )
@@ -762,10 +894,13 @@ export function InboxScopeMenu({
               className={cn('gap-2', activeKey === inboxNavKey(quinnItem) && 'text-primary')}
             >
               <QUINN_VIEW.Icon className="h-4 w-4" />
-              {QUINN_VIEW.label}
+              {intl.formatMessage(QUINN_VIEW.label)}
             </DropdownMenuItem>
             <ScopeMenuSection
-              title="Teams"
+              title={intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.teams',
+                defaultMessage: 'Teams',
+              })}
               rows={teamRows}
               activeKey={activeKey}
               onSelect={onSelect}
@@ -777,7 +912,12 @@ export function InboxScopeMenu({
         {(views ?? []).length > 0 && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-muted-foreground">Saved views</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.savedViews',
+                defaultMessage: 'Saved views',
+              })}
+            </DropdownMenuLabel>
             {(views ?? []).map((v) => {
               const item: InboxNavItem = { kind: 'custom', viewId: v.id }
               return (
@@ -791,7 +931,9 @@ export function InboxScopeMenu({
                   ) : (
                     <FunnelIcon className="h-4 w-4" />
                   )}
-                  <span className="min-w-0 flex-1 truncate">{v.name}</span>
+                  <span dir="auto" className="min-w-0 flex-1 truncate">
+                    {v.name}
+                  </span>
                 </DropdownMenuItem>
               )
             })}
@@ -800,14 +942,20 @@ export function InboxScopeMenu({
         {showConversations && (
           <>
             <ScopeMenuSection
-              title="Tags"
+              title={intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.tags',
+                defaultMessage: 'Tags',
+              })}
               rows={tags ?? []}
               activeKey={activeKey}
               onSelect={onSelect}
               makeItem={tagNavItem}
             />
             <ScopeMenuSection
-              title="Segments"
+              title={intl.formatMessage({
+                id: 'admin.inbox.inboxNavSidebar.segments',
+                defaultMessage: 'Segments',
+              })}
               rows={segments ?? []}
               activeKey={activeKey}
               onSelect={onSelect}

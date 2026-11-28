@@ -54,6 +54,39 @@ describe('the English scan', () => {
     ])
   })
 
+  it('finds each text a choice or a fallback can show', () => {
+    expect(
+      texts(
+        `const a = <>
+          <p>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create view'}</p>
+          <span>{name ?? 'Unnamed user'}</span>
+          <button aria-label={label || 'Remove'} title={open && 'Close panel'} />
+        </>
+        toast.success(editing ? 'View updated' : 'View created')
+        const tab = { label: ok ? 'Ready' : 'Pending' }`
+      )
+    ).toEqual([
+      '"Saving…"',
+      '"Save changes"',
+      '"Create view"',
+      '"Unnamed user"',
+      'aria-label="Remove"',
+      'title="Close panel"',
+      'toast.success("View updated")',
+      'toast.success("View created")',
+      'label: "Ready"',
+      'label: "Pending"',
+    ])
+  })
+
+  it('leaves the condition and values in a choice alone', () => {
+    expect(
+      texts(
+        `const a = <p className={on ? 'text-sm' : 'text-xs'}>{count > 0 ? count : null}{kind === 'Open' && <b />}</p>`
+      )
+    ).toEqual([])
+  })
+
   it('still skips a key or a path in a prop, and a template made only of values', () => {
     expect(
       texts(

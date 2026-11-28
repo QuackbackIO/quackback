@@ -1,3 +1,5 @@
+import type { IntlShape } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -9,7 +11,6 @@ import type {
   ConversationPriority,
   Channel,
 } from '@/lib/shared/conversation/types'
-import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
 import {
   inboxItemRefFromId,
   type InboxItemDTO,
@@ -40,52 +41,22 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { SPAM_REASON_LABELS, formatLabel, previewText } from './inbox-labels'
+import { emptyStateMessage } from './inbox-empty-words'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
-import { FormattedMessage, useIntl } from 'react-intl'
 
 /** Ignore scroll-by hovers; only warm a thread the pointer actually rests on. */
 const PREFETCH_DELAY_MS = 120
 
+const VISITOR = { id: 'admin.inbox.conversationListColumn.visitor', defaultMessage: 'Visitor' }
+const NO_MESSAGES = {
+  id: 'admin.inbox.conversationListColumn.noMessages',
+  defaultMessage: 'No messages yet',
+}
+
 /** Stable string id for any inbox item (a conversation or ticket TypeID). */
 function itemId(item: InboxItemDTO): string {
   return item.kind === 'conversation' ? item.conversation.id : item.ticket.id
-}
-
-/** The empty-list message for the active scope + facet. */
-function emptyStateMessage(nav: InboxNavItem, facet: InboxTriageFacet, scopeLabel: string): string {
-  if (nav.kind === 'tag') return `No conversations labelled ${scopeLabel}`
-  if (nav.kind === 'segment') {
-    const part = facet === 'all' ? '' : `${facet} `
-    return `No ${part}conversations from ${scopeLabel}`
-  }
-  if (nav.kind === 'team') {
-    const part = facet === 'all' ? '' : `${facet} `
-    return `No ${part}conversations for ${scopeLabel}`
-  }
-  if (nav.kind === 'custom') return `No conversations match ${scopeLabel}`
-  if (nav.kind === 'view') {
-    const facetPart = facet === 'all' ? '' : `${facet} `
-    switch (nav.view) {
-      case 'mentions':
-        return 'No conversations mention you yet'
-      case 'mine':
-        return `No ${facetPart}conversations assigned to you`
-      case 'unassigned':
-        return `No ${facetPart}unassigned conversations`
-      case 'tickets_all':
-        return `No ${facetPart}tickets`
-      case 'tickets_customer':
-        return `No ${facetPart}customer tickets`
-      case 'tickets_back_office':
-        return `No ${facetPart}back office tickets`
-      case 'tickets_tracker':
-        return `No ${facetPart}trackers`
-    }
-    return `No ${facetPart}conversations`
-  }
-  // Unscoped empty inbox — first-run friendly, not filter-blame.
-  if (facet === 'all') return 'No conversations yet'
-  return `No ${facet} conversations`
 }
 
 const TICKET_TYPE_ICON: Record<TicketType, typeof TicketIcon> = {
@@ -115,6 +86,7 @@ function TicketAssigneeGlyph({
 }: {
   assignee: Extract<InboxItemDTO, { kind: 'ticket' }>['ticket']['assignee']
 }) {
+  const intl = useOptionalIntl()
   if (assignee.principalId) {
     return (
       <Avatar
@@ -127,7 +99,13 @@ function TicketAssigneeGlyph({
   if (assignee.teamId) {
     return (
       <span
-        title={assignee.teamName ?? 'Team'}
+        title={
+          assignee.teamName ??
+          intl.formatMessage({
+            id: 'admin.inbox.conversationListColumn.team',
+            defaultMessage: 'Team',
+          })
+        }
         className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
       >
         {nameInitial(assignee.teamName ?? 'T')}
@@ -336,6 +314,7 @@ const ConversationListHeader = memo(function ConversationListHeader({
   sort,
   onSort,
 }: ConversationListHeaderProps) {
+  const intl = useOptionalIntl()
   const [composeOpen, setComposeOpen] = useState(false)
   // A tickets-only workspace has no conversations to start.
   const canCompose = useSupportConversationsEnabled()
@@ -352,11 +331,12 @@ const ConversationListHeader = memo(function ConversationListHeader({
           <InboxScopeMenu nav={nav} onSelect={onSelectNav} />
         </div>
         {canCompose && (
-          <NewButton
-            noun="conversation"
-            onClick={() => setComposeOpen(true)}
-            className="shrink-0"
-          />
+          <NewButton noun="conversation" onClick={() => setComposeOpen(true)} className="shrink-0">
+            {intl.formatMessage({
+              id: 'admin.shell.newConversationDialog.newConversation',
+              defaultMessage: 'New conversation',
+            })}
+          </NewButton>
         )}
       </div>
       {headerSlot}
@@ -365,8 +345,14 @@ const ConversationListHeader = memo(function ConversationListHeader({
         <SearchInput
           value={searchInput}
           onChange={onSearchInput}
-          placeholder="Search conversations…"
-          aria-label="Search the inbox"
+          placeholder={intl.formatMessage({
+            id: 'admin.inbox.conversationListColumn.searchConversations',
+            defaultMessage: 'Search conversations…',
+          })}
+          aria-label={intl.formatMessage({
+            id: 'admin.inbox.conversationListColumn.searchTheInbox',
+            defaultMessage: 'Search the inbox',
+          })}
           data-search-input
         />
       </div>
@@ -408,7 +394,7 @@ function EmptyList({
   ConversationListColumnProps,
   'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
 >) {
-  const intl = useIntl()
+  const intl = useOptionalIntl()
   const activationAction = useActivationAction('conversation_empty')
 
   const isMainConversationQueue =
@@ -444,7 +430,7 @@ function EmptyList({
             id: 'inbox.empty.allClear.title',
             defaultMessage: 'Nothing to review',
           })
-        : emptyStateMessage(nav, facet, scopeLabel)
+        : emptyStateMessage(intl, nav, facet, scopeLabel)
   // First-run CTA on the unfiltered main queues (not tickets/labels).
   const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
   return (
@@ -455,18 +441,18 @@ function EmptyList({
       <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
       {isFiltered && (
         <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-          <FormattedMessage
-            id="inbox.empty.filtered.description"
-            defaultMessage="Try changing your search or filters."
-          />
+          {intl.formatMessage({
+            id: 'inbox.empty.filtered.description',
+            defaultMessage: 'Try changing your search or filters.',
+          })}
         </p>
       )}
       {isAllClear && (
         <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-          <FormattedMessage
-            id="inbox.empty.allClear.description"
-            defaultMessage="No open conversations need your attention."
-          />
+          {intl.formatMessage({
+            id: 'inbox.empty.allClear.description',
+            defaultMessage: 'No open conversations need your attention.',
+          })}
         </p>
       )}
       {showMessengerCta && activationAction && (
@@ -533,22 +519,36 @@ function RowShell({ selected, children }: { selected: boolean; children: ReactNo
  *  thread renders an explicit "Unassigned" label in the same slot — the
  *  column is always present, never collapsing with row content. Kept tiny
  *  and muted so it scans as metadata, never as a second row identity. */
-function assigneeColumn(c: ConversationDTO) {
+function assigneeColumn(c: ConversationDTO, intl: IntlShape) {
   if (!c.assignedAgent) {
     return (
       <span className="flex w-24 shrink-0 items-center text-xs text-muted-foreground/70">
-        Unassigned
+        {intl.formatMessage({
+          id: 'admin.inbox.conversationListColumn.unassigned',
+          defaultMessage: 'Unassigned',
+        })}
       </span>
     )
   }
-  const fullName = c.assignedAgent.displayName ?? 'teammate'
+  const fullName =
+    c.assignedAgent.displayName ??
+    intl.formatMessage({
+      id: 'admin.inbox.conversationListColumn.teammate',
+      defaultMessage: 'teammate',
+    })
   // First name only: the column is a fixed 96px, so a full name would
   // ellipsis-truncate into noise; the full name stays one hover away on the
   // title.
   const firstName = fullName.split(' ')[0]
   return (
     <span
-      title={`Assigned to ${fullName}`}
+      title={intl.formatMessage(
+        {
+          id: 'admin.inbox.conversationListColumn.assignedTo',
+          defaultMessage: 'Assigned to {name}',
+        },
+        { name: fullName }
+      )}
       className="flex w-24 shrink-0 items-center gap-1 text-xs text-muted-foreground"
     >
       <Avatar
@@ -576,6 +576,7 @@ export const ConversationRow = memo(function ConversationRow({
   onPrefetch?: (id: string) => void
   onPrefetchCancel?: () => void
 }) {
+  const intl = useOptionalIntl()
   const c = item.conversation
   return (
     <RowShell selected={selected}>
@@ -600,13 +601,13 @@ export const ConversationRow = memo(function ConversationRow({
       >
         <Avatar
           src={c.visitor.avatarUrl}
-          name={c.visitor.displayName ?? 'Visitor'}
+          name={c.visitor.displayName ?? intl.formatMessage(VISITOR)}
           className="size-8 shrink-0 text-xs"
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium">
-              {c.visitor.displayName ?? 'Visitor'}
+            <span dir="auto" className="truncate text-sm font-medium">
+              {c.visitor.displayName ?? intl.formatMessage(VISITOR)}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
               {c.unreadCount > 0 && (
@@ -619,7 +620,7 @@ export const ConversationRow = memo(function ConversationRow({
                   <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                   {/* Rightmost on the row, so the column's left edge is the
                       same constant offset from the right edge on every row. */}
-                  {assigneeColumn(c)}
+                  {assigneeColumn(c, intl)}
                 </>
               )}
             </span>
@@ -637,8 +638,10 @@ export const ConversationRow = memo(function ConversationRow({
             </p>
           ) : (
             <div className="mt-0.5 flex items-center justify-between gap-2">
-              <p className="min-w-0 truncate text-xs text-muted-foreground">
-                {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
+              <p dir="auto" className="min-w-0 truncate text-xs text-muted-foreground">
+                {c.lastMessagePreview != null
+                  ? previewText(intl, c.lastMessagePreview)
+                  : (c.subject ?? intl.formatMessage(NO_MESSAGES))}
               </p>
               <span className="flex shrink-0 items-center gap-1.5">
                 {/* The Spam view's one row decoration: which rule or classifier
@@ -646,18 +649,18 @@ export const ConversationRow = memo(function ConversationRow({
                     false positive's source without opening it. */}
                 {c.endReason === 'spam' && c.spamReason && (
                   <Badge size="sm" variant="outline">
-                    {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
+                    {formatLabel(intl, SPAM_REASON_LABELS, c.spamReason)}
                   </Badge>
                 )}
                 {c.isTest && (
                   <Badge size="sm" variant="outline">
-                    <FormattedMessage id="inbox.row.test" defaultMessage="Test" />
+                    {intl.formatMessage({ id: 'inbox.row.test', defaultMessage: 'Test' })}
                   </Badge>
                 )}
                 <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                 {/* Rightmost on the row, so the column's left edge is the
                     same constant offset from the right edge on every row. */}
-                {assigneeColumn(c)}
+                {assigneeColumn(c, intl)}
               </span>
             </div>
           )}
@@ -682,6 +685,7 @@ const TicketRow = memo(function TicketRow({
   onPrefetch?: (id: string) => void
   onPrefetchCancel?: () => void
 }) {
+  const intl = useOptionalIntl()
   const t = item.ticket
   return (
     <RowShell selected={selected}>
@@ -699,7 +703,9 @@ const TicketRow = memo(function TicketRow({
         <TicketTypeGlyph type={t.type} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium">{t.title}</span>
+            <span dir="auto" className="truncate text-sm font-medium">
+              {t.title}
+            </span>
             <span className="flex shrink-0 items-center gap-1.5">
               <TicketAssigneeGlyph assignee={t.assignee} />
               {item.unreadCount > 0 && (
@@ -714,8 +720,10 @@ const TicketRow = memo(function TicketRow({
             <TicketStatusChip status={t.status} />
           </div>
           <div className="mt-0.5 flex items-center justify-between gap-2">
-            <p className="min-w-0 truncate text-xs text-muted-foreground">
-              {t.lastMessagePreview ?? 'No messages yet'}
+            <p dir="auto" className="min-w-0 truncate text-xs text-muted-foreground">
+              {t.lastMessagePreview != null
+                ? previewText(intl, t.lastMessagePreview)
+                : intl.formatMessage(NO_MESSAGES)}
             </p>
             <TimeAgo date={t.updatedAt} short className="shrink-0 text-xs text-muted-foreground" />
           </div>

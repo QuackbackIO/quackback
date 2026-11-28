@@ -1,3 +1,5 @@
+import { STATUS_LABELS, STATUS_WORDS } from './inbox-labels'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -55,6 +57,7 @@ export const StatusControl = memo(function StatusControl({
   endReason?: ConversationEndReason | null
   onChanged: () => void
 }) {
+  const intl = useOptionalIntl()
   const queryClient = useQueryClient()
   const formatDate = useLocalDateFormatter()
   // Required-to-close refusal from the server: raise the blocking prompt
@@ -72,17 +75,33 @@ export const StatusControl = memo(function StatusControl({
       if (error instanceof Error && isMissingRequiredAttributesMessage(error.message)) {
         setCloseBlocked([error.message])
       } else {
-        toast.error('Failed to update status')
+        toast.error(
+          intl.formatMessage({
+            id: 'admin.inbox.statusControl.failedToUpdateStatus',
+            defaultMessage: 'Failed to update status',
+          })
+        )
       }
     },
   })
   const restoreMut = useMutation({
     mutationFn: () => restoreConversationFromSpamFn({ data: { conversationId } }),
     onSuccess: () => {
-      toast.success('Conversation restored from spam')
+      toast.success(
+        intl.formatMessage({
+          id: 'admin.inbox.statusControl.conversationRestoredFromSpam',
+          defaultMessage: 'Conversation restored from spam',
+        })
+      )
       invalidate()
     },
-    onError: () => toast.error('Failed to restore conversation'),
+    onError: () =>
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.statusControl.failedToRestoreConversation',
+          defaultMessage: 'Failed to restore conversation',
+        })
+      ),
   })
   const busy = statusMut.isPending || restoreMut.isPending
 
@@ -97,10 +116,16 @@ export const StatusControl = memo(function StatusControl({
           <button
             type="button"
             disabled={busy}
-            title={wakeLabel ? `Snoozed until ${wakeLabel}` : undefined}
+            title={
+              wakeLabel
+                ? intl.formatMessage(STATUS_WORDS.snoozedUntil, { date: wakeLabel })
+                : undefined
+            }
             className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[13px] font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
-            <span className="capitalize">{isSpam ? 'Spam' : status}</span>
+            <span className="capitalize">
+              {intl.formatMessage(isSpam ? STATUS_WORDS.spam : STATUS_LABELS[status])}
+            </span>
             {wakeLabel && <span className="text-muted-foreground">· {wakeLabel}</span>}
             <ChevronDownIcon className="size-3.5 text-muted-foreground" />
           </button>
@@ -108,16 +133,25 @@ export const StatusControl = memo(function StatusControl({
         <DropdownMenuContent align="end">
           {isSpam ? (
             <DropdownMenuItem onClick={() => restoreMut.mutate()}>
-              Restore from spam
+              {intl.formatMessage({
+                id: 'admin.inbox.statusControl.restoreFromSpam',
+                defaultMessage: 'Restore from spam',
+              })}
             </DropdownMenuItem>
           ) : (
             <>
               {/* Open doubles as "unsnooze" — it clears any snooze timer. */}
               <DropdownMenuItem onClick={() => statusMut.mutate('open')} className="capitalize">
-                open
+                {intl.formatMessage({
+                  id: 'admin.inbox.statusControl.open',
+                  defaultMessage: 'open',
+                })}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => statusMut.mutate('closed')} className="capitalize">
-                closed
+                {intl.formatMessage({
+                  id: 'admin.inbox.statusControl.closed',
+                  defaultMessage: 'closed',
+                })}
               </DropdownMenuItem>
             </>
           )}

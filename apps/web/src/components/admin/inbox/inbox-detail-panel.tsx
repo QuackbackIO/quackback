@@ -1,5 +1,6 @@
+import { type MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
@@ -24,7 +25,6 @@ import {
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import {
   HANDOFF_REASON_LABELS,
-  CONVERSATION_END_REASON_LABELS,
   type ConversationDTO,
   type AssistantInvolvementOutcome,
 } from '@/lib/shared/conversation/types'
@@ -74,25 +74,40 @@ import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import {
+  END_REASON_LABELS,
+  SLA_CHIP,
+  formatLabel,
+} from '@/components/admin/conversation/inbox-labels'
 
 const RESOLVED_META = {
-  label: 'Resolved',
+  label: { id: 'admin.inbox.inboxDetailPanel.resolved', defaultMessage: 'Resolved' },
   className: 'bg-success/10 text-success',
 }
 // Both resolution flavours (customer-confirmed + assumed-after-inactivity) read
 // as "Resolved" to the agent.
-const AI_OUTCOME_META: Record<AssistantInvolvementOutcome, { label: string; className: string }> = {
-  active: { label: 'Handling', className: 'bg-primary/10 text-primary' },
+const AI_OUTCOME_META: Record<
+  AssistantInvolvementOutcome,
+  { label: MessageDescriptor; className: string }
+> = {
+  active: {
+    label: { id: 'admin.inbox.inboxDetailPanel.handling', defaultMessage: 'Handling' },
+    className: 'bg-primary/10 text-primary',
+  },
   handed_off: {
-    label: 'Escalated',
+    label: { id: 'admin.inbox.inboxDetailPanel.escalated', defaultMessage: 'Escalated' },
     className: 'bg-warning/10 text-warning',
   },
   resolved_confirmed: RESOLVED_META,
   resolved_assumed: RESOLVED_META,
-  abandoned: { label: 'Abandoned', className: 'bg-muted text-muted-foreground' },
+  abandoned: {
+    label: { id: 'admin.inbox.inboxDetailPanel.abandoned', defaultMessage: 'Abandoned' },
+    className: 'bg-muted text-muted-foreground',
+  },
 }
 
 function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
+  const intl = useOptionalIntl()
   const meta = AI_OUTCOME_META[outcome]
   return (
     <span
@@ -101,7 +116,7 @@ function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
         meta.className
       )}
     >
-      {meta.label}
+      {intl.formatMessage(meta.label)}
     </span>
   )
 }
@@ -115,6 +130,7 @@ function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
  * date set, and only after mount (the label depends on "now").
  */
 function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt: string | null }) {
+  const intl = useOptionalIntl()
   const formatDate = useLocalDateFormatter()
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
@@ -135,10 +151,15 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
         'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
         TONE_CLASSES[tone]
       )}
-      title={`Due ${formatDate(dueAt, DETAIL_DATE)}`}
+      title={intl.formatMessage(
+        { id: 'admin.inbox.inboxDetailPanel.dueOn', defaultMessage: 'Due {date}' },
+        { date: formatDate(dueAt, DETAIL_DATE) }
+      )}
     >
       <ClockIcon className="h-3 w-3" aria-hidden />
-      {overdue ? `${formatSlaCountdown(abs)} over` : formatSlaCountdown(abs)}
+      {overdue
+        ? intl.formatMessage(SLA_CHIP.over, { time: formatSlaCountdown(abs) })
+        : formatSlaCountdown(abs)}
     </span>
   )
 }
@@ -154,6 +175,7 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
  * permanently, so there is no "resolved" countdown to show.
  */
 function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
+  const intl = useOptionalIntl()
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
     setNow(new Date())
@@ -177,7 +199,13 @@ function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
         'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
         TONE_CLASSES[tone]
       )}
-      title={`${sla.policyName} · time to resolve target`}
+      title={intl.formatMessage(
+        {
+          id: 'admin.inbox.inboxDetailPanel.resolveTarget',
+          defaultMessage: '{policy} · time to resolve target',
+        },
+        { policy: sla.policyName }
+      )}
     >
       <ClockIcon className="h-3 w-3" aria-hidden />
       {label}
@@ -197,6 +225,7 @@ const FilesSection = memo(function FilesSection({
   target: { conversationId: ConversationId } | { ticketId: TicketId }
   visible: boolean
 }) {
+  const intl = useOptionalIntl()
   const { open } = useFileViewer()
   const { data } = useQuery({
     ...conversationPanelQueries.files(target),
@@ -217,7 +246,7 @@ const FilesSection = memo(function FilesSection({
     <div className="space-y-1.5 border-t border-border/30 pt-4">
       <div className="flex items-center justify-between">
         <span className={MENU_LABEL}>
-          <FormattedMessage id="admin.inbox.filesSectionTitle" defaultMessage="Files" />
+          {intl.formatMessage({ id: 'admin.inbox.filesSectionTitle', defaultMessage: 'Files' })}
         </span>
         <span className="text-xs text-muted-foreground">{entries.length}</span>
       </div>
@@ -297,6 +326,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   visible: isVisible,
   overlay = false,
 }: InboxDetailPanelProps) {
+  const intl = useOptionalIntl()
   const flags = useFeatureFlags()
   const asideClassName = overlay
     ? 'flex h-full min-h-0 w-full flex-col overflow-hidden'
@@ -394,7 +424,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   const contactName = supportContactName({
     accountName: detail?.name,
     publicName,
-    fallback: principalId ? (isTicketItem ? 'Requester' : 'Visitor') : 'No requester',
+    fallback: intl.formatMessage(
+      principalId
+        ? isTicketItem
+          ? { id: 'admin.inbox.inboxDetailPanel.requester', defaultMessage: 'Requester' }
+          : { id: 'admin.inbox.inboxDetailPanel.visitor', defaultMessage: 'Visitor' }
+        : { id: 'admin.inbox.inboxDetailPanel.noRequester', defaultMessage: 'No requester' }
+    ),
   })
   const convoCount = history?.conversations.length ?? 0
   const convoMore = history?.hasMore ?? false
@@ -402,7 +438,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   const isClosedConversation = !isTicketItem && conversation?.status === 'closed'
   const endReasonLabel =
     !isTicketItem && conversation?.endReason
-      ? CONVERSATION_END_REASON_LABELS[conversation.endReason]
+      ? formatLabel(intl, END_REASON_LABELS, conversation.endReason)
       : null
 
   // One target object per item, so the memoised sections that take it skip
@@ -447,7 +483,10 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     {detail?.emailVerified && (
                       <CheckBadgeIcon
                         className="h-3.5 w-3.5 shrink-0 text-primary"
-                        title="Verified email"
+                        title={intl.formatMessage({
+                          id: 'admin.inbox.inboxDetailPanel.verifiedEmail',
+                          defaultMessage: 'Verified email',
+                        })}
                       />
                     )}
                   </Link>
@@ -459,22 +498,40 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     <p className="truncate text-xs text-muted-foreground">
                       {email}
                       {!detail?.email && !isTicketItem && conversation?.visitorEmail && (
-                        <span className="ms-1 text-muted-foreground/50">(in conversation)</span>
+                        <span className="ms-1 text-muted-foreground/50">
+                          {intl.formatMessage({
+                            id: 'admin.inbox.inboxDetailPanel.inConversation',
+                            defaultMessage: '(in conversation)',
+                          })}
+                        </span>
                       )}
                     </p>
                   ) : getChannelDescriptor(conversation?.channel ?? '')?.addressing === 'thread' ? (
                     <p className="truncate text-xs text-muted-foreground">
-                      {getChannelDescriptor(conversation!.channel)?.label} user
+                      {intl.formatMessage(
+                        {
+                          id: 'admin.inbox.inboxDetailPanel.channelUser',
+                          defaultMessage: '{channel} user',
+                        },
+                        { channel: getChannelDescriptor(conversation!.channel)?.label }
+                      )}
                     </p>
                   ) : (
                     <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-                      Anonymous <UnreachableBadge channel={conversation?.channel ?? 'email'} />
+                      {intl.formatMessage({
+                        id: 'admin.inbox.inboxDetailPanel.anonymous',
+                        defaultMessage: 'Anonymous',
+                      })}{' '}
+                      <UnreachableBadge channel={conversation?.channel ?? 'email'} />
                     </p>
                   )
                 ) : null}
                 {contactBlocked && (
                   <Badge variant="destructive" className="mt-1 text-[11px]">
-                    Blocked
+                    {intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.blocked',
+                      defaultMessage: 'Blocked',
+                    })}
                   </Badge>
                 )}
               </div>
@@ -499,9 +556,27 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {detail && (
               <div className="grid grid-cols-3 gap-1 text-center">
                 {[
-                  { label: 'Posts', value: detail.postCount },
-                  { label: 'Comments', value: detail.commentCount },
-                  { label: 'Votes', value: detail.voteCount },
+                  {
+                    label: intl.formatMessage({
+                      id: 'admin.shell.authorHoverCard.posts',
+                      defaultMessage: 'Posts',
+                    }),
+                    value: detail.postCount,
+                  },
+                  {
+                    label: intl.formatMessage({
+                      id: 'admin.shell.authorHoverCard.comments',
+                      defaultMessage: 'Comments',
+                    }),
+                    value: detail.commentCount,
+                  },
+                  {
+                    label: intl.formatMessage({
+                      id: 'admin.shell.authorHoverCard.votes',
+                      defaultMessage: 'Votes',
+                    }),
+                    value: detail.voteCount,
+                  },
                 ].map((s) => (
                   <div key={s.label} className="rounded-md bg-muted/40 py-1.5">
                     <p className="text-sm font-semibold">{s.value}</p>
@@ -514,7 +589,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {principalId && (
               <div className="space-y-1 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Conversations</span>
+                  <span className="text-muted-foreground">
+                    {intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.conversations',
+                      defaultMessage: 'Conversations',
+                    })}
+                  </span>
                   <span className="font-medium text-foreground">
                     {convoCount}
                     {convoMore ? '+' : ''}
@@ -522,7 +602,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 </div>
                 {firstSeen && (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">First seen</span>
+                    <span className="text-muted-foreground">
+                      {intl.formatMessage({
+                        id: 'admin.inbox.inboxDetailPanel.firstSeen',
+                        defaultMessage: 'First seen',
+                      })}
+                    </span>
                     <span className="font-medium text-foreground">
                       <DetailDate date={firstSeen} />
                     </span>
@@ -537,7 +622,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {/* Previous conversations (this principal's other threads). */}
             {previous.length > 0 && (
               <div className="space-y-1.5 border-t border-border/30 pt-3">
-                <p className="text-xs font-medium text-muted-foreground">Previous conversations</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {intl.formatMessage({
+                    id: 'admin.inbox.inboxDetailPanel.previousConversations',
+                    defaultMessage: 'Previous conversations',
+                  })}
+                </p>
                 {previous.slice(0, 8).map((c) => (
                   <button
                     key={c.id}
@@ -546,7 +636,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-start transition-colors hover:bg-muted/60"
                   >
                     <span className="block w-full min-w-0 truncate text-xs text-foreground/90">
-                      {c.subject ?? c.lastMessagePreview ?? 'Conversation'}
+                      {c.subject ??
+                        c.lastMessagePreview ??
+                        intl.formatMessage({
+                          id: 'admin.inbox.inboxDetailPanel.conversation',
+                          defaultMessage: 'Conversation',
+                        })}
                     </span>
                     <span className="block w-full min-w-0 truncate text-xs capitalize text-muted-foreground">
                       {c.status} · <TimeAgo date={c.lastMessageAt} />
@@ -566,7 +661,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           issuePeople &&
           issuePeople.length > 0 && (
             <div className="space-y-2 border-t border-border/30 pt-4">
-              <span className={MENU_LABEL}>On this issue</span>
+              <span className={MENU_LABEL}>
+                {intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.onThisIssue',
+                  defaultMessage: 'On this issue',
+                })}
+              </span>
               <ul className="space-y-2">
                 {issuePeople.map((person) => (
                   <li key={person.principalId} className="flex min-w-0 items-center gap-2">
@@ -588,7 +688,15 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           <div className="space-y-3 border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <span className={MENU_LABEL}>
-                {isTicketItem ? 'Ticket details' : 'Linked ticket'}
+                {isTicketItem
+                  ? intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.ticketDetails',
+                      defaultMessage: 'Ticket details',
+                    })
+                  : intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.linkedTicket',
+                      defaultMessage: 'Linked ticket',
+                    })}
               </span>
               {!isTicketItem && (
                 <button
@@ -603,7 +711,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {/* The type chip leads the card (convergence Phase 4): the
                 registry type's icon + name, tinted its color. Typeless legacy
                 rows fall back to the bare category badge. */}
-            <Row label="Type">
+            <Row
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.type',
+                defaultMessage: 'Type',
+              })}
+            >
               {ticket.ticketType ? (
                 <span
                   className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
@@ -621,31 +734,64 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             </Row>
             {!isTicketItem && (
               <>
-                <Row label="Status">
+                <Row
+                  label={intl.formatMessage({
+                    id: 'admin.inbox.inboxDetailPanel.status',
+                    defaultMessage: 'Status',
+                  })}
+                >
                   <TicketStatusControl ticket={ticket} onChanged={onChanged} />
                 </Row>
-                <Row label="Stage">
+                <Row
+                  label={intl.formatMessage({
+                    id: 'admin.inbox.inboxDetailPanel.stage',
+                    defaultMessage: 'Stage',
+                  })}
+                >
                   {ticket.stage.slot ? (
                     <TicketStageChip stage={ticket.stage} />
                   ) : (
-                    <span className="text-xs text-muted-foreground">Internal only</span>
+                    <span className="text-xs text-muted-foreground">
+                      {intl.formatMessage({
+                        id: 'admin.inbox.inboxDetailPanel.internalOnly',
+                        defaultMessage: 'Internal only',
+                      })}
+                    </span>
                   )}
                 </Row>
               </>
             )}
             {ticket.dueAt && !ticket.resolvedAt && (
-              <Row icon={ClockIcon} label="Due">
+              <Row
+                icon={ClockIcon}
+                label={intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.due',
+                  defaultMessage: 'Due',
+                })}
+              >
                 <TicketDueChip dueAt={ticket.dueAt} resolvedAt={ticket.resolvedAt} />
               </Row>
             )}
             {/* The SLA stamp's TTR countdown — separate from the bare `dueAt`
                 row above, which reads the ticket's own due_at column. */}
             {ticket.sla && !ticket.sla.resolvedAt && (
-              <Row icon={ClockIcon} label="SLA">
+              <Row
+                icon={ClockIcon}
+                label={intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.sla',
+                  defaultMessage: 'SLA',
+                })}
+              >
                 <TicketSlaChip sla={ticket.sla} />
               </Row>
             )}
-            <Row icon={CalendarIcon} label="Opened">
+            <Row
+              icon={CalendarIcon}
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.opened',
+                defaultMessage: 'Opened',
+              })}
+            >
               <span className="text-sm font-medium text-foreground">
                 <DetailDate date={ticket.createdAt} />
               </span>
@@ -653,18 +799,33 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {/* Back-office and tracker tickets have no customer, so they
                 never get a first response. */}
             {ticket.type === 'customer' && (
-              <Row icon={CalendarIcon} label="First response">
+              <Row
+                icon={CalendarIcon}
+                label={intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.firstResponse',
+                  defaultMessage: 'First response',
+                })}
+              >
                 <span className="text-sm font-medium text-foreground">
                   {ticket.firstResponseAt ? (
                     <DetailDate date={ticket.firstResponseAt} />
                   ) : (
-                    'Not yet'
+                    intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.notYet',
+                      defaultMessage: 'Not yet',
+                    })
                   )}
                 </span>
               </Row>
             )}
             {ticket.resolvedAt && (
-              <Row icon={CalendarIcon} label="Resolved">
+              <Row
+                icon={CalendarIcon}
+                label={intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.resolved',
+                  defaultMessage: 'Resolved',
+                })}
+              >
                 <span className="text-sm font-medium text-foreground">
                   <DetailDate date={ticket.resolvedAt} />
                 </span>
@@ -682,9 +843,15 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               const display =
                 field.type === 'checkbox' ? (
                   raw === true ? (
-                    'Yes'
+                    intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.yes',
+                      defaultMessage: 'Yes',
+                    })
                   ) : (
-                    'No'
+                    intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.no',
+                      defaultMessage: 'No',
+                    })
                   )
                 ) : field.type === 'date' && typeof raw === 'string' ? (
                   <CalendarDate value={raw} options={DETAIL_DATE} />
@@ -700,16 +867,20 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           </div>
         ) : showCreateTicketSlot && pairHidden ? (
           <p className="border-t border-border/30 pt-4 text-sm text-muted-foreground">
-            <FormattedMessage
-              id="admin.inbox.linkedTicketHidden"
-              defaultMessage="Linked ticket you can't open"
-            />
+            {intl.formatMessage({
+              id: 'admin.inbox.linkedTicketHidden',
+              defaultMessage: "Linked ticket you can't open",
+            })}
           </p>
         ) : (
           showCreateTicketSlot && (
             <div className="border-t border-border/30 pt-4">
               <Button type="button" variant="outline" className="w-full" onClick={onCreateTicket}>
-                <TicketIcon className="h-4 w-4" /> Create ticket
+                <TicketIcon className="h-4 w-4" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.createTicket',
+                  defaultMessage: 'Create ticket',
+                })}
               </Button>
             </div>
           )
@@ -720,15 +891,32 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               ticket's own status lives in the Ticket card above, so it is not
               repeated here. */}
         <div className="space-y-4 border-t border-border/30 pt-4">
-          <span className={cn(MENU_LABEL, 'block')}>Properties</span>
+          <span className={cn(MENU_LABEL, 'block')}>
+            {intl.formatMessage({
+              id: 'admin.inbox.inboxDetailPanel.properties',
+              defaultMessage: 'Properties',
+            })}
+          </span>
           {!isTicketItem && conversation && (
             <>
               {isClosedConversation && endReasonLabel && (
-                <Row icon={StopCircleIcon} label="Ended">
+                <Row
+                  icon={StopCircleIcon}
+                  label={intl.formatMessage({
+                    id: 'admin.inbox.inboxDetailPanel.ended',
+                    defaultMessage: 'Ended',
+                  })}
+                >
                   <span className="text-sm font-medium text-foreground">{endReasonLabel}</span>
                 </Row>
               )}
-              <Row icon={CheckCircleIcon} label="Status">
+              <Row
+                icon={CheckCircleIcon}
+                label={intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.status',
+                  defaultMessage: 'Status',
+                })}
+              >
                 <StatusControl
                   conversationId={conversation.id}
                   status={conversation.status}
@@ -739,7 +927,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               </Row>
             </>
           )}
-          <Row icon={FlagIcon} label="Priority">
+          <Row
+            icon={FlagIcon}
+            label={intl.formatMessage({
+              id: 'admin.inbox.inboxDetailPanel.priority',
+              defaultMessage: 'Priority',
+            })}
+          >
             {isTicketItem && ticket ? (
               <TicketPriorityControl ticket={ticket} onChanged={onChanged} />
             ) : (
@@ -752,7 +946,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               )
             )}
           </Row>
-          <Row icon={UserCircleIcon} label="Assignee">
+          <Row
+            icon={UserCircleIcon}
+            label={intl.formatMessage({
+              id: 'admin.inbox.inboxDetailPanel.assignee',
+              defaultMessage: 'Assignee',
+            })}
+          >
             {isTicketItem && ticket ? (
               <TicketAssigneeControl ticket={ticket} onChanged={onChanged} />
             ) : (
@@ -766,26 +966,56 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             )}
           </Row>
           {isTicketItem && ticket && (
-            <Row icon={BellIcon} label="Watchers" align="start">
+            <Row
+              icon={BellIcon}
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.watchers',
+                defaultMessage: 'Watchers',
+              })}
+              align="start"
+            >
               <TicketWatchControl ticketId={ticket.id} />
             </Row>
           )}
           {!isTicketItem && conversation && (
-            <Row icon={TagIcon} label="Tags" align="start">
+            <Row
+              icon={TagIcon}
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.tags',
+                defaultMessage: 'Tags',
+              })}
+              align="start"
+            >
               <div className="flex flex-wrap justify-end gap-1">
                 <ConversationTagsEditor conversationId={conversation.id} tags={conversation.tags} />
               </div>
             </Row>
           )}
           {ticket && (
-            <Row icon={BuildingOffice2Icon} label="Ticket company">
+            <Row
+              icon={BuildingOffice2Icon}
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.ticketCompany',
+                defaultMessage: 'Ticket company',
+              })}
+            >
               <span className="truncate text-sm font-medium text-foreground">
-                {ticket.company?.name ?? 'None'}
+                {ticket.company?.name ??
+                  intl.formatMessage({
+                    id: 'admin.inbox.inboxDetailPanel.none',
+                    defaultMessage: 'None',
+                  })}
               </span>
             </Row>
           )}
           {!isTicketItem && conversation && (
-            <Row icon={InboxArrowDownIcon} label="Channel">
+            <Row
+              icon={InboxArrowDownIcon}
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.channel',
+                defaultMessage: 'Channel',
+              })}
+            >
               <span className="text-sm font-medium text-foreground">
                 {CHANNEL_LABEL[conversation.channel]}
               </span>
@@ -794,7 +1024,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           {!isTicketItem &&
             conversation?.channel === 'github' &&
             githubIssueRefFromUrl(conversation.customAttributes?.githubUrl) && (
-              <Row icon={ArrowTopRightOnSquareIcon} label="Issue">
+              <Row
+                icon={ArrowTopRightOnSquareIcon}
+                label={intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.issue',
+                  defaultMessage: 'Issue',
+                })}
+              >
                 <a
                   href={String(conversation.customAttributes.githubUrl)}
                   target="_blank"
@@ -806,14 +1042,26 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               </Row>
             )}
           {!isTicketItem && conversation && (
-            <Row icon={CalendarIcon} label="Created">
+            <Row
+              icon={CalendarIcon}
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.created',
+                defaultMessage: 'Created',
+              })}
+            >
               <span className="text-sm font-medium text-foreground">
                 <DetailDate date={conversation.createdAt} />
               </span>
             </Row>
           )}
           {!isTicketItem && conversation?.csatRating != null && (
-            <Row icon={FaceSmileIcon} label="CSAT">
+            <Row
+              icon={FaceSmileIcon}
+              label={intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.csat',
+                defaultMessage: 'CSAT',
+              })}
+            >
               <span className="text-sm text-warning">
                 {'★'.repeat(conversation.csatRating)}
                 <span className="text-muted-foreground/40">
@@ -848,7 +1096,11 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {/* Track as feedback — conversation-level (kept here per §2.7's
                   Links section). */}
             <Button type="button" variant="outline" className="w-full" onClick={onTrackAsFeedback}>
-              <ArrowTopRightOnSquareIcon className="h-4 w-4" /> Track as feedback
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" />{' '}
+              {intl.formatMessage({
+                id: 'admin.inbox.inboxDetailPanel.trackAsFeedback',
+                defaultMessage: 'Track as feedback',
+              })}
             </Button>
           </div>
         )}
@@ -869,7 +1121,10 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 className="flex w-full items-center justify-between py-1 text-start"
               >
                 <span className={MENU_LABEL}>
-                  <FormattedMessage id="admin.ticketActivity.title" defaultMessage="Activity" />
+                  {intl.formatMessage({
+                    id: 'admin.ticketActivity.title',
+                    defaultMessage: 'Activity',
+                  })}
                 </span>
                 <ChevronDownIcon
                   className={cn(
@@ -892,24 +1147,47 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           <div className="space-y-2.5 border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <SparklesIcon className="h-4 w-4" /> AI agent
+                <SparklesIcon className="h-4 w-4" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.aiAgent',
+                  defaultMessage: 'AI agent',
+                })}
               </p>
               <AiOutcomePill outcome={aiActivity.outcome} />
             </div>
             {aiActivity.outcome === 'handed_off' && aiActivity.handoffReason && (
               <p className="text-xs text-muted-foreground">
-                Escalated:{' '}
-                {HANDOFF_REASON_LABELS[aiActivity.handoffReason] ?? aiActivity.handoffReason}
+                {intl.formatMessage(
+                  {
+                    id: 'admin.inbox.inboxDetailPanel.escalatedReason',
+                    defaultMessage: 'Escalated: {reason}',
+                  },
+                  {
+                    reason:
+                      HANDOFF_REASON_LABELS[aiActivity.handoffReason] ?? aiActivity.handoffReason,
+                  }
+                )}
               </p>
             )}
             {aiActivity.rating != null && (
-              <Row icon={FaceSmileIcon} label="AI CSAT">
+              <Row
+                icon={FaceSmileIcon}
+                label={intl.formatMessage({
+                  id: 'admin.inbox.inboxDetailPanel.aiCsat',
+                  defaultMessage: 'AI CSAT',
+                })}
+              >
                 <span className="text-sm text-foreground">{aiActivity.rating}/5</span>
               </Row>
             )}
             {aiActivity.sources.length > 0 && (
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Sources used</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {intl.formatMessage({
+                    id: 'admin.inbox.inboxDetailPanel.sourcesUsed',
+                    defaultMessage: 'Sources used',
+                  })}
+                </p>
                 {aiActivity.sources.map((s) => (
                   <a
                     key={s.id}
@@ -934,14 +1212,26 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   // the pre-Copilot panel.
   if (!showCopilotTab) {
     return (
-      <aside aria-label="Item details" className={asideClassName}>
+      <aside
+        aria-label={intl.formatMessage({
+          id: 'admin.inbox.inboxDetailPanel.itemDetails',
+          defaultMessage: 'Item details',
+        })}
+        className={asideClassName}
+      >
         {detailsBody}
       </aside>
     )
   }
 
   return (
-    <aside aria-label="Item details" className={asideClassName}>
+    <aside
+      aria-label={intl.formatMessage({
+        id: 'admin.inbox.inboxDetailPanel.itemDetails',
+        defaultMessage: 'Item details',
+      })}
+      className={asideClassName}
+    >
       <Tabs
         value={tab}
         onValueChange={setTab}
@@ -949,10 +1239,18 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
         className="h-full min-h-0 flex-1 gap-0 overflow-hidden"
       >
         <TabsList className="m-3 mb-0 self-start">
-          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="details">
+            {intl.formatMessage({
+              id: 'admin.inbox.inboxDetailPanel.details',
+              defaultMessage: 'Details',
+            })}
+          </TabsTrigger>
           <TabsTrigger value="copilot">
             <SparklesIcon className="h-3.5 w-3.5" />
-            Copilot
+            {intl.formatMessage({
+              id: 'admin.inbox.inboxDetailPanel.copilot',
+              defaultMessage: 'Copilot',
+            })}
           </TabsTrigger>
         </TabsList>
         {/* Both tabs stay mounted (keepMounted + CSS-hide instead of the

@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
@@ -9,6 +10,7 @@ import { getLinkedPostsForConversationFn } from '@/lib/server/functions/conversa
  * there are no links, so it's safe to drop into the sidebar unconditionally.
  */
 export function LinkedPosts({ conversationId }: { conversationId: ConversationId }) {
+  const intl = useOptionalIntl()
   const { data: posts } = useQuery({
     queryKey: ['admin', 'inbox', 'linked-posts', conversationId],
     queryFn: () => getLinkedPostsForConversationFn({ data: { conversationId } }),
@@ -19,7 +21,12 @@ export function LinkedPosts({ conversationId }: { conversationId: ConversationId
 
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-[11px] font-medium text-muted-foreground">Linked posts</p>
+      <p className="text-[11px] font-medium text-muted-foreground">
+        {intl.formatMessage({
+          id: 'admin.inbox.linkedPosts.linkedPosts',
+          defaultMessage: 'Linked posts',
+        })}
+      </p>
       {posts.map((post) => (
         <Link
           key={post.postId}

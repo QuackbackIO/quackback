@@ -14,7 +14,9 @@ import {
 
 describe('isInboxView', () => {
   it('orders the broad conversation queue before personal queues', () => {
-    expect(CONVERSATION_VIEWS.map(({ view, label }) => ({ view, label }))).toEqual([
+    expect(
+      CONVERSATION_VIEWS.map(({ view, label }) => ({ view, label: label.defaultMessage }))
+    ).toEqual([
       { view: 'all', label: 'All conversations' },
       { view: 'mine', label: 'Assigned to me' },
       { view: 'unassigned', label: 'Unassigned' },
@@ -48,7 +50,10 @@ describe('isInboxView', () => {
   })
 
   it('puts All tickets before type-specific ticket queues', () => {
-    expect(TICKET_INBOX_VIEWS[0]).toMatchObject({ view: 'tickets_all', label: 'All tickets' })
+    expect(TICKET_INBOX_VIEWS[0]).toMatchObject({
+      view: 'tickets_all',
+      label: { defaultMessage: 'All tickets' },
+    })
   })
 
   it('rejects unknown and non-string values', () => {

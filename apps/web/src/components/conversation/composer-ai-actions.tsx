@@ -1,3 +1,6 @@
+import { COMPOSER_WORDS } from '@/components/admin/conversation/inbox-labels'
+import { type MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowPathIcon, ChevronDownIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
@@ -17,28 +20,52 @@ import type { InboxItemRef } from '@/lib/shared/inbox/items'
 export type ComposerMode = 'reply' | 'note'
 
 const IMPROVE_GROUPS: ReadonlyArray<{
-  label: string
-  rows: ReadonlyArray<{ transform: TransformKind; label: string }>
+  label: MessageDescriptor
+  rows: ReadonlyArray<{ transform: TransformKind; label: MessageDescriptor }>
 }> = [
   {
-    label: 'Rewrite',
+    label: { id: 'admin.inbox.composerAiActions.rewrite', defaultMessage: 'Rewrite' },
     rows: [
-      { transform: 'rephrase', label: 'Rephrase' },
-      { transform: 'fix_grammar', label: 'Fix grammar and spelling' },
+      {
+        transform: 'rephrase',
+        label: { id: 'admin.inbox.composerAiActions.rephrase', defaultMessage: 'Rephrase' },
+      },
+      {
+        transform: 'fix_grammar',
+        label: {
+          id: 'admin.inbox.composerAiActions.fixGrammarAndSpelling',
+          defaultMessage: 'Fix grammar and spelling',
+        },
+      },
     ],
   },
   {
-    label: 'Tone',
+    label: { id: 'admin.inbox.composerAiActions.tone', defaultMessage: 'Tone' },
     rows: [
-      { transform: 'more_friendly', label: 'More friendly' },
-      { transform: 'more_formal', label: 'More formal' },
+      {
+        transform: 'more_friendly',
+        label: {
+          id: 'admin.inbox.composerAiActions.moreFriendly',
+          defaultMessage: 'More friendly',
+        },
+      },
+      {
+        transform: 'more_formal',
+        label: { id: 'admin.inbox.composerAiActions.moreFormal', defaultMessage: 'More formal' },
+      },
     ],
   },
   {
-    label: 'Length',
+    label: { id: 'admin.inbox.composerAiActions.length', defaultMessage: 'Length' },
     rows: [
-      { transform: 'more_concise', label: 'More concise' },
-      { transform: 'expand', label: 'Expand' },
+      {
+        transform: 'more_concise',
+        label: { id: 'admin.inbox.composerAiActions.moreConcise', defaultMessage: 'More concise' },
+      },
+      {
+        transform: 'expand',
+        label: { id: 'admin.inbox.composerAiActions.expand', defaultMessage: 'Expand' },
+      },
     ],
   },
 ]
@@ -67,6 +94,7 @@ export const ComposerAiActions = memo(function ComposerAiActions({
   /** Replace one mode's whole draft and return a full-fidelity restore action. */
   onReplaceDraftText: (mode: ComposerMode, text: string) => () => void
 }) {
+  const intl = useOptionalIntl()
   const available = useCopilotTabGate()
   const runTransform = useCopilotTransform(item)
   const activeModeRef = useRef(activeMode)
@@ -132,7 +160,14 @@ export const ComposerAiActions = memo(function ComposerAiActions({
           className="order-first mb-1 flex w-full flex-wrap items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-2 text-[13px]"
         >
           <span className="min-w-48 flex-1 text-muted-foreground">
-            Your {activeMode} draft changed while Improve was working.
+            {intl.formatMessage(
+              {
+                id: 'admin.inbox.composerAiActions.draftChanged',
+                defaultMessage:
+                  '{mode, select, note {Your note draft changed while Improve was working.} other {Your reply draft changed while Improve was working.}}',
+              },
+              { mode: activeMode }
+            )}
           </span>
           <Button
             type="button"
@@ -140,10 +175,16 @@ export const ComposerAiActions = memo(function ComposerAiActions({
             size="sm"
             onClick={() => applyResult(visibleProposal.mode, visibleProposal.result)}
           >
-            Use improved draft
+            {intl.formatMessage({
+              id: 'admin.inbox.composerAiActions.useImprovedDraft',
+              defaultMessage: 'Use improved draft',
+            })}
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={() => setProposal(null)}>
-            Keep current
+            {intl.formatMessage({
+              id: 'admin.inbox.composerAiActions.keepCurrent',
+              defaultMessage: 'Keep current',
+            })}
           </Button>
         </div>
       )}
@@ -152,7 +193,12 @@ export const ComposerAiActions = memo(function ComposerAiActions({
           role="status"
           className="order-first mb-1 flex w-full items-center gap-2 rounded-md bg-muted/30 px-2.5 py-1.5 text-[13px] text-muted-foreground"
         >
-          <span className="flex-1">Draft improved.</span>
+          <span className="flex-1">
+            {intl.formatMessage({
+              id: 'admin.inbox.composerAiActions.draftImproved',
+              defaultMessage: 'Draft improved.',
+            })}
+          </span>
           <Button
             type="button"
             variant="ghost"
@@ -162,7 +208,10 @@ export const ComposerAiActions = memo(function ComposerAiActions({
               setUndo(null)
             }}
           >
-            Undo
+            {intl.formatMessage({
+              id: 'admin.inbox.composerAiActions.undo',
+              defaultMessage: 'Undo',
+            })}
           </Button>
         </div>
       )}
@@ -173,25 +222,32 @@ export const ComposerAiActions = memo(function ComposerAiActions({
             variant="ghost"
             size="sm"
             disabled={transforming || !hasDraftText}
-            title={!hasDraftText ? 'Write a draft first' : undefined}
+            title={
+              !hasDraftText
+                ? intl.formatMessage({
+                    id: 'admin.inbox.composerAiActions.writeDraftFirst',
+                    defaultMessage: 'Write a draft first',
+                  })
+                : undefined
+            }
           >
             {transforming ? (
               <ArrowPathIcon className="size-4 animate-spin" />
             ) : (
               <SparklesIcon className="size-4" />
             )}
-            {transforming ? 'Improving…' : 'Improve'}
+            {intl.formatMessage(transforming ? COMPOSER_WORDS.improving : COMPOSER_WORDS.improve)}
             {!transforming && <ChevronDownIcon className="size-3.5" />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           {IMPROVE_GROUPS.map((group, index) => (
-            <div key={group.label}>
+            <div key={group.label.id}>
               {index > 0 && <DropdownMenuSeparator />}
-              <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+              <DropdownMenuLabel>{intl.formatMessage(group.label)}</DropdownMenuLabel>
               {group.rows.map((row) => (
                 <DropdownMenuItem key={row.transform} onClick={() => void improve(row.transform)}>
-                  {row.label}
+                  {intl.formatMessage(row.label)}
                 </DropdownMenuItem>
               ))}
             </div>

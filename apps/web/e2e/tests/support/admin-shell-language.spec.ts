@@ -92,8 +92,8 @@ test.describe('the admin shell reads in the teammate language', () => {
         await expectNoSidewaysScroll(page)
         await snap(page, 'shell-de-search')
 
-        // The inbox's own area is not translated yet: lang stays English, the rail is German.
-        await page.goto('/admin/inbox')
+        // The feedback area is not translated yet: lang stays English, the rail is German.
+        await page.goto('/admin/feedback')
         await expect(page.locator('[data-admin-rail]').getByText(de['admin.nav.home'])).toBeVisible(
           {
             timeout: 20_000,

@@ -4,6 +4,7 @@
  * body against the live conversation and runs its bundled actions server-side
  * (on use, not on send), then inserts the rendered text and toasts what ran.
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -38,6 +39,7 @@ export const MacroPicker = memo(function MacroPicker({
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  const intl = useOptionalIntl()
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const open = controlledOpen ?? uncontrolledOpen
   const setOpen = (next: boolean) => {
@@ -57,11 +59,21 @@ export const MacroPicker = memo(function MacroPicker({
       onInsert(body)
       setOpen(false)
       if (applied.length > 0) {
-        toast.success(`Applied: ${applied.join(', ')}`)
+        toast.success(
+          intl.formatMessage(
+            { id: 'admin.inbox.macroPicker.applied', defaultMessage: 'Applied: {actions}' },
+            { actions: intl.formatList(applied) }
+          )
+        )
         onApplied?.()
       }
     } catch {
-      toast.error('Failed to apply macro')
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.macroPicker.failedToApplyMacro',
+          defaultMessage: 'Failed to apply macro',
+        })
+      )
     } finally {
       setApplying(false)
     }
@@ -74,16 +86,29 @@ export const MacroPicker = memo(function MacroPicker({
           type="button"
           disabled={disabled || applying}
           className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-          aria-label="Macros"
+          aria-label={intl.formatMessage({
+            id: 'admin.inbox.macroPicker.macros',
+            defaultMessage: 'Macros',
+          })}
         >
           <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
         <Command>
-          <CommandInput placeholder="Search macros…" />
+          <CommandInput
+            placeholder={intl.formatMessage({
+              id: 'admin.inbox.macroPicker.searchMacros',
+              defaultMessage: 'Search macros…',
+            })}
+          />
           <CommandList>
-            <CommandEmpty>No macros found.</CommandEmpty>
+            <CommandEmpty>
+              {intl.formatMessage({
+                id: 'admin.inbox.macroPicker.noMacrosFound',
+                defaultMessage: 'No macros found.',
+              })}
+            </CommandEmpty>
             {macros.map((m) => (
               <CommandItem
                 key={m.id}

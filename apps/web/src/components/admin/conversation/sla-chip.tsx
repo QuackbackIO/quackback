@@ -5,11 +5,13 @@
  * renders only after mount (the label depends on "now", which would otherwise
  * differ between the SSR pass and hydration).
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useMemo, useState } from 'react'
 import { ClockIcon } from '@heroicons/react/24/outline'
 import type { ConversationSlaDTO, ConversationStatus } from '@/lib/shared/conversation/types'
-import { slaChipState, SLA_TARGET_LABELS, type SlaChipTone } from '@/lib/shared/conversation/sla'
+import { slaChipState, type SlaChipTone } from '@/lib/shared/conversation/sla'
 import { cn } from '@/lib/shared/utils'
+import { SLA_CHIP, SLA_TARGET_LABELS as SLA_TARGET_WORDS } from './inbox-labels'
 
 /** Exported so other bare-countdown chips (e.g. `TicketDueChip` in
  *  inbox-detail-panel.tsx) share this exact tone → color mapping. */
@@ -30,6 +32,7 @@ export const SlaChip = memo(function SlaChip({
   status: ConversationStatus
   className?: string
 }) {
+  const intl = useOptionalIntl()
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
     setNow(new Date())
@@ -50,10 +53,17 @@ export const SlaChip = memo(function SlaChip({
         TONE_CLASSES[state.tone],
         className
       )}
-      title={`${sla.policyName} · ${SLA_TARGET_LABELS[state.kind]} target`}
+      title={intl.formatMessage(
+        { id: 'admin.inbox.slaChip.targetTitle', defaultMessage: '{policy} · {target} target' },
+        { policy: sla.policyName, target: intl.formatMessage(SLA_TARGET_WORDS[state.kind]) }
+      )}
     >
       <ClockIcon className="h-3 w-3" aria-hidden />
-      {state.label}
+      {state.tone === 'paused'
+        ? intl.formatMessage(SLA_CHIP.paused)
+        : state.tone === 'overdue'
+          ? intl.formatMessage(SLA_CHIP.over, { time: state.time })
+          : state.time}
     </span>
   )
 })

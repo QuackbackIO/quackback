@@ -8,7 +8,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
-import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
+import { useInboxTeams } from '@/lib/client/queries/inbox-teams'
 import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tags'
 import { listSlaPolicyOptionsFn, type SlaPolicyOption } from '@/lib/server/functions/sla'
 import { ticketQueries } from '@/lib/client/queries/inbox'

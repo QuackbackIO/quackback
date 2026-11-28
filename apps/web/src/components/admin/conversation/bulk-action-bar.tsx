@@ -9,6 +9,8 @@
  * The value menus are controlled (`openMenu`) so the command bar / keyboard layer
  * can pop the right one open without a second source of truth.
  */
+import { MESSAGES } from './bulk-action-bar-messages'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { XMarkIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -105,6 +107,7 @@ export function BulkActionBar({
   onRestore,
   onDeleteForever,
 }: BulkActionBarProps) {
+  const intl = useOptionalIntl()
   const { data: members } = useAdminTeamMembers()
   const { data: teams } = useInboxTeams()
   // Only fetch the label taxonomy once its menu is actually open.
@@ -128,23 +131,25 @@ export function BulkActionBar({
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
         <div
           role="toolbar"
-          aria-label="Bulk actions"
+          aria-label={intl.formatMessage(MESSAGES.bulkActions)}
           className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-background/95 px-2 py-1.5 shadow-lg backdrop-blur"
         >
           <button
             type="button"
             onClick={onClear}
-            aria-label={solo ? 'Dismiss' : 'Clear selection'}
+            aria-label={intl.formatMessage(solo ? MESSAGES.dismiss : MESSAGES.clearSelection)}
             className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <XMarkIcon className="size-4" />
           </button>
           <span className="px-1.5 text-xs font-semibold whitespace-nowrap">
-            {solo ? 'This conversation' : `${count} selected`}
+            {solo
+              ? intl.formatMessage(MESSAGES.thisConversation)
+              : intl.formatMessage(MESSAGES.selected, { count })}
           </span>
           <span className="mx-1 h-5 w-px bg-border" />
           <button type="button" onClick={onRestore} disabled={pending} className={triggerClass}>
-            Restore
+            {intl.formatMessage(MESSAGES.restore)}
           </button>
           <button
             type="button"
@@ -152,29 +157,30 @@ export function BulkActionBar({
             disabled={pending}
             className={cn(triggerClass, 'text-destructive hover:bg-destructive/10')}
           >
-            Delete forever
+            {intl.formatMessage(MESSAGES.deleteForever)}
           </button>
         </div>
         <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Delete {solo ? 'this conversation' : `${count} conversations`} forever?
+                {intl.formatMessage(MESSAGES.deleteForeverTitle, { count: solo ? 0 : count })}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                This permanently deletes the conversation and its entire history. This action cannot
-                be undone.
+                {intl.formatMessage(MESSAGES.thisPermanentlyDeletesThe)}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>
+                {intl.formatMessage({ id: 'common.cancel', defaultMessage: 'Cancel' })}
+              </AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
                   setConfirmDelete(false)
                   onDeleteForever?.()
                 }}
               >
-                Delete permanently
+                {intl.formatMessage(MESSAGES.deletePermanently)}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -187,19 +193,21 @@ export function BulkActionBar({
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
       <div
         role="toolbar"
-        aria-label="Bulk actions"
+        aria-label={intl.formatMessage(MESSAGES.bulkActions2)}
         className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-background/95 px-2 py-1.5 shadow-lg backdrop-blur"
       >
         <button
           type="button"
           onClick={onClear}
-          aria-label={solo ? 'Dismiss' : 'Clear selection'}
+          aria-label={intl.formatMessage(solo ? MESSAGES.dismiss : MESSAGES.clearSelection)}
           className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <XMarkIcon className="size-4" />
         </button>
         <span className="px-1.5 text-xs font-semibold whitespace-nowrap">
-          {solo ? 'This conversation' : `${count} selected`}
+          {solo
+            ? intl.formatMessage(MESSAGES.thisConversation)
+            : intl.formatMessage(MESSAGES.selected, { count })}
         </span>
         <span className="mx-1 h-5 w-px bg-border" />
 
@@ -212,10 +220,10 @@ export function BulkActionBar({
             <button
               type="button"
               disabled={pending || disableMacro}
-              title={disableMacro ? 'Not available for tickets' : undefined}
+              title={disableMacro ? intl.formatMessage(MESSAGES.notForTickets) : undefined}
               className={triggerClass}
             >
-              Macro
+              {intl.formatMessage(MESSAGES.macro)}
               <ChevronUpIcon className="size-3" />
             </button>
           </DropdownMenuTrigger>
@@ -231,7 +239,7 @@ export function BulkActionBar({
                 </DropdownMenuItem>
               ))
             ) : (
-              <DropdownMenuItem disabled>No macros</DropdownMenuItem>
+              <DropdownMenuItem disabled>{intl.formatMessage(MESSAGES.noMacros)}</DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -240,7 +248,7 @@ export function BulkActionBar({
         <DropdownMenu {...menuOpen('assign')}>
           <DropdownMenuTrigger asChild>
             <button type="button" disabled={pending} className={triggerClass}>
-              Assign
+              {intl.formatMessage(MESSAGES.assign)}
               <ChevronUpIcon className="size-3" />
             </button>
           </DropdownMenuTrigger>
@@ -253,7 +261,7 @@ export function BulkActionBar({
         <DropdownMenu {...menuOpen('assign_team')}>
           <DropdownMenuTrigger asChild>
             <button type="button" disabled={pending} className={triggerClass}>
-              Team
+              {intl.formatMessage(MESSAGES.team)}
               <ChevronUpIcon className="size-3" />
             </button>
           </DropdownMenuTrigger>
@@ -273,7 +281,7 @@ export function BulkActionBar({
                 </DropdownMenuItem>
               ))
             ) : (
-              <DropdownMenuItem disabled>No teams</DropdownMenuItem>
+              <DropdownMenuItem disabled>{intl.formatMessage(MESSAGES.noTeams)}</DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -282,7 +290,7 @@ export function BulkActionBar({
         <DropdownMenu {...menuOpen('priority')}>
           <DropdownMenuTrigger asChild>
             <button type="button" disabled={pending} className={triggerClass}>
-              Priority
+              {intl.formatMessage(MESSAGES.priority)}
               <ChevronUpIcon className="size-3" />
             </button>
           </DropdownMenuTrigger>
@@ -300,10 +308,10 @@ export function BulkActionBar({
             <button
               type="button"
               disabled={pending || disableTag}
-              title={disableTag ? 'Not available for tickets' : undefined}
+              title={disableTag ? intl.formatMessage(MESSAGES.notForTickets) : undefined}
               className={triggerClass}
             >
-              Tag
+              {intl.formatMessage(MESSAGES.tag)}
               <ChevronUpIcon className="size-3" />
             </button>
           </DropdownMenuTrigger>
@@ -323,7 +331,7 @@ export function BulkActionBar({
                 </DropdownMenuItem>
               ))
             ) : (
-              <DropdownMenuItem disabled>No tags</DropdownMenuItem>
+              <DropdownMenuItem disabled>{intl.formatMessage(MESSAGES.noTags)}</DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -336,25 +344,29 @@ export function BulkActionBar({
             <button
               type="button"
               disabled={pending || disableSnooze}
-              title={disableSnooze ? 'Not available for tickets' : undefined}
+              title={disableSnooze ? intl.formatMessage(MESSAGES.notForTickets) : undefined}
               className={triggerClass}
             >
-              Snooze
+              {intl.formatMessage(MESSAGES.snooze)}
               <ChevronUpIcon className="size-3" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top">
-            <DropdownMenuLabel className="text-muted-foreground">Snooze until</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">
+              {intl.formatMessage(MESSAGES.snoozeUntil)}
+            </DropdownMenuLabel>
             <DropdownMenuItem onClick={() => onSnooze(inHours(4).toISOString())}>
-              Later today
+              {intl.formatMessage(MESSAGES.laterToday)}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onSnooze(tomorrowAt(9).toISOString())}>
-              Tomorrow
+              {intl.formatMessage(MESSAGES.tomorrow)}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onSnooze(nextMondayAt(9).toISOString())}>
-              Next week
+              {intl.formatMessage(MESSAGES.nextWeek)}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onSnooze(null)}>Until they reply</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onSnooze(null)}>
+              {intl.formatMessage(MESSAGES.untilTheyReply)}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -365,7 +377,7 @@ export function BulkActionBar({
           disabled={pending}
           className={cn(triggerClass, 'text-muted-foreground hover:text-foreground')}
         >
-          Close
+          {intl.formatMessage(MESSAGES.close)}
         </button>
       </div>
     </div>

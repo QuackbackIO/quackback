@@ -17,6 +17,7 @@
  * The single-key chars come from `INBOX_ACTIONS` (each descriptor's `shortcut`),
  * so this file adds no new source of truth for them.
  */
+import { type MessageDescriptor } from 'react-intl'
 import { useEffect, useRef } from 'react'
 import { INBOX_ACTIONS, type InboxActionId } from '@/lib/shared/conversation/inbox-actions'
 
@@ -25,10 +26,28 @@ import { INBOX_ACTIONS, type InboxActionId } from '@/lib/shared/conversation/inb
  * help panel. Action keys live on the descriptors; these are the only keys this
  * hook owns that aren't actions.
  */
-export const INBOX_GLOBAL_SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
-  { keys: '⌘K', label: 'Open command bar' },
-  { keys: '?', label: 'Show keyboard shortcuts' },
-  { keys: 'Esc', label: 'Leave the composer' },
+export const INBOX_GLOBAL_SHORTCUTS: ReadonlyArray<{ keys: string; label: MessageDescriptor }> = [
+  {
+    keys: '⌘K',
+    label: {
+      id: 'admin.inbox.useInboxKeyboard.openCommandBar',
+      defaultMessage: 'Open command bar',
+    },
+  },
+  {
+    keys: '?',
+    label: {
+      id: 'admin.inbox.useInboxKeyboard.showKeyboardShortcuts',
+      defaultMessage: 'Show keyboard shortcuts',
+    },
+  },
+  {
+    keys: 'Esc',
+    label: {
+      id: 'admin.inbox.useInboxKeyboard.leaveTheComposer',
+      defaultMessage: 'Leave the composer',
+    },
+  },
 ]
 
 /**

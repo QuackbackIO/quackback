@@ -15,6 +15,8 @@
  * tokens both bubbles render from (UNIFIED-INBOX-SPEC.md §2.6) — geometry
  * and fill live in one place so the two idioms cannot drift apart.
  */
+import type { IntlShape } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useCallback, useRef, useState } from 'react'
 import {
   EllipsisVerticalIcon,
@@ -78,6 +80,7 @@ import {
 } from '@/components/conversation/conversation-editor-features'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useLocalDateFormatter } from '@/components/ui/local-date'
+import { AdminSystemNotice } from './admin-system-notice'
 
 /** A message's time of day, e.g. "3:04 PM". */
 const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
@@ -93,8 +96,16 @@ function MessageTime({ iso }: { iso: string }) {
 
 /** The "(edited)" mark, titled with the time of the edit. */
 function EditedAt({ iso }: { iso: string }) {
+  const intl = useOptionalIntl()
   const formatDate = useLocalDateFormatter()
-  return <EditedMark title={`Edited ${formatDate(iso, TIME_LABEL)}`} />
+  return (
+    <EditedMark
+      title={intl.formatMessage(
+        { id: 'admin.inbox.messageBubble.editedAt', defaultMessage: 'Edited {time}' },
+        { time: formatDate(iso, TIME_LABEL) }
+      )}
+    />
+  )
 }
 
 /** Small grey "(edited)" beside the timestamp, the same mark Slack uses. */
@@ -106,11 +117,32 @@ function EditedMark({ label = '(edited)', title }: { label?: string; title?: str
   )
 }
 
-function channelDeliveryLabel(delivery: ChannelDelivery): string {
-  const name = getChannelDescriptor(delivery.channel)?.label ?? 'channel'
-  if (delivery.status === 'pending') return `Sending to ${name}`
-  if (delivery.status === 'sent') return `Sent to ${name}`
-  return delivery.error || `Could not send to ${name}`
+function channelDeliveryLabel(delivery: ChannelDelivery, intl: IntlShape): string {
+  const name =
+    getChannelDescriptor(delivery.channel)?.label ??
+    intl.formatMessage({ id: 'admin.inbox.messageBubble.channel', defaultMessage: 'channel' })
+  if (delivery.status === 'pending') {
+    return intl.formatMessage(
+      { id: 'admin.inbox.messageBubble.sendingTo', defaultMessage: 'Sending to {name}' },
+      { name }
+    )
+  }
+  if (delivery.status === 'sent') {
+    return intl.formatMessage(
+      { id: 'admin.inbox.messageBubble.sentTo', defaultMessage: 'Sent to {name}' },
+      { name }
+    )
+  }
+  return (
+    delivery.error ||
+    intl.formatMessage(
+      {
+        id: 'admin.inbox.messageBubble.couldNotSendTo',
+        defaultMessage: 'Could not send to {name}',
+      },
+      { name }
+    )
+  )
 }
 
 function ChannelDeliveryTicks({
@@ -120,7 +152,8 @@ function ChannelDeliveryTicks({
   delivery: ChannelDelivery
   onRetry?: () => void
 }) {
-  const label = channelDeliveryLabel(delivery)
+  const intl = useOptionalIntl()
+  const label = channelDeliveryLabel(delivery, intl)
   const failed = delivery.status === 'failed'
   const icon =
     delivery.status === 'pending' ? (
@@ -182,6 +215,7 @@ function humanizeAttributeKey(key: string): string {
  * never resolved once the customer replied was the bug this fixes).
  */
 function AgentBlockSummary({ block, state }: { block: WorkflowBlockPayload; state?: BlockState }) {
+  const intl = useOptionalIntl()
   const resolved = state === 'chosen' || state === 'superseded'
   switch (block.kind) {
     case 'buttons':
@@ -202,9 +236,15 @@ function AgentBlockSummary({ block, state }: { block: WorkflowBlockPayload; stat
       if (state === 'superseded') return null
       return (
         <p className="mt-1 text-[11px] text-muted-foreground/80">
-          {state === 'chosen'
-            ? `Answered: ${humanizeAttributeKey(block.attributeKey)}`
-            : `Waiting for: ${humanizeAttributeKey(block.attributeKey)}`}
+          {intl.formatMessage(
+            state === 'chosen'
+              ? { id: 'admin.inbox.messageBubble.answered', defaultMessage: 'Answered: {name}' }
+              : {
+                  id: 'admin.inbox.messageBubble.waitingFor',
+                  defaultMessage: 'Waiting for: {name}',
+                },
+            { name: humanizeAttributeKey(block.attributeKey) }
+          )}
         </p>
       )
     case 'csat':
@@ -298,11 +338,19 @@ function hasBubbleBody(content: string, richBody: TiptapContent | null): boolean
 
 /** A thin "New" divider rendered immediately above the first unread message. */
 export function UnreadDivider() {
+  const intl = useOptionalIntl()
   return (
-    <div className="my-1.5 flex items-center gap-2" role="separator" aria-label="New messages">
+    <div
+      className="my-1.5 flex items-center gap-2"
+      role="separator"
+      aria-label={intl.formatMessage({
+        id: 'admin.inbox.messageBubble.newMessages',
+        defaultMessage: 'New messages',
+      })}
+    >
       <span className="h-px flex-1 bg-primary/30" />
       <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
-        New
+        {intl.formatMessage({ id: 'admin.inbox.messageBubble.new', defaultMessage: 'New' })}
       </span>
       <span className="h-px flex-1 bg-primary/30" />
     </div>
@@ -373,6 +421,8 @@ interface AgentMessageBubbleProps {
    *  noise; internal notes and system events never carry it (their own
    *  markers already say what they are). */
   ticketProvenance?: boolean
+  /** The thread is an issue on a code host: its close and reopen notices read "Issue …". */
+  issueThread?: boolean
   /** Retry a failed GitHub (thread-channel) send. */
   onRetryChannelDelivery?: (messageId: ConversationMessageId) => void
 }
@@ -426,6 +476,7 @@ function MessageEditForm({
   onCancel: () => void
   onSave: (draft: { content: string; contentJson: TiptapContent | null }) => Promise<void>
 }) {
+  const intl = useOptionalIntl()
   const jsonRef = useRef<TiptapContent | null>(message.contentJson)
   const markdownRef = useRef(message.content)
   const [saving, setSaving] = useState(false)
@@ -472,7 +523,10 @@ function MessageEditForm({
         borderless
         minHeight="2.5rem"
         autofocus="end"
-        placeholder="Edit message"
+        placeholder={intl.formatMessage({
+          id: 'admin.inbox.messageBubble.editMessage',
+          defaultMessage: 'Edit message',
+        })}
         className="max-h-64 overflow-y-auto"
         onDocumentChange={(document) => {
           const doc = document.json() as TiptapContent
@@ -490,7 +544,7 @@ function MessageEditForm({
           disabled={saving}
           className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
         >
-          Cancel
+          {intl.formatMessage({ id: 'admin.inbox.messageBubble.cancel', defaultMessage: 'Cancel' })}
         </button>
         <button
           type="button"
@@ -498,7 +552,15 @@ function MessageEditForm({
           disabled={saving || (empty && !hasAttachments)}
           className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save changes'}
+          {saving
+            ? intl.formatMessage({
+                id: 'admin.inbox.messageBubble.saving',
+                defaultMessage: 'Saving…',
+              })
+            : intl.formatMessage({
+                id: 'admin.inbox.messageBubble.saveChanges',
+                defaultMessage: 'Save changes',
+              })}
         </button>
       </div>
     </div>
@@ -524,8 +586,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   translation,
   blockState,
   ticketProvenance = false,
+  issueThread = false,
   onRetryChannelDelivery,
 }: AgentMessageBubbleProps) {
+  const intl = useOptionalIntl()
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -535,15 +599,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   // System events (e.g. "assigned to …") are status notices, not messages:
   // centered, no avatar, no actions.
   if (message.senderType === 'system') {
-    return (
-      <div className="flex items-center gap-2 py-1" role="status">
-        <span className="h-px flex-1 bg-border/40" />
-        <span className="whitespace-nowrap px-2 text-[11px] text-muted-foreground">
-          {message.content}
-        </span>
-        <span className="h-px flex-1 bg-border/40" />
-      </div>
-    )
+    return <AdminSystemNotice message={message} issueThread={issueThread} />
   }
 
   // Visitor messages, agent replies, and internal notes all share one chat-
@@ -554,7 +610,11 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   // through `NoteContent` instead of the reply renderer.
   const isNote = message.isInternal
   const isAgent = message.senderType === 'agent'
-  const authorName = message.author?.displayName ?? (isAgent ? 'Agent' : 'Visitor')
+  const authorName =
+    message.author?.displayName ??
+    (isAgent
+      ? intl.formatMessage({ id: 'admin.inbox.messageBubble.agent', defaultMessage: 'Agent' })
+      : intl.formatMessage({ id: 'admin.inbox.messageBubble.visitor', defaultMessage: 'Visitor' }))
   const isFlagged = message.flaggedAt !== null
   const toolbarPinned = emojiOpen || menuOpen
   // Agent replies, assistant turns, and notes all sit on the agent's side of
@@ -625,7 +685,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           ) : (
             <>
               {hasBody && (
+                // Text people wrote takes its own direction (dir="auto"), so an
+                // English message reads left to right on a right-to-left page.
                 <div
+                  dir="auto"
                   className={cn(
                     jumbo
                       ? 'max-w-full'
@@ -690,8 +753,17 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                             className="mt-0.5 text-[11px] text-muted-foreground/60 underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
                           >
                             {translation.showingOriginal
-                              ? 'Show translation'
-                              : `${translation.label} · Show original`}
+                              ? intl.formatMessage({
+                                  id: 'admin.inbox.messageBubble.showTranslation',
+                                  defaultMessage: 'Show translation',
+                                })
+                              : intl.formatMessage(
+                                  {
+                                    id: 'admin.inbox.messageBubble.showOriginal',
+                                    defaultMessage: '{label} · Show original',
+                                  },
+                                  { label: translation.label }
+                                )}
                           </button>
                         )}
                       </>
@@ -722,7 +794,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     <button
                       type="button"
                       className="flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Add reaction"
+                      aria-label={intl.formatMessage({
+                        id: 'admin.inbox.messageBubble.addReaction',
+                        defaultMessage: 'Add reaction',
+                      })}
                     >
                       <FaceSmileIcon className="h-4 w-4" />
                     </button>
@@ -735,7 +810,13 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                           <button
                             key={emoji}
                             type="button"
-                            aria-label={`React with ${emoji}`}
+                            aria-label={intl.formatMessage(
+                              {
+                                id: 'admin.inbox.messageBubble.reactWith',
+                                defaultMessage: 'React with {emoji}',
+                              },
+                              { emoji }
+                            )}
                             aria-pressed={has}
                             onClick={() => {
                               onToggleReaction(message.id, emoji, has)
@@ -761,7 +842,17 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     'flex size-7 items-center justify-center rounded transition-colors hover:bg-muted',
                     isFlagged ? 'text-amber-500' : 'text-muted-foreground hover:text-foreground'
                   )}
-                  aria-label={isFlagged ? 'Remove flag' : 'Flag message'}
+                  aria-label={
+                    isFlagged
+                      ? intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.removeFlag',
+                          defaultMessage: 'Remove flag',
+                        })
+                      : intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.flagMessage',
+                          defaultMessage: 'Flag message',
+                        })
+                  }
                   aria-pressed={isFlagged}
                 >
                   {isFlagged ? (
@@ -776,23 +867,38 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     <button
                       type="button"
                       className="flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="More actions"
+                      aria-label={intl.formatMessage({
+                        id: 'admin.inbox.messageBubble.moreActions',
+                        defaultMessage: 'More actions',
+                      })}
                     >
                       <EllipsisVerticalIcon className="h-4 w-4" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => onMarkUnread(message.id)}>
-                      <EnvelopeIcon className="h-4 w-4" /> Mark unread
+                      <EnvelopeIcon className="h-4 w-4" />{' '}
+                      {intl.formatMessage({
+                        id: 'admin.inbox.messageBubble.markUnread',
+                        defaultMessage: 'Mark unread',
+                      })}
                     </DropdownMenuItem>
                     {canEdit && onEdit && (
                       <DropdownMenuItem onClick={() => setEditing(true)}>
-                        <PencilIcon className="h-4 w-4" /> Edit message
+                        <PencilIcon className="h-4 w-4" />{' '}
+                        {intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.editMessage',
+                          defaultMessage: 'Edit message',
+                        })}
                       </DropdownMenuItem>
                     )}
                     {canDelete && (
                       <DropdownMenuItem variant="destructive" onClick={() => onDelete(message.id)}>
-                        <TrashIcon className="h-4 w-4" /> Delete
+                        <TrashIcon className="h-4 w-4" />{' '}
+                        {intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.delete',
+                          defaultMessage: 'Delete',
+                        })}
                       </DropdownMenuItem>
                     )}
                     {showTrackActions && (
@@ -800,12 +906,20 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                         <DropdownMenuSeparator />
                         {onSharePost && (
                           <DropdownMenuItem onClick={() => onSharePost(message)}>
-                            <ChatBubbleLeftRightIcon className="h-4 w-4" /> Share a post…
+                            <ChatBubbleLeftRightIcon className="h-4 w-4" />{' '}
+                            {intl.formatMessage({
+                              id: 'admin.inbox.messageBubble.shareAPost',
+                              defaultMessage: 'Share a post…',
+                            })}
                           </DropdownMenuItem>
                         )}
                         {onTrackAsPost && (
                           <DropdownMenuItem onClick={() => onTrackAsPost(message)}>
-                            <AdjustmentsHorizontalIcon className="h-4 w-4" /> Track as feedback…
+                            <AdjustmentsHorizontalIcon className="h-4 w-4" />{' '}
+                            {intl.formatMessage({
+                              id: 'admin.inbox.messageBubble.trackAsFeedback',
+                              defaultMessage: 'Track as feedback…',
+                            })}
                           </DropdownMenuItem>
                         )}
                       </>
@@ -834,14 +948,22 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         {isNote && suggestion && onTrackSuggestion && (
           <div className="flex max-w-[85%] flex-wrap items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-1.5">
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-              <LightBulbIcon className="h-3.5 w-3.5" /> AI suggests tracking this as a post
+              <LightBulbIcon className="h-3.5 w-3.5" />{' '}
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.aiSuggestsTrackingThis',
+                defaultMessage: 'AI suggests tracking this as a post',
+              })}
             </span>
             <button
               type="button"
               onClick={() => onTrackSuggestion(message)}
               className="ms-auto inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
+              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />{' '}
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.trackAsFeedbackShort',
+                defaultMessage: 'Track as feedback',
+              })}
             </button>
           </div>
         )}
@@ -886,14 +1008,24 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           <ViaApiBadge author={message.author} />
           {isNote && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-              <PencilSquareIcon className="h-3 w-3" /> Internal note
+              <PencilSquareIcon className="h-3 w-3" />{' '}
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.internalNote',
+                defaultMessage: 'Internal note',
+              })}
             </span>
           )}
           {message.viaEmail && (
             <EnvelopeIcon
               className="h-3 w-3 shrink-0"
-              aria-label="Received by email"
-              title="Received by email"
+              aria-label={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.receivedByEmail',
+                defaultMessage: 'Received by email',
+              })}
+              title={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.receivedByEmail',
+                defaultMessage: 'Received by email',
+              })}
             />
           )}
           {/* Pair-thread provenance (convergence Phase 2): a legacy
@@ -901,7 +1033,12 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
               not a chip — it answers "why does this read differently", nothing
               more. */}
           {ticketProvenance && message.ticketId && !isNote && (
-            <span className="shrink-0">· via ticket thread</span>
+            <span className="shrink-0">
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.viaTicketThread',
+                defaultMessage: '· via ticket thread',
+              })}
+            </span>
           )}
           <MessageTime iso={message.createdAt} />
           {message.editedAt && <EditedAt iso={message.editedAt} />}
@@ -920,8 +1057,14 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           {isFlagged && (
             <BookmarkSolidIcon
               className="h-3.5 w-3.5 shrink-0 text-amber-500"
-              aria-label="Flagged"
-              title="Flagged"
+              aria-label={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.flagged',
+                defaultMessage: 'Flagged',
+              })}
+              title={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.flagged',
+                defaultMessage: 'Flagged',
+              })}
             />
           )}
         </div>

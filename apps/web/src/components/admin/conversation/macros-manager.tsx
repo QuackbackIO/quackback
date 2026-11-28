@@ -22,7 +22,7 @@ import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tag
 import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
 import { AttributeValueInput } from './attribute-value-input'
 import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
-import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
+import { useInboxTeams } from '@/lib/client/queries/inbox-teams'
 import { MACRO_VARIABLES } from '@/lib/shared/conversation/macros'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

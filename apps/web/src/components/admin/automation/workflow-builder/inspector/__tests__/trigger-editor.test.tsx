@@ -22,7 +22,7 @@ import type { WorkflowClassValue } from '../../../workflow-graph'
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
   useAdminTeamMembers: () => ({ data: [] }),
 }))
-vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
+vi.mock('@/lib/client/queries/inbox-teams', () => ({
   useInboxTeams: () => ({ data: [] }),
 }))
 vi.mock('@/lib/server/functions/conversation-tags', () => ({

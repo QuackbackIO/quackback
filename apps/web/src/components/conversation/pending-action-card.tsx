@@ -7,18 +7,34 @@
  * usePendingActionDecision) so the buttons reflect current status rather
  * than the stale snapshot.
  */
+import type { IntlShape, MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { CheckIcon, XMarkIcon, ShieldExclamationIcon } from '@heroicons/react/24/solid'
 import type { AssistantPendingActionId } from '@quackback/ids'
 import { usePendingActionDecision } from '@/lib/client/hooks/use-pending-action-decision'
 
 /** Terminal-status copy — shown in place of the buttons once a proposal is no
  *  longer decidable. 'proposed' isn't here: that state renders the buttons. */
-const TERMINAL_LABEL: Record<string, string> = {
-  approved: 'Approved',
-  executed: 'Approved and executed',
-  rejected: 'Rejected',
-  expired: 'Expired',
-  failed: 'Failed',
+export const PENDING_ACTION_STATUS_LABELS: Record<string, MessageDescriptor> = {
+  approved: { id: 'admin.inbox.pendingActionCard.status.approved', defaultMessage: 'Approved' },
+  executed: {
+    id: 'admin.inbox.pendingActionCard.status.executed',
+    defaultMessage: 'Approved and executed',
+  },
+  rejected: { id: 'admin.inbox.pendingActionCard.status.rejected', defaultMessage: 'Rejected' },
+  expired: { id: 'admin.inbox.pendingActionCard.status.expired', defaultMessage: 'Expired' },
+  failed: { id: 'admin.inbox.pendingActionCard.status.failed', defaultMessage: 'Failed' },
+}
+
+export const UNABLE_TO_LOAD_STATUS: MessageDescriptor = {
+  id: 'admin.inbox.pendingActionCard.unableToLoad',
+  defaultMessage: 'Unable to load status',
+}
+
+/** A decided action's status in words; a status with no words shows as it is. */
+export function pendingActionStatusText(intl: IntlShape, status: string): string {
+  const label = PENDING_ACTION_STATUS_LABELS[status]
+  return label ? intl.formatMessage(label) : status
 }
 
 export interface PendingActionCardProps {
@@ -37,6 +53,7 @@ function formatArgValue(value: unknown): string {
 }
 
 export function PendingActionCard({ pendingActionId, summary }: PendingActionCardProps) {
+  const intl = useOptionalIntl()
   const id = pendingActionId as AssistantPendingActionId
   const { data, isLoading, isError, busy, inlineError, approve, reject } =
     usePendingActionDecision(id)
@@ -61,9 +78,19 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
         </dl>
       )}
       {isLoading ? (
-        <span className="text-[11px] text-muted-foreground">Checking status…</span>
+        <span className="text-[11px] text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.pendingActionCard.checkingStatus',
+            defaultMessage: 'Checking status…',
+          })}
+        </span>
       ) : isError ? (
-        <span className="text-[11px] text-muted-foreground">Couldn't load the current status</span>
+        <span className="text-[11px] text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.pendingActionCard.couldntLoadTheCurrent',
+            defaultMessage: "Couldn't load the current status",
+          })}
+        </span>
       ) : data?.status === 'proposed' ? (
         <div className="flex items-center gap-2">
           <button
@@ -72,7 +99,11 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
             disabled={busy}
             className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            <CheckIcon className="h-3.5 w-3.5" /> Approve
+            <CheckIcon className="h-3.5 w-3.5" />{' '}
+            {intl.formatMessage({
+              id: 'admin.inbox.pendingActionCard.approve',
+              defaultMessage: 'Approve',
+            })}
           </button>
           <button
             type="button"
@@ -80,12 +111,18 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
             disabled={busy}
             className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
           >
-            <XMarkIcon className="h-3.5 w-3.5" /> Reject
+            <XMarkIcon className="h-3.5 w-3.5" />{' '}
+            {intl.formatMessage({
+              id: 'admin.inbox.pendingActionCard.reject',
+              defaultMessage: 'Reject',
+            })}
           </button>
         </div>
       ) : (
         <span className="text-[11px] font-medium text-muted-foreground">
-          {data ? (TERMINAL_LABEL[data.status] ?? data.status) : 'Unable to load status'}
+          {data
+            ? pendingActionStatusText(intl, data.status)
+            : intl.formatMessage(UNABLE_TO_LOAD_STATUS)}
         </span>
       )}
       {inlineError && <span className="text-[11px] text-destructive">{inlineError}</span>}

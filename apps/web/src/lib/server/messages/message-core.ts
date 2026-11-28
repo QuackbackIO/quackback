@@ -5,6 +5,7 @@
  * conversations and tickets, owned by neither, so this lives outside both domains
  * (a non-domain module) to keep tickets from depending on the conversation domain.
  */
+import { PREVIEW_LABELS } from '@/lib/shared/conversation/preview-labels'
 import type { ConversationMessage, ConversationAttachment } from '@/lib/server/db'
 import { ValidationError } from '@/lib/shared/errors'
 import { resignStoredAssetUrl, getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -99,7 +100,7 @@ export function validateContent(raw: string, hasAttachments = false): string {
 /** The list/notification preview line for a message (text, else an attachment). */
 export function preview(content: string, attachments: ConversationAttachment[] = []): string {
   if (content) return truncate(content, PREVIEW_LENGTH)
-  if (attachments.length > 0) return attachments[0].name || 'Attachment'
+  if (attachments.length > 0) return attachments[0].name || PREVIEW_LABELS.attachment
   return ''
 }
 
@@ -118,11 +119,12 @@ export function preview(content: string, attachments: ConversationAttachment[] =
 export function richMessageFallbackLabel(doc: TiptapContent | null | undefined): string {
   for (const node of doc?.content ?? []) {
     if (node.type === 'chatImage' || node.type === 'image' || node.type === 'resizableImage') {
-      if (typeof node.attrs?.src === 'string' && node.attrs.src.length > 0) return 'Image'
+      if (typeof node.attrs?.src === 'string' && node.attrs.src.length > 0)
+        return PREVIEW_LABELS.image
       continue
     }
     if (node.type === 'quackbackEmbed') {
-      return node.attrs?.kind === 'changelog' ? 'Shared an update' : 'Shared a post'
+      return node.attrs?.kind === 'changelog' ? PREVIEW_LABELS.update : PREVIEW_LABELS.post
     }
     const nested = richMessageFallbackLabel(node)
     if (nested) return nested

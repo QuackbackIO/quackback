@@ -37,6 +37,10 @@ describe('documentLocale', () => {
       )
     ).toBe('de')
   })
+  it('localizes the inbox, and no other admin area yet', () => {
+    expect(documentLocale(['__root__', '/admin', '/admin/inbox'], 'ar')).toBe('ar')
+    expect(documentLocale(['__root__', '/admin', '/admin/feedback'], 'ar')).toBe('en')
+  })
   it('keeps the other settings pages on the default', () => {
     for (const id of [
       '/admin/settings',

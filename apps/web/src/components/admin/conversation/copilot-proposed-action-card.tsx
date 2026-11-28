@@ -3,21 +3,18 @@
  * pure move — see that file's header for the surface this belongs to):
  * one write-tool call a Copilot turn proposed (P2-C.4, "act-on-approval").
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { CheckCircleIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { ArrowPathIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import type { AssistantPendingActionId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { usePendingActionDecision } from '@/lib/client/hooks/use-pending-action-decision'
 import type { CopilotProposedAction } from '@/lib/shared/assistant/copilot-contract'
-
-/** Terminal-status copy for a decided proposal that ISN'T executed/failed
- *  (those two get their own richer treatment below). Mirrors
- *  pending-action-card.tsx's TERMINAL_LABEL for the states it shares. */
-const PROPOSED_ACTION_TERMINAL_LABEL: Record<string, string> = {
-  approved: 'Approved',
-  rejected: 'Rejected',
-  expired: 'Expired',
-}
+import {
+  PENDING_ACTION_STATUS_LABELS,
+  UNABLE_TO_LOAD_STATUS,
+  pendingActionStatusText,
+} from '@/components/conversation/pending-action-card'
 
 /** Pull a short, human line out of a tool's JSON result, if it offered one
  *  (create_ticket's reference/title, or any tool's own `note`). Returns null
@@ -52,6 +49,7 @@ function formatProposedActionFailure(result: unknown): string | null {
  * plumbing underneath.
  */
 export function CopilotProposedActionCard({ action }: { action: CopilotProposedAction }) {
+  const intl = useOptionalIntl()
   const id = action.id as AssistantPendingActionId
   const { data, isLoading, isError, busy, approving, rejecting, inlineError, approve, reject } =
     usePendingActionDecision(id)
@@ -83,30 +81,56 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
       )}
 
       {isLoading ? (
-        <span className="text-muted-foreground">Checking status…</span>
+        <span className="text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.copilotProposedActionCard.checkingStatus',
+            defaultMessage: 'Checking status…',
+          })}
+        </span>
       ) : isError ? (
-        <span className="text-muted-foreground">Couldn&apos;t load the current status</span>
+        <span className="text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.copilotProposedActionCard.statusLoadFailed',
+            defaultMessage: "Couldn't load the current status",
+          })}
+        </span>
       ) : data?.status === 'proposed' ? (
         <div className="flex items-center gap-2 pt-0.5">
           <Button type="button" size="sm" disabled={busy} onClick={approve}>
             {approving ? (
               <>
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Approving…
+                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.approving',
+                  defaultMessage: 'Approving…',
+                })}
               </>
             ) : (
               <>
-                <CheckIcon className="h-3.5 w-3.5" /> Approve
+                <CheckIcon className="h-3.5 w-3.5" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.approve',
+                  defaultMessage: 'Approve',
+                })}
               </>
             )}
           </Button>
           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={reject}>
             {rejecting ? (
               <>
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Rejecting…
+                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.rejecting',
+                  defaultMessage: 'Rejecting…',
+                })}
               </>
             ) : (
               <>
-                <XMarkIcon className="h-3.5 w-3.5" /> Reject
+                <XMarkIcon className="h-3.5 w-3.5" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.reject',
+                  defaultMessage: 'Reject',
+                })}
               </>
             )}
           </Button>
@@ -114,17 +138,24 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
       ) : data?.status === 'executed' ? (
         <div className="flex items-center gap-1.5 pt-0.5 text-success">
           <CheckCircleIcon className="h-4 w-4 shrink-0" />
-          <span>{formatProposedActionResult(data.result) ?? 'Approved and executed'}</span>
+          <span>
+            {formatProposedActionResult(data.result) ??
+              intl.formatMessage(PENDING_ACTION_STATUS_LABELS.executed!)}
+          </span>
         </div>
       ) : data?.status === 'failed' ? (
         <span className="pt-0.5 text-destructive">
-          {formatProposedActionFailure(data.result) ?? 'This action could not be completed.'}
+          {formatProposedActionFailure(data.result) ??
+            intl.formatMessage({
+              id: 'admin.inbox.copilotProposedActionCard.notCompleted',
+              defaultMessage: 'This action could not be completed.',
+            })}
         </span>
       ) : (
         <span className="pt-0.5 font-medium text-muted-foreground">
           {data
-            ? (PROPOSED_ACTION_TERMINAL_LABEL[data.status] ?? data.status)
-            : 'Unable to load status'}
+            ? pendingActionStatusText(intl, data.status)
+            : intl.formatMessage(UNABLE_TO_LOAD_STATUS)}
         </span>
       )}
       {inlineError && <span className="text-destructive">{inlineError}</span>}

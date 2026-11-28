@@ -4,21 +4,30 @@
  * and the requester-facing stage chip. Pure display — no data fetching — so both
  * the list rows and the detail panel render tickets identically.
  */
+import { ENGLISH_INTL, useOptionalIntl } from '@/components/ui/use-optional-intl'
+import { type MessageDescriptor, type IntlShape } from 'react-intl'
 import type { TicketStatusRef, TicketStageRef } from '@/lib/server/domains/tickets'
 import type { TicketType, TicketStatusCategory } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
 
-const TYPE_META: Record<TicketType, { label: string; className: string }> = {
-  customer: { label: 'Customer', className: 'bg-muted text-foreground' },
-  back_office: {
-    label: 'Back office',
+const TYPE_META: Record<TicketType, { label: MessageDescriptor; className: string }> = {
+  customer: {
+    label: { id: 'admin.shell.ticketChips.customer', defaultMessage: 'Customer' },
     className: 'bg-muted text-foreground',
   },
-  tracker: { label: 'Tracker', className: 'bg-muted text-muted-foreground' },
+  back_office: {
+    label: { id: 'admin.shell.ticketChips.backOffice', defaultMessage: 'Back office' },
+    className: 'bg-muted text-foreground',
+  },
+  tracker: {
+    label: { id: 'admin.shell.ticketChips.tracker', defaultMessage: 'Tracker' },
+    className: 'bg-muted text-muted-foreground',
+  },
 }
 
-export function ticketTypeLabel(type: TicketType): string {
-  return TYPE_META[type].label
+/** A ticket type's name, in `intl`'s language (English when none is given). */
+export function ticketTypeLabel(type: TicketType, intl: IntlShape = ENGLISH_INTL): string {
+  return intl.formatMessage(TYPE_META[type].label)
 }
 
 /** The type badge's tint, keyed by ticket type — shared with the inbox list
@@ -32,6 +41,7 @@ export const TICKET_TYPE_CLASS: Record<TicketType, string> = {
 
 /** A small pill naming a ticket's type (Customer / Back office / Tracker). */
 export function TicketTypeBadge({ type, className }: { type: TicketType; className?: string }) {
+  const intl = useOptionalIntl()
   const meta = TYPE_META[type]
   return (
     <span
@@ -41,7 +51,7 @@ export function TicketTypeBadge({ type, className }: { type: TicketType; classNa
         className
       )}
     >
-      {meta.label}
+      {intl.formatMessage(meta.label)}
     </span>
   )
 }

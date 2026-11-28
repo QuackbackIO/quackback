@@ -1,3 +1,5 @@
+import { ASSIGNEE_WORDS } from './inbox-labels'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { ChevronDownIcon, CheckIcon, UserCircleIcon } from '@heroicons/react/24/solid'
@@ -34,10 +36,23 @@ export function AssigneeMenuItems({
   showUnassign?: boolean
   onSelect: (assignTo: string | null) => void
 }) {
+  const intl = useOptionalIntl()
   return (
     <>
-      <DropdownMenuItem onClick={() => onSelect('me')}>Assign to me</DropdownMenuItem>
-      {showUnassign && <DropdownMenuItem onClick={() => onSelect(null)}>Unassign</DropdownMenuItem>}
+      <DropdownMenuItem onClick={() => onSelect('me')}>
+        {intl.formatMessage({
+          id: 'admin.inbox.assigneeControl.assignToMe',
+          defaultMessage: 'Assign to me',
+        })}
+      </DropdownMenuItem>
+      {showUnassign && (
+        <DropdownMenuItem onClick={() => onSelect(null)}>
+          {intl.formatMessage({
+            id: 'admin.inbox.assigneeControl.unassign',
+            defaultMessage: 'Unassign',
+          })}
+        </DropdownMenuItem>
+      )}
       {members && members.length > 0 && <DropdownMenuSeparator />}
       {members?.map((m) => (
         <DropdownMenuItem
@@ -66,6 +81,7 @@ export const AssigneeControl = memo(function AssigneeControl({
   assignedAgent: ConversationAuthorDTO | null
   onChanged?: () => void
 }) {
+  const intl = useOptionalIntl()
   const { data: members } = useAdminTeamMembers()
 
   const mutation = useMutation({
@@ -73,10 +89,18 @@ export const AssigneeControl = memo(function AssigneeControl({
     mutationFn: (assignTo: string | null) =>
       assignConversationFn({ data: { conversationId, assignTo } }),
     onSuccess: () => onChanged?.(),
-    onError: () => toast.error('Failed to assign conversation'),
+    onError: () =>
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.assigneeControl.failedToAssignConversation',
+          defaultMessage: 'Failed to assign conversation',
+        })
+      ),
   })
 
-  const label = assignedAgent ? (assignedAgent.displayName ?? 'Assigned') : 'Unassigned'
+  const label = assignedAgent
+    ? (assignedAgent.displayName ?? intl.formatMessage(ASSIGNEE_WORDS.assigned))
+    : intl.formatMessage(ASSIGNEE_WORDS.unassigned)
 
   return (
     <DropdownMenu>

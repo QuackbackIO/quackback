@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import {
   memo,
   useCallback,
@@ -9,7 +10,6 @@ import {
   type DragEvent,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
@@ -53,6 +53,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toastError } from '@/lib/client/error-notice'
+
+const CREATE_TICKET = {
+  id: 'admin.shell.createTicketDialog.createTicket',
+  defaultMessage: 'Create ticket',
+}
 
 // Native `<textarea maxLength>` used to silently cap this field; a rich doc
 // can't be truncated mid-node without corrupting it, so the cap is now
@@ -143,7 +148,7 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
   defaultRequester,
   onChanged,
 }: CreateTicketDialogProps) {
-  const intl = useIntl()
+  const intl = useOptionalIntl()
   const fromConversation = !!conversationId
   const [type, setType] = useState<TicketType>('customer')
   const [title, setTitle] = useState('')
@@ -295,7 +300,12 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
         // The quiet fallback: retire the affordance for this session and
         // leave the plain Phase-4 form unchanged.
         setAutoFillHidden(true)
-        toast.info('AI suggestions are unavailable. The form is unchanged.')
+        toast.info(
+          intl.formatMessage({
+            id: 'admin.shell.createTicketDialog.aiSuggestionsAreUnavailable',
+            defaultMessage: 'AI suggestions are unavailable. The form is unchanged.',
+          })
+        )
         return
       }
       // Snapshot the pre-suggestion form for "Undo suggestions", then apply.
@@ -314,7 +324,12 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
     } catch {
       // An unexpected failure (network, auth): the form stays unchanged and
       // the button stays (a transient error may succeed on retry).
-      toast.info('AI suggestions are unavailable. The form is unchanged.')
+      toast.info(
+        intl.formatMessage({
+          id: 'admin.shell.createTicketDialog.aiSuggestionsAreUnavailable',
+          defaultMessage: 'AI suggestions are unavailable. The form is unchanged.',
+        })
+      )
     } finally {
       setAutoFillLoading(false)
     }
@@ -335,7 +350,15 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
     if (!canCreate) return
     const description = descriptionMarkdown.trim()
     if (description.length > DESCRIPTION_MAX_LENGTH) {
-      toast.error(`Description is too long (max ${DESCRIPTION_MAX_LENGTH} characters).`)
+      toast.error(
+        intl.formatMessage(
+          {
+            id: 'admin.shell.createTicketDialog.descriptionTooLong',
+            defaultMessage: 'Description is too long (max {max} characters).',
+          },
+          { max: DESCRIPTION_MAX_LENGTH }
+        )
+      )
       return
     }
 
@@ -374,7 +397,12 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
             setLinking(true)
             try {
               await linkTicketToConversationFn({ data: { ticketId: ticket.id, conversationId } })
-              toast.success('Ticket created')
+              toast.success(
+                intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.ticketCreated',
+                  defaultMessage: 'Ticket created',
+                })
+              )
             } catch (error) {
               // The ticket itself was created successfully — a link failure
               // (e.g. this conversation already has one) is a secondary,
@@ -386,20 +414,41 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                       defaultMessage: 'Test and real conversations need separate tickets.',
                     })
                   : error instanceof Error
-                    ? `Ticket created, but couldn't link it: ${error.message}`
-                    : "Ticket created, but couldn't link it to this conversation"
+                    ? intl.formatMessage(
+                        {
+                          id: 'admin.shell.createTicketDialog.linkFailedReason',
+                          defaultMessage: "Ticket created, but couldn't link it: {reason}",
+                        },
+                        { reason: error.message }
+                      )
+                    : intl.formatMessage({
+                        id: 'admin.shell.createTicketDialog.linkFailed',
+                        defaultMessage: "Ticket created, but couldn't link it to this conversation",
+                      })
               )
             } finally {
               setLinking(false)
             }
           } else {
-            toast.success('Ticket created')
+            toast.success(
+              intl.formatMessage({
+                id: 'admin.shell.createTicketDialog.ticketCreated',
+                defaultMessage: 'Ticket created',
+              })
+            )
           }
           onOpenChange(false)
           onCreated(ticket.id)
           onChanged?.()
         },
-        onError: (error) => toastError(error, 'Failed to create ticket'),
+        onError: (error) =>
+          toastError(
+            error,
+            intl.formatMessage({
+              id: 'admin.shell.createTicketDialog.createFailed',
+              defaultMessage: 'Failed to create ticket',
+            })
+          ),
       }
     )
   }
@@ -409,17 +458,34 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {fromConversation ? 'Create ticket' : 'New ticket'}
+            {fromConversation
+              ? intl.formatMessage(CREATE_TICKET)
+              : intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.newTicket',
+                  defaultMessage: 'New ticket',
+                })}
             {suggestedKeys.size > 0 && (
               <span className="ms-2 rounded bg-primary/15 px-1.5 py-0.5 align-middle text-[11px] font-medium text-primary">
-                ✨ {suggestedKeys.size} suggested
+                {intl.formatMessage(
+                  {
+                    id: 'admin.shell.createTicketDialog.suggestedCount',
+                    defaultMessage: '✨ {count} suggested',
+                  },
+                  { count: suggestedKeys.size }
+                )}
               </span>
             )}
           </DialogTitle>
           <DialogDescription>
             {fromConversation
-              ? 'Open a trackable ticket for this conversation.'
-              : 'Open a trackable request and set who it is for.'}
+              ? intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.descFromConversation',
+                  defaultMessage: 'Open a trackable ticket for this conversation.',
+                })
+              : intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.descNew',
+                  defaultMessage: 'Open a trackable request and set who it is for.',
+                })}
           </DialogDescription>
         </DialogHeader>
 
@@ -430,7 +496,12 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
           {candidates.length > 0 ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-muted-foreground">Type</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  {intl.formatMessage({
+                    id: 'admin.shell.createTicketDialog.type',
+                    defaultMessage: 'Type',
+                  })}
+                </label>
                 {/* Phase 5 auto-fill entry: a button (explicit action), not an
                     auto-trigger on type selection — see runAutoFill's doc. */}
                 {showAutoFill && (
@@ -442,13 +513,26 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                     onClick={runAutoFill}
                     disabled={autoFillLoading}
                   >
-                    {autoFillLoading ? '✨ Suggesting…' : '✨ Auto-fill'}
+                    {autoFillLoading
+                      ? intl.formatMessage({
+                          id: 'admin.shell.createTicketDialog.suggesting',
+                          defaultMessage: '✨ Suggesting…',
+                        })
+                      : intl.formatMessage({
+                          id: 'admin.shell.createTicketDialog.autoFill',
+                          defaultMessage: '✨ Auto-fill',
+                        })}
                   </Button>
                 )}
               </div>
               <Select value={selectedTypeId ?? ''} onValueChange={selectType}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a type…" />
+                  <SelectValue
+                    placeholder={intl.formatMessage({
+                      id: 'admin.shell.createTicketDialog.selectAType',
+                      defaultMessage: 'Select a type…',
+                    })}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {candidates.map((t) => (
@@ -457,7 +541,7 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                         <span aria-hidden>{t.icon}</span>
                         <span>{t.name}</span>
                         <span className="text-muted-foreground">
-                          · {ticketTypeLabel(t.category)}
+                          · {ticketTypeLabel(t.category, intl)}
                         </span>
                       </span>
                     </SelectItem>
@@ -467,7 +551,12 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Type</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.type',
+                  defaultMessage: 'Type',
+                })}
+              </label>
               <Select value={type} onValueChange={(v) => setType(v as TicketType)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -475,7 +564,7 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                 <SelectContent>
                   {TICKET_TYPES.map((t) => (
                     <SelectItem key={t} value={t}>
-                      {ticketTypeLabel(t)}
+                      {ticketTypeLabel(t, intl)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -485,9 +574,17 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
-              Title
+              {intl.formatMessage({
+                id: 'admin.shell.createTicketDialog.titleLabel',
+                defaultMessage: 'Title',
+              })}
               {suggestedKeys.has('title') && (
-                <span className="ms-1 font-normal text-primary">✨ suggested</span>
+                <span className="ms-1 font-normal text-primary">
+                  {intl.formatMessage({
+                    id: 'admin.shell.createTicketDialog.suggested',
+                    defaultMessage: '✨ suggested',
+                  })}
+                </span>
               )}
             </label>
             <Input
@@ -495,12 +592,20 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               maxLength={300}
-              placeholder="Summarize the request…"
+              placeholder={intl.formatMessage({
+                id: 'admin.shell.createTicketDialog.summarizeTheRequest',
+                defaultMessage: 'Summarize the request…',
+              })}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Description</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.shell.createTicketDialog.description',
+                defaultMessage: 'Description',
+              })}
+            </label>
             <div onPaste={handleComposerPaste} onDrop={handleComposerDrop}>
               <RichTextEditor
                 value={descriptionJson ?? ''}
@@ -510,7 +615,10 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                 }}
                 features={CONVERSATION_EDITOR_FEATURES}
                 minHeight="120px"
-                placeholder="Add details (optional). This opens the ticket thread."
+                placeholder={intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.addDetailsOptionalThis',
+                  defaultMessage: 'Add details (optional). This opens the ticket thread.',
+                })}
               />
               <ComposerAttachmentTray
                 items={items}
@@ -532,7 +640,10 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                aria-label="Attach files"
+                aria-label={intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.attachFiles',
+                  defaultMessage: 'Attach files',
+                })}
               >
                 <PaperClipIcon className="h-4 w-4" />
               </button>
@@ -553,7 +664,15 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
-              {fromConversation ? 'Requester' : 'Requester (optional)'}
+              {fromConversation
+                ? intl.formatMessage({
+                    id: 'admin.shell.createTicketDialog.requester',
+                    defaultMessage: 'Requester',
+                  })
+                : intl.formatMessage({
+                    id: 'admin.shell.createTicketDialog.requesterOptional',
+                    defaultMessage: 'Requester (optional)',
+                  })}
             </label>
             {requester ? (
               <div className="flex items-center gap-2.5 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
@@ -564,10 +683,18 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-foreground">
-                    {requester.name || 'Unnamed user'}
+                    {requester.name ||
+                      intl.formatMessage({
+                        id: 'admin.shell.portalUserPicker.unnamed',
+                        defaultMessage: 'Unnamed user',
+                      })}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {realEmail(requester.email) ?? 'No email'}
+                    {realEmail(requester.email) ??
+                      intl.formatMessage({
+                        id: 'admin.shell.portalUserPicker.noEmail',
+                        defaultMessage: 'No email',
+                      })}
                   </span>
                 </span>
                 {/* The conversation's visitor is fixed — only the standalone
@@ -576,7 +703,10 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                   <button
                     type="button"
                     onClick={() => setRequester(null)}
-                    aria-label="Clear requester"
+                    aria-label={intl.formatMessage({
+                      id: 'admin.shell.createTicketDialog.clearRequester',
+                      defaultMessage: 'Clear requester',
+                    })}
                     className="text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <XMarkIcon className="size-4" />
@@ -585,7 +715,10 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
               </div>
             ) : fromConversation ? (
               <p className="rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
-                Anonymous visitor, no portal account on file.
+                {intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.anonymousVisitorNoPortal',
+                  defaultMessage: 'Anonymous visitor, no portal account on file.',
+                })}
               </p>
             ) : (
               <PortalUserPicker
@@ -606,14 +739,25 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
               onClick={undoSuggestions}
               disabled={create.isPending || linking}
             >
-              Undo suggestions
+              {intl.formatMessage({
+                id: 'admin.shell.createTicketDialog.undoSuggestions',
+                defaultMessage: 'Undo suggestions',
+              })}
             </Button>
           )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {intl.formatMessage({
+              id: 'admin.shell.createTicketDialog.cancel',
+              defaultMessage: 'Cancel',
+            })}
           </Button>
           <Button onClick={submit} disabled={!canCreate}>
-            {create.isPending || linking ? 'Creating…' : 'Create ticket'}
+            {create.isPending || linking
+              ? intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.creating',
+                  defaultMessage: 'Creating…',
+                })
+              : intl.formatMessage(CREATE_TICKET)}
           </Button>
         </DialogFooter>
       </DialogContent>

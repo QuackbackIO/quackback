@@ -7,6 +7,8 @@
  * targeting (channel/audience/send-window/frequency-cap) entirely: those are
  * trigger-time guards, and this is a human choosing to run the workflow now.
  */
+import type { MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -27,10 +29,19 @@ import {
 
 /** The friendly toast copy for each structured failure reason
  *  runWorkflowManuallyFn can return — see its own doc for what each means. */
-const FAILURE_TOASTS: Record<'locked' | 'nothing_to_do' | 'not_live', string> = {
-  locked: 'A customer-facing workflow is already active on this conversation.',
-  nothing_to_do: 'Workflow had nothing to do on this conversation.',
-  not_live: 'This workflow is no longer live.',
+const FAILURE_TOASTS: Record<'locked' | 'nothing_to_do' | 'not_live', MessageDescriptor> = {
+  locked: {
+    id: 'admin.inbox.workflowRunPicker.failure.locked',
+    defaultMessage: 'A customer-facing workflow is already active on this conversation.',
+  },
+  nothing_to_do: {
+    id: 'admin.inbox.workflowRunPicker.failure.nothingToDo',
+    defaultMessage: 'Workflow had nothing to do on this conversation.',
+  },
+  not_live: {
+    id: 'admin.inbox.workflowRunPicker.failure.notLive',
+    defaultMessage: 'This workflow is no longer live.',
+  },
 }
 
 export const WorkflowRunPicker = memo(function WorkflowRunPicker({
@@ -43,6 +54,7 @@ export const WorkflowRunPicker = memo(function WorkflowRunPicker({
   onApplied?: () => void
   disabled?: boolean
 }) {
+  const intl = useOptionalIntl()
   const [open, setOpen] = useState(false)
   const [running, setRunning] = useState(false)
   const { data } = useQuery(runnableWorkflowsQuery())
@@ -56,13 +68,23 @@ export const WorkflowRunPicker = memo(function WorkflowRunPicker({
       const result = await runWorkflowManuallyFn({ data: { workflowId, conversationId } })
       setOpen(false)
       if (result.ok) {
-        toast.success('Workflow started')
+        toast.success(
+          intl.formatMessage({
+            id: 'admin.inbox.workflowRunPicker.workflowStarted',
+            defaultMessage: 'Workflow started',
+          })
+        )
         onApplied?.()
       } else {
-        toast.error(FAILURE_TOASTS[result.reason])
+        toast.error(intl.formatMessage(FAILURE_TOASTS[result.reason]))
       }
     } catch {
-      toast.error('Failed to run workflow')
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.workflowRunPicker.failedToRunWorkflow',
+          defaultMessage: 'Failed to run workflow',
+        })
+      )
     } finally {
       setRunning(false)
     }
@@ -77,19 +99,37 @@ export const WorkflowRunPicker = memo(function WorkflowRunPicker({
               type="button"
               disabled={disabled || running}
               className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-              aria-label="Run a workflow"
+              aria-label={intl.formatMessage({
+                id: 'admin.inbox.workflowRunPicker.runAWorkflow',
+                defaultMessage: 'Run a workflow',
+              })}
             >
               <PlayIcon className="h-4 w-4" />
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Run a workflow</TooltipContent>
+        <TooltipContent>
+          {intl.formatMessage({
+            id: 'admin.inbox.workflowRunPicker.runAWorkflow',
+            defaultMessage: 'Run a workflow',
+          })}
+        </TooltipContent>
       </Tooltip>
       <PopoverContent align="start" className="w-80 p-0">
         <Command>
-          <CommandInput placeholder="Search workflows…" />
+          <CommandInput
+            placeholder={intl.formatMessage({
+              id: 'admin.inbox.workflowRunPicker.searchWorkflows',
+              defaultMessage: 'Search workflows…',
+            })}
+          />
           <CommandList>
-            <CommandEmpty>No workflows found.</CommandEmpty>
+            <CommandEmpty>
+              {intl.formatMessage({
+                id: 'admin.inbox.workflowRunPicker.noWorkflowsFound',
+                defaultMessage: 'No workflows found.',
+              })}
+            </CommandEmpty>
             {workflows.map((w) => (
               <CommandItem
                 key={w.id}
@@ -100,7 +140,10 @@ export const WorkflowRunPicker = memo(function WorkflowRunPicker({
                 <span className="truncate font-medium">{w.name}</span>
                 {w.class === 'customer_facing' && (
                   <Badge size="sm" variant="secondary">
-                    bot
+                    {intl.formatMessage({
+                      id: 'admin.inbox.workflowRunPicker.bot',
+                      defaultMessage: 'bot',
+                    })}
                   </Badge>
                 )}
               </CommandItem>
