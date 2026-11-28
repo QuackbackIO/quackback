@@ -17,6 +17,17 @@ import {
   type UpdateNotificationChannelInput,
   type RemoveNotificationChannelInput,
 } from '@/lib/server/functions/integrations'
+import {
+  addIntegrationDestinationFn,
+  reconnectIntegrationDestinationFn,
+  removeIntegrationDestinationFn,
+  setIntegrationDestinationConfigFn,
+  setIntegrationDestinationEnabledFn,
+} from '@/lib/server/functions/integration-destinations'
+import {
+  deleteIntegrationUserMappingFn,
+  upsertIntegrationUserMappingFn,
+} from '@/lib/server/functions/integration-user-mappings'
 
 /**
  * Mutation hook for updating integration config and event mappings
@@ -84,6 +95,105 @@ export function useRemoveNotificationChannel() {
   return useMutation({
     mutationFn: (input: RemoveNotificationChannelInput) =>
       removeNotificationChannelFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/**
+ * Register a destination's webhook again (the settings page's "Repair
+ * webhook"). The caller reports the outcome.
+ */
+export function useReconnectIntegrationDestination() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (destinationId: string) =>
+      reconnectIntegrationDestinationFn({ data: { destinationId } }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/** Start syncing one more destination (a GitHub repository). The caller reports the outcome. */
+export function useAddIntegrationDestination() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { integrationType: string; kind: string; externalId: string }) =>
+      addIntegrationDestinationFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/** Stop syncing a destination; its links and webhook go with it. */
+export function useRemoveIntegrationDestination() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (destinationId: string) =>
+      removeIntegrationDestinationFn({ data: { destinationId } }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/** Switch a destination on or off. */
+export function useSetIntegrationDestinationEnabled() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { destinationId: string; enabled: boolean }) =>
+      setIntegrationDestinationEnabledFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/** Patch a destination's settings (GitHub: which way it syncs). */
+export function useSetIntegrationDestinationConfig() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { destinationId: string; config: Record<string, unknown> }) =>
+      setIntegrationDestinationConfigFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/** Match an account on the provider (a GitHub user) to a teammate. The caller reports the outcome. */
+export function useUpsertIntegrationUserMapping() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: {
+      integrationType: string
+      externalUserId: string
+      externalLogin: string
+      externalDisplayName?: string | null
+      principalId: string
+    }) => upsertIntegrationUserMappingFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/** Remove an account's match to a teammate. */
+export function useDeleteIntegrationUserMapping() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { integrationType: string; mappingId: string }) =>
+      deleteIntegrationUserMappingFn({ data: input }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
     },

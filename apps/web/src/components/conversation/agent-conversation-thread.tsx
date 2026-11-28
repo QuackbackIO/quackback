@@ -174,6 +174,8 @@ import {
 import { InboxDetailPanel } from '@/components/admin/inbox/inbox-detail-panel'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { CreateTicketDialog } from '@/components/admin/inbox/create-ticket-dialog'
+import { TicketTitleEditor } from '@/components/admin/inbox/ticket-title-editor'
+import { useMessageFileChanges } from '@/components/conversation/message-file-actions'
 import { ConvertToPostDialog } from '@/components/admin/conversation/convert-to-post-dialog'
 import { EndConversationDialog } from '@/components/admin/conversation/end-conversation-dialog'
 import { AddParticipantDialog } from '@/components/conversation/add-participant-dialog'
@@ -1256,6 +1258,19 @@ export function AgentConversationThread({
     onError: () => toast.error('Failed to delete message'),
   })
 
+  // Add files to / remove a file from a sent message (same author rule as Edit).
+  const handleFileChange = useCallback(
+    (message: AgentConversationMessageDTO) => {
+      patchActiveMessage(message.id, () => message)
+      onChanged()
+    },
+    [onChanged, patchActiveMessage]
+  )
+  const { addFiles: handleAddFiles, removeFile: handleRemoveFile } = useMessageFileChanges({
+    upload,
+    onUpdated: handleFileChange,
+  })
+
   const handleEditMessage = useCallback(
     async (
       messageId: ConversationMessageId,
@@ -1912,6 +1927,8 @@ export function AgentConversationThread({
             canEdit={canEditAgentMessage(m, myPrincipalId, permissions)}
             canDelete={canDeleteAgentMessage(m, myPrincipalId, permissions)}
             onEdit={handleEditMessage}
+            onAddFiles={handleAddFiles}
+            onRemoveFile={handleRemoveFile}
             mentionItem={item}
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}
@@ -2150,7 +2167,7 @@ export function AgentConversationThread({
         <div className="flex min-w-[6rem] flex-1 items-center gap-2.5">
           {backButton}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{ticket.title}</p>
+            <TicketTitleEditor ticket={ticket} onChanged={onChanged} />
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span className="font-mono">{ticket.reference}</span>
               <TicketTypeBadge type={ticket.type} />
@@ -2514,6 +2531,11 @@ export function AgentConversationThread({
             open={addParticipantOpen}
             onOpenChange={setAddParticipantOpen}
             conversationId={conversationId}
+            sharedTicketNumber={
+              !isTicket && linkedTicketSummary && !isHiddenTicketLink(linkedTicketSummary)
+                ? linkedTicketSummary.number
+                : null
+            }
           />
           <CreateTicketDialog
             open={createTicketOpen}

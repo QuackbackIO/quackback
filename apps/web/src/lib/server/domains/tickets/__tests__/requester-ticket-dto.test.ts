@@ -120,12 +120,14 @@ const T2 = new Date('2026-01-03T00:00:00.000Z')
 const T3 = new Date('2026-01-04T00:00:00.000Z')
 
 /** The keys a requester may receive. Written out here, not imported, so a new
- *  key added to the DTO fails this suite until it is deliberately allowed. */
+ *  key added to the DTO fails this suite until it is deliberately allowed.
+ *  `dueAt` is the one shared due date, which the customer sees by design. */
 const REQUESTER_KEYS = [
   'assignee',
   'company',
   'createdAt',
   'customAttributes',
+  'dueAt',
   'id',
   'lastMessagePreview',
   'number',
@@ -299,6 +301,8 @@ describe.skipIf(!fixture.available)('requester ticket DTO and customer-visible t
     expect(Object.keys(dto!.assignee).sort()).toEqual(['displayName', 'principalId'])
     expect(dto!.assignee.principalId).toBe(agent.principalId)
     expect(dto!.customAttributes).toEqual({ order_number: 'A-1001' })
+    // The shared due date is the customer's too, as an ISO string.
+    expect(dto!.dueAt).toBe(T3.toISOString())
 
     // An attribute envelope stored under a visible field's key is an
     // attribute write, not the customer's answer: it is left out.

@@ -1,9 +1,15 @@
-import { and, eq, sql, integrationSyncOperations as operations } from '@/lib/server/db'
+import { and, eq, sql, type db, integrationSyncOperations as operations } from '@/lib/server/db'
 import type { SyncOperation } from './types'
-import type { SyncTransaction } from './ledger'
 
-/** Called under a source lock, inside the same transaction as the local mutation. */
-export async function hasNewerInbound(tx: SyncTransaction, op: SyncOperation): Promise<boolean> {
+/**
+ * Called under a source lock, inside the same transaction as the local
+ * mutation, or, for a change applied through a service (inbound assignees),
+ * while the claim holds the remote item.
+ */
+export async function hasNewerInbound(
+  tx: Pick<typeof db, 'select'>,
+  op: SyncOperation
+): Promise<boolean> {
   if (!op.sourceRevision) return false
   const [newer] = await tx
     .select({ id: operations.id })
