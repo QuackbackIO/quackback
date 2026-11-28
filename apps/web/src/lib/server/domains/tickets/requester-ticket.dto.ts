@@ -190,9 +190,26 @@ export function toRequesterTicketDTO(
       ? { id: row.companyId, name: ctx.companies.get(row.companyId) ?? 'Unknown' }
       : null,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    // The shared due date: the customer sees the same date the team does.
+    dueAt: row.dueAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: (ctx.requesterUpdatedAt.get(row.id) ?? row.createdAt).toISOString(),
     customAttributes: customerVisibleAnswers(row, ticketType),
     lastMessagePreview: ctx.activity.get(row.id)?.lastMessagePreview ?? row.title,
+  }
+}
+
+/**
+ * The view of a customer a ticket was shared with (ticket sharing): the
+ * requester's view without what is the requester's or the team's business:
+ * the requester's company, who on the team has it, and the answers the
+ * requester gave on the ticket form.
+ */
+export function toSharedTicketDTO(dto: RequesterTicketDTO): RequesterTicketDTO {
+  return {
+    ...dto,
+    assignee: { principalId: null, displayName: null },
+    company: null,
+    customAttributes: {},
   }
 }

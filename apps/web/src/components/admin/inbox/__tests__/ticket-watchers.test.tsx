@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import type { PrincipalId, TicketId } from '@quackback/ids'
 
 // ticketQueries imports the whole ticket fn module; stub it so no server code loads.
@@ -22,6 +23,13 @@ vi.mock('@/lib/client/mutations/inbox', () => {
 })
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
   useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
+}))
+// The watcher list is manageable with ticket.assign.
+vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/hooks/use-root-context')>()),
+  useHasPermission: () => true,
+  usePermissions: () => new Set(),
 }))
 
 import { TicketWatchControl } from '../ticket-controls'
@@ -37,6 +45,7 @@ function watcher(id: string, displayName: string) {
     displayName,
     avatarUrl: null,
     role: 'member',
+    isTeamMember: true,
   }
 }
 
@@ -52,9 +61,11 @@ describe('TicketWatchControl watcher stack', () => {
       watcher('principal_3', 'Dev Ortiz'),
     ])
     render(
-      <QueryClientProvider client={qc}>
-        <TicketWatchControl ticketId={TICKET} />
-      </QueryClientProvider>
+      <IntlProvider locale="en" messages={{}}>
+        <QueryClientProvider client={qc}>
+          <TicketWatchControl ticketId={TICKET} />
+        </QueryClientProvider>
+      </IntlProvider>
     )
 
     const stack = screen.getByRole('button', { name: 'Manage watchers' })

@@ -39,6 +39,17 @@ export interface InboundWebhookHandler {
   handshake?(request: Request): Response | null
 
   /**
+   * For a provider with `destination.multiple`: which destination an incoming
+   * delivery claims to come from, read from the unverified body only to pick
+   * the secret to verify it with. Null when the body names none. Nothing is
+   * trusted or written until the signature checks out with that secret.
+   */
+  destinationOf?(
+    body: string,
+    headers: Headers
+  ): { externalId: string; externalKey?: string } | null
+
+  /**
    * Verify the webhook signature/authenticity.
    * Returns `true` if valid, or a `Response` for handshake challenges or auth failures.
    */

@@ -29,9 +29,13 @@ import {
   waitForActivity,
 } from '../../product/feedback-admin-posts'
 
-/** Open the Voters dialog from the sidebar's avatar stack. */
+/** Open the Voters dialog from the sidebar's avatar stack (not the Subscribers stack beside it). */
 async function openVoters(page: Page, count: number) {
-  await page.getByRole('dialog').first().locator('button[class*="-space-x-2"]').click()
+  await page
+    .getByRole('dialog')
+    .first()
+    .locator('button[class*="-space-x-2"]:not([aria-label="Subscribers"])')
+    .click()
   const voters = page.getByRole('dialog', { name: `Voters (${count})` })
   await expect(voters).toBeVisible()
   return voters

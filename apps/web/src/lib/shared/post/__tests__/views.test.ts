@@ -26,6 +26,7 @@ describe('postViewFiltersSchema', () => {
       minVotes: 5,
       minComments: 2,
       hasDuplicates: true,
+      following: true,
       showDeleted: true,
       sort: 'votes',
       dateFrom: '2026-01-01',
@@ -93,5 +94,13 @@ describe('postViewFiltersToInboxFilters', () => {
 
   it('restores an empty view to empty inbox filters', () => {
     expect(postViewFiltersToInboxFilters({})).toEqual({})
+  })
+})
+
+describe('the following filter', () => {
+  it('round-trips through a saved view, and drops out when off', () => {
+    expect(inboxFiltersToPostViewFilters({ following: true })).toEqual({ following: true })
+    expect(inboxFiltersToPostViewFilters({ following: false })).toEqual({})
+    expect(postViewFiltersToInboxFilters({ following: true })).toEqual({ following: true })
   })
 })

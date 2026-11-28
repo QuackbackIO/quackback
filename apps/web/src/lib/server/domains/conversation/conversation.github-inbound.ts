@@ -4,12 +4,17 @@
  * Tracker-created issues stay on post/ticket links and never spawn a channel
  * thread. Issue closed/reopened syncs conversation status; a comment on a
  * closed issue does not reopen it. Comment edits and deletes follow the issue,
- * and the open inbox thread updates over SSE.
+ * and the open inbox thread updates over SSE. Only repositories that bring
+ * their issues in (`inboundMode: 'conversations'`) are ingested.
  */
 import { db, eq, integrations, conversations, conversationMessages } from '@/lib/server/db'
 import type { ChannelAccountId, ConversationId, IntegrationId } from '@quackback/ids'
 import { githubLoginsMatch, githubThreadKey } from '@/lib/server/domains/channels/github-thread'
-import { getLiveGitHubConnectionAccount } from '@/lib/server/domains/channel-accounts/github-connection'
+import {
+  getLiveGitHubConnectionAccount,
+  githubRepositoryIngests,
+} from '@/lib/server/domains/channel-accounts/github-connection'
+import type { IntegrationDestination } from '@/lib/server/integrations/destinations'
 import { logger } from '@/lib/server/logger'
 import { lookupChannelThread } from './conversation.inbound-resolve'
 import { channelCloseSystemCopy } from '@/lib/shared/channels'
@@ -45,9 +50,17 @@ export async function ingestGitHubChannelEvent(opts: {
   body: string
   eventName: string | null
   integration: IntegrationRow
+  /**
+   * The repository the signed delivery was routed to, when the webhook is per
+   * repository. Absent for a legacy delivery from the connection's default
+   * repository before it had a row; that one is ingested as it always was.
+   */
+  destination?: Pick<IntegrationDestination, 'externalId' | 'config' | 'enabled'>
 }): Promise<void> {
   const account = await getLiveGitHubConnectionAccount()
   if (!account) return
+  // Each repository chooses whether its issues come into the inbox.
+  if (opts.destination && !githubRepositoryIngests(opts.destination)) return
 
   let payload: GitHubPayload
   try {
@@ -63,6 +76,7 @@ export async function ingestGitHubChannelEvent(opts: {
   const botLogin = typeof config.username === 'string' ? config.username : undefined
   const ownerRepo =
     payload.repository?.full_name ||
+    opts.destination?.externalId ||
     (typeof config.channelId === 'string' ? config.channelId : null)
   const issue = payload.issue
   if (!ownerRepo || !issue?.number) return
@@ -115,7 +129,12 @@ export async function ingestGitHubChannelEvent(opts: {
 
   let conversationId = await lookupChannelThread(channelAccountId, threadKey)
   if (!conversationId) {
-    const trackerOwned = await isTrackerOwnedIssue(issueNumber, botLogin, issue.user?.login)
+    const trackerOwned = await isTrackerOwnedIssue(
+      ownerRepo,
+      issueNumber,
+      botLogin,
+      issue.user?.login
+    )
     if (trackerOwned) return
     conversationId = await createGitHubConversation({
       channelAccountId,
