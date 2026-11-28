@@ -22,6 +22,7 @@ export type InboxActionId =
   | 'assign_team'
   | 'snooze'
   | 'priority'
+  | 'due'
   | 'close'
   | 'reopen'
   | 'create_ticket'
@@ -38,7 +39,7 @@ export type InboxActionGroup = 'Reply' | 'Assign' | 'Status' | 'Navigate'
  * - `active`    — needs a focused/open conversation (reply, note, macro, next, prev).
  * - `selection` — needs a multi-select selection (toggle_select).
  * - `both`      — runs on the active conversation OR the current selection
- *                 (assign, snooze, priority, close/reopen, …).
+ *                 (assign, snooze, priority, due date, close/reopen, …).
  */
 export type InboxActionScope = 'active' | 'selection' | 'both'
 
@@ -84,6 +85,9 @@ export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
   { id: 'assign_team', label: 'Assign to team', group: 'Assign', scope: 'both', shortcut: 't' },
   { id: 'snooze', label: 'Snooze', group: 'Status', scope: 'both', shortcut: 's' },
   { id: 'priority', label: 'Set priority', group: 'Status', scope: 'both', shortcut: 'p' },
+  // Due date lives on tickets: additionally gated on `hasDueTarget` (the
+  // target is a ticket, or a conversation with a linked customer ticket).
+  { id: 'due', label: 'Set due date', group: 'Status', scope: 'both', shortcut: 'd' },
   { id: 'close', label: 'Close conversation', group: 'Status', scope: 'both', shortcut: 'e' },
   { id: 'reopen', label: 'Reopen conversation', group: 'Status', scope: 'both', shortcut: 'u' },
   {
@@ -140,6 +144,12 @@ export interface InboxActionContext {
    * absent the `copilot` action is disabled.
    */
   copilotAvailable?: boolean
+  /**
+   * True when the target (the selection, or the single open item) resolves
+   * to at least one ticket: a ticket row, or a conversation with a linked
+   * customer ticket. Optional; when absent the `due` action is disabled.
+   */
+  hasDueTarget?: boolean
 }
 
 /**
@@ -153,7 +163,8 @@ export interface InboxActionContext {
  * condition, navigates to the linked ticket instead). Copilot additionally
  * requires the tab to actually exist for this viewer/viewport
  * (`copilotAvailable`), so the palette row and the `q` key can never point at
- * a panel that isn't rendered. Pure; shared by the palette and unit-tested
+ * a panel that isn't rendered. The due date needs a ticket to land on
+ * (`hasDueTarget`). Pure; shared by the palette and unit-tested
  * directly.
  */
 export function isInboxActionEnabled(
@@ -167,6 +178,7 @@ export function isInboxActionEnabled(
   if (descriptor.id === 'create_ticket') return !ctx.hasTicketTarget && !ctx.hasLinkedTicket
   if (descriptor.id === 'open_ticket') return ctx.hasLinkedTicket === true
   if (descriptor.id === 'copilot' && !ctx.copilotAvailable) return false
+  if (descriptor.id === 'due' && !ctx.hasDueTarget) return false
   switch (descriptor.scope) {
     case 'active':
       return ctx.hasActiveConversation

@@ -114,7 +114,12 @@ import {
   notifyConversationStarted,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
-import { assertMessageParentVisible, permissionParentOf } from './message-parent'
+import { hasParticipantThreadAccess, markParticipantRead } from './conversation-participant.service'
+import {
+  assertMessageParentVisible,
+  permissionParentOf,
+  type MessageParent,
+} from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   conversationToDTO,
@@ -178,6 +183,61 @@ function normalizeEmail(raw: string | undefined): string | undefined {
   const email = raw?.trim().toLowerCase() ?? ''
   if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined
   return email
+}
+
+/**
+ * A conversation the actor may see (`assertConversationVisible`: its visitor,
+ * or a teammate whose scope admits it), or one whose paired customer ticket
+ * was shared with them (ticket sharing). Anyone else gets NotFound, never
+ * Forbidden. Only the customer-facing paths a shared customer uses read
+ * through here; every agent path keeps `assertConversationVisible`.
+ */
+export async function assertConversationViewable(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<Conversation> {
+  try {
+    return await assertConversationVisible(conversationId, actor)
+  } catch (err) {
+    if (!(err instanceof NotFoundError)) throw err
+    const shared = await sharedTicketConversation(conversationId, actor)
+    if (!shared) throw err
+    return shared
+  }
+}
+
+/**
+ * The conversation when the actor reaches it as a customer its paired ticket
+ * was shared with, else null. Looked up only after the visibility check said
+ * no, so the common paths pay nothing for it.
+ */
+async function sharedTicketConversation(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<Conversation | null> {
+  if (!actor.principalId || actor.principalType === 'service') return null
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  if (!row || !(await isSharedTicketParticipant(row, actor))) return null
+  return row
+}
+
+/**
+ * Whether the actor reaches this conversation as a customer its paired ticket
+ * was shared with, rather than as its visitor or a teammate (ticket sharing,
+ * conversation-participant.service's `hasParticipantThreadAccess`).
+ */
+export async function isSharedTicketParticipant(
+  conversation: Pick<Conversation, 'id' | 'visitorPrincipalId'>,
+  actor: Actor,
+  executor?: Parameters<typeof hasParticipantThreadAccess>[2]
+): Promise<boolean> {
+  if (!actor.principalId || actor.principalType === 'service') return false
+  if (actor.principalId === conversation.visitorPrincipalId) return false
+  return hasParticipantThreadAccess(conversation.id, actor.principalId, executor)
 }
 
 /**
@@ -400,6 +460,7 @@ export async function sendVisitorMessage(
       )
 
   let created = false
+  let writesAsParticipant = false
   // The conversation's status BEFORE this message, so the assistant trigger can
   // tell a genuinely reopened thread from one a human deliberately closed.
   let priorStatus: ConversationStatus | null = null
@@ -417,10 +478,26 @@ export async function sendVisitorMessage(
       if (!existing) {
         throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
       }
-      const decision = canSendVisitorMessage(actor, existing)
+      // A customer the paired ticket was shared with writes on the requester's
+      // thread as themselves (ticket sharing): checked only when ownership
+      // says no, inside the transaction so a share removed a moment ago no
+      // longer counts. They reply; they never answer the requester's
+      // structured blocks, and their message moves none of the requester's own
+      // state (read watermark, channel, pre-chat email).
+      if (!canSendVisitorMessage(actor, existing).allowed) {
+        writesAsParticipant = await isSharedTicketParticipant(existing, actor, tx)
+      }
+      if (writesAsParticipant && resolvedBlockReply) {
+        throw new ForbiddenError(
+          'FORBIDDEN',
+          'Only the person who opened this ticket can answer this'
+        )
+      }
+      const access = { participant: writesAsParticipant }
+      const decision = canSendVisitorMessage(actor, existing, access)
       if (!decision.allowed) {
         // Hide existence from non-owners; surface the real reason otherwise.
-        if (!mayExplainVisitorRefusal(actor, existing).allowed) {
+        if (!mayExplainVisitorRefusal(actor, existing, access).allowed) {
           throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
         }
         throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -493,7 +570,7 @@ export async function sendVisitorMessage(
     // Capture a pre-chat email once, only when none is recorded yet — a later
     // send can't overwrite an address the visitor already gave.
     const captureEmail =
-      !conversation.visitorEmail && input.visitorEmail
+      !writesAsParticipant && !conversation.visitorEmail && input.visitorEmail
         ? normalizeEmail(input.visitorEmail)
         : undefined
 
@@ -518,7 +595,8 @@ export async function sendVisitorMessage(
         lastMessageAt: message.createdAt,
         lastMessagePreview: preview(content || fallbackLabel, attachments),
         // Visitor is active, so their side is read; a reply surfaces the thread.
-        visitorLastReadAt: message.createdAt,
+        // A participant's reply moves their own watermark instead (below).
+        ...(writesAsParticipant ? {} : { visitorLastReadAt: message.createdAt }),
         status: visitorNextStatus,
         // A customer message always wakes a snoozed thread — clear the timer.
         snoozedUntil: null,
@@ -553,10 +631,17 @@ export async function sendVisitorMessage(
         // mailbox as a side channel and silently drops replies. Bidirectional on
         // purpose: moving back into the widget must restore the presence gate,
         // otherwise they would get an in-app message AND a redundant email.
-        channel: channelFromVisitorTransport(messageMetadata?.source),
+        // A participant's transport says nothing about the requester's, so
+        // their reply leaves the channel as it is.
+        channel: writesAsParticipant
+          ? conversation.channel
+          : channelFromVisitorTransport(messageMetadata?.source),
       })
       .where(eq(conversations.id, conversation.id))
       .returning()
+    if (writesAsParticipant) {
+      await markParticipantRead(conversation.id, author.principalId, message.createdAt, tx)
+    }
 
     // Also stash the captured email at the principal level so it survives across
     // conversations (reusable contact). Don't overwrite an existing address.
@@ -2092,8 +2177,22 @@ export async function deleteConversationMessage(
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
   // A parent the actor cannot see answers exactly like a missing message, also
-  // for the author of the message, before any other refusal.
-  const parent = await assertMessageParentVisible(message, actor)
+  // for the author of the message, before any other refusal. A customer the
+  // paired ticket was shared with reaches the conversation as a participant,
+  // and may delete only their own message there (canDeleteMessage).
+  let parent: MessageParent
+  let access = { participant: false }
+  try {
+    parent = await assertMessageParentVisible(message, actor)
+  } catch (err) {
+    const shared =
+      err instanceof NotFoundError && message.conversationId
+        ? await sharedTicketConversation(message.conversationId as ConversationId, actor)
+        : null
+    if (!shared) throw err
+    parent = { kind: 'conversation', conversationId: shared.id, conversation: shared }
+    access = { participant: true }
+  }
 
   const authored = {
     senderType: message.senderType,
@@ -2145,7 +2244,7 @@ export async function deleteConversationMessage(
   }
 
   const { conversationId, conversation } = parent
-  const decision = canDeleteMessage(actor, authored, conversation)
+  const decision = canDeleteMessage(actor, authored, conversation, access)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
   if (
@@ -2227,7 +2326,7 @@ export async function recordCsat(
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     throw new ValidationError('VALIDATION_ERROR', 'Rating must be between 1 and 5')
   }
-  const conversation = await assertConversationVisible(conversationId, actor)
+  const conversation = await assertConversationViewable(conversationId, actor)
   // Only the visitor who owns the conversation can rate it.
   if (actor.principalId !== conversation.visitorPrincipalId) {
     throw new ForbiddenError('FORBIDDEN', 'Only the visitor can rate this conversation')
@@ -2328,8 +2427,9 @@ function conversationSideFor(conversation: Conversation, actor: Actor): Conversa
 /** Broadcast an ephemeral typing signal (never persisted). */
 export async function signalTyping(conversationId: ConversationId, actor: Actor): Promise<void> {
   // Same access gate as reading the thread — prevents spoofing typing into a
-  // conversation the actor can't see.
-  const conversation = await assertConversationVisible(conversationId, actor)
+  // conversation the actor can't see. A customer the ticket was shared with
+  // types on it too.
+  const conversation = await assertConversationViewable(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
   // The typist id rides along so the stream layer can drop the typist's own echo.
   publishTyping(
@@ -2347,9 +2447,23 @@ export async function markConversationRead(
   actor: Actor,
   opts?: SystemCascadeOptions
 ): Promise<void> {
-  const conversation = await loadConversationForWrite(conversationId, actor, opts)
-  const side = conversationSideFor(conversation, actor)
+  // A customer the ticket was shared with marks it read too, on their own
+  // watermark below.
+  const conversation = opts?.systemCascade
+    ? await loadConversationForWrite(conversationId, actor, opts)
+    : await assertConversationViewable(conversationId, actor)
   const now = new Date()
+  const side = conversationSideFor(conversation, actor)
+  // A customer the ticket was shared with reads on their own watermark: the
+  // requester's unread state and read receipt stay the requester's.
+  if (
+    side === 'visitor' &&
+    actor.principalId !== conversation.visitorPrincipalId &&
+    (await isSharedTicketParticipant(conversation, actor))
+  ) {
+    await markParticipantRead(conversation.id, actor.principalId!, now)
+    return
+  }
   await db
     .update(conversations)
     .set(side === 'agent' ? { agentLastReadAt: now } : { visitorLastReadAt: now })
