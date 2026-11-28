@@ -41,11 +41,14 @@ export function Disclosure({
       <button
         type="button"
         onClick={toggle}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-sm font-medium"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-start text-sm font-medium"
         aria-expanded={open}
       >
         <ChevronRightIcon
-          className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-90')}
+          className={cn(
+            'rtl:-scale-x-100 size-3.5 text-muted-foreground transition-transform',
+            open && 'rotate-90 rtl:-rotate-90'
+          )}
         />
         <span className="flex-1">{title}</span>
         {!open && summary && (

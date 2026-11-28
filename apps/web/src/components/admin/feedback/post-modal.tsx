@@ -360,11 +360,11 @@ export const PostModalContent = memo(function PostModalContent({
       >
         <ManagePostActions actions={manageActions} showLabel={false} className="lg:hidden" />
         {navigationContext.total > 0 && (
-          <div className="hidden sm:flex items-center gap-0.5 mr-2 px-2 py-1 rounded-lg bg-muted/30">
+          <div className="hidden sm:flex items-center gap-0.5 me-2 px-2 py-1 rounded-lg bg-muted/30">
             <span className="text-xs tabular-nums text-muted-foreground font-medium px-1">
               {navigationContext.position} / {navigationContext.total}
             </span>
-            <div className="flex items-center ml-1 border-l border-border/40 pl-1">
+            <div className="flex items-center ms-1 border-s border-border/40 ps-1">
               <Button
                 type="button"
                 variant="ghost"
@@ -375,7 +375,7 @@ export const PostModalContent = memo(function PostModalContent({
                 disabled={!navigationContext.prevId}
                 className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
               >
-                <ChevronLeftIcon className="h-3.5 w-3.5" />
+                <ChevronLeftIcon className="rtl:-scale-x-100 h-3.5 w-3.5" />
               </Button>
               <Button
                 type="button"
@@ -387,7 +387,7 @@ export const PostModalContent = memo(function PostModalContent({
                 disabled={!navigationContext.nextId}
                 className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
               >
-                <ChevronRightIcon className="h-3.5 w-3.5" />
+                <ChevronRightIcon className="rtl:-scale-x-100 h-3.5 w-3.5" />
               </Button>
             </div>
           </div>

@@ -120,7 +120,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
         {/* Post content layout */}
         <div className="flex">
           {/* Vote sidebar */}
-          <div className="flex flex-col items-center justify-start py-6 px-4 border-r !border-r-[rgba(0,0,0,0.05)] dark:!border-r-[rgba(255,255,255,0.06)] bg-muted/10">
+          <div className="flex flex-col items-center justify-start py-6 px-4 border-e !border-e-[rgba(0,0,0,0.05)] dark:!border-e-[rgba(255,255,255,0.06)] bg-muted/10">
             <VoteButton postId={postId} voteCount={post.voteCount} />
           </div>
 

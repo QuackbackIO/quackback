@@ -27,7 +27,7 @@ export function SidebarContainer({ children, className }: SidebarContainerProps)
   return (
     <aside
       className={cn(
-        'hidden lg:block w-72 shrink-0 border-l border-border/30 bg-muted/5',
+        'hidden lg:block w-72 shrink-0 border-s border-border/30 bg-muted/5',
         'animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards',
         className
       )}
@@ -43,7 +43,7 @@ export function SidebarContainer({ children, className }: SidebarContainerProps)
  */
 export function SidebarSkeleton() {
   return (
-    <aside className="hidden lg:block w-72 shrink-0 border-l border-border/30 bg-muted/5 p-4 space-y-4">
+    <aside className="hidden lg:block w-72 shrink-0 border-s border-border/30 bg-muted/5 p-4 space-y-4">
       <Skeleton className="h-8 w-full rounded" />
       <Skeleton className="h-8 w-full rounded" />
       <Skeleton className="h-24 w-full rounded" />
@@ -152,7 +152,7 @@ export function StatusSelect({ value, options, onChange, disabled = false }: Sta
               className="h-2 w-2 rounded-full shrink-0"
               style={{ backgroundColor: option.color }}
             />
-            <span className="flex-1 text-left truncate">{option.label}</span>
+            <span className="flex-1 text-start truncate">{option.label}</span>
             {value === option.value && <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />}
           </button>
         ))}
@@ -208,7 +208,7 @@ export function BadgeList<T extends BadgeItem>({
           type="button"
           onClick={() => onRemove(item.id)}
           className={cn(
-            'group inline-flex items-center gap-0.5 pl-1.5 pr-1 py-0.5',
+            'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
             'rounded-md text-[11px] font-medium border',
             'transition-all duration-150',
             badgeClasses

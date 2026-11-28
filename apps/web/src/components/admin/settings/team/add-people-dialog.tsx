@@ -293,7 +293,7 @@ function AddPeopleForm({
       {chips.length > 0 && !over && (
         <ul
           aria-label="What happens"
-          className="list-disc space-y-1 pl-[18px] text-[13px] leading-normal text-muted-foreground"
+          className="list-disc space-y-1 ps-[18px] text-[13px] leading-normal text-muted-foreground"
         >
           {summarySentences(chips, role).map((line) => (
             <li key={line}>{line}</li>
@@ -394,7 +394,7 @@ function SeatMeter({
             </span>
           </>
         ) : (
-          <span className="ml-auto font-mono tabular-nums">{check.needed} used</span>
+          <span className="ms-auto font-mono tabular-nums">{check.needed} used</span>
         )}
       </div>
       {over ? (
@@ -862,7 +862,7 @@ function Chip({ chip, onRemove }: { chip: AddChip; onRemove: () => void }) {
       {chip.kind === 'person' ? (
         <Avatar src={chip.avatarUrl} name={chip.name} className="size-5 text-[11px]" />
       ) : (
-        <EnvelopeIcon className="ml-0.5 size-4 text-muted-foreground" aria-hidden />
+        <EnvelopeIcon className="ms-0.5 size-4 text-muted-foreground" aria-hidden />
       )}
       <span className="truncate">{label}</span>
       {chip.kind === 'email' && <span className="text-[11px] text-muted-foreground">invite</span>}

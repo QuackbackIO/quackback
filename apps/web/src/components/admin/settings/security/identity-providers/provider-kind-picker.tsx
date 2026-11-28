@@ -40,7 +40,7 @@ export function ProviderKindPicker({
           id={`idp-kind-${k}`}
           disabled={disabled}
           className={cn(
-            'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
+            'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-start shadow-sm outline-none transition-all',
             'hover:border-border hover:bg-accent/40',
             'focus-visible:ring-2 focus-visible:ring-ring/50',
             'data-checked:border-primary data-checked:ring-2 data-checked:ring-primary/30',

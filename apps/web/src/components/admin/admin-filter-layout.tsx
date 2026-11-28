@@ -59,14 +59,14 @@ export function AdminFilterLayout({
       </aside>
 
       {/* Mobile filter button */}
-      <div className="lg:hidden fixed bottom-4 left-4 z-50">
+      <div className="lg:hidden fixed bottom-4 start-4 z-50">
         <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
           <SheetTrigger asChild>
             <Button size="lg">
-              <FunnelIcon className="h-4 w-4 mr-2" />
+              <FunnelIcon className="h-4 w-4 me-2" />
               Filters
               {hasActiveFilters && (
-                <span className="ml-2 h-2 w-2 rounded-full bg-primary-foreground" />
+                <span className="ms-2 h-2 w-2 rounded-full bg-primary-foreground" />
               )}
             </Button>
           </SheetTrigger>

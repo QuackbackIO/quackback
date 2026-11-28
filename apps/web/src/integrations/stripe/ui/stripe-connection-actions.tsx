@@ -62,7 +62,7 @@ export function StripeConnectionActions({
         >
           {disconnecting ? (
             <>
-              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+              <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
               Disconnecting...
             </>
           ) : (
@@ -115,7 +115,7 @@ export function StripeConnectionActions({
           <Button onClick={handleSave} disabled={saving || !key.trim()}>
             {saving ? (
               <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
                 Saving...
               </>
             ) : (

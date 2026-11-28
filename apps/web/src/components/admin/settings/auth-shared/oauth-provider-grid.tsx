@@ -53,13 +53,13 @@ export function OAuthProviderGrid({
 
   return (
     <div>
-      <div className="relative mb-3 ml-auto w-48">
-        <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <div className="relative mb-3 ms-auto w-48">
+        <MagnifyingGlassIcon className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Filter providers…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-8 pl-8 text-sm"
+          className="h-8 ps-8 text-sm"
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -91,7 +91,7 @@ export function OAuthProviderGrid({
                 type="button"
                 aria-label={`Configure ${provider.name}`}
                 onClick={() => onConfigure(provider)}
-                className="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-3 text-left transition-colors hover:bg-muted/40"
+                className="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-3 text-start transition-colors hover:bg-muted/40"
               >
                 {icon}
                 <p className="min-w-0 flex-1 truncate text-sm font-medium">{provider.name}</p>

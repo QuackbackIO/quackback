@@ -386,7 +386,7 @@ export default function FileViewer({
         })}
         onClick={() => go(-1)}
       >
-        <ChevronLeftIcon className="size-[17px]" />
+        <ChevronLeftIcon className="rtl:-scale-x-100 size-[17px]" />
       </ToolButton>
       <span
         className={cn(
@@ -406,7 +406,7 @@ export default function FileViewer({
         })}
         onClick={() => go(1)}
       >
-        <ChevronRightIcon className="size-[17px]" />
+        <ChevronRightIcon className="rtl:-scale-x-100 size-[17px]" />
       </ToolButton>
     </>
   )
@@ -440,7 +440,7 @@ export default function FileViewer({
         className={cn(
           'flex flex-col gap-0 overflow-hidden bg-background p-0 text-foreground',
           compact
-            ? 'top-0 left-0 h-full w-full max-w-none translate-x-0 translate-y-0 border-0 shadow-none [border-radius:0]'
+            ? 'top-0 start-0 h-full w-full max-w-none translate-x-0 translate-y-0 border-0 shadow-none [border-radius:0]'
             : 'h-[min(88vh,860px)] w-[92vw] max-w-[1240px] [border-radius:12px] max-sm:h-dvh max-sm:w-full max-sm:max-w-none max-sm:border-0 max-sm:[border-radius:0]'
         )}
       >
@@ -455,7 +455,7 @@ export default function FileViewer({
               label={intl.formatMessage({ id: 'files.viewer.back', defaultMessage: 'Back' })}
               onClick={onClose}
             >
-              <ArrowLeftIcon className="size-[17px]" />
+              <ArrowLeftIcon className="rtl:-scale-x-100 size-[17px]" />
             </ToolButton>
           ) : (
             <FileBadge name={file.name} family={file.family} />
@@ -472,7 +472,7 @@ export default function FileViewer({
                     onClose()
                     onJumpToMessage?.(file.messageId!)
                   }}
-                  className="truncate text-left text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  className="truncate text-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 >
                   {subLine}
                 </button>
@@ -566,7 +566,7 @@ export default function FileViewer({
               disabled={toolbar.page.current <= 1}
               onClick={() => toolbar.page?.go(toolbar.page.current - 1)}
             >
-              <ChevronLeftIcon className="size-[17px]" />
+              <ChevronLeftIcon className="rtl:-scale-x-100 size-[17px]" />
             </ToolButton>
             {intl.formatMessage(
               { id: 'files.viewer.page', defaultMessage: 'Page {current} of {total}' },
@@ -580,7 +580,7 @@ export default function FileViewer({
               disabled={toolbar.page.current >= toolbar.page.total}
               onClick={() => toolbar.page?.go(toolbar.page.current + 1)}
             >
-              <ChevronRightIcon className="size-[17px]" />
+              <ChevronRightIcon className="rtl:-scale-x-100 size-[17px]" />
             </ToolButton>
           </div>
         )}

@@ -71,7 +71,7 @@ export function NtfyConnectionActions({ integrationId, isConnected }: NtfyConnec
         >
           {disconnecting ? (
             <>
-              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+              <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
               Disconnecting...
             </>
           ) : (
@@ -128,7 +128,7 @@ export function NtfyConnectionActions({ integrationId, isConnected }: NtfyConnec
         <div className="flex flex-col gap-2">
           <Label htmlFor="ntfy-token" className="text-sm">
             Access token
-            <span className="ml-1 text-muted-foreground font-normal">(optional)</span>
+            <span className="ms-1 text-muted-foreground font-normal">(optional)</span>
           </Label>
           <Input
             id="ntfy-token"
@@ -146,7 +146,7 @@ export function NtfyConnectionActions({ integrationId, isConnected }: NtfyConnec
         <Button onClick={handleSave} disabled={saving || !url.trim()} className="self-start">
           {saving ? (
             <>
-              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+              <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
               Saving...
             </>
           ) : (

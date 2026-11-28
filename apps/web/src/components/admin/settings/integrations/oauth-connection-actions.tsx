@@ -190,7 +190,7 @@ export function OAuthConnectionActions({
           <Button size="sm" onClick={handleConnect} disabled={connecting}>
             {connecting ? (
               <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
                 Connecting…
               </>
             ) : (
@@ -209,7 +209,7 @@ export function OAuthConnectionActions({
             >
               {disconnecting ? (
                 <>
-                  <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                  <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
                   Disconnecting…
                 </>
               ) : (

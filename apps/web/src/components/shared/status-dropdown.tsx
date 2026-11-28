@@ -90,7 +90,7 @@ export function StatusDropdown({
               className="h-2 w-2 rounded-full shrink-0"
               style={{ backgroundColor: status.color }}
             />
-            <span className="flex-1 text-left truncate">{status.name}</span>
+            <span className="flex-1 text-start truncate">{status.name}</span>
             {status.id === currentStatus?.id && (
               <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
             )}

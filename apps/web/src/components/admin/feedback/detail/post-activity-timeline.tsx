@@ -156,7 +156,7 @@ const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
         <span className="text-xs text-muted-foreground">
           {from && (
             <span
-              className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium mr-1"
+              className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium me-1"
               style={{
                 backgroundColor: `${(m.fromColor as string) ?? '#888'}20`,
                 color: (m.fromColor as string) ?? '#888',
@@ -168,7 +168,7 @@ const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
           <span className="mx-0.5">&rarr;</span>
           {to && (
             <span
-              className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium ml-1"
+              className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium ms-1"
               style={{
                 backgroundColor: `${(m.toColor as string) ?? '#888'}20`,
                 color: (m.toColor as string) ?? '#888',

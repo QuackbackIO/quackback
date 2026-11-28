@@ -91,7 +91,7 @@ export function ZendeskConnectionActions({
             <Button onClick={handleConnect} disabled={connecting}>
               {connecting ? (
                 <>
-                  <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                  <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
                   Connecting...
                 </>
               ) : (
@@ -112,7 +112,7 @@ export function ZendeskConnectionActions({
           >
             {disconnecting ? (
               <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
                 Disconnecting...
               </>
             ) : (

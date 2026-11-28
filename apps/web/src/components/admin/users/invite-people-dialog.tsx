@@ -110,7 +110,7 @@ export function InvitePeopleDialog({
               <p className="font-medium">
                 {batchResults.sent} sent, {batchResults.failed.length} failed.
               </p>
-              <ul className="mt-1 list-disc pl-4 space-y-0.5">
+              <ul className="mt-1 list-disc ps-4 space-y-0.5">
                 {batchResults.failed.map((f) => (
                   <li key={f.email}>
                     <span className="font-mono">{f.email}</span>: {f.error}
@@ -128,7 +128,7 @@ export function InvitePeopleDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={sendBusy || !emailsInput.trim()}>
-              {sendBusy ? <ArrowPathIcon className="mr-2 h-3 w-3 animate-spin" /> : null}
+              {sendBusy ? <ArrowPathIcon className="me-2 h-3 w-3 animate-spin" /> : null}
               Send invites
             </Button>
           </DialogFooter>

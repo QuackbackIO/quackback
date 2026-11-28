@@ -158,9 +158,9 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
                     className="h-2.5 w-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: segment.color }}
                   />
-                  <span className="min-w-0 flex-1 truncate text-left">{segment.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-start">{segment.name}</span>
                   {count != null && (
-                    <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                    <span className="ms-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">
                       {count}
                     </span>
                   )}
@@ -220,8 +220,8 @@ function ModerationRow({ active }: { active?: boolean }) {
       )}
     >
       <ShieldCheckIcon className={MENU_ICON} aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate text-left">Moderation</span>
-      <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate text-start">Moderation</span>
+      <span className="ms-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">
         {data?.pendingCount ?? 0}
       </span>
     </Link>

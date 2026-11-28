@@ -215,7 +215,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                       onClick={() => setRotateDialogOpen(true)}
                       disabled={isPending}
                     >
-                      <ArrowPathIcon className="h-4 w-4 mr-1.5" />
+                      <ArrowPathIcon className="h-4 w-4 me-1.5" />
                       Rotate secret
                     </Button>
                   </div>

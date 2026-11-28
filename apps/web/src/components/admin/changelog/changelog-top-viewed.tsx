@@ -38,7 +38,7 @@ export function ChangelogTopViewed({ onSelect }: ChangelogTopViewedProps) {
             type="button"
             data-slot="top-viewed-row"
             onClick={() => onSelect?.(entry.id)}
-            className="group flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/20 transition-colors"
+            className="group flex w-full items-center gap-3 px-4 py-2.5 text-start hover:bg-muted/20 transition-colors"
           >
             <span
               data-slot="top-viewed-rank"

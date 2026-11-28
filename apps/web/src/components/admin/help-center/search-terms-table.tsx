@@ -31,7 +31,7 @@ export function SearchTermsTable() {
           Visitor search terms
         </span>
         {!isLoading && rows && rows.length > 0 && (
-          <span className="text-xs text-muted-foreground ml-auto shrink-0">
+          <span className="text-xs text-muted-foreground ms-auto shrink-0">
             {rows.length} term{rows.length === 1 ? '' : 's'}, last 30 days
           </span>
         )}
@@ -56,9 +56,9 @@ export function SearchTermsTable() {
           <TableHeader>
             <TableRow>
               <TableHead>Query</TableHead>
-              <TableHead className="text-right">Searches</TableHead>
-              <TableHead className="text-right">No results</TableHead>
-              <TableHead className="text-right">Last searched</TableHead>
+              <TableHead className="text-end">Searches</TableHead>
+              <TableHead className="text-end">No results</TableHead>
+              <TableHead className="text-end">Last searched</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -81,16 +81,16 @@ export function SearchTermsTable() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-foreground">
+                  <TableCell className="text-end tabular-nums text-foreground">
                     {formatNumber(row.searches)}
                   </TableCell>
                   <TableCell
-                    className="text-right tabular-nums text-muted-foreground"
+                    className="text-end tabular-nums text-muted-foreground"
                     data-testid={`search-term-misses-${row.normalizedQuery}`}
                   >
                     {row.zeroResultSearches > 0 ? formatNumber(row.zeroResultSearches) : '-'}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className="text-end text-muted-foreground">
                     <TimeAgo date={row.lastSearchedAt} />
                   </TableCell>
                 </TableRow>

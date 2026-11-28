@@ -71,7 +71,7 @@ function CollapsibleSection({
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className={className}>
       <div
         className={cn(
-          'flex w-full items-center justify-between rounded-lg px-4 py-3 text-left',
+          'flex w-full items-center justify-between rounded-lg px-4 py-3 text-start',
           headerClassName
         )}
       >
@@ -83,7 +83,7 @@ function CollapsibleSection({
             )}
           />
           {icon}
-          <div className="flex-1 text-left">
+          <div className="flex-1 text-start">
             <h3 className="font-medium text-sm">{title}</h3>
             {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
           </div>

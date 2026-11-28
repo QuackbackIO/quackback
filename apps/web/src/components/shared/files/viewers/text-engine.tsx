@@ -201,7 +201,7 @@ export default function TextEngine({
                 data-index={item.index}
                 ref={virtualizer.measureElement}
                 className={cn(
-                  'absolute left-0 flex',
+                  'absolute start-0 flex',
                   wrap ? 'w-full' : 'w-max min-w-full',
                   hit && 'bg-red-500/15 shadow-[inset_3px_0_0_#ef4444]'
                 )}
@@ -210,7 +210,7 @@ export default function TextEngine({
                 <span
                   data-line-number=""
                   aria-hidden="true"
-                  className="sticky left-0 shrink-0 bg-[#16161a] pr-3.5 text-right text-[#5b5b66] select-none"
+                  className="sticky start-0 shrink-0 bg-[#16161a] pe-3.5 text-end text-[#5b5b66] select-none"
                   style={{ width: gutter }}
                 >
                   {item.index + 1}
@@ -218,7 +218,7 @@ export default function TextEngine({
                 <span
                   data-line-text=""
                   className={cn(
-                    'min-w-0 pr-4',
+                    'min-w-0 pe-4',
                     wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'
                   )}
                 >

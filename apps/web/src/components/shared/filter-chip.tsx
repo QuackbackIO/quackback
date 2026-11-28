@@ -172,7 +172,7 @@ export function FilterChip({
           type="button"
           onClick={onRemove}
           className={cn(
-            'ml-0.5 p-0.5 rounded-full',
+            'ms-0.5 p-0.5 rounded-full',
             'hover:bg-foreground/10',
             'text-muted-foreground hover:text-foreground',
             'transition-colors'

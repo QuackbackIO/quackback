@@ -226,7 +226,7 @@ export function buildExtensions(
           TableRow,
           TableHeader.configure({
             HTMLAttributes: {
-              class: 'border border-border bg-muted/50 p-2 text-left font-semibold',
+              class: 'border border-border bg-muted/50 p-2 text-start font-semibold',
             },
           }),
           TableCell.configure({
@@ -1775,24 +1775,24 @@ const EditorChrome = memo(function EditorChrome({
       {contextMenuImageSrc && (
         <ContextMenuContent className="min-w-[180px]">
           <ContextMenuItem onClick={contextMenuActions.viewImage}>
-            <Expand className="mr-3 size-4 text-muted-foreground" />
+            <Expand className="me-3 size-4 text-muted-foreground" />
             View image
           </ContextMenuItem>
           <ContextMenuItem onClick={contextMenuActions.downloadImage}>
-            <Download className="mr-3 size-4 text-muted-foreground" />
+            <Download className="me-3 size-4 text-muted-foreground" />
             Download
           </ContextMenuItem>
           <ContextMenuItem onClick={contextMenuActions.copyImage}>
-            <Copy className="mr-3 size-4 text-muted-foreground" />
+            <Copy className="me-3 size-4 text-muted-foreground" />
             Copy to clipboard
           </ContextMenuItem>
           <ContextMenuItem onClick={contextMenuActions.copyLink}>
-            <Link2 className="mr-3 size-4 text-muted-foreground" />
+            <Link2 className="me-3 size-4 text-muted-foreground" />
             Copy link
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={contextMenuActions.deleteImage}>
-            <Trash2 className="mr-3 size-4 text-muted-foreground" />
+            <Trash2 className="me-3 size-4 text-muted-foreground" />
             Delete
           </ContextMenuItem>
         </ContextMenuContent>

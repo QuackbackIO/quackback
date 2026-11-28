@@ -108,7 +108,7 @@ export function StatusIncidentList({ kind, state, emptyMessage }: StatusIncident
           action={
             // One primary action per tab: on the maintenance tab the
             // schedule button takes the primary slot.
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 ms-auto">
               {kind === 'maintenance' ? (
                 <ScheduleMaintenanceDialog variant="default" />
               ) : (
@@ -232,7 +232,7 @@ function StatusIncidentRow({
       </div>
 
       <div
-        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute end-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => e.stopPropagation()}
       >
         <DropdownMenu>
@@ -246,7 +246,7 @@ function StatusIncidentRow({
               onClick={() => onDelete(incident)}
               className="text-destructive focus:text-destructive"
             >
-              <TrashIcon className="mr-2 h-4 w-4" />
+              <TrashIcon className="me-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>

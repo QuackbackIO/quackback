@@ -95,7 +95,7 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
             )}
           >
             {chip.label}{' '}
-            <span className="ml-0.5 tabular-nums text-muted-foreground">{chip.count}</span>
+            <span className="ms-0.5 tabular-nums text-muted-foreground">{chip.count}</span>
           </button>
         ))}
       </div>
@@ -130,7 +130,7 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
             </>
           )
           const TILE =
-            'flex items-center gap-3 rounded-panel border border-border bg-transparent p-3 text-left transition-colors'
+            'flex items-center gap-3 rounded-panel border border-border bg-transparent p-3 text-start transition-colors'
           const TILE_ACTIVE = 'hover:bg-accent'
 
           // Read-only: the tile and its status, nothing to open

@@ -300,7 +300,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   const flags = useFeatureFlags()
   const asideClassName = overlay
     ? 'flex h-full min-h-0 w-full flex-col overflow-hidden'
-    : 'hidden h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border/50 bg-card/20 min-[1680px]:flex'
+    : 'hidden h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-s border-border/50 bg-card/20 min-[1680px]:flex'
   // The flag + copilot.use gate, shared with the inbox route's
   // `copilotAvailable` so the Ask Copilot affordances can never disagree
   // with the tab actually existing.
@@ -459,7 +459,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     <p className="truncate text-xs text-muted-foreground">
                       {email}
                       {!detail?.email && !isTicketItem && conversation?.visitorEmail && (
-                        <span className="ml-1 text-muted-foreground/50">(in conversation)</span>
+                        <span className="ms-1 text-muted-foreground/50">(in conversation)</span>
                       )}
                     </p>
                   ) : getChannelDescriptor(conversation?.channel ?? '')?.addressing === 'thread' ? (
@@ -543,7 +543,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     key={c.id}
                     type="button"
                     onClick={() => onSelectItem(c.id)}
-                    className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+                    className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-start transition-colors hover:bg-muted/60"
                   >
                     <span className="block w-full min-w-0 truncate text-xs text-foreground/90">
                       {c.subject ?? c.lastMessagePreview ?? 'Conversation'}
@@ -866,7 +866,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             <CollapsibleTrigger asChild>
               <button
                 type="button"
-                className="flex w-full items-center justify-between py-1 text-left"
+                className="flex w-full items-center justify-between py-1 text-start"
               >
                 <span className={MENU_LABEL}>
                   <FormattedMessage id="admin.ticketActivity.title" defaultMessage="Activity" />

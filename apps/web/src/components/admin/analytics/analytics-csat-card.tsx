@@ -17,7 +17,7 @@ export function AnalyticsCsatDistribution({
         const pct = Math.round((count / maxCount) * 100)
         return (
           <div key={rating} className="flex items-center gap-2 text-xs">
-            <span className="w-7 shrink-0 text-right text-muted-foreground">{rating}★</span>
+            <span className="w-7 shrink-0 text-end text-muted-foreground">{rating}★</span>
             <div className="h-3 flex-1 overflow-hidden rounded-sm bg-muted/40">
               <div
                 className="h-full rounded-sm bg-primary/70"
@@ -25,7 +25,7 @@ export function AnalyticsCsatDistribution({
                 aria-hidden
               />
             </div>
-            <span className="w-8 shrink-0 text-right font-medium tabular-nums">{count}</span>
+            <span className="w-8 shrink-0 text-end font-medium tabular-nums">{count}</span>
           </div>
         )
       })}

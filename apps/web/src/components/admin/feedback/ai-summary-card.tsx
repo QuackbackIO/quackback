@@ -42,7 +42,7 @@ export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardPr
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/10 transition-colors rounded-t-lg"
+            className="flex w-full items-center gap-2 px-4 py-3 text-start hover:bg-muted/10 transition-colors rounded-t-lg"
           >
             <SparklesIcon className="size-3.5 text-warning shrink-0" />
             <p className="text-xs font-medium text-muted-foreground/70">AI Summary</p>
@@ -73,7 +73,7 @@ export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardPr
                 {summaryJson.keyQuotes.map((quote, i) => (
                   <p
                     key={i}
-                    className="text-sm italic text-muted-foreground border-l-2 border-border/60 pl-3"
+                    className="text-sm italic text-muted-foreground border-s-2 border-border/60 ps-3"
                   >
                     &ldquo;{quote}&rdquo;
                   </p>

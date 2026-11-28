@@ -11,7 +11,7 @@ export function SlaRulesPopover() {
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96">
-        <ul className="list-disc space-y-1.5 pl-4 text-xs text-muted-foreground">
+        <ul className="list-disc space-y-1.5 ps-4 text-xs text-muted-foreground">
           <li>
             A default policy can be applied when a conversation starts. Workflows can still apply a
             different policy through the Apply SLA action.

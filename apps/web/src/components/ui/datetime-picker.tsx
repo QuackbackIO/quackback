@@ -136,7 +136,7 @@ export function DateTimePicker({
 
   const triggerContent = (
     <>
-      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+      <CalendarIcon className="me-2 h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1 truncate">
         {value ? <PickedValue value={value} dateOnly={dateOnly} /> : resolvedPlaceholder}
       </span>
@@ -158,7 +158,7 @@ export function DateTimePicker({
               type="button"
               disabled={disabled}
               className={cn(
-                'inline-flex min-w-0 flex-1 items-center px-2 text-left text-xs font-normal transition-colors hover:bg-muted/40',
+                'inline-flex min-w-0 flex-1 items-center px-2 text-start text-xs font-normal transition-colors hover:bg-muted/40',
                 !value && 'text-muted-foreground'
               )}
             >
@@ -173,7 +173,7 @@ export function DateTimePicker({
               e.stopPropagation()
               onClear()
             }}
-            className="inline-flex shrink-0 items-center justify-center border-l border-border/50 px-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            className="inline-flex shrink-0 items-center justify-center border-s border-border/50 px-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
             aria-label="Clear date"
           >
             <XMarkIcon className="h-3 w-3" />
@@ -185,7 +185,7 @@ export function DateTimePicker({
             variant="outline"
             disabled={disabled}
             className={cn(
-              'max-w-full justify-start text-left font-normal',
+              'max-w-full justify-start text-start font-normal',
               !value && 'text-muted-foreground',
               className
             )}
@@ -217,7 +217,7 @@ export function DateTimePicker({
                     : undefined
                 }
                 onChange={handleTimeChange}
-                className="ml-auto h-8 w-24 bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                className="ms-auto h-8 w-24 bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
               />
             </div>
           </div>

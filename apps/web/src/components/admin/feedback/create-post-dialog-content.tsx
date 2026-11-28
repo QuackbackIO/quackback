@@ -226,7 +226,7 @@ export function CreatePostDialogContent({
             </div>
 
             {/* Right sidebar: Metadata (lg+) */}
-            <aside className="hidden lg:block w-64 shrink-0 border-l border-border/30 bg-muted/5">
+            <aside className="hidden lg:block w-64 shrink-0 border-s border-border/30 bg-muted/5">
               <div className="p-4 space-y-5">
                 {/* Author */}
                 <div className="space-y-1.5">
@@ -391,7 +391,7 @@ export function CreatePostDialogContent({
                     <Select onValueChange={field.onChange} value={field.value as string}>
                       <FormControl>
                         <SelectTrigger size="sm" className="text-xs">
-                          <FolderIcon className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                          <FolderIcon className="h-3.5 w-3.5 me-1 text-muted-foreground" />
                           <SelectValue placeholder="Board">
                             {selectedBoard?.name || 'Board'}
                           </SelectValue>

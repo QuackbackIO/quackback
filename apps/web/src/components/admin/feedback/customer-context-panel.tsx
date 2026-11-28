@@ -68,7 +68,7 @@ function ContextCard({ card }: { card: EnrichmentCard }) {
           {card.fields.map((f) => (
             <div key={f.label} className="contents">
               <dt className="text-muted-foreground">{f.label}</dt>
-              <dd className="truncate text-right font-medium">{f.value}</dd>
+              <dd className="truncate text-end font-medium">{f.value}</dd>
             </div>
           ))}
         </dl>

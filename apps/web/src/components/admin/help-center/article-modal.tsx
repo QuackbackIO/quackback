@@ -302,7 +302,7 @@ function ArticleEditor({ articleId, onClose }: ArticleModalContentProps) {
               <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
                 <SheetTrigger asChild>
                   <Button type="button" variant="outline" size="sm" className="lg:hidden">
-                    <Cog6ToothIcon className="mr-1.5 h-4 w-4" />
+                    <Cog6ToothIcon className="me-1.5 h-4 w-4" />
                     Settings
                   </Button>
                 </SheetTrigger>

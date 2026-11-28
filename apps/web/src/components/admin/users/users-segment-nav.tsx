@@ -108,7 +108,7 @@ export function UsersSegmentNav({
               }}
               className={cn(
                 MENU_ROW,
-                'w-full text-left',
+                'w-full text-start',
                 !hasSelection && !inInvitesMode && !inLeadsMode && !inCompaniesMode
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -142,7 +142,7 @@ export function UsersSegmentNav({
               }}
               className={cn(
                 MENU_ROW,
-                'w-full text-left',
+                'w-full text-start',
                 inLeadsMode
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -178,7 +178,7 @@ export function UsersSegmentNav({
               }}
               className={cn(
                 MENU_ROW,
-                'w-full text-left',
+                'w-full text-start',
                 inCompaniesMode
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -203,7 +203,7 @@ export function UsersSegmentNav({
               replace
               className={cn(
                 MENU_ROW,
-                'w-full text-left',
+                'w-full text-start',
                 inInvitesMode
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -289,7 +289,7 @@ function SegmentNavItem({
       <button
         type="button"
         onClick={(e) => onSelect(e.shiftKey)}
-        className={cn(MENU_ROW, 'flex-1 min-w-0 text-left', isSelected && 'font-medium')}
+        className={cn(MENU_ROW, 'flex-1 min-w-0 text-start', isSelected && 'font-medium')}
       >
         <FunnelIcon className={MENU_ICON} />
         <span className="flex-1 truncate">{segment.name}</span>
@@ -302,7 +302,7 @@ function SegmentNavItem({
       </button>
 
       {/* Hover actions */}
-      <div className="hidden group-hover:flex items-center shrink-0 pr-1">
+      <div className="hidden group-hover:flex items-center shrink-0 pe-1">
         {onEvaluate && (
           <button
             type="button"
@@ -389,7 +389,7 @@ export function MobileSegmentSelector({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-50 w-56 rounded-lg border border-border bg-popover shadow-md py-1">
+          <div className="absolute top-full start-0 mt-1 z-50 w-56 rounded-lg border border-border bg-popover shadow-md py-1">
             <button
               type="button"
               onClick={() => {
@@ -397,7 +397,7 @@ export function MobileSegmentSelector({
                 setOpen(false)
               }}
               className={cn(
-                'w-full text-left px-3 py-1.5 text-xs font-medium',
+                'w-full text-start px-3 py-1.5 text-xs font-medium',
                 'hover:bg-muted/50 transition-colors',
                 selectedSegmentIds.length === 0 && 'bg-muted text-foreground'
               )}
@@ -411,7 +411,7 @@ export function MobileSegmentSelector({
                 type="button"
                 onClick={() => onSelectSegment(seg.id, true)}
                 className={cn(
-                  'w-full text-left px-3 py-1.5 text-xs flex items-center gap-2',
+                  'w-full text-start px-3 py-1.5 text-xs flex items-center gap-2',
                   'hover:bg-muted/50 transition-colors',
                   selectedSegmentIds.includes(seg.id) && 'bg-muted text-foreground font-medium'
                 )}

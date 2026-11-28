@@ -195,7 +195,7 @@ function ProviderRow({
             >
               {d.enforced && <LockClosedIcon className="shrink-0" />}
               {d.name}
-              {d.enforced && <span className="ml-0.5">enforced</span>}
+              {d.enforced && <span className="ms-0.5">enforced</span>}
             </Badge>
           ))}
         </span>

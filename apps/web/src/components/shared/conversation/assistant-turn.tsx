@@ -176,11 +176,11 @@ function CitationDot({
         {isInternal && (
           <LockClosedIcon
             aria-hidden
-            className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 p-[1.5px] text-white"
+            className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 p-[1.5px] text-white"
           />
         )}
         <TooltipContent
-          className="w-56 max-w-[calc(100vw-1rem)] rounded-xl p-3 text-left"
+          className="w-56 max-w-[calc(100vw-1rem)] rounded-xl p-3 text-start"
           sideOffset={8}
         >
           <span className="mb-1.5 block text-[13px] font-semibold leading-snug text-foreground">

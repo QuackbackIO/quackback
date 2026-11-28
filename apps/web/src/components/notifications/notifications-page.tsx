@@ -113,7 +113,7 @@ export function NotificationsPage() {
               <TabsTrigger value="unread">
                 Unread
                 {unreadCount > 0 && (
-                  <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">
+                  <span className="ms-1.5 text-xs tabular-nums text-muted-foreground">
                     {unreadCount}
                   </span>
                 )}

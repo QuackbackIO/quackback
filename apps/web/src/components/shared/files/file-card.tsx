@@ -282,7 +282,7 @@ function VideoThumb({ url, durationMs }: { url: string; durationMs?: number }) {
         </span>
       </span>
       {durationMs != null && (
-        <span className="pointer-events-none absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
+        <span className="pointer-events-none absolute bottom-1.5 end-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
           {durationLabel(durationMs)}
         </span>
       )}
@@ -399,7 +399,7 @@ export function FilePreviewCard({
         type="button"
         onClick={onOpen}
         aria-label={ariaLabel}
-        className="flex w-full flex-col text-left"
+        className="flex w-full flex-col text-start"
       >
         <span
           className={cn(
@@ -409,7 +409,7 @@ export function FilePreviewCard({
         >
           <AttachmentThumb attachment={attachment} family={family} />
         </span>
-        <span className="flex items-center gap-2.5 px-2.5 py-2 pr-9">
+        <span className="flex items-center gap-2.5 px-2.5 py-2 pe-9">
           <FileBadge name={attachment.name} family={family} size="sm" />
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
@@ -420,7 +420,7 @@ export function FilePreviewCard({
       <DownloadLink
         url={attachment.url}
         name={name}
-        className="absolute bottom-1.5 right-1.5 size-7"
+        className="absolute bottom-1.5 end-1.5 size-7"
       />
     </div>
   )
@@ -437,7 +437,7 @@ export function FileIconCard({ attachment, onOpen, className }: FileCardProps) {
       onClick={onOpen}
       aria-label={ariaLabel}
       className={cn(
-        'flex w-full max-w-[248px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-2.5 py-2.5 text-left transition-colors hover:border-foreground/30',
+        'flex w-full max-w-[248px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-2.5 py-2.5 text-start transition-colors hover:border-foreground/30',
         className
       )}
     >
@@ -467,7 +467,7 @@ export function FileRow({ attachment, onOpen, className }: FileCardProps) {
         type="button"
         onClick={onOpen}
         aria-label={ariaLabel}
-        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
       >
         {thumbUrl ? (
           <span className="relative h-11 w-[34px] shrink-0 overflow-hidden rounded-[3px] bg-muted outline outline-1 -outline-offset-1 outline-border">

@@ -34,7 +34,7 @@ export function UserCard({ user, isSelected, onClick, showCountry = false }: Use
       className={cn(
         'flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors relative',
         isSelected
-          ? 'bg-muted/50 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-primary'
+          ? 'bg-muted/50 before:absolute before:start-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-primary'
           : 'hover:bg-muted/30'
       )}
       onClick={onClick}
@@ -100,13 +100,13 @@ export function UserCard({ user, isSelected, onClick, showCountry = false }: Use
           hidden when zero) so the column stays put and can be scanned straight
           down instead of decoded row by row. */}
       <div className="flex shrink-0 items-center gap-3 text-xs tabular-nums text-muted-foreground">
-        <span className={cn(METRIC_COLUMN_WIDTH, 'text-right')} title="Posts">
+        <span className={cn(METRIC_COLUMN_WIDTH, 'text-end')} title="Posts">
           {user.postCount}
         </span>
-        <span className={cn(METRIC_COLUMN_WIDTH, 'text-right')} title="Comments">
+        <span className={cn(METRIC_COLUMN_WIDTH, 'text-end')} title="Comments">
           {user.commentCount}
         </span>
-        <span className={cn(METRIC_COLUMN_WIDTH, 'text-right')} title="Votes">
+        <span className={cn(METRIC_COLUMN_WIDTH, 'text-end')} title="Votes">
           {user.voteCount}
         </span>
       </div>

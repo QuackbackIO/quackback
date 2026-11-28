@@ -194,9 +194,9 @@ export function AnalyticsQuinnSection({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Action</TableHead>
-                    <TableHead className="text-right">Attempted</TableHead>
-                    <TableHead className="text-right">Completed</TableHead>
-                    <TableHead className="text-right">Failed</TableHead>
+                    <TableHead className="text-end">Attempted</TableHead>
+                    <TableHead className="text-end">Completed</TableHead>
+                    <TableHead className="text-end">Failed</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -205,11 +205,11 @@ export function AnalyticsQuinnSection({
                       <TableCell>
                         <ActionLabel toolName={tool.toolName} />
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="text-end tabular-nums">
                         {tool.succeeded + tool.failed + tool.denied}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{tool.succeeded}</TableCell>
-                      <TableCell className="text-right tabular-nums">{tool.failed}</TableCell>
+                      <TableCell className="text-end tabular-nums">{tool.succeeded}</TableCell>
+                      <TableCell className="text-end tabular-nums">{tool.failed}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -240,7 +240,7 @@ export function AnalyticsQuinnSection({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Activity</TableHead>
-                    <TableHead className="text-right">{periodLabel}</TableHead>
+                    <TableHead className="text-end">{periodLabel}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -252,7 +252,7 @@ export function AnalyticsQuinnSection({
                   ].map(([label, value]) => (
                     <TableRow key={label}>
                       <TableCell>{label}</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="text-end tabular-nums">
                         {typeof value === 'number' ? formatNumber(value) : '-'}
                       </TableCell>
                     </TableRow>

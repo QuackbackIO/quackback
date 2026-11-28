@@ -50,7 +50,7 @@ export function WhoRepliesFirstCard() {
         defaultMessage: WHO_REPLIES_FIRST.title,
       })}
     >
-      <ol className="list-decimal space-y-0.5 pl-[18px] text-xs leading-[1.7] text-muted-foreground">
+      <ol className="list-decimal space-y-0.5 ps-[18px] text-xs leading-[1.7] text-muted-foreground">
         {WHO_REPLIES_FIRST.steps.map((step) => (
           <li key={step.id}>
             {intl.formatMessage({ id: step.id, defaultMessage: step.defaultMessage }, rich)}

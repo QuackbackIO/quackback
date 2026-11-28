@@ -156,7 +156,7 @@ export function PlatformCredentialsForm({
             <Label htmlFor={`cred-${field.key}`} className="text-sm font-medium">
               {field.label}
               {field.required === false ? (
-                <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
+                <span className="ms-1 font-normal text-muted-foreground">(optional)</span>
               ) : null}
             </Label>
             <Input

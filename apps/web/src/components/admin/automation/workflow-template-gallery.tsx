@@ -78,7 +78,7 @@ export function WorkflowTemplateGallery({
                   type="button"
                   onClick={() => setCategory(c.key)}
                   className={cn(
-                    'flex items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors',
+                    'flex items-center justify-between rounded-md px-2.5 py-1.5 text-start text-[13px] font-medium transition-colors',
                     selected
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
@@ -139,7 +139,7 @@ function TemplateCard({
     <button
       type="button"
       onClick={() => onSelect(template)}
-      className="flex flex-col rounded-[11px] border bg-card px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:shadow-sm"
+      className="flex flex-col rounded-[11px] border bg-card px-3 py-2.5 text-start transition-colors hover:border-primary/40 hover:shadow-sm"
     >
       <div className="flex items-center gap-2">
         <span className={cn('grid size-[26px] shrink-0 place-items-center rounded-lg', STEP_TILE)}>

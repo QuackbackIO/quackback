@@ -90,7 +90,7 @@ export function Combobox<T extends string>({
           <span className={cn('truncate', !selected && 'text-muted-foreground')}>
             {selected ? selected.label : (placeholder ?? fallbackPlaceholder)}
           </span>
-          <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronUpDownIcon className="ms-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className={cn('w-(--anchor-width) p-0', contentClassName)}>
@@ -115,7 +115,7 @@ export function Combobox<T extends string>({
                   >
                     <CheckIcon
                       className={cn(
-                        'mr-2 h-4 w-4',
+                        'me-2 h-4 w-4',
                         option.value === value ? 'opacity-100' : 'opacity-0'
                       )}
                     />

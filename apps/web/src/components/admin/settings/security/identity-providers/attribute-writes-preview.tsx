@@ -116,7 +116,7 @@ export function AttributeWritesPreview({
                       <>
                         “{String(written)}”
                         {joined && (
-                          <Badge variant="outline" className="ml-1 align-middle">
+                          <Badge variant="outline" className="ms-1 align-middle">
                             array joined to text
                           </Badge>
                         )}

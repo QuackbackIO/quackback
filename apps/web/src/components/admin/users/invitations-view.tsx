@@ -95,7 +95,7 @@ export function InvitationsView({ status }: InvitationsViewProps) {
               <TabsTrigger key={value} value={value}>
                 {STATUS_LABEL[value]}
                 {value === 'pending' && portal.pendingCount > 0 && (
-                  <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">
+                  <span className="ms-1.5 text-xs tabular-nums text-muted-foreground">
                     {portal.pendingCount}
                   </span>
                 )}

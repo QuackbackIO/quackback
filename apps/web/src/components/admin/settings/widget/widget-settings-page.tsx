@@ -253,7 +253,7 @@ function VisibilityCard({
         <Button asChild size="sm" variant={idle ? 'default' : 'outline'} className="shrink-0">
           <Link to="/admin/settings/widget/install">
             {idle ? 'Set it up' : 'View installation'}
-            <ArrowRightIcon className="h-3.5 w-3.5" />
+            <ArrowRightIcon className="rtl:-scale-x-100 h-3.5 w-3.5" />
           </Link>
         </Button>
       }

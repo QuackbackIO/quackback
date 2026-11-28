@@ -862,7 +862,7 @@ function PanelSection({
           {isOpen ? (
             <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
           ) : (
-            <ChevronRightIcon className="size-4 shrink-0" aria-hidden="true" />
+            <ChevronRightIcon className="rtl:-scale-x-100 size-4 shrink-0" aria-hidden="true" />
           )}
         </span>
       </button>

@@ -167,8 +167,8 @@ export function TicketHeaderCard({
       >
         <ChevronRightIcon
           className={cn(
-            'size-3.5 transition-transform rtl:rotate-180',
-            expanded && 'rotate-90 rtl:rotate-90'
+            'rtl:-scale-x-100 size-3.5 transition-transform rtl:rotate-180',
+            expanded && 'rotate-90 rtl:-rotate-90 rtl:rotate-90 rtl:rtl:-rotate-90'
           )}
         />
         <FormattedMessage id="portal.tickets.details.toggle" defaultMessage="Details" />

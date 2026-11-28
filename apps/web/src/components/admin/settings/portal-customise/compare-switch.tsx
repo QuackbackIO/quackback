@@ -67,7 +67,7 @@ export function CompareLabel({ view }: { view: CompareView }) {
   if (view === 'after') return null
   return (
     <div
-      className="absolute bottom-4 left-1/2 origin-bottom whitespace-nowrap rounded-full bg-foreground px-3 py-1 text-xs font-medium text-background shadow-md"
+      className="absolute bottom-4 start-1/2 origin-bottom whitespace-nowrap rounded-full bg-foreground px-3 py-1 text-xs font-medium text-background shadow-md"
       style={{ transform: 'translateX(-50%) scale(calc(1 / var(--preview-scale, 1)))' }}
     >
       {LABELS[view]}

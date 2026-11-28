@@ -55,7 +55,7 @@ function useIncidentCount(
 function CountBadge({ count }: { count: number | string | undefined }) {
   if (count === undefined) return null
   return (
-    <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{count}</span>
+    <span className="ms-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{count}</span>
   )
 }
 
@@ -86,7 +86,7 @@ function SideItem({
       )}
     >
       <Icon className={MENU_ICON} />
-      <span className="min-w-0 flex-1 truncate text-left">{children}</span>
+      <span className="min-w-0 flex-1 truncate text-start">{children}</span>
       <CountBadge count={count} />
     </button>
   )

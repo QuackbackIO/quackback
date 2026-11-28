@@ -106,7 +106,7 @@ function OfferFrame(props: OfferFrameProps) {
   const showFooter = props.billingEnabled || Boolean(props.onDismiss)
 
   return (
-    <div className={cn('w-full text-left', props.className)}>
+    <div className={cn('w-full text-start', props.className)}>
       <div className="flex items-start gap-3">
         <span
           aria-hidden

@@ -32,7 +32,7 @@ export function ModalFooter({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-t bg-muted/30 shrink-0">
       <KeyboardHint keys={['Mod', 'Enter']} action={hintAction} />
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 ml-auto">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 ms-auto">
         {children}
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isPending}>
           Cancel

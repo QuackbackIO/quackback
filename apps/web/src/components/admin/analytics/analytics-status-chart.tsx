@@ -35,7 +35,7 @@ export function AnalyticsStatusChart({ data }: StatusChartProps) {
                   style={{ background: (payload[0]?.payload as { color?: string })?.color }}
                 />
                 <span className="font-medium">{payload[0]?.name}</span>
-                <span className="ml-1 tabular-nums text-muted-foreground">{payload[0]?.value}</span>
+                <span className="ms-1 tabular-nums text-muted-foreground">{payload[0]?.value}</span>
               </div>
             ) : null
           }

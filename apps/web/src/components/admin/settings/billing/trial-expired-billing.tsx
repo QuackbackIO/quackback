@@ -105,7 +105,7 @@ export function TrialExpiredBilling(props: {
                   type="button"
                   onClick={() => setSelectedId(plan.id as PaidPlanId | 'free')}
                   className={cn(
-                    'flex w-full items-start justify-between gap-3 border-b border-border/50 px-5 py-4 text-left last:border-b-0',
+                    'flex w-full items-start justify-between gap-3 border-b border-border/50 px-5 py-4 text-start last:border-b-0',
                     isSelected && 'bg-primary/5'
                   )}
                 >
@@ -131,7 +131,7 @@ export function TrialExpiredBilling(props: {
                       </span>
                     ) : null}
                   </div>
-                  <p className="shrink-0 text-right">
+                  <p className="shrink-0 text-end">
                     <span className="text-lg font-semibold tabular-nums">
                       {formatUsd(monthly, 0)}
                     </span>

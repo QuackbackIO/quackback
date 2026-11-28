@@ -342,7 +342,7 @@ function ImportReview({
                 <TableHead>Board</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Author</TableHead>
-                <TableHead className="text-right">Action</TableHead>
+                <TableHead className="text-end">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -357,12 +357,12 @@ function ImportReview({
                   <TableCell className="text-muted-foreground">
                     {row.author}
                     {row.isNewAuthor && (
-                      <Badge variant="secondary" className="ml-1.5">
+                      <Badge variant="secondary" className="ms-1.5">
                         new
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end">
                     <Badge variant={row.action === 'update' ? 'default' : 'outline'}>
                       {row.action === 'update' ? 'Update' : 'Create'}
                     </Badge>

@@ -375,7 +375,7 @@ export function RoadmapBuilderForm({
                               onClick={() => moveColumn(columnIndex, -1)}
                               aria-label={`Move ${status.name} left`}
                             >
-                              <ChevronLeftIcon className="size-3.5" />
+                              <ChevronLeftIcon className="rtl:-scale-x-100 size-3.5" />
                             </Button>
                             <Button
                               type="button"
@@ -385,7 +385,7 @@ export function RoadmapBuilderForm({
                               onClick={() => moveColumn(columnIndex, 1)}
                               aria-label={`Move ${status.name} right`}
                             >
-                              <ChevronRightIcon className="size-3.5" />
+                              <ChevronRightIcon className="rtl:-scale-x-100 size-3.5" />
                             </Button>
                           </div>
                         </div>

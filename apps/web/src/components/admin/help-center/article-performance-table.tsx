@@ -117,7 +117,7 @@ export function ArticlePerformanceTable() {
           type="button"
           data-testid="article-performance-worst"
           onClick={() => handleOpen(summary.worst!.article.id as KbArticleId)}
-          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-left transition-colors hover:bg-warning/20"
+          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-start transition-colors hover:bg-warning/20"
         >
           <ExclamationTriangleIcon className="size-5 shrink-0 text-warning" />
           <div className="min-w-0 flex-1">
@@ -138,7 +138,7 @@ export function ArticlePerformanceTable() {
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
           <span className="text-[11px] font-semibold text-muted-foreground">Ranked by views</span>
           {!isLoading && rows && rows.length > 0 && (
-            <span className="text-xs text-muted-foreground ml-auto shrink-0">
+            <span className="text-xs text-muted-foreground ms-auto shrink-0">
               {rows.length} article{rows.length === 1 ? '' : 's'}
             </span>
           )}
@@ -164,10 +164,10 @@ export function ArticlePerformanceTable() {
               <TableRow>
                 <TableHead>Article</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead className="text-right">Views</TableHead>
-                <TableHead className="text-right">Helpful</TableHead>
-                <TableHead className="text-right">Not helpful</TableHead>
-                <TableHead className="text-right">Helpful rate</TableHead>
+                <TableHead className="text-end">Views</TableHead>
+                <TableHead className="text-end">Helpful</TableHead>
+                <TableHead className="text-end">Not helpful</TableHead>
+                <TableHead className="text-end">Helpful rate</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -200,25 +200,25 @@ export function ArticlePerformanceTable() {
                     <TableCell className="text-muted-foreground truncate max-w-[10rem]">
                       {article.categoryName}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-end tabular-nums">
                       <span className="inline-flex items-center justify-end gap-1 text-foreground">
                         <EyeIcon className="size-3.5 text-muted-foreground/70" />
                         {formatNumber(article.viewCount)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-end tabular-nums">
                       <span className="inline-flex items-center justify-end gap-1 text-foreground">
                         <HandThumbUpIcon className="size-3.5 text-muted-foreground/70" />
                         {formatNumber(article.helpfulCount)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-end tabular-nums">
                       <span className="inline-flex items-center justify-end gap-1 text-foreground">
                         <HandThumbDownIcon className="size-3.5 text-muted-foreground/70" />
                         {formatNumber(article.notHelpfulCount)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-end tabular-nums text-muted-foreground">
                       {rate === null ? '-' : `${rate}%`}
                     </TableCell>
                   </TableRow>

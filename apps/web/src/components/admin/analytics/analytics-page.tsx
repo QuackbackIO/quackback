@@ -180,7 +180,7 @@ export function AnalyticsPage() {
                     )}
                   >
                     <Icon className={cn(MENU_ICON, active && 'text-primary')} />
-                    <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                    <span className="min-w-0 flex-1 truncate text-start">{label}</span>
                   </button>
                 )
               })}
@@ -199,7 +199,7 @@ export function AnalyticsPage() {
                 <h1 className="text-base font-semibold">Analytics</h1>
                 <AnalyticsSectionSelect items={sections} value={section} onChange={setSection} />
               </div>
-              <div className="ml-auto flex items-center gap-3">
+              <div className="ms-auto flex items-center gap-3">
                 {data?.computedAt && (
                   <p className="hidden text-sm text-muted-foreground sm:block">
                     Updated {formatDistanceToNow(new Date(data.computedAt), { addSuffix: true })}
@@ -213,7 +213,7 @@ export function AnalyticsPage() {
                       <Button variant="outline" size="sm" className="relative px-2.5">
                         <FunnelIcon className="h-4 w-4" />
                         {surface !== 'all' && (
-                          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary" />
+                          <span className="absolute -top-0.5 -end-0.5 h-2 w-2 rounded-full bg-primary" />
                         )}
                         <span className="sr-only">Filters</span>
                       </Button>

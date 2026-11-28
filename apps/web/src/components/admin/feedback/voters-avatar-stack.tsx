@@ -233,7 +233,7 @@ export function VotersAvatarStack({
                         className={cn(
                           'w-full flex items-center gap-2 px-2 py-1.5 rounded-md',
                           'text-[13px] text-foreground/80 hover:bg-muted/60 hover:text-foreground',
-                          'transition-colors duration-100 text-left',
+                          'transition-colors duration-100 text-start',
                           'disabled:opacity-50'
                         )}
                       >
@@ -257,7 +257,7 @@ export function VotersAvatarStack({
                     <button
                       type="button"
                       onClick={() => setMode('create')}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-start text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                     >
                       <PlusIcon className="size-4" />
                       New user
@@ -276,7 +276,7 @@ export function VotersAvatarStack({
                     }}
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <ArrowLeftIcon className="h-3.5 w-3.5" />
+                    <ArrowLeftIcon className="rtl:-scale-x-100 h-3.5 w-3.5" />
                   </button>
                   <span className="text-xs font-medium">New user</span>
                 </div>

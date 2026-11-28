@@ -113,7 +113,7 @@ function WorkflowBuilderShell({ workflow }: { workflow: WorkflowDTO }) {
           <JsonPanel draft={b.graphDraft} onChange={b.changeGraphDraft} error={b.toggleError} />
         )}
 
-        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-l border-border/50 bg-background">
+        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-s border-border/50 bg-background">
           <InspectorPanel
             mode={b.graphDraft.mode}
             tree={b.graphDraft.mode === 'visual' ? b.graphDraft.tree : null}

@@ -240,7 +240,7 @@ function RuleGroup({
             type="button"
             aria-label="Remove group"
             onClick={onRemoveGroup}
-            className="ml-auto rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+            className="ms-auto rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
           >
             <XMarkIcon className="size-3.5" />
           </button>

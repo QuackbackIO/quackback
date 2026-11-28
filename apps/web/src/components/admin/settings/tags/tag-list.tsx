@@ -260,7 +260,7 @@ function VisibilityCard({
       value={value}
       aria-label={label}
       className={cn(
-        'group flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors outline-none',
+        'group flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-start transition-colors outline-none',
         'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer',
         'focus-visible:ring-2 focus-visible:ring-ring/50',
         'data-checked:border-primary data-checked:bg-primary/10'

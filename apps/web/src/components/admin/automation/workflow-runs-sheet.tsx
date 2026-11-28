@@ -124,7 +124,7 @@ function RunRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-[13px] transition-colors',
+        'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-start text-[13px] transition-colors',
         selected ? 'bg-primary/10' : 'hover:bg-muted/60'
       )}
     >

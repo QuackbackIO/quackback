@@ -251,7 +251,7 @@ function PlanRow(props: {
             <ArrowTopRightOnSquareIcon className="size-3.5" />
           </a>
         </div>
-        <p className="shrink-0 text-right">
+        <p className="shrink-0 text-end">
           <span className="text-lg font-semibold tracking-tight tabular-nums">
             {formatUsd(monthlyCents, 0)}
           </span>
@@ -299,7 +299,7 @@ function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) 
           </div>
         ) : null}
       </div>
-      <p className="shrink-0 text-right">
+      <p className="shrink-0 text-end">
         <span className="text-lg font-semibold tracking-tight tabular-nums">$0</span>
         <span className="block text-[12px] text-muted-foreground">forever</span>
       </p>

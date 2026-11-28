@@ -491,7 +491,7 @@ function PolicyEditorDialog({
           </div>
 
           <div className="flex items-center justify-between py-1">
-            <div className="pr-4">
+            <div className="pe-4">
               <Label htmlFor="sla-pause-on-snooze" className="text-sm font-medium cursor-pointer">
                 Pause while snoozed
               </Label>
@@ -507,7 +507,7 @@ function PolicyEditorDialog({
           </div>
 
           <div className="flex items-center justify-between py-1">
-            <div className="pr-4">
+            <div className="pe-4">
               <Label htmlFor="sla-pause-on-pending" className="text-sm font-medium cursor-pointer">
                 Pause while pending
               </Label>

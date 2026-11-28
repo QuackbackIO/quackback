@@ -713,7 +713,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                   'absolute -top-3 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5 shadow-sm transition-opacity',
                   // With no bubble the anchor is the attachments' outer edge, so
                   // the toolbar opens toward the thread rather than off the column.
-                  hasBody ? (self ? 'left-2' : 'right-2') : self ? 'right-0' : 'left-0',
+                  hasBody ? (self ? 'start-2' : 'end-2') : self ? 'end-0' : 'start-0',
                   toolbarPinned ? 'opacity-100' : 'opacity-0 group-hover/message:opacity-100'
                 )}
               >
@@ -839,7 +839,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             <button
               type="button"
               onClick={() => onTrackSuggestion(message)}
-              className="ml-auto inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="ms-auto inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
             </button>

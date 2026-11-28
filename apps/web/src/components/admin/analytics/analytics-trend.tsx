@@ -28,7 +28,7 @@ export function TrendDelta({ value, suffix, className }: TrendDeltaProps) {
     >
       <Icon className="h-3 w-3" aria-hidden />
       {up ? '+' : ''}
-      {value}%{suffix && <span className="ml-1 font-normal text-muted-foreground">{suffix}</span>}
+      {value}%{suffix && <span className="ms-1 font-normal text-muted-foreground">{suffix}</span>}
     </span>
   )
 }

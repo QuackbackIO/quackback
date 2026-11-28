@@ -174,7 +174,7 @@ export function HelpCenterHomeSection({
         <span>Domain and languages</span>
         <span className="flex items-center gap-1 text-muted-foreground">
           Help Center settings
-          <ChevronRightIcon className="size-4" aria-hidden="true" />
+          <ChevronRightIcon className="rtl:-scale-x-100 size-4" aria-hidden="true" />
         </span>
       </Link>
     </div>

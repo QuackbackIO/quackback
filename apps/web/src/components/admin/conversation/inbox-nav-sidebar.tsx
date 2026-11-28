@@ -287,7 +287,7 @@ function ScopeFilterSection({
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: r.color }}
               />
-              <span className="min-w-0 flex-1 truncate text-left">{r.name}</span>
+              <span className="min-w-0 flex-1 truncate text-start">{r.name}</span>
               {showCounts && (
                 <span className="shrink-0 text-[11px] text-muted-foreground">{r.count}</span>
               )}
@@ -429,7 +429,7 @@ function ViewsFilterSection({
                 <button
                   type="button"
                   onClick={() => onSelect(item)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-start"
                 >
                   {v.isPinned ? (
                     <StarIcon className="size-4 shrink-0 text-warning" />
@@ -484,7 +484,7 @@ function ViewsFilterSection({
  *  nothing for a zero/undefined count so an empty scope shows no stray "0". */
 function NavRowCount({ count }: { count?: number }) {
   if (!count) return null
-  return <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{count}</span>
+  return <span className="ms-auto shrink-0 text-[11px] text-muted-foreground">{count}</span>
 }
 
 /** Nav-badge count for one conversation scope view, from `useInboxCounts`. */
@@ -565,7 +565,7 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                       className={itemClass(active)}
                     >
                       <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
-                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                      <span className="min-w-0 flex-1 truncate text-start">{label}</span>
                       <NavRowCount count={countForConversationView(view, counts)} />
                     </button>
                   )
@@ -579,7 +579,7 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                   <QUINN_VIEW.Icon
                     className={cn('size-4 shrink-0', quinnActive && 'text-primary')}
                   />
-                  <span className="min-w-0 flex-1 truncate text-left">{QUINN_VIEW.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-start">{QUINN_VIEW.label}</span>
                 </button>
                 {showsTestView(counts, testActive) && (
                   <button
@@ -589,7 +589,7 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                     className={itemClass(testActive)}
                   >
                     <BeakerIcon className={cn('size-4 shrink-0', testActive && 'text-primary')} />
-                    <span className="min-w-0 flex-1 truncate text-left">
+                    <span className="min-w-0 flex-1 truncate text-start">
                       <TestViewLabel />
                     </span>
                     <NavRowCount count={counts?.test} />
@@ -615,7 +615,7 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                       className={itemClass(active)}
                     >
                       <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
-                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                      <span className="min-w-0 flex-1 truncate text-start">{label}</span>
                       <NavRowCount count={count} />
                     </button>
                   )

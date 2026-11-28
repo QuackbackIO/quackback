@@ -391,14 +391,14 @@ export function WorkflowsManager({
             })
           }
         >
-          <SparklesIcon className="mr-2 size-4 text-primary" />
+          <SparklesIcon className="me-2 size-4 text-primary" />
           {intl.formatMessage({
             id: 'automation.workflows.fromTemplate',
             defaultMessage: 'Create from template',
           })}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={createFromScratch}>
-          <PencilSquareIcon className="mr-2 size-4 text-muted-foreground" />
+          <PencilSquareIcon className="me-2 size-4 text-muted-foreground" />
           {intl.formatMessage({
             id: 'automation.workflows.fromScratch',
             defaultMessage: 'Create from scratch',
@@ -422,7 +422,7 @@ export function WorkflowsManager({
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full max-w-xs">
-            <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 start-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -434,7 +434,7 @@ export function WorkflowsManager({
                 id: 'automation.workflows.search',
                 defaultMessage: 'Search workflows…',
               })}
-              className="pl-8"
+              className="ps-8"
             />
           </div>
           <WorkflowFilters
@@ -605,7 +605,7 @@ function GroupHeader({
         {count}
       </Badge>
       {dragHint && (
-        <span className="ml-auto text-[11px] font-medium text-muted-foreground">{dragHint}</span>
+        <span className="ms-auto text-[11px] font-medium text-muted-foreground">{dragHint}</span>
       )}
     </div>
   )
@@ -748,7 +748,7 @@ function WorkflowRow({
             },
           ]}
         />
-        <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden />
+        <ChevronRightIcon className="rtl:-scale-x-100 size-3.5 text-muted-foreground" aria-hidden />
       </div>
     </div>
   )

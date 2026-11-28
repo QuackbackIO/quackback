@@ -76,7 +76,7 @@ function InlineValueInput({
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
         if (e.key === 'Escape') setDraft(value)
       }}
-      className="h-7 w-36 text-right text-sm"
+      className="h-7 w-36 text-end text-sm"
     />
   )
 }

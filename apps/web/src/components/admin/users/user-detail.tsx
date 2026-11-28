@@ -168,7 +168,7 @@ function KvRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2 py-[3px] text-xs leading-4">
       <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 truncate text-right">{children}</span>
+      <span className="min-w-0 truncate text-end">{children}</span>
     </div>
   )
 }
@@ -220,7 +220,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
       className="flex transition-colors hover:bg-muted/30 border-b border-border/30 last:border-b-0"
     >
       {/* Vote section - left column */}
-      <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/30 py-3">
+      <div className="flex flex-col items-center justify-center w-14 shrink-0 border-e border-border/30 py-3">
         <ChevronUpIcon className="h-5 w-5 text-muted-foreground" />
         <span className="text-xs font-bold text-foreground">{post.voteCount}</span>
       </div>
@@ -398,7 +398,7 @@ function UserConversations({
                   type="button"
                   aria-expanded={expanded}
                   onClick={() => setExpandedId(expanded ? null : c.id)}
-                  className="flex w-full items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+                  className="flex w-full items-start gap-2 px-3 py-2.5 text-start transition-colors hover:bg-muted/40"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -452,7 +452,7 @@ function UserConversations({
                 {expanded && (
                   <div className="px-3 pb-3">
                     <ConversationPreview conversationId={c.id} />
-                    <div className="mt-2 text-right">
+                    <div className="mt-2 text-end">
                       <Link
                         to="/admin/inbox"
                         search={{ c: c.id }}
@@ -617,7 +617,7 @@ export function UserDetail({
   const backHeader = (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       <Button variant="ghost" size="sm" onClick={onClose}>
-        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
+        <ArrowLeftIcon className="rtl:-scale-x-100 h-4 w-4 me-1.5" />
         Back to users
       </Button>
     </div>
@@ -685,12 +685,12 @@ export function UserDetail({
                     {updateUser.isPending ? (
                       <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <CheckIcon className="h-3.5 w-3.5 mr-1" />
+                      <CheckIcon className="h-3.5 w-3.5 me-1" />
                     )}
                     Save
                   </Button>
                   <Button size="sm" variant="ghost" onClick={cancelEditing}>
-                    <XMarkIcon className="h-3.5 w-3.5 mr-1" />
+                    <XMarkIcon className="h-3.5 w-3.5 me-1" />
                     Cancel
                   </Button>
                 </div>
@@ -1026,7 +1026,7 @@ function FactCell({
   muted?: boolean
 }) {
   return (
-    <div className="flex-1 border-border/50 px-2 py-2.5 text-center not-last:border-r">
+    <div className="flex-1 border-border/50 px-2 py-2.5 text-center not-last:border-e">
       <div
         className={cn(
           'leading-[22px]',

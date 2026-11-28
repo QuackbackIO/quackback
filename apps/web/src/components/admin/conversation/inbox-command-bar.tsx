@@ -100,7 +100,7 @@ export const InboxCommandBar = memo(function InboxCommandBar({
                       >
                         <span>{label}</span>
                         {action.shortcut && (
-                          <kbd className="bg-muted text-muted-foreground ml-auto rounded border px-1.5 py-0.5 text-xs">
+                          <kbd className="bg-muted text-muted-foreground ms-auto rounded border px-1.5 py-0.5 text-xs">
                             {action.shortcut}
                           </kbd>
                         )}

@@ -104,7 +104,7 @@ export function SidebarCreateForm({ initialTitle, onBack, onCreated }: SidebarCr
         onClick={onBack}
         className="mb-3 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeftIcon className="h-4 w-4" />
+        <ArrowLeftIcon className="rtl:-scale-x-100 h-4 w-4" />
         New Post
       </button>
 
@@ -185,7 +185,7 @@ export function SidebarCreateForm({ initialTitle, onBack, onCreated }: SidebarCr
         <Button type="submit" className="w-full" disabled={submitting || !title.trim()}>
           {submitting ? (
             <>
-              <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2Icon className="me-2 h-4 w-4 animate-spin" />
               Creating...
             </>
           ) : (

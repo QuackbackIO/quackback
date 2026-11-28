@@ -451,7 +451,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                     disabled={saving}
                     onChange={(patch) => updateRule(index, patch)}
                   />
-                  <div className="ml-auto flex shrink-0 items-center">
+                  <div className="ms-auto flex shrink-0 items-center">
                     <Button
                       type="button"
                       variant="ghost"
@@ -488,17 +488,17 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                   </div>
                 </div>
                 {roleMissing(rule) && (
-                  <p className="mt-1.5 pl-6 text-xs text-warning">{MISSING_ROLE_NOTE}</p>
+                  <p className="mt-1.5 ps-6 text-xs text-warning">{MISSING_ROLE_NOTE}</p>
                 )}
                 {rule.roleId && ruleError?.roleIds.includes(rule.roleId) && (
-                  <p role="alert" className="mt-1.5 pl-6 text-xs text-destructive">
+                  <p role="alert" className="mt-1.5 ps-6 text-xs text-destructive">
                     {ruleError.message}
                   </p>
                 )}
                 {matches[index] && testPerson && (
                   <p
                     className={cn(
-                      'mt-1.5 pl-6 text-xs',
+                      'mt-1.5 ps-6 text-xs',
                       index === firstMatch ? 'text-success' : 'text-muted-foreground'
                     )}
                   >
@@ -589,7 +589,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
               They sign in with {label} and no rule gives Admin. Add a rule that gives Admin, or
               keep &ldquo;First sign-in only&rdquo;.
             </p>
-            <ul aria-label="Admins who would lose access" className="list-disc pl-4">
+            <ul aria-label="Admins who would lose access" className="list-disc ps-4">
               {guard.people.map((p) => (
                 <li key={p.principalId}>{personLabel(p)}</li>
               ))}
@@ -627,9 +627,9 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
 
       {dirty && (
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/40 pt-5">
-          {waiting && valid && <p className="mr-auto text-sm text-muted-foreground">{waiting}</p>}
+          {waiting && valid && <p className="me-auto text-sm text-muted-foreground">{waiting}</p>}
           {!valid && (
-            <p className="mr-auto text-sm text-muted-foreground">
+            <p className="me-auto text-sm text-muted-foreground">
               {filled
                 ? 'Pick a role that exists for the rules you changed.'
                 : 'Each rule needs a claim and a value.'}

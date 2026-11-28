@@ -193,7 +193,7 @@ export function CreateBoardDialog({
                   className="cursor-pointer text-xs font-normal text-muted-foreground"
                 >
                   Customize access after create
-                  <span className="ml-1">open the Access tab to fine-tune.</span>
+                  <span className="ms-1">open the Access tab to fine-tune.</span>
                 </Label>
               </div>
             </div>
@@ -234,7 +234,7 @@ function PresetTile({ active, label, description, icon, onClick }: PresetTilePro
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        'flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors',
+        'flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-start transition-colors',
         active
           ? 'border-primary bg-primary/10'
           : 'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer'

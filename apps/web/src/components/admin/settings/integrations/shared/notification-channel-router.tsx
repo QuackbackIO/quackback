@@ -284,7 +284,7 @@ function ChannelPicker<TChannel extends Channel>({
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>
           )}
-          <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronUpDownIcon className="ms-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-(--anchor-width) p-0" align="start" initialFocus={inputRef}>
@@ -336,7 +336,7 @@ function ChannelPicker<TChannel extends Channel>({
                 >
                   {renderChannelIcon(channel)}
                   <span className="truncate">{channel.name}</span>
-                  {blocked && <span className="ml-auto shrink-0 text-xs">No access</span>}
+                  {blocked && <span className="ms-auto shrink-0 text-xs">No access</span>}
                 </button>
               )
             })
@@ -400,7 +400,7 @@ function BoardFilterCombobox({
           <span className={cn('truncate', isAllBoards && 'text-muted-foreground')}>
             {triggerLabel}
           </span>
-          <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronUpDownIcon className="ms-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-(--anchor-width) p-0">
@@ -418,7 +418,7 @@ function BoardFilterCombobox({
                   }}
                 >
                   <CheckIcon
-                    className={cn('mr-2 h-4 w-4', isAllBoards ? 'opacity-100' : 'opacity-0')}
+                    className={cn('me-2 h-4 w-4', isAllBoards ? 'opacity-100' : 'opacity-0')}
                   />
                   All boards
                 </CommandItem>
@@ -433,7 +433,7 @@ function BoardFilterCombobox({
                   >
                     <CheckIcon
                       className={cn(
-                        'mr-2 h-4 w-4',
+                        'me-2 h-4 w-4',
                         selectedSet.has(board.id) ? 'opacity-100' : 'opacity-0'
                       )}
                     />
@@ -538,7 +538,7 @@ function ChannelRow<TChannel extends Channel>({
           <div className="flex items-center gap-2 px-4 py-3">
             <ChevronRightIcon
               className={`h-3 w-3 text-muted-foreground shrink-0 transition-transform duration-150 ${
-                expanded ? 'rotate-90' : ''
+                expanded ? 'rtl:-scale-x-100 rotate-90 rtl:-rotate-90' : ''
               }`}
             />
             {renderChannelIcon(channelInfo)}
@@ -559,7 +559,7 @@ function ChannelRow<TChannel extends Channel>({
                 key={event.id}
                 className={cn(
                   'flex justify-center self-stretch items-center py-3',
-                  starts.has(event.id) && 'border-l border-border/50'
+                  starts.has(event.id) && 'border-s border-border/50'
                 )}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -575,14 +575,14 @@ function ChannelRow<TChannel extends Channel>({
         </div>
 
         {updateMutation.isError && (
-          <p className="px-4 pb-3 pl-11 text-sm text-destructive">
+          <p className="px-4 pb-3 ps-11 text-sm text-destructive">
             {updateMutation.error.message || "Couldn't save the change. Try again."}
           </p>
         )}
 
         {expanded && (
           <div className="border-t border-border/30 bg-muted/5 px-4 pb-4">
-            <div className="pl-10 pt-3 space-y-3">
+            <div className="ps-10 pt-3 space-y-3">
               {showBoardFilter && (
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Board filter</Label>
@@ -602,7 +602,7 @@ function ChannelRow<TChannel extends Channel>({
                   onClick={() => setConfirmRemove(true)}
                   disabled={disabled}
                 >
-                  <XMarkIcon className="h-3.5 w-3.5 mr-1" />
+                  <XMarkIcon className="h-3.5 w-3.5 me-1" />
                   Remove channel
                 </Button>
               </div>
@@ -683,7 +683,7 @@ function RoutingTable<TChannel extends Channel>({
                   key={group.name}
                   className={cn(
                     'pt-2 text-[11px] font-semibold text-foreground/80 text-center',
-                    i > 0 && 'border-l border-border/50'
+                    i > 0 && 'border-s border-border/50'
                   )}
                   style={{ gridColumn: `span ${group.events.length}` }}
                 >
@@ -700,7 +700,7 @@ function RoutingTable<TChannel extends Channel>({
               className={cn(
                 'py-2 text-[11px] font-medium text-muted-foreground text-center leading-tight',
                 groups && 'pt-1',
-                starts.has(event.id) && 'border-l border-border/50'
+                starts.has(event.id) && 'border-s border-border/50'
               )}
               title={event.description}
             >

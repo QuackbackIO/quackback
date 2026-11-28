@@ -73,7 +73,7 @@ function CopyAsParts({ value, name }: { value: string; name: string }) {
  * with the header row left out.
  */
 const STACKED_CELL =
-  '@max-xl:flex @max-xl:items-start @max-xl:gap-3 @max-xl:py-0.5 @max-xl:pr-0 ' +
+  '@max-xl:flex @max-xl:items-start @max-xl:gap-3 @max-xl:py-0.5 @max-xl:pe-0 ' +
   '@max-xl:before:w-11 @max-xl:before:shrink-0 @max-xl:before:pt-0.5 @max-xl:before:font-sans ' +
   '@max-xl:before:text-xs @max-xl:before:text-muted-foreground ' +
   '@max-xl:before:content-[attr(data-label)]'
@@ -101,10 +101,10 @@ export function DnsRecordTable({
     <div className="@container overflow-x-auto">
       <table className="w-full text-[13px] @max-xl:block">
         <thead className="@max-xl:hidden">
-          <tr className="text-left text-xs text-muted-foreground">
-            <th className={cn('py-1.5 pr-3 font-medium', allQuiet && 'sr-only')}>Record</th>
-            <th className="py-1.5 pr-3 font-medium">Name</th>
-            <th className="py-1.5 pr-3 font-medium">Type</th>
+          <tr className="text-start text-xs text-muted-foreground">
+            <th className={cn('py-1.5 pe-3 font-medium', allQuiet && 'sr-only')}>Record</th>
+            <th className="py-1.5 pe-3 font-medium">Name</th>
+            <th className="py-1.5 pe-3 font-medium">Type</th>
             <th className="py-1.5 font-medium">Value</th>
           </tr>
         </thead>
@@ -119,7 +119,7 @@ export function DnsRecordTable({
                 >
                   <td
                     className={cn(
-                      'py-1.5 pr-3 whitespace-nowrap @max-xl:block @max-xl:pt-0 @max-xl:font-medium',
+                      'py-1.5 pe-3 whitespace-nowrap @max-xl:block @max-xl:pt-0 @max-xl:font-medium',
                       quiet(r) && 'sr-only'
                     )}
                   >
@@ -140,7 +140,7 @@ export function DnsRecordTable({
                       </span>
                     )}
                   </td>
-                  <td data-label="Name" className={cn('py-1.5 pr-3', STACKED_CELL)}>
+                  <td data-label="Name" className={cn('py-1.5 pe-3', STACKED_CELL)}>
                     <span className="flex min-w-0 items-start gap-1">
                       <span className="font-mono whitespace-nowrap @max-xl:break-all @max-xl:whitespace-normal">
                         {r.name}
@@ -155,7 +155,7 @@ export function DnsRecordTable({
                   </td>
                   <td
                     data-label="Type"
-                    className={cn('py-1.5 pr-3 font-mono whitespace-nowrap', STACKED_CELL)}
+                    className={cn('py-1.5 pe-3 font-mono whitespace-nowrap', STACKED_CELL)}
                   >
                     {r.type}
                   </td>
@@ -174,7 +174,7 @@ export function DnsRecordTable({
                 {r.value.length > TXT_STRING_MAX && (
                   <tr data-slot="dns-record-parts" className="@max-xl:block">
                     <td colSpan={3} className="@max-xl:hidden" />
-                    <td className="pb-1.5 @max-xl:block @max-xl:pl-14">
+                    <td className="pb-1.5 @max-xl:block @max-xl:ps-14">
                       <CopyAsParts value={r.value} name={r.name} />
                     </td>
                   </tr>

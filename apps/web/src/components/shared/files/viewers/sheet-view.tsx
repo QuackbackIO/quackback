@@ -128,7 +128,7 @@ function CellBar({ sheet, selected }: { sheet: SheetData; selected: CellAddress 
       data-testid="cell-bar"
       className="flex min-h-8 shrink-0 items-stretch border-b border-border/60 text-[12.5px]"
     >
-      <span className="grid w-16 shrink-0 place-items-center border-r border-border/60 font-semibold tabular-nums">
+      <span className="grid w-16 shrink-0 place-items-center border-e border-border/60 font-semibold tabular-nums">
         {ref}
       </span>
       <span className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap px-2.5">
@@ -230,7 +230,7 @@ function SheetGrid({
         >
           <div
             aria-hidden="true"
-            className="sticky left-0 z-30 border-b border-r border-border/60 bg-muted"
+            className="sticky start-0 z-30 border-b border-e border-border/60 bg-muted"
             style={{ width: ROW_HEADER_WIDTH, height: HEADER_HEIGHT }}
           />
           {visibleCols.map((col) => (
@@ -238,7 +238,7 @@ function SheetGrid({
               key={col.key}
               role="columnheader"
               aria-colindex={col.index + 2}
-              className="absolute top-0 grid place-items-center border-b border-r border-border/60 bg-muted text-[11.5px] font-medium text-muted-foreground"
+              className="absolute top-0 grid place-items-center border-b border-e border-border/60 bg-muted text-[11.5px] font-medium text-muted-foreground"
               style={{ left: col.start, width: col.size, height: HEADER_HEIGHT }}
             >
               {columnLabel(col.index)}
@@ -255,12 +255,12 @@ function SheetGrid({
               role="row"
               aria-rowindex={row.index + 2}
               data-header-row={isHeader ? 'true' : undefined}
-              className="absolute left-0"
+              className="absolute start-0"
               style={{ top: row.start, width: totalWidth, height: row.size }}
             >
               <div
                 role="rowheader"
-                className="sticky left-0 z-10 grid place-items-center border-b border-r border-border/60 bg-muted text-[11.5px] font-medium text-muted-foreground"
+                className="sticky start-0 z-10 grid place-items-center border-b border-e border-border/60 bg-muted text-[11.5px] font-medium text-muted-foreground"
                 style={{ width: ROW_HEADER_WIDTH, height: row.size }}
               >
                 {row.index + 1}
@@ -283,7 +283,7 @@ function SheetGrid({
                     data-match={isMatch ? '' : undefined}
                     onClick={() => onSelect({ r: row.index, c: col.index })}
                     className={cn(
-                      'absolute top-0 cursor-cell truncate border-b border-r border-border/60 px-2 leading-[25px]',
+                      'absolute top-0 cursor-cell truncate border-b border-e border-border/60 px-2 leading-[25px]',
                       align === 'right' && 'text-right',
                       align === 'center' && 'text-center',
                       isHeader && 'bg-muted/50 font-semibold',

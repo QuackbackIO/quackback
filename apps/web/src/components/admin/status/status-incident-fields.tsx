@@ -104,7 +104,7 @@ export function AffectedComponentsField({
             <span className="flex-1 min-w-0 truncate text-sm">
               {c.name}
               {c.groupName && (
-                <span className="ml-1.5 text-xs text-muted-foreground">· {c.groupName}</span>
+                <span className="ms-1.5 text-xs text-muted-foreground">· {c.groupName}</span>
               )}
             </span>
             {checked && (
@@ -163,7 +163,7 @@ export function TemplatePickerButton({
               onApply(t)
               setOpen(false)
             }}
-            className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted/50 transition-colors"
+            className="w-full rounded px-2 py-1.5 text-start text-sm hover:bg-muted/50 transition-colors"
           >
             <span className="block font-medium">{t.name}</span>
             <span className="block text-xs text-muted-foreground truncate">{t.title}</span>

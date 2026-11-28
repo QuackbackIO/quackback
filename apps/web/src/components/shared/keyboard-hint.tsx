@@ -29,7 +29,7 @@ export function KeyboardHint({ keys, action, className }: KeyboardHintProps) {
           </kbd>
         </Fragment>
       ))}
-      <span className="ml-2">{action}</span>
+      <span className="ms-2">{action}</span>
     </p>
   )
 }

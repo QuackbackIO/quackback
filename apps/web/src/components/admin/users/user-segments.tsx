@@ -45,7 +45,7 @@ export function SegmentBadge({ segment, onRemove, isRemoving, readOnly }: Segmen
             onRemove(segment.id)
           }}
           disabled={isRemoving}
-          className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive disabled:opacity-50"
+          className="ms-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive disabled:opacity-50"
           aria-label={`Remove from ${segment.name}`}
         >
           <XMarkIcon className="h-3 w-3" />
@@ -140,7 +140,7 @@ export function UserSegmentBadges({
               size="sm"
               className="h-5 px-1.5 text-[13px] text-muted-foreground hover:text-foreground"
             >
-              <PlusIcon className="size-3.5 mr-0.5" />
+              <PlusIcon className="size-3.5 me-0.5" />
               Add
             </Button>
           </PopoverTrigger>

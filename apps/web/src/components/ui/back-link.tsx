@@ -16,11 +16,11 @@ export function BackLink({ children, className, ...props }: BackLinkProps) {
     <Link
       {...props}
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 -ml-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors',
+        'inline-flex items-center gap-1.5 px-2 py-1 -ms-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors',
         className
       )}
     >
-      <ArrowLeftIcon className="h-4 w-4" />
+      <ArrowLeftIcon className="rtl:-scale-x-100 h-4 w-4" />
       <span>{children}</span>
     </Link>
   )

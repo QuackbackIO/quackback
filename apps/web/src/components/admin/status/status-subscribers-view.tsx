@@ -243,7 +243,7 @@ export function StatusSubscribersView() {
                     {SOURCE_LABELS[sub.source]}
                   </Badge>
                 )}
-                <div className="text-xs text-muted-foreground text-right shrink-0 whitespace-nowrap">
+                <div className="text-xs text-muted-foreground text-end shrink-0 whitespace-nowrap">
                   {sub.unsubscribedAt ? (
                     <span>
                       Unsubscribed <TimeAgo date={sub.unsubscribedAt} locale="en" />

@@ -107,7 +107,7 @@ export function TrustedSendersCard({ entries, onSave }: TrustedSendersCardProps)
                   type="button"
                   onClick={() => setRemoveTarget(entry)}
                   disabled={saving}
-                  className="ml-2 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 transition-colors"
+                  className="ms-2 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 transition-colors"
                   aria-label={`Remove ${entry}`}
                 >
                   <XMarkIcon className="h-3.5 w-3.5" />

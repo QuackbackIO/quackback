@@ -216,7 +216,7 @@ export function PasswordForm({ hasPassword, onSaved }: PasswordFormProps) {
             >
               {loading ? (
                 <>
-                  <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
+                  <ArrowPathIcon className="h-4 w-4 animate-spin me-2" />
                   {hasPassword ? (
                     <FormattedMessage
                       id="portal.settings.password.changing"

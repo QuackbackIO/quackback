@@ -113,7 +113,7 @@ export function MergeLeadControl({
           onClick={() => setOpen(true)}
           title="Fold this lead's activity into an identified user"
         >
-          <ArrowsRightLeftIcon className="h-4 w-4 mr-2" />
+          <ArrowsRightLeftIcon className="h-4 w-4 me-2" />
           Merge into user…
         </Button>
       ) : null}
@@ -133,13 +133,13 @@ export function MergeLeadControl({
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+            <MagnifyingGlassIcon className="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
             <Input
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search users by name or email…"
-              className="pl-8 text-sm"
+              className="ps-8 text-sm"
             />
           </div>
           <div className="max-h-64 overflow-y-auto -mx-1 px-1">
@@ -157,7 +157,7 @@ export function MergeLeadControl({
                     type="button"
                     onClick={() => setTargetId(item.principalId as PrincipalId)}
                     className={cn(
-                      'flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted/40',
+                      'flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors hover:bg-muted/40',
                       targetId === item.principalId && 'bg-primary/10 hover:bg-primary/10'
                     )}
                   >
@@ -181,7 +181,7 @@ export function MergeLeadControl({
             </Button>
             <Button size="sm" onClick={confirm} disabled={!targetId || mergeLead.isPending}>
               {mergeLead.isPending ? (
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin mr-1" />
+                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin me-1" />
               ) : null}
               Merge
             </Button>

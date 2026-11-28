@@ -348,7 +348,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
         <nav
           ref={railRef}
           aria-label={intl.formatMessage({ id: 'files.pdf.railAria', defaultMessage: 'Pages' })}
-          className="w-28 shrink-0 overflow-y-auto border-r border-border bg-background"
+          className="w-28 shrink-0 overflow-y-auto border-e border-border bg-background"
         >
           <div className="relative w-full" style={{ height: rail.getTotalSize() }}>
             {rail.getVirtualItems().map((item) => {

@@ -37,7 +37,7 @@ export function DuplicateSummaryBar({ active, onToggle }: DuplicateSummaryBarPro
         <button
           type="button"
           onClick={onToggle}
-          className="text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer ml-1"
+          className="text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer ms-1"
         >
           Clear
         </button>

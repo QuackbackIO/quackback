@@ -25,9 +25,9 @@ export function AnalyticsTeammatePerformance({ teammates }: { teammates: Teammat
       <TableHeader>
         <TableRow>
           <TableHead>Teammate</TableHead>
-          <TableHead className="text-right">Conversations</TableHead>
-          <TableHead className="text-right">Median first response</TableHead>
-          <TableHead className="text-right">Median time to close</TableHead>
+          <TableHead className="text-end">Conversations</TableHead>
+          <TableHead className="text-end">Median first response</TableHead>
+          <TableHead className="text-end">Median time to close</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -43,11 +43,11 @@ export function AnalyticsTeammatePerformance({ teammates }: { teammates: Teammat
                 <span className="truncate font-medium">{t.displayName}</span>
               </div>
             </TableCell>
-            <TableCell className="text-right tabular-nums">{formatNumber(t.handled)}</TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-end tabular-nums">{formatNumber(t.handled)}</TableCell>
+            <TableCell className="text-end tabular-nums">
               {formatResponseTime(t.medianFirstResponseMinutes)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-end tabular-nums">
               {formatResponseTime(t.medianCloseMinutes)}
             </TableCell>
           </TableRow>

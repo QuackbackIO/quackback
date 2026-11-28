@@ -234,7 +234,7 @@ export function ConversationListColumn({
   return (
     <div
       className={cn(
-        'flex min-h-0 w-full shrink-0 flex-col border-r border-border/50 md:w-72 xl:w-[22.5rem]',
+        'flex min-h-0 w-full shrink-0 flex-col border-e border-border/50 md:w-72 xl:w-[22.5rem]',
         // On mobile the list and thread are one column: hide the list while an
         // item is open (a back button returns to it).
         selectedId && 'hidden md:flex'
@@ -484,7 +484,7 @@ function EmptyList({
 function SkeletonRow() {
   return (
     <div className="flex w-full items-start border-b border-border/30">
-      <div className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3 pr-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 py-3 ps-3 pe-3">
         <Skeleton className="size-8 shrink-0 rounded-full" />
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
@@ -596,7 +596,7 @@ export const ConversationRow = memo(function ConversationRow({
         onMouseLeave={onPrefetchCancel}
         onFocus={onPrefetch ? () => onPrefetch(id) : undefined}
         onBlur={onPrefetchCancel}
-        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3 pr-3 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 ps-3 pe-3 text-start"
       >
         <Avatar
           src={c.visitor.avatarUrl}
@@ -694,7 +694,7 @@ const TicketRow = memo(function TicketRow({
         onMouseLeave={onPrefetchCancel}
         onFocus={onPrefetch ? () => onPrefetch(id) : undefined}
         onBlur={onPrefetchCancel}
-        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3 pr-3 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 ps-3 pe-3 text-start"
       >
         <TicketTypeGlyph type={t.type} />
         <div className="min-w-0 flex-1">

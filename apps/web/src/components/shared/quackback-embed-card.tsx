@@ -111,7 +111,7 @@ function EmbedShell({
       <div
         role="button"
         tabIndex={0}
-        className={cn(shellCls, 'cursor-pointer text-left')}
+        className={cn(shellCls, 'cursor-pointer text-start')}
         onClick={() => onOpenInModal(modalTarget)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {

@@ -90,7 +90,7 @@ export function ImportHistoryList() {
             <TableHead>Status</TableHead>
             <TableHead>Counts</TableHead>
             <TableHead>Started</TableHead>
-            <TableHead className="text-right">Errors</TableHead>
+            <TableHead className="text-end">Errors</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -121,7 +121,7 @@ export function ImportHistoryList() {
               <TableCell className="text-sm text-muted-foreground">
                 <TimeAgo date={run.createdAt} />
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-end">
                 {run.errorReport && run.errorReport.length > 0 ? (
                   <Button variant="ghost" size="sm" onClick={() => downloadErrorReport(run)}>
                     <ArrowDownTrayIcon className="size-4" />

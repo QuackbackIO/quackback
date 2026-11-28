@@ -97,7 +97,7 @@ function SearchPaletteDialogView({ open, onOpenChange, returnFocus }: SearchPale
           navigated.current = false
           return false
         }}
-        className="max-w-xl gap-0 p-0 [&>button]:top-3 [&>button]:right-3"
+        className="max-w-xl gap-0 p-0 [&>button]:top-3 [&>button]:end-3"
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <AskComposer
