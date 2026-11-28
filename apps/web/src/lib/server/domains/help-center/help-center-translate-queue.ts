@@ -61,10 +61,14 @@ export { HELP_CENTER_TRANSLATE_QUEUE }
 /** Attempts per translate job, shared with the resume sweep. */
 export const TRANSLATE_JOB_ATTEMPTS = 3
 
-export async function enqueueHelpCenterTranslateJob(data: HelpCenterTranslateJob): Promise<void> {
+export async function enqueueHelpCenterTranslateJob(
+  data: HelpCenterTranslateJob,
+  opts: { dedupeKey?: string } = {}
+): Promise<void> {
   await enqueueJob({
     queue: HELP_CENTER_TRANSLATE_QUEUE,
     payload: { ...data },
+    dedupeKey: opts.dedupeKey ?? null,
     // Was BullMQ's `attempts: 3` with exponential backoff from 5s; the
     // definition carries the same numbers.
     maxAttempts: TRANSLATE_JOB_ATTEMPTS,

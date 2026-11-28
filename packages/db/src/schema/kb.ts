@@ -285,7 +285,14 @@ export interface TranslationSourceText {
 
 /** A problem the translation checks found, with what it concerns. */
 export interface TranslationCheckProblem {
-  code: 'empty' | 'code_block_changed' | 'link_missing' | 'image_missing' | 'headings_changed'
+  code:
+    | 'empty'
+    | 'code_block_changed'
+    | 'link_missing'
+    | 'image_missing'
+    | 'embed_missing'
+    | 'headings_changed'
+    | 'term_changed'
   /** The code, link or image target, or heading outline, the problem is about. */
   detail?: string
 }
@@ -322,7 +329,8 @@ export const helpCenterArticleTranslations = pgTable(
     sourceText: jsonb('source_text').$type<TranslationSourceText>(),
     /**
      * An AI update waiting for review. The live columns above are what
-     * readers see until a person publishes it.
+     * readers see until a person publishes it. After a discard only
+     * pendingSourceRevision stays, so the automatic upkeep skips that version.
      */
     pendingTitle: text('pending_title'),
     pendingDescription: text('pending_description'),

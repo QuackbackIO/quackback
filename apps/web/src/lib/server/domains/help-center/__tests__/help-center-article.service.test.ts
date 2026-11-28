@@ -93,9 +93,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 const mockCancelPendingAutoTranslations = vi.fn(async (..._args: unknown[]) => {})
+const mockQueueUpkeep = vi.fn()
 vi.mock('../help-center-translate-jobs', () => ({
   HELP_CENTER_TRANSLATE_QUEUE: 'help-center-translate',
   cancelPendingAutoTranslations: (...args: unknown[]) => mockCancelPendingAutoTranslations(...args),
+  queueUpkeep: (...args: unknown[]) => mockQueueUpkeep(...args),
 }))
 
 vi.mock('@/lib/server/markdown-tiptap', () => ({
@@ -404,6 +406,32 @@ describe('publishArticle', () => {
     const result = await publishArticle('article_1' as KbArticleId)
     expect(result).toBeDefined()
     expect(updateSetCalls.length).toBeGreaterThan(0)
+  })
+
+  it('queues the upkeep of its translations', async () => {
+    mockCategoryFindFirst.mockResolvedValue({ id: 'kb_category_1', slug: 'test', name: 'Test' })
+    mockPrincipalFindFirst.mockResolvedValue(null)
+
+    await publishArticle('article_1' as KbArticleId)
+    expect(mockQueueUpkeep).toHaveBeenCalledWith(expect.objectContaining({ id: 'article_1' }))
+  })
+})
+
+describe('updateArticle and translation upkeep', () => {
+  beforeEach(() => {
+    mockCategoryFindFirst.mockResolvedValue({ id: 'kb_category_1', slug: 'test', name: 'Test' })
+    mockPrincipalFindFirst.mockResolvedValue(null)
+  })
+
+  it('queues the upkeep when the update writes text', async () => {
+    await updateArticle('article_1' as KbArticleId, { description: 'New summary' })
+    expect(mockQueueUpkeep).toHaveBeenCalledOnce()
+  })
+
+  it('queues nothing for an update that writes no text', async () => {
+    mockCategoryFindFirst.mockResolvedValue({ id: 'kb_category_2', slug: 'b', name: 'B' })
+    await updateArticle('article_1' as KbArticleId, { segmentIds: [] })
+    expect(mockQueueUpkeep).not.toHaveBeenCalled()
   })
 })
 

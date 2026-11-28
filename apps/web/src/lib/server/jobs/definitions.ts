@@ -680,6 +680,24 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Daily: queues again the help center translations still behind their
+    // article (a failed AI call, a paused allowance). Inert unless automatic
+    // translation is on.
+    name: 'help-center-translate-catch-up',
+    cron: '40 3 * * *',
+    maxAttempts: 1,
+    cronEnabled: () =>
+      import('@/lib/server/domains/help-center/help-center-translation-upkeep').then((m) =>
+        m.automaticTranslationOn()
+      ),
+    handler: () =>
+      import('@/lib/server/domains/help-center/help-center-translation-upkeep').then(
+        (m) => async () => {
+          await m.runTranslationCatchUp()
+        }
+      ),
+  },
+  {
     // Was `{email-imap}`, a 60s repeatable poll. `cronEnabled` keeps the
     // schedule inert unless an IMAP mailbox is actually configured, which is
     // what the reference achieved by never constructing the worker.

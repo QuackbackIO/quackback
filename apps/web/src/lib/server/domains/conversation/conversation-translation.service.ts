@@ -258,8 +258,7 @@ async function callInboxTranslationModel<T>(
  * Best-effort customer-language detection from the visitor's own recent
  * messages, persisted once on the conversation row. Never throws: AI
  * misconfiguration, an empty thread, or an unparseable response all just
- * skip detection silently (mirrors queueAutoTranslateOnPublish's
- * error-swallow style) — this only powers a "nice to have" activation-
+ * skip detection silently — this only powers a "nice to have" activation-
  * suggestion banner, never a blocking path. Callers must invoke this
  * fire-and-forget (see `getConversationFn`) — it is never on the critical
  * path of opening a thread.

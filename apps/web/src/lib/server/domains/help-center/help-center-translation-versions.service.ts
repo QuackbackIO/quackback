@@ -9,6 +9,9 @@
  *
  * An AI update never changes the live text. It waits in the pending_* columns
  * until a person publishes it, which makes it live and current, or discards it.
+ * A discarded update leaves its pending_source_revision behind with no
+ * pending text: the automatic upkeep does not make that version again, and
+ * the next change to the article clears the way.
  */
 import {
   db,
@@ -68,6 +71,21 @@ export function nextTextRevision(next: {
   return sql`CASE WHEN ${or(...changes)} THEN ${t.textRevision} + 1 ELSE ${t.textRevision} END`
 }
 
+/** True when an article update writes any of the text translations are made from. */
+export function touchesTranslatedText(input: {
+  title?: unknown
+  description?: unknown
+  content?: unknown
+  contentJson?: unknown
+}): boolean {
+  return (
+    input.title !== undefined ||
+    input.description !== undefined ||
+    input.content !== undefined ||
+    input.contentJson !== undefined
+  )
+}
+
 /** The revision and text of an article, or null when there is no live article. */
 export async function getArticleSource(
   articleId: KbArticleId
@@ -78,6 +96,33 @@ export async function getArticleSource(
   })
   if (!row) return null
   return { revision: row.textRevision, text: sourceTextOf(row), locale: row.locale }
+}
+
+/** The article as a translation is made from it: revision, text and rich body. */
+export async function getArticleSourceForTranslation(articleId: KbArticleId): Promise<{
+  revision: number
+  text: TranslationSourceText
+  contentJson: TiptapContent | null
+  locale: string
+} | null> {
+  const row = await db.query.helpCenterArticles.findFirst({
+    where: and(eq(helpCenterArticles.id, articleId), isNull(helpCenterArticles.deletedAt)),
+    columns: {
+      textRevision: true,
+      title: true,
+      description: true,
+      content: true,
+      contentJson: true,
+      locale: true,
+    },
+  })
+  if (!row) return null
+  return {
+    revision: row.textRevision,
+    text: sourceTextOf(row),
+    contentJson: row.contentJson ?? null,
+    locale: row.locale,
+  }
 }
 
 /** An AI update waiting beside a translation's live text. */
@@ -273,14 +318,19 @@ export async function publishPendingTranslationUpdate(
   return row
 }
 
-/** Drop the waiting AI update; the live text stays as it is. */
+/**
+ * Drop the waiting AI update; the live text stays as it is. The revision it
+ * was made from stays as a marker, so the automatic upkeep does not make the
+ * same update again for that version. A person can still ask for one.
+ */
 export async function discardPendingTranslationUpdate(
   articleId: KbArticleId,
   locale: string
 ): Promise<TranslationRow> {
+  const { pendingSourceRevision: _kept, ...cleared } = clearedPending
   const [row] = await db
     .update(helpCenterArticleTranslations)
-    .set({ ...clearedPending })
+    .set(cleared)
     .where(
       and(translationIn(articleId, locale), isNotNull(helpCenterArticleTranslations.pendingTitle))
     )

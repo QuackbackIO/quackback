@@ -429,52 +429,53 @@ went stale the moment a queue moved.
 
 <!-- QUEUE-TABLE:START — generated from JOB_DEFINITIONS; do not hand-edit -->
 
-| Queue                           | Schedule       | Concurrency | Attempts | Lease |
-| ------------------------------- | -------------- | ----------- | -------- | ----- |
-| `slack-hook`                    | —              | 1           | 3        | 60s   |
-| `integration-deliveries-sweep`  | `0 3 * * *`    | 1           | 1        | 60s   |
-| `integration-install-cleanup`   | —              | 1           | 1        | 60s   |
-| `integration-installs-backfill` | —              | 1           | 1        | 60s   |
-| `anon-sweep`                    | `0 3 * * *`    | 1           | 3        | 60s   |
-| `cimd-client-sweep`             | `45 3 * * *`   | 1           | 3        | 60s   |
-| `page-view-partitions`          | `30 2 * * *`   | 1           | 3        | 60s   |
-| `sla-breach-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
-| `snooze-sweep`                  | `* * * * *`    | 1           | 3        | 60s   |
-| `workflow-sweep`                | `*/5 * * * *`  | 1           | 3        | 60s   |
-| `workflow-retention`            | `0 4 * * *`    | 1           | 3        | 60s   |
-| `email-log-retention`           | `0 6 * * *`    | 1           | 3        | 60s   |
-| `onboarding-email`              | —              | 1           | 3        | 60s   |
-| `spam-retention`                | `0 5 * * *`    | 1           | 3        | 60s   |
-| `sending-domain-recheck`        | `20 6 * * *`   | 1           | 3        | 60s   |
-| `sending-domain-watch`          | `7/10 * * * *` | 1           | 1        | 60s   |
-| `domain-ownership-watch`        | `50 6 * * *`   | 1           | 3        | 60s   |
-| `section-domains-watch`         | `55 6 * * *`   | 1           | 3        | 60s   |
-| `ses-tenant-reconcile`          | `41 * * * *`   | 1           | 3        | 60s   |
-| `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |
-| `startup-backfill`              | `15 * * * *`   | 1           | 20       | 60s   |
-| `ticket-frt-reconcile`          | —              | 1           | 20       | 60s   |
-| `deferred-index-build`          | `35 * * * *`   | 1           | 5        | 60s   |
-| `events`                        | —              | 5           | 6        | 60s   |
-| `integration-sync`              | —              | 5           | 6        | 90s   |
-| `integration-sync-sweep`        | `* * * * *`    | 1           | 1        | 60s   |
-| `integration-sync-retention`    | `45 2 * * *`   | 1           | 3        | 60s   |
-| `jira-webhook-refresh`          | `* * * * *`    | 1           | 3        | 60s   |
-| `event-dispatch`                | —              | 5           | 10       | 60s   |
-| `event-reactions`               | —              | 1           | 3        | 60s   |
-| `event-summaries`               | —              | 2           | 3        | 60s   |
-| `segment-evaluation`            | dynamic        | 2           | 3        | 60s   |
-| `file-preview`                  | —              | 2           | 2        | 120s  |
-| `file-retention`                | `40 4 * * *`   | 1           | 3        | 60s   |
-| `staged-upload-sweep`           | `50 4 * * *`   | 1           | 3        | 60s   |
-| `help-center-translate`         | —              | 1           | 3        | 120s  |
-| `help-center-translate-resume`  | `25 * * * *`   | 1           | 1        | 60s   |
-| `email-imap`                    | `* * * * *`    | 1           | 1        | 60s   |
-| `workflow-dispatch`             | —              | 1           | 3        | 60s   |
-| `workflow-wait`                 | —              | 4           | 3        | 60s   |
-| `import`                        | —              | 2           | 1        | 60s   |
-| `export`                        | —              | 1           | 1        | 60s   |
-| `membership-sync`               | `*/15 * * * *` | 1           | 10       | 60s   |
-| `usage-report`                  | `10 * * * *`   | 1           | 10       | 60s   |
+| Queue                            | Schedule       | Concurrency | Attempts | Lease |
+| -------------------------------- | -------------- | ----------- | -------- | ----- |
+| `slack-hook`                     | —              | 1           | 3        | 60s   |
+| `integration-deliveries-sweep`   | `0 3 * * *`    | 1           | 1        | 60s   |
+| `integration-install-cleanup`    | —              | 1           | 1        | 60s   |
+| `integration-installs-backfill`  | —              | 1           | 1        | 60s   |
+| `anon-sweep`                     | `0 3 * * *`    | 1           | 3        | 60s   |
+| `cimd-client-sweep`              | `45 3 * * *`   | 1           | 3        | 60s   |
+| `page-view-partitions`           | `30 2 * * *`   | 1           | 3        | 60s   |
+| `sla-breach-sweep`               | `* * * * *`    | 1           | 3        | 60s   |
+| `snooze-sweep`                   | `* * * * *`    | 1           | 3        | 60s   |
+| `workflow-sweep`                 | `*/5 * * * *`  | 1           | 3        | 60s   |
+| `workflow-retention`             | `0 4 * * *`    | 1           | 3        | 60s   |
+| `email-log-retention`            | `0 6 * * *`    | 1           | 3        | 60s   |
+| `onboarding-email`               | —              | 1           | 3        | 60s   |
+| `spam-retention`                 | `0 5 * * *`    | 1           | 3        | 60s   |
+| `sending-domain-recheck`         | `20 6 * * *`   | 1           | 3        | 60s   |
+| `sending-domain-watch`           | `7/10 * * * *` | 1           | 1        | 60s   |
+| `domain-ownership-watch`         | `50 6 * * *`   | 1           | 3        | 60s   |
+| `section-domains-watch`          | `55 6 * * *`   | 1           | 3        | 60s   |
+| `ses-tenant-reconcile`           | `41 * * * *`   | 1           | 3        | 60s   |
+| `analytics`                      | `0 * * * *`    | 1           | 3        | 60s   |
+| `startup-backfill`               | `15 * * * *`   | 1           | 20       | 60s   |
+| `ticket-frt-reconcile`           | —              | 1           | 20       | 60s   |
+| `deferred-index-build`           | `35 * * * *`   | 1           | 5        | 60s   |
+| `events`                         | —              | 5           | 6        | 60s   |
+| `integration-sync`               | —              | 5           | 6        | 90s   |
+| `integration-sync-sweep`         | `* * * * *`    | 1           | 1        | 60s   |
+| `integration-sync-retention`     | `45 2 * * *`   | 1           | 3        | 60s   |
+| `jira-webhook-refresh`           | `* * * * *`    | 1           | 3        | 60s   |
+| `event-dispatch`                 | —              | 5           | 10       | 60s   |
+| `event-reactions`                | —              | 1           | 3        | 60s   |
+| `event-summaries`                | —              | 2           | 3        | 60s   |
+| `segment-evaluation`             | dynamic        | 2           | 3        | 60s   |
+| `file-preview`                   | —              | 2           | 2        | 120s  |
+| `file-retention`                 | `40 4 * * *`   | 1           | 3        | 60s   |
+| `staged-upload-sweep`            | `50 4 * * *`   | 1           | 3        | 60s   |
+| `help-center-translate`          | —              | 1           | 3        | 120s  |
+| `help-center-translate-resume`   | `25 * * * *`   | 1           | 1        | 60s   |
+| `help-center-translate-catch-up` | `40 3 * * *`   | 1           | 1        | 60s   |
+| `email-imap`                     | `* * * * *`    | 1           | 1        | 60s   |
+| `workflow-dispatch`              | —              | 1           | 3        | 60s   |
+| `workflow-wait`                  | —              | 4           | 3        | 60s   |
+| `import`                         | —              | 2           | 1        | 60s   |
+| `export`                         | —              | 1           | 1        | 60s   |
+| `membership-sync`                | `*/15 * * * *` | 1           | 10       | 60s   |
+| `usage-report`                   | `10 * * * *`   | 1           | 10       | 60s   |
 
 <!-- QUEUE-TABLE:END -->
 
