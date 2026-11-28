@@ -347,12 +347,16 @@ export function VoteCount({ count }: VoteCountProps) {
  * Remove button for list items
  */
 export function ListItemRemoveButton({ onClick, label }: { onClick: () => void; label?: string }) {
+  const intl = useOptionalIntl()
   return (
     <button
       type="button"
       onClick={onClick}
       className="p-1 rounded hover:bg-muted"
-      aria-label={label || 'Remove'}
+      aria-label={
+        label ||
+        intl.formatMessage({ id: 'admin.shell.detailSidebar.remove', defaultMessage: 'Remove' })
+      }
     >
       <XMarkIcon className="h-3.5 w-3.5 text-muted-foreground" />
     </button>

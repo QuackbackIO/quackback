@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "模組",
   "admin.shell.settingsNav.section.automation": "AI 與自動化",
   "admin.shell.settingsNav.section.workspace": "工作區",
-  "admin.shell.settingsNav.section.data": "資料"
+  "admin.shell.settingsNav.section.data": "資料",
+  "admin.shell.availability.setAway": "將自己設為離開",
+  "admin.shell.availability.setActive": "將自己設為上線",
+  "admin.shell.accountMenu.account": "帳戶",
+  "admin.shell.portalUserPicker.search": "依名稱或電子郵件搜尋使用者…",
+  "admin.shell.portalUserPicker.noEmailTitle": "此使用者沒有電子郵件地址",
+  "admin.shell.portalUserPicker.noEmail": "無電子郵件",
+  "admin.shell.portalUserPicker.unnamed": "未命名使用者",
+  "admin.shell.filterAdd.filter": "篩選",
+  "admin.shell.detailSidebar.remove": "移除",
+  "admin.shell.autocomplete.search": "搜尋或輸入…",
+  "admin.shell.autocomplete.empty": "無相符項目。",
+  "admin.shell.autocomplete.use": "使用「{value}」",
+  "admin.shell.searchInput.placeholder": "搜尋…",
+  "admin.shell.listHeader.search": "搜尋…",
+  "admin.shell.sortMenu.label": "排序：{label}",
+  "ui.editor.youtubePrompt": "貼上 YouTube 影片網址："
 }

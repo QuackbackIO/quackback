@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "Modules",
   "admin.shell.settingsNav.section.automation": "IA et automatisation",
   "admin.shell.settingsNav.section.workspace": "Espace de travail",
-  "admin.shell.settingsNav.section.data": "Données"
+  "admin.shell.settingsNav.section.data": "Données",
+  "admin.shell.availability.setAway": "Passer en absent",
+  "admin.shell.availability.setActive": "Passer en actif",
+  "admin.shell.accountMenu.account": "Compte",
+  "admin.shell.portalUserPicker.search": "Rechercher des utilisateurs par nom ou e-mail…",
+  "admin.shell.portalUserPicker.noEmailTitle": "Cet utilisateur n’a pas d’adresse e-mail",
+  "admin.shell.portalUserPicker.noEmail": "Pas d’e-mail",
+  "admin.shell.portalUserPicker.unnamed": "Utilisateur sans nom",
+  "admin.shell.filterAdd.filter": "Filtrer",
+  "admin.shell.detailSidebar.remove": "Retirer",
+  "admin.shell.autocomplete.search": "Rechercher ou saisir…",
+  "admin.shell.autocomplete.empty": "Aucun résultat.",
+  "admin.shell.autocomplete.use": "Utiliser « {value} »",
+  "admin.shell.searchInput.placeholder": "Rechercher…",
+  "admin.shell.listHeader.search": "Rechercher…",
+  "admin.shell.sortMenu.label": "Trier : {label}",
+  "ui.editor.youtubePrompt": "Collez l’URL de la vidéo YouTube :"
 }

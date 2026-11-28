@@ -26,11 +26,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useFormatNumber } from '@/components/ui/format-number'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 
 export function useWorkspaceHomeTitle(): string {
+  const intl = useOptionalIntl()
   const settings = useWorkspaceSettings()
   const branding = (settings as { brandingData?: { name?: string } } | undefined)?.brandingData
-  return branding?.name ?? settings?.name ?? 'Home'
+  return branding?.name ?? settings?.name ?? intl.formatMessage(HOME_TITLE)
 }
 
 type Filter = OverviewAttentionKind | 'all'

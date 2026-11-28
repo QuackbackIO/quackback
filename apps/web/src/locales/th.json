@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "โมดูล",
   "admin.shell.settingsNav.section.automation": "AI และระบบอัตโนมัติ",
   "admin.shell.settingsNav.section.workspace": "เวิร์กสเปซ",
-  "admin.shell.settingsNav.section.data": "ข้อมูล"
+  "admin.shell.settingsNav.section.data": "ข้อมูล",
+  "admin.shell.availability.setAway": "ตั้งตัวเองเป็นไม่อยู่",
+  "admin.shell.availability.setActive": "ตั้งตัวเองเป็นออนไลน์",
+  "admin.shell.accountMenu.account": "บัญชี",
+  "admin.shell.portalUserPicker.search": "ค้นหาผู้ใช้ตามชื่อหรืออีเมล…",
+  "admin.shell.portalUserPicker.noEmailTitle": "ผู้ใช้นี้ไม่มีอีเมล",
+  "admin.shell.portalUserPicker.noEmail": "ไม่มีอีเมล",
+  "admin.shell.portalUserPicker.unnamed": "ผู้ใช้ที่ไม่มีชื่อ",
+  "admin.shell.filterAdd.filter": "ตัวกรอง",
+  "admin.shell.detailSidebar.remove": "นำออก",
+  "admin.shell.autocomplete.search": "ค้นหาหรือพิมพ์…",
+  "admin.shell.autocomplete.empty": "ไม่พบรายการที่ตรงกัน",
+  "admin.shell.autocomplete.use": "ใช้ \"{value}\"",
+  "admin.shell.searchInput.placeholder": "ค้นหา…",
+  "admin.shell.listHeader.search": "ค้นหา…",
+  "admin.shell.sortMenu.label": "เรียง: {label}",
+  "ui.editor.youtubePrompt": "วาง URL วิดีโอ YouTube:"
 }

@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "Modules",
   "admin.shell.settingsNav.section.automation": "AI & automatisering",
   "admin.shell.settingsNav.section.workspace": "Werkruimte",
-  "admin.shell.settingsNav.section.data": "Gegevens"
+  "admin.shell.settingsNav.section.data": "Gegevens",
+  "admin.shell.availability.setAway": "Jezelf op afwezig zetten",
+  "admin.shell.availability.setActive": "Jezelf op actief zetten",
+  "admin.shell.accountMenu.account": "Account",
+  "admin.shell.portalUserPicker.search": "Zoek gebruikers op naam of e-mail…",
+  "admin.shell.portalUserPicker.noEmailTitle": "Deze gebruiker heeft geen e-mailadres",
+  "admin.shell.portalUserPicker.noEmail": "Geen e-mail",
+  "admin.shell.portalUserPicker.unnamed": "Naamloze gebruiker",
+  "admin.shell.filterAdd.filter": "Filteren",
+  "admin.shell.detailSidebar.remove": "Verwijderen",
+  "admin.shell.autocomplete.search": "Zoek of typ…",
+  "admin.shell.autocomplete.empty": "Geen resultaten.",
+  "admin.shell.autocomplete.use": "\"{value}\" gebruiken",
+  "admin.shell.searchInput.placeholder": "Zoeken…",
+  "admin.shell.listHeader.search": "Zoeken…",
+  "admin.shell.sortMenu.label": "Sorteren: {label}",
+  "ui.editor.youtubePrompt": "Plak de URL van de YouTube-video:"
 }

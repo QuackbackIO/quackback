@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "模块",
   "admin.shell.settingsNav.section.automation": "AI 与自动化",
   "admin.shell.settingsNav.section.workspace": "工作区",
-  "admin.shell.settingsNav.section.data": "数据"
+  "admin.shell.settingsNav.section.data": "数据",
+  "admin.shell.availability.setAway": "将自己设为离开",
+  "admin.shell.availability.setActive": "将自己设为在线",
+  "admin.shell.accountMenu.account": "账户",
+  "admin.shell.portalUserPicker.search": "按姓名或邮箱搜索用户…",
+  "admin.shell.portalUserPicker.noEmailTitle": "该用户没有邮箱地址",
+  "admin.shell.portalUserPicker.noEmail": "无邮箱",
+  "admin.shell.portalUserPicker.unnamed": "未命名用户",
+  "admin.shell.filterAdd.filter": "筛选",
+  "admin.shell.detailSidebar.remove": "移除",
+  "admin.shell.autocomplete.search": "搜索或输入…",
+  "admin.shell.autocomplete.empty": "无匹配项。",
+  "admin.shell.autocomplete.use": "使用“{value}”",
+  "admin.shell.searchInput.placeholder": "搜索…",
+  "admin.shell.listHeader.search": "搜索…",
+  "admin.shell.sortMenu.label": "排序：{label}",
+  "ui.editor.youtubePrompt": "粘贴 YouTube 视频网址："
 }

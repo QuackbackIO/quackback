@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "Module",
   "admin.shell.settingsNav.section.automation": "KI & Automatisierung",
   "admin.shell.settingsNav.section.workspace": "Workspace",
-  "admin.shell.settingsNav.section.data": "Daten"
+  "admin.shell.settingsNav.section.data": "Daten",
+  "admin.shell.availability.setAway": "Auf abwesend setzen",
+  "admin.shell.availability.setActive": "Auf aktiv setzen",
+  "admin.shell.accountMenu.account": "Konto",
+  "admin.shell.portalUserPicker.search": "Benutzer nach Name oder E-Mail suchen …",
+  "admin.shell.portalUserPicker.noEmailTitle": "Dieser Benutzer hat keine E-Mail-Adresse",
+  "admin.shell.portalUserPicker.noEmail": "Keine E-Mail",
+  "admin.shell.portalUserPicker.unnamed": "Unbenannter Benutzer",
+  "admin.shell.filterAdd.filter": "Filtern",
+  "admin.shell.detailSidebar.remove": "Entfernen",
+  "admin.shell.autocomplete.search": "Suchen oder eingeben …",
+  "admin.shell.autocomplete.empty": "Keine Treffer.",
+  "admin.shell.autocomplete.use": "„{value}“ verwenden",
+  "admin.shell.searchInput.placeholder": "Suchen …",
+  "admin.shell.listHeader.search": "Suchen …",
+  "admin.shell.sortMenu.label": "Sortieren: {label}",
+  "ui.editor.youtubePrompt": "YouTube-Video-URL einfügen:"
 }

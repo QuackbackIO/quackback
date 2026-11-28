@@ -211,6 +211,7 @@ export function FilterAddButton({
   children,
   ...props
 }: React.ComponentProps<typeof Button>) {
+  const intl = useOptionalIntl()
   return (
     <Button
       type="button"
@@ -220,7 +221,8 @@ export function FilterAddButton({
       {...props}
     >
       <PlusIcon className="size-3.5" aria-hidden />
-      {children ?? 'Filter'}
+      {children ??
+        intl.formatMessage({ id: 'admin.shell.filterAdd.filter', defaultMessage: 'Filter' })}
     </Button>
   )
 }

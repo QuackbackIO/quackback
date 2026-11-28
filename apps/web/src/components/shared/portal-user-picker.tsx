@@ -42,12 +42,16 @@ export function PortalUserPicker({
   requireEmail = false,
   searchRequired = false,
   autoFocus = false,
-  placeholder = 'Search users by name or email…',
+  placeholder,
 }: PortalUserPickerProps) {
   const intl = useOptionalIntl()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search.trim(), 350)
   const showResults = !searchRequired || debounced.length > 0
+  const unnamed = intl.formatMessage({
+    id: 'admin.shell.portalUserPicker.unnamed',
+    defaultMessage: 'Unnamed user',
+  })
 
   const usersQuery = useQuery({
     ...adminQueries.portalUsers({ search: debounced || undefined, page: 1, limit }),
@@ -60,7 +64,13 @@ export function PortalUserPicker({
         autoFocus={autoFocus}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder={placeholder}
+        placeholder={
+          placeholder ??
+          intl.formatMessage({
+            id: 'admin.shell.portalUserPicker.search',
+            defaultMessage: 'Search users by name or email…',
+          })
+        }
       />
       {showResults && (
         <div className="max-h-64 divide-y divide-border/40 overflow-y-auto rounded-md border border-border/60">
@@ -86,7 +96,14 @@ export function PortalUserPicker({
                   key={u.principalId}
                   type="button"
                   disabled={!deliverable}
-                  title={deliverable ? undefined : 'This user has no email address'}
+                  title={
+                    deliverable
+                      ? undefined
+                      : intl.formatMessage({
+                          id: 'admin.shell.portalUserPicker.noEmailTitle',
+                          defaultMessage: 'This user has no email address',
+                        })
+                  }
                   onClick={() =>
                     onSelect({
                       principalId: u.principalId,
@@ -97,13 +114,17 @@ export function PortalUserPicker({
                   }
                   className="flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Avatar src={u.image} name={u.name ?? 'User'} className="size-7 text-xs" />
+                  <Avatar src={u.image} name={u.name ?? unnamed} className="size-7 text-xs" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm text-foreground">
-                      {u.name || 'Unnamed user'}
+                      {u.name || unnamed}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {realEmail(u.email) ?? 'No email'}
+                      {realEmail(u.email) ??
+                        intl.formatMessage({
+                          id: 'admin.shell.portalUserPicker.noEmail',
+                          defaultMessage: 'No email',
+                        })}
                     </span>
                   </span>
                 </button>

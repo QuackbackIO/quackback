@@ -79,10 +79,19 @@ function AvailabilityMenuItems({
   availability: 'online' | 'away'
   onSet: (next: 'online' | 'away') => void
 }) {
+  const intl = useIntl()
   const goingAway = availability === 'online'
   return (
     <DropdownMenuItem onClick={() => onSet(goingAway ? 'away' : 'online')}>
-      {goingAway ? 'Set yourself as away' : 'Set yourself as active'}
+      {goingAway
+        ? intl.formatMessage({
+            id: 'admin.shell.availability.setAway',
+            defaultMessage: 'Set yourself as away',
+          })
+        : intl.formatMessage({
+            id: 'admin.shell.availability.setActive',
+            defaultMessage: 'Set yourself as active',
+          })}
     </DropdownMenuItem>
   )
 }
@@ -616,7 +625,13 @@ export function AdminSidebar({
                         />
                       )}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-start">{name || 'Account'}</span>
+                    <span className="min-w-0 flex-1 truncate text-start">
+                      {name ||
+                        intl.formatMessage({
+                          id: 'admin.shell.accountMenu.account',
+                          defaultMessage: 'Account',
+                        })}
+                    </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">

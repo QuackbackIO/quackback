@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "Модули",
   "admin.shell.settingsNav.section.automation": "ИИ и автоматизация",
   "admin.shell.settingsNav.section.workspace": "Рабочее пространство",
-  "admin.shell.settingsNav.section.data": "Данные"
+  "admin.shell.settingsNav.section.data": "Данные",
+  "admin.shell.availability.setAway": "Отметить себя как отошедшего",
+  "admin.shell.availability.setActive": "Отметить себя как активного",
+  "admin.shell.accountMenu.account": "Аккаунт",
+  "admin.shell.portalUserPicker.search": "Поиск пользователей по имени или email…",
+  "admin.shell.portalUserPicker.noEmailTitle": "У этого пользователя нет email",
+  "admin.shell.portalUserPicker.noEmail": "Нет email",
+  "admin.shell.portalUserPicker.unnamed": "Пользователь без имени",
+  "admin.shell.filterAdd.filter": "Фильтр",
+  "admin.shell.detailSidebar.remove": "Убрать",
+  "admin.shell.autocomplete.search": "Найдите или введите…",
+  "admin.shell.autocomplete.empty": "Нет совпадений.",
+  "admin.shell.autocomplete.use": "Использовать «{value}»",
+  "admin.shell.searchInput.placeholder": "Поиск…",
+  "admin.shell.listHeader.search": "Поиск…",
+  "admin.shell.sortMenu.label": "Сортировка: {label}",
+  "ui.editor.youtubePrompt": "Вставьте ссылку на видео YouTube:"
 }

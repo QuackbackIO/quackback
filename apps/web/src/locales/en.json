@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "Modules",
   "admin.shell.settingsNav.section.automation": "AI & Automation",
   "admin.shell.settingsNav.section.workspace": "Workspace",
-  "admin.shell.settingsNav.section.data": "Data"
+  "admin.shell.settingsNav.section.data": "Data",
+  "admin.shell.availability.setAway": "Set yourself as away",
+  "admin.shell.availability.setActive": "Set yourself as active",
+  "admin.shell.accountMenu.account": "Account",
+  "admin.shell.portalUserPicker.search": "Search users by name or email…",
+  "admin.shell.portalUserPicker.noEmailTitle": "This user has no email address",
+  "admin.shell.portalUserPicker.noEmail": "No email",
+  "admin.shell.portalUserPicker.unnamed": "Unnamed user",
+  "admin.shell.filterAdd.filter": "Filter",
+  "admin.shell.detailSidebar.remove": "Remove",
+  "admin.shell.autocomplete.search": "Search or type…",
+  "admin.shell.autocomplete.empty": "No matches.",
+  "admin.shell.autocomplete.use": "Use \"{value}\"",
+  "admin.shell.searchInput.placeholder": "Search...",
+  "admin.shell.listHeader.search": "Search…",
+  "admin.shell.sortMenu.label": "Sort: {label}",
+  "ui.editor.youtubePrompt": "Paste YouTube video URL:"
 }

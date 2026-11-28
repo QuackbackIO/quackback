@@ -77,7 +77,13 @@ export function StatusDropdown({
               className="h-2 w-2 rounded-full shrink-0"
               style={{ backgroundColor: currentStatus?.color || '#94a3b8' }}
             />
-            <span className="max-w-[80px] truncate">{currentStatus?.name || 'No Status'}</span>
+            <span className="max-w-[80px] truncate">
+              {currentStatus?.name ||
+                intl.formatMessage({
+                  id: 'ui.statusDropdown.noStatus',
+                  defaultMessage: 'No status',
+                })}
+            </span>
           </button>
         )}
       </PopoverTrigger>

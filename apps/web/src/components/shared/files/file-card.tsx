@@ -201,7 +201,8 @@ export function hasPreviewWorthShowing(attachment: ConversationAttachment): bool
 function useCardLabel(attachment: ConversationAttachment) {
   const intl = useIntl()
   const family = resolveFamily(attachment)
-  const name = attachment.name || 'File'
+  const name =
+    attachment.name || intl.formatMessage({ id: 'files.family.other', defaultMessage: 'File' })
   const ariaLabel = attachmentAriaLabel(name, family, attachment.size, attachment.preview, intl)
   return { family, name, ariaLabel }
 }

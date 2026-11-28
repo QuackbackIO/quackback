@@ -2956,5 +2956,21 @@
   "admin.shell.settingsNav.section.modules": "Модулі",
   "admin.shell.settingsNav.section.automation": "ШІ та автоматизація",
   "admin.shell.settingsNav.section.workspace": "Робочий простір",
-  "admin.shell.settingsNav.section.data": "Дані"
+  "admin.shell.settingsNav.section.data": "Дані",
+  "admin.shell.availability.setAway": "Позначити себе як відсутнього",
+  "admin.shell.availability.setActive": "Позначити себе як активного",
+  "admin.shell.accountMenu.account": "Обліковий запис",
+  "admin.shell.portalUserPicker.search": "Пошук користувачів за ім’ям або email…",
+  "admin.shell.portalUserPicker.noEmailTitle": "У цього користувача немає email",
+  "admin.shell.portalUserPicker.noEmail": "Немає email",
+  "admin.shell.portalUserPicker.unnamed": "Користувач без імені",
+  "admin.shell.filterAdd.filter": "Фільтр",
+  "admin.shell.detailSidebar.remove": "Прибрати",
+  "admin.shell.autocomplete.search": "Знайдіть або введіть…",
+  "admin.shell.autocomplete.empty": "Збігів немає.",
+  "admin.shell.autocomplete.use": "Використати «{value}»",
+  "admin.shell.searchInput.placeholder": "Пошук…",
+  "admin.shell.listHeader.search": "Пошук…",
+  "admin.shell.sortMenu.label": "Сортування: {label}",
+  "ui.editor.youtubePrompt": "Вставте посилання на відео YouTube:"
 }

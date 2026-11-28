@@ -150,6 +150,7 @@ const M = {
   tableHint: { id: 'ui.editor.tableHint', defaultMessage: 'Insert a table' },
   youtube: { id: 'ui.editor.youtube', defaultMessage: 'YouTube' },
   youtubeHint: { id: 'ui.editor.youtubeHint', defaultMessage: 'Embed a YouTube video' },
+  youtubePrompt: { id: 'ui.editor.youtubePrompt', defaultMessage: 'Paste YouTube video URL:' },
   groupLists: { id: 'ui.editor.groupLists', defaultMessage: 'Lists' },
   groupBlocks: { id: 'ui.editor.groupBlocks', defaultMessage: 'Blocks' },
   groupAdvanced: { id: 'ui.editor.groupAdvanced', defaultMessage: 'Advanced' },
@@ -893,7 +894,7 @@ function getSlashMenuItems(
       icon: <YoutubeIcon className="size-4" />,
       command: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run()
-        const url = window.prompt('Paste YouTube video URL:')
+        const url = window.prompt(intl.formatMessage(M.youtubePrompt))
         if (url && url.trim()) {
           editor.commands.setYoutubeVideo({
             src: url.trim(),
@@ -2476,7 +2477,7 @@ function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boole
           className="h-7 px-2 gap-1 text-xs font-medium"
           disabled={disabled}
         >
-          {currentType}
+          {currentType === 'Text' ? intl.formatMessage(M.text) : currentType}
           <ChevronDown className="size-3" />
         </Button>
       </DropdownMenuTrigger>
