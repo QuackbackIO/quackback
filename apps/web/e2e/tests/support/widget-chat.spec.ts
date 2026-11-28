@@ -670,7 +670,7 @@ test.describe('widget chat: identified visitors', () => {
       await expect(widgetTab(again, 'Tickets')).toBeVisible({ timeout: 20_000 })
       const labels = await again
         .getByRole('button', {
-          name: /^(?:\d+ unread )?(Home|Messages|Tickets|Help|News|Feedback)$/,
+          name: /^(?:\d+ (?:unread|tickets? updated|new updates?) )?(Home|Messages|Tickets|Help|News|Feedback)$/,
         })
         .allTextContents()
       const order = labels.map((l) => l.replace(/^\d+/, '').trim())

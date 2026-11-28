@@ -735,7 +735,9 @@ type Frame = ReturnType<Page['frameLocator']>
 
 /** A widget bottom-bar tab; its name carries an unread prefix when badged. */
 export function widgetTab(widget: Frame, label: 'Messages' | 'Tickets' | 'Home' | 'Help') {
-  return widget.getByRole('button', { name: new RegExp(`^(?:\\d+ unread )?${label}$`) })
+  return widget.getByRole('button', {
+    name: new RegExp(`^(?:\\d+ (?:unread|tickets? updated|new updates?) )?${label}$`),
+  })
 }
 
 /** Open the visitor's thread whose list row shows `preview`. */
