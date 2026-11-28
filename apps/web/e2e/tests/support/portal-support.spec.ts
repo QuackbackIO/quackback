@@ -687,6 +687,8 @@ test.describe('portal support: what the customer receives and is refused', () =>
           'updatedAt',
           'customAttributes',
           'lastMessagePreview',
+          // The one shared due date: the customer sees the date the team set.
+          'dueAt',
         ].sort()
       )
       expect(Object.keys(dto.stage as object).sort()).toEqual(['closed', 'label', 'slot'])
@@ -698,7 +700,7 @@ test.describe('portal support: what the customer receives and is refused', () =>
       expect(Object.keys(dto.assignee as object).sort()).toEqual(['displayName', 'principalId'])
       expect(dto.customAttributes).toEqual({})
       const raw = JSON.stringify(dto)
-      for (const withheld of ['priority', 'sla', 'dueAt', 'firstResponseAt', 'teamId', 'status"']) {
+      for (const withheld of ['priority', 'sla', 'firstResponseAt', 'teamId', 'status"']) {
         expect(raw, withheld).not.toContain(withheld)
       }
 

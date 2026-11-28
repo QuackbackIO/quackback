@@ -9,7 +9,8 @@ import { act } from 'react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import { IntlProvider } from 'react-intl'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO } from '@/lib/shared/inbox/items'
 import { ConversationRow } from '../conversation-list-column'
@@ -75,5 +76,48 @@ describe('ConversationRow hydration', () => {
     expect(errors).toEqual([])
     expect(container.textContent).toContain('4m')
     expect(container.textContent).not.toContain('3m')
+  })
+})
+
+describe('ConversationRow due marker hydration', () => {
+  // The linked ticket went overdue an hour before the server render.
+  const withOverdueTicket: Extract<InboxItemDTO, { kind: 'conversation' }> = {
+    ...item,
+    linkedTicket: {
+      id: 'ticket_1' as TicketId,
+      number: 142,
+      title: 'Cannot log in',
+      statusName: 'Open',
+      statusCategory: 'open',
+      dueAt: '2026-10-01T02:34:00.000Z',
+    },
+  }
+  const overdueRow = () => (
+    <IntlProvider locale="en">
+      <ConversationRow
+        item={withOverdueTicket}
+        id={withOverdueTicket.conversation.id}
+        selected={false}
+        onSelect={() => {}}
+      />
+    </IntlProvider>
+  )
+
+  it('leaves the marker out of the server render and adds it once hydrated', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-01T03:34:37.600Z'))
+    const container = document.createElement('div')
+    container.innerHTML = renderToString(overdueRow())
+    expect(container.textContent).toContain('#142')
+    expect(container.textContent).not.toContain('over')
+    expect(container.querySelector('[role="img"]')).toBeNull()
+
+    const errors: unknown[] = []
+    await act(async () => {
+      hydrateRoot(container, overdueRow(), { onRecoverableError: (error) => errors.push(error) })
+    })
+
+    expect(errors).toEqual([])
+    expect(container.querySelector('[role="img"]')?.textContent).toBe('1h over')
   })
 })

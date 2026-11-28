@@ -137,3 +137,27 @@ describe('createTicketFn — save-path field validation (Phase 5 gate 2)', () =>
     expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: PERMISSIONS.TICKET_CREATE })
   })
 })
+
+describe('createTicketFn — the shared due date', () => {
+  it('passes an ISO instant through to the service as a Date', async () => {
+    await createTicketFn({
+      data: { type: 'back_office', title: 'Audit', dueAt: '2026-11-03T18:00:00+01:00' },
+    })
+    const [input] = hoisted.createTicket.mock.calls[0]
+    expect(input.dueAt).toBeInstanceOf(Date)
+    expect(input.dueAt.toISOString()).toBe('2026-11-03T17:00:00.000Z')
+  })
+
+  it('leaves dueAt unset when none is given', async () => {
+    await createTicketFn({ data: { type: 'back_office', title: 'Audit' } })
+    expect(hoisted.createTicket.mock.calls[0][0].dueAt).toBeUndefined()
+  })
+
+  it('rejects a date-only or malformed dueAt before auth or the service', async () => {
+    for (const dueAt of ['2026-11-03', 'next Friday', '2026-11-03T17:00:00']) {
+      await expect(createTicketFn({ data: { title: 'Audit', dueAt } })).rejects.toThrow()
+    }
+    expect(hoisted.requireAuth).not.toHaveBeenCalled()
+    expect(hoisted.createTicket).not.toHaveBeenCalled()
+  })
+})

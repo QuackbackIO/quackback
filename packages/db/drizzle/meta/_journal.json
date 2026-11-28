@@ -2115,6 +2115,41 @@
       "when": 1791006400000,
       "tag": "0324_changelog_announce_on_launcher",
       "breakpoints": true
+    },
+    {
+      "idx": 302,
+      "version": "7",
+      "when": 1791006500000,
+      "tag": "0325_ticket_due_dates",
+      "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1791006600000,
+      "tag": "0326_ticket_sharing",
+      "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "7",
+      "when": 1791006700000,
+      "tag": "0327_integration_destinations",
+      "breakpoints": true
+    },
+    {
+      "idx": 305,
+      "version": "7",
+      "when": 1791006800000,
+      "tag": "0328_integration_user_mappings",
+      "breakpoints": true
+    },
+    {
+      "idx": 306,
+      "version": "7",
+      "when": 1791006900000,
+      "tag": "0329_message_external_links",
+      "breakpoints": true
     }
   ]
 }

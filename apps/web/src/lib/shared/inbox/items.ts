@@ -21,7 +21,7 @@ import type { TermSegment } from '@/lib/shared/utils/keyword-context'
  *  `ConversationSort` and `TicketSort`, so they type-check as either branch's
  *  `sort` param directly (see `resolveInboxSort` for 'relevance'). */
 export type InboxSort =
-  'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'relevance'
+  'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'due' | 'relevance'
 
 /**
  * A ticket's nearest unmet SLA deadline for the 'sla' sort: its time-to-resolve
@@ -63,6 +63,9 @@ export interface LinkedTicketSummary {
   title: string
   statusName: string
   statusCategory: TicketStatusCategory
+  /** The linked ticket's shared due date (ISO), null when none or when the
+   *  ticket is soft-deleted (agrees with the 'due' sort expression). */
+  dueAt: string | null
 }
 
 /** A conversation's paired ticket that the viewer cannot open: it exists, and

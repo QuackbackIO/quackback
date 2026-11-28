@@ -223,6 +223,15 @@ describe('post.service updatePost', () => {
         previousOwnerPrincipalId: 'principal_prev',
       })
     )
+    // The new owner follows the post; the previous owner keeps whatever they had.
+    const { subscribeToPost } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    expect(subscribeToPost).toHaveBeenCalledWith('principal_next', 'post_123', 'owner')
+    expect(subscribeToPost).not.toHaveBeenCalledWith(
+      'principal_prev',
+      expect.anything(),
+      expect.anything()
+    )
     expect(createActivity).toHaveBeenCalledWith(
       expect.objectContaining({
         principalId: 'principal_actor',
@@ -237,6 +246,22 @@ describe('post.service updatePost', () => {
         metadata: { tagNames: ['Old tag'] },
       })
     )
+  })
+
+  it('still saves the assignment when the owner subscription fails', async () => {
+    const { subscribeToPost } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    vi.mocked(subscribeToPost).mockRejectedValueOnce(new Error('db down'))
+    const { updatePost } = await import('../post.service')
+
+    await expect(
+      updatePost(
+        'post_123' as PostId,
+        { ownerPrincipalId: 'principal_next' as PrincipalId },
+        { principalId: 'principal_actor' as PrincipalId }
+      )
+    ).resolves.toBeDefined()
+    expect(dispatchPostOwnerAssigned).toHaveBeenCalledTimes(1)
   })
 
   it('replaces the tags inside the transaction, never on the bare db', async () => {

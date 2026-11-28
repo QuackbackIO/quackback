@@ -72,20 +72,27 @@ const CALL_RULES: { rule: Rule; pattern: RegExp }[] = [
 const BY_ID_CONVERSATION_READS: Record<string, string> = {
   'lib/server/domains/assistant/assistant.runtime.ts::runAssistantTurn::unscopedConversationRead':
     'the copilot gate checked the conversation for the actor before the turn runs',
-  'lib/server/domains/conversation/conversation.edit.ts::applyEdit::unscopedConversationRead':
-    'reloads the row after editConversationMessage checked it, for the published DTO',
+  'lib/server/domains/conversation/conversation.edit.ts::publishMessageChange::unscopedConversationRead':
+    'reloads the row after loadEditableMessage checked it, for the published DTO',
   'lib/server/domains/conversation/conversation.service.ts::sendVisitorMessage::unscopedConversationRead':
     'the visitor send: the owner check runs on the row it reads',
   'lib/server/domains/conversation/conversation.service.ts::sendAgentMessage::unscopedConversationRead':
     're-reads inside the write transaction after the check at the top of the function',
   'lib/server/domains/conversation/conversation.service.ts::recordCsat::unscopedConversationRead':
-    'reads after assertConversationVisible checked the row',
+    'reads after assertConversationViewable checked the row (the owner, a teammate in scope, or a shared ticket participant, who is then refused)',
   'lib/server/domains/conversation-attributes/set-attribute.service.ts::setConversationAttribute::unscopedConversationRead':
     'builds the change event after the write; every agent caller checked the conversation',
   'lib/server/domains/tickets/ticket-conversation-link.service.ts::linkTicketToConversation::unscopedConversationRead':
     'locks the row after assertConversationVisible at the top of the function',
   'lib/server/integrations/sync/eligibility.ts::validateSyncSource::unscopedConversationRead':
     'the sync worker re-validating a queued operation, with no teammate request behind it',
+  // Ticket sharing: a customer a paired ticket was shared with.
+  'lib/server/domains/conversation/conversation.service.ts::sharedTicketConversation::unscopedConversationRead':
+    'only after assertConversationVisible said no, and returned only when the actor has thread access as a shared ticket participant',
+  'lib/server/domains/conversation/conversation-participant.service.ts::conversationVisitorOr404::unscopedConversationRead':
+    'only under systemCascade, from ticket sharing, which checked the ticket and the customer rules first',
+  'routes/api/chat/stream.ts::Route::unscopedConversationRead':
+    'only after assertConversationVisible said no; the stream opens only for a shared ticket participant, re-checked on every heartbeat',
 }
 
 /**
@@ -105,10 +112,10 @@ const ALLOWLIST: Record<string, string> = {
     'shared by the requester reply and intake; agent callers check visibility first',
   'lib/server/domains/tickets/ticket-message.service.ts::emitPairTicketReplied::loadTicketOr404':
     'the ticket.replied signal for a message already written on its pair conversation',
-  'lib/server/domains/tickets/ticket-external-links.service.ts::buildTicketIssueData::loadTicketOr404':
+  'lib/server/domains/tickets/ticket-issue-source.ts::buildTicketIssueData::loadTicketOr404':
     'the integration sync worker builds the issue body after the write was checked',
-  'lib/server/domains/tickets/requester.service.ts::loadOwnedTicketOr404::loadTicketOr404':
-    'the requester path checks ownership instead of team scope',
+  'lib/server/domains/tickets/requester.service.ts::loadAccessibleTicketOr404::loadTicketOr404':
+    'the customer path checks ownership, or a share with thread access, instead of team scope',
   'lib/server/domains/conversation/conversation.email-inbound.service.ts::ingestTicketReply::loadTicketOr404':
     'an inbound email reply, matched to the ticket by its reply token',
   'lib/server/domains/assistant/assistant.runtime.ts::loadTicketGroundingContext::getTicket':
@@ -137,6 +144,11 @@ const SYSTEM_CASCADE_ALLOWLIST = new Set([
   'lib/server/domains/tickets/ticket-unread.service.ts::markTicketUnreadFromMessage',
   // One macro run, after its caller checked the conversation (see below).
   'lib/server/domains/macros/macro.actions.ts::applyMacroActions',
+  // Ticket sharing changes who is on a ticket's pair conversation after
+  // checking the ticket (team side) or the customer rules (customer side).
+  'lib/server/domains/tickets/ticket-sharing.service.ts::addTicketParticipantByEmail',
+  'lib/server/domains/tickets/ticket-sharing.service.ts::removeTicketParticipant',
+  'lib/server/domains/tickets/customer-ticket-sharing.service.ts::removeTicketShare',
 ])
 
 /** Blank out comments and string bodies, keeping offsets and line breaks. */
@@ -266,6 +278,10 @@ const ENTRY_POINT_ALLOWLIST: Record<string, string> = {
     'checks the ticket; the anchor must hang off that ticket or its pair (ticket-visibility tests)',
   'lib/server/functions/tickets.ts::linkTicketToConversationFn':
     'checks both sides; covered by ticket-visibility-links.db.test.ts',
+  'lib/server/functions/conversation.ts::addMessageAttachmentsFn':
+    "loadEditableMessage checks the message's parent first, as editConversationMessageFn's row shows",
+  'lib/server/functions/conversation.ts::removeMessageAttachmentFn':
+    "loadEditableMessage checks the message's parent first, as editConversationMessageFn's row shows",
   'lib/server/functions/copilot-events.ts::recordCopilotEventFn':
     'copilot-gated: gateCopilotFn checks the item for the caller',
 }
