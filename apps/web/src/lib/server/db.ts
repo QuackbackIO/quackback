@@ -596,6 +596,11 @@ export type {
   MacroAction,
 } from '@quackback/db'
 export type { ServiceMetadata } from '@quackback/db'
+export type {
+  TranslationCheckProblem,
+  TranslationCheckResult,
+  TranslationSourceText,
+} from '@quackback/db'
 export type { Domain, DomainStatus } from '@quackback/db'
 export type { FileRecord, NewFileRecord } from '@quackback/db'
 export type { IdentityProviderClaimMapping, ClaimRoleMapping } from '@quackback/db'

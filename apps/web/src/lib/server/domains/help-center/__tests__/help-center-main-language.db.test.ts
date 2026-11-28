@@ -320,6 +320,44 @@ describe.skipIf(!fixture.available)('changing the main language', () => {
       await vi.waitFor(() => expect(embedded.ids).toEqual([id]))
     })
 
+    it('leaves the swapped text current with no waiting update, and the article on its revision', async () => {
+      await storeHelpCenter(locales('en', ['de']))
+      const cat = await seedCategory('Getting started')
+      const id = await seedArticle(cat, 'Settings')
+      await testDb
+        .update(helpCenterArticles)
+        .set({ textRevision: 4 })
+        .where(eq(helpCenterArticles.id, id))
+      await translate(id, 'de', 'Einstellungen')
+      await testDb
+        .update(helpCenterArticleTranslations)
+        .set({
+          sourceRevision: 2,
+          pendingTitle: 'Einstellungen (neu)',
+          pendingContent: 'neu',
+          pendingSourceRevision: 4,
+          checkResult: { ok: true, problems: [] },
+        })
+        .where(eq(helpCenterArticleTranslations.articleId, id))
+
+      await updateLanguageConfig({ mainLanguage: 'de' })
+
+      expect((await article(id)).textRevision).toBe(4)
+      expect((await translationsOf(id)).en).toMatchObject({
+        title: 'Settings',
+        sourceRevision: 4,
+        sourceText: {
+          title: 'Einstellungen',
+          description: 'Einstellungen Zusammenfassung',
+          content: 'Einstellungen **Text**',
+        },
+        pendingTitle: null,
+        pendingContent: null,
+        pendingSourceRevision: null,
+        checkResult: null,
+      })
+    })
+
     it('never puts a draft live: a published article with a draft stays as it is', async () => {
       await storeHelpCenter(locales('en', ['de']))
       const cat = await seedCategory('Getting started')

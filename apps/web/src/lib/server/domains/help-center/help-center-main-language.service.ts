@@ -287,6 +287,7 @@ async function swapArticles(tx: Executor, to: string): Promise<KbArticleId[]> {
       contentJson: helpCenterArticles.contentJson,
       publishedAt: helpCenterArticles.publishedAt,
       updatedAt: helpCenterArticles.updatedAt,
+      textRevision: helpCenterArticles.textRevision,
       translation: {
         id: helpCenterArticleTranslations.id,
         title: helpCenterArticleTranslations.title,
@@ -313,6 +314,23 @@ async function swapArticles(tx: Executor, to: string): Promise<KbArticleId[]> {
         content: row.content,
         contentJson: row.contentJson ?? markdownToTiptapJson(row.content),
         status: row.publishedAt ? 'published' : 'draft',
+        // The former main text is what the new main text was made from, so
+        // it starts current. Text and checks of an AI update waiting for the
+        // old translation no longer match the row.
+        sourceRevision: row.textRevision,
+        sourceText: {
+          title: t.title,
+          description: t.description,
+          content: t.content,
+        },
+        pendingTitle: null,
+        pendingDescription: null,
+        pendingContent: null,
+        pendingContentJson: null,
+        pendingSourceRevision: null,
+        pendingSourceText: null,
+        pendingAt: null,
+        checkResult: null,
         updatedAt: row.updatedAt,
       })
       .where(eq(helpCenterArticleTranslations.id, t.id))

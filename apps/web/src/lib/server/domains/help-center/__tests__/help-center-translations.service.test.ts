@@ -66,6 +66,14 @@ vi.mock('../help-center-translate-jobs', () => ({
   cancelPendingAutoTranslations: (...args: unknown[]) => mockCancelPendingAutoTranslations(...args),
 }))
 
+vi.mock('../help-center-translation-versions.service', () => ({
+  getArticleSource: async () => ({
+    revision: 3,
+    locale: 'en',
+    text: { title: 'Title', description: null, content: 'Body' },
+  }),
+}))
+
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
@@ -84,6 +92,7 @@ vi.mock('@/lib/server/db', () => ({
   },
   eq: (...args: unknown[]) => ({ op: 'eq', args }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', strings, values }),
   helpCenterArticleTranslations: { articleId: 'article_id', locale: 'locale' },
   helpCenterCategoryTranslations: { categoryId: 'category_id', locale: 'locale' },
 }))

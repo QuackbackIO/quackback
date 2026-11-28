@@ -18,6 +18,10 @@ import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
+import {
+  getArticleSource,
+  type TranslationSourceText,
+} from './help-center-translation-versions.service'
 import type {
   HelpCenterArticleTranslation,
   HelpCenterCategoryTranslation,
@@ -88,6 +92,19 @@ export interface UpsertArticleTranslationInput {
   description?: string | null
   content: string
   contentJson?: TiptapContent | null
+  /**
+   * The article revision and text a new translation is made from. Read from
+   * the article when not given. An existing translation keeps its own.
+   */
+  source?: { revision: number; text: TranslationSourceText }
+}
+
+/** The source a new translation records: the given one, or the article as it is now. */
+async function sourceFor(input: UpsertArticleTranslationInput) {
+  if (input.source) return input.source
+  const article = await getArticleSource(input.articleId)
+  if (!article) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${input.articleId} not found`)
+  return { revision: article.revision, text: article.text }
 }
 
 export async function listArticleTranslations(
@@ -136,6 +153,7 @@ export async function upsertArticleTranslation(
   if (manual) await cancelPendingAutoTranslations(input.articleId, input.locale)
   // The public pages render the rich body, so a Markdown-only write stores one too.
   const contentJson = input.contentJson ?? markdownToTiptapJson(input.content)
+  const source = await sourceFor(input)
   const [row] = await db
     .insert(helpCenterArticleTranslations)
     .values({
@@ -145,6 +163,8 @@ export async function upsertArticleTranslation(
       description: input.description ?? null,
       content: input.content,
       contentJson,
+      sourceRevision: source.revision,
+      sourceText: source.text,
     })
     .onConflictDoUpdate({
       target: [helpCenterArticleTranslations.articleId, helpCenterArticleTranslations.locale],
@@ -154,6 +174,13 @@ export async function upsertArticleTranslation(
         content: input.content,
         contentJson,
         ...(manual ? { status: 'draft' as const } : {}),
+        // A person's edit is no longer the AI draft the checks were about. A
+        // waiting update keeps its own result.
+        ...(manual
+          ? {
+              checkResult: sql`CASE WHEN ${helpCenterArticleTranslations.pendingTitle} IS NULL THEN NULL ELSE ${helpCenterArticleTranslations.checkResult} END`,
+            }
+          : {}),
         updatedAt: new Date(),
       },
     })
@@ -176,6 +203,7 @@ export async function writeGuardedArticleTranslation(
   input: UpsertArticleTranslationInput,
   baselineUpdatedAt: string | null
 ): Promise<boolean> {
+  const source = await sourceFor(input)
   const values = {
     articleId: input.articleId,
     locale: input.locale,
@@ -183,6 +211,8 @@ export async function writeGuardedArticleTranslation(
     description: input.description ?? null,
     content: input.content,
     contentJson: input.contentJson ?? null,
+    sourceRevision: source.revision,
+    sourceText: source.text,
   }
   const insert = db.insert(helpCenterArticleTranslations).values(values)
   const rows =
