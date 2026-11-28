@@ -1,5 +1,5 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useMemo, useState } from 'react'
-import { useIntl } from 'react-intl'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -67,7 +67,7 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
   open: controlledOpen,
   onOpenChange,
 }: ConvertToPostDialogProps) {
-  const intl = useIntl()
+  const intl = useOptionalIntl()
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
@@ -152,11 +152,22 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
   const share = useMutation({
     mutationFn: (postId: PostId) => sharePostFn({ data: { conversationId, postId } }),
     onSuccess: () => {
-      toast.success('Post shared in conversation')
+      toast.success(
+        intl.formatMessage({
+          id: 'admin.inbox.convertToPostDialog.postSharedInConversation',
+          defaultMessage: 'Post shared in conversation',
+        })
+      )
       setOpen(false)
       onConverted?.()
     },
-    onError: () => toast.error('Failed to share post'),
+    onError: () =>
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.convertToPostDialog.failedToSharePost',
+          defaultMessage: 'Failed to share post',
+        })
+      ),
   })
 
   // Best-effort contact-email capture: fired alongside a track action and never
@@ -186,25 +197,47 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
             type="button"
             className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
           >
-            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
+            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />{' '}
+            {intl.formatMessage({
+              id: 'admin.inbox.convertToPostDialog.trackAsFeedback',
+              defaultMessage: 'Track as feedback',
+            })}
           </button>
         </DialogTrigger>
       )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Track as a feedback post</DialogTitle>
+          <DialogTitle>
+            {intl.formatMessage({
+              id: 'admin.inbox.convertToPostDialog.trackAsAFeedback',
+              defaultMessage: 'Track as a feedback post',
+            })}
+          </DialogTitle>
           <DialogDescription>
-            Create a post from this conversation, attributed to the customer. They'll see it in the
-            conversation and get status updates.
+            {intl.formatMessage({
+              id: 'admin.inbox.convertToPostDialog.createAPostFrom',
+              defaultMessage:
+                "Create a post from this conversation, attributed to the customer. They'll see it in the conversation and get status updates.",
+            })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="convert-board">Board</Label>
+            <Label htmlFor="convert-board">
+              {intl.formatMessage({
+                id: 'admin.inbox.convertToPostDialog.board',
+                defaultMessage: 'Board',
+              })}
+            </Label>
             <Select value={boardId} onValueChange={setBoardId}>
               <SelectTrigger id="convert-board">
-                <SelectValue placeholder="Select a board" />
+                <SelectValue
+                  placeholder={intl.formatMessage({
+                    id: 'admin.inbox.convertToPostDialog.selectABoard',
+                    defaultMessage: 'Select a board',
+                  })}
+                />
               </SelectTrigger>
               <SelectContent>
                 {boards.map((b) => (
@@ -217,7 +250,12 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="convert-title">Title</Label>
+            <Label htmlFor="convert-title">
+              {intl.formatMessage({
+                id: 'admin.inbox.convertToPostDialog.title',
+                defaultMessage: 'Title',
+              })}
+            </Label>
             <Input
               id="convert-title"
               value={title}
@@ -227,7 +265,12 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="convert-content">Details</Label>
+            <Label htmlFor="convert-content">
+              {intl.formatMessage({
+                id: 'admin.inbox.convertToPostDialog.details',
+                defaultMessage: 'Details',
+              })}
+            </Label>
             <Textarea
               id="convert-content"
               value={content}
@@ -240,14 +283,20 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
           {showEmailCapture && (
             <div className="space-y-1.5">
               <Label htmlFor="convert-contact-email">
-                Capture an email so the visitor gets status updates (optional)
+                {intl.formatMessage({
+                  id: 'admin.inbox.convertToPostDialog.captureAnEmailSo',
+                  defaultMessage: 'Capture an email so the visitor gets status updates (optional)',
+                })}
               </Label>
               <Input
                 id="convert-contact-email"
                 type="email"
                 value={captureEmail}
                 maxLength={320}
-                placeholder="visitor@example.com"
+                placeholder={intl.formatMessage({
+                  id: 'admin.inbox.convertToPostDialog.visitorExampleCom',
+                  defaultMessage: 'visitor@example.com',
+                })}
                 onChange={(e) => setCaptureEmail(e.target.value)}
               />
             </div>
@@ -256,7 +305,10 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
           {similar.length > 0 && (
             <div className="rounded-lg border border-border/60 p-2.5">
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                Similar posts: upvote instead of creating a duplicate?
+                {intl.formatMessage({
+                  id: 'admin.inbox.convertToPostDialog.similarPostsUpvoteInstead',
+                  defaultMessage: 'Similar posts: upvote instead of creating a duplicate?',
+                })}
               </p>
               <div className="flex flex-col gap-1">
                 {similar.map((p) => (
@@ -276,7 +328,11 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
                         })
                       }}
                     >
-                      <ChevronUpIcon className="h-3.5 w-3.5" /> Upvote
+                      <ChevronUpIcon className="h-3.5 w-3.5" />{' '}
+                      {intl.formatMessage({
+                        id: 'admin.inbox.convertToPostDialog.upvote',
+                        defaultMessage: 'Upvote',
+                      })}
                     </Button>
                     <Button
                       type="button"
@@ -285,7 +341,11 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
                       disabled={busy}
                       onClick={() => share.mutate(p.id as PostId)}
                     >
-                      <ChatBubbleLeftRightIcon className="h-3.5 w-3.5" /> Share
+                      <ChatBubbleLeftRightIcon className="h-3.5 w-3.5" />{' '}
+                      {intl.formatMessage({
+                        id: 'admin.inbox.convertToPostDialog.share',
+                        defaultMessage: 'Share',
+                      })}
                     </Button>
                   </div>
                 ))}
@@ -296,7 +356,10 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {intl.formatMessage({
+              id: 'admin.inbox.convertToPostDialog.cancel',
+              defaultMessage: 'Cancel',
+            })}
           </Button>
           <Button
             type="button"
@@ -306,7 +369,10 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
               convert.mutate({})
             }}
           >
-            Track as feedback
+            {intl.formatMessage({
+              id: 'admin.inbox.convertToPostDialog.trackAsFeedback2',
+              defaultMessage: 'Track as feedback',
+            })}
           </Button>
         </DialogFooter>
       </DialogContent>

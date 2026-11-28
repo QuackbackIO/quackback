@@ -3,6 +3,7 @@
  * pure move — see that file's header for the surface this belongs to):
  * one write-tool call a Copilot turn proposed (P2-C.4, "act-on-approval").
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { CheckCircleIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { ArrowPathIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import type { AssistantPendingActionId } from '@quackback/ids'
@@ -52,6 +53,7 @@ function formatProposedActionFailure(result: unknown): string | null {
  * plumbing underneath.
  */
 export function CopilotProposedActionCard({ action }: { action: CopilotProposedAction }) {
+  const intl = useOptionalIntl()
   const id = action.id as AssistantPendingActionId
   const { data, isLoading, isError, busy, approving, rejecting, inlineError, approve, reject } =
     usePendingActionDecision(id)
@@ -83,30 +85,56 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
       )}
 
       {isLoading ? (
-        <span className="text-muted-foreground">Checking status…</span>
+        <span className="text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.copilotProposedActionCard.checkingStatus',
+            defaultMessage: 'Checking status…',
+          })}
+        </span>
       ) : isError ? (
-        <span className="text-muted-foreground">Couldn&apos;t load the current status</span>
+        <span className="text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.copilotProposedActionCard.statusLoadFailed',
+            defaultMessage: "Couldn't load the current status",
+          })}
+        </span>
       ) : data?.status === 'proposed' ? (
         <div className="flex items-center gap-2 pt-0.5">
           <Button type="button" size="sm" disabled={busy} onClick={approve}>
             {approving ? (
               <>
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Approving…
+                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.approving',
+                  defaultMessage: 'Approving…',
+                })}
               </>
             ) : (
               <>
-                <CheckIcon className="h-3.5 w-3.5" /> Approve
+                <CheckIcon className="h-3.5 w-3.5" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.approve',
+                  defaultMessage: 'Approve',
+                })}
               </>
             )}
           </Button>
           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={reject}>
             {rejecting ? (
               <>
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Rejecting…
+                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.rejecting',
+                  defaultMessage: 'Rejecting…',
+                })}
               </>
             ) : (
               <>
-                <XMarkIcon className="h-3.5 w-3.5" /> Reject
+                <XMarkIcon className="h-3.5 w-3.5" />{' '}
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotProposedActionCard.reject',
+                  defaultMessage: 'Reject',
+                })}
               </>
             )}
           </Button>

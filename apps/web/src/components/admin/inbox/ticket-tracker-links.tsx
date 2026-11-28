@@ -1,5 +1,6 @@
 'use client'
 
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
@@ -108,6 +109,7 @@ function TrackerSection({
   links: TrackerLink[]
   onChanged: () => void
 }) {
+  const intl = useOptionalIntl()
   const qc = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [issueRef, setIssueRef] = useState('')
@@ -140,12 +142,24 @@ function TrackerSection({
       settle()
       toast.message(
         result.state === 'succeeded'
-          ? 'Issue already created'
+          ? intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.issueAlreadyCreated',
+              defaultMessage: 'Issue already created',
+            })
           : ['queued', 'running', 'retry_wait'].includes(result.state)
-            ? 'Issue creation queued'
-            : 'This sync needs attention',
+            ? intl.formatMessage({
+                id: 'admin.inbox.ticketTrackerLinks.issueCreationQueued',
+                defaultMessage: 'Issue creation queued',
+              })
+            : intl.formatMessage({
+                id: 'admin.inbox.ticketTrackerLinks.syncNeedsAttention',
+                defaultMessage: 'This sync needs attention',
+              }),
         {
-          description: 'Review progress in the integration’s Sync history.',
+          description: intl.formatMessage({
+            id: 'admin.inbox.ticketTrackerLinks.reviewProgressInThe',
+            defaultMessage: 'Review progress in the integration’s Sync history.',
+          }),
         }
       )
     },
@@ -171,13 +185,27 @@ function TrackerSection({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setAdding(true)}>Link existing issue…</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => create.mutate()}>Create new issue</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setAdding(true)}>
+            {intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.linkExistingIssue',
+              defaultMessage: 'Link existing issue…',
+            })}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => create.mutate()}>
+            {intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.createNewIssue',
+              defaultMessage: 'Create new issue',
+            })}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     ) : canLink ? (
       <button type="button" onClick={() => setAdding(true)} className={addBtnClass}>
-        <PlusIcon className="size-4" /> Link issue
+        <PlusIcon className="size-4" />{' '}
+        {intl.formatMessage({
+          id: 'admin.inbox.ticketTrackerLinks.linkIssue',
+          defaultMessage: 'Link issue',
+        })}
       </button>
     ) : canCreate ? (
       <button
@@ -212,10 +240,19 @@ function TrackerSection({
                 setIssueRef('')
               }
             }}
-            placeholder="Issue URL or reference"
+            placeholder={intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.issueUrlOrReference',
+              defaultMessage: 'Issue URL or reference',
+            })}
             className="h-8 text-[13px]"
             disabled={link.isPending}
-            aria-label={`${name} issue URL or reference`}
+            aria-label={intl.formatMessage(
+              {
+                id: 'admin.inbox.ticketTrackerLinks.issueInput',
+                defaultMessage: '{tracker} issue URL or reference',
+              },
+              { tracker: name }
+            )}
           />
           <button
             type="button"
@@ -224,7 +261,10 @@ function TrackerSection({
               setIssueRef('')
             }}
             className="shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="Cancel linking"
+            aria-label={intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.cancelLinking',
+              defaultMessage: 'Cancel linking',
+            })}
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -232,7 +272,14 @@ function TrackerSection({
       )}
 
       {links.length === 0 ? (
-        !adding && <p className="text-sm text-muted-foreground">No linked issues</p>
+        !adding && (
+          <p className="text-sm text-muted-foreground">
+            {intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.noLinkedIssues',
+              defaultMessage: 'No linked issues',
+            })}
+          </p>
+        )
       ) : (
         <ul className="space-y-0.5">
           {links.map((l) => (
@@ -258,7 +305,10 @@ function TrackerSection({
                 type="button"
                 onClick={() => unlink.mutate(l.id)}
                 className="shrink-0 text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
-                aria-label={`Unlink ${l.externalDisplayId ?? l.externalId}`}
+                aria-label={intl.formatMessage(
+                  { id: 'admin.inbox.ticketTrackerLinks.unlink', defaultMessage: 'Unlink {issue}' },
+                  { issue: l.externalDisplayId ?? l.externalId }
+                )}
               >
                 <XMarkIcon className="h-4 w-4" />
               </button>

@@ -12,6 +12,8 @@
  * affordance rather than by a confirm dialog), so internal content can never
  * reach a customer-facing composer.
  */
+import { type MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import {
   memo,
   useCallback,
@@ -100,8 +102,14 @@ const MAX_QUESTION_CHARS = 4000
  * (they only fire while focus is inside the Copilot panel), so they live here
  * next to that handler rather than in the inbox action registry.
  */
-export const COPILOT_PANEL_SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
-  { keys: '⌘↵', label: 'Insert last Copilot answer (with the ask box empty)' },
+export const COPILOT_PANEL_SHORTCUTS: ReadonlyArray<{ keys: string; label: MessageDescriptor }> = [
+  {
+    keys: '⌘↵',
+    label: {
+      id: 'admin.inbox.copilotPanel.insertLastCopilotAnswer',
+      defaultMessage: 'Insert last Copilot answer (with the ask box empty)',
+    },
+  },
 ]
 
 /** The quick actions: each is nothing more than a canned question submitted
@@ -111,32 +119,44 @@ export const COPILOT_PANEL_SHORTCUTS: ReadonlyArray<{ keys: string; label: strin
  *  ask box once a thread exists (label only). */
 const QUICK_ACTIONS: ReadonlyArray<{
   /** Compact pill label (composer footer). */
-  label: string
+  label: MessageDescriptor
   /** Empty-state card title. */
-  title: string
+  title: MessageDescriptor
   /** Empty-state card description. */
-  description: string
+  description: MessageDescriptor
   icon: typeof ClipboardDocumentListIcon
   question: string
 }> = [
   {
-    label: 'Draft reply',
-    title: 'Draft a reply',
-    description: 'Use your knowledge base to draft a reply in your tone and style.',
+    label: { id: 'admin.inbox.copilotPanel.draftReply', defaultMessage: 'Draft reply' },
+    title: { id: 'admin.inbox.copilotPanel.draftAReply', defaultMessage: 'Draft a reply' },
+    description: {
+      id: 'admin.inbox.copilotPanel.useYourKnowledgeBase',
+      defaultMessage: 'Use your knowledge base to draft a reply in your tone and style.',
+    },
     icon: PencilSquareIcon,
     question: 'Draft a reply to this conversation',
   },
   {
-    label: 'Summarize',
-    title: 'Catch me up',
-    description: 'Get a quick summary of what has happened so far.',
+    label: { id: 'admin.inbox.copilotPanel.summarize', defaultMessage: 'Summarize' },
+    title: { id: 'admin.inbox.copilotPanel.catchMeUp', defaultMessage: 'Catch me up' },
+    description: {
+      id: 'admin.inbox.copilotPanel.getAQuickSummary',
+      defaultMessage: 'Get a quick summary of what has happened so far.',
+    },
     icon: ClipboardDocumentListIcon,
     question: 'Summarize this conversation and highlight the key points',
   },
   {
-    label: 'Next steps',
-    title: 'Suggest next steps',
-    description: 'Get guidance on how to move this conversation forward.',
+    label: { id: 'admin.inbox.copilotPanel.nextSteps', defaultMessage: 'Next steps' },
+    title: {
+      id: 'admin.inbox.copilotPanel.suggestNextSteps',
+      defaultMessage: 'Suggest next steps',
+    },
+    description: {
+      id: 'admin.inbox.copilotPanel.getGuidanceOnHow',
+      defaultMessage: 'Get guidance on how to move this conversation forward.',
+    },
     icon: BoltIcon,
     question: 'Suggest the next steps to resolve this conversation',
   },
@@ -152,11 +172,23 @@ type InsertEventMeta = Pick<CopilotEventInput, 'eventType' | 'answerType' | 'int
 /** The answer card's Modify menu: the transform kinds shared with the
  *  composer's Improve menu (TRANSFORM_KINDS' doc); the Improve-only kinds
  *  (`expand`/`rephrase`/`fix_grammar`) stay off the answer card. */
-const ANSWER_REWRITE_ROWS: ReadonlyArray<{ transform: TransformKind; label: string }> = [
-  { transform: 'my_tone', label: 'In my tone' },
-  { transform: 'more_friendly', label: 'More friendly' },
-  { transform: 'more_formal', label: 'More formal' },
-  { transform: 'more_concise', label: 'More concise' },
+const ANSWER_REWRITE_ROWS: ReadonlyArray<{ transform: TransformKind; label: MessageDescriptor }> = [
+  {
+    transform: 'my_tone',
+    label: { id: 'admin.inbox.copilotPanel.inMyTone', defaultMessage: 'In my tone' },
+  },
+  {
+    transform: 'more_friendly',
+    label: { id: 'admin.inbox.copilotPanel.moreFriendly', defaultMessage: 'More friendly' },
+  },
+  {
+    transform: 'more_formal',
+    label: { id: 'admin.inbox.copilotPanel.moreFormal', defaultMessage: 'More formal' },
+  },
+  {
+    transform: 'more_concise',
+    label: { id: 'admin.inbox.copilotPanel.moreConcise', defaultMessage: 'More concise' },
+  },
 ]
 
 export interface CopilotTurn {
@@ -299,6 +331,7 @@ export const CopilotPanel = memo(function CopilotPanel({
    *  (e.g. an inbox keyboard shortcut). */
   askInputRef?: Ref<HTMLTextAreaElement>
 }) {
+  const intl = useOptionalIntl()
   const principalId = usePrincipalId()
   const assistantName = 'Copilot'
   const headerLabel = 'Copilot'
@@ -562,8 +595,14 @@ export const CopilotPanel = memo(function CopilotPanel({
           type="button"
           onClick={newChat}
           disabled={busy}
-          aria-label="New chat"
-          title="New chat"
+          aria-label={intl.formatMessage({
+            id: 'admin.inbox.copilotPanel.newChat',
+            defaultMessage: 'New chat',
+          })}
+          title={intl.formatMessage({
+            id: 'admin.inbox.copilotPanel.newChat2',
+            defaultMessage: 'New chat',
+          })}
           className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
         >
           <ArrowPathIcon className="h-4 w-4" />
@@ -622,6 +661,7 @@ function CopilotEmptyState({
   /** Submit a QUICK_ACTIONS canned question as an ordinary turn. */
   onQuickAction: (question: string) => void
 }) {
+  const intl = useOptionalIntl()
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 px-1 py-6">
       <div className="flex flex-col items-center gap-3 text-center">
@@ -630,17 +670,27 @@ function CopilotEmptyState({
         </div>
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">
-            Ask {assistantName} anything about this conversation.
+            {intl.formatMessage(
+              {
+                id: 'admin.inbox.copilotPanel.askAnything',
+                defaultMessage: 'Ask {assistant} anything about this conversation.',
+              },
+              { assistant: assistantName }
+            )}
           </p>
           <p className="text-xs text-muted-foreground">
-            Answers draw on your help center, snippets, roadmap, and this customer&apos;s history.
+            {intl.formatMessage({
+              id: 'admin.inbox.copilotPanel.answersDrawOn',
+              defaultMessage:
+                "Answers draw on your help center, snippets, roadmap, and this customer's history.",
+            })}
           </p>
         </div>
       </div>
       <div className="w-full space-y-2">
         {QUICK_ACTIONS.map((action) => (
           <button
-            key={action.label}
+            key={action.question}
             type="button"
             onClick={() => onQuickAction(action.question)}
             className="w-full rounded-xl border border-border/60 bg-card/60 px-3.5 py-3 text-start transition-colors hover:border-border hover:bg-muted/60"
@@ -648,8 +698,12 @@ function CopilotEmptyState({
             <span className="flex items-start gap-3">
               <action.icon className="mt-0.5 size-4 shrink-0 text-primary" />
               <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">{action.title}</span>
-                <span className="text-xs text-muted-foreground">{action.description}</span>
+                <span className="text-sm font-medium text-foreground">
+                  {intl.formatMessage(action.title)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {intl.formatMessage(action.description)}
+                </span>
               </span>
             </span>
           </button>
@@ -658,11 +712,17 @@ function CopilotEmptyState({
       <div className="space-y-1 text-center text-[11px] text-muted-foreground">
         <p className="flex items-center justify-center gap-1.5">
           <LockClosedIcon className="size-3.5 shrink-0" />
-          Chats are private to you.
+          {intl.formatMessage({
+            id: 'admin.inbox.copilotPanel.chatsArePrivateTo',
+            defaultMessage: 'Chats are private to you.',
+          })}
         </p>
         <p className="flex items-center justify-center gap-1.5">
           <ShieldCheckIcon className="size-3.5 shrink-0" />
-          Can take actions for you, with your approval.
+          {intl.formatMessage({
+            id: 'admin.inbox.copilotPanel.canTakeActionsFor',
+            defaultMessage: 'Can take actions for you, with your approval.',
+          })}
         </p>
       </div>
     </div>
@@ -690,6 +750,7 @@ function CopilotTurnView({
    *  turn's answer. Fire-and-forget — the latch below is purely local. */
   onFeedback: (rating: 'up' | 'down', reason?: string) => void
 }) {
+  const intl = useOptionalIntl()
   const streaming = turn.status === 'streaming'
   // The single eligibility rule (see insertableTurn): only a finalized
   // customer-facing draft with no internal sources gets "Add to composer" —
@@ -710,12 +771,19 @@ function CopilotTurnView({
           <div className="space-y-2">
             <p className="text-sm text-destructive">{turn.errorMessage ?? GENERIC_ERROR}</p>
             <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-              Try again
+              {intl.formatMessage({
+                id: 'admin.inbox.copilotPanel.tryAgain',
+                defaultMessage: 'Try again',
+              })}
             </Button>
           </div>
         ) : turn.suppressed ? (
           <p className="text-sm text-muted-foreground">
-            I could not find enough to answer that. Try rephrasing, or check the sources filter.
+            {intl.formatMessage({
+              id: 'admin.inbox.copilotPanel.iCouldNotFind',
+              defaultMessage:
+                'I could not find enough to answer that. Try rephrasing, or check the sources filter.',
+            })}
           </p>
         ) : (
           <>
@@ -725,7 +793,10 @@ function CopilotTurnView({
                 {insertable && (
                   <>
                     <Button type="button" size="sm" onClick={onAddToComposer}>
-                      Add to composer
+                      {intl.formatMessage({
+                        id: 'admin.inbox.copilotPanel.addToComposer',
+                        defaultMessage: 'Add to composer',
+                      })}
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -740,18 +811,28 @@ function CopilotTurnView({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start">
-                        <DropdownMenuLabel>Rewrite</DropdownMenuLabel>
+                        <DropdownMenuLabel>
+                          {intl.formatMessage({
+                            id: 'admin.inbox.copilotPanel.rewrite',
+                            defaultMessage: 'Rewrite',
+                          })}
+                        </DropdownMenuLabel>
                         {ANSWER_REWRITE_ROWS.map((row) => (
                           <DropdownMenuItem
                             key={row.transform}
                             onClick={() => onRewrite(row.transform)}
                           >
-                            {row.label}
+                            {intl.formatMessage(row.label)}
                           </DropdownMenuItem>
                         ))}
                         <DropdownMenuSeparator />
                         <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>Translate to</DropdownMenuSubTrigger>
+                          <DropdownMenuSubTrigger>
+                            {intl.formatMessage({
+                              id: 'admin.inbox.copilotPanel.translateTo',
+                              defaultMessage: 'Translate to',
+                            })}
+                          </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
                             {TRANSLATE_LANGUAGES.map((lang) => (
                               <DropdownMenuItem
@@ -769,7 +850,10 @@ function CopilotTurnView({
                 )}
                 {turn.preRewriteAnswer !== undefined && (
                   <Button type="button" variant="ghost" size="sm" onClick={onUndoRewrite}>
-                    Undo rewrite
+                    {intl.formatMessage({
+                      id: 'admin.inbox.copilotPanel.undoRewrite',
+                      defaultMessage: 'Undo rewrite',
+                    })}
                   </Button>
                 )}
                 <CopilotTurnFeedback onFeedback={onFeedback} />
@@ -800,6 +884,7 @@ function CopilotTurnFeedback({
 }: {
   onFeedback: (rating: 'up' | 'down', reason?: string) => void
 }) {
+  const intl = useOptionalIntl()
   const [rating, setRating] = useState<'up' | 'down' | null>(null)
   const [reasonOpen, setReasonOpen] = useState(false)
   const [reason, setReason] = useState('')
@@ -838,7 +923,10 @@ function CopilotTurnFeedback({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Good answer"
+          aria-label={intl.formatMessage({
+            id: 'admin.inbox.copilotPanel.goodAnswer',
+            defaultMessage: 'Good answer',
+          })}
           aria-pressed={rating === 'up'}
           onClick={() => choose('up')}
           className={cn(rating === 'up' && 'text-foreground')}
@@ -853,7 +941,10 @@ function CopilotTurnFeedback({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Bad answer"
+          aria-label={intl.formatMessage({
+            id: 'admin.inbox.copilotPanel.badAnswer',
+            defaultMessage: 'Bad answer',
+          })}
           aria-pressed={rating === 'down'}
           onClick={() => choose('down')}
           className={cn(rating === 'down' && 'text-foreground')}
@@ -870,8 +961,14 @@ function CopilotTurnFeedback({
           <Input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="What was wrong? (optional)"
-            aria-label="Feedback reason"
+            placeholder={intl.formatMessage({
+              id: 'admin.inbox.copilotPanel.whatWasWrongOptional',
+              defaultMessage: 'What was wrong? (optional)',
+            })}
+            aria-label={intl.formatMessage({
+              id: 'admin.inbox.copilotPanel.feedbackReason',
+              defaultMessage: 'Feedback reason',
+            })}
             maxLength={500}
             className="h-8 flex-1 text-[13px]"
             onKeyDown={(e) => {
@@ -890,13 +987,16 @@ function CopilotTurnFeedback({
             onClick={() => resolveDown(true)}
             disabled={!reason.trim()}
           >
-            Send
+            {intl.formatMessage({ id: 'admin.inbox.copilotPanel.send', defaultMessage: 'Send' })}
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Dismiss feedback reason"
+            aria-label={intl.formatMessage({
+              id: 'admin.inbox.copilotPanel.dismissFeedbackReason',
+              defaultMessage: 'Dismiss feedback reason',
+            })}
             onClick={() => resolveDown(false)}
           >
             <XMarkIcon className="size-4" />
@@ -934,6 +1034,7 @@ function CopilotAskInput({
   checked: Set<SourceType>
   onToggleSource: (type: SourceType) => void
 }) {
+  const intl = useOptionalIntl()
   const placeholder = hasAskedBefore ? 'Ask a follow-up question...' : 'Ask a question...'
   return (
     <div className="border-t border-border/50 p-3">
@@ -943,7 +1044,7 @@ function CopilotAskInput({
         <div className="mb-2 flex flex-wrap gap-1.5">
           {QUICK_ACTIONS.map((action) => (
             <Button
-              key={action.label}
+              key={action.question}
               type="button"
               variant="outline"
               size="sm"
@@ -952,7 +1053,7 @@ function CopilotAskInput({
               className="text-muted-foreground hover:text-foreground"
             >
               <action.icon className="size-3.5" />
-              {action.label}
+              {intl.formatMessage(action.label)}
             </Button>
           ))}
         </div>
@@ -992,14 +1093,22 @@ function CopilotAskInput({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                aria-label="Answer sources"
+                aria-label={intl.formatMessage({
+                  id: 'admin.inbox.copilotPanel.answerSources',
+                  defaultMessage: 'Answer sources',
+                })}
                 className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <FunnelIcon className="h-4 w-4" />
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-64 space-y-1 p-2">
-              <p className="px-1 pb-1 text-xs font-medium text-muted-foreground">Answer sources</p>
+              <p className="px-1 pb-1 text-xs font-medium text-muted-foreground">
+                {intl.formatMessage({
+                  id: 'admin.inbox.copilotPanel.answerSources2',
+                  defaultMessage: 'Answer sources',
+                })}
+              </p>
               {sourceOptions.map((opt) => {
                 const Icon = opt.icon
                 return (
@@ -1019,9 +1128,11 @@ function CopilotAskInput({
                     >
                       <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="flex flex-col">
-                        <span className="text-sm">{opt.label}</span>
+                        <span className="text-sm">{intl.formatMessage(opt.label)}</span>
                         {opt.subtitle && (
-                          <span className="text-[11px] text-muted-foreground">{opt.subtitle}</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {intl.formatMessage(opt.subtitle)}
+                          </span>
                         )}
                       </span>
                     </label>

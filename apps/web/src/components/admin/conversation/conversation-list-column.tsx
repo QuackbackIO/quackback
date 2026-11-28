@@ -1,3 +1,5 @@
+import type { IntlShape } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -9,7 +11,6 @@ import type {
   ConversationPriority,
   Channel,
 } from '@/lib/shared/conversation/types'
-import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
 import {
   inboxItemRefFromId,
   type InboxItemDTO,
@@ -40,8 +41,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { SPAM_REASON_LABELS } from './inbox-labels'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
-import { FormattedMessage, useIntl } from 'react-intl'
 
 /** Ignore scroll-by hovers; only warm a thread the pointer actually rests on. */
 const PREFETCH_DELAY_MS = 120
@@ -336,6 +337,7 @@ const ConversationListHeader = memo(function ConversationListHeader({
   sort,
   onSort,
 }: ConversationListHeaderProps) {
+  const intl = useOptionalIntl()
   const [composeOpen, setComposeOpen] = useState(false)
   // A tickets-only workspace has no conversations to start.
   const canCompose = useSupportConversationsEnabled()
@@ -352,11 +354,12 @@ const ConversationListHeader = memo(function ConversationListHeader({
           <InboxScopeMenu nav={nav} onSelect={onSelectNav} />
         </div>
         {canCompose && (
-          <NewButton
-            noun="conversation"
-            onClick={() => setComposeOpen(true)}
-            className="shrink-0"
-          />
+          <NewButton noun="conversation" onClick={() => setComposeOpen(true)} className="shrink-0">
+            {intl.formatMessage({
+              id: 'admin.shell.newConversationDialog.newConversation',
+              defaultMessage: 'New conversation',
+            })}
+          </NewButton>
         )}
       </div>
       {headerSlot}
@@ -365,8 +368,14 @@ const ConversationListHeader = memo(function ConversationListHeader({
         <SearchInput
           value={searchInput}
           onChange={onSearchInput}
-          placeholder="Search conversations…"
-          aria-label="Search the inbox"
+          placeholder={intl.formatMessage({
+            id: 'admin.inbox.conversationListColumn.searchConversations',
+            defaultMessage: 'Search conversations…',
+          })}
+          aria-label={intl.formatMessage({
+            id: 'admin.inbox.conversationListColumn.searchTheInbox',
+            defaultMessage: 'Search the inbox',
+          })}
           data-search-input
         />
       </div>
@@ -408,7 +417,7 @@ function EmptyList({
   ConversationListColumnProps,
   'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
 >) {
-  const intl = useIntl()
+  const intl = useOptionalIntl()
   const activationAction = useActivationAction('conversation_empty')
 
   const isMainConversationQueue =
@@ -455,18 +464,18 @@ function EmptyList({
       <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
       {isFiltered && (
         <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-          <FormattedMessage
-            id="inbox.empty.filtered.description"
-            defaultMessage="Try changing your search or filters."
-          />
+          {intl.formatMessage({
+            id: 'inbox.empty.filtered.description',
+            defaultMessage: 'Try changing your search or filters.',
+          })}
         </p>
       )}
       {isAllClear && (
         <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-          <FormattedMessage
-            id="inbox.empty.allClear.description"
-            defaultMessage="No open conversations need your attention."
-          />
+          {intl.formatMessage({
+            id: 'inbox.empty.allClear.description',
+            defaultMessage: 'No open conversations need your attention.',
+          })}
         </p>
       )}
       {showMessengerCta && activationAction && (
@@ -533,22 +542,36 @@ function RowShell({ selected, children }: { selected: boolean; children: ReactNo
  *  thread renders an explicit "Unassigned" label in the same slot — the
  *  column is always present, never collapsing with row content. Kept tiny
  *  and muted so it scans as metadata, never as a second row identity. */
-function assigneeColumn(c: ConversationDTO) {
+function assigneeColumn(c: ConversationDTO, intl: IntlShape) {
   if (!c.assignedAgent) {
     return (
       <span className="flex w-24 shrink-0 items-center text-xs text-muted-foreground/70">
-        Unassigned
+        {intl.formatMessage({
+          id: 'admin.inbox.conversationListColumn.unassigned',
+          defaultMessage: 'Unassigned',
+        })}
       </span>
     )
   }
-  const fullName = c.assignedAgent.displayName ?? 'teammate'
+  const fullName =
+    c.assignedAgent.displayName ??
+    intl.formatMessage({
+      id: 'admin.inbox.conversationListColumn.teammate',
+      defaultMessage: 'teammate',
+    })
   // First name only: the column is a fixed 96px, so a full name would
   // ellipsis-truncate into noise; the full name stays one hover away on the
   // title.
   const firstName = fullName.split(' ')[0]
   return (
     <span
-      title={`Assigned to ${fullName}`}
+      title={intl.formatMessage(
+        {
+          id: 'admin.inbox.conversationListColumn.assignedTo',
+          defaultMessage: 'Assigned to {name}',
+        },
+        { name: fullName }
+      )}
       className="flex w-24 shrink-0 items-center gap-1 text-xs text-muted-foreground"
     >
       <Avatar
@@ -576,6 +599,7 @@ export const ConversationRow = memo(function ConversationRow({
   onPrefetch?: (id: string) => void
   onPrefetchCancel?: () => void
 }) {
+  const intl = useOptionalIntl()
   const c = item.conversation
   return (
     <RowShell selected={selected}>
@@ -619,7 +643,7 @@ export const ConversationRow = memo(function ConversationRow({
                   <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                   {/* Rightmost on the row, so the column's left edge is the
                       same constant offset from the right edge on every row. */}
-                  {assigneeColumn(c)}
+                  {assigneeColumn(c, intl)}
                 </>
               )}
             </span>
@@ -646,18 +670,18 @@ export const ConversationRow = memo(function ConversationRow({
                     false positive's source without opening it. */}
                 {c.endReason === 'spam' && c.spamReason && (
                   <Badge size="sm" variant="outline">
-                    {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
+                    {intl.formatMessage(SPAM_REASON_LABELS[c.spamReason])}
                   </Badge>
                 )}
                 {c.isTest && (
                   <Badge size="sm" variant="outline">
-                    <FormattedMessage id="inbox.row.test" defaultMessage="Test" />
+                    {intl.formatMessage({ id: 'inbox.row.test', defaultMessage: 'Test' })}
                   </Badge>
                 )}
                 <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                 {/* Rightmost on the row, so the column's left edge is the
                     same constant offset from the right edge on every row. */}
-                {assigneeColumn(c)}
+                {assigneeColumn(c, intl)}
               </span>
             </div>
           )}

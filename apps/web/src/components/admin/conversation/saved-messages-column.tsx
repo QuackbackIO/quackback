@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useQuery } from '@tanstack/react-query'
 import { BookmarkIcon } from '@heroicons/react/24/solid'
 import type { ConversationId, ConversationMessageId, TicketId } from '@quackback/ids'
@@ -32,6 +33,7 @@ export function SavedMessagesColumn({
    *  message) or a ticket (just the ticket itself, see `SavedMessageTarget`). */
   onSelect: (target: SavedMessageTarget) => void
 }) {
+  const intl = useOptionalIntl()
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'inbox', 'flagged'],
     queryFn: () => listFlaggedMessagesFn(),
@@ -49,7 +51,10 @@ export function SavedMessagesColumn({
       <div className="border-b border-border/50 px-4 py-[1.1rem]">
         <h2 className="flex items-center gap-1.5 truncate text-sm font-semibold leading-tight">
           <BookmarkIcon className="h-3.5 w-3.5 shrink-0 text-warning" />
-          Saved messages
+          {intl.formatMessage({
+            id: 'admin.inbox.savedMessagesColumn.savedMessages',
+            defaultMessage: 'Saved messages',
+          })}
         </h2>
       </div>
       <ScrollArea className="min-h-0 flex-1">
@@ -59,7 +64,10 @@ export function SavedMessagesColumn({
           </div>
         ) : messages.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-            Nothing saved yet. Flag a message to find it here.
+            {intl.formatMessage({
+              id: 'admin.inbox.savedMessagesColumn.nothingSavedYetFlag',
+              defaultMessage: 'Nothing saved yet. Flag a message to find it here.',
+            })}
           </div>
         ) : (
           messages.map((m) => (
@@ -91,7 +99,22 @@ export function SavedMessagesColumn({
               </div>
               <p className="truncate text-xs text-muted-foreground">{m.preview}</p>
               <p className="truncate text-xs text-muted-foreground/60">
-                in {m.conversationLabel ?? (m.ticketId ? 'ticket' : 'conversation')}
+                {intl.formatMessage(
+                  { id: 'admin.inbox.savedMessagesColumn.inPlace', defaultMessage: 'in {place}' },
+                  {
+                    place:
+                      m.conversationLabel ??
+                      (m.ticketId
+                        ? intl.formatMessage({
+                            id: 'admin.inbox.savedMessagesColumn.ticket',
+                            defaultMessage: 'ticket',
+                          })
+                        : intl.formatMessage({
+                            id: 'admin.inbox.savedMessagesColumn.conversation',
+                            defaultMessage: 'conversation',
+                          })),
+                  }
+                )}
               </p>
             </button>
           ))

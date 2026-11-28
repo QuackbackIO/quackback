@@ -15,6 +15,7 @@
  * tokens both bubbles render from (UNIFIED-INBOX-SPEC.md §2.6) — geometry
  * and fill live in one place so the two idioms cannot drift apart.
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useCallback, useRef, useState } from 'react'
 import {
   EllipsisVerticalIcon,
@@ -93,8 +94,16 @@ function MessageTime({ iso }: { iso: string }) {
 
 /** The "(edited)" mark, titled with the time of the edit. */
 function EditedAt({ iso }: { iso: string }) {
+  const intl = useOptionalIntl()
   const formatDate = useLocalDateFormatter()
-  return <EditedMark title={`Edited ${formatDate(iso, TIME_LABEL)}`} />
+  return (
+    <EditedMark
+      title={intl.formatMessage(
+        { id: 'admin.inbox.messageBubble.editedAt', defaultMessage: 'Edited {time}' },
+        { time: formatDate(iso, TIME_LABEL) }
+      )}
+    />
+  )
 }
 
 /** Small grey "(edited)" beside the timestamp, the same mark Slack uses. */
@@ -298,11 +307,19 @@ function hasBubbleBody(content: string, richBody: TiptapContent | null): boolean
 
 /** A thin "New" divider rendered immediately above the first unread message. */
 export function UnreadDivider() {
+  const intl = useOptionalIntl()
   return (
-    <div className="my-1.5 flex items-center gap-2" role="separator" aria-label="New messages">
+    <div
+      className="my-1.5 flex items-center gap-2"
+      role="separator"
+      aria-label={intl.formatMessage({
+        id: 'admin.inbox.messageBubble.newMessages',
+        defaultMessage: 'New messages',
+      })}
+    >
       <span className="h-px flex-1 bg-primary/30" />
       <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
-        New
+        {intl.formatMessage({ id: 'admin.inbox.messageBubble.new', defaultMessage: 'New' })}
       </span>
       <span className="h-px flex-1 bg-primary/30" />
     </div>
@@ -426,6 +443,7 @@ function MessageEditForm({
   onCancel: () => void
   onSave: (draft: { content: string; contentJson: TiptapContent | null }) => Promise<void>
 }) {
+  const intl = useOptionalIntl()
   const jsonRef = useRef<TiptapContent | null>(message.contentJson)
   const markdownRef = useRef(message.content)
   const [saving, setSaving] = useState(false)
@@ -472,7 +490,10 @@ function MessageEditForm({
         borderless
         minHeight="2.5rem"
         autofocus="end"
-        placeholder="Edit message"
+        placeholder={intl.formatMessage({
+          id: 'admin.inbox.messageBubble.editMessage',
+          defaultMessage: 'Edit message',
+        })}
         className="max-h-64 overflow-y-auto"
         onDocumentChange={(document) => {
           const doc = document.json() as TiptapContent
@@ -490,7 +511,7 @@ function MessageEditForm({
           disabled={saving}
           className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
         >
-          Cancel
+          {intl.formatMessage({ id: 'admin.inbox.messageBubble.cancel', defaultMessage: 'Cancel' })}
         </button>
         <button
           type="button"
@@ -526,6 +547,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   ticketProvenance = false,
   onRetryChannelDelivery,
 }: AgentMessageBubbleProps) {
+  const intl = useOptionalIntl()
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -722,7 +744,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     <button
                       type="button"
                       className="flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Add reaction"
+                      aria-label={intl.formatMessage({
+                        id: 'admin.inbox.messageBubble.addReaction',
+                        defaultMessage: 'Add reaction',
+                      })}
                     >
                       <FaceSmileIcon className="h-4 w-4" />
                     </button>
@@ -735,7 +760,13 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                           <button
                             key={emoji}
                             type="button"
-                            aria-label={`React with ${emoji}`}
+                            aria-label={intl.formatMessage(
+                              {
+                                id: 'admin.inbox.messageBubble.reactWith',
+                                defaultMessage: 'React with {emoji}',
+                              },
+                              { emoji }
+                            )}
                             aria-pressed={has}
                             onClick={() => {
                               onToggleReaction(message.id, emoji, has)
@@ -776,23 +807,38 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     <button
                       type="button"
                       className="flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="More actions"
+                      aria-label={intl.formatMessage({
+                        id: 'admin.inbox.messageBubble.moreActions',
+                        defaultMessage: 'More actions',
+                      })}
                     >
                       <EllipsisVerticalIcon className="h-4 w-4" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => onMarkUnread(message.id)}>
-                      <EnvelopeIcon className="h-4 w-4" /> Mark unread
+                      <EnvelopeIcon className="h-4 w-4" />{' '}
+                      {intl.formatMessage({
+                        id: 'admin.inbox.messageBubble.markUnread',
+                        defaultMessage: 'Mark unread',
+                      })}
                     </DropdownMenuItem>
                     {canEdit && onEdit && (
                       <DropdownMenuItem onClick={() => setEditing(true)}>
-                        <PencilIcon className="h-4 w-4" /> Edit message
+                        <PencilIcon className="h-4 w-4" />{' '}
+                        {intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.editMessage2',
+                          defaultMessage: 'Edit message',
+                        })}
                       </DropdownMenuItem>
                     )}
                     {canDelete && (
                       <DropdownMenuItem variant="destructive" onClick={() => onDelete(message.id)}>
-                        <TrashIcon className="h-4 w-4" /> Delete
+                        <TrashIcon className="h-4 w-4" />{' '}
+                        {intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.delete',
+                          defaultMessage: 'Delete',
+                        })}
                       </DropdownMenuItem>
                     )}
                     {showTrackActions && (
@@ -800,12 +846,20 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                         <DropdownMenuSeparator />
                         {onSharePost && (
                           <DropdownMenuItem onClick={() => onSharePost(message)}>
-                            <ChatBubbleLeftRightIcon className="h-4 w-4" /> Share a post…
+                            <ChatBubbleLeftRightIcon className="h-4 w-4" />{' '}
+                            {intl.formatMessage({
+                              id: 'admin.inbox.messageBubble.shareAPost',
+                              defaultMessage: 'Share a post…',
+                            })}
                           </DropdownMenuItem>
                         )}
                         {onTrackAsPost && (
                           <DropdownMenuItem onClick={() => onTrackAsPost(message)}>
-                            <AdjustmentsHorizontalIcon className="h-4 w-4" /> Track as feedback…
+                            <AdjustmentsHorizontalIcon className="h-4 w-4" />{' '}
+                            {intl.formatMessage({
+                              id: 'admin.inbox.messageBubble.trackAsFeedback',
+                              defaultMessage: 'Track as feedback…',
+                            })}
                           </DropdownMenuItem>
                         )}
                       </>
@@ -834,14 +888,22 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         {isNote && suggestion && onTrackSuggestion && (
           <div className="flex max-w-[85%] flex-wrap items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-1.5">
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-              <LightBulbIcon className="h-3.5 w-3.5" /> AI suggests tracking this as a post
+              <LightBulbIcon className="h-3.5 w-3.5" />{' '}
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.aiSuggestsTrackingThis',
+                defaultMessage: 'AI suggests tracking this as a post',
+              })}
             </span>
             <button
               type="button"
               onClick={() => onTrackSuggestion(message)}
               className="ms-auto inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
+              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />{' '}
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.trackAsFeedback2',
+                defaultMessage: 'Track as feedback',
+              })}
             </button>
           </div>
         )}
@@ -886,14 +948,24 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           <ViaApiBadge author={message.author} />
           {isNote && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-              <PencilSquareIcon className="h-3 w-3" /> Internal note
+              <PencilSquareIcon className="h-3 w-3" />{' '}
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.internalNote',
+                defaultMessage: 'Internal note',
+              })}
             </span>
           )}
           {message.viaEmail && (
             <EnvelopeIcon
               className="h-3 w-3 shrink-0"
-              aria-label="Received by email"
-              title="Received by email"
+              aria-label={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.receivedByEmail',
+                defaultMessage: 'Received by email',
+              })}
+              title={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.receivedByEmail2',
+                defaultMessage: 'Received by email',
+              })}
             />
           )}
           {/* Pair-thread provenance (convergence Phase 2): a legacy
@@ -901,7 +973,12 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
               not a chip — it answers "why does this read differently", nothing
               more. */}
           {ticketProvenance && message.ticketId && !isNote && (
-            <span className="shrink-0">· via ticket thread</span>
+            <span className="shrink-0">
+              {intl.formatMessage({
+                id: 'admin.inbox.messageBubble.viaTicketThread',
+                defaultMessage: '· via ticket thread',
+              })}
+            </span>
           )}
           <MessageTime iso={message.createdAt} />
           {message.editedAt && <EditedAt iso={message.editedAt} />}
@@ -920,8 +997,14 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           {isFlagged && (
             <BookmarkSolidIcon
               className="h-3.5 w-3.5 shrink-0 text-amber-500"
-              aria-label="Flagged"
-              title="Flagged"
+              aria-label={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.flagged',
+                defaultMessage: 'Flagged',
+              })}
+              title={intl.formatMessage({
+                id: 'admin.inbox.messageBubble.flagged2',
+                defaultMessage: 'Flagged',
+              })}
             />
           )}
         </div>

@@ -6,6 +6,8 @@
  * context, and reports the chosen id to the parent. It owns no behavior — the
  * parent supplies `onAction`.
  */
+import { INBOX_ACTION_GROUP_LABELS, INBOX_ACTION_LABELS } from './inbox-action-labels'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo } from 'react'
 import {
   INBOX_ACTIONS,
@@ -56,6 +58,7 @@ export const InboxCommandBar = memo(function InboxCommandBar({
   linkedTicketNumber,
   copilotAvailable,
 }: InboxCommandBarProps) {
+  const intl = useOptionalIntl()
   function run(id: InboxActionId) {
     onAction(id)
     onOpenChange(false)
@@ -64,20 +67,38 @@ export const InboxCommandBar = memo(function InboxCommandBar({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="max-w-lg overflow-hidden p-0">
-        <DialogTitle className="sr-only">Inbox commands</DialogTitle>
+        <DialogTitle className="sr-only">
+          {intl.formatMessage({
+            id: 'admin.inbox.inboxCommandBar.inboxCommands',
+            defaultMessage: 'Inbox commands',
+          })}
+        </DialogTitle>
         <Command
           // cmdk defaults to filtering by an item's `value`; we set that to the
           // label so search matches what the user reads.
           className="[&_[cmdk-group-heading]]:px-3"
         >
-          <CommandInput placeholder="Type a command…" />
+          <CommandInput
+            placeholder={intl.formatMessage({
+              id: 'admin.inbox.inboxCommandBar.typeACommand',
+              defaultMessage: 'Type a command…',
+            })}
+          />
           <CommandList>
-            <CommandEmpty>No commands found.</CommandEmpty>
+            <CommandEmpty>
+              {intl.formatMessage({
+                id: 'admin.inbox.inboxCommandBar.noCommandsFound',
+                defaultMessage: 'No commands found.',
+              })}
+            </CommandEmpty>
             {INBOX_ACTION_GROUP_ORDER.map((group) => {
               const items = INBOX_ACTIONS.filter((a) => a.group === group)
               if (items.length === 0) return null
               return (
-                <CommandGroup key={group} heading={group}>
+                <CommandGroup
+                  key={group}
+                  heading={intl.formatMessage(INBOX_ACTION_GROUP_LABELS[group])}
+                >
                   {items.map((action) => {
                     const disabled = !isInboxActionEnabled(action, {
                       hasActiveConversation,
@@ -88,8 +109,14 @@ export const InboxCommandBar = memo(function InboxCommandBar({
                     })
                     const label =
                       action.id === 'open_ticket' && linkedTicketNumber != null
-                        ? `Open ticket ${formatTicketNumber(linkedTicketNumber)}`
-                        : action.label
+                        ? intl.formatMessage(
+                            {
+                              id: 'admin.inbox.actions.openTicketNumber',
+                              defaultMessage: 'Open ticket {number}',
+                            },
+                            { number: formatTicketNumber(linkedTicketNumber) }
+                          )
+                        : intl.formatMessage(INBOX_ACTION_LABELS[action.id])
                     return (
                       <CommandItem
                         key={action.id}

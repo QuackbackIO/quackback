@@ -41,7 +41,10 @@ export type SlaChipTone = 'ok' | 'due_soon' | 'due_now' | 'overdue' | 'paused'
 
 export interface SlaChipState {
   tone: SlaChipTone
+  /** The chip's English text (countdown, "<time> over" or "paused"). */
   label: string
+  /** The countdown alone, for a caller that words the rest; empty while paused. */
+  time: string
   kind: SlaTargetKind
 }
 
@@ -58,14 +61,16 @@ export function slaChipState(
   const next = nextSlaDue(sla)
   if (!next) return null
   if (status === 'snoozed' && sla.pauseOnSnooze) {
-    return { tone: 'paused', label: 'paused', kind: next.kind }
+    return { tone: 'paused', label: 'paused', time: '', kind: next.kind }
   }
   const remaining = next.dueAt.getTime() - now.getTime()
   if (remaining < 0) {
-    return { tone: 'overdue', label: `${formatSlaCountdown(-remaining)} over`, kind: next.kind }
+    const time = formatSlaCountdown(-remaining)
+    return { tone: 'overdue', label: `${time} over`, time, kind: next.kind }
   }
   const tone = remaining <= DUE_NOW_MS ? 'due_now' : remaining <= DUE_SOON_MS ? 'due_soon' : 'ok'
-  return { tone, label: formatSlaCountdown(remaining), kind: next.kind }
+  const time = formatSlaCountdown(remaining)
+  return { tone, label: time, time, kind: next.kind }
 }
 
 /**

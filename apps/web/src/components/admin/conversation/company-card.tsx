@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -28,6 +29,7 @@ export const CompanyCard = memo(function CompanyCard({
   principalId: string
   enabled?: boolean
 }) {
+  const intl = useOptionalIntl()
   const [editing, setEditing] = useState(false)
   const queryClient = useQueryClient()
   const formatNumber = useFormatNumber()
@@ -48,7 +50,12 @@ export const CompanyCard = memo(function CompanyCard({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <BuildingOffice2Icon className="size-4" />
-            <span>Company</span>
+            <span>
+              {intl.formatMessage({
+                id: 'admin.inbox.companyCard.company',
+                defaultMessage: 'Company',
+              })}
+            </span>
           </div>
           <Button
             type="button"
@@ -88,7 +95,12 @@ export const CompanyCard = memo(function CompanyCard({
     <div className="space-y-2 border-t border-border/30 pt-4">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <BuildingOffice2Icon className="h-4 w-4" />
-        <span>Company</span>
+        <span>
+          {intl.formatMessage({
+            id: 'admin.inbox.companyCard.company2',
+            defaultMessage: 'Company',
+          })}
+        </span>
       </div>
       <Link
         to="/admin/users"
@@ -100,31 +112,47 @@ export const CompanyCard = memo(function CompanyCard({
       <div className="space-y-1 text-xs">
         {company.plan && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Plan</span>
+            <span className="text-muted-foreground">
+              {intl.formatMessage({ id: 'admin.inbox.companyCard.plan', defaultMessage: 'Plan' })}
+            </span>
             <span className="font-medium text-foreground">{company.plan}</span>
           </div>
         )}
         {mrr && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">MRR</span>
+            <span className="text-muted-foreground">
+              {intl.formatMessage({ id: 'admin.inbox.companyCard.mrr', defaultMessage: 'MRR' })}
+            </span>
             <span className="font-medium text-foreground">{mrr}/mo</span>
           </div>
         )}
         {company.size && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Size</span>
+            <span className="text-muted-foreground">
+              {intl.formatMessage({ id: 'admin.inbox.companyCard.size', defaultMessage: 'Size' })}
+            </span>
             <span className="font-medium text-foreground">{company.size}</span>
           </div>
         )}
         {company.industry && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Industry</span>
+            <span className="text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.inbox.companyCard.industry',
+                defaultMessage: 'Industry',
+              })}
+            </span>
             <span className="font-medium text-foreground">{company.industry}</span>
           </div>
         )}
         {company.website && (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground">Website</span>
+            <span className="text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.inbox.companyCard.website',
+                defaultMessage: 'Website',
+              })}
+            </span>
             <span className="min-w-0 truncate font-medium text-foreground">{company.website}</span>
           </div>
         )}
@@ -134,7 +162,10 @@ export const CompanyCard = memo(function CompanyCard({
         search={{ company: company.id }}
         className="block text-xs font-medium text-primary hover:underline"
       >
-        View conversations →
+        {intl.formatMessage({
+          id: 'admin.inbox.companyCard.viewConversations',
+          defaultMessage: 'View conversations →',
+        })}
       </Link>
     </div>
   )
@@ -151,6 +182,7 @@ function QualificationEditor({
   principalId: string
   onQualified: () => void
 }) {
+  const intl = useOptionalIntl()
   const [name, setName] = useState('')
   const [size, setSize] = useState('')
   const [website, setWebsite] = useState('')
@@ -184,10 +216,38 @@ function QualificationEditor({
       <div className="space-y-1.5">
         {(
           [
-            { value: name, set: setName, placeholder: 'Company name' },
-            { value: size, set: setSize, placeholder: 'Size (e.g. 11-50)' },
-            { value: website, set: setWebsite, placeholder: 'Website' },
-            { value: industry, set: setIndustry, placeholder: 'Industry' },
+            {
+              value: name,
+              set: setName,
+              placeholder: intl.formatMessage({
+                id: 'admin.inbox.companyCard.companyNamePlaceholder',
+                defaultMessage: 'Company name',
+              }),
+            },
+            {
+              value: size,
+              set: setSize,
+              placeholder: intl.formatMessage({
+                id: 'admin.inbox.companyCard.sizePlaceholder',
+                defaultMessage: 'Size (e.g. 11-50)',
+              }),
+            },
+            {
+              value: website,
+              set: setWebsite,
+              placeholder: intl.formatMessage({
+                id: 'admin.inbox.companyCard.websitePlaceholder',
+                defaultMessage: 'Website',
+              }),
+            },
+            {
+              value: industry,
+              set: setIndustry,
+              placeholder: intl.formatMessage({
+                id: 'admin.inbox.companyCard.industryPlaceholder',
+                defaultMessage: 'Industry',
+              }),
+            },
           ] as const
         ).map((field) => (
           <Input
@@ -212,7 +272,11 @@ function QualificationEditor({
         {saving ? 'Saving…' : 'Save company'}
       </Button>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        Saving links this user to an existing company with the same name, or creates one.
+        {intl.formatMessage({
+          id: 'admin.inbox.companyCard.savingLinksThisUser',
+          defaultMessage:
+            'Saving links this user to an existing company with the same name, or creates one.',
+        })}
       </p>
     </div>
   )

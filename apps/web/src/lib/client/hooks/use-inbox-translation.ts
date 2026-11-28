@@ -7,8 +7,8 @@
  * original already rides along on `message.translatedFrom` from the thread
  * load.
  */
-import { useCallback, useMemo, useState } from 'react'
 import { useIntl } from 'react-intl'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { ConversationId } from '@quackback/ids'
@@ -29,9 +29,9 @@ import {
 
 /** Human language name from a BCP-47 tag, e.g. "fr" -> "French". Falls back
  *  to the raw tag when Intl can't resolve it (unrecognized/malformed tag). */
-export function languageDisplayName(tag: string): string {
+export function languageDisplayName(tag: string, locale = 'en'): string {
   try {
-    return new Intl.DisplayNames(['en'], { type: 'language' }).of(tag) ?? tag
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag
   } catch {
     return tag
   }
@@ -120,13 +120,25 @@ export function useInboxTranslation({
     mutationFn: (next: boolean) =>
       setInboxTranslationEnabledFn({ data: { conversationId, enabled: next } }),
     onSuccess: onChanged,
-    onError: () => toast.error('Failed to update translation'),
+    onError: () =>
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.useInboxTranslation.failedToUpdateTranslation',
+          defaultMessage: 'Failed to update translation',
+        })
+      ),
   })
 
   const dismissMutation = useMutation({
     mutationFn: () => dismissInboxTranslationSuggestionFn({ data: { conversationId } }),
     onSuccess: onChanged,
-    onError: () => toast.error('Failed to dismiss suggestion'),
+    onError: () =>
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.useInboxTranslation.failedToDismissSuggestion',
+          defaultMessage: 'Failed to dismiss suggestion',
+        })
+      ),
   })
 
   const detected = translationState?.detectedCustomerLanguage ?? null
@@ -167,7 +179,18 @@ export function useInboxTranslation({
         const fetched = translationsQuery.data?.translations[message.id]
         if (!fetched) return undefined
         return {
-          label: `Translated from ${languageDisplayName(fetched.sourceLocale ?? detectedForDisplay ?? '')}`,
+          label: intl.formatMessage(
+            {
+              id: 'admin.inbox.translation.translatedFrom',
+              defaultMessage: 'Translated from {language}',
+            },
+            {
+              language: languageDisplayName(
+                fetched.sourceLocale ?? detectedForDisplay ?? '',
+                intl.locale
+              ),
+            }
+          ),
           translatedContent: fetched.content,
           originalContent: message.content,
           showingOriginal,
@@ -176,7 +199,13 @@ export function useInboxTranslation({
       }
       if (message.senderType === 'agent' && message.translatedFrom) {
         return {
-          label: `Translated to ${languageDisplayName(message.translatedFrom.targetLocale)}`,
+          label: intl.formatMessage(
+            {
+              id: 'admin.inbox.translation.translatedTo',
+              defaultMessage: 'Translated to {language}',
+            },
+            { language: languageDisplayName(message.translatedFrom.targetLocale, intl.locale) }
+          ),
           translatedContent: message.content,
           originalContent: message.translatedFrom.originalContent,
           showingOriginal,
@@ -207,7 +236,9 @@ export function useInboxTranslation({
   return {
     overAllowanceNotice,
     showSuggestionBanner,
-    detectedLanguageLabel: detectedForDisplay ? languageDisplayName(detectedForDisplay) : '',
+    detectedLanguageLabel: detectedForDisplay
+      ? languageDisplayName(detectedForDisplay, intl.locale)
+      : '',
     dismissSuggestion: () => dismissMutation.mutate(),
     activateFromSuggestion: () => toggleMutation.mutate(true),
     enabled: translationState?.enabled ?? false,

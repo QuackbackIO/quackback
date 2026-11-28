@@ -6,6 +6,7 @@
  * envelope. Renders nothing while no definitions exist so the panel stays
  * clean for workspaces that haven't adopted attributes.
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -90,6 +91,7 @@ function AttributeEditor({
   raw: unknown
   onSet: (value: unknown) => void
 }) {
+  const intl = useOptionalIntl()
   const value = readAttributeValue(raw)?.v
   switch (definition.fieldType) {
     case 'text':
@@ -127,10 +129,20 @@ function AttributeEditor({
           onValueChange={(next) => onSet(next === NONE ? null : next)}
         >
           <SelectTrigger size="sm" className="w-36">
-            <SelectValue placeholder="None" />
+            <SelectValue
+              placeholder={intl.formatMessage({
+                id: 'admin.inbox.conversationAttributesEditor.none',
+                defaultMessage: 'None',
+              })}
+            />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NONE}>None</SelectItem>
+            <SelectItem value={NONE}>
+              {intl.formatMessage({
+                id: 'admin.inbox.conversationAttributesEditor.none2',
+                defaultMessage: 'None',
+              })}
+            </SelectItem>
             {options.map((o) => (
               <SelectItem key={o.id} value={o.id} title={o.description ?? undefined}>
                 {o.label}
@@ -186,6 +198,7 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
   /** Skip fetching while the panel is hidden (mirrors the sibling queries). */
   enabled?: boolean
 }) {
+  const intl = useOptionalIntl()
   const queryClient = useQueryClient()
   const { data: definitions } = useQuery({
     ...conversationAttributeQueries.live(),
@@ -211,7 +224,12 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
 
   return (
     <div className="space-y-4 border-t border-border/30 pt-4">
-      <span className={MENU_LABEL}>Attributes</span>
+      <span className={MENU_LABEL}>
+        {intl.formatMessage({
+          id: 'admin.inbox.conversationAttributesEditor.attributes',
+          defaultMessage: 'Attributes',
+        })}
+      </span>
       {definitions.map((def) => {
         const raw = customAttributes[def.key]
         const isAiSet = readAttributeValue(raw)?.src === 'ai'
@@ -220,8 +238,18 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
             <Row label={def.label} align="center">
               <div className="flex items-center gap-1.5">
                 {isAiSet && (
-                  <Badge variant="secondary" className="h-5 px-1.5 text-xs" title="Set by AI">
-                    AI
+                  <Badge
+                    variant="secondary"
+                    className="h-5 px-1.5 text-xs"
+                    title={intl.formatMessage({
+                      id: 'admin.inbox.conversationAttributesEditor.setByAi',
+                      defaultMessage: 'Set by AI',
+                    })}
+                  >
+                    {intl.formatMessage({
+                      id: 'admin.inbox.conversationAttributesEditor.aiBadge',
+                      defaultMessage: 'AI',
+                    })}
                   </Badge>
                 )}
                 <AttributeEditor

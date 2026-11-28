@@ -5,10 +5,13 @@
  * COPILOT_PANEL_SHORTCUTS (bound by the panel, not the hook), so it can never
  * list a key nothing binds.
  */
+import { type MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo } from 'react'
 import { INBOX_ACTIONS, INBOX_ACTION_GROUP_ORDER } from '@/lib/shared/conversation/inbox-actions'
 import { INBOX_GLOBAL_SHORTCUTS } from './use-inbox-keyboard'
 import { COPILOT_PANEL_SHORTCUTS } from './copilot-panel'
+import { INBOX_ACTION_GROUP_LABELS, INBOX_ACTION_LABELS } from './inbox-action-labels'
 import {
   Dialog,
   DialogContent,
@@ -17,10 +20,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-function ShortcutRow({ keys, label }: { keys: string; label: string }) {
+function ShortcutRow({ keys, label }: { keys: string; label: MessageDescriptor }) {
+  const intl = useOptionalIntl()
   return (
     <div className="flex items-center justify-between gap-4 py-1 text-sm">
-      <span className="text-foreground">{label}</span>
+      <span className="text-foreground">{intl.formatMessage(label)}</span>
       <kbd className="bg-muted text-muted-foreground rounded border px-1.5 py-0.5 text-xs">
         {keys}
       </kbd>
@@ -50,15 +54,31 @@ export const ShortcutHelpPanel = memo(function ShortcutHelpPanel({
    *  advertises a key that does nothing. */
   copilotAvailable: boolean
 }) {
+  const intl = useOptionalIntl()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
-          <DialogDescription>Work the inbox without leaving the keyboard.</DialogDescription>
+          <DialogTitle>
+            {intl.formatMessage({
+              id: 'admin.inbox.shortcutHelpPanel.keyboardShortcuts',
+              defaultMessage: 'Keyboard shortcuts',
+            })}
+          </DialogTitle>
+          <DialogDescription>
+            {intl.formatMessage({
+              id: 'admin.inbox.shortcutHelpPanel.workTheInboxWithout',
+              defaultMessage: 'Work the inbox without leaving the keyboard.',
+            })}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Section title="General">
+          <Section
+            title={intl.formatMessage({
+              id: 'admin.inbox.shortcutHelpPanel.general',
+              defaultMessage: 'General',
+            })}
+          >
             {INBOX_GLOBAL_SHORTCUTS.map((s) => (
               <ShortcutRow key={s.keys} keys={s.keys} label={s.label} />
             ))}
@@ -69,16 +89,21 @@ export const ShortcutHelpPanel = memo(function ShortcutHelpPanel({
             )
             if (rows.length === 0) return null
             return (
-              <Section key={group} title={group}>
+              <Section key={group} title={intl.formatMessage(INBOX_ACTION_GROUP_LABELS[group])}>
                 {rows.map((a) => (
-                  <ShortcutRow key={a.id} keys={a.shortcut!} label={a.label} />
+                  <ShortcutRow key={a.id} keys={a.shortcut!} label={INBOX_ACTION_LABELS[a.id]} />
                 ))}
               </Section>
             )
           })}
           {/* Panel-scoped: only fires while focus is inside the Copilot panel. */}
           {copilotAvailable && (
-            <Section title="Copilot">
+            <Section
+              title={intl.formatMessage({
+                id: 'admin.inbox.shortcutHelpPanel.copilot',
+                defaultMessage: 'Copilot',
+              })}
+            >
               {COPILOT_PANEL_SHORTCUTS.map((s) => (
                 <ShortcutRow key={s.keys} keys={s.keys} label={s.label} />
               ))}

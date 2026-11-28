@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo } from 'react'
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import type { Channel } from '@/lib/shared/conversation/types'
@@ -29,19 +30,29 @@ export const ChannelBadge = memo(function ChannelBadge({ channel }: { channel: C
 
 /** Flags to an agent that an offline reply has no address to reach. */
 export function NoEmailBadge() {
+  const intl = useOptionalIntl()
   return (
     <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
-      No email
+      {intl.formatMessage({ id: 'admin.shell.channelBadge.noEmail', defaultMessage: 'No email' })}
     </span>
   )
 }
 
 /** Unreachable on the conversation's current channel. */
 export function UnreachableBadge({ channel }: { channel: Channel }) {
-  const label = getChannelDescriptor(channel)?.label ?? 'channel'
+  const intl = useOptionalIntl()
+  const label =
+    getChannelDescriptor(channel)?.label ??
+    intl.formatMessage({ id: 'admin.shell.channelBadge.channel', defaultMessage: 'channel' })
   return (
     <span className="inline-flex items-center whitespace-nowrap rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
-      Unreachable on {label}
+      {intl.formatMessage(
+        {
+          id: 'admin.shell.channelBadge.unreachableOn',
+          defaultMessage: 'Unreachable on {channel}',
+        },
+        { channel: label }
+      )}
     </span>
   )
 }

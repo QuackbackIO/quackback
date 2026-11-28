@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { ChevronDownIcon, CheckIcon } from '@heroicons/react/24/solid'
@@ -12,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { PRIORITY_LABELS, PRIORITY_PLACEHOLDER } from './inbox-labels'
 import { cn } from '@/lib/shared/utils'
 
 /** A small colored dot for a conversation's priority (hidden for 'none'). */
@@ -22,13 +24,17 @@ export function PriorityDot({
   priority: ConversationPriority
   className?: string
 }) {
+  const intl = useOptionalIntl()
   if (priority === 'none') return null
   const meta = priorityMeta(priority)
   return (
     <span
       className={cn('inline-block size-2 shrink-0 rounded-full', className)}
       style={{ backgroundColor: meta.color }}
-      aria-label={`${meta.label} priority`}
+      aria-label={intl.formatMessage(
+        { id: 'admin.inbox.priorityControl.ariaLabel', defaultMessage: '{priority} priority' },
+        { priority: intl.formatMessage(PRIORITY_LABELS[priority]) }
+      )}
     />
   )
 }
@@ -45,6 +51,7 @@ export function PriorityMenuItems({
   selected?: ConversationPriority
   onSelect: (priority: ConversationPriority) => void
 }) {
+  const intl = useOptionalIntl()
   return (
     <>
       {PRIORITY_OPTIONS.map((opt) => (
@@ -57,7 +64,7 @@ export function PriorityMenuItems({
             className="inline-block size-2 shrink-0 rounded-full"
             style={{ backgroundColor: opt.color }}
           />
-          {opt.label}
+          {intl.formatMessage(PRIORITY_LABELS[opt.value])}
           {opt.value === selected && <CheckIcon className="ms-auto h-3.5 w-3.5 text-primary" />}
         </DropdownMenuItem>
       ))}
@@ -75,12 +82,18 @@ export const PriorityControl = memo(function PriorityControl({
   value: ConversationPriority
   onChanged?: () => void
 }) {
-  const meta = priorityMeta(value)
+  const intl = useOptionalIntl()
   const mutation = useMutation({
     mutationFn: (priority: ConversationPriority) =>
       setConversationPriorityFn({ data: { conversationId, priority } }),
     onSuccess: () => onChanged?.(),
-    onError: () => toast.error('Failed to set priority'),
+    onError: () =>
+      toast.error(
+        intl.formatMessage({
+          id: 'admin.inbox.priorityControl.failedToSetPriority',
+          defaultMessage: 'Failed to set priority',
+        })
+      ),
   })
 
   return (
@@ -92,7 +105,7 @@ export const PriorityControl = memo(function PriorityControl({
           className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted"
         >
           <PriorityDot priority={value} />
-          {value === 'none' ? 'Priority' : meta.label}
+          {intl.formatMessage(value === 'none' ? PRIORITY_PLACEHOLDER : PRIORITY_LABELS[value])}
           <ChevronDownIcon className="size-3.5" />
         </button>
       </DropdownMenuTrigger>

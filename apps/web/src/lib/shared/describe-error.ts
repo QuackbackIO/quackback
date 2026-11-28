@@ -104,6 +104,46 @@ export const ERROR_CODE_MESSAGES = {
     id: 'admin.shell.errorNotice.code.invalidEmail',
     defaultMessage: 'Enter a valid email address',
   },
+  CONVERSATION_NOT_FOUND: {
+    id: 'admin.shell.errorNotice.code.conversationNotFound',
+    defaultMessage: 'Conversation not found',
+  },
+  TICKET_NOT_FOUND: {
+    id: 'admin.shell.errorNotice.code.ticketNotFound',
+    defaultMessage: 'Ticket not found',
+  },
+  MESSAGE_NOT_FOUND: {
+    id: 'admin.shell.errorNotice.code.messageNotFound',
+    defaultMessage: 'Message not found',
+  },
+  MACRO_NOT_FOUND: {
+    id: 'admin.shell.errorNotice.code.macroNotFound',
+    defaultMessage: 'Macro not found',
+  },
+  INVALID_ASSIGNEE: {
+    id: 'admin.shell.errorNotice.code.invalidAssignee',
+    defaultMessage: 'Can only assign to a team member',
+  },
+  INVALID_WATCHER: {
+    id: 'admin.shell.errorNotice.code.invalidWatcher',
+    defaultMessage: 'Can only add team members as watchers',
+  },
+  LINK_FAILED: {
+    id: 'admin.shell.errorNotice.code.linkFailed',
+    defaultMessage: 'Could not link the issue. Please try again.',
+  },
+  REPLY_ALL_ATTACHMENTS: {
+    id: 'admin.shell.errorNotice.code.replyAllAttachments',
+    defaultMessage: 'Reply all cannot include attachments',
+  },
+  TAG_NOT_ARCHIVED: {
+    id: 'admin.shell.errorNotice.code.tagNotArchived',
+    defaultMessage: 'Archive the tag before deleting it permanently',
+  },
+  SUPPORT_INBOX_NOT_ENABLED: {
+    id: 'admin.shell.errorNotice.code.supportInboxNotEnabled',
+    defaultMessage: 'Support inbox is not enabled',
+  },
 } as const
 
 export type ErrorNoticeWord = keyof typeof ERROR_NOTICE_MESSAGES

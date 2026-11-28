@@ -1,3 +1,5 @@
+import { type MessageDescriptor } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { Link } from '@tanstack/react-router'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -6,11 +8,20 @@ import { cn } from '@/lib/shared/utils'
 type QuinnBucket = 'resolved' | 'escalated' | 'pending'
 
 /** Quinn-view outcome sub-filter. */
-const QUINN_BUCKETS: { value: QuinnBucket | undefined; label: string }[] = [
-  { value: undefined, label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'escalated', label: 'Escalated' },
-  { value: 'resolved', label: 'Resolved' },
+const QUINN_BUCKETS: { value: QuinnBucket | undefined; label: MessageDescriptor }[] = [
+  { value: undefined, label: { id: 'admin.inbox.quinnViewHeader.all', defaultMessage: 'All' } },
+  {
+    value: 'pending',
+    label: { id: 'admin.inbox.quinnViewHeader.pending', defaultMessage: 'Pending' },
+  },
+  {
+    value: 'escalated',
+    label: { id: 'admin.inbox.quinnViewHeader.escalated', defaultMessage: 'Escalated' },
+  },
+  {
+    value: 'resolved',
+    label: { id: 'admin.inbox.quinnViewHeader.resolved', defaultMessage: 'Resolved' },
+  },
 ]
 
 /**
@@ -26,6 +37,7 @@ export function QuinnViewHeader({
   counts?: { resolved: number; escalated: number; pending: number }
   onChange: (value?: QuinnBucket) => void
 }) {
+  const intl = useOptionalIntl()
   const canConfigure = usePermission(PERMISSIONS.AI_CUSTOMER_MANAGE)
   const countFor = (v?: QuinnBucket): number | undefined => {
     if (!counts) return undefined
@@ -38,7 +50,7 @@ export function QuinnViewHeader({
         const n = countFor(b.value)
         return (
           <button
-            key={b.label}
+            key={b.label.id}
             type="button"
             onClick={() => onChange(b.value)}
             className={cn(
@@ -48,7 +60,7 @@ export function QuinnViewHeader({
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
           >
-            {b.label}
+            {intl.formatMessage(b.label)}
             {n != null && <span className="tabular-nums opacity-70">{n}</span>}
           </button>
         )
@@ -58,7 +70,10 @@ export function QuinnViewHeader({
           to="/admin/settings/agent"
           className="ms-auto rounded-full px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          Configure the agent
+          {intl.formatMessage({
+            id: 'admin.inbox.quinnViewHeader.configureTheAgent',
+            defaultMessage: 'Configure the agent',
+          })}
         </Link>
       )}
     </div>

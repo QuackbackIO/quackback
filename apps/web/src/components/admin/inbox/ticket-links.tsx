@@ -1,5 +1,6 @@
 'use client'
 
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { LinkIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { TicketId } from '@quackback/ids'
@@ -39,6 +40,7 @@ function TicketPicker({
   label: string
   onPick: (id: TicketId) => void
 }) {
+  const intl = useOptionalIntl()
   const { data: candidates } = useQuery(ticketQueries.list({ type, limit: 50 }))
   const options = (candidates ?? []).filter((t) => !exclude.includes(t.id))
   return (
@@ -53,7 +55,16 @@ function TicketPicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-72 w-64 overflow-y-auto">
         {options.length === 0 ? (
-          <div className="px-2 py-1.5 text-[13px] text-muted-foreground">No {type} tickets</div>
+          <div className="px-2 py-1.5 text-[13px] text-muted-foreground">
+            {intl.formatMessage(
+              {
+                id: 'admin.inbox.ticketLinks.noTickets',
+                defaultMessage:
+                  '{type, select, customer {No customer tickets} back_office {No back office tickets} tracker {No tracker tickets} other {No tickets}}',
+              },
+              { type }
+            )}
+          </div>
         ) : (
           options.map((t) => (
             <DropdownMenuItem
@@ -77,6 +88,7 @@ function TicketPicker({
  * tickets have no links. Tracker status changes then cascade automatically.
  */
 export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChanged: () => void }) {
+  const intl = useOptionalIntl()
   const qc = useQueryClient()
   const { data } = useQuery(ticketQueries.links(ticket.id))
 
@@ -107,17 +119,29 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <LinkIcon className="h-4 w-4" /> Tracking
+            <LinkIcon className="h-4 w-4" />{' '}
+            {intl.formatMessage({
+              id: 'admin.inbox.ticketLinks.tracking',
+              defaultMessage: 'Tracking',
+            })}
           </span>
           <TicketPicker
             type="customer"
             exclude={[ticket.id, ...linked.map((t) => t.id)]}
-            label="Attach"
+            label={intl.formatMessage({
+              id: 'admin.inbox.ticketLinks.attach',
+              defaultMessage: 'Attach',
+            })}
             onPick={(id) => link.mutate({ trackerTicketId: ticket.id, ticketId: id })}
           />
         </div>
         {linked.length === 0 && hiddenCount === 0 ? (
-          <p className="text-sm text-muted-foreground">No linked tickets</p>
+          <p className="text-sm text-muted-foreground">
+            {intl.formatMessage({
+              id: 'admin.inbox.ticketLinks.noLinkedTickets',
+              defaultMessage: 'No linked tickets',
+            })}
+          </p>
         ) : (
           <>
             <ul className="space-y-0.5">
@@ -131,7 +155,13 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
                     type="button"
                     onClick={() => unlink.mutate({ trackerTicketId: ticket.id, ticketId: t.id })}
                     className="shrink-0 text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
-                    aria-label={`Unlink ${t.reference}`}
+                    aria-label={intl.formatMessage(
+                      {
+                        id: 'admin.inbox.ticketLinks.unlink',
+                        defaultMessage: 'Unlink {reference}',
+                      },
+                      { reference: t.reference }
+                    )}
                   >
                     <XMarkIcon className="h-4 w-4" />
                   </button>
@@ -140,7 +170,14 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
             </ul>
             {hiddenCount > 0 && (
               <p className="px-1 text-sm text-muted-foreground">
-                {hiddenCount} more you can't access
+                {intl.formatMessage(
+                  {
+                    id: 'admin.inbox.ticketLinks.hiddenMore',
+                    defaultMessage:
+                      "{count, plural, one {# more you can't access} other {# more you can't access}}",
+                  },
+                  { count: hiddenCount }
+                )}
               </p>
             )}
           </>
@@ -153,7 +190,13 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
   // tickets can be tracked, so back_office falls through to "None").
   const tracker = data?.tracker
   return (
-    <Row icon={LinkIcon} label="Tracker">
+    <Row
+      icon={LinkIcon}
+      label={intl.formatMessage({
+        id: 'admin.inbox.ticketLinks.tracker',
+        defaultMessage: 'Tracker',
+      })}
+    >
       {tracker ? (
         <span className="flex min-w-0 items-center gap-1">
           <TicketLabel ticket={tracker} />
@@ -161,22 +204,35 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
             type="button"
             onClick={() => unlink.mutate({ trackerTicketId: tracker.id, ticketId: ticket.id })}
             className="shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="Unlink from tracker"
+            aria-label={intl.formatMessage({
+              id: 'admin.inbox.ticketLinks.unlinkFromTracker',
+              defaultMessage: 'Unlink from tracker',
+            })}
           >
             <XMarkIcon className="h-3.5 w-3.5" />
           </button>
         </span>
       ) : data?.trackerHidden ? (
-        <span className="text-sm text-muted-foreground">No access</span>
+        <span className="text-sm text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.ticketLinks.noAccess',
+            defaultMessage: 'No access',
+          })}
+        </span>
       ) : ticket.type === 'customer' ? (
         <TicketPicker
           type="tracker"
           exclude={[ticket.id]}
-          label="Link to tracker"
+          label={intl.formatMessage({
+            id: 'admin.inbox.ticketLinks.linkToTracker',
+            defaultMessage: 'Link to tracker',
+          })}
           onPick={(id) => link.mutate({ trackerTicketId: id, ticketId: ticket.id })}
         />
       ) : (
-        <span className="text-sm text-muted-foreground">None</span>
+        <span className="text-sm text-muted-foreground">
+          {intl.formatMessage({ id: 'admin.inbox.ticketLinks.none', defaultMessage: 'None' })}
+        </span>
       )}
     </Row>
   )

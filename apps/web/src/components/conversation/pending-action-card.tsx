@@ -7,6 +7,7 @@
  * usePendingActionDecision) so the buttons reflect current status rather
  * than the stale snapshot.
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { CheckIcon, XMarkIcon, ShieldExclamationIcon } from '@heroicons/react/24/solid'
 import type { AssistantPendingActionId } from '@quackback/ids'
 import { usePendingActionDecision } from '@/lib/client/hooks/use-pending-action-decision'
@@ -37,6 +38,7 @@ function formatArgValue(value: unknown): string {
 }
 
 export function PendingActionCard({ pendingActionId, summary }: PendingActionCardProps) {
+  const intl = useOptionalIntl()
   const id = pendingActionId as AssistantPendingActionId
   const { data, isLoading, isError, busy, inlineError, approve, reject } =
     usePendingActionDecision(id)
@@ -61,9 +63,19 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
         </dl>
       )}
       {isLoading ? (
-        <span className="text-[11px] text-muted-foreground">Checking status…</span>
+        <span className="text-[11px] text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.pendingActionCard.checkingStatus',
+            defaultMessage: 'Checking status…',
+          })}
+        </span>
       ) : isError ? (
-        <span className="text-[11px] text-muted-foreground">Couldn't load the current status</span>
+        <span className="text-[11px] text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.inbox.pendingActionCard.couldntLoadTheCurrent',
+            defaultMessage: "Couldn't load the current status",
+          })}
+        </span>
       ) : data?.status === 'proposed' ? (
         <div className="flex items-center gap-2">
           <button
@@ -72,7 +84,11 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
             disabled={busy}
             className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            <CheckIcon className="h-3.5 w-3.5" /> Approve
+            <CheckIcon className="h-3.5 w-3.5" />{' '}
+            {intl.formatMessage({
+              id: 'admin.inbox.pendingActionCard.approve',
+              defaultMessage: 'Approve',
+            })}
           </button>
           <button
             type="button"
@@ -80,7 +96,11 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
             disabled={busy}
             className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
           >
-            <XMarkIcon className="h-3.5 w-3.5" /> Reject
+            <XMarkIcon className="h-3.5 w-3.5" />{' '}
+            {intl.formatMessage({
+              id: 'admin.inbox.pendingActionCard.reject',
+              defaultMessage: 'Reject',
+            })}
           </button>
         </div>
       ) : (

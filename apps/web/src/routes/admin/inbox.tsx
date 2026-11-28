@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
 import { PermissionDeniedPage } from '@/components/shared/error-page'
 import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
@@ -435,6 +436,7 @@ const THREAD_ECHO_HOLD_MS = 5_000
 const SCOPE_REFETCH_JITTER_MS = 2_000
 
 function InboxPage() {
+  const intl = useOptionalIntl()
   const queryClient = useQueryClient()
   const navigate = Route.useNavigate()
   const {
@@ -594,7 +596,14 @@ function InboxPage() {
   const { data: navSegments } = useInboxSegmentsWithCounts()
   const { data: navTeams } = useInboxTeams()
   const { data: navViews } = useConversationViews()
-  const scopeLabel = scopeLabelFor(nav, navTags, navSegments, navTeams, navViews)
+  const scopeLabel = scopeLabelFor(
+    (m) => intl.formatMessage(m),
+    nav,
+    navTags,
+    navSegments,
+    navTeams,
+    navViews
+  )
 
   // The active custom view (if any): its saved rules become the list-query
   // params, and its own sort is the default until the user re-sorts. The
@@ -1089,9 +1098,23 @@ function InboxPage() {
   // otherwise. Verb is the past-tense action word ("Closed", "Snoozed", …).
   const summarize = useCallback((verb: string, ok: number, fail: number) => {
     if (fail === 0) {
-      toast.success(`${verb} ${ok} ${ok === 1 ? 'item' : 'items'}`)
+      toast.success(
+        intl.formatMessage(
+          {
+            id: 'admin.inbox.bulk.done',
+            defaultMessage:
+              '{verb, select, Assigned {Assigned} Updated {Updated} Snoozed {Snoozed} Tagged {Tagged} Replied {Replied} Closed {Closed} Reopened {Reopened} Restored {Restored} Deleted {Deleted} other {Updated}} {count, plural, one {# item} other {# items}}',
+          },
+          { verb, count: ok }
+        )
+      )
     } else {
-      toast.warning(`${ok} updated, ${fail} failed`)
+      toast.warning(
+        intl.formatMessage(
+          { id: 'admin.inbox.bulk.partial', defaultMessage: '{ok} updated, {fail} failed' },
+          { ok, fail }
+        )
+      )
     }
   }, [])
 
@@ -1109,7 +1132,12 @@ function InboxPage() {
         if (res.failed.length === 0) clearSelection()
         else setBulkMenu(null)
       } catch {
-        toast.error('Bulk action failed')
+        toast.error(
+          intl.formatMessage({
+            id: 'admin.inbox.inbox.bulkActionFailed',
+            defaultMessage: 'Bulk action failed',
+          })
+        )
       }
     },
     [selectedIds, bulk, summarize, clearSelection]
@@ -1338,7 +1366,12 @@ function InboxPage() {
     if (hasSelection) {
       const { ticketIds } = splitByKind(selectedIds)
       if (ticketIds.length > 0 && !closedStatusId) {
-        toast.error('No closed ticket status is configured')
+        toast.error(
+          intl.formatMessage({
+            id: 'admin.inbox.inbox.noClosedTicketStatus',
+            defaultMessage: 'No closed ticket status is configured',
+          })
+        )
       }
       try {
         // `runMixedBulk` already does the succeeded/failed merge, the summary
@@ -1373,14 +1406,24 @@ function InboxPage() {
           ])
         }
       } catch {
-        toast.error('Bulk action failed')
+        toast.error(
+          intl.formatMessage({
+            id: 'admin.inbox.inbox.bulkActionFailed2',
+            defaultMessage: 'Bulk action failed',
+          })
+        )
       }
       return
     }
     if (!selectedRef) return
     if (selectedRef.kind === 'ticket') {
       if (!closedStatusId) {
-        toast.error('No closed ticket status is configured')
+        toast.error(
+          intl.formatMessage({
+            id: 'admin.inbox.inbox.noClosedTicketStatus2',
+            defaultMessage: 'No closed ticket status is configured',
+          })
+        )
         return
       }
       return runSolo(
@@ -1396,11 +1439,22 @@ function InboxPage() {
     try {
       await setConversationStatusFn({ data: { conversationId: selectedRef.id, status: 'closed' } })
       refreshInbox()
-      toast.success('Conversation closed')
+      toast.success(
+        intl.formatMessage({
+          id: 'admin.inbox.inbox.conversationClosed',
+          defaultMessage: 'Conversation closed',
+        })
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : null
       if (message && isMissingRequiredAttributesMessage(message)) setCloseBlocked([message])
-      else toast.error('Failed to close conversation')
+      else
+        toast.error(
+          intl.formatMessage({
+            id: 'admin.inbox.inbox.failedToCloseConversation',
+            defaultMessage: 'Failed to close conversation',
+          })
+        )
     }
   }, [
     hasSelection,

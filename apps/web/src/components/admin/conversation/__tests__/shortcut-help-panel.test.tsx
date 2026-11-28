@@ -11,7 +11,15 @@ import { render, screen, cleanup } from '@testing-library/react'
 // The real copilot-panel module drags in the whole Copilot dependency graph
 // (SSE hooks, server fns); the help panel only reads its shortcut table.
 vi.mock('../copilot-panel', () => ({
-  COPILOT_PANEL_SHORTCUTS: [{ keys: '⌘↵', label: 'Insert last Copilot answer' }],
+  COPILOT_PANEL_SHORTCUTS: [
+    {
+      keys: '⌘↵',
+      label: {
+        id: 'admin.inbox.copilotPanel.insertLastCopilotAnswer',
+        defaultMessage: 'Insert last Copilot answer',
+      },
+    },
+  ],
 }))
 
 import { ShortcutHelpPanel } from '../shortcut-help-panel'
