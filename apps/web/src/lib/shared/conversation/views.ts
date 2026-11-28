@@ -19,6 +19,7 @@ import {
   type TicketType,
   type TicketStage,
 } from '@/lib/shared/db-types'
+import { TICKET_DUE_FILTERS, type TicketDueFilter } from '@/lib/shared/ticket-due'
 import {
   INBOX_TRIAGE_FACETS,
   facetToConversationStatus,
@@ -38,6 +39,7 @@ export const CONVERSATION_SORTS = [
   'waiting',
   'priority',
   'sla',
+  'due',
 ] as const
 export type ConversationSort = (typeof CONVERSATION_SORTS)[number]
 export const DEFAULT_CONVERSATION_SORT: ConversationSort = 'recent'
@@ -53,6 +55,7 @@ export const TERMLESS_CONVERSATION_SORTS = [
   'waiting',
   'priority',
   'sla',
+  'due',
 ] as const satisfies readonly ConversationSort[]
 export type TermlessConversationSort = (typeof TERMLESS_CONVERSATION_SORTS)[number]
 
@@ -95,6 +98,7 @@ export const CONVERSATION_SORT_LABELS: Record<ConversationSort, string> = {
   waiting: 'Waiting longest',
   priority: 'Priority',
   sla: 'SLA breach soonest',
+  due: 'Due date',
 }
 
 // ── Rules ────────────────────────────────────────────────────────────────────
@@ -102,10 +106,10 @@ export const CONVERSATION_SORT_LABELS: Record<ConversationSort, string> = {
 export const MAX_VIEW_RULES = 15
 
 /** The rule fields a saved view can filter on (the ones the list query honors).
- *  The last four (unified inbox §2.8) are ticket-only rules: hidden from the
- *  field picker when `supportTickets` is off, and routed through the unified
- *  endpoint rather than the legacy conversation-only list — see
- *  `viewHasTicketRules`/`buildInboxListParams`. */
+ *  The last five (unified inbox §2.8, plus `ticket_due`) are ticket-only
+ *  rules: hidden from the field picker when `supportTickets` is off, and
+ *  routed through the unified endpoint rather than the legacy
+ *  conversation-only list — see `viewHasTicketRules`/`buildInboxListParams`. */
 export const CONVERSATION_VIEW_RULE_FIELDS = [
   'status',
   'priority',
@@ -118,6 +122,7 @@ export const CONVERSATION_VIEW_RULE_FIELDS = [
   'ticket_type',
   'ticket_status_category',
   'ticket_stage',
+  'ticket_due',
 ] as const
 export type ConversationViewRuleField = (typeof CONVERSATION_VIEW_RULE_FIELDS)[number]
 
@@ -129,6 +134,7 @@ export const TICKET_VIEW_RULE_FIELDS = [
   'ticket_type',
   'ticket_status_category',
   'ticket_stage',
+  'ticket_due',
 ] as const satisfies readonly ConversationViewRuleField[]
 
 // ── Attribute rules (C2.7 / AI-ATTRIBUTES-PARITY-SPEC.md Phase 4) ──────────
@@ -177,6 +183,9 @@ export const VALUELESS_ATTRIBUTE_OPERATORS: ReadonlySet<ConversationAttributeOpe
 // `kind`/`ticket_type`/`ticket_status_category`/`ticket_stage` (§2.8) scope a
 // view to conversations, tickets, or a ticket subset — the request routes
 // through the unified inbox endpoint whenever any of these four are present.
+// `ticket_due` (overdue / due soon / no due date) routes the same way, and
+// matches a linked customer ticket through its conversation's row as well as
+// a standalone ticket row.
 // `attribute` (§C2.7) is the dynamic `conversation.attr.<key>` dimension —
 // unlike the other fields its key isn't a fixed literal, so it carries its own
 // `key`/`operator` alongside `value` instead of living in
@@ -196,6 +205,7 @@ export const conversationViewRuleSchema = z.discriminatedUnion('field', [
   z.object({ field: z.literal('ticket_type'), value: z.enum(TICKET_TYPES) }),
   z.object({ field: z.literal('ticket_status_category'), value: z.enum(TICKET_STATUS_CATEGORIES) }),
   z.object({ field: z.literal('ticket_stage'), value: z.enum(TICKET_STAGES) }),
+  z.object({ field: z.literal('ticket_due'), value: z.enum(TICKET_DUE_FILTERS) }),
   z.object({
     field: z.literal('attribute'),
     key: z.string().trim().min(1).max(100),
@@ -309,10 +319,10 @@ export function viewFiltersToListParams(
 // ── Ticket rules → unified inbox params (unified inbox §2.8) ───────────────
 
 /** Whether any of `filters`' rules only make sense against tickets (`kind`,
- *  `ticket_type`, `ticket_status_category`, `ticket_stage`). A view carrying
- *  one of these routes through the unified `inboxQueries.itemList` endpoint
- *  instead of the legacy conversation-only list — see
- *  `viewFiltersToInboxParams` for the translated params. */
+ *  `ticket_type`, `ticket_status_category`, `ticket_stage`, `ticket_due`). A
+ *  view carrying one of these routes through the unified
+ *  `inboxQueries.itemList` endpoint instead of the legacy conversation-only
+ *  list — see `viewFiltersToInboxParams` for the translated params. */
 export function viewHasTicketRules(filters: ConversationViewFilters): boolean {
   return filters.rules.some((r) => (TICKET_VIEW_RULE_FIELDS as readonly string[]).includes(r.field))
 }
@@ -345,6 +355,11 @@ export interface TicketViewRuleParams {
    *  OWN assignee vocabulary (unlike `viewFiltersToListParams`'s 'mine'). */
   assignee?: string
   teamId?: string
+  /** From a `ticket_due` rule. Unlike the other ticket fields it does NOT
+   *  imply tickets-only: a linked customer ticket lists as its
+   *  conversation's row, and the conversation branch filters those through
+   *  the pair edge, so both kinds stay in play. */
+  due?: TicketDueFilter
 }
 
 /** Build a facet's inverse map by running the forward mapper (items.ts) over
@@ -383,6 +398,7 @@ export function viewFiltersToInboxParams(filters: ConversationViewFilters): Tick
   let priority: ConversationPriority | undefined
   let assignee: string | undefined
   let teamId: string | undefined
+  let due: TicketDueFilter | undefined
   let hasTicketField = false
 
   for (const rule of filters.rules) {
@@ -414,9 +430,14 @@ export function viewFiltersToInboxParams(filters: ConversationViewFilters): Tick
       case 'team':
         teamId = rule.value
         break
+      case 'ticket_due':
+        // No `hasTicketField`: forcing tickets-only would hide the linked
+        // customer tickets, which list as their conversation's row.
+        due = rule.value
+        break
     }
   }
 
   const kinds: Array<'conversation' | 'ticket'> = kind ? [kind] : hasTicketField ? ['ticket'] : []
-  return { kinds, ticketType, facet, ticketStage, priority, assignee, teamId }
+  return { kinds, ticketType, facet, ticketStage, priority, assignee, teamId, due }
 }

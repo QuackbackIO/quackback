@@ -71,6 +71,8 @@ vi.mock('../ticket.webhooks', () => ({
 }))
 
 import { sendAgentMessage } from '@/lib/server/domains/conversation/conversation.service'
+import { emitPairTicketReplied } from '../ticket-message.service'
+import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 
 const fixture = await createDbTestFixture()
@@ -187,5 +189,47 @@ describe('a teammate reply typed in the inbox on a ticket conversation', () => {
     await vi.waitFor(() => expect(spies.emitTicketReplied).toHaveBeenCalledTimes(1))
     expect(await watchReason(ticketId, apiKey)).toBeNull()
     expect((await updatedAtOf(ticketId)).getTime()).toBeGreaterThan(LONG_AGO.getTime())
+  })
+})
+
+describe('a customer message on a ticket conversation', () => {
+  function customerActor(principalId: PrincipalId): Actor {
+    return { principalId, principalType: 'anonymous', role: 'user', segmentIds: new Set() }
+  }
+  const customerMessage = {
+    senderType: 'visitor',
+    createdAt: new Date().toISOString(),
+  } as ConversationMessageDTO
+
+  it('makes the requester who replied a watcher again, as a reply from the ticket view does', async () => {
+    const { ticketId, conversationId } = await pairedTicket()
+    expect(await watchReason(ticketId, customer)).toBeNull()
+
+    await emitPairTicketReplied(conversationId, customerActor(customer), customerMessage)
+
+    expect(await watchReason(ticketId, customer)).toBe('requester')
+    expect(spies.emitTicketReplied).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves an existing watch, its reason and its mute alone', async () => {
+    const { ticketId, conversationId } = await pairedTicket()
+    const mutedUntil = new Date(Date.now() + 60 * 60 * 1000)
+    await testDb
+      .insert(ticketSubscriptions)
+      .values({ ticketId, principalId: customer, reason: 'manual', mutedUntil })
+
+    await emitPairTicketReplied(conversationId, customerActor(customer), customerMessage)
+
+    const [row] = await testDb
+      .select()
+      .from(ticketSubscriptions)
+      .where(
+        and(
+          eq(ticketSubscriptions.ticketId, ticketId),
+          eq(ticketSubscriptions.principalId, customer)
+        )
+      )
+    expect(row?.reason).toBe('manual')
+    expect(row?.mutedUntil?.getTime()).toBe(mutedUntil.getTime())
   })
 })

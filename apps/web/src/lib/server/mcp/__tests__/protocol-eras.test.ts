@@ -175,7 +175,7 @@ describe('MCP 2026-07-28 (stateless, per-request envelope)', () => {
       securitySchemes?: unknown
       outputSchema?: { type?: string }
     }[]
-    expect(tools).toHaveLength(43)
+    expect(tools).toHaveLength(49)
     const search = tools.find((tool) => tool.name === 'search')
     expect(search?.title).toBe('Search workspace')
     const schemes = [{ type: 'oauth2', scopes: ['read:feedback', 'read:article'] }]
@@ -327,7 +327,7 @@ describe('MCP 2025-11-25 (initialize, then stateless JSON)', () => {
     expect(notified.status).toBe(202)
 
     const list = await json(await handleMcpRequest(legacy('tools/list')))
-    expect(list.result?.tools).toHaveLength(43)
+    expect(list.result?.tools).toHaveLength(49)
     const legacySearch = (list.result?.tools as { name: string; securitySchemes?: unknown }[]).find(
       (tool) => tool.name === 'search'
     )

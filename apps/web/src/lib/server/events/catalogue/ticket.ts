@@ -1,4 +1,5 @@
-/** Ticket-family event declarations (WO-2). created/status_changed are workflow triggers. */
+/** Ticket-family event declarations (WO-2). created/status_changed and the three
+ *  due-date events are workflow triggers. */
 import { decl } from './helpers'
 
 const S = 'support'
@@ -40,5 +41,42 @@ export const ticketExternalStatusChanged = decl(
   'ticket.external_status_changed',
   'ticket',
   { webhook: true, notification: 'ticket_external_status_changed' },
+  S
+)
+// The due date was set, moved or cleared. A workflow trigger, never a
+// notification (the teammate who changed it already knows; the alerts below
+// are the notification surface).
+export const ticketDueChanged = decl(
+  'ticket.due_changed',
+  'ticket',
+  { webhook: true, workflow: true },
+  S
+)
+// Timer-driven by the ticket-due sweep: once per ticket per due date.
+export const ticketDueSoon = decl(
+  'ticket.due_soon',
+  'ticket',
+  { webhook: true, workflow: true, notification: 'ticket_due_soon' },
+  S
+)
+export const ticketOverdue = decl(
+  'ticket.overdue',
+  'ticket',
+  { webhook: true, workflow: true, notification: 'ticket_overdue' },
+  S
+)
+// A watch changed by hand. The bell on an add tells the person a teammate
+// added them (never on their own watch); the webhook lets an integration keep
+// its own follower list in step.
+export const ticketSubscriberAdded = decl(
+  'ticket.subscriber_added',
+  'ticket',
+  { webhook: true, notification: 'ticket_subscriber_added' },
+  S
+)
+export const ticketSubscriberRemoved = decl(
+  'ticket.subscriber_removed',
+  'ticket',
+  { webhook: true },
   S
 )
