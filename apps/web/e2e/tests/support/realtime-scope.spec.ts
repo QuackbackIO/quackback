@@ -14,7 +14,14 @@ import { toUuid } from '@quackback/ids'
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
 import { inboxRow, seedConv, seedTicket } from '../../support/access'
-import { about, noteAndWait, openInbox, removalOf } from '../../support/access-streams'
+import {
+  about,
+  noteAndWait,
+  noteAndWaitOnPage,
+  openInbox,
+  removalOf,
+  tapPageStreams,
+} from '../../support/access-streams'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { openStream, waitForStreamClosed, type OpenStream } from '../../support/streams'
 import { runSweep } from '../../support/sweeps'
@@ -217,11 +224,14 @@ test(
     await noteAndWait(admin, queue.id, [sStream], `${marker} warm-up`)
 
     const page = await s.newPage(browser)
+    await tapPageStreams(page)
     await page.goto(
       `/admin/inbox?view=tickets_all&status=all&q=${encodeURIComponent(marker)}&i=${ticket.id}`
     )
     const row = page.getByRole('button', { name: new RegExp(ticket.title) })
     await expect(row.first()).toBeVisible({ timeout: 15_000 })
+    // The page subscribes on its own; reassign only once its stream is live.
+    await noteAndWaitOnPage(admin, queue.id, page, `${marker} page warm-up`)
 
     // Bulk assign moves it to team B.
     const bulk = await callServerFn<{ succeeded: string[] }>(admin, 'bulkUpdateTicketsFn', {

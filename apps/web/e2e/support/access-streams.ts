@@ -4,7 +4,7 @@
  * inbox stream marks its owner online, and closing their last one while
  * routing is on frees their unanswered conversations.
  */
-import type { APIRequestContext } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 import { callServerFn } from './server-fns'
 import { openStream, type OpenStream, type StreamEvent } from './streams'
@@ -53,4 +53,62 @@ export async function noteAndWait(
     pending = pending.filter((_, i) => waits[i].status === 'rejected')
   }
   expect(pending.length, `streams that never saw "${text}"`).toBe(0)
+}
+
+/**
+ * Record every frame the page's EventSources deliver, so a test can tell when
+ * the page's own inbox stream is subscribed. Call before the page navigates.
+ */
+export async function tapPageStreams(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const frames: string[] = []
+    ;(window as unknown as { __e2eStreamFrames: string[] }).__e2eStreamFrames = frames
+    const tapped = new WeakMap<EventSource, Set<string>>()
+    const add = EventSource.prototype.addEventListener
+    EventSource.prototype.addEventListener = function (
+      this: EventSource,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions
+    ) {
+      const seen = tapped.get(this) ?? new Set<string>()
+      tapped.set(this, seen)
+      if (!seen.has(type)) {
+        seen.add(type)
+        add.call(this, type, (e: Event) => frames.push(`${type} ${(e as MessageEvent).data}`))
+      }
+      add.call(this, type, listener, options)
+    } as typeof EventSource.prototype.addEventListener
+  })
+}
+
+/**
+ * noteAndWait for a browser page tapped with tapPageStreams: add admin notes
+ * until one reaches the page's own stream, so a change made next cannot land
+ * while the page is still subscribing and be missed.
+ */
+export async function noteAndWaitOnPage(
+  admin: APIRequestContext,
+  conversationId: string,
+  page: Page,
+  text: string
+): Promise<void> {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const content = `${text} #${attempt}`
+    const res = await callServerFn(admin, 'addConversationNoteFn', { conversationId, content })
+    expect(res.ok, res.error).toBe(true)
+    const seen = await page
+      .waitForFunction(
+        (c) =>
+          (window as unknown as { __e2eStreamFrames?: string[] }).__e2eStreamFrames?.some((f) =>
+            f.includes(c)
+          ) ?? false,
+        content,
+        { timeout: attempt === 5 ? 15_000 : 3_000 }
+      )
+      .then(() => true)
+      .catch(() => false)
+    if (seen) return
+  }
+  expect(false, `the page's stream never saw "${text}"`).toBe(true)
 }
