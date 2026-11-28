@@ -5,7 +5,9 @@
  * page whose area is not translated yet keeps lang="en" while its rail is
  * translated. An English teammate sees no change.
  *
- * Set E2E_GALLERY_DIR to also save a screenshot of each page there.
+ * Set E2E_GALLERY_DIR to also save a screenshot of each page there, and to
+ * run ADM-SHELL-4, which captures the shared parts other pages show (Home,
+ * the settings nav, a dialog with the editor's slash menu, the date picker).
  */
 import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -149,6 +151,65 @@ test.describe('the admin shell reads in the teammate language', () => {
         await expect(page.locator('html')).toHaveAttribute('lang', 'en')
       } finally {
         await context.close()
+      }
+    }
+  )
+
+  test(
+    'ADM-SHELL-4 gallery: the shared parts on other pages, German and Arabic',
+    { tag: '@core' },
+    async ({ browser, newTeammate }) => {
+      test.skip(!process.env.E2E_GALLERY_DIR, 'captures screenshots only')
+      test.setTimeout(120_000)
+      for (const language of ['de', 'ar'] as const) {
+        const words = catalogue(language)
+        const { context, page } = await teammatePage(browser, newTeammate, language)
+        try {
+          await page.goto('/admin')
+          await expect(
+            page.locator('[data-admin-rail]').getByText(words['admin.nav.home'])
+          ).toBeVisible({ timeout: 20_000 })
+          await expectNoSidewaysScroll(page)
+          await snap(page, `shell-${language}-home`)
+
+          await page.goto('/admin/settings/general')
+          await expect(
+            page.getByText(words['admin.shell.settingsNav.general']).first()
+          ).toBeVisible({ timeout: 20_000 })
+          await expectNoSidewaysScroll(page)
+          await snap(page, `shell-${language}-settings-nav`)
+
+          await page.goto('/admin/changelog')
+          await page.getByRole('button', { name: words['admin.changelog.list.newEntry'] }).click()
+          const dialog = page.getByRole('dialog')
+          const editor = dialog.locator('.ProseMirror[contenteditable="true"]')
+          await expect(editor).toBeVisible({ timeout: 20_000 })
+          await editor.click()
+          await page.keyboard.type('/')
+          await expect(page.getByText(words['ui.editor.heading1']).first()).toBeVisible()
+          await snap(page, `shell-${language}-editor-slash`)
+          await page.keyboard.press('Backspace')
+
+          // The changelog dialog is the feedback area's, which may still be English.
+          const either = (key: string, english: string) =>
+            new RegExp(`^(${english}|${words[key]})$`)
+          await dialog.getByText(either('admin.changelog.status.draft', 'Draft')).click()
+          await page
+            .getByText(either('admin.changelog.status.scheduled', 'Scheduled'))
+            .last()
+            .click()
+          // The picker's trigger reads the scheduled date, which holds the year.
+          await dialog
+            .getByRole('button', { name: /20\d\d/ })
+            .first()
+            .click()
+          await expect(page.getByRole('grid').first()).toBeVisible()
+          // Let the popover finish fading in before the capture.
+          await page.waitForTimeout(400)
+          await snap(page, `shell-${language}-date-picker`)
+        } finally {
+          await context.close()
+        }
       }
     }
   )
