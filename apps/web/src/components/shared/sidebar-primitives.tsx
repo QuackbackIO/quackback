@@ -1,5 +1,6 @@
 'use client'
 
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState } from 'react'
 import { CheckIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -85,7 +86,12 @@ export function SidebarDivider() {
  * None label for empty values
  */
 export function SidebarNoneLabel() {
-  return <span className="text-sm italic text-muted-foreground">None</span>
+  const intl = useOptionalIntl()
+  return (
+    <span className="text-sm italic text-muted-foreground">
+      {intl.formatMessage({ id: 'admin.shell.detailSidebar.none', defaultMessage: 'None' })}
+    </span>
+  )
 }
 
 // ============================================================================
@@ -192,6 +198,7 @@ export function BadgeList<T extends BadgeItem>({
   variant = 'blue',
   renderAddPopover,
 }: BadgeListProps<T>) {
+  const intl = useOptionalIntl()
   const visibleItems = items.slice(0, maxVisible)
   const overflowCount = items.length - maxVisible
 
@@ -223,7 +230,9 @@ export function BadgeList<T extends BadgeItem>({
       )}
       {renderAddPopover?.()}
       {items.length === 0 && !renderAddPopover && (
-        <span className="text-xs text-muted-foreground/60 italic">None</span>
+        <span className="text-xs text-muted-foreground/60 italic">
+          {intl.formatMessage({ id: 'admin.shell.detailSidebar.none', defaultMessage: 'None' })}
+        </span>
       )}
     </div>
   )
@@ -236,6 +245,7 @@ export function AddBadgeButton({
   children: _children,
   ...props
 }: React.ComponentProps<typeof PopoverTrigger>) {
+  const intl = useOptionalIntl()
   return (
     <PopoverTrigger {...props} asChild>
       <button
@@ -250,7 +260,7 @@ export function AddBadgeButton({
         )}
       >
         <PlusIcon className="h-2.5 w-2.5" />
-        Add
+        {intl.formatMessage({ id: 'admin.shell.detailSidebar.add', defaultMessage: 'Add' })}
       </button>
     </PopoverTrigger>
   )
@@ -337,12 +347,16 @@ export function VoteCount({ count }: VoteCountProps) {
  * Remove button for list items
  */
 export function ListItemRemoveButton({ onClick, label }: { onClick: () => void; label?: string }) {
+  const intl = useOptionalIntl()
   return (
     <button
       type="button"
       onClick={onClick}
       className="p-1 rounded hover:bg-muted"
-      aria-label={label || 'Remove'}
+      aria-label={
+        label ||
+        intl.formatMessage({ id: 'admin.shell.detailSidebar.remove', defaultMessage: 'Remove' })
+      }
     >
       <XMarkIcon className="h-3.5 w-3.5 text-muted-foreground" />
     </button>

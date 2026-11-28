@@ -2,16 +2,63 @@
 
 import * as React from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { IntlContext, type MessageDescriptor } from 'react-intl'
 import { DayFlag, DayPicker, SelectionState, UI } from 'react-day-picker'
 
 import { cn } from '@/lib/shared/utils'
 import { buttonVariants } from '@/components/ui/button'
+import { usePageLocale } from '@/components/ui/local-date'
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
+const LABELS = {
+  previous: {
+    id: 'admin.shell.calendar.previousMonth',
+    defaultMessage: 'Go to the previous month',
+  },
+  next: { id: 'admin.shell.calendar.nextMonth', defaultMessage: 'Go to the next month' },
+} satisfies Record<string, MessageDescriptor & { defaultMessage: string }>
+
+/**
+ * Month and weekday names, and the day and button labels screen readers
+ * announce, in the page's language. English keeps the picker's own wording;
+ * outside an IntlProvider the button labels stay English.
+ */
+function useCalendarLanguage(): Pick<CalendarProps, 'formatters' | 'labels'> {
+  const locale = usePageLocale()
+  const intl = React.useContext(IntlContext)
+  return React.useMemo(() => {
+    if (locale.toLowerCase().startsWith('en')) return {}
+    const caption = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' })
+    // The weekday column is two letters wide: a language whose short names
+    // run longer (Arabic, Polish) uses the narrow form for every day.
+    const short = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+    const week = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2026, 2, 1 + i)))
+    const fits = week.every((date) => short.format(date).length <= 3)
+    const weekdays = fits ? short : new Intl.DateTimeFormat(locale, { weekday: 'narrow' })
+    const weekday = (date: Date) => weekdays.format(date)
+    const day = new Intl.DateTimeFormat(locale, { dateStyle: 'full' })
+    const label = (message: (typeof LABELS)[keyof typeof LABELS]) =>
+      intl ? intl.formatMessage(message) : message.defaultMessage
+    return {
+      formatters: {
+        formatCaption: (month) => caption.format(month),
+        formatWeekdayName: (date) => weekday(date),
+      },
+      labels: {
+        labelPrevious: () => label(LABELS.previous),
+        labelNext: () => label(LABELS.next),
+        labelDayButton: (date) => day.format(date),
+      },
+    }
+  }, [locale, intl])
+}
+
 function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+  const language = useCalendarLanguage()
   return (
     <DayPicker
+      {...language}
       showOutsideDays={showOutsideDays}
       className={cn('p-2', className)}
       classNames={{

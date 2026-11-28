@@ -85,7 +85,7 @@ describe('TicketFormFields', () => {
       '✨ suggested'
     )
     expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveAccessibleDescription(
-      '— not suggested'
+      '(not suggested)'
     )
   })
 })

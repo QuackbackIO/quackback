@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 
@@ -18,6 +19,7 @@ export function TagChip({
   onRemove?: () => void
   className?: string
 }) {
+  const intl = useOptionalIntl()
   return (
     <span
       className={cn(
@@ -31,7 +33,10 @@ export function TagChip({
         <button
           type="button"
           onClick={onRemove}
-          aria-label={`Remove ${name}`}
+          aria-label={intl.formatMessage(
+            { id: 'admin.shell.tagChip.remove', defaultMessage: 'Remove {name}' },
+            { name }
+          )}
           className="shrink-0 opacity-60 transition-opacity hover:opacity-100"
         >
           <XMarkIcon className="h-2.5 w-2.5" />

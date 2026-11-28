@@ -169,6 +169,41 @@ export function describePlanRefusal(
 }
 
 /**
+ * True for the sentence an entitlement refusal carries ("Upgrade to Pro to
+ * enable it.", "... not included in your plan.").
+ */
+export function isEntitlementRefusal(message: string): boolean {
+  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
+}
+
+export interface PlanRefusalFacts {
+  /** The feature the refusal names, in the server's English, when it names one. */
+  feature: string | null
+  /** The plan that includes the feature, when the sentence names one. */
+  requiredPlanName: string | null
+}
+
+/**
+ * What a plan refusal names, for wording it in another language: the
+ * server's sentence is English, so only the feature and the plan are read.
+ */
+export function planRefusalFacts(error: unknown): PlanRefusalFacts {
+  const named =
+    /^(.+?) (?:is|are) (?:an? \w+ feature|not (?:included|available) (?:in|on) your plan)\./.exec(
+      refusalMessage(error)
+    )
+  const refusal = describePlanRefusal(error, {
+    entitlement: null,
+    feature: '',
+    requiredPlan: null,
+    requiredPlanName: null,
+    headline: '',
+    body: '',
+  })
+  return { feature: named?.[1] ?? null, requiredPlanName: refusal.requiredPlanName }
+}
+
+/**
  * TanStack Start often delivers a thrown server-fn as HTTP 200 with an
  * error payload. Treat that as a failure so callers cannot toast success.
  */

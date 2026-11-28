@@ -53,7 +53,9 @@ export interface NavModule {
 export type NavEntry = NavItem | NavModule
 
 export interface NavSection {
+  /** The English heading; `labelId` names it in the catalogue. */
   label: string
+  labelId: string
   items: NavEntry[]
 }
 
@@ -207,9 +209,14 @@ export function buildNavSections(
   })
 
   return [
-    { label: 'Modules', items: products },
+    {
+      label: 'Modules',
+      labelId: 'admin.shell.settingsNav.section.modules',
+      items: products,
+    },
     {
       label: 'AI & Automation',
+      labelId: 'admin.shell.settingsNav.section.automation',
       items: [
         navAutomationPage('/admin/settings/agent'),
         navAutomationPage('/admin/settings/copilot'),
@@ -220,6 +227,7 @@ export function buildNavSections(
     },
     {
       label: 'Workspace',
+      labelId: 'admin.shell.settingsNav.section.workspace',
       items: [
         navPage('/admin/settings/general'),
         {
@@ -245,6 +253,7 @@ export function buildNavSections(
     },
     {
       label: 'Data',
+      labelId: 'admin.shell.settingsNav.section.data',
       items: [
         navPage('/admin/settings/people'),
         navPage('/admin/settings/companies'),

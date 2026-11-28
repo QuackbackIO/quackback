@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { forwardRef, useImperativeHandle, useState, useEffect, useRef } from 'react'
 import { CheckBadgeIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
@@ -30,6 +31,7 @@ export interface MentionPickerHandle {
 
 export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>(
   ({ items, command, query = '' }, ref) => {
+    const intl = useOptionalIntl()
     const [selected, setSelected] = useState(0)
     const listRef = useRef<HTMLDivElement>(null)
     // Refs shadow state so the imperative handle (empty-deps useImperativeHandle)
@@ -43,7 +45,10 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
     const settings = useWorkspaceSettings()
     const branding = settings?.brandingData
     const teamBadgeLogoUrl = branding?.logoUrl ?? null
-    const teamBadgeLabel = branding?.name ?? settings?.name ?? 'Team'
+    const teamBadgeLabel =
+      branding?.name ??
+      settings?.name ??
+      intl.formatMessage({ id: 'ui.mention.teamFallback', defaultMessage: 'Team' })
 
     const updateSelected = (next: number) => {
       selectedRef.current = next
@@ -78,7 +83,9 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
     return (
       <div className="mention-picker">
         {items.length === 0 ? (
-          <div className="mention-picker__empty">No people match.</div>
+          <div className="mention-picker__empty">
+            {intl.formatMessage({ id: 'ui.mention.noMatch', defaultMessage: 'No people match.' })}
+          </div>
         ) : (
           <ScrollArea className="mention-picker__scroll">
             <div role="listbox" ref={listRef} className="mention-picker__list">
@@ -112,8 +119,14 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
                     {isTeamMember(item.role) && (
                       <span
                         className="mention-picker__team-badge"
-                        aria-label={`${teamBadgeLabel} Member`}
-                        title={`${teamBadgeLabel} Member`}
+                        aria-label={intl.formatMessage(
+                          { id: 'ui.mention.teamMember', defaultMessage: '{team} Member' },
+                          { team: teamBadgeLabel }
+                        )}
+                        title={intl.formatMessage(
+                          { id: 'ui.mention.teamMember', defaultMessage: '{team} Member' },
+                          { team: teamBadgeLabel }
+                        )}
                       >
                         {teamBadgeLogoUrl ? (
                           <img
@@ -129,7 +142,10 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
                     {blocked && (
                       <span className="mention-picker__no-access">
                         <LockClosedIcon className="mention-picker__lock" aria-hidden />
-                        No access
+                        {intl.formatMessage({
+                          id: 'ui.mention.noAccess',
+                          defaultMessage: 'No access',
+                        })}
                       </span>
                     )}
                   </button>

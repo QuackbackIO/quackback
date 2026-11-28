@@ -2,6 +2,8 @@
 import { describe, expect, it, afterEach, vi } from 'vitest'
 import { act, render, screen, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { ENTITLEMENTS } from '@/lib/server/domains/settings'
+import { PLAN_FEATURE_NAMES } from '../plan-refusal-copy'
 import pl from '@/locales/pl.json'
 import { withoutPageScopedMessages } from '@/lib/shared/i18n'
 import { DocumentLocaleContext } from '../document-locale-context'
@@ -136,7 +138,7 @@ describe('DefaultErrorPage', () => {
     expect(screen.getByText(/custom exploded/)).toBeInTheDocument()
   })
 
-  it('does not treat a plan refusal as an unexpected crash', () => {
+  it('does not treat a plan refusal as an unexpected crash', async () => {
     render(
       <DefaultErrorPage
         error={
@@ -147,27 +149,65 @@ describe('DefaultErrorPage', () => {
       />
     )
 
+    expect(
+      await screen.findByRole('heading', {
+        name: 'The audit log is available from the Enterprise plan',
+      })
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Something went wrong/i)).toBeNull()
     expect(screen.queryByText(/Technical details/i)).toBeNull()
-    expect(
-      screen.getByRole('heading', { name: 'The audit log is available from the Enterprise plan' })
-    ).toBeInTheDocument()
-    expect(screen.getByText(/The audit log is an Enterprise feature/)).toBeInTheDocument()
+    expect(screen.getByText('Upgrade to Enterprise to enable it.')).toBeInTheDocument()
   })
 
-  it('keeps the generic plan headline when the refusal names no plan', () => {
+  it('keeps the generic plan headline when the refusal names no plan', async () => {
     render(
       <DefaultErrorPage
         error={new Error('Workflows are not included in your plan. Contact us to enable it.')}
       />
     )
 
-    expect(screen.getByRole('heading', { name: 'This is a plan feature' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Workflows are not included in your plan' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('Contact us to add them to your plan.')).toBeInTheDocument()
+  })
+
+  it('keeps the generic plan headline for a feature it cannot name', async () => {
+    render(
+      <DefaultErrorPage
+        error={new Error('Custom CSS is not included in your plan. Contact us to enable it.')}
+      />
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'This is a plan feature' })
+    ).toBeInTheDocument()
   })
 })
 
 describe('error pages in the reader’s language', () => {
   afterEach(cleanup)
+
+  it('words a plan refusal in the page language, not the server sentence', async () => {
+    render(
+      <IntlProvider locale="pl" defaultLocale="en" messages={pl}>
+        <DefaultErrorPage
+          error={
+            new Error(
+              'The audit log is an Enterprise feature. Your workspace is on Business. Upgrade to Enterprise to enable it.'
+            )
+          }
+        />
+      </IntlProvider>
+    )
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Dziennik audytu wchodzi w zakres planu Enterprise',
+      })
+    ).toBeTruthy()
+    expect(screen.getByText('Przejdź na Enterprise, aby włączyć tę funkcję.')).toBeTruthy()
+    expect(screen.queryByText(/Enterprise feature/)).toBeNull()
+  })
 
   it('words the not-found page in the page language', () => {
     render(
@@ -227,5 +267,20 @@ describe('error pages in the reader’s language', () => {
   it('falls back to English when no IntlProvider is mounted', () => {
     render(<NotFoundPage />)
     expect(screen.getByText('Page not found')).toBeTruthy()
+  })
+})
+
+describe('plan feature names on the refusal page', () => {
+  it('names every plan feature the catalogue has, with its verb form', () => {
+    const catalogue = Object.fromEntries(
+      Object.values(ENTITLEMENTS).map((definition) => [definition.friendly, definition.plural])
+    )
+    const page = Object.fromEntries(
+      Object.entries(PLAN_FEATURE_NAMES).map(([english, entry]) => [english, entry.plural])
+    )
+    expect(page).toEqual(catalogue)
+    for (const [english, entry] of Object.entries(PLAN_FEATURE_NAMES)) {
+      expect(entry.name.defaultMessage).toBe(english)
+    }
   })
 })

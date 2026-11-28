@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 
 interface SearchInputProps {
   value: string
@@ -13,9 +14,13 @@ interface SearchInputProps {
 }
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(function SearchInput(
-  { value, onChange, placeholder = 'Search...', 'aria-label': ariaLabel, ...props },
+  { value, onChange, placeholder: placeholderProp, 'aria-label': ariaLabel, ...props },
   ref
 ) {
+  const intl = useOptionalIntl()
+  const placeholder =
+    placeholderProp ??
+    intl.formatMessage({ id: 'admin.shell.searchInput.placeholder', defaultMessage: 'Search...' })
   return (
     <div className="relative flex-1">
       <MagnifyingGlassIcon className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

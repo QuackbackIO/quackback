@@ -1,5 +1,6 @@
 'use client'
 
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
@@ -20,6 +21,7 @@ export const Route = createFileRoute('/admin/settings/')({
 })
 
 function SettingsIndexPage() {
+  const intl = useOptionalIntl()
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const flags = useFeatureFlags()
@@ -37,7 +39,10 @@ function SettingsIndexPage() {
 
   return (
     <div className="lg:hidden">
-      <SettingsPage title="Settings" backLink={false}>
+      <SettingsPage
+        title={intl.formatMessage({ id: 'admin.shell.settings.title', defaultMessage: 'Settings' })}
+        backLink={false}
+      >
         <SettingsNav />
       </SettingsPage>
     </div>

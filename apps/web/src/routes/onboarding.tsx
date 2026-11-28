@@ -2,6 +2,7 @@ import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { DEFAULT_LOCALE, loadOnboardingMessages } from '@/lib/shared/i18n'
 import { onIntlError } from '@/lib/client/intl-error'
+import { ErrorNoticeLanguage } from '@/lib/client/error-notice-words'
 
 /**
  * Parent route for onboarding: renders children under an IntlProvider.
@@ -44,6 +45,7 @@ function OnboardingRoot() {
       defaultLocale={DEFAULT_LOCALE}
       onError={onIntlError}
     >
+      <ErrorNoticeLanguage />
       <Outlet />
     </IntlProvider>
   )

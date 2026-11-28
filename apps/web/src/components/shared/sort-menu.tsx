@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,13 +29,19 @@ export const SortMenu = memo(function SortMenu({
   onChange,
   formatLabel,
 }: SortMenuProps) {
+  const intl = useOptionalIntl()
   const active = options.find((o) => o.value === value) ?? options[0]
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={<Button variant="outline" size="sm" className="whitespace-nowrap" />}
       >
-        {formatLabel ? formatLabel(active?.label ?? '') : `Sort: ${active?.label ?? ''}`}
+        {formatLabel
+          ? formatLabel(active?.label ?? '')
+          : intl.formatMessage(
+              { id: 'admin.shell.sortMenu.label', defaultMessage: 'Sort: {label}' },
+              { label: active?.label ?? '' }
+            )}
         <ChevronDownIcon className="size-3.5 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

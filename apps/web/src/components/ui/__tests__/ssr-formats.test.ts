@@ -49,7 +49,10 @@ const ALLOWLIST: Record<Rule, Record<string, string>> = {
       'Reads the zone in the enable toggle handler; the "opens" label renders once an effect sets now.',
   },
   'default-locale-number': {},
-  'unzoned-date': {},
+  'unzoned-date': {
+    'components/ui/calendar.tsx':
+      "Words the picker's own days, which it builds in the browser's zone; the calendar renders only in an opened popover, never in the server's HTML.",
+  },
   'date-fns-format': {},
 }
 

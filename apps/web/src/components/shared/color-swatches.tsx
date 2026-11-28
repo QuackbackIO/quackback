@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { cn } from '@/lib/shared/utils'
 
 // The palette offered when picking a label or team color. The first entry is the
@@ -22,13 +23,17 @@ export function ColorSwatches({
   value: string
   onChange: (color: string) => void
 }) {
+  const intl = useOptionalIntl()
   return (
     <div className="flex flex-wrap gap-1">
       {TAG_COLORS.map((c) => (
         <button
           key={c}
           type="button"
-          aria-label={`Color ${c}`}
+          aria-label={intl.formatMessage(
+            { id: 'admin.shell.colorSwatches.color', defaultMessage: 'Color {color}' },
+            { color: c }
+          )}
           onClick={() => onChange(c)}
           className={cn(
             'h-4 w-4 rounded-full ring-offset-1 ring-offset-background transition',

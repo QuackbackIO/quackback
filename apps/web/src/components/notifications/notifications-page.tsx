@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { defineMessages, FormattedMessage, useIntl } from 'react-intl'
 import { getRouteApi } from '@tanstack/react-router'
 import {
   InboxIcon,
@@ -42,15 +43,16 @@ import {
   type NotificationDateGroupKey,
 } from '@/components/notifications/group-by-date'
 
-const GROUP_LABELS: Record<NotificationDateGroupKey, string> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  earlier: 'Earlier',
-}
+const GROUP_LABELS = defineMessages<NotificationDateGroupKey>({
+  today: { id: 'admin.shell.notifications.groupToday', defaultMessage: 'Today' },
+  yesterday: { id: 'admin.shell.notifications.groupYesterday', defaultMessage: 'Yesterday' },
+  earlier: { id: 'admin.shell.notifications.groupEarlier', defaultMessage: 'Earlier' },
+})
 
 const route = getRouteApi('/admin/notifications')
 
 export function NotificationsPage() {
+  const intl = useIntl()
   const navigate = route.useNavigate()
   const { filter } = route.useSearch()
   const unreadOnly = filter === 'unread'
@@ -71,7 +73,10 @@ export function NotificationsPage() {
       <div className="px-4 pt-4 pb-16 sm:px-6">
         <div className="w-full max-w-3xl space-y-4">
           <PageHeader
-            title="Notifications"
+            title={intl.formatMessage({
+              id: 'admin.shell.notifications.title',
+              defaultMessage: 'Notifications',
+            })}
             actions={
               <>
                 <Button
@@ -80,17 +85,30 @@ export function NotificationsPage() {
                   onClick={() => markAllAsRead.mutate()}
                   disabled={unreadCount === 0 || markAllAsRead.isPending}
                 >
-                  Mark all as read
+                  <FormattedMessage
+                    id="admin.shell.notifications.markAllRead"
+                    defaultMessage="Mark all as read"
+                  />
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="More notification actions">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={intl.formatMessage({
+                        id: 'admin.shell.notifications.moreActions',
+                        defaultMessage: 'More notification actions',
+                      })}
+                    >
                       <EllipsisHorizontalIcon className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => setArchiveAllReadOpen(true)}>
-                      Archive all read
+                      <FormattedMessage
+                        id="admin.shell.notifications.archiveAllRead"
+                        defaultMessage="Archive all read"
+                      />
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -109,9 +127,14 @@ export function NotificationsPage() {
             variant="line"
           >
             <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="all">
+                <FormattedMessage id="admin.shell.notifications.tabAll" defaultMessage="All" />
+              </TabsTrigger>
               <TabsTrigger value="unread">
-                Unread
+                <FormattedMessage
+                  id="admin.shell.notifications.tabUnread"
+                  defaultMessage="Unread"
+                />
                 {unreadCount > 0 && (
                   <span className="ms-1.5 text-xs tabular-nums text-muted-foreground">
                     {unreadCount}
@@ -124,18 +147,34 @@ export function NotificationsPage() {
           <AlertDialog open={archiveAllReadOpen} onOpenChange={setArchiveAllReadOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Archive all read notifications?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  <FormattedMessage
+                    id="admin.shell.notifications.archiveDialog.title"
+                    defaultMessage="Archive all read notifications?"
+                  />
+                </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Read notifications will be removed from your list. This can't be undone.
+                  <FormattedMessage
+                    id="admin.shell.notifications.archiveDialog.description"
+                    defaultMessage="Read notifications will be removed from your list. This can't be undone."
+                  />
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={archiveAllRead.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogCancel disabled={archiveAllRead.isPending}>
+                  <FormattedMessage
+                    id="admin.shell.notifications.archiveDialog.cancel"
+                    defaultMessage="Cancel"
+                  />
+                </AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => archiveAllRead.mutate()}
                   disabled={archiveAllRead.isPending}
                 >
-                  Archive
+                  <FormattedMessage
+                    id="admin.shell.notifications.archiveDialog.confirm"
+                    defaultMessage="Archive"
+                  />
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -149,11 +188,20 @@ export function NotificationsPage() {
           ) : isError ? (
             <EmptyState
               icon={ExclamationTriangleIcon}
-              title="Failed to load"
-              description="We couldn't load your notifications. Please try again."
+              title={intl.formatMessage({
+                id: 'admin.shell.notifications.error.title',
+                defaultMessage: 'Failed to load',
+              })}
+              description={intl.formatMessage({
+                id: 'admin.shell.notifications.error.description',
+                defaultMessage: "We couldn't load your notifications. Please try again.",
+              })}
               action={
                 <Button variant="outline" size="sm" onClick={() => refetch()}>
-                  Retry
+                  <FormattedMessage
+                    id="admin.shell.notifications.error.retry"
+                    defaultMessage="Retry"
+                  />
                 </Button>
               }
               className="py-24"
@@ -171,7 +219,7 @@ export function NotificationsPage() {
                 {groups.map((group) => (
                   <div key={group.label}>
                     <h2 className="mb-2 text-[13px] font-medium text-muted-foreground">
-                      {GROUP_LABELS[group.label]}
+                      {intl.formatMessage(GROUP_LABELS[group.label])}
                     </h2>
                     <div className="divide-y divide-border/50">
                       {group.notifications.map((notification) => (
@@ -195,7 +243,10 @@ export function NotificationsPage() {
                       disabled={isFetchingNextPage}
                     >
                       {isFetchingNextPage && <Spinner size="sm" />}
-                      Load more
+                      <FormattedMessage
+                        id="admin.shell.notifications.loadMore"
+                        defaultMessage="Load more"
+                      />
                     </Button>
                   </div>
                 )}
@@ -204,15 +255,28 @@ export function NotificationsPage() {
           ) : unreadOnly ? (
             <EmptyState
               icon={CheckCircleIcon}
-              title="Nothing to review"
-              description="No unread notifications."
+              title={intl.formatMessage({
+                id: 'admin.shell.notifications.emptyUnread.title',
+                defaultMessage: 'Nothing to review',
+              })}
+              description={intl.formatMessage({
+                id: 'admin.shell.notifications.emptyUnread.description',
+                defaultMessage: 'No unread notifications.',
+              })}
               className="py-24"
             />
           ) : (
             <EmptyState
               icon={InboxIcon}
-              title="No notifications yet"
-              description="You'll see notifications here when there are status changes or new comments on posts you're subscribed to."
+              title={intl.formatMessage({
+                id: 'admin.shell.notifications.empty.title',
+                defaultMessage: 'No notifications yet',
+              })}
+              description={intl.formatMessage({
+                id: 'admin.shell.notifications.empty.description',
+                defaultMessage:
+                  "You'll see notifications here when there are status changes or new comments on posts you're subscribed to.",
+              })}
               className="py-24"
             />
           )}

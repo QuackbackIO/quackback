@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { Fragment, Suspense, lazy, useState } from 'react'
 import { useNavigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -49,6 +50,7 @@ const ReportIncidentDialog = lazy(() =>
 )
 
 export function HomeActions({ flags }: { flags: Partial<FeatureFlags> | undefined }) {
+  const intl = useOptionalIntl()
   const groups = homeActionGroups(flags)
   const [action, setAction] = useState<HomeActionId | null>(null)
   const close = () => setAction(null)
@@ -60,7 +62,10 @@ export function HomeActions({ flags }: { flags: Partial<FeatureFlags> | undefine
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
-            Actions
+            {intl.formatMessage({
+              id: 'admin.shell.homeActions.actions',
+              defaultMessage: 'Actions',
+            })}
             <ChevronDownIcon className="size-3.5" />
           </Button>
         </DropdownMenuTrigger>

@@ -13,6 +13,12 @@ const LOCALIZED_ROUTE_IDS = new Set([
   '/auth/reset-password',
   '/widget',
   '/unsubscribe',
+  // The admin shell's own pages: notifications, search and a teammate's
+  // notification settings. Other admin pages are listed once every string
+  // they render is translated.
+  '/admin/notifications',
+  '/admin/search',
+  '/admin/settings/notifications',
   // The AI & Automation pages under settings. The settings layout and the other
   // settings pages stay English.
   '/admin/settings/agent',

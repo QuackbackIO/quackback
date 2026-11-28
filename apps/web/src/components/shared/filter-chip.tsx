@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState } from 'react'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -58,6 +59,7 @@ export function FilterChip({
   internal = false,
   tooltip,
 }: FilterChipProps) {
+  const intl = useOptionalIntl()
   const [open, setOpen] = useState(false)
   const hasOptions = options && options.length > 0 && onChange
 
@@ -177,7 +179,10 @@ export function FilterChip({
             'text-muted-foreground hover:text-foreground',
             'transition-colors'
           )}
-          aria-label={`Remove ${label} ${value} filter`}
+          aria-label={intl.formatMessage(
+            { id: 'ui.filterChip.remove', defaultMessage: 'Remove {label} {value} filter' },
+            { label, value }
+          )}
         >
           <XMarkIcon className="h-2.5 w-2.5" />
         </button>
@@ -206,6 +211,7 @@ export function FilterAddButton({
   children,
   ...props
 }: React.ComponentProps<typeof Button>) {
+  const intl = useOptionalIntl()
   return (
     <Button
       type="button"
@@ -215,7 +221,8 @@ export function FilterAddButton({
       {...props}
     >
       <PlusIcon className="size-3.5" aria-hidden />
-      {children ?? 'Filter'}
+      {children ??
+        intl.formatMessage({ id: 'admin.shell.filterAdd.filter', defaultMessage: 'Filter' })}
     </Button>
   )
 }

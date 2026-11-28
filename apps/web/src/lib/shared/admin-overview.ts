@@ -185,7 +185,8 @@ export type OverviewPublishItem = {
 
 export type OverviewSectionState = {
   enabled: boolean
-  error: string | null
+  /** Why the section is missing, as a code the page words in its language. */
+  error: 'load_failed' | null
 }
 
 export type AdminOverviewData = {

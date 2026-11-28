@@ -27,6 +27,16 @@ describe('documentLocale', () => {
       expect(documentLocale(['__root__', '/admin', id], 'zh-cn'), id).toBe('zh-cn')
     }
   })
+  it("localizes the admin shell's own pages", () => {
+    expect(documentLocale(['__root__', '/admin', '/admin/notifications'], 'de')).toBe('de')
+    expect(documentLocale(['__root__', '/admin', '/admin/search'], 'ar')).toBe('ar')
+    expect(
+      documentLocale(
+        ['__root__', '/admin', '/admin/settings', '/admin/settings/notifications'],
+        'de'
+      )
+    ).toBe('de')
+  })
   it('keeps the other settings pages on the default', () => {
     for (const id of [
       '/admin/settings',

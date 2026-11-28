@@ -20,6 +20,7 @@
  *     QueryClientProvider in the tree, so we keep it dependency-free
  *     instead of relying on react-query.
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
@@ -102,12 +103,16 @@ interface MentionHoverCardOverlayProps {
 }
 
 export function MentionHoverCardOverlay({ children, className }: MentionHoverCardOverlayProps) {
+  const intl = useOptionalIntl()
   const containerRef = useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = useState<{ rect: DOMRect; principalId: string } | null>(null)
   const settings = useWorkspaceSettings()
   const branding = settings?.brandingData
   const teamBadgeLogoUrl = branding?.logoUrl ?? null
-  const teamBadgeLabel = branding?.name ?? settings?.name ?? 'Team'
+  const teamBadgeLabel =
+    branding?.name ??
+    settings?.name ??
+    intl.formatMessage({ id: 'ui.mention.teamFallback', defaultMessage: 'Team' })
   const [card, setCard] = useState<PrincipalCard | null>(null)
   const [isMissing, setIsMissing] = useState(false)
 
@@ -264,8 +269,14 @@ export function MentionHoverCardOverlay({ children, className }: MentionHoverCar
                   {isTeamMember(card.role) && (
                     <span
                       className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary/15 text-primary shrink-0"
-                      aria-label={`${teamBadgeLabel} Member`}
-                      title={`${teamBadgeLabel} Member`}
+                      aria-label={intl.formatMessage(
+                        { id: 'ui.mention.teamMember', defaultMessage: '{team} Member' },
+                        { team: teamBadgeLabel }
+                      )}
+                      title={intl.formatMessage(
+                        { id: 'ui.mention.teamMember', defaultMessage: '{team} Member' },
+                        { team: teamBadgeLabel }
+                      )}
                     >
                       {teamBadgeLogoUrl ? (
                         <img
@@ -280,8 +291,18 @@ export function MentionHoverCardOverlay({ children, className }: MentionHoverCar
                   )}
                 </div>
                 <div className="text-xs text-muted-foreground/70 mt-1">
-                  Joined{' '}
-                  <LocalDate date={card.joinedAt} options={{ month: 'short', year: 'numeric' }} />
+                  {intl.formatMessage(
+                    { id: 'ui.mention.joined', defaultMessage: 'Joined {date}' },
+                    {
+                      date: (
+                        <LocalDate
+                          key="date"
+                          date={card.joinedAt}
+                          options={{ month: 'short', year: 'numeric' }}
+                        />
+                      ),
+                    }
+                  )}
                 </div>
               </div>
             </div>

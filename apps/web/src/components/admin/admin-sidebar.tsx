@@ -6,7 +6,7 @@ import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-lim
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { FormattedMessage, useIntl, type MessageDescriptor } from 'react-intl'
 import { htmlLangDir } from '@/lib/shared/document-locale'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 import { railControlClass } from '@/components/admin/rail-item'
@@ -79,10 +79,19 @@ function AvailabilityMenuItems({
   availability: 'online' | 'away'
   onSet: (next: 'online' | 'away') => void
 }) {
+  const intl = useIntl()
   const goingAway = availability === 'online'
   return (
     <DropdownMenuItem onClick={() => onSet(goingAway ? 'away' : 'online')}>
-      {goingAway ? 'Set yourself as away' : 'Set yourself as active'}
+      {goingAway
+        ? intl.formatMessage({
+            id: 'admin.shell.availability.setAway',
+            defaultMessage: 'Set yourself as away',
+          })
+        : intl.formatMessage({
+            id: 'admin.shell.availability.setActive',
+            defaultMessage: 'Set yourself as active',
+          })}
     </DropdownMenuItem>
   )
 }
@@ -120,13 +129,12 @@ function GitHubStarIcon({ className }: { className?: string }) {
 }
 
 interface RailItem {
-  label: string
+  /** The label, so the rail reads in the teammate's language. */
+  label: MessageDescriptor
   href: string
   icon: RailIcon
   /** Active on this path only, not on the pages under it. */
   exact?: boolean
-  /** The catalogue id of the label, so the rail reads in the workspace language. */
-  labelId: string
   /** The workspace product this item belongs to; hidden while it is off. */
   product?: ProductId
   /** The guided tour's `data-tour` name for this item. */
@@ -136,26 +144,28 @@ interface RailItem {
 // One product reads as one run: Feedback, Roadmap and Changelog sit together,
 // then Support, Help Center and Status.
 const RAIL_ITEMS: RailItem[] = [
-  { label: 'Home', labelId: 'admin.nav.home', href: '/admin', icon: HomeIcon, exact: true },
   {
-    label: 'Feedback',
-    labelId: 'admin.nav.feedback',
+    label: { id: 'admin.nav.home', defaultMessage: 'Home' },
+    href: '/admin',
+    icon: HomeIcon,
+    exact: true,
+  },
+  {
+    label: { id: 'admin.nav.feedback', defaultMessage: 'Feedback' },
     href: '/admin/feedback',
     icon: ENTITY_ICONS.post,
     product: 'feedback',
     tour: 'nav-feedback',
   },
   {
-    label: 'Roadmap',
-    labelId: 'admin.nav.roadmap',
+    label: { id: 'admin.nav.roadmap', defaultMessage: 'Roadmap' },
     href: '/admin/roadmap',
     icon: MapIcon,
     product: 'feedback',
     tour: 'nav-roadmap',
   },
   {
-    label: 'Changelog',
-    labelId: 'admin.nav.changelog',
+    label: { id: 'admin.nav.changelog', defaultMessage: 'Changelog' },
     href: '/admin/changelog',
     icon: ENTITY_ICONS.changelog,
     product: 'changelog',
@@ -164,36 +174,36 @@ const RAIL_ITEMS: RailItem[] = [
   // One Support entry covers conversations and tickets: the unified inbox
   // shell serves both (gated on either flag being on).
   {
-    label: 'Support',
-    labelId: 'admin.nav.support',
+    label: { id: 'admin.nav.support', defaultMessage: 'Support' },
     href: '/admin/inbox',
     icon: ENTITY_ICONS.conversation,
     product: 'support',
     tour: 'nav-support',
   },
   {
-    label: 'Help center',
-    labelId: 'admin.nav.helpCenter',
+    label: { id: 'admin.nav.helpCenter', defaultMessage: 'Help center' },
     href: '/admin/help-center',
     icon: ENTITY_ICONS.article,
     product: 'helpCenter',
     tour: 'nav-help-center',
   },
   {
-    label: 'Status',
-    labelId: 'admin.nav.status',
+    label: { id: 'admin.nav.status', defaultMessage: 'Status' },
     href: '/admin/status',
     icon: SignalIcon,
     product: 'status',
     tour: 'nav-status',
   },
   {
-    label: 'Analytics',
-    labelId: 'admin.nav.analytics',
+    label: { id: 'admin.nav.analytics', defaultMessage: 'Analytics' },
     href: '/admin/analytics',
     icon: ChartBarIcon,
   },
-  { label: 'Users', labelId: 'admin.nav.users', href: '/admin/users', icon: UsersIcon },
+  {
+    label: { id: 'admin.nav.users', defaultMessage: 'Users' },
+    href: '/admin/users',
+    icon: UsersIcon,
+  },
 ]
 
 /**
@@ -368,7 +378,15 @@ export function AdminSidebar({
   const itemBadge = (item: RailItem) =>
     item.href === '/admin/feedback' && pendingModeration > 0 ? pendingModeration : null
   const itemBadgeLabel = (item: RailItem) =>
-    itemBadge(item) ? `${pendingModeration} waiting for review` : undefined
+    itemBadge(item)
+      ? intl.formatMessage(
+          {
+            id: 'admin.shell.rail.waitingForReview',
+            defaultMessage: '{count} waiting for review',
+          },
+          { count: pendingModeration }
+        )
+      : undefined
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const user = session?.user
@@ -449,7 +467,7 @@ export function AdminSidebar({
                 railItem({
                   href: item.href,
                   icon: item.icon,
-                  label: intl.formatMessage({ id: item.labelId, defaultMessage: item.label }),
+                  label: intl.formatMessage(item.label),
                   exact: item.exact,
                   badge: itemBadge(item),
                   badgeLabel: itemBadgeLabel(item),
@@ -586,7 +604,11 @@ export function AdminSidebar({
                         rel="noopener noreferrer"
                         className="text-xs text-primary hover:underline"
                       >
-                        Update available · v{latestVersion.version}
+                        <FormattedMessage
+                          id="admin.shell.sidebar.updateAvailable"
+                          defaultMessage="Update available · v{version}"
+                          values={{ version: latestVersion.version }}
+                        />
                       </a>
                     )}
                   </div>
@@ -611,7 +633,13 @@ export function AdminSidebar({
                         />
                       )}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-start">{name || 'Account'}</span>
+                    <span className="min-w-0 flex-1 truncate text-start">
+                      {name ||
+                        intl.formatMessage({
+                          id: 'admin.shell.accountMenu.account',
+                          defaultMessage: 'Account',
+                        })}
+                    </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
@@ -688,7 +716,7 @@ export function AdminSidebar({
                   key={item.href}
                   href={item.href}
                   icon={item.icon}
-                  label={intl.formatMessage({ id: item.labelId, defaultMessage: item.label })}
+                  label={intl.formatMessage(item.label)}
                   exact={item.exact}
                   badge={itemBadge(item)}
                   badgeLabel={itemBadgeLabel(item)}
@@ -815,7 +843,11 @@ export function AdminSidebar({
                     rel="noopener noreferrer"
                     className="text-xs text-primary hover:underline"
                   >
-                    Update available · v{latestVersion.version}
+                    <FormattedMessage
+                      id="admin.shell.sidebar.updateAvailable"
+                      defaultMessage="Update available · v{version}"
+                      values={{ version: latestVersion.version }}
+                    />
                   </a>
                 )}
               </div>

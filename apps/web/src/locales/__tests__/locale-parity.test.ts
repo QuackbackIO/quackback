@@ -42,9 +42,11 @@ const SAME_AS_ENGLISH_EVERYWHERE = [
   'GitHub',
   'Copilot.',
   'Quackback AI.',
+  'YouTube',
 ]
 const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   de: [
+    'Webhooks',
     'Chat',
     '{name} (Team)',
     '(optional)',
@@ -104,9 +106,11 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Widget',
     'Workflows',
     'Workspace',
+    'Workspaces',
     'Zoom',
   ],
   fr: [
+    'Segments',
     'Accent',
     'Actions',
     'Admin',
@@ -165,6 +169,8 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   es: [
     'Chat',
     'Audio',
+    'Color {color}',
+    'Error',
     'Avatar',
     'ETA',
     'Feedback',
@@ -215,6 +221,8 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Tickets',
     'Widget',
     'Workflows',
+    'Workspace',
+    'Workspaces',
     'Zoom',
     'via {workflowName}',
     '{count, plural, one {# post} other {# posts}}',
@@ -222,6 +230,8 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   'zh-cn': [],
   'zh-tw': [],
   nl: [
+    'Single sign-on',
+    'Webhooks',
     'Chat',
     'webhooks',
     'workflows',

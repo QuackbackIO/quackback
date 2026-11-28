@@ -376,7 +376,7 @@ describe('CreateTicketDialog — Phase 5 copilot auto-fill', () => {
     expect(await screen.findByText('High')).toBeInTheDocument()
     expect(screen.getAllByText('✨ suggested')).toHaveLength(2)
     expect(screen.getByText('✨ 2 suggested')).toBeInTheDocument()
-    expect(screen.getByText('— not suggested')).toBeInTheDocument()
+    expect(screen.getByText('(not suggested)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Undo suggestions' })).toBeInTheDocument()
   })
 

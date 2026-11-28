@@ -6,7 +6,8 @@
  * the shared `validateTicketIntakeValues` in each surface's submit path, so
  * the three never drift.
  */
-import { useIntl } from 'react-intl'
+import type { IntlShape } from 'react-intl'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useId, type ReactNode } from 'react'
 import type { TicketFormField } from '@/lib/shared/tickets'
 import { Input } from '@/components/ui/input'
@@ -40,6 +41,7 @@ export interface TicketFormFieldsProps {
  *  completed without answering this field. Null on surfaces without
  *  suggestions (both props omitted). */
 function suggestionMarker(
+  intl: IntlShape,
   field: TicketFormField,
   suggestedKeys: ReadonlySet<string> | undefined,
   suggestionRun: boolean | undefined,
@@ -48,14 +50,17 @@ function suggestionMarker(
   if (suggestedKeys?.has(field.key)) {
     return (
       <span id={id} className="ms-1 text-xs text-primary">
-        ✨ suggested
+        {intl.formatMessage({ id: 'tickets.fields.suggested', defaultMessage: '✨ suggested' })}
       </span>
     )
   }
   if (suggestionRun) {
     return (
       <span id={id} className="ms-1 text-xs text-muted-foreground/70">
-        — not suggested
+        {intl.formatMessage({
+          id: 'tickets.fields.notSuggested',
+          defaultMessage: '(not suggested)',
+        })}
       </span>
     )
   }
@@ -89,7 +94,7 @@ export function TicketFormFields({
   suggestedKeys,
   suggestionRun,
 }: TicketFormFieldsProps) {
-  const intl = useIntl()
+  const intl = useOptionalIntl()
   const idPrefix = useId()
   if (fields.length === 0) return null
   return (
@@ -98,7 +103,13 @@ export function TicketFormFields({
         const id = `${idPrefix}-${field.key}`
         // The suggestion state sits beside the label but describes the control,
         // so it is not read as part of the field's name.
-        const marker = suggestionMarker(field, suggestedKeys, suggestionRun, `${id}-suggestion`)
+        const marker = suggestionMarker(
+          intl,
+          field,
+          suggestedKeys,
+          suggestionRun,
+          `${id}-suggestion`
+        )
         const a11y = {
           'aria-required': field.required || undefined,
           'aria-describedby': marker ? `${id}-suggestion` : undefined,

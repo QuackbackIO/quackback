@@ -9,6 +9,7 @@
  * Anonymous and service principals never resolve a public profile, so they
  * never get a card — same anti-enumeration contract as the portal.
  */
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -44,6 +45,7 @@ export function AdminAuthorHoverCard({
   children,
   className,
 }: AdminAuthorHoverCardProps) {
+  const intl = useOptionalIntl()
   const navigate = useNavigate()
   // Render-only: the team-context fn still requireAuth(people.view). Skip the
   // request when the caller lacks it so a vote manager without people.view
@@ -141,14 +143,22 @@ export function AdminAuthorHoverCard({
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <span className="min-w-0 truncate text-sm font-medium text-foreground">
-                    {profile.displayName || displayName || 'Anonymous'}
+                    {profile.displayName ||
+                      displayName ||
+                      intl.formatMessage({
+                        id: 'admin.shell.authorHoverCard.anonymous',
+                        defaultMessage: 'Anonymous',
+                      })}
                   </span>
                   {teamQuery.data?.emailVerified && (
                     <CheckCircleIcon className="size-3.5 shrink-0 text-primary" />
                   )}
                   {teamQuery.data?.blocked && (
                     <Badge variant="destructive" size="sm" className="shrink-0">
-                      Blocked
+                      {intl.formatMessage({
+                        id: 'admin.shell.authorHoverCard.blocked',
+                        defaultMessage: 'Blocked',
+                      })}
                     </Badge>
                   )}
                 </div>
@@ -168,9 +178,27 @@ export function AdminAuthorHoverCard({
             />
 
             <div className="mt-3 flex items-center border-t border-border/50 pt-2.5">
-              <CardStat value={profile.postCount} label="Posts" />
-              <CardStat value={profile.commentCount} label="Comments" />
-              <CardStat value={profile.voteCount} label="Votes" />
+              <CardStat
+                value={profile.postCount}
+                label={intl.formatMessage({
+                  id: 'admin.shell.authorHoverCard.posts',
+                  defaultMessage: 'Posts',
+                })}
+              />
+              <CardStat
+                value={profile.commentCount}
+                label={intl.formatMessage({
+                  id: 'admin.shell.authorHoverCard.comments',
+                  defaultMessage: 'Comments',
+                })}
+              />
+              <CardStat
+                value={profile.voteCount}
+                label={intl.formatMessage({
+                  id: 'admin.shell.authorHoverCard.votes',
+                  defaultMessage: 'Votes',
+                })}
+              />
             </div>
 
             {canViewPeople && (
@@ -179,7 +207,12 @@ export function AdminAuthorHoverCard({
                 onClick={goToProfile}
                 className="mt-3 flex w-full items-center justify-between border-t border-border/50 pt-2.5 text-primary"
               >
-                <span className="text-xs font-medium">Open full profile</span>
+                <span className="text-xs font-medium">
+                  {intl.formatMessage({
+                    id: 'admin.shell.authorHoverCard.openProfile',
+                    defaultMessage: 'Open full profile',
+                  })}
+                </span>
                 <ArrowRightIcon className="rtl:-scale-x-100 size-3.5" />
               </button>
             )}
@@ -197,6 +230,7 @@ function TeamInfoRows({
   team: ProfileTeamContextView | null
   isLoading: boolean
 }) {
+  const intl = useOptionalIntl()
   if (isLoading && !team) {
     return (
       <div className="mt-3 space-y-[5px] border-t border-border/50 pt-2.5">
@@ -218,7 +252,12 @@ function TeamInfoRows({
   return (
     <div className="mt-3 flex flex-col gap-[5px] border-t border-border/50 pt-2.5 text-xs leading-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="shrink-0 text-muted-foreground">Company</span>
+        <span className="shrink-0 text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.shell.authorHoverCard.company',
+            defaultMessage: 'Company',
+          })}
+        </span>
         <span className="min-w-0 truncate font-medium">
           {team.company ? (
             <>
@@ -236,14 +275,24 @@ function TeamInfoRows({
         </span>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <span className="shrink-0 text-muted-foreground">Last seen</span>
+        <span className="shrink-0 text-muted-foreground">
+          {intl.formatMessage({
+            id: 'admin.shell.authorHoverCard.lastSeen',
+            defaultMessage: 'Last seen',
+          })}
+        </span>
         <span className="min-w-0 truncate">
           {team.lastSeenAt ? <TimeAgo date={team.lastSeenAt} /> : '-'}
         </span>
       </div>
       {segments.length > 0 && (
         <div className="flex items-center justify-between gap-2">
-          <span className="shrink-0 text-muted-foreground">Segments</span>
+          <span className="shrink-0 text-muted-foreground">
+            {intl.formatMessage({
+              id: 'admin.shell.authorHoverCard.segments',
+              defaultMessage: 'Segments',
+            })}
+          </span>
           <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
             {visible.map((seg) => (
               <span
@@ -269,7 +318,7 @@ function TeamInfoRows({
   )
 }
 
-function CardStat({ value, label }: { value: number; label: string }) {
+function CardStat({ value, label }: { value: number; label: ReactNode }) {
   return (
     <div className="flex-1 text-center">
       <div className="text-sm font-semibold tabular-nums text-foreground">{value}</div>

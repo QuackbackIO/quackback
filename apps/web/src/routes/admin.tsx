@@ -35,6 +35,7 @@ import {
   useHasPermission,
 } from '@/lib/client/hooks/use-root-context'
 import { useToasterLocale } from '@/components/ui/use-toaster-locale'
+import { ErrorNoticeLanguage } from '@/lib/client/error-notice-words'
 import adminThemeCss from '@/styles/admin-theme.css?url'
 
 /** What the admin pages read from the role guard's answer. */
@@ -301,6 +302,7 @@ function AdminLayout() {
 
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
+      <ErrorNoticeLanguage />
       <SearchPaletteProvider>
         <AdminProductTourProvider>
           <TooltipProvider delay={0}>

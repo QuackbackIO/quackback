@@ -11,7 +11,11 @@ import {
   pathIsUnder,
   type NavItem,
   type NavModule,
+  type NavSection,
 } from './settings-nav-sections'
+import { settingsPageTitle } from '@/lib/shared/settings-pages'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
+import type { IntlShape } from 'react-intl'
 import { SettingsNavContext } from './settings-page'
 import {
   useBillingEnabled,
@@ -38,6 +42,26 @@ function settingsRowClass(active: boolean) {
   )
 }
 
+/** The nav's headings, rows and module tabs in the reader's language. */
+function inLanguage(sections: NavSection[], intl: IntlShape): NavSection[] {
+  return sections.map((section) => ({
+    ...section,
+    label: intl.formatMessage({ id: section.labelId, defaultMessage: section.label }),
+    items: section.items.map((entry) =>
+      isNavModule(entry)
+        ? {
+            ...entry,
+            label: settingsPageTitle(intl, entry.id, entry.label),
+            pages: entry.pages.map((page) => ({
+              ...page,
+              label: settingsPageTitle(intl, page.to, page.label),
+            })),
+          }
+        : { ...entry, label: settingsPageTitle(intl, entry.to, entry.label) }
+    ),
+  }))
+}
+
 /**
  * Builds the settings nav for the current viewer once, for the nav and for the
  * module tabs on the page. It selects the context parts the nav is made from,
@@ -47,10 +71,11 @@ export function SettingsNavProvider({ children }: { children: ReactNode }) {
   const flags = useFeatureFlags()
   const billingEnabled = useBillingEnabled()
   const permissions = usePermissions()
+  const intl = useOptionalIntl()
 
   const navSections = useMemo(
-    () => navSectionsFor(buildNavSections(flags, billingEnabled), permissions),
-    [flags, billingEnabled, permissions]
+    () => inLanguage(navSectionsFor(buildNavSections(flags, billingEnabled), permissions), intl),
+    [flags, billingEnabled, permissions, intl]
   )
 
   return <SettingsNavContext.Provider value={navSections}>{children}</SettingsNavContext.Provider>

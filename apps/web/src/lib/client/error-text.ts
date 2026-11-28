@@ -3,6 +3,7 @@
  * `describeError`, so a raw technical message never reaches the screen.
  */
 import { describeError, noticeText, type ErrorAudience } from '@/lib/shared/describe-error'
+import { errorNoticeWords } from '@/lib/client/error-notice-words'
 
 const TEAM_AREAS = ['/admin', '/onboarding']
 
@@ -16,7 +17,8 @@ export function errorAudience(): ErrorAudience {
 }
 
 export function errorText(error: unknown, fallback: string): string {
-  return noticeText(describeError(error, fallback, errorAudience()))
+  const words = errorNoticeWords()
+  return noticeText(describeError(error, fallback, errorAudience(), words), words)
 }
 
 /**
@@ -26,6 +28,7 @@ export function errorText(error: unknown, fallback: string): string {
  * any other message is the browser's or a library's, so the fallback is shown.
  */
 export function unplannedErrorText(error: unknown, fallback: string): string {
-  const notice = describeError(error, fallback, errorAudience())
-  return notice.description || notice.action ? noticeText(notice) : fallback
+  const words = errorNoticeWords()
+  const notice = describeError(error, fallback, errorAudience(), words)
+  return notice.description || notice.action ? noticeText(notice, words) : fallback
 }

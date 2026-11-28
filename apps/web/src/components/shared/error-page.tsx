@@ -1,9 +1,10 @@
 import { lazy, Suspense, useContext, useState } from 'react'
 import { IntlContext, useIntl, type MessageDescriptor } from 'react-intl'
 import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
+import { ENGLISH_INTL } from '@/components/ui/use-optional-intl'
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
+import { isEntitlementRefusal } from '@/lib/shared/describe-upgrade'
 import { isSeatPausedError } from '@/lib/shared/billing/seat-paused'
 import { errorReferenceOf } from '@/lib/shared/error-reference'
 import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
@@ -20,9 +21,13 @@ interface FriendlyShellProps {
   fullPage?: boolean
 }
 
-type Copy = (message: MessageDescriptor & { defaultMessage: string }) => string
+type Copy = (
+  message: MessageDescriptor & { defaultMessage: string },
+  values?: Record<string, string>
+) => string
 
-const english: Copy = (message) => message.defaultMessage
+/** The English, formatted the way a provider would format it. */
+const english: Copy = (message, values) => ENGLISH_INTL.formatMessage(message, values)
 
 // Error pages render under every route, so the module that loads their strings
 // is fetched when one shows rather than shipped in the chunk every page loads
@@ -40,7 +45,7 @@ const AreaMessages = lazy(() =>
  * error pages can also render above every IntlProvider; with none mounted they
  * stay English rather than throwing the way `useIntl` would.
  */
-function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode }) {
+export function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode }) {
   const intl = useContext(IntlContext)
   const documentLocale = useContext(DocumentLocaleContext)
   if (!intl || documentLocale === DEFAULT_LOCALE) return children(english)
@@ -63,7 +68,7 @@ function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode
 
 function PageLanguage({ children }: { children: (copy: Copy) => React.ReactNode }) {
   const intl = useIntl()
-  return children((message) => intl.formatMessage(message))
+  return children((message, values) => intl.formatMessage(message, values))
 }
 
 export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps) {
@@ -119,8 +124,7 @@ export function isAuthorizationError(error: unknown): boolean {
  * boundary. Those sentences are commercial outcomes, not crashes.
  */
 export function isEntitlementError(error: unknown): boolean {
-  const message = errorMessage(error)
-  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
+  return isEntitlementRefusal(errorMessage(error))
 }
 
 export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
@@ -133,71 +137,61 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">You don&apos;t have access</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Only people with the right permissions can open this page. Ask a workspace admin if you need
-        access.
-      </p>
-
-      <div className="mt-6 flex items-center justify-center gap-3">
-        {isAdminArea ? (
+      <ErrorPageCopy>
+        {(copy) => (
           <>
-            <Button asChild>
-              <a href="/admin">Back to Home</a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/">View public board</a>
-            </Button>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {copy({
+                id: 'common.errorPage.denied.title',
+                defaultMessage: "You don't have access",
+              })}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {copy({
+                id: 'common.errorPage.denied.description',
+                defaultMessage:
+                  'Only people with the right permissions can open this page. Ask a workspace admin if you need access.',
+              })}
+            </p>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
+              {isAdminArea ? (
+                <>
+                  <Button asChild>
+                    <a href="/admin">
+                      {copy({
+                        id: 'common.errorPage.denied.backHome',
+                        defaultMessage: 'Back to Home',
+                      })}
+                    </a>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <a href="/">
+                      {copy({
+                        id: 'common.errorPage.denied.viewBoard',
+                        defaultMessage: 'View public board',
+                      })}
+                    </a>
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" asChild>
+                  <a href="/">
+                    {copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}
+                  </a>
+                </Button>
+              )}
+            </div>
           </>
-        ) : (
-          <Button variant="outline" asChild>
-            <a href="/">Go home</a>
-          </Button>
         )}
-      </div>
+      </ErrorPageCopy>
     </FriendlyShell>
   )
 }
 
 const SeatPausedPage = lazy(() => import('./seat-paused-page'))
-
-export function EntitlementRequiredPage({
-  error,
-  fullPage = true,
-}: {
-  error: unknown
-  fullPage?: boolean
-}) {
-  const normalized = toError(error)
-  const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
-  const refusal = describePlanRefusal(error, {
-    entitlement: null,
-    feature: 'This feature',
-    requiredPlan: null,
-    requiredPlanName: null,
-    headline: 'This is a plan feature',
-    body: normalized.message,
-  })
-
-  return (
-    <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{normalized.message}</p>
-      <div className="mt-6 flex items-center justify-center gap-3">
-        {isAdminArea ? (
-          <Button asChild>
-            <a href="/admin/settings/billing">
-              {refusal.requiredPlanName ? `Upgrade to ${refusal.requiredPlanName}` : 'See plans'}
-            </a>
-          </Button>
-        ) : null}
-        <Button variant="outline" asChild>
-          <a href={isAdminArea ? '/admin/settings' : '/'}>Go back</a>
-        </Button>
-      </div>
-    </FriendlyShell>
-  )
-}
+// The plan refusal page's words load when it shows, not with every page.
+const EntitlementRequiredPage = lazy(() => import('./plan-refusal-page'))
 
 export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
   if (isSeatPausedError(error)) {
@@ -211,7 +205,11 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
     return <PermissionDeniedPage fullPage={fullPage} />
   }
   if (isEntitlementError(error)) {
-    return <EntitlementRequiredPage error={error} fullPage={fullPage} />
+    return (
+      <Suspense fallback={null}>
+        <EntitlementRequiredPage error={error} fullPage={fullPage} />
+      </Suspense>
+    )
   }
 
   // A failure the server hid behind a plain sentence carries a reference code

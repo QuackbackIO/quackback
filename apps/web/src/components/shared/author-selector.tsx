@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import {
@@ -14,22 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/shared/utils'
 import { adminQueries } from '@/lib/client/queries/admin'
 import type { TeamMember } from '@/lib/shared/types'
-
-/** Extract a user-friendly message from server errors (Zod validation returns raw JSON) */
-function parseErrorMessage(err: unknown, fallback: string): string {
-  if (!(err instanceof Error)) return fallback
-  const msg = err.message
-  // TanStack Start validation errors may be JSON arrays
-  try {
-    const parsed = JSON.parse(msg)
-    if (Array.isArray(parsed) && parsed[0]?.message) {
-      return parsed[0].message
-    }
-  } catch {
-    // not JSON, use as-is
-  }
-  return msg || fallback
-}
+import { errorText } from '@/lib/client/error-text'
 
 /** A user created or pre-populated inline */
 export interface NewAuthor {
@@ -62,6 +48,7 @@ export function AuthorSelector({
   onEditUser,
   isCreating,
 }: AuthorSelectorProps) {
+  const intl = useOptionalIntl()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -155,7 +142,10 @@ export function AuthorSelector({
     selectedFromResults?.name ||
     selectedFromResults?.email ||
     fallbackName ||
-    'Select author'
+    intl.formatMessage({
+      id: 'admin.shell.authorSelector.selectAuthor',
+      defaultMessage: 'Select author',
+    })
   const selectedMember = allMembers.find((m) => m.id === value)
   const isNew = createdIds.has(value)
 
@@ -168,7 +158,12 @@ export function AuthorSelector({
     if (!onCreateUser || !newName.trim()) return
     const trimmedEmail = newEmail.trim()
     if (trimmedEmail && !validateEmail(trimmedEmail)) {
-      setFormError('Invalid email address')
+      setFormError(
+        intl.formatMessage({
+          id: 'admin.shell.authorSelector.invalidEmail',
+          defaultMessage: 'Invalid email address',
+        })
+      )
       return
     }
     setFormError(null)
@@ -182,7 +177,15 @@ export function AuthorSelector({
       onChange(result.principalId)
       setOpen(false)
     } catch (err) {
-      setFormError(parseErrorMessage(err, 'Failed to create user'))
+      setFormError(
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'admin.shell.authorSelector.createFailed',
+            defaultMessage: 'Failed to create user',
+          })
+        )
+      )
     }
   }
 
@@ -190,7 +193,12 @@ export function AuthorSelector({
     if (!onEditUser || !editingPrincipalId || !newName.trim()) return
     const trimmedEmail = newEmail.trim()
     if (trimmedEmail && !validateEmail(trimmedEmail)) {
-      setFormError('Invalid email address')
+      setFormError(
+        intl.formatMessage({
+          id: 'admin.shell.authorSelector.invalidEmail',
+          defaultMessage: 'Invalid email address',
+        })
+      )
       return
     }
     setFormError(null)
@@ -204,7 +212,15 @@ export function AuthorSelector({
       setMode('list')
       setEditingPrincipalId(null)
     } catch (err) {
-      setFormError(parseErrorMessage(err, 'Failed to update user'))
+      setFormError(
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'admin.shell.authorSelector.updateFailed',
+            defaultMessage: 'Failed to update user',
+          })
+        )
+      )
     }
   }
 
@@ -217,15 +233,30 @@ export function AuthorSelector({
   }
 
   const handleFormSubmit = mode === 'edit' ? handleEdit : handleCreate
-  const formTitle = mode === 'edit' ? 'Edit user' : 'New user'
+  const formTitle =
+    mode === 'edit'
+      ? intl.formatMessage({
+          id: 'admin.shell.authorSelector.editUser',
+          defaultMessage: 'Edit user',
+        })
+      : intl.formatMessage({ id: 'admin.shell.authorSelector.newUser', defaultMessage: 'New user' })
   const formButton =
     mode === 'edit'
       ? isCreating
-        ? 'Saving...'
-        : 'Save'
+        ? intl.formatMessage({
+            id: 'admin.shell.authorSelector.saving',
+            defaultMessage: 'Saving...',
+          })
+        : intl.formatMessage({ id: 'admin.shell.authorSelector.save', defaultMessage: 'Save' })
       : isCreating
-        ? 'Creating...'
-        : 'Create & select'
+        ? intl.formatMessage({
+            id: 'admin.shell.authorSelector.creating',
+            defaultMessage: 'Creating...',
+          })
+        : intl.formatMessage({
+            id: 'admin.shell.authorSelector.createAndSelect',
+            defaultMessage: 'Create & select',
+          })
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -250,7 +281,10 @@ export function AuthorSelector({
               variant="outline"
               className="text-[11px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shrink-0"
             >
-              New
+              {intl.formatMessage({
+                id: 'admin.shell.authorSelector.newBadge',
+                defaultMessage: 'New',
+              })}
             </Badge>
           )}
           <ChevronUpDownIcon className="h-3.5 w-3.5 text-muted-foreground/60 ms-auto shrink-0" />
@@ -266,7 +300,10 @@ export function AuthorSelector({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search members..."
+                placeholder={intl.formatMessage({
+                  id: 'admin.shell.authorSelector.searchPlaceholder',
+                  defaultMessage: 'Search members...',
+                })}
                 className="flex-1 text-[13px] bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               />
             </div>
@@ -276,7 +313,10 @@ export function AuthorSelector({
             >
               {allMembers.length === 0 ? (
                 <p className="text-xs text-muted-foreground/60 text-center py-4">
-                  No members found
+                  {intl.formatMessage({
+                    id: 'admin.shell.authorSelector.noMembers',
+                    defaultMessage: 'No members found',
+                  })}
                 </p>
               ) : (
                 allMembers.map((member) => {
@@ -309,13 +349,20 @@ export function AuthorSelector({
                         />
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate flex items-center gap-1.5">
-                            {member.name || 'Unnamed'}
+                            {member.name ||
+                              intl.formatMessage({
+                                id: 'admin.shell.authorSelector.unnamed',
+                                defaultMessage: 'Unnamed',
+                              })}
                             {memberIsNew && (
                               <Badge
                                 variant="outline"
                                 className="text-xs px-1 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
                               >
-                                New
+                                {intl.formatMessage({
+                                  id: 'admin.shell.authorSelector.newBadge',
+                                  defaultMessage: 'New',
+                                })}
                               </Badge>
                             )}
                           </div>
@@ -332,7 +379,10 @@ export function AuthorSelector({
                             startEdit(member)
                           }}
                           className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                          title="Edit user"
+                          title={intl.formatMessage({
+                            id: 'admin.shell.authorSelector.editUser',
+                            defaultMessage: 'Edit user',
+                          })}
                         >
                           <PencilIcon className="h-3.5 w-3.5" />
                         </button>
@@ -352,7 +402,10 @@ export function AuthorSelector({
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-start text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                 >
                   <PlusIcon className="size-4" />
-                  Create new user
+                  {intl.formatMessage({
+                    id: 'admin.shell.authorSelector.createNew',
+                    defaultMessage: 'Create new user',
+                  })}
                 </button>
               </div>
             )}
@@ -379,7 +432,10 @@ export function AuthorSelector({
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="Name"
+                placeholder={intl.formatMessage({
+                  id: 'admin.shell.authorSelector.namePlaceholder',
+                  defaultMessage: 'Name',
+                })}
                 className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border/50 bg-transparent outline-none placeholder:text-muted-foreground/50 focus:border-border"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -392,7 +448,10 @@ export function AuthorSelector({
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="Email (optional)"
+                placeholder={intl.formatMessage({
+                  id: 'admin.shell.authorSelector.emailPlaceholder',
+                  defaultMessage: 'Email (optional)',
+                })}
                 className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border/50 bg-transparent outline-none placeholder:text-muted-foreground/50 focus:border-border"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {

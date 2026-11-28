@@ -1,17 +1,12 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
-import { useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader, type PageCrumb } from '@/components/shared/page-header'
 import { cn } from '@/lib/shared/utils'
 import { SaveStatus } from './save-status'
 import { moduleOfPage, type NavModule, type NavSection } from './settings-nav-sections'
-import {
-  AUTOMATION_PAGES,
-  SETTINGS_PAGES,
-  type AutomationPagePath,
-  type SettingsPagePath,
-} from './settings-pages'
+import { settingsPageTitle, type AutomationPagePath, type SettingsPagePath } from './settings-pages'
 
 type PageTitle =
   { page: SettingsPagePath | AutomationPagePath; title?: never } | { title: string; page?: never }
@@ -76,11 +71,7 @@ export function SettingsPage({
 
   let resolvedTitle = title
   if (page !== undefined) {
-    if (page in AUTOMATION_PAGES) {
-      resolvedTitle = intl.formatMessage(AUTOMATION_PAGES[page as AutomationPagePath])
-    } else {
-      resolvedTitle = SETTINGS_PAGES[page as SettingsPagePath].label
-    }
+    resolvedTitle = settingsPageTitle(intl, page, page)
   }
 
   const shownCrumbs = module ? undefined : crumbs
@@ -90,7 +81,12 @@ export function SettingsPage({
     <div data-settings-page-body="" className={cn('space-y-6', WIDTH_CLASS[width])}>
       {backLink && !hasBackCrumb && (
         <div className="lg:hidden">
-          <BackLink to="/admin/settings">Settings</BackLink>
+          <BackLink to="/admin/settings">
+            <FormattedMessage
+              id="admin.shell.settingsPage.backToSettings"
+              defaultMessage="Settings"
+            />
+          </BackLink>
         </div>
       )}
       <PageHeader

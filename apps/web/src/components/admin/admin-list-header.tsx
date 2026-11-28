@@ -1,5 +1,6 @@
 import { SearchInput } from '@/components/shared/search-input'
 import { SortMenu } from '@/components/shared/sort-menu'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 
 interface SortOption {
   value: string
@@ -26,7 +27,7 @@ interface AdminListHeaderProps {
 export function AdminListHeader({
   searchValue,
   onSearchChange,
-  searchPlaceholder = 'Search…',
+  searchPlaceholder,
   sortOptions,
   activeSort,
   onSortChange,
@@ -35,6 +36,7 @@ export function AdminListHeader({
   action,
   children,
 }: AdminListHeaderProps) {
+  const intl = useOptionalIntl()
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -42,7 +44,10 @@ export function AdminListHeader({
           <SearchInput
             value={searchValue}
             onChange={onSearchChange}
-            placeholder={searchPlaceholder}
+            placeholder={
+              searchPlaceholder ??
+              intl.formatMessage({ id: 'admin.shell.listHeader.search', defaultMessage: 'Search…' })
+            }
             data-search-input
           />
         </div>

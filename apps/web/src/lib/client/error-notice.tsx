@@ -7,7 +7,8 @@
  * the toast library is fetched on the first toast instead of imported here:
  * a static import would put it on every page, the widget included.
  */
-import { describeError } from '@/lib/shared/describe-error'
+import { describeError, referenceLabel } from '@/lib/shared/describe-error'
+import { errorNoticeWords } from '@/lib/client/error-notice-words'
 import { errorAudience } from '@/lib/client/error-text'
 
 type Toast = (typeof import('sonner'))['toast']
@@ -36,7 +37,8 @@ export function toastErrorLine(line: string): void {
  * written for people.
  */
 export function toastError(error: unknown, fallback: string): void {
-  const notice = describeError(error, fallback, errorAudience())
+  const words = errorNoticeWords()
+  const notice = describeError(error, fallback, errorAudience(), words)
   if (!notice.description && !notice.action) {
     toastErrorLine(notice.title)
     return
@@ -48,18 +50,20 @@ export function toastError(error: unknown, fallback: string): void {
       description: reference ? (
         <>
           {notice.description}
-          <span className="mt-1 block font-mono text-xs opacity-70">Ref {reference}</span>
+          <span className="mt-1 block font-mono text-xs opacity-70">
+            {referenceLabel(reference, words)}
+          </span>
         </>
       ) : (
         notice.description
       ),
       action:
         notice.action === 'reload'
-          ? { label: 'Reload', onClick: () => window.location.reload() }
+          ? { label: words.reload, onClick: () => window.location.reload() }
           : notice.action === 'sign-in'
-            ? { label: 'Sign in', onClick: () => window.location.assign('/admin/login') }
+            ? { label: words.signIn, onClick: () => window.location.assign('/admin/login') }
             : reference
-              ? { label: 'Copy', onClick: () => void navigator.clipboard?.writeText(reference) }
+              ? { label: words.copy, onClick: () => void navigator.clipboard?.writeText(reference) }
               : undefined,
     })
   )

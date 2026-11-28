@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState } from 'react'
 import { FunnelIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,7 @@ export function AdminFilterLayout({
   scrollContent = true,
   headerTitle,
 }: AdminFilterLayoutProps) {
+  const intl = useOptionalIntl()
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   return (
@@ -64,7 +66,10 @@ export function AdminFilterLayout({
           <SheetTrigger asChild>
             <Button size="lg">
               <FunnelIcon className="h-4 w-4 me-2" />
-              Filters
+              {intl.formatMessage({
+                id: 'admin.shell.filterLayout.filters',
+                defaultMessage: 'Filters',
+              })}
               {hasActiveFilters && (
                 <span className="ms-2 h-2 w-2 rounded-full bg-primary-foreground" />
               )}
@@ -72,7 +77,12 @@ export function AdminFilterLayout({
           </SheetTrigger>
           <SheetContent side="left" className="w-80 p-0">
             <SheetHeader className="px-4 py-3 border-b border-border/50">
-              <SheetTitle>Filters</SheetTitle>
+              <SheetTitle>
+                {intl.formatMessage({
+                  id: 'admin.shell.filterLayout.filters',
+                  defaultMessage: 'Filters',
+                })}
+              </SheetTitle>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-60px)]">
               <div className="p-2.5">{filters}</div>
