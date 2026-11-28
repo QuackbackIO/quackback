@@ -140,6 +140,16 @@ export const branding = {
     display: 'block' as const,
     margin: '0 auto',
   },
+  wordmark: {
+    height: 40,
+    style: {
+      display: 'block' as const,
+      margin: '0 auto',
+      height: '40px',
+      width: 'auto',
+      maxWidth: '100%',
+    },
+  },
   appName: {
     color: colors.heading,
     fontSize: '18px',

@@ -11,6 +11,7 @@ import {
 } from '@react-email/components'
 import { layout, branding, typography, utils, colors, DEFAULT_LOGO_URL } from './shared-styles'
 import { useEmailShowPoweredBy } from '../powered-by'
+import { useEmailBranding } from '../branding'
 
 interface EmailLayoutProps {
   preview: string
@@ -47,6 +48,7 @@ export function EmailLayout({
 }: EmailLayoutProps) {
   const fromContext = useEmailShowPoweredBy()
   const showPoweredBy = showPoweredByOverride ?? fromContext
+  const { wordmarkUrl } = useEmailBranding()
   return (
     <Html lang={lang ?? 'en'} dir={dir ?? 'ltr'}>
       <Head />
@@ -58,13 +60,23 @@ export function EmailLayout({
           <Container style={layout.container} dir={dir}>
             {/* Logo */}
             <Section style={branding.logoContainer}>
-              <Img
-                src={logoUrl ?? DEFAULT_LOGO_URL}
-                alt={logoAlt}
-                width={branding.logo.width}
-                height={branding.logo.height}
-                style={branding.logo}
-              />
+              {wordmarkUrl ? (
+                // The portal's horizontal header logo: fixed height, natural width.
+                <Img
+                  src={wordmarkUrl}
+                  alt={logoAlt}
+                  height={branding.wordmark.height}
+                  style={branding.wordmark.style}
+                />
+              ) : (
+                <Img
+                  src={logoUrl ?? DEFAULT_LOGO_URL}
+                  alt={logoAlt}
+                  width={branding.logo.width}
+                  height={branding.logo.height}
+                  style={branding.logo}
+                />
+              )}
             </Section>
 
             {children}
