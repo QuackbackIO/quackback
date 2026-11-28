@@ -438,8 +438,11 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
     try {
       const { sealedRecipient } = await import('@/lib/server/email/recipient')
+      // The same language as the first invitation, never the inviter's browser.
+      const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
       result = await sendPortalInviteEmail({
         to: sealedRecipient(minted),
+        i18n: await recipientEmailLocale({ email: inv.email }),
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,

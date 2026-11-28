@@ -55,6 +55,7 @@ const hoisted = vi.hoisted(() => ({
   mockGetEmailSafeUrl: vi.fn(),
   mockGetBaseUrl: vi.fn(),
   mockGenerateId: vi.fn(),
+  mockRecipientEmailLocale: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -130,6 +131,13 @@ vi.mock('@/lib/server/storage/s3', () => ({
   getEmailSafeUrl: hoisted.mockGetEmailSafeUrl,
 }))
 
+vi.mock('@/lib/server/email/email-locale', () => ({
+  recipientEmailLocale: hoisted.mockRecipientEmailLocale,
+}))
+
+/** What the invitee's language resolves to in these tests. */
+const INVITEE_LOCALE = { locale: 'de' }
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -160,6 +168,7 @@ beforeEach(async () => {
   // Sensible defaults
   hoisted.mockRequireAuth.mockResolvedValue(ADMIN_AUTH)
   hoisted.mockGetBaseUrl.mockReturnValue('https://acme.example.com')
+  hoisted.mockRecipientEmailLocale.mockResolvedValue(INVITEE_LOCALE)
   hoisted.mockMintMagicLinkUrl.mockResolvedValue({
     url: 'https://acme.example.com/verify-magic-link?token=abc',
     token: 'tok_new',
@@ -272,6 +281,17 @@ describe('sendPortalInviteFn — success (single)', () => {
         to: 'invitee@example.com',
         workspaceName: ADMIN_AUTH.settings.name,
       })
+    )
+  })
+
+  it("sends the invitation in the invitee's language, looked up by their address", async () => {
+    hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: true })
+
+    await sendHandler({ data: { emails: ['invitee@example.com'] } })
+
+    expect(hoisted.mockRecipientEmailLocale).toHaveBeenCalledWith({ email: 'invitee@example.com' })
+    expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ i18n: INVITEE_LOCALE })
     )
   })
 
@@ -595,6 +615,24 @@ describe('resendPortalInviteFn — success', () => {
     expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalled()
     expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalled()
     expect((result as { inviteId: string }).inviteId).toBe('invite_1')
+  })
+
+  it("resends the invitation in the invitee's language, as the first one", async () => {
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_1',
+      kind: 'portal',
+      status: 'pending',
+      email: 'user@example.com',
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    })
+    hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: true })
+
+    await resendHandler({ data: { inviteId: 'invite_1' } })
+
+    expect(hoisted.mockRecipientEmailLocale).toHaveBeenCalledWith({ email: 'user@example.com' })
+    expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ i18n: INVITEE_LOCALE })
+    )
   })
 
   it('appends the new token without revoking prior links (resend is additive)', async () => {
