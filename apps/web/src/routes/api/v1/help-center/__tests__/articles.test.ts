@@ -108,6 +108,7 @@ const mockArticle: HelpCenterArticleWithCategory = {
   categoryId: 'kb_category_1' as KbCategoryId,
   slug: 'how-to-start',
   locale: 'en',
+  textRevision: 1,
   title: 'How to Get Started',
   description: null,
   position: null,

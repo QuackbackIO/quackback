@@ -100,6 +100,8 @@ export function useUpdateArticle() {
       queryClient.setQueryData(helpCenterKeys.articleDetail(id), data)
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.public() })
+      // A text change can leave the article's translations behind it.
+      queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLanguages(data.id) })
     },
   })
 }

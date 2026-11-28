@@ -8,4 +8,6 @@ export const helpCenterSearchSchema = z.object({
   sort: z.enum(['newest', 'oldest']).optional().catch(undefined),
   deleted: z.boolean().optional().catch(undefined),
   performance: z.boolean().optional().catch(undefined),
+  /** Articles with a language behind its article, or with a language missing. */
+  languages: z.enum(['needs_update', 'missing']).optional().catch(undefined),
 })

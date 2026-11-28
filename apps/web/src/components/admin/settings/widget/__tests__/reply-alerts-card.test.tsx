@@ -84,6 +84,8 @@ describe('ReplyAlertsCard', () => {
       expect(mutateAsync).toHaveBeenCalledWith({ messenger: { titleAlerts: true } })
     )
     expect(titleSwitch().getAttribute('aria-checked')).toBe('true')
+    // The switch is disabled until the first save settles; a click before then is ignored.
+    await waitFor(() => expect(titleSwitch().hasAttribute('data-disabled')).toBe(false))
 
     mutateAsync.mockRejectedValueOnce(new Error('save failed'))
     fireEvent.click(titleSwitch())

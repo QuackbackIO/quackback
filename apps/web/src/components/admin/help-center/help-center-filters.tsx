@@ -7,6 +7,7 @@ import { HelpCenterCategoryTree, type CategoryActions } from './help-center-cate
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import type { HelpCenterStatusFilter } from './use-help-center-filters'
 import type { KbCategoryId } from '@quackback/ids'
+import { LanguageDot } from './article-language-bar'
 
 interface HelpCenterFiltersProps {
   status: HelpCenterStatusFilter
@@ -18,6 +19,9 @@ interface HelpCenterFiltersProps {
   onShowDeletedChange?: (showDeleted: boolean | undefined) => void
   showPerformance?: boolean
   onShowPerformanceChange?: (showPerformance: boolean | undefined) => void
+  /** Shown when the help center has more than one language. */
+  languages?: 'needs_update' | 'missing'
+  onLanguagesChange?: (languages: 'needs_update' | 'missing' | undefined) => void
 }
 
 const ARTICLE_STATUSES: Array<{ id: HelpCenterStatusFilter; name: string; color?: string }> = [
@@ -36,6 +40,8 @@ export function HelpCenterFiltersPanel({
   onShowDeletedChange,
   showPerformance,
   onShowPerformanceChange,
+  languages,
+  onLanguagesChange,
 }: HelpCenterFiltersProps) {
   const { data: categories = [] } = useQuery(helpCenterQueries.categories())
 
@@ -72,6 +78,35 @@ export function HelpCenterFiltersPanel({
           actions={categoryActions}
         />
       </FilterSection>
+
+      {onLanguagesChange ? (
+        <FilterSection title="Languages">
+          <FilterList
+            items={[
+              { id: 'needs_update', name: 'Needs update', color: '#f59e0b' },
+              { id: 'missing', name: 'Missing a language', color: undefined },
+            ]}
+            selectedIds={languages ? [languages] : []}
+            onSelect={(id) =>
+              onLanguagesChange(languages === id ? undefined : (id as 'needs_update' | 'missing'))
+            }
+            renderItem={(item) => (
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <span
+                  className="flex size-4 shrink-0 items-center justify-center"
+                  aria-hidden="true"
+                >
+                  <LanguageDot
+                    state={item.id === 'missing' ? 'missing' : 'needs_update'}
+                    className="size-2.5"
+                  />
+                </span>
+                <span className="truncate">{item.name}</span>
+              </span>
+            )}
+          />
+        </FilterSection>
+      ) : null}
 
       <FilterSection title="Other">
         <FilterList

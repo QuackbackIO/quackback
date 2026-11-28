@@ -11,6 +11,14 @@ import {
 import { EllipsisHorizontalIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { KbArticleId } from '@quackback/ids'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
+import { LanguageDot, languageName, type LanguageDotState } from './article-language-bar'
+
+const LANGUAGE_STATE_LABEL: Record<LanguageDotState, string> = {
+  published: 'published',
+  needs_update: 'needs update',
+  draft: 'draft',
+  missing: 'not translated',
+}
 
 interface HelpCenterListItemProps {
   id: KbArticleId
@@ -23,6 +31,8 @@ interface HelpCenterListItemProps {
   author: { id: string; name: string; avatarUrl: string | null } | null
   viewCount: number
   helpfulCount: number
+  /** The help center's other languages and their state for this article. */
+  languages?: Array<{ locale: string; state: LanguageDotState }>
   onEdit?: (id: KbArticleId) => void
   onDelete?: (id: KbArticleId) => void
 }
@@ -38,6 +48,7 @@ export function HelpCenterListItem({
   author,
   viewCount,
   helpfulCount,
+  languages,
   onEdit,
   onDelete,
 }: HelpCenterListItemProps) {
@@ -92,6 +103,23 @@ export function HelpCenterListItem({
               <span className="text-muted-foreground/50">{helpfulCount} helpful</span>
             </>
           )}
+          {languages && languages.length > 0 ? (
+            <>
+              <span className="text-muted-foreground/40">&middot;</span>
+              <span className="flex items-center gap-2" aria-label="Languages">
+                {languages.map((l) => (
+                  <span
+                    key={l.locale}
+                    className="flex items-center gap-1 text-muted-foreground/70"
+                    title={`${languageName(l.locale)}: ${LANGUAGE_STATE_LABEL[l.state]}`}
+                  >
+                    {l.locale.toUpperCase()}
+                    <LanguageDot state={l.state} />
+                  </span>
+                ))}
+              </span>
+            </>
+          ) : null}
         </div>
       </div>
 

@@ -64,8 +64,8 @@ interface SidebarRowProps {
  */
 export function SidebarRow({ icon, label, children, alignTop = false }: SidebarRowProps) {
   return (
-    <div className={cn('flex justify-between', alignTop ? 'items-start' : 'items-center')}>
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    <div className={cn('flex justify-between gap-3', alignTop ? 'items-start' : 'items-center')}>
+      <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
         {icon}
         <span>{label}</span>
       </div>

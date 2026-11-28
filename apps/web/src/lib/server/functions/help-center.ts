@@ -256,9 +256,23 @@ export const listArticlesFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const result = await listArticles(data)
+    const [{ listArticleLanguageSummaries }, { getHelpCenterConfig }] = await Promise.all([
+      import('@/lib/server/domains/help-center/help-center-translation-list'),
+      import('@/lib/server/domains/settings/settings.service'),
+    ])
+    const { locales } = await getHelpCenterConfig()
+    const languagesOffered = locales.additional.length > 0
+    const languages = languagesOffered
+      ? await listArticleLanguageSummaries(result.items, [locales.default, ...locales.additional])
+      : new Map<string, never[]>()
     return {
       ...result,
-      items: result.items.map(serializeArticle),
+      /** The help center has more than one language (the list's Languages filter). */
+      languagesOffered,
+      items: result.items.map((a) => ({
+        ...serializeArticle(a),
+        languages: languages.get(a.id) ?? [],
+      })),
     }
   })
 

@@ -129,9 +129,9 @@ describe('Help Center domains and languages autosave', () => {
         }
       )
       renderTab()
-      typeAndBlur(screen.getByLabelText('Protected terms'), 'API')
+      typeAndBlur(screen.getByLabelText('Never translate'), 'API')
       await waitFor(() => expect(order).toEqual(['start terms']))
-      fireEvent.click(screen.getByRole('switch', { name: /Auto-translate on publish/ }))
+      fireEvent.click(screen.getByRole('switch', { name: /Translate automatically/ }))
       await new Promise((resolve) => setTimeout(resolve, 30))
       expect(order).toEqual(['start terms'])
       releaseFirst()
@@ -185,7 +185,7 @@ describe('Help Center domains and languages autosave', () => {
   describe('protected terms', () => {
     it('saves the trimmed, non-empty lines on blur', async () => {
       renderTab()
-      typeAndBlur(screen.getByLabelText('Protected terms'), ' Quackback \n\nAPI\n')
+      typeAndBlur(screen.getByLabelText('Never translate'), ' Quackback \n\nAPI\n')
       await waitFor(() => expect(fns.updateAutoTranslate).toHaveBeenCalledTimes(1))
       expect(fns.updateAutoTranslate).toHaveBeenCalledWith({
         data: { protectedTerms: ['Quackback', 'API'] },
@@ -194,7 +194,7 @@ describe('Help Center domains and languages autosave', () => {
 
     it('never sends a term longer than 100 characters', async () => {
       renderTab()
-      typeAndBlur(screen.getByLabelText('Protected terms'), `ok\n${'x'.repeat(101)}`)
+      typeAndBlur(screen.getByLabelText('Never translate'), `ok\n${'x'.repeat(101)}`)
       await new Promise((resolve) => setTimeout(resolve, 30))
       expect(fns.updateAutoTranslate).not.toHaveBeenCalled()
       expect(screen.getByRole('alert').textContent).toMatch(/100/)
@@ -203,7 +203,7 @@ describe('Help Center domains and languages autosave', () => {
     it('never sends more than 100 terms', async () => {
       renderTab()
       const many = Array.from({ length: 101 }, (_, i) => `t${i}`).join('\n')
-      typeAndBlur(screen.getByLabelText('Protected terms'), many)
+      typeAndBlur(screen.getByLabelText('Never translate'), many)
       await new Promise((resolve) => setTimeout(resolve, 30))
       expect(fns.updateAutoTranslate).not.toHaveBeenCalled()
     })
@@ -211,10 +211,31 @@ describe('Help Center domains and languages autosave', () => {
     it('raises the shared toast exactly once when the save fails', async () => {
       fns.updateAutoTranslate.mockRejectedValue(new Error('boom'))
       renderTab()
-      typeAndBlur(screen.getByLabelText('Protected terms'), 'API')
+      typeAndBlur(screen.getByLabelText('Never translate'), 'API')
       await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
       await new Promise((resolve) => setTimeout(resolve, 30))
       expect(toastError).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('fixed translations', () => {
+    it('saves each "word = translation" line for its language on blur', async () => {
+      renderTab()
+      typeAndBlur(
+        screen.getByLabelText('Fixed translations in Deutsch'),
+        'Board = Board\nno equals sign\nchangelog =  Neuigkeiten '
+      )
+      await waitFor(() => expect(fns.updateAutoTranslate).toHaveBeenCalledTimes(1))
+      expect(fns.updateAutoTranslate).toHaveBeenCalledWith({
+        data: {
+          fixedTranslations: {
+            de: [
+              { term: 'Board', translation: 'Board' },
+              { term: 'changelog', translation: 'Neuigkeiten' },
+            ],
+          },
+        },
+      })
     })
   })
 

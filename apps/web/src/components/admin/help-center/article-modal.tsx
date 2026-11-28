@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
+import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
@@ -15,7 +16,12 @@ import {
   HelpCenterMetadataSidebar,
   HelpCenterMetadataSidebarContent,
 } from './help-center-metadata-sidebar'
-import { ArticleTranslationsDialog } from './article-translations-dialog'
+import { ArticleLanguageBar, languageName } from './article-language-bar'
+import { ArticleTranslationPane } from './article-translation-pane'
+import { articleLanguagesKey } from './article-language-actions'
+import { languageDotState } from './article-languages'
+import { getArticleLanguagesFn } from '@/lib/server/functions/help-center-article-languages'
+import { cn } from '@/lib/shared/utils'
 import { ArticleFeedbackReasonsDialog } from './article-feedback-reasons-dialog'
 import { updateArticleSchema } from '@/lib/shared/schemas/help-center'
 import { isNotFoundError } from '@/lib/shared/errors'
@@ -39,10 +45,17 @@ interface ArticleModalContentProps {
 
 export function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const [translationsOpen, setTranslationsOpen] = useState(false)
+  const [activeLocale, setActiveLocale] = useState<string | null>(null)
+  const [visited, setVisited] = useState<string[]>([])
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const hasInitialized = useRef(false)
+  // Languages whose tab holds edits that are not saved yet.
+  const unsavedLocales = useRef(new Set<string>())
+  const setTranslationDirty = useCallback((locale: string, dirty: boolean) => {
+    if (dirty) unsavedLocales.current.add(locale)
+    else unsavedLocales.current.delete(locale)
+  }, [])
 
   const updateArticleMutation = useUpdateArticle()
   const publishArticleMutation = usePublishArticle()
@@ -63,6 +76,15 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
     staleTime: 60_000,
   })
   const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
+  const languagesQuery = useQuery({
+    queryKey: articleLanguagesKey(articleId),
+    queryFn: () => getArticleLanguagesFn({ data: { articleId } }),
+  })
+  const languages = languagesQuery.data
+  const selectLanguage = useCallback((locale: string) => {
+    setActiveLocale(locale)
+    setVisited((v) => (v.includes(locale) ? v : [...v, locale]))
+  }, [])
 
   const form = useForm({
     resolver: standardSchemaResolver(updateArticleSchema),
@@ -139,7 +161,12 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
       },
       {
         onSuccess: () => {
-          onClose()
+          const unsaved = [...unsavedLocales.current][0]
+          if (!unsaved) return onClose()
+          // Closing would drop another language's edits: stay open on it.
+          form.reset(form.getValues())
+          selectLanguage(unsaved)
+          toast.info(`Saved. ${languageName(unsaved)} still has changes that are not saved.`)
         },
       }
     )
@@ -191,69 +218,150 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
     onSegmentIdsChange: handleSegmentsChange,
     notHelpfulCount: article.notHelpfulCount,
     onOpenFeedback: () => setFeedbackOpen(true),
-    onOpenTranslations: () => setTranslationsOpen(true),
+    languagesSummary: languages ? summarizeLanguages(languages.languages) : undefined,
     publishPending,
   }
 
-  return (
-    <Form {...form}>
-      <form onSubmit={handleSubmit} onKeyDown={handleOwnKeyDown} className="flex h-full flex-col">
-        <ModalHeader
-          section="Help center"
-          title={article.title}
-          onClose={onClose}
-          viewUrl={publicArticleUrl}
-        />
-
-        <div className="flex min-h-0 flex-1">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <HelpCenterFormFields
-              form={form}
-              contentJson={contentJson}
-              onContentChange={handleContentChange}
-              showDescription
-              error={
-                updateArticleMutation.isError ? updateArticleMutation.error.message : undefined
-              }
-            />
-          </div>
-          <HelpCenterMetadataSidebar {...sidebar} />
-        </div>
-
-        <ModalFooter
-          onCancel={onClose}
-          submitLabel={updateArticleMutation.isPending ? 'Saving…' : 'Save changes'}
-          isPending={updateArticleMutation.isPending}
-          submitDisabled={!isDirty}
-        >
-          <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
-            <SheetTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="lg:hidden">
-                <Cog6ToothIcon className="mr-1.5 h-4 w-4" />
-                Settings
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="bottom" className="h-[70vh]">
-              <SheetHeader>
-                <SheetTitle>Article settings</SheetTitle>
-              </SheetHeader>
-              <div className="overflow-y-auto py-4">
-                <HelpCenterMetadataSidebarContent {...sidebar} />
-              </div>
-            </SheetContent>
-          </Sheet>
-        </ModalFooter>
-      </form>
-      <ArticleTranslationsDialog
-        articleId={articleId}
-        open={translationsOpen}
-        onOpenChange={setTranslationsOpen}
+  const ownLocale = languages?.ownLocale ?? article.locale
+  const active = activeLocale ?? ownLocale
+  const header = (
+    <>
+      <ModalHeader
+        section="Help center"
+        title={article.title}
+        onClose={onClose}
+        viewUrl={publicArticleUrl}
       />
+      {languages && languages.languages.length > 0 ? (
+        <ArticleLanguageBar
+          ownLocale={ownLocale}
+          isMain={ownLocale === languages.mainLocale}
+          entries={languages.languages.map((l) => ({
+            locale: l.locale,
+            state: languageDotState(l),
+          }))}
+          active={active}
+          onSelect={selectLanguage}
+        />
+      ) : null}
+    </>
+  )
+  const audience =
+    segmentIds.length === 0
+      ? 'Everyone'
+      : segments
+          .filter((s) => segmentIds.includes(s.id))
+          .map((s) => s.name)
+          .join(', ') || 'Some people'
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className={cn('flex min-h-0 flex-1 flex-col', active !== ownLocale && 'hidden')}>
+        <Form {...form}>
+          <form
+            onSubmit={handleSubmit}
+            onKeyDown={handleOwnKeyDown}
+            className="flex h-full flex-col"
+          >
+            {header}
+
+            <div className="flex min-h-0 flex-1">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <HelpCenterFormFields
+                  form={form}
+                  contentJson={contentJson}
+                  onContentChange={handleContentChange}
+                  showDescription
+                  error={
+                    updateArticleMutation.isError ? updateArticleMutation.error.message : undefined
+                  }
+                />
+              </div>
+              <HelpCenterMetadataSidebar {...sidebar} />
+            </div>
+
+            <ModalFooter
+              onCancel={onClose}
+              submitLabel={updateArticleMutation.isPending ? 'Saving…' : 'Save changes'}
+              isPending={updateArticleMutation.isPending}
+              submitDisabled={!isDirty}
+            >
+              <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
+                <SheetTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="lg:hidden">
+                    <Cog6ToothIcon className="mr-1.5 h-4 w-4" />
+                    Settings
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[70vh]">
+                  <SheetHeader>
+                    <SheetTitle>Article settings</SheetTitle>
+                  </SheetHeader>
+                  <div className="overflow-y-auto py-4">
+                    <HelpCenterMetadataSidebarContent {...sidebar} />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </ModalFooter>
+          </form>
+        </Form>
+      </div>
+      {languages
+        ? visited
+            .filter((l) => l !== ownLocale)
+            .map((locale) => {
+              const entry = languages.languages.find((l) => l.locale === locale)
+              if (!entry) return null
+              return (
+                <div
+                  key={locale}
+                  className={cn('flex min-h-0 flex-1 flex-col', active !== locale && 'hidden')}
+                >
+                  <ArticleTranslationPane
+                    articleId={articleId}
+                    ownLocale={ownLocale}
+                    entry={entry}
+                    aiAvailable={languages.aiAvailable}
+                    source={{
+                      title: article.title,
+                      description: article.description ?? null,
+                      content: article.content,
+                      contentJson: getInitialContentJson(article),
+                    }}
+                    shared={{
+                      categoryName: article.category?.name,
+                      authorName: article.author?.name,
+                      audience,
+                    }}
+                    header={header}
+                    onClose={onClose}
+                    onDirtyChange={(dirty) => setTranslationDirty(locale, dirty)}
+                  />
+                </div>
+              )
+            })
+        : null}
       <ArticleFeedbackReasonsDialog
         articleId={articleId}
         open={feedbackOpen}
         onOpenChange={setFeedbackOpen}
       />
-    </Form>
+    </div>
   )
+}
+
+/** "1 published · 1 needs update" for the sidebar's Languages row. */
+function summarizeLanguages(
+  entries: Array<Parameters<typeof languageDotState>[0]>
+): string | undefined {
+  if (entries.length === 0) return undefined
+  const counts = { published: 0, needs_update: 0, draft: 0, missing: 0 }
+  for (const e of entries) counts[languageDotState(e)]++
+  const parts = [
+    counts.published ? `${counts.published} published` : null,
+    counts.needs_update ? `${counts.needs_update} needs update` : null,
+    counts.draft ? `${counts.draft} draft` : null,
+    counts.missing ? `${counts.missing} not translated` : null,
+  ].filter(Boolean)
+  return parts.join(' · ')
 }

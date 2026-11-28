@@ -140,6 +140,7 @@ function LiveHelpCenterFinder({
       status: filters.status === 'all' ? undefined : filters.status,
       search: filters.search,
       sort: filters.sort,
+      languages: filters.languages,
     }),
   })
 
@@ -289,6 +290,7 @@ function LiveHelpCenterFinder({
                     author={article.author}
                     viewCount={article.viewCount}
                     helpfulCount={article.helpfulCount}
+                    languages={article.languages}
                     onEdit={onEditArticle}
                     onDelete={onDeleteArticle}
                   />

@@ -318,6 +318,15 @@ export async function runArticleTranslation(
   return { kind: 'draft', check }
 }
 
+/** True when AI translation can run now: the plan has it and an AI model is set up. */
+export async function articleTranslationAiAvailable(): Promise<boolean> {
+  if (!(await isFeatureLive('aiArticleTranslation'))) return false
+  return (
+    isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) &&
+    !!getChatModel('helpCenterTranslate')
+  )
+}
+
 /** The queue's entry point: the pause to park on, or nothing. */
 export async function translateArticleForLocale(
   articleId: KbArticleId,
