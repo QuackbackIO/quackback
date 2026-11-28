@@ -271,4 +271,129 @@ test.describe('help center in another language', () => {
       )
     }
   )
+
+  test(
+    'CUS-HC-L4 an admin makes German, an extra language, the main language: the German versions swap in, and back',
+    { tag: ['@core', '@isolated'] },
+    async ({ browser, asPerson, marker }) => {
+      const sql = supportDb()
+      const [author] = await sql`SELECT id FROM principal WHERE role = 'admin' AND type = 'user'
+        ORDER BY created_at LIMIT 1`
+      const categoryUuid = toUuid(generateId('kb_category'))
+      const translatedUuid = toUuid(generateId('article'))
+      const untranslatedUuid = toUuid(generateId('article'))
+      const slug = `${marker}-${randomBytes(3).toString('hex')}`
+      const english = { collection: `Account ${marker}`, title: `Change your password ${marker}` }
+      const german = { collection: `Konto ${marker}`, title: `Passwort ändern ${marker}` }
+      const untranslatedTitle = `Close your account ${marker}`
+      await sql`INSERT INTO kb_categories (id, slug, name, is_public, position, created_at, updated_at)
+        VALUES (${categoryUuid}, ${slug}, ${english.collection}, true, 0, NOW(), NOW())`
+      await sql`INSERT INTO kb_category_translations (id, category_id, locale, name)
+        VALUES (${toUuid(generateId('kb_category_translation'))}, ${categoryUuid}, 'de',
+          ${german.collection})`
+      for (const [uuid, title, articleSlug] of [
+        [translatedUuid, english.title, `${slug}-a`],
+        [untranslatedUuid, untranslatedTitle, `${slug}-b`],
+      ]) {
+        await sql`INSERT INTO kb_articles (id, category_id, slug, title, content, principal_id,
+            published_at, created_at, updated_at)
+          VALUES (${uuid}, ${categoryUuid}, ${articleSlug}, ${title}, ${`${title}.`}, ${author.id},
+            NOW() - interval '1 minute', NOW(), NOW())`
+      }
+      await sql`INSERT INTO kb_article_translations (id, article_id, locale, title, content,
+          content_json, status)
+        VALUES (${toUuid(generateId('kb_article_translation'))}, ${translatedUuid}, 'de',
+          ${german.title}, ${'Öffne dein Konto.'}, NULL, 'published')`
+      const urlIdOf = async (uuid: string) =>
+        (await sql`SELECT url_id FROM kb_articles WHERE id = ${uuid}`)[0].url_id as number
+      const translatedPath = `/hc/de/articles/${await urlIdOf(translatedUuid)}-${slug}-a`
+      const untranslatedPath = `/hc/de/articles/${await urlIdOf(untranslatedUuid)}-${slug}-b`
+      const de = catalogue('de')
+      const mainLanguage = async () =>
+        (await sql`SELECT language_config FROM settings LIMIT 1`)[0].language_config as
+          string | null
+
+      await withSettings(
+        {
+          feature_flags: { helpCenter: true },
+          help_center_config: { 'locales.default': 'en', 'locales.additional': ['de'] },
+          language_config: { mainLanguage: 'en', visitorLanguage: 'own' },
+        },
+        async () => {
+          const admin = await asPerson('admin')
+          const switchTo = async (option: RegExp, action: string) => {
+            await admin.goto('/admin/settings/general')
+            await admin.locator('#main-language').click()
+            await admin.getByRole('option', { name: option }).click()
+            const dialog = admin.getByRole('alertdialog')
+            await expect(dialog.getByTestId('main-language-confirm')).toContainText(
+              /have a (German|English) version, which becomes their main text/,
+              { timeout: 20_000 }
+            )
+            await snap(admin, `general-main-language-confirm-${action}`)
+            await dialog.getByRole('button', { name: action }).click()
+            await expect(dialog).toBeHidden({ timeout: 20_000 })
+          }
+
+          try {
+            await switchTo(/^German \(Deutsch\)$/, 'Switch to German')
+            expect(await mainLanguage()).toContain('"mainLanguage":"de"')
+            await expect(admin.locator('#main-language')).toHaveText('German (Deutsch)')
+            await expect(admin.getByText('German for everyone')).toBeVisible()
+            await snap(admin, 'general-language-card-german')
+
+            // The help center's languages name German as the main language.
+            await admin.goto('/admin/settings/help-center?tab=domains-languages')
+            const mainRow = admin.getByTestId('hc-main-language')
+            await expect(mainRow).toContainText('German')
+            await expect(mainRow.getByRole('link', { name: 'Change in General' })).toHaveAttribute(
+              'href',
+              '/admin/settings/general'
+            )
+            await snap(admin, 'help-center-languages-main-row')
+
+            const context = await browser.newContext({
+              locale: 'en-US',
+              extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+            })
+            const page = await context.newPage()
+            try {
+              // The German version is now the article itself.
+              await page.goto(translatedPath)
+              await expect(page.getByRole('heading', { level: 1, name: german.title })).toBeVisible(
+                { timeout: 20_000 }
+              )
+              await expect(page.getByTestId('hc-fallback-notice')).toHaveCount(0)
+
+              // The article with no German version keeps its English text, with a German notice.
+              await page.goto(untranslatedPath)
+              await expect(
+                page.getByRole('heading', { level: 1, name: untranslatedTitle })
+              ).toHaveAttribute('lang', 'en')
+              await expect(page.getByTestId('hc-fallback-notice')).toHaveText(
+                de['portal.hc.fallback.article'].replace('{language}', de['portal.hc.language.en'])
+              )
+              await snap(page, 'hc-main-de-untranslated-article')
+
+              // English is now an extra language, read from the swapped-out text.
+              await page.goto(translatedPath.replace('/hc/de/', '/hc/en/'))
+              await expect(
+                page.getByRole('heading', { level: 1, name: english.title })
+              ).toBeVisible()
+            } finally {
+              await context.close()
+            }
+          } finally {
+            // Back to English through the same screen: the swap reverses.
+            await switchTo(/^English$/, 'Switch to English')
+            expect(await mainLanguage()).toContain('"mainLanguage":"en"')
+            const [row] =
+              await sql`SELECT locale, title FROM kb_articles WHERE id = ${translatedUuid}`
+            expect(row).toEqual({ locale: 'en', title: english.title })
+            await admin.context().close()
+          }
+        }
+      )
+    }
+  )
 })

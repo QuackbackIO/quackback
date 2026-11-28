@@ -56,6 +56,10 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     users: /^(components\/device\/device-approval\.tsx|routes\/device\.tsx)$/,
     importers: /^routes\/device\.tsx$/,
   },
+  languageSettings: {
+    users: /^components\/admin\/settings\/(language\/|help-center\/domains-languages-tab\.tsx$)/,
+    importers: null,
+  },
   statusPage: {
     users: /^(components\/portal\/status\/|routes\/_portal\/status\.(index|\$incidentId)\.tsx$)/,
     importers:
@@ -67,6 +71,7 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
 const SHOWN_BY: { area: MessageArea; marker: RegExp }[] = [
   { area: 'twoFactor', marker: /<(ChallengeStep|EnrollSteps)\b/ },
   { area: 'notificationText', marker: /<NotificationItem\b/ },
+  { area: 'languageSettings', marker: /<(LanguageCard|MainLanguageRow)\b/ },
 ]
 
 /**

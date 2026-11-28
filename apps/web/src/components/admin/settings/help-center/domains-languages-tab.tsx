@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { FormattedMessage } from 'react-intl'
+import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { TrashIcon, XCircleIcon } from '@heroicons/react/24/solid'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
@@ -32,22 +34,11 @@ import { listArticlesFn } from '@/lib/server/functions/help-center'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
 import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
+import { LOCALE_NATIVE_NAMES } from '@/lib/shared/locale-names'
+import { useLanguageNames } from '@/components/admin/settings/language/use-language-name'
+import { AreaMessages } from '@/components/shared/area-messages'
 
-const LOCALE_LABELS: Record<string, string> = {
-  en: 'English',
-  de: 'Deutsch',
-  fr: 'Français',
-  es: 'Español',
-  ar: 'العربية',
-  ru: 'Русский',
-  'pt-br': 'Português (Brasil)',
-  'zh-cn': '简体中文',
-  'zh-tw': '繁體中文',
-  nl: 'Nederlands',
-  pl: 'Polski',
-  th: 'ภาษาไทย',
-  uk: 'Українська',
-}
+const LOCALE_LABELS: Record<string, string> = LOCALE_NATIVE_NAMES
 
 const MAX_PROTECTED_TERMS = 100
 const MAX_TERM_LENGTH = 100
@@ -302,16 +293,13 @@ function LocalesCard({ locales }: { locales: HelpCenterConfig['locales'] }) {
   return (
     <SettingsCard
       title="Languages"
-      description="Add a locale to translate articles and categories into it."
+      description="Add a language to translate your articles and collections into it."
     >
       <div className="space-y-4">
         <ul className="divide-y divide-border/50">
-          <li className="flex items-center justify-between py-3">
-            <span className="text-sm font-medium">
-              {LOCALE_LABELS[locales.default] ?? locales.default}
-            </span>
-            <span className="text-[13px] text-muted-foreground">Default</span>
-          </li>
+          <AreaMessages area="languageSettings">
+            <MainLanguageRow locale={locales.default} />
+          </AreaMessages>
           {locales.additional.map((locale) => (
             <LocaleRow
               key={locale}
@@ -373,6 +361,32 @@ function LocalesCard({ locales }: { locales: HelpCenterConfig['locales'] }) {
         )}
       </div>
     </SettingsCard>
+  )
+}
+
+/** The main language, which is set on Settings > General, not here. */
+function MainLanguageRow({ locale }: { locale: string }) {
+  const { name } = useLanguageNames()
+  return (
+    <li className="flex items-center justify-between gap-4 py-3" data-testid="hc-main-language">
+      <span className="text-sm font-medium">{name(locale)}</span>
+      <span className="text-[13px] text-muted-foreground">
+        <FormattedMessage
+          id="admin.settings.language.helpCenter.main"
+          defaultMessage="Main language"
+        />
+        {' · '}
+        <Link
+          to="/admin/settings/general"
+          className="text-foreground underline-offset-4 hover:underline"
+        >
+          <FormattedMessage
+            id="admin.settings.language.helpCenter.change"
+            defaultMessage="Change in General"
+          />
+        </Link>
+      </span>
+    </li>
   )
 }
 

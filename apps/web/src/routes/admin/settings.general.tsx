@@ -29,6 +29,8 @@ import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-ide
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { AreaMessages } from '@/components/shared/area-messages'
+import { LanguageCard } from '@/components/admin/settings/language/language-card'
 
 const searchSchema = z.object({
   /** `logo` scrolls to the workspace logo and highlights it. */
@@ -136,6 +138,10 @@ function GeneralSettingsPage() {
         maxLength={cloudIdentity ? 80 : undefined}
         focusLogo={focus === 'logo'}
       />
+
+      <AreaMessages area="languageSettings">
+        <LanguageCard />
+      </AreaMessages>
 
       <SettingsCard
         title="Modules"

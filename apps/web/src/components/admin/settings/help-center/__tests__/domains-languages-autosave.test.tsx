@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { IntlProvider } from 'react-intl'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -9,6 +10,7 @@ const toastError = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
 
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
   useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
     const context = { billingEnabled: false }
     return opts?.select ? opts.select(context as never) : context
@@ -79,7 +81,9 @@ function renderTab() {
     defaultOptions: { queries: { retry: false } },
   })
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <IntlProvider locale="en">{children}</IntlProvider>
+    </QueryClientProvider>
   )
   return render(<DomainsLanguagesTab config={config} />, { wrapper: Wrapper })
 }
