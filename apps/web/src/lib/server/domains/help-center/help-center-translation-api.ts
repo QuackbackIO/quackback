@@ -18,6 +18,7 @@ import {
   getArticleTranslation,
   getCategoryLocale,
   listArticleTranslations,
+  setArticleTranslationStatus,
   translatableLocales,
   upsertArticleTranslation,
   upsertCategoryTranslation,
@@ -28,6 +29,7 @@ import {
   markArticleTranslationCurrent,
   publishPendingTranslationUpdate,
 } from './help-center-translation-versions.service'
+import type { TiptapContent } from '@/lib/server/db'
 import type { HelpCenterArticleTranslation } from './help-center.types'
 
 /** A product language, or a 400. */
@@ -132,7 +134,11 @@ async function editableArticleLanguage(articleId: KbArticleId, locale: string): 
   assertNotOwnLanguage(await getArticleLocale(articleId), locale)
 }
 
-/** Write one language of an article from Markdown; the rich body is built from it. */
+/**
+ * Write one language of an article from Markdown; the rich body is built from
+ * it. A caller that keeps the stored body as it is passes its `contentJson`,
+ * so embeds and sized images are not rebuilt from Markdown.
+ */
 export async function writeArticleTranslation(
   articleId: KbArticleId,
   locale: string,
@@ -140,6 +146,7 @@ export async function writeArticleTranslation(
     title: string
     description?: string | null
     content: string
+    contentJson?: TiptapContent | null
     status?: 'draft' | 'published'
   }
 ): Promise<ArticleTranslationSummary> {
@@ -150,9 +157,24 @@ export async function writeArticleTranslation(
     title: input.title,
     description: input.description ?? null,
     content: input.content,
-    contentJson: markdownToTiptapJson(input.content),
+    contentJson: input.contentJson ?? markdownToTiptapJson(input.content),
     status: input.status,
   })
+  const source = await getArticleSource(articleId)
+  return summarizeTranslation(row, source?.revision ?? row.sourceRevision)
+}
+
+/**
+ * Publish or unpublish one language of an article. The text, and whether it
+ * is up to date with the article, stay as they are.
+ */
+export async function setArticleLanguageStatus(
+  articleId: KbArticleId,
+  locale: string,
+  status: 'draft' | 'published'
+): Promise<ArticleTranslationSummary> {
+  await editableArticleLanguage(articleId, locale)
+  const row = await setArticleTranslationStatus(articleId, locale, status)
   const source = await getArticleSource(articleId)
   return summarizeTranslation(row, source?.revision ?? row.sourceRevision)
 }

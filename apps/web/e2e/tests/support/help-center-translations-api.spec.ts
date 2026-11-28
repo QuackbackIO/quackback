@@ -294,12 +294,27 @@ test.describe('help center translations through the API', () => {
             const german = await mcpCall(api, 'get_details', { id: articleId, locale: 'de' })
             expect(german.json).toMatchObject({ locale: 'en', fallback: true })
 
+            // A rich body Markdown cannot hold: publishing alone must keep it whole.
+            const sql = supportDb()
+            const richBody = {
+              type: 'doc',
+              content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'Ouvrez Paramètres.' }] },
+                { type: 'youtube', attrs: { src: 'https://www.youtube.com/watch?v=abc123def45' } },
+                { type: 'resizableImage', attrs: { src: 'https://example.com/a.png', width: 320 } },
+              ],
+            }
+            await sql`UPDATE kb_article_translations SET content_json = ${sql.json(richBody)}
+              WHERE article_id = ${toUuid(articleId)} AND locale = 'fr'`
             const published = await mcpCall(api, 'update_article', {
               articleId,
               locale: 'fr',
               publishedAt: '2026-11-28T00:00:00Z',
             })
             expect(published.json.translation).toMatchObject({ locale: 'fr', status: 'published' })
+            const [fr] = await sql`SELECT content_json FROM kb_article_translations
+              WHERE article_id = ${toUuid(articleId)} AND locale = 'fr'`
+            expect(fr.content_json).toEqual(richBody)
 
             const named = await mcpCall(api, 'manage_category', {
               action: 'update',

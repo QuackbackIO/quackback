@@ -21,10 +21,10 @@ import {
   removeArticleTranslation,
   removeCategoryTranslation,
   requestArticleAiTranslation,
+  setArticleLanguageStatus,
   writeArticleTranslation,
   writeCategoryTranslation,
 } from '@/lib/server/domains/help-center/help-center-translation-api'
-import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { McpAuthContext } from '../types'
 import { registerTool, jsonResult, errorResult, WRITE, articleResult } from './helpers'
 
@@ -116,20 +116,34 @@ export async function updateArticleLanguage(args: {
   }
   const locale = parseTranslationLocale(args.locale!)
   const existing = await getArticleTranslation(articleId, locale)
+  const status =
+    args.publishedAt === undefined ? undefined : args.publishedAt ? 'published' : 'draft'
+  const textGiven =
+    args.title !== undefined || args.description !== undefined || args.content !== undefined
+  // Publishing or unpublishing alone leaves the text, its rich body and
+  // whether it is up to date exactly as they are.
+  if (existing && !textGiven) {
+    if (!status) {
+      return errorResult(new Error('Give a title, description, content or publishedAt to change'))
+    }
+    const translation = await setArticleLanguageStatus(articleId, locale, status)
+    return jsonResult({ articleId, translation })
+  }
   const title = args.title ?? existing?.title
-  const content =
-    args.content ?? (existing ? contentJsonToMarkdown(existing.contentJson, existing.content) : '')
-  if (!title || !content) {
+  if (!title || args.content === '' || (!existing && !args.content)) {
     return errorResult(
       new Error('title and content are required to add a language the article does not have yet')
     )
   }
-  const status =
-    args.publishedAt === undefined ? undefined : args.publishedAt ? 'published' : 'draft'
+  // Without new content the stored body is kept whole, embeds and image sizes included.
+  const body =
+    args.content !== undefined || !existing
+      ? { content: args.content ?? '' }
+      : { content: existing.content, contentJson: existing.contentJson }
   const summary = await writeArticleTranslation(articleId, locale, {
     title,
     description: args.description ?? existing?.description ?? null,
-    content,
+    ...body,
     status,
   })
   return jsonResult({ articleId, translation: summary })
