@@ -41,6 +41,7 @@ export const MCP_TOOL_NAMES = [
   'create_ticket',
   'reply_to_ticket',
   'add_ticket_note',
+  'set_ticket_due_date',
   'link_ticket',
   'unlink_ticket',
   'upload_file',

@@ -35,6 +35,8 @@ import {
   getTicketAssignedEmailTargets,
   getSlaEmailTargets,
   getConversationNoteMentionedEmailTargets,
+  getTicketDueTargets,
+  getTicketDueEmailTargets,
   getModerationDecisionTargets,
 } from '../targets'
 import type { SinkResolver } from './registry'
@@ -70,6 +72,8 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
   'ticket.note_added': getTicketNoteAddedTargets,
   'ticket.external_status_changed': getTicketExternalStatusChangedTargets,
   'message.created': getMessageCreatedTargets,
+  'ticket.due_soon': getTicketDueTargets,
+  'ticket.overdue': getTicketDueTargets,
 }
 
 /**
@@ -88,6 +92,8 @@ const EMAIL_BUILDERS: Record<string, EmailBuilder> = {
   'ticket.assigned': getTicketAssignedEmailTargets,
   'sla.approaching_breach': getSlaEmailTargets,
   'sla.breached': getSlaEmailTargets,
+  'ticket.due_soon': getTicketDueEmailTargets,
+  'ticket.overdue': getTicketDueEmailTargets,
   'conversation.note_mentioned': getConversationNoteMentionedEmailTargets,
   // The author's bell and email for the team's decision on their held item.
   'post.approved': getModerationDecisionTargets,

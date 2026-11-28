@@ -25,6 +25,7 @@ import {
   explicitConversationSort,
 } from '@/lib/shared/conversation/views'
 import type { TicketType, TicketStage } from '@/lib/shared/db-types'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import {
   facetToConversationStatus,
   isInboxTriageFacet,
@@ -180,6 +181,9 @@ export interface InboxSearch {
   /** The tickets-branch registry-type dropdown (convergence Phase 4): a
    *  `ticket_type` TypeID. Only applied on the Tickets-section scopes. */
   ttype?: string
+  /** The Due date filter (overdue / due within 24 hours / no due date). Only
+   *  applied on the unified list, where tickets can appear. */
+  due?: TicketDueFilter
   /** Inbox ordering; omitted = the list's implicit default ('relevance' while
    *  `q` is set, 'recent' otherwise). */
   sort?: ConversationSort
@@ -379,7 +383,9 @@ export function facetToStatusFilter(facet: InboxTriageFacet): StatusFilter {
 /** The subset of `ConversationSort` the unified endpoint's `inboxSortSchema`
  *  accepts. 'sla' ranks both kinds by their nearest unmet deadline (a ticket's
  *  time-to-resolve clock). 'waiting' lists every waiting conversation longest
- *  first; tickets have no waiting clock, so they follow every conversation. */
+ *  first; tickets have no waiting clock, so they follow every conversation.
+ *  `due` works on both: a ticket row by its own due date, a conversation row
+ *  by its linked customer ticket's. */
 const INBOX_UNIFIED_SORTS = new Set([
   'recent',
   'oldest',
@@ -387,6 +393,7 @@ const INBOX_UNIFIED_SORTS = new Set([
   'priority',
   'sla',
   'waiting',
+  'due',
   'relevance',
 ])
 
@@ -408,7 +415,10 @@ export interface InboxListParams {
   assignee?: string
   teamId?: string
   companyId?: string
-  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'relevance'
+  /** The Due date filter: the ticket branch filters its rows, the
+   *  conversation branch filters through the linked customer ticket. */
+  due?: TicketDueFilter
+  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting' | 'due' | 'relevance'
   channel?: Channel
 }
 
@@ -457,7 +467,10 @@ export function buildInboxListParams(
   /** The tickets-branch registry-type dropdown (Phase 4); only meaningful on
    *  the Tickets-section scopes, ignored elsewhere. */
   ticketTypeId?: string,
-  channel?: Channel
+  channel?: Channel,
+  /** The Due date filter chip. A custom view ignores it and applies its own
+   *  `ticket_due` rule instead (the view owns everything it filters on). */
+  due?: TicketDueFilter
 ): InboxListParams {
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const searchParam = search || undefined
@@ -480,6 +493,7 @@ export function buildInboxListParams(
       priority: view.priority,
       search: searchParam,
       companyId: company,
+      ...(view.due ? { due: view.due } : {}),
       sort: sortParam,
       ...(channel ? { channel } : {}),
     }
@@ -492,6 +506,7 @@ export function buildInboxListParams(
       priority,
       search: searchParam,
       companyId: company,
+      ...(due ? { due } : {}),
       sort: sortParam,
       ...(channel ? { channel } : {}),
     }
@@ -513,6 +528,7 @@ export function buildInboxListParams(
       priority,
       search: searchParam,
       companyId: company,
+      ...(due ? { due } : {}),
       sort: sortParam,
       ...(channel ? { channel } : {}),
     }
@@ -524,6 +540,7 @@ export function buildInboxListParams(
       priority,
       search: searchParam,
       companyId: company,
+      ...(due ? { due } : {}),
       sort: sortParam,
       ...(channel ? { channel } : {}),
     }
@@ -542,6 +559,7 @@ export function buildInboxListParams(
     priority,
     search: searchParam,
     companyId: company,
+    ...(due ? { due } : {}),
     sort: sortParam,
     ...(channel ? { channel } : {}),
   }

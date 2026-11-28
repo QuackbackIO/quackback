@@ -1,7 +1,8 @@
 /**
  * Ticket activity service — the ticket-side activity log (mirrors the post
  * domain's activity.service). Records meaningful state changes on tickets:
- * creation, status transitions, assignment moves, priority changes, reopens.
+ * creation, status transitions, assignment moves, priority changes, reopens,
+ * and due-date changes.
  *
  * Inserts are fire-and-forget and never block or fail the parent operation;
  * reads resolve actors through the shared author loader, as the inbox shows
@@ -26,6 +27,8 @@ export type TicketActivityType =
   | 'ticket.assigned'
   | 'priority.changed'
   | 'ticket.reopened'
+  // metadata { from, to }: ISO due dates, null when unset/cleared.
+  | 'due.changed'
 
 export interface RecordTicketActivityOpts {
   ticketId: TicketId

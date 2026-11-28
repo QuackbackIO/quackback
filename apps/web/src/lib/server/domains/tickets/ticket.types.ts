@@ -23,6 +23,8 @@ import type {
 } from '@/lib/shared/db-types'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import type { JsonValue } from '@/lib/shared/json'
+import type { TICKET_SORTS } from '@/lib/shared/tickets'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 
 // ---------------------------------------------------------------------------
 // Service inputs
@@ -62,6 +64,10 @@ export interface CreateTicketInput {
    *  still written by the separate link step (`linkTicketToConversation`). */
   sourceConversationId?: ConversationId | null
   customAttributes?: Record<string, unknown>
+  /** The ticket's shared due date (null/absent = none). A requester filing
+   *  their own ticket is held to the customer window, everyone else to the
+   *  teammate window — `createTicketCore` validates via `assertTicketDueAt`. */
+  dueAt?: Date | null
   /** CONVERGENCE PHASE 1b opt-in, set ONLY by the four customer-intake paths
    *  (portal `createMyTicket`, the widget fn, API v1, MCP `create_ticket`):
    *  on a CUSTOMER ticket with a requester, `createTicketCore` creates the
@@ -84,8 +90,9 @@ export interface AssignTicketInput {
 /** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt);
  *  `sla` by the open time-to-resolve deadline, soonest first, none last;
  *  `waiting` by id alone, since a ticket has no waiting clock (the unified
- *  inbox lists them after every conversation, in a stable order). */
-export type TicketSort = 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting'
+ *  inbox lists them after every conversation, in a stable order);
+ *  `due` by the shared due date, soonest first, none last. */
+export type TicketSort = (typeof TICKET_SORTS)[number]
 
 /** Who a list is scoped to by assignee: the caller, nobody, or a specific teammate. */
 export type TicketAssigneeFilter = 'me' | 'unassigned' | PrincipalId
@@ -100,6 +107,8 @@ export interface TicketListFilter {
   stage?: TicketStage
   priority?: ConversationPriority
   assignee?: TicketAssigneeFilter
+  /** Due-date filter: overdue, due within 24 hours, or no due date. */
+  due?: TicketDueFilter
   teamId?: TeamId
   requesterPrincipalId?: PrincipalId
   companyId?: CompanyId
@@ -278,6 +287,8 @@ export interface RequesterTicketDTO {
   assignee: { principalId: PrincipalId | null; displayName: string | null }
   company: TicketCompanyRef | null
   resolvedAt: string | null
+  /** The ticket's one shared due date (ISO), the same the team sees; null when unset. */
+  dueAt: string | null
   createdAt: string
   /** The newest public, non-system message on the ticket's thread; else the
    *  newest move into a status with a customer stage; else `createdAt`. */
@@ -306,6 +317,7 @@ export type BulkTicketAction =
   | { type: 'assign_team'; teamId: TeamId | null }
   | { type: 'priority'; priority: ConversationPriority }
   | { type: 'set_status'; statusId: TicketStatusId }
+  | { type: 'set_due'; dueAt: Date | null }
 
 /** The result of `bulkUpdateTickets`: which tickets updated, and why any
  *  didn't — mirrors the conversation bulk fn's succeeded/failed shape. */
