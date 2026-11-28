@@ -20,8 +20,10 @@ import {
   projectTicketPreview,
   scopeTicketEmbed,
   resolveEmbed,
+  resolveEmbedAuth,
 } from '../embeds'
 import type { EmbedResolverDeps, TicketEmbedRow } from '../embeds'
+import type { AuthContext } from '../auth-helpers'
 import { allOnPrimary } from '@/lib/shared/section-links'
 
 const sid = (s: string) => s as PostStatusId
@@ -383,7 +385,7 @@ describe('scopeTicketEmbed', () => {
   it('lets a team member see the ticket even when they are not the requester', () => {
     expect(scopeTicketEmbed(TICKET_ROW, teamActor)).toEqual(TICKET_ROW)
   })
-  it("hides the ticket from a team member whose ticket filter leaves it out", () => {
+  it('hides the ticket from a team member whose ticket filter leaves it out', () => {
     expect(scopeTicketEmbed({ ...TICKET_ROW, teamVisible: false }, teamActor)).toBeNull()
   })
   it('hides the ticket from a different visitor principal', () => {
@@ -481,5 +483,26 @@ describe("embed links on each section's own host", () => {
       ON_HOSTS
     )
     expect(internal.url).toBe(`https://feedback.example.com/admin/inbox?i=${TICKET_ROW.id}`)
+  })
+})
+
+describe('resolveEmbedAuth', () => {
+  const siteAuth = { scope: 'portal' } as unknown as AuthContext
+  const widgetAuth = { scope: 'widget' } as unknown as AuthContext
+
+  it('uses the site session when there is one', async () => {
+    const widget = vi.fn(async () => widgetAuth)
+    expect(await resolveEmbedAuth({ site: async () => siteAuth, widget })).toBe(siteAuth)
+    expect(widget).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the widget session, so a widget customer can see their own ticket', async () => {
+    expect(await resolveEmbedAuth({ site: async () => null, widget: async () => widgetAuth })).toBe(
+      widgetAuth
+    )
+  })
+
+  it('stays anonymous when neither session is present', async () => {
+    expect(await resolveEmbedAuth({ site: async () => null, widget: async () => null })).toBeNull()
   })
 })
