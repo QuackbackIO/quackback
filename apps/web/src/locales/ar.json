@@ -2972,5 +2972,6 @@
   "admin.shell.searchInput.placeholder": "بحث…",
   "admin.shell.listHeader.search": "بحث…",
   "admin.shell.sortMenu.label": "ترتيب: {label}",
-  "ui.editor.youtubePrompt": "الصق رابط فيديو YouTube:"
+  "ui.editor.youtubePrompt": "الصق رابط فيديو YouTube:",
+  "admin.shell.rail.waitingForReview": "{count} في انتظار المراجعة"
 }

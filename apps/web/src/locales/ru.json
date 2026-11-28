@@ -2972,5 +2972,6 @@
   "admin.shell.searchInput.placeholder": "Поиск…",
   "admin.shell.listHeader.search": "Поиск…",
   "admin.shell.sortMenu.label": "Сортировка: {label}",
-  "ui.editor.youtubePrompt": "Вставьте ссылку на видео YouTube:"
+  "ui.editor.youtubePrompt": "Вставьте ссылку на видео YouTube:",
+  "admin.shell.rail.waitingForReview": "На проверке: {count}"
 }

@@ -2972,5 +2972,6 @@
   "admin.shell.searchInput.placeholder": "搜尋…",
   "admin.shell.listHeader.search": "搜尋…",
   "admin.shell.sortMenu.label": "排序：{label}",
-  "ui.editor.youtubePrompt": "貼上 YouTube 影片網址："
+  "ui.editor.youtubePrompt": "貼上 YouTube 影片網址：",
+  "admin.shell.rail.waitingForReview": "{count} 則待審核"
 }

@@ -378,7 +378,15 @@ export function AdminSidebar({
   const itemBadge = (item: RailItem) =>
     item.href === '/admin/feedback' && pendingModeration > 0 ? pendingModeration : null
   const itemBadgeLabel = (item: RailItem) =>
-    itemBadge(item) ? `${pendingModeration} waiting for review` : undefined
+    itemBadge(item)
+      ? intl.formatMessage(
+          {
+            id: 'admin.shell.rail.waitingForReview',
+            defaultMessage: '{count} waiting for review',
+          },
+          { count: pendingModeration }
+        )
+      : undefined
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const user = session?.user

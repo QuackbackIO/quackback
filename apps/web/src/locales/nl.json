@@ -2972,5 +2972,6 @@
   "admin.shell.searchInput.placeholder": "Zoeken…",
   "admin.shell.listHeader.search": "Zoeken…",
   "admin.shell.sortMenu.label": "Sorteren: {label}",
-  "ui.editor.youtubePrompt": "Plak de URL van de YouTube-video:"
+  "ui.editor.youtubePrompt": "Plak de URL van de YouTube-video:",
+  "admin.shell.rail.waitingForReview": "{count} wachten op beoordeling"
 }

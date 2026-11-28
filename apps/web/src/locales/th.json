@@ -2972,5 +2972,6 @@
   "admin.shell.searchInput.placeholder": "ค้นหา…",
   "admin.shell.listHeader.search": "ค้นหา…",
   "admin.shell.sortMenu.label": "เรียง: {label}",
-  "ui.editor.youtubePrompt": "วาง URL วิดีโอ YouTube:"
+  "ui.editor.youtubePrompt": "วาง URL วิดีโอ YouTube:",
+  "admin.shell.rail.waitingForReview": "รอการตรวจสอบ {count} รายการ"
 }

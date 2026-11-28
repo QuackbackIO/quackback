@@ -2972,5 +2972,6 @@
   "admin.shell.searchInput.placeholder": "Rechercher…",
   "admin.shell.listHeader.search": "Rechercher…",
   "admin.shell.sortMenu.label": "Trier : {label}",
-  "ui.editor.youtubePrompt": "Collez l’URL de la vidéo YouTube :"
+  "ui.editor.youtubePrompt": "Collez l’URL de la vidéo YouTube :",
+  "admin.shell.rail.waitingForReview": "{count} en attente de vérification"
 }

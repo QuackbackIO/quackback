@@ -2972,5 +2972,6 @@
   "admin.shell.searchInput.placeholder": "搜索…",
   "admin.shell.listHeader.search": "搜索…",
   "admin.shell.sortMenu.label": "排序：{label}",
-  "ui.editor.youtubePrompt": "粘贴 YouTube 视频网址："
+  "ui.editor.youtubePrompt": "粘贴 YouTube 视频网址：",
+  "admin.shell.rail.waitingForReview": "{count} 条待审核"
 }
